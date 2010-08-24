@@ -14,4 +14,3 @@ struct DefaultOS
 		y = 768;
 	}
 }
-

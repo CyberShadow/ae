@@ -12,10 +12,7 @@ struct OS
 static:
 	alias DefaultOS this;
 
-	struct Config
-	{
-		alias PosixConfig this;
-	}
+	alias PosixConfig Config;
 
 	private string getPosixAppName()
 	{

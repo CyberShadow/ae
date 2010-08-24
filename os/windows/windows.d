@@ -55,8 +55,5 @@ static:
 
 	// ************************************************************
 
-	struct Config
-	{
-		alias WindowsConfig this;
-	}
+	alias WindowsConfig Config;
 }
