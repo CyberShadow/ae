@@ -1,7 +1,7 @@
 module ae.os.windows.config;
 
 import std.windows.charset;
-import std.contracts;
+import std.exception;
 import std.traits;
 import std.utf;
 import std.conv;

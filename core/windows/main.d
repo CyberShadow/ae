@@ -28,7 +28,7 @@ int WinMain(HINSTANCE hInstance,
 		Runtime.terminate(&exceptionHandler);
 	}
 
-	catch (Object o)				// catch any uncaught exceptions
+	catch (Throwable o)				// catch any uncaught exceptions
 	{
 		MessageBoxA(null, toMBSz(o.toString()), "Error",
 					MB_OK | MB_ICONEXCLAMATION);
