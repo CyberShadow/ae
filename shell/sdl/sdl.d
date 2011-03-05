@@ -1,10 +1,10 @@
-module ng.shell.sdl.sdl;
+module ae.shell.sdl.sdl;
 
 import std.conv;
 
 import derelict.sdl.sdl;
 
-import ng.shell.shell;
+import ae.shell.shell;
 
 final class SDLShell : Shell
 {

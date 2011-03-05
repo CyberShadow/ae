@@ -1,6 +1,6 @@
-module ng.core.posix.main;
+module ae.core.posix.main;
 
-import ng.core.main;
+import ae.core.main;
 
 int main(string[] args)
 {

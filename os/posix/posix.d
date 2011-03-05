@@ -1,11 +1,11 @@
-module ng.os.posix.posix;
+module ae.os.posix.posix;
 
 import std.path;
 import std.string;
 import std.ctype;
 
-import ng.os.os;
-import ng.os.posix.config;
+import ae.os.os;
+import ae.os.posix.config;
 
 struct OS
 {

@@ -1,4 +1,4 @@
-module ng.os.windows.windows;
+module ae.os.windows.windows;
 
 import win32.shlobj;
 import win32.objidl;
@@ -9,10 +9,10 @@ import win32.winbase;
 import std.c.string;
 import std.file;
 
-import ng.os.os;
-import ng.core.application;
+import ae.os.os;
+import ae.core.application;
 
-import ng.os.windows.config;
+import ae.os.windows.config;
 
 struct OS
 {

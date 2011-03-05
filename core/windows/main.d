@@ -1,10 +1,10 @@
-module ng.core.windows.main;
+module ae.core.windows.main;
 
 import core.runtime;
 import std.c.windows.windows;
 import std.windows.charset : toMBSz;
 
-import ng.core.main;
+import ae.core.main;
 
 extern (Windows)
 int WinMain(HINSTANCE hInstance,

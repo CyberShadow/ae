@@ -1,4 +1,4 @@
-module ng.os.windows.config;
+module ae.os.windows.config;
 
 import std.windows.charset;
 import std.contracts;
@@ -9,7 +9,7 @@ import std.conv;
 import win32.windef;
 import win32.winreg;
 
-import ng.core.application;
+import ae.core.application;
 
 struct WindowsConfig
 {

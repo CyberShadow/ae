@@ -1,4 +1,4 @@
-module ng.shell.shell;
+module ae.shell.shell;
 
 /// A "shell" handles OS window management, input handling, and various other platform-dependent tasks.
 class Shell

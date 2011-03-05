@@ -1,4 +1,4 @@
-module ng.os.posix.config;
+module ae.os.posix.config;
 
 import std.conv;
 import std.stdio;
@@ -6,7 +6,7 @@ import std.file;
 import std.conv;
 import std.string;
 
-import ng.os.os;
+import ae.os.os;
 
 struct PosixConfig
 {

@@ -1,12 +1,12 @@
 /// OS-dependent entry point.
-module ng.core.main;
+module ae.core.main;
 
 version(Windows)
-	import ng.core.windows.main;
+	import ae.core.windows.main;
 else
-	import ng.core.posix.main;
+	import ae.core.posix.main;
 
-import ng.core.application;
+import ae.core.application;
 
 int ngmain(string[] args)
 {

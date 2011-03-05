@@ -1,9 +1,9 @@
-module ng.os.os;
+module ae.os.os;
 
 version(Windows)
-	public import ng.os.windows.windows;
+	public import ae.os.windows.windows;
 else
-	public import ng.os.posix.posix;
+	public import ae.os.posix.posix;
 
 /// Abstract interface for OS-dependent actions
 struct DefaultOS

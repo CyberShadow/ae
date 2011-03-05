@@ -1,6 +1,6 @@
-module ng.core.application;
+module ae.core.application;
 
-import ng.os.os;
+import ae.os.os;
 
 /// The purpose of this class is to allow the application to provide app-specific information to the framework.
 class Application
