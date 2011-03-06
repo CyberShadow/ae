@@ -19,7 +19,7 @@ struct OS
 static:
 	alias DefaultOS this;
 
-	void getDefaultResolution(out int x, out int y)
+	void getDefaultResolution(out uint x, out uint y)
 	{
 		x = GetSystemMetrics(SM_CXSCREEN);
 		y = GetSystemMetrics(SM_CYSCREEN);

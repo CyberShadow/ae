@@ -10,7 +10,7 @@ class Shell
 		quitting = true;
 	}
 
-private:
+protected:
 	bool quitting;
 }
 

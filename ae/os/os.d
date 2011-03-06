@@ -8,7 +8,7 @@ else
 /// Abstract interface for OS-dependent actions
 struct DefaultOS
 {
-	void getDefaultResolution(out int x, out int y)
+	void getDefaultResolution(out uint x, out uint y)
 	{
 		x = 1024;
 		y = 768;

@@ -20,10 +20,29 @@ class Application
 	abstract void initialise();
 
 	/// Default screen settings.
-	void getDefaultFullScreenResolution(out int x, out int y) { return OS.getDefaultResolution(x, y); }
-	void getDefaultWindowSize(out int x, out int y) { x = 1024; y = 768; }
+	void getDefaultFullScreenResolution(out uint x, out uint y) { return OS.getDefaultResolution(x, y); }
+	void getDefaultWindowSize(out uint x, out uint y) { x = 800; y = 600; }
 	bool isFullScreenByDefault() { return false; }
+
+	void getFullScreenResolution(out uint x, out uint y)
+	{
+		getDefaultFullScreenResolution(x, y);
+		x = OS.Config.read("FullScreenX", x);
+		y = OS.Config.read("FullScreenY", y);
+	}
+
+	void getWindowSize(out uint x, out uint y)
+	{
+		getDefaultWindowSize(x, y);
+		x = OS.Config.read("WindowX", x);
+		y = OS.Config.read("WindowY", y);
+	}
+
+	bool isFullScreen()
+	{
+		return OS.Config.read("FullScreen", isFullScreenByDefault());
+	}
 }
 
 /// The application must initialise this with an instance of an Application implementation in a static constructor.
-Application application;
+__gshared Application application;
