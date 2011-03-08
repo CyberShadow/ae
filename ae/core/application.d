@@ -1,7 +1,7 @@
 module ae.core.application;
 
 import ae.os.os;
-import ae.wm.events;
+import ae.shell.events;
 
 /// The purpose of this class is to allow the application to provide app-specific information to the framework.
 class Application

@@ -1,38 +1,18 @@
-module ae.shell.sdl.sdl;
+module ae.shell.sdl.shell;
 
-import core.thread;
 import std.conv;
+import std.string;
 
 import derelict.sdl.sdl;
 
 import ae.shell.shell;
+import ae.video.video;
 import ae.core.application;
 import ae.os.os;
 
 final class SDLShell : Shell
 {
-	void initVideo()
-	{
-		auto surface = SDL_GetVideoSurface();
-		if (surface)
-			SDL_FreeSurface(surface);
-
-		uint screenWidth, screenHeight, flags;
-		if (application.isFullScreen())
-		{
-		    application.getFullScreenResolution(screenWidth, screenHeight);
-		    flags = SDL_HWSURFACE | SDL_DOUBLEBUF | SDL_FULLSCREEN;
-		}
-		else
-		{
-			application.getWindowSize(screenWidth, screenHeight);
-			flags = SDL_HWSURFACE | SDL_DOUBLEBUF;
-		}
-
-		sdlEnforce(SDL_SetVideoMode(screenWidth, screenHeight, 32, flags), "can't set video mode");
-	}
-
-	override void initialize()
+	this()
 	{
 		DerelictSDL.load();
 		sdlEnforce(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)==0);
@@ -42,14 +22,17 @@ final class SDLShell : Shell
 
 	override void run()
 	{
+		assert(video !is null, "Video object not set");
+
 		// video (re-)initialization loop
 		while (!quitting)
-		{	
+		{
 			reinitPending = false;
-			initVideo();
-			
-			// start render thread
-			auto renderThread = new Thread(&renderThreadProc);
+			video.initialize();
+			setCaption(application.getName());
+
+			// start renderer
+			video.start();
 
 			// pump events
 			while (!reinitPending && !quitting)
@@ -65,10 +48,15 @@ final class SDLShell : Shell
 			}
 
 			// wait for render thread
-			while (renderThread.isRunning())
-				Thread.sleep(10_000);
+			video.stop();
 		}
 		SDL_Quit();
+	}
+
+	void setCaption(string caption)
+	{
+		auto szCaption = toStringz(caption);
+		SDL_WM_SetCaption(szCaption, szCaption);
 	}
 
 	void handleEvent(SDL_Event* event)
@@ -77,27 +65,13 @@ final class SDLShell : Shell
 		{
 		case SDL_QUIT:
 			application.handleQuit();
+			break;
 		default:
 			break;
 		}
 	}
 
 	bool reinitPending;
-
-	void renderThreadProc()
-	{
-		// TODO: separate video from shell when SDL/OpenGL is added
-		auto surface = sdlEnforce(SDL_GetVideoSurface());
-		while (!reinitPending && !quitting)
-		{
-			// TODO: predict flip (vblank wait) duration and render at the last moment
-			synchronized (application)
-			{
-				// TODO: put rendering code here
-			}
-			sdlEnforce(SDL_Flip(surface)==0);
-		}
-	}
 }
 
 class SdlException : Exception

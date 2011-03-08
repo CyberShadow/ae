@@ -1,4 +1,4 @@
-module ae.wm.events;
+module ae.shell.events;
 
 enum Key
 {
