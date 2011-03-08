@@ -21,24 +21,27 @@ final class SDLShell : Shell
 		if (application.isFullScreen())
 		{
 		    application.getFullScreenResolution(screenWidth, screenHeight);
-		    flags = SDL_HWSURFACE | SDL_FULLSCREEN;
+		    flags = SDL_HWSURFACE | SDL_DOUBLEBUF | SDL_FULLSCREEN;
 		}
 		else
 		{
 			application.getWindowSize(screenWidth, screenHeight);
-			flags = SDL_HWSURFACE;
+			flags = SDL_HWSURFACE | SDL_DOUBLEBUF;
 		}
 
 		sdlEnforce(SDL_SetVideoMode(screenWidth, screenHeight, 32, flags), "can't set video mode");
 	}
 
-	override void run()
+	override void initialize()
 	{
-		// global initialization
 		DerelictSDL.load();
 		sdlEnforce(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)==0);
 		SDL_EnableKeyRepeat(SDL_DEFAULT_REPEAT_DELAY, SDL_DEFAULT_REPEAT_INTERVAL);
+		SDL_EnableUNICODE(1);
+	}
 
+	override void run()
+	{
 		// video (re-)initialization loop
 		while (!quitting)
 		{	
@@ -51,11 +54,14 @@ final class SDLShell : Shell
 			// pump events
 			while (!reinitPending && !quitting)
 			{
-				SDL_Event event = void;
-				while (SDL_PollEvent(&event))
-					handleEvent(&event);
-
 				sdlEnforce(SDL_WaitEvent(null));
+
+				synchronized(application)
+				{
+					SDL_Event event = void;
+					while (SDL_PollEvent(&event))
+						handleEvent(&event);
+				}
 			}
 
 			// wait for render thread
@@ -67,15 +73,24 @@ final class SDLShell : Shell
 
 	void handleEvent(SDL_Event* event)
 	{
+		switch (event.type)
+		{
+		case SDL_QUIT:
+			application.handleQuit();
+		default:
+			break;
+		}
 	}
 
 	bool reinitPending;
 
 	void renderThreadProc()
 	{
+		// TODO: separate video from shell when SDL/OpenGL is added
 		auto surface = sdlEnforce(SDL_GetVideoSurface());
-		while (!reinitPending)
+		while (!reinitPending && !quitting)
 		{
+			// TODO: predict flip (vblank wait) duration and render at the last moment
 			synchronized (application)
 			{
 				// TODO: put rendering code here
