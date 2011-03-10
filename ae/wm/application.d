@@ -28,6 +28,11 @@ class WMApplication : Application
 		root.handleMouseUp(x, y, button);
 	}
 
+	override void handleMouseMove(uint x, uint y, MouseButtons buttons)
+	{
+		root.handleMouseMove(x, y, buttons);
+	}
+
 	override void handleQuit()
 	{
 		shell.quit();

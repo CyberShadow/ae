@@ -78,6 +78,15 @@ final class SDLShell : Shell
 		}
 	}
 
+	MouseButtons translateMouseButtons(ubyte sdlButtons)
+	{
+		MouseButtons result;
+		for (ubyte i=SDL_BUTTON_LEFT; i<=SDL_BUTTON_WHEELDOWN; i++)
+			if (sdlButtons & SDL_BUTTON(i))
+				result |= 1<<translateMouseButton(i);
+		return result;
+	}
+
 	void handleEvent(SDL_Event* event)
 	{
 		switch (event.type)
@@ -87,6 +96,9 @@ final class SDLShell : Shell
 			break;
 		case SDL_MOUSEBUTTONUP:
 			application.handleMouseUp(event.button.x, event.button.y, translateMouseButton(event.button.button));
+			break;
+		case SDL_MOUSEMOTION:
+			application.handleMouseMove(event.motion.x, event.motion.y, translateMouseButtons(event.motion.state));
 			break;
 		case SDL_QUIT:
 			application.handleQuit();

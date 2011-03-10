@@ -59,10 +59,10 @@ class Application
 	//void handleKeyDown(Key key/*, modifiers? */, dchar character) {}
 	//void handleKeyUp(Key key/*, modifiers? */) {}
 
-	//void handleMouseMove(uint x, uint y) {}
-	//void handleMouseRelMove(int dx, int dy) {} /// when cursor is clipped
 	void handleMouseDown(uint x, uint y, MouseButton button) {}
 	void handleMouseUp(uint x, uint y, MouseButton button) {}
+	void handleMouseMove(uint x, uint y, MouseButtons buttons) {}
+	//void handleMouseRelMove(int dx, int dy) {} /// when cursor is clipped
 
 	//void handleResize(uint w, uint h) {}
 	void handleQuit() {}

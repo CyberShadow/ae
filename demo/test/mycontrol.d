@@ -12,19 +12,27 @@ class MyControl : Control
 		h = 768;
 	}
 
-	struct Coord { uint x, y; }
+	struct Coord { uint x, y, c; }
 	Coord[] coords;
 
-	override void handleMouseDown(uint x, uint y, MouseButton button)
+	override void handleMouseMove(uint x, uint y, MouseButtons buttons)
 	{
-		coords ~= Coord(x, y);
+		if (buttons)
+		{
+			uint b = cast(uint)buttons;
+			b = (b&1)|((b&2)<<7)|((b&4)<<14);
+			b |= b<<4;
+			b |= b<<2;
+			b |= b<<1;
+			coords ~= Coord(x, y, b);
+		}
 	}
 
 	override void render(Surface s, int x, int y)
 	{
 		auto b = s.lock();
 		foreach (coord; coords)
-			b[coord.x, coord.y] = 0xFFFFFF;
+			b[coord.x, coord.y] = coord.c;
 		s.unlock();
 	}
 }

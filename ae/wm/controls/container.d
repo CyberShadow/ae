@@ -32,6 +32,13 @@ class ContainerControl : Control
 			child.handleMouseUp(x-child.x, y-child.y, button);
 	}
 
+	override void handleMouseMove(uint x, uint y, MouseButtons buttons)
+	{
+		auto child = controlAt(x, y);
+		if (child)
+			child.handleMouseMove(x-child.x, y-child.y, buttons);
+	}
+
 	override void render(Surface s, int x, int y)
 	{
 		// background should be rendered upstream

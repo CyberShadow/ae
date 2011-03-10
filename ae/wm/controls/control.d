@@ -10,6 +10,7 @@ class Control
 
 	void handleMouseDown(uint x, uint y, MouseButton button) {}
 	void handleMouseUp(uint x, uint y, MouseButton button) {}
+	void handleMouseMove(uint x, uint y, MouseButtons buttons) {}
 
 	abstract void render(Surface s, int x, int y);
 }
