@@ -6,6 +6,7 @@ import std.string;
 import derelict.sdl.sdl;
 
 import ae.shell.shell;
+import ae.shell.events;
 import ae.video.video;
 import ae.core.application;
 import ae.os.os;
@@ -47,7 +48,7 @@ final class SDLShell : Shell
 				}
 			}
 
-			// wait for render thread
+			// wait for renderer to stop
 			video.stop();
 		}
 		SDL_Quit();
@@ -59,10 +60,34 @@ final class SDLShell : Shell
 		SDL_WM_SetCaption(szCaption, szCaption);
 	}
 
+	MouseButton translateMouseButton(ubyte sdlButton)
+	{
+		switch (sdlButton)
+		{
+		case SDL_BUTTON_LEFT:
+			return MouseButton.Left;
+		case SDL_BUTTON_MIDDLE:
+		default:
+			return MouseButton.Middle;
+		case SDL_BUTTON_RIGHT:
+			return MouseButton.Right;
+		case SDL_BUTTON_WHEELUP:
+			return MouseButton.WheelUp;
+		case SDL_BUTTON_WHEELDOWN:
+			return MouseButton.WheelDown;
+		}
+	}
+
 	void handleEvent(SDL_Event* event)
 	{
 		switch (event.type)
 		{
+		case SDL_MOUSEBUTTONDOWN:
+			application.handleMouseDown(event.button.x, event.button.y, translateMouseButton(event.button.button));
+			break;
+		case SDL_MOUSEBUTTONUP:
+			application.handleMouseUp(event.button.x, event.button.y, translateMouseButton(event.button.button));
+			break;
 		case SDL_QUIT:
 			application.handleQuit();
 			break;

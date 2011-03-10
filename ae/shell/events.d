@@ -9,5 +9,7 @@ enum MouseButton
 {
 	Left,
 	Right,
-	Middle
+	Middle,
+	WheelUp,
+	WheelDown
 }
