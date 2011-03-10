@@ -54,7 +54,7 @@ final class SDLShell : Shell
 		SDL_Quit();
 	}
 
-	void setCaption(string caption)
+	override void setCaption(string caption)
 	{
 		auto szCaption = toStringz(caption);
 		SDL_WM_SetCaption(szCaption, szCaption);

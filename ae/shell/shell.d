@@ -5,6 +5,8 @@ class Shell
 {
 	abstract void run();
 
+	abstract void setCaption(string caption);
+
 	void quit()
 	{
 		quitting = true;

@@ -1,15 +1,19 @@
 module demo.test.mycontrol;
 
+import ae.shell.shell;
 import ae.shell.events;
 import ae.video.surface;
 import ae.wm.controls.control;
+import std.conv;
+
+import std.random;
 
 class MyControl : Control
 {
 	this()
 	{
-		w = 1024;
-		h = 768;
+		w = 800;
+		h = 600;
 	}
 
 	struct Coord { uint x, y, c; }
@@ -30,6 +34,10 @@ class MyControl : Control
 
 	override void render(Surface s, int x, int y)
 	{
+		foreach (i; 0..100)
+			coords ~= Coord(uniform(0, w), uniform(0, h), uniform(0, 0x1_00_00_00));
+		shell.setCaption(to!string(coords.length));
+
 		auto b = s.lock();
 		foreach (coord; coords)
 			b[coord.x, coord.y] = coord.c;
