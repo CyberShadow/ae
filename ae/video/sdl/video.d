@@ -7,6 +7,7 @@ import derelict.sdl.sdl;
 import ae.video.video;
 import ae.core.application;
 import ae.shell.sdl.shell;
+import ae.video.sdl.surface;
 
 class SDLVideo : Video
 {
@@ -35,13 +36,13 @@ class SDLVideo : Video
 	{
 		stopping = false;
 		renderThread = new Thread(&renderThreadProc);
+		renderThread.start();
 	}
 
 	override void stop()
 	{
 		stopping = true;
-		while (renderThread.isRunning())
-			Thread.sleep(10_000);
+		renderThread.join();
 	}
 
 private:
@@ -50,15 +51,15 @@ private:
 
 	void renderThreadProc()
 	{
-		auto surface = sdlEnforce(SDL_GetVideoSurface());
+		auto surface = new SDLSurface(sdlEnforce(SDL_GetVideoSurface()));
 		while (!stopping)
 		{
 			// TODO: predict flip (vblank wait) duration and render at the last moment
 			synchronized (application)
 			{
-				// TODO: put rendering code here
+				application.render(surface);
 			}
-			sdlEnforce(SDL_Flip(surface)==0);
+			surface.flip();
 		}
 	}
 }

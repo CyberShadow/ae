@@ -4,6 +4,7 @@ import ae.core.application;
 import ae.shell.shell;
 import ae.shell.events;
 import ae.wm.controls.root;
+import ae.video.surface;
 
 /// Specialization of Application class which automatically handles framework messages.
 class WMApplication : Application
@@ -14,6 +15,8 @@ class WMApplication : Application
 	{
 		root = new RootControl();
 	}
+
+	// ****************************** Event handlers *******************************
 
 	override void handleMouseDown(uint x, uint y, MouseButton button)
 	{
@@ -28,5 +31,12 @@ class WMApplication : Application
 	override void handleQuit()
 	{
 		shell.quit();
+	}
+
+	// ********************************* Rendering *********************************
+
+	override void render(Surface s)
+	{
+		root.render(s, 0, 0);
 	}
 }

@@ -2,6 +2,7 @@ module ae.wm.controls.container;
 
 import ae.wm.controls.control;
 import ae.shell.events;
+import ae.video.surface;
 
 /// Base class for a control with children.
 class ContainerControl : Control
@@ -29,5 +30,12 @@ class ContainerControl : Control
 		auto child = controlAt(x, y);
 		if (child)
 			child.handleMouseUp(x-child.x, y-child.y, button);
+	}
+
+	override void render(Surface s, int x, int y)
+	{
+		// background should be rendered upstream
+		foreach (child; children)
+			child.render(s, x+child.x, y+child.y);
 	}
 }

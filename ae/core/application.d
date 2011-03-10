@@ -2,6 +2,7 @@ module ae.core.application;
 
 import ae.os.os;
 import ae.shell.events;
+import ae.video.surface;
 
 /// The purpose of this class is to allow the application to provide app-specific information to the framework.
 class Application
@@ -65,6 +66,10 @@ class Application
 
 	//void handleResize(uint w, uint h) {}
 	void handleQuit() {}
+
+	// ********************************* Rendering *********************************
+
+	void render(Surface s) {}
 }
 
 /// The application must initialise this with an instance of an Application implementation in a static constructor.
