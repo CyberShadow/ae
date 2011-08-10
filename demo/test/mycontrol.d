@@ -16,7 +16,7 @@ class MyControl : Control
 		h = 600;
 	}
 
-	struct Coord { uint x, y, c; }
+	struct Coord { uint x, y, c; void* dummy; }
 	Coord[] coords;
 
 	override void handleMouseMove(uint x, uint y, MouseButtons buttons)
