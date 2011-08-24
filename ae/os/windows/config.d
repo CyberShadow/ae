@@ -9,7 +9,7 @@ import std.conv;
 import win32.windef;
 import win32.winreg;
 
-import ae.core.application;
+import ae.app.application;
 
 struct WindowsConfig
 {

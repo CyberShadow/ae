@@ -1,7 +1,7 @@
 module demo.test.main;
 
-import ae.core.application;
-import ae.core.main;
+import ae.app.application;
+import ae.app.main;
 import ae.shell.shell;
 import ae.shell.sdl.shell;
 import ae.video.video;

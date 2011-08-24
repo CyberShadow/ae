@@ -1,4 +1,4 @@
-module ae.core.application;
+module ae.app.application;
 
 import ae.os.os;
 import ae.shell.events;

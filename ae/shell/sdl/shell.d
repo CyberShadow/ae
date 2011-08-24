@@ -8,7 +8,7 @@ import derelict.sdl.sdl;
 import ae.shell.shell;
 import ae.shell.events;
 import ae.video.video;
-import ae.core.application;
+import ae.app.application;
 import ae.os.os;
 
 final class SDLShell : Shell

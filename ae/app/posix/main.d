@@ -1,6 +1,6 @@
-module ae.core.posix.main;
+module ae.app.posix.main;
 
-import ae.core.main;
+import ae.app.main;
 
 int main(string[] args)
 {

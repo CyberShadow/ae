@@ -5,7 +5,7 @@ import core.thread;
 import derelict.sdl.sdl;
 
 import ae.video.video;
-import ae.core.application;
+import ae.app.application;
 import ae.shell.sdl.shell;
 import ae.video.sdl.surface;
 

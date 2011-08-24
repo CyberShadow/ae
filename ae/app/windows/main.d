@@ -1,10 +1,10 @@
-module ae.core.windows.main;
+module ae.app.windows.main;
 
 import core.runtime;
 import std.c.windows.windows;
 import std.windows.charset : toMBSz;
 
-import ae.core.main;
+import ae.app.main;
 
 extern (Windows)
 int WinMain(HINSTANCE hInstance,

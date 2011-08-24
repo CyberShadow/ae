@@ -10,7 +10,7 @@ import std.c.string;
 import std.file;
 
 import ae.os.os;
-import ae.core.application;
+import ae.app.application;
 
 import ae.os.windows.config;
 

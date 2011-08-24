@@ -1,6 +1,6 @@
 module ae.wm.application;
 
-import ae.core.application;
+import ae.app.application;
 import ae.shell.shell;
 import ae.shell.events;
 import ae.wm.controls.root;
