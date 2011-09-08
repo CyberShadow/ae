@@ -32,7 +32,7 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-module demo.test.mycontrol;
+module ae.demo.test.mycontrol;
 
 import ae.shell.shell;
 import ae.shell.events;

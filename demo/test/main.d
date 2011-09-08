@@ -32,7 +32,7 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-module demo.test.main;
+module ae.demo.test.main;
 
 import ae.app.application;
 import ae.app.main;
