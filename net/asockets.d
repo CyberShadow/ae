@@ -234,18 +234,18 @@ protected:
 
 public:
 	/// allow getting the address of connections that are already disconnected
-	private string cachedRemoteHost = null;
+	private string cachedRemoteAddress = null;
 
-	final string remoteIP()
+	final string remoteAddress()
 	{
-		if (cachedRemoteHost !is null)
-			return cachedRemoteHost;
+		if (cachedRemoteAddress !is null)
+			return cachedRemoteAddress;
 		else
 		if (conn is null)
 			return "(null)";
 		else
 		try
-			return cachedRemoteHost = conn.remoteAddress().toAddrString();
+			return cachedRemoteAddress = conn.remoteAddress().toString();
 		catch (Exception e)
 			return e.msg;
 	}

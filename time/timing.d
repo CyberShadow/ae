@@ -45,7 +45,8 @@ public import core.time : TickDuration;
 
 static this()
 {
-	enforce(TickDuration.ticksPerSec != 0, "TickDuration not available on this system");
+	// Bug 6631
+	//enforce(TickDuration.ticksPerSec != 0, "TickDuration not available on this system");
 }
 
 final class Timer
