@@ -34,7 +34,7 @@
  * ***** END LICENSE BLOCK ***** */
 
 /// Management of timed events.
-module ae.time.timing;
+module ae.sys.timing;
 
 import std.exception;
 import core.time;

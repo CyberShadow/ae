@@ -38,7 +38,7 @@
 /// Asynchronous socket abstraction.
 module ae.net.asockets;
 
-import ae.time.timing;
+import ae.sys.timing;
 import ae.sys.data;
 
 import std.socket;
