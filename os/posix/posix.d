@@ -44,7 +44,8 @@ import ae.os.posix.config;
 struct OS
 {
 static:
-	alias DefaultOS this;
+	DefaultOS defaultOS; // Issue 6656
+	alias defaultOS this;
 
 	alias PosixConfig Config;
 

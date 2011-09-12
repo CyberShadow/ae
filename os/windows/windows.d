@@ -51,7 +51,8 @@ import ae.os.windows.config;
 struct OS
 {
 static:
-	alias DefaultOS this;
+	DefaultOS defaultOS; // Issue 6656
+	alias defaultOS this;
 
 	void getDefaultResolution(out uint x, out uint y)
 	{
