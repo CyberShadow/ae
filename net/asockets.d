@@ -39,7 +39,7 @@
 module ae.net.asockets;
 
 import ae.sys.timing;
-import ae.sys.data;
+public import ae.sys.data;
 
 import std.socket;
 public import std.socket : Address, Socket;
@@ -118,33 +118,33 @@ public:
 			}
 
 			sockcount = 0;
-			debug (VERBOSE) writefln("Populating sets");
+			debug (ASOCKETS) writefln("Populating sets");
 			foreach (GenericSocket conn; sockets)
 			{
 				if (!conn.socket)
 					continue;
 				sockcount++;
 
-				debug (VERBOSE) writef("\t%s:", cast(void*)conn);
+				debug (ASOCKETS) writef("\t%s:", cast(void*)conn);
 				PollFlags flags = conn.pollFlags();
 				if (flags.read)
 				{
 					readset.add(conn.socket);
-					debug (VERBOSE) writef(" READ");
+					debug (ASOCKETS) writef(" READ");
 				}
 				if (flags.write)
 				{
 					writeset.add(conn.socket);
-					debug (VERBOSE) writef(" WRITE");
+					debug (ASOCKETS) writef(" WRITE");
 				}
 				if (flags.error)
 				{
 					errorset.add(conn.socket);
-					debug (VERBOSE) writef(" ERROR");
+					debug (ASOCKETS) writef(" ERROR");
 				}
-				debug (VERBOSE) writefln();
+				debug (ASOCKETS) writefln();
 			}
-			debug (VERBOSE) { writefln("Waiting..."); fflush(stdout); }
+			debug (ASOCKETS) { writefln("Waiting..."); fflush(stdout); }
 			if (sockcount == 0 && !mainTimer.isWaiting())
 				break;
 
@@ -164,7 +164,7 @@ public:
 						continue;
 					if (readset.isSet(conn.socket))
 					{
-						debug (VERBOSE) writefln("\t%s is readable", cast(void*)conn);
+						debug (ASOCKETS) writefln("\t%s is readable", cast(void*)conn);
 						conn.onReadable();
 					}
 
@@ -172,7 +172,7 @@ public:
 						continue;
 					if (writeset.isSet(conn.socket))
 					{
-						debug (VERBOSE) writefln("\t%s is writable", cast(void*)conn);
+						debug (ASOCKETS) writefln("\t%s is writable", cast(void*)conn);
 						conn.onWritable();
 					}
 
@@ -180,7 +180,7 @@ public:
 						continue;
 					if (errorset.isSet(conn.socket))
 					{
-						debug (VERBOSE) writefln("\t%s is errored", cast(void*)conn);
+						debug (ASOCKETS) writefln("\t%s is errored", cast(void*)conn);
 						conn.onError("select() error: " ~ conn.socket.getErrorText());
 					}
 				}
@@ -267,16 +267,27 @@ class ClientSocket : GenericSocket
 private:
 	TimerTask idleTask;
 
+	/// Blocks of data larger than this value are passed as unmanaged memory
+	/// (in Data objects). Blocks smaller than this value will be reallocated
+	/// on the managed heap. The disadvantage of placing large objects on the
+	/// managed heap is false pointers; the disadvantage of using Data for
+	/// small objects is wasted slack space due to the page size alignment
+	/// requirement.
+	enum UNMANAGED_THRESHOLD = 256;
+
 public:
 	/// Whether the socket is connected.
 	bool connected;
 
+	enum MAX_PRIORITY = 4;
+	enum DEFAULT_PRIORITY = 2;
+
 protected:
-	/// The send buffer.
-	Data outBuffer;
-	/// Queue indices (for low-priority data)
-	int[] queueIndices;
-	/// Whether a disconnect as pending after all data is sent
+	/// The send buffers.
+	Data[][MAX_PRIORITY+1] outQueue;
+	/// Whether the first item from each queue has been partially sent (and thus can't be cancelled).
+	bool[MAX_PRIORITY+1] partiallySent;
+	/// Whether a disconnect is pending after all data is sent
 	bool disconnecting;
 
 protected:
@@ -298,8 +309,10 @@ protected:
 
 		flags.error = true;
 
-		if (!connected || outBuffer.length > 0)
+		if (!connected)
 			flags.write = true;
+		else
+			flags.write = writePending;
 
 		if (connected && handleReadData)
 			flags.read = true;
@@ -314,17 +327,30 @@ protected:
 		int received = conn.receive(inBuffer);
 
 		if (received == 0)
-		{
-			outBuffer.clear;
-			disconnect("Connection closed", DisconnectType.Graceful);
-			return;
-		}
+			return disconnect("Connection closed", DisconnectType.Graceful);
 
 		if (received == Socket.ERROR)
 			onError(lastSocketError);
 		else
 			if (!disconnecting && handleReadData)
-				handleReadData(this, inBuffer[0 .. received]);
+			{
+				// Currently, unlike the D1 version of this module,
+				// we will always reallocate read network data.
+				// This disfavours code which doesn't need to store
+				// read data after processing it, but otherwise
+				// makes things simpler and safer all around.
+
+				if (received < UNMANAGED_THRESHOLD)
+				{
+					// Copy to the managed heap
+					handleReadData(this, Data(inBuffer[0 .. received].dup));
+				}
+				else
+				{
+					// Copy to unmanaged memory
+					handleReadData(this, Data(inBuffer[0 .. received], true));
+				}
+			}
 	}
 
 	/// Called when a socket is writable.
@@ -346,51 +372,52 @@ protected:
 		}
 		//debug writefln(remoteAddress(), ": Writable - handler ", handleBufferFlushed?"OK":"not set", ", outBuffer.length=", outBuffer.length);
 
-
-		debug (VERBOSE) writefln("\t\t%s: %d bytes to send", cast(void*)this, outBuffer.length);
-		while (outBuffer.length>0)
-		{
-			int amount = queueIndices.length?queueIndices[0]?queueIndices[0]:queueIndices.length>1?queueIndices[1]:outBuffer.length:outBuffer.length;
-			int sent = conn.send(outBuffer.contents[0..amount]);
-			//debug writefln(remoteAddress(), ": Sent ", sent, "/", amount, "/", outBuffer.length);
-			debug (VERBOSE) writefln("\t\t%s: sent %d/%d bytes", cast(void*)this, sent, amount);
-			if (sent == Socket.ERROR)
+		foreach (priority, ref queue; outQueue)
+			while (queue.length)
 			{
-				if (wouldHaveBlocked()) // why would this happen?
+				auto data = queue.ptr; // pointer to first data
+				auto sent = conn.send(data.contents);
+				debug (ASOCKETS) writefln("\t\t%s: sent %d/%d bytes", cast(void*)this, sent, data.length);
+
+				if (sent == Socket.ERROR)
+				{
+					if (wouldHaveBlocked())
+						return;
+					else
+						return onError(lastSocketError);
+				}
+				else
+				if (sent == 0)
 					return;
 				else
-					onError(lastSocketError);
+				if (sent < data.length)
+				{
+					*data = (*data)[sent..data.length];
+					partiallySent[priority] = true;
+					return;
+				}
+				else
+				{
+					assert(sent == data.length);
+					//debug writefln("[%s] Sent data:", remoteAddress);
+					//debug writefln("%s", hexDump(data.contents[0..sent]));
+					queue = queue[1..$];
+					partiallySent[priority] = false;
+					if (queue.length == 0)
+						queue = null;
+				}
 			}
-			else
-			if (sent == 0)
-				return;
-			else
-			{
-				//debug writefln("[%s] Sent data:", remoteAddress);
-				//debug writefln("%s", hexDump(outBuffer[0..sent]));
-				outBuffer = outBuffer[sent .. outBuffer.length];
-				if (outBuffer.length == 0)
-					outBuffer.clear;
-				foreach (ref index;queueIndices)
-					index -= sent;
-				while (queueIndices.length>0 && queueIndices[0]<0)
-					queueIndices = queueIndices[1..$];
-			}
-		}
 
-		if (outBuffer.length == 0)
-		{
-			if (handleBufferFlushed)
-				handleBufferFlushed(this);
-			if (disconnecting)
-				disconnect("Delayed disconnect - buffer flushed", DisconnectType.Requested);
-		}
+		// outQueue is now empty
+		if (handleBufferFlushed)
+			handleBufferFlushed(this);
+		if (disconnecting)
+			disconnect("Delayed disconnect - buffer flushed", DisconnectType.Requested);
 	}
 
 	/// Called when an error occurs on the socket.
 	override void onError(string reason)
 	{
-		outBuffer.clear;
 		disconnect("Socket error: " ~ reason, DisconnectType.Error);
 	}
 
@@ -400,11 +427,7 @@ protected:
 			return;
 
 		if (disconnecting)
-		{
-			outBuffer.clear;
-			disconnect("Delayed disconnect - time-out", DisconnectType.Error);
-			return;
-		}
+			return disconnect("Delayed disconnect - time-out", DisconnectType.Error);
 
 		if (handleIdleTimeout)
 		{
@@ -423,8 +446,7 @@ public:
 	/// Default constructor
 	this()
 	{
-		debug (VERBOSE) writefln("New ClientSocket @ %s", cast(void*)this);
-		outBuffer = new Data;
+		debug (ASOCKETS) writefln("New ClientSocket @ %s", cast(void*)this);
 	}
 
 	/// Start establishing a connection.
@@ -451,7 +473,7 @@ public:
 	{
 		assert(conn);
 
-		if (outBuffer.length && type==DisconnectType.Requested)
+		if (writePending && type==DisconnectType.Requested)
 		{
 			// queue disconnect after all data is sent
 			//debug writefln("[%s] Queueing disconnect: ", remoteAddress, reason);
@@ -466,7 +488,7 @@ public:
 		socketManager.unregister(this);
 		conn.close();
 		conn = null;
-		outBuffer.clear;
+		outQueue[] = null;
 		connected = false;
 		if (idleTask !is null && idleTask.isWaiting())
 			mainTimer.remove(idleTask);
@@ -474,52 +496,48 @@ public:
 			handleDisconnect(this, reason, type);
 	}
 
-	/// Append data to the send buffer, before the low-priority data.
-	final void send(const(void)[] data)
+	/// Append data to the send buffer.
+	final void send(const(void)[] data, int priority = DEFAULT_PRIORITY)
 	{
-		//assert(connected);
-		if (!connected || disconnecting)
+		send(Data(data), priority);
+	}
+
+	/// ditto
+	final void send(Data data, int priority = DEFAULT_PRIORITY)
+	{
+		assert(connected && !disconnecting);
+		outQueue[priority] ~= data;
+	}
+
+	final void clearQueue(int priority)
+	{
+		if (partiallySent[priority])
 		{
-			//debug writefln("Not connected when trying to send buffer to " ~ remoteAddress() ~ ":" ~ hexDump(data));
-			return;
+			assert(outQueue[priority].length > 0);
+			outQueue[priority] = outQueue[priority][0..1];
 		}
-		//debug (Valgrind) validate(data);
-		if (queueIndices.length==0)
-			outBuffer ~= data;
 		else
+			outQueue[priority] = null;
+	}
+
+	@property
+	final bool writePending()
+	{
+		foreach (queue; outQueue)
+			if (queue.length)
+				return true;
+		return false;
+	}
+
+	final bool queuePresent(int priority)
+	{
+		if (partiallySent[priority])
 		{
-			//debug writefln(remoteAddress(), ": Inserting ", data.length, " bytes into the queue");
-			int pos = queueIndices[0];
-			//outBuffer = outBuffer[0..pos] ~ data ~ outBuffer[pos..outBuffer.length];
-			outBuffer.splice(pos, data);
-			foreach (ref index;queueIndices)
-				index += data.length;
+			assert(outQueue[priority].length > 0);
+			return outQueue[priority].length > 1;
 		}
-	}
-
-	/// Append data to the send buffer, in a low-priority queue.
-	final void queue(void[] data)
-	{
-		assert(connected);
-		if (data.length==0) return;
-		//debug writefln(remoteAddress(), ": Queuing ", data.length, " bytes");
-		//debug (Valgrind) validate(data);
-		queueIndices ~= outBuffer.length;
-		outBuffer ~= data;
-	}
-
-	final void clearQueue()
-	{
-		if (queueIndices.length>0)
-		{
-			outBuffer = outBuffer[0..queueIndices[0]];
-			queueIndices = null;
-		}
-	}
-
-	final bool queuePresent()
-	{
-		return queueIndices.length>0;
+		else
+			return outQueue[priority].length > 0;
 	}
 
 	void cancelIdleTimeout()
@@ -575,7 +593,7 @@ public:
 	/// Callback for when a connection has stopped responding.
 	void delegate(ClientSocket sender) handleIdleTimeout;
 	/// Callback for incoming data.
-	void delegate(ClientSocket sender, void[] data) handleReadData;
+	void delegate(ClientSocket sender, Data data) handleReadData;
 	/// Callback for when the send buffer has been flushed.
 	void delegate(ClientSocket sender) handleBufferFlushed;
 }
@@ -589,7 +607,7 @@ private:
 	{
 		this(Socket conn)
 		{
-			debug (VERBOSE) writefln("New Listener @ %s", cast(void*)this);
+			debug (ASOCKETS) writefln("New Listener @ %s", cast(void*)this);
 			this.conn = conn;
 			socketManager.register(this);
 		}
@@ -739,7 +757,7 @@ class LineBufferedSocket : ClientSocket
 {
 private:
 	/// The receive buffer.
-	string inBuffer;
+	Data inBuffer;
 
 public:
 	/// The protocol's line delimiter.
@@ -747,19 +765,25 @@ public:
 
 private:
 	/// Called when data has been received.
-	final void onReadData(ClientSocket sender, void[] data)
+	final void onReadData(ClientSocket sender, Data data)
 	{
 		import std.string;
-		inBuffer ~= cast(string) data;
-		string[] lines = split(inBuffer, delimiter);
-		inBuffer = lines[lines.length - 1];
+		inBuffer ~= data;
 
-		if (handleReadLine)
-			foreach (string line; lines[0 .. lines.length - 1])
-				if (line.length > 0)
-					handleReadLine(this, line);
+		sizediff_t index;
+		bool gotLines;
+		while ((index=indexOf(cast(string)inBuffer.contents, delimiter)) >= 0)
+		{
+			gotLines = true;
+			if (handleReadLine)
+			{
+				string line = cast(string)inBuffer.contents[0..index];
+				handleReadLine(this, line.idup);
+			}
+			inBuffer = inBuffer[index+delimiter.length..inBuffer.length];
+		}
 
-		if (lines.length > 0)
+		if (gotLines)
 			markNonIdle();
 	}
 
@@ -786,13 +810,13 @@ public:
 	override final void disconnect(string reason = DefaultDisconnectReason, DisconnectType type = DisconnectType.Requested)
 	{
 		super.disconnect(reason, type);
-		inBuffer = null;
+		inBuffer.clear();
 	}
 
 	/// Append a line to the send buffer.
 	final void send(string line)
 	{
-		super.send(line ~ "\r\n");
+		super.send(line ~ delimiter);
 	}
 
 public:
