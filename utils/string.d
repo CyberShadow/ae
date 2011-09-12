@@ -36,9 +36,9 @@ module ae.utils.string;
 
 import std.string;
 
-string hexDump(void[] b)
+string hexDump(const(void)[] b)
 {
-	auto data = cast(ubyte[]) b;
+	auto data = cast(const(ubyte)[]) b;
 	int i=0;
 	string s;
 	while (i<data.length)

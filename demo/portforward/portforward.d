@@ -74,10 +74,10 @@ class Connection
 		outer.handleDisconnect = &onOuterDisconnect;
 	}
 
-	void onOuterData(ClientSocket sender, void[] data)
+	void onOuterData(ClientSocket sender, Data data)
 	{
-		if (logData) log(format("Outer connection from %s sent %d bytes:\n%s", outer.remoteAddress(), data.length, hexDump(data)));
-		if (record) recordLog(format("%d < %d %s", Clock.currStdTime(), index, hexEscape(data)));
+		if (logData) log(format("Outer connection from %s sent %d bytes:\n%s", outer.remoteAddress(), data.length, hexDump(data.contents)));
+		if (record) recordLog(format("%d < %d %s", Clock.currStdTime(), index, hexEscape(data.contents)));
 		inner.send(data);
 	}
 
@@ -89,10 +89,10 @@ class Connection
 			inner.disconnect();
 	}
 
-	void onInnerData(ClientSocket sender, void[] data)
+	void onInnerData(ClientSocket sender, Data data)
 	{
-		if (logData) log(format("Inner connection to %s sent %d bytes:\n%s", inner.remoteAddress(), data.length, hexDump(data)));
-		if (record) recordLog(format("%d > %d %s", Clock.currStdTime(), index, hexEscape(data)));
+		if (logData) log(format("Inner connection to %s sent %d bytes:\n%s", inner.remoteAddress(), data.length, hexDump(data.contents)));
+		if (record) recordLog(format("%d > %d %s", Clock.currStdTime(), index, hexEscape(data.contents)));
 		outer.send(data);
 	}
 
@@ -137,6 +137,7 @@ void main(string[] args)
 	string listenOn = null;
 	bool quiet = false;
 	getopt(args,
+		std.getopt.config.bundling,
 		"l|listen", &listenOn,
 		"v|verbose", &logData,
 		"r|record", &record,
@@ -170,9 +171,9 @@ void main(string[] args)
 	socketManager.loop();
 }
 
-string hexEscape(void[] data)
+string hexEscape(const(void)[] data)
 {
-	auto bytes = cast(ubyte[])data;
+	auto bytes = cast(const(ubyte)[])data;
 	string s;
 	foreach (b; bytes)
 		if (b<0x20 || b>0x7E || b=='\\')
