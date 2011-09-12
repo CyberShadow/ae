@@ -38,68 +38,113 @@ static import std.c.stdlib;
 import std.c.string : memmove;
 import core.memory;
 import core.exception;
-debug import std.stdio;
-debug import std.string;
+debug(DATA) import std.stdio;
+debug(DATA) import std.string;
 
-/** Wrapper for data located in external memory, to prevent faux references.
-	Represents a slice of data managed by a DataWrapper class.
+// ideas/todo:
+// * templatize (and forbid using aliased types)?
+// * use heap (malloc/Windows heap API) for small objects?
+// * reference counting?
+// * "immutable" support?
 
-	This class has been designed to be "safe" (and opaque) as long as the "contents" isn't accessed directly.
-	Therefore, try to minimize direct access to contained data when possible.
-
-	Be careful with assignments! Assigning a Data to a Data will copy a reference to the data reference,
-	so a .clear on one reference will affect both. To create a shallow copy, use the [] operator: a = b[];
-
-	Notes on accesing memory from a Data class directly:
-	* concatenations (not appends) will work, but when using more than a few hundred bytes, better to use Data classes instead
-	* appends to data contents will probably crash the runtime, or cause reallocs (both are to be avoided) - use Data classes instead
-	* be sure not to lose Data references while using their contents!
-**/
-
-final class Data
+/**
+ * Wrapper for data located in external memory, to prevent faux references.
+ * Represents a slice of data, which may or may not be in unmanaged memory.
+ * Data in unmanaged memory is bound to a DataWrapper class instance.
+ *
+ * All operations on this class should be safe, except for accessing contents directly.
+ * All operations on contents must be accompanied by a live reference to the Data object,
+ * to keep a GC anchor towards the unmanaged data.
+ *
+ * Concatenations and appends to Data contents will cause reallocations on the heap, consider using Data instead.
+ * Be sure not to lose Data references while using their contents!
+ */
+struct Data
 {
 private:
-	/// Reference to the wrapper of the actual data.
+	/// Wrapped data
+	const(void)[] _contents;
+	/// Reference to the wrapper of the actual data - may be null to indicate wrapped data in managed memory.
+	/// Used as a GC anchor to unmanaged data, and for in-place expands (for appends).
 	DataWrapper wrapper;
-	/// Real allocated capacity. If 0, then contents represents a slice of memory owned by another Data class.
-	size_t start, end;
+	/// Indicates whether we're allowed to modify the data contents.
+	bool mutable;
 
 	/// Maximum preallocation for append operations.
 	enum { MAX_PREALLOC = 4*1024*1024 } // must be power of 2
 
-	invariant()
+public:
+	/**
+	 * Create new instance wrapping the given data.
+	 * Params:
+	 *   data = initial data
+	 *   forceReallocation = when false, the contents will be duplicated to
+	 *     unmanaged memory only when it's not on the managed heap; when true,
+	 *     the contents will be reallocated always.
+	 */
+	this(const(void)[] data, bool forceReallocation = false)
+	out
 	{
-		assert(wrapper !is null || end == 0);
-		if (wrapper)
-			assert(end <= wrapper.capacity);
-		assert(start <= end);
+		assert(this.length == data.length);
+	}
+	body
+	{
+		if (data.length == 0)
+			contents = null;
+		else
+		if (forceReallocation || GC.addrOf(data.ptr) is null)
+		{
+			// copy to unmanaged memory
+			wrapper = new DataWrapper(data.length, data.length);
+			wrapper.contents[] = data;
+			contents = wrapper.contents;
+			mutable = true;
+		}
+		else
+		{
+			// just save a reference
+			contents = data;
+			mutable = false;
+		}
 	}
 
-public:
-	/// Create new instance with a copy of the given data.
-	this(const(void)[] data)
+	/// ditto
+	this(void[] data, bool forceReallocation = false)
 	{
-		wrapper = new DataWrapper(data.length);
-		start = 0;
-		end = data.length;
-		contents[] = data;
+		const(void)[] cdata = data;
+		this(cdata, forceReallocation);
+		mutable = true;
 	}
 
 	/// Create a new instance with given size/capacity. Capacity defaults to size.
 	this(size_t size = 0, size_t capacity = 0)
+	in
+	{
+		assert(capacity == 0 || size <= capacity);
+	}
+	out
+	{
+		assert(this.length == size);
+	}
+	body
 	{
 		if (!capacity)
 			capacity = size;
 
-		assert(size <= capacity);
 		if (capacity)
-			wrapper = new DataWrapper(capacity);
+		{
+			wrapper = new DataWrapper(size, capacity);
+			contents = wrapper.contents;
+			mutable = true;
+		}
 		else
+		{
 			wrapper = null;
-		start = 0;
-		end = size;
+			contents = null;
+		}
 	}
 
+/*
 	/// Create new instance as a slice over an existing DataWrapper.
 	private this(DataWrapper wrapper, size_t start = 0, size_t end = size_t.max)
 	{
@@ -107,44 +152,130 @@ public:
 		this.start = start;
 		this.end = end==size_t.max ? wrapper.capacity : end;
 	}
+*/
+
+	@property const(void)[] contents() const
+	{
+		return _contents;
+	}
+
+	@property private const(void)[] contents(const(void)[] data)
+	{
+		return _contents = data;
+	}
+
+	/// Get mutable contents
+	@property void[] mcontents()
+	{
+		if (!mutable)
+			reallocate(length, length);
+		assert(mutable);
+		return cast(void[])_contents;
+	}
+
+	@property const(void)* ptr() const
+	{
+		return contents.ptr;
+	}
+
+	@property void* mptr()
+	{
+		return mcontents.ptr;
+	}
+
+	@property size_t length() const
+	{
+		return contents.length;
+	}
+
+	private void reallocate(size_t size, size_t capacity)
+	{
+		wrapper = new DataWrapper(size, capacity);
+		wrapper.contents[0..this.length] = contents;
+		//(cast(ubyte[])newWrapper.contents)[this.length..value] = 0;
+		contents = wrapper.contents;
+		mutable = true;
+	}
+
+	private void expand(size_t newSize, size_t newCapacity)
+	in
+	{
+		assert(length < newSize);
+		assert(newSize <= newCapacity);
+	}
+	out
+	{
+		assert(length == newSize);
+	}
+	body
+	{
+		if (wrapper is null)
+			return reallocate(newSize, newCapacity);
+		// We can only safely expand if the memory slice is at the end of the used unmanaged memory block.
+		auto pos = ptr - wrapper.contents.ptr;
+		assert(pos + length <= wrapper.size);
+		if (pos + length == wrapper.size && pos + newSize <= wrapper.capacity)
+		{
+			wrapper.size = pos + newSize;
+			contents = ptr[0..newSize];
+		}
+		else
+			reallocate(newSize, newCapacity);
+	}
+
+	@property void length(size_t value)
+	{
+		if (value == length) // no change
+			return;
+		if (value < length)  // shorten
+			_contents.length = value;
+		else                 // lengthen
+			expand(value, value);
+	}
+
+	@property Data dup() const
+	{
+		return Data(contents, true);
+	}
 
 	/// UNSAFE! Use only when you know there is only one reference to the data.
 	void deleteContents()
+	out
+	{
+		assert(wrapper is null);
+	}
+	body
 	{
 		delete wrapper;
-		assert(wrapper is null);
-		start = end = 0;
+		contents = null;
 	}
 
 	void clear()
 	{
 		wrapper = null;
-		start = end = 0;
+		contents = null;
 	}
 
 	Data opCat(const(void)[] data)
 	{
 		if (data.length==0)
 			return this;
-		Data result = new Data(length + data.length);
-		result.contents[0..this.length] = contents;
-		result.contents[this.length..$] = data;
+		Data result = Data(length + data.length);
+		result.mcontents[0..this.length] = contents;
+		result.mcontents[this.length..$] = data;
 		return result;
 	}
 
 	Data opCat(Data data)
 	{
-		if (data)
-			return this.opCat(data.contents);
-		else
-			return this;
+		return this.opCat(data.contents);
 	}
 
 	Data opCat_r(const(void)[] data)
 	{
-		Data result = new Data(data.length + length);
-		result.contents[0..data.length] = data;
-		result.contents[data.length..$] = contents;
+		Data result = Data(data.length + length);
+		result.mcontents[0..data.length] = data;
+		result.mcontents[data.length..$] = contents;
 		return result;
 	}
 
@@ -161,35 +292,17 @@ public:
 	{
 		if (data.length==0)
 			return this;
-		if (start==0 && wrapper && end + data.length <= wrapper.capacity)
-		{
-			wrapper.contents[end .. end + data.length] = data;
-			end += data.length;
-			return this;
-		}
-		else
-		{
-			// Create a new DataWrapper with all the data
-			size_t newLength = length + data.length;
-			size_t newCapacity = getPreallocSize(newLength);
-			auto newWrapper = new DataWrapper(newCapacity);
-			newWrapper.contents[0..this.length] = contents;
-			newWrapper.contents[this.length..newLength] = data;
-
-			wrapper = newWrapper;
-			start = 0;
-			end = newLength;
-
-			return this;
-		}
+		size_t oldLength = length;
+		size_t newLength = length + data.length;
+		expand(newLength, getPreallocSize(newLength));
+		auto newContents = cast(void[])_contents[oldLength..$];
+		newContents[] = data;
+		return this;
 	}
 
 	Data opCatAssign(Data data)
 	{
-		if (data)
-			return this.opCatAssign(data.contents);
-		else
-			return this;
+		return this.opCatAssign(data.contents);
 	}
 
 	Data opCatAssign(ubyte value) // hack?
@@ -197,178 +310,101 @@ public:
 		return this.opCatAssign((&value)[0..1]);
 	}
 
-	/// Inserts data at pos. Will preallocate, like opCatAssign.
-	Data splice(size_t pos, const(void)[] data)
-	{
-		if (data.length==0)
-			return this;
-		// 0 | start | start+pos | end | wrapper.capacity
-		assert(pos <= length);
-		if (start==0 && wrapper && end + data.length <= wrapper.capacity)
-		{
-			// overlapping array copy - use memmove
-			auto splicePtr = cast(ubyte*)ptr + pos;
-			memmove(splicePtr + data.length, splicePtr, length-pos);
-			memmove(splicePtr, data.ptr, data.length);
-			end += data.length;
-			return this;
-		}
-		else
-		{
-			// Create a new DataWrapper with all the data
-			size_t newLength = length + data.length;
-			size_t newCapacity = getPreallocSize(newLength);
-			auto newWrapper = new DataWrapper(newCapacity);
-			newWrapper.contents[0..pos] = contents[0..pos];
-			newWrapper.contents[pos..pos+data.length] = data;
-			newWrapper.contents[pos+data.length..newLength] = contents[pos..$];
-
-			wrapper = newWrapper;
-			start = 0;
-			end = newLength;
-
-			return this;
-		}
-	}
-
-	Data opSlice()  // duplicate reference, not content
-	{
-		return new Data(wrapper, start, end);
-	}
-
 	Data opSlice(size_t x, size_t y)
+	in
 	{
 		assert(x <= y);
 		assert(y <= length);
-		return new Data(wrapper, start + x, start + y);
+	}
+	out(result)
+	{
+		assert(result.length == y-x);
+	}
+	body
+	{
+		if (x == y)
+			return Data();
+		else
+		{
+			Data result = this;
+			result.contents = result.contents[x..y];
+			return result;
+		}
 	}
 
 	/// Return a new Data for the first size bytes, and slice this instance from size to end.
 	Data popFront(size_t size)
+	in
 	{
 		assert(size <= length);
-		Data result = new Data(wrapper, start, start + size);
-		this.start += size;
+	}
+	body
+	{
+		Data result = this;
+		result.contents = contents[0..size];
+		this  .contents = contents[size..$];
 		return result;
-	}
-
-	void[] contents()
-	{
-		return wrapper ? wrapper.contents[start..end] : null;
-	}
-
-	void* ptr()
-	{
-		return contents.ptr;
-	}
-
-	size_t length()
-	{
-		return end - start;
-	}
-
-	void length(size_t value)
-	{
-		if (value == length) // no change
-			return;
-		if (value < length) // shorten
-			end = start + value;
-		else
-		if (start==0 && start + value <= wrapper.capacity) // lengthen - with available space
-			end = start + value;
-		else // reallocate
-		{
-			auto newWrapper = new DataWrapper(value);
-			newWrapper.contents[0..this.length] = contents;
-			//(cast(ubyte[])newWrapper.contents)[this.length..value] = 0;
-
-			wrapper = newWrapper;
-			start = 0;
-			end = value;
-		}
-	}
-
-	Data dup()
-	{
-		return new Data(contents);
 	}
 }
 
 // ************************************************************************
 
-static size_t dataMemory, dataMemoryPeak;
-static uint   dataCount, allocCount;
+static /*thread-local*/ size_t dataMemory, dataMemoryPeak;
+static /*thread-local*/ uint   dataCount, allocCount;
 
 private:
 
 version (Windows)
 	import std.c.windows.windows;
-else version (FreeBSD)
-	import std.c.freebsd.freebsd;
-else version (Solaris)
-	import std.c.solaris.solaris;
-else version (linux)
-	import std.c.linux.linux;
+else
+	import core.sys.posix.unistd;
 
 /// Actual wrapper.
 final class DataWrapper
 {
 	/// Pointer to actual data.
 	void* data;
+	/// Used size. Needed for safe appends.
+	size_t size;
 	/// Allocated capacity.
 	size_t capacity;
 
 	/// Threshold of allocated memory to trigger a collect.
 	enum { COLLECT_THRESHOLD = 8*1024*1024 } // 8MB
 	/// Counter towards the threshold.
-	static size_t allocatedThreshold;
+	static /*thread-local*/ size_t allocatedThreshold;
 
 	/// Create a new instance with given capacity.
-	this(size_t capacity)
+	this(size_t size, size_t capacity)
 	{
-		data = malloc(capacity);
+		data = malloc(/*ref*/ capacity);
 		if (data is null)
 		{
-			debug printf("Garbage collect triggered by failed Data allocation... ");
-			//debug printStats();
+			debug(DATA) printf("Garbage collect triggered by failed Data allocation... ");
 			GC.collect();
-			//debug printStats();
-			debug printf("Done\n");
-			data = malloc(capacity);
+			debug(DATA) printf("Done\n");
+			data = malloc(/*ref*/ capacity);
 			allocatedThreshold = 0;
 		}
 		if (data is null)
 			onOutOfMemoryError();
-
-		/*debug if (capacity > 32*1024*1024)
-		{
-			printf("Data - allocated %d bytes at %p\n", capacity, data);
-			breakPoint();
-		}*/
-		/*debug if (capacity > 8*1024*1024)
-		{
-			printf("Data - allocated %d bytes at %p\n", capacity, data);
-			stackTrace();
-			printf("===============================================================================\n");
-		}*/
 
 		dataMemory += capacity;
 		if (dataMemoryPeak < dataMemory)
 			dataMemoryPeak = dataMemory;
 		dataCount ++;
 		allocCount ++;
-		//debug printStats();
 
+		this.size = size;
 		this.capacity = capacity;
 
 		// also collect
 		allocatedThreshold += capacity;
 		if (allocatedThreshold > COLLECT_THRESHOLD)
 		{
-			debug printf("Garbage collect triggered by total allocated Data exceeding threshold... ");
+			debug(DATA) printf("Garbage collect triggered by total allocated Data exceeding threshold... ");
 			GC.collect();
-			debug printf("Done\n");
-			//debug printStats();
+			debug(DATA) printf("Done\n");
 			allocatedThreshold = 0;
 		}
 	}
@@ -390,23 +426,14 @@ final class DataWrapper
 
 	void[] contents()
 	{
-		return data[0..capacity];
+		return data[0..size];
 	}
-
-	/*static void printStats()
-	{
-		std.gc.GCStats stats;
-		std.gc.getStats(stats);
-		with(stats)
-			printf("poolsize=%d, usedsize=%d, freeblocks=%d, freelistsize=%d, pageblocks=%d", poolsize, usedsize, freeblocks, freelistsize, pageblocks);
-		printf(" | %d bytes in %d objects\n", dataMemory, dataCount);
-	}*/
 
 	version(Windows)
 	{
-		static size_t pageSize;
+		static immutable size_t pageSize;
 
-		static this()
+		shared static this()
 		{
 			SYSTEM_INFO si;
 			GetSystemInfo(&si);
@@ -414,13 +441,12 @@ final class DataWrapper
 		}
 	}
 	else
-	version(linux)
+	static if (is(typeof(_SC_PAGE_SIZE)))
 	{
-		static size_t pageSize;
+		static immutable size_t pageSize;
 
-		static this()
+		shared static this()
 		{
-			version(linux) const _SC_PAGE_SIZE = 30;
 			pageSize = sysconf(_SC_PAGE_SIZE);
 		}
 	}
@@ -446,7 +472,10 @@ final class DataWrapper
 
 	static void free(void* p, size_t size)
 	{
-		(cast(ubyte*)p)[0..size] = 0xBA;
+		debug
+		{
+			(cast(ubyte*)p)[0..size] = 0xDA;
+		}
 		version(Windows)
 			return VirtualFree(p, 0, MEM_RELEASE);
 		else
@@ -496,9 +525,4 @@ version(Windows)
 	alias SYSTEM_INFO* LPSYSTEM_INFO;
 
 	extern(Windows) VOID GetSystemInfo(LPSYSTEM_INFO);
-}
-
-version(Posix)
-{
-	extern (C) int sysconf(int);
 }
