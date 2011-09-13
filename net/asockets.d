@@ -323,6 +323,7 @@ protected:
 	/// Called when a socket is readable.
 	override void onReadable()
 	{
+		// TODO: use FIONREAD when Phobos gets ioctl support (issue 6649)
 		static ubyte[0x10000] inBuffer;
 		int received = conn.receive(inBuffer);
 

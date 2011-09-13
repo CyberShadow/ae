@@ -39,6 +39,8 @@ import std.string;
 import std.ctype;
 
 import ae.os.os;
+import ae.app.application;
+
 import ae.os.posix.config;
 
 struct OS
