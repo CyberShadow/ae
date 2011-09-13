@@ -296,3 +296,10 @@ static this()
 {
 	mainTimer = new Timer();
 }
+
+TimerTask setTimeout(void delegate() handler, TickDuration delay)
+{
+	auto task = new TimerTask(delay, (Timer timer, TimerTask task) { handler(); });
+	mainTimer.add(task);
+	return task;
+}
