@@ -32,10 +32,13 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
+/// Utility code related to string processing.
 module ae.utils.string;
 
 import std.string;
 
+/// Formats binary data as a hex dump (three-column layout consisting of hex
+/// offset, byte values in hex, and printable low-ASCII characters).
 string hexDump(const(void)[] b)
 {
 	auto data = cast(const(ubyte)[]) b;
@@ -71,5 +74,38 @@ string hexDump(const(void)[] b)
 		i += 16;
 	}
 	return s;
+}
+
+import std.utf;
+
+/// Convert any data to a valid UTF-8 bytestream, so D's string functions can
+/// properly work on it.
+string rawToUTF8(string s)
+{
+	dstring d;
+	foreach (char c; s)
+		d ~= c;
+	return toUTF8(d);
+}
+
+string UTF8ToRaw(string r)
+{
+	string s;
+	foreach (dchar c; r)
+	{
+		assert(c < '\u0100');
+		s ~= c;
+	}
+	return s;
+}
+
+unittest
+{
+	char[1] c;
+	for (int i=0; i<256; i++)
+	{
+		c[0] = cast(char)i;
+		assert(UTF8ToRaw(rawToUTF8(c[])) == c[]);
+	}
 }
 
