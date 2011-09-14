@@ -15,7 +15,7 @@
  *
  * The Initial Developer of the Original Code is
  * Stéphan Kochen <stephan@kochen.nl>
- * Portions created by the Initial Developer are Copyright (C) 2006-2011
+ * Portions created by the Initial Developer are Copyright (C) 2006
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -676,16 +676,6 @@ public:
 	{
 		//debug writefln("Listening on %s:%d", addr, port);
 		assert(!listening);
-
-		/*addrinfo hints;
-		addrinfo* res, cur;
-		int status, ret, i;
-		char* service = toStringz(.toString(port));
-
-		hints.ai_flags = AI_PASSIVE;
-		hints.ai_family = AF_UNSPEC;
-		hints.ai_socktype = SOCK_STREAM;
-		hints.ai_protocol = IPPROTO_TCP;*/
 
 		auto addressInfos = getAddressInfo(addr, to!string(port), AddressInfoFlags.PASSIVE, SocketType.STREAM, ProtocolType.TCP);
 

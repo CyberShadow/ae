@@ -124,20 +124,20 @@ private:
 		if (!key) openKey();
 		enforce(getSize(name) == dest.length, "Invalid registry value length for " ~ name);
 		DWORD size = dest.length;
-		enforce(RegQueryValueExW(key, toUTF16z(name), null, null, cast(ubyte*)dest.ptr, &size) == ERROR_SUCCESS, "RegQueryValueEx failed");
+		enforce(RegQueryValueExW(key, toUTFz!LPCWSTR(name), null, null, cast(ubyte*)dest.ptr, &size) == ERROR_SUCCESS, "RegQueryValueEx failed");
 		enforce(size == dest.length, "Not enough data read");
 	}
 
 	void writeRaw(string name, const(void)[] dest, DWORD type)
 	{
 		if (!key) openKey();
-		enforce(RegSetValueExW(key, toUTF16z(name), 0, type, cast(ubyte*)dest.ptr, dest.length) == ERROR_SUCCESS, "RegSetValueEx failed");
+		enforce(RegSetValueExW(key, toUTFz!LPCWSTR(name), 0, type, cast(ubyte*)dest.ptr, dest.length) == ERROR_SUCCESS, "RegSetValueEx failed");
 	}
 
 	uint getSize(string name)
 	{
 		DWORD size;
-		enforce(RegQueryValueExW(key, toUTF16z(name), null, null, null, &size) == ERROR_SUCCESS);
+		enforce(RegQueryValueExW(key, toUTFz!LPCWSTR(name), null, null, null, &size) == ERROR_SUCCESS);
 		return size;
 	}
 

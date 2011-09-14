@@ -57,7 +57,7 @@ static:
 		string s2;
 		foreach (c; s)
 			if (isalnum(c))
-				s2 ~= tolower(c);
+				s2 ~= toLower(c);
 			else
 				if (!s2.endsWith('-'))
 					s2 ~= '-';

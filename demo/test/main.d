@@ -42,7 +42,7 @@ import ae.video.video;
 import ae.video.sdl.video;
 import ae.wm.application;
 
-import demo.test.mycontrol;
+import ae.demo.test.mycontrol;
 
 final class MyApplication : WMApplication
 {
