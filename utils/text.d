@@ -32,8 +32,8 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-/// Utility code related to string processing.
-module ae.utils.string;
+/// Utility code related to string and text processing.
+module ae.utils.text;
 
 import std.string;
 

@@ -43,7 +43,7 @@ import std.datetime;
 import std.random;
 import std.string;
 
-public import ae.utils.string;
+public import ae.utils.text;
 public import ae.net.irc.common;
 import ae.net.asockets;
 debug(IRC) import std.stdio;
