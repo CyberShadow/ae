@@ -32,34 +32,50 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-module ae.demo.test.main;
+module ae.ui.wm.application;
 
 import ae.ui.app.application;
-import ae.ui.app.main;
 import ae.ui.shell.shell;
-import ae.ui.shell.sdl.shell;
-import ae.ui.video.video;
-import ae.ui.video.sdl.video;
-import ae.ui.wm.application;
+import ae.ui.shell.events;
+import ae.ui.wm.controls.root;
+import ae.ui.video.surface;
 
-import ae.demo.test.mycontrol;
-
-final class MyApplication : WMApplication
+/// Specialization of Application class which automatically handles framework messages.
+class WMApplication : Application
 {
-	override string getName() { return "Demo/Test"; }
-	override string getCompanyName() { return "CyberShadow"; }
+	RootControl root;
 
-	override int run(string[] args)
+	this()
 	{
-		shell = new SDLShell();
-		video = new SDLVideo();
-		root.children ~= new MyControl();
-		shell.run();
-		return 0;
+		root = new RootControl();
 	}
-}
 
-shared static this()
-{
-	application = new MyApplication;
+	// ****************************** Event handlers *******************************
+
+	override void handleMouseDown(uint x, uint y, MouseButton button)
+	{
+		root.handleMouseDown(x, y, button);
+	}
+
+	override void handleMouseUp(uint x, uint y, MouseButton button)
+	{
+		root.handleMouseUp(x, y, button);
+	}
+
+	override void handleMouseMove(uint x, uint y, MouseButtons buttons)
+	{
+		root.handleMouseMove(x, y, buttons);
+	}
+
+	override void handleQuit()
+	{
+		shell.quit();
+	}
+
+	// ********************************* Rendering *********************************
+
+	override void render(Surface s)
+	{
+		root.render(s, 0, 0);
+	}
 }

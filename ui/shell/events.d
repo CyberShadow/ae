@@ -32,34 +32,29 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-module ae.demo.test.main;
+module ae.ui.shell.events;
 
-import ae.ui.app.application;
-import ae.ui.app.main;
-import ae.ui.shell.shell;
-import ae.ui.shell.sdl.shell;
-import ae.ui.video.video;
-import ae.ui.video.sdl.video;
-import ae.ui.wm.application;
-
-import ae.demo.test.mycontrol;
-
-final class MyApplication : WMApplication
+enum Key
 {
-	override string getName() { return "Demo/Test"; }
-	override string getCompanyName() { return "CyberShadow"; }
-
-	override int run(string[] args)
-	{
-		shell = new SDLShell();
-		video = new SDLVideo();
-		root.children ~= new MyControl();
-		shell.run();
-		return 0;
-	}
+	Esc
 }
 
-shared static this()
+enum MouseButton : ubyte
 {
-	application = new MyApplication;
+	Left,
+	Right,
+	Middle,
+	WheelUp,
+	WheelDown,
+	Max
+}
+
+enum MouseButtons : ubyte
+{
+	None = 0,
+	Left      = 1<<0,
+	Right     = 1<<1,
+	Middle    = 1<<2,
+	WheelUp   = 1<<3,
+	WheelDown = 1<<4
 }

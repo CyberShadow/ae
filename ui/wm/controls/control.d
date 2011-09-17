@@ -32,34 +32,19 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-module ae.demo.test.main;
+module ae.ui.wm.controls.control;
 
-import ae.ui.app.application;
-import ae.ui.app.main;
-import ae.ui.shell.shell;
-import ae.ui.shell.sdl.shell;
-import ae.ui.video.video;
-import ae.ui.video.sdl.video;
-import ae.ui.wm.application;
+import ae.ui.shell.events;
+import ae.ui.video.surface;
 
-import ae.demo.test.mycontrol;
-
-final class MyApplication : WMApplication
+/// Root control class.
+class Control
 {
-	override string getName() { return "Demo/Test"; }
-	override string getCompanyName() { return "CyberShadow"; }
+	uint x, y, w, h;
 
-	override int run(string[] args)
-	{
-		shell = new SDLShell();
-		video = new SDLVideo();
-		root.children ~= new MyControl();
-		shell.run();
-		return 0;
-	}
-}
+	void handleMouseDown(uint x, uint y, MouseButton button) {}
+	void handleMouseUp(uint x, uint y, MouseButton button) {}
+	void handleMouseMove(uint x, uint y, MouseButtons buttons) {}
 
-shared static this()
-{
-	application = new MyApplication;
+	abstract void render(Surface s, int x, int y);
 }

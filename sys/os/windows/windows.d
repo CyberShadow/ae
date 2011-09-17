@@ -32,34 +32,63 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-module ae.demo.test.main;
+module ae.sys.os.windows.windows;
 
+import win32.shlobj;
+import win32.objidl;
+import win32.shellapi;
+import win32.winuser;
+import win32.windef;
+import win32.winbase;
+import std.c.string;
+import std.file;
+
+import ae.sys.os.os;
 import ae.ui.app.application;
-import ae.ui.app.main;
-import ae.ui.shell.shell;
-import ae.ui.shell.sdl.shell;
-import ae.ui.video.video;
-import ae.ui.video.sdl.video;
-import ae.ui.wm.application;
 
-import ae.demo.test.mycontrol;
+import ae.sys.os.windows.config;
 
-final class MyApplication : WMApplication
+struct OS
 {
-	override string getName() { return "Demo/Test"; }
-	override string getCompanyName() { return "CyberShadow"; }
+static:
+	DefaultOS defaultOS; // Issue 6656
+	alias defaultOS this;
 
-	override int run(string[] args)
+	void getDefaultResolution(out uint x, out uint y)
 	{
-		shell = new SDLShell();
-		video = new SDLVideo();
-		root.children ~= new MyControl();
-		shell.run();
-		return 0;
+		x = GetSystemMetrics(SM_CXSCREEN);
+		y = GetSystemMetrics(SM_CYSCREEN);
 	}
-}
 
-shared static this()
-{
-	application = new MyApplication;
+	// ************************************************************
+
+	private string getShellPath(int csidl)
+	{
+		LPITEMIDLIST pidl;
+		IMalloc aMalloc;
+
+		char[] path = new char[MAX_PATH];
+		SHGetSpecialFolderLocation(null, csidl, &pidl);
+		if(!SHGetPathFromIDList(pidl, path.ptr))
+			path = null;
+		path.length = strlen(path.ptr);
+		SHGetMalloc(&aMalloc);
+		aMalloc.Free(pidl);
+		return cast(string)path;
+	}
+
+	private string getAppDir(int csidl)
+	{
+		string dir = getShellPath(csidl) ~ `\` ~ application.getName();
+		if (!exists(dir))
+			mkdir(dir);
+		return dir;
+	}
+
+	string getLocalAppProfile() { return getAppDir(CSIDL_LOCAL_APPDATA); }
+	string getRoamingAppProfile() { return getAppDir(CSIDL_APPDATA); }
+
+	// ************************************************************
+
+	alias WindowsConfig Config;
 }

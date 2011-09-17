@@ -32,34 +32,11 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-module ae.demo.test.main;
+module ae.ui.wm.controls.root;
 
-import ae.ui.app.application;
-import ae.ui.app.main;
-import ae.ui.shell.shell;
-import ae.ui.shell.sdl.shell;
-import ae.ui.video.video;
-import ae.ui.video.sdl.video;
-import ae.ui.wm.application;
+import ae.ui.wm.controls.container;
 
-import ae.demo.test.mycontrol;
-
-final class MyApplication : WMApplication
+/// Container for all top-level windows.
+final class RootControl : ContainerControl
 {
-	override string getName() { return "Demo/Test"; }
-	override string getCompanyName() { return "CyberShadow"; }
-
-	override int run(string[] args)
-	{
-		shell = new SDLShell();
-		video = new SDLVideo();
-		root.children ~= new MyControl();
-		shell.run();
-		return 0;
-	}
-}
-
-shared static this()
-{
-	application = new MyApplication;
 }

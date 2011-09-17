@@ -32,34 +32,19 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-module ae.demo.test.main;
+module ae.sys.os.os;
 
-import ae.ui.app.application;
-import ae.ui.app.main;
-import ae.ui.shell.shell;
-import ae.ui.shell.sdl.shell;
-import ae.ui.video.video;
-import ae.ui.video.sdl.video;
-import ae.ui.wm.application;
+version(Windows)
+	public import ae.sys.os.windows.windows;
+else
+	public import ae.sys.os.posix.posix;
 
-import ae.demo.test.mycontrol;
-
-final class MyApplication : WMApplication
+/// Abstract interface for OS-dependent actions
+struct DefaultOS
 {
-	override string getName() { return "Demo/Test"; }
-	override string getCompanyName() { return "CyberShadow"; }
-
-	override int run(string[] args)
+	void getDefaultResolution(out uint x, out uint y)
 	{
-		shell = new SDLShell();
-		video = new SDLVideo();
-		root.children ~= new MyControl();
-		shell.run();
-		return 0;
+		x = 1024;
+		y = 768;
 	}
-}
-
-shared static this()
-{
-	application = new MyApplication;
 }

@@ -32,34 +32,68 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-module ae.demo.test.main;
+module ae.ui.video.sdl.video;
 
-import ae.ui.app.application;
-import ae.ui.app.main;
-import ae.ui.shell.shell;
-import ae.ui.shell.sdl.shell;
+import core.thread;
+
+import derelict.sdl.sdl;
+
 import ae.ui.video.video;
-import ae.ui.video.sdl.video;
-import ae.ui.wm.application;
+import ae.ui.app.application;
+import ae.ui.shell.sdl.shell;
+import ae.ui.video.sdl.surface;
 
-import ae.demo.test.mycontrol;
-
-final class MyApplication : WMApplication
+class SDLVideo : Video
 {
-	override string getName() { return "Demo/Test"; }
-	override string getCompanyName() { return "CyberShadow"; }
-
-	override int run(string[] args)
+	override void initialize()
 	{
-		shell = new SDLShell();
-		video = new SDLVideo();
-		root.children ~= new MyControl();
-		shell.run();
-		return 0;
-	}
-}
+		auto surface = SDL_GetVideoSurface();
+		if (surface)
+			SDL_FreeSurface(surface);
 
-shared static this()
-{
-	application = new MyApplication;
+		uint screenWidth, screenHeight, flags;
+		if (application.isFullScreen())
+		{
+		    application.getFullScreenResolution(screenWidth, screenHeight);
+		    flags = SDL_HWSURFACE | SDL_DOUBLEBUF | SDL_FULLSCREEN;
+		}
+		else
+		{
+			application.getWindowSize(screenWidth, screenHeight);
+			flags = SDL_HWSURFACE | SDL_DOUBLEBUF;
+		}
+
+		sdlEnforce(SDL_SetVideoMode(screenWidth, screenHeight, 32, flags), "can't set video mode");
+	}
+
+	override void start()
+	{
+		stopping = false;
+		renderThread = new Thread(&renderThreadProc);
+		renderThread.start();
+	}
+
+	override void stop()
+	{
+		stopping = true;
+		renderThread.join();
+	}
+
+private:
+	Thread renderThread;
+	bool stopping;
+
+	void renderThreadProc()
+	{
+		auto surface = new SDLSurface(sdlEnforce(SDL_GetVideoSurface()));
+		while (!stopping)
+		{
+			// TODO: predict flip (vblank wait) duration and render at the last moment
+			synchronized (application)
+			{
+				application.render(surface);
+			}
+			surface.flip();
+		}
+	}
 }

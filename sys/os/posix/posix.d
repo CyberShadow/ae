@@ -32,34 +32,46 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-module ae.demo.test.main;
+module ae.sys.os.posix.posix;
 
+import std.path;
+import std.string;
+import std.ctype;
+
+import ae.sys.os.os;
 import ae.ui.app.application;
-import ae.ui.app.main;
-import ae.ui.shell.shell;
-import ae.ui.shell.sdl.shell;
-import ae.ui.video.video;
-import ae.ui.video.sdl.video;
-import ae.ui.wm.application;
 
-import ae.demo.test.mycontrol;
+import ae.sys.os.posix.config;
 
-final class MyApplication : WMApplication
+struct OS
 {
-	override string getName() { return "Demo/Test"; }
-	override string getCompanyName() { return "CyberShadow"; }
+static:
+	DefaultOS defaultOS; // Issue 6656
+	alias defaultOS this;
 
-	override int run(string[] args)
+	alias PosixConfig Config;
+
+	private string getPosixAppName()
 	{
-		shell = new SDLShell();
-		video = new SDLVideo();
-		root.children ~= new MyControl();
-		shell.run();
-		return 0;
+		string s = application.getName();
+		string s2;
+		foreach (c; s)
+			if (isalnum(c))
+				s2 ~= toLower(c);
+			else
+				if (!s2.endsWith('-'))
+					s2 ~= '-';
+		return s2;
 	}
-}
 
-shared static this()
-{
-	application = new MyApplication;
+	string getAppProfile()
+	{
+		string path = expandTilde("~/." ~ getPosixAppName());
+		if (!exists(path))
+			mkdir(path);
+		return path;
+	}
+
+	alias getAppProfile getLocalAppProfile;
+	alias getAppProfile getRoamingAppProfile;
 }

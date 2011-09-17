@@ -34,10 +34,10 @@
 
 module ae.demo.test.mycontrol;
 
-import ae.shell.shell;
-import ae.shell.events;
-import ae.video.surface;
-import ae.wm.controls.control;
+import ae.ui.shell.shell;
+import ae.ui.shell.events;
+import ae.ui.video.surface;
+import ae.ui.wm.controls.control;
 import std.conv;
 
 import std.random;

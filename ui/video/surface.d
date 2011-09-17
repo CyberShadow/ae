@@ -32,34 +32,33 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-module ae.demo.test.main;
+module ae.ui.video.surface;
 
-import ae.ui.app.application;
-import ae.ui.app.main;
-import ae.ui.shell.shell;
-import ae.ui.shell.sdl.shell;
-import ae.ui.video.video;
-import ae.ui.video.sdl.video;
-import ae.ui.wm.application;
-
-import ae.demo.test.mycontrol;
-
-final class MyApplication : WMApplication
+/// Abstract class for a video surface.
+class Surface
 {
-	override string getName() { return "Demo/Test"; }
-	override string getCompanyName() { return "CyberShadow"; }
-
-	override int run(string[] args)
+	struct Bitmap
 	{
-		shell = new SDLShell();
-		video = new SDLVideo();
-		root.children ~= new MyControl();
-		shell.run();
-		return 0;
-	}
-}
+		uint* pixels;
+		uint w, h, stride;
 
-shared static this()
-{
-	application = new MyApplication;
+		uint* pixelPtr(uint x, uint y)
+		{
+			assert(x<w && y<h);
+			return cast(uint*)(cast(ubyte*)pixels + y*stride) + x;
+		}
+		
+		uint opIndex(uint x, uint y)
+		{
+			return *pixelPtr(x, y);
+		}
+		
+		void opIndexAssign(uint value, uint x, uint y)
+		{
+			*pixelPtr(x, y) = value;
+		}
+	}
+
+	abstract Bitmap lock();
+	abstract void unlock();
 }

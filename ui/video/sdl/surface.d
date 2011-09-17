@@ -32,34 +32,35 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-module ae.demo.test.main;
+module ae.ui.video.sdl.surface;
 
-import ae.ui.app.application;
-import ae.ui.app.main;
-import ae.ui.shell.shell;
+import derelict.sdl.sdl;
+
+import ae.ui.video.surface;
 import ae.ui.shell.sdl.shell;
-import ae.ui.video.video;
-import ae.ui.video.sdl.video;
-import ae.ui.wm.application;
 
-import ae.demo.test.mycontrol;
-
-final class MyApplication : WMApplication
+final class SDLSurface : Surface
 {
-	override string getName() { return "Demo/Test"; }
-	override string getCompanyName() { return "CyberShadow"; }
+	SDL_Surface* s;
 
-	override int run(string[] args)
+	this(SDL_Surface* s)
 	{
-		shell = new SDLShell();
-		video = new SDLVideo();
-		root.children ~= new MyControl();
-		shell.run();
-		return 0;
+		this.s = s;
 	}
-}
 
-shared static this()
-{
-	application = new MyApplication;
+	override Bitmap lock()
+	{
+		sdlEnforce(SDL_LockSurface(s)==0, "Can't lock surface");
+		return Bitmap(cast(uint*)s.pixels, s.w, s.h, s.pitch);
+	}
+
+	override void unlock()
+	{
+		SDL_UnlockSurface(s);
+	}
+
+	void flip()
+	{
+		sdlEnforce(SDL_Flip(s)==0);
+	}
 }

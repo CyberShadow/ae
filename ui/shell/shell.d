@@ -32,34 +32,22 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-module ae.demo.test.main;
+module ae.ui.shell.shell;
 
-import ae.ui.app.application;
-import ae.ui.app.main;
-import ae.ui.shell.shell;
-import ae.ui.shell.sdl.shell;
-import ae.ui.video.video;
-import ae.ui.video.sdl.video;
-import ae.ui.wm.application;
-
-import ae.demo.test.mycontrol;
-
-final class MyApplication : WMApplication
+/// A "shell" handles OS window management, input handling, and various other platform-dependent tasks.
+class Shell
 {
-	override string getName() { return "Demo/Test"; }
-	override string getCompanyName() { return "CyberShadow"; }
+	abstract void run();
 
-	override int run(string[] args)
+	abstract void setCaption(string caption);
+
+	void quit()
 	{
-		shell = new SDLShell();
-		video = new SDLVideo();
-		root.children ~= new MyControl();
-		shell.run();
-		return 0;
+		quitting = true;
 	}
+
+protected:
+	bool quitting;
 }
 
-shared static this()
-{
-	application = new MyApplication;
-}
+__gshared Shell shell;

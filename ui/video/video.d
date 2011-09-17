@@ -32,34 +32,18 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-module ae.demo.test.main;
+module ae.ui.video.video;
 
-import ae.ui.app.application;
-import ae.ui.app.main;
-import ae.ui.shell.shell;
-import ae.ui.shell.sdl.shell;
-import ae.ui.video.video;
-import ae.ui.video.sdl.video;
-import ae.ui.wm.application;
-
-import ae.demo.test.mycontrol;
-
-final class MyApplication : WMApplication
+class Video
 {
-	override string getName() { return "Demo/Test"; }
-	override string getCompanyName() { return "CyberShadow"; }
+	/// Initialise video.
+	abstract void initialize();
 
-	override int run(string[] args)
-	{
-		shell = new SDLShell();
-		video = new SDLVideo();
-		root.children ~= new MyControl();
-		shell.run();
-		return 0;
-	}
+	/// Start render thread.
+	abstract void start();
+
+	/// Stop render thread (may block).
+	abstract void stop();
 }
 
-shared static this()
-{
-	application = new MyApplication;
-}
+__gshared Video video;
