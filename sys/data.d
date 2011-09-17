@@ -188,6 +188,11 @@ public:
 		return contents.length;
 	}
 
+	@property bool empty() const
+	{
+		return contents is null;
+	}
+
 	private void reallocate(size_t size, size_t capacity)
 	{
 		wrapper = new DataWrapper(size, capacity);

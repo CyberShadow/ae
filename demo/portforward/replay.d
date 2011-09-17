@@ -35,13 +35,13 @@
 /// Some common stuff for replaying PortForward replay logs.
 module ae.demo.portforward.replay;
 
-//import Team15.Utils;
-
 import std.stdio;
 import std.conv;
 import std.string;
 import std.datetime;
 import std.exception;
+
+import ae.utils.text;
 
 class Replayer
 {
@@ -147,7 +147,7 @@ ubyte[] stringUnescape(string s)
 	ubyte[] r;
 	for (int i=0; i<s.length; i++)
 		if (s[i]=='\\')
-			r ~= parse!ubyte(s[i+1..i+3], 16),
+			r ~= fromHex!ubyte(s[i+1..i+3]),
 			i+=2;
 		else
 			r ~= s[i];

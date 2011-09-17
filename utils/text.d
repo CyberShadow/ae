@@ -35,6 +35,7 @@
 /// Utility code related to string and text processing.
 module ae.utils.text;
 
+import std.exception;
 import std.string;
 
 /// Formats binary data as a hex dump (three-column layout consisting of hex
@@ -80,7 +81,7 @@ import std.utf;
 
 /// Convert any data to a valid UTF-8 bytestream, so D's string functions can
 /// properly work on it.
-string rawToUTF8(string s)
+string rawToUTF8(in char[] s)
 {
 	dstring d;
 	foreach (char c; s)
@@ -88,13 +89,14 @@ string rawToUTF8(string s)
 	return toUTF8(d);
 }
 
-string UTF8ToRaw(string r)
+/// Undo rawToUTF8.
+string UTF8ToRaw(in char[] r)
 {
 	string s;
 	foreach (dchar c; r)
 	{
 		assert(c < '\u0100');
-		s ~= c;
+		s ~= cast(char)c;
 	}
 	return s;
 }
@@ -105,7 +107,15 @@ unittest
 	for (int i=0; i<256; i++)
 	{
 		c[0] = cast(char)i;
-		assert(UTF8ToRaw(rawToUTF8(c[])) == c[]);
+		assert(UTF8ToRaw(rawToUTF8(c[])) == c[], format("%s -> %s -> %s", cast(ubyte[])c[], cast(ubyte[])rawToUTF8(c[]), cast(ubyte[])UTF8ToRaw(rawToUTF8(c[]))));
 	}
 }
 
+import std.conv;
+
+T fromHex(T : ulong = uint)(string s)
+{
+	T result = parse!T(s, 16);
+	enforce(s.length==0, new ConvException("Could not parse entire string"));
+	return result;
+}

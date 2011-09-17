@@ -518,7 +518,7 @@ public:
 	/// Fail to connect if the specified nickname is taken.
 	bool exactNickname;
 	/// How to convert the IRC 8-bit data to and from UTF-8 (D strings must be valid UTF-8).
-	string function(string) decoder = &rawToUTF8, encoder = &UTF8ToRaw;
+	string function(in char[]) decoder = &rawToUTF8, encoder = &UTF8ToRaw;
 
 	struct Channel
 	{
@@ -587,13 +587,6 @@ public:
 		conn.handleReadLine = &onReadLine;
 		conn.handleInactivity = &onSocketInactivity;
 		conn.handleTimeout = &onSocketTimeout;
-
-		debug (REFCOUNT) refcount("Irc/IrcClient",1);
-	}
-
-	~this()
-	{
-		debug (REFCOUNT) refcount("Irc/IrcClient",0);
 	}
 
 	/// Start establishing a connection to the IRC network.
