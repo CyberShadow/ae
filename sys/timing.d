@@ -303,3 +303,11 @@ TimerTask setTimeout(void delegate() handler, TickDuration delay)
 	mainTimer.add(task);
 	return task;
 }
+
+TimerTask setInterval(void delegate() handler, TickDuration delay)
+{
+	TimerTask task;
+	task = new TimerTask(delay, (Timer timer, TimerTask task) { mainTimer.add(task); handler(); });
+	mainTimer.add(task);
+	return task;
+}
