@@ -178,6 +178,9 @@ string formatTime(string fmt, SysTime t = Clock.currTime)
 			case 'u':
 				result ~= format("%06d", t.fracSec.usecs);
 				break;
+			case 'E': // not standard
+				result ~= format("%03d", t.fracSec.msecs);
+				break;
 
 			// Timezone
 			case 'e':
