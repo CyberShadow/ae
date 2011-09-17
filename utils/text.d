@@ -38,6 +38,13 @@ module ae.utils.text;
 import std.exception;
 import std.string;
 
+bool contains(string str, string what)
+{
+	return str.indexOf(what)>=0;
+}
+
+// ************************************************************************
+
 /// Formats binary data as a hex dump (three-column layout consisting of hex
 /// offset, byte values in hex, and printable low-ASCII characters).
 string hexDump(const(void)[] b)
@@ -111,6 +118,8 @@ unittest
 	}
 }
 
+// ************************************************************************
+
 import std.conv;
 
 T fromHex(T : ulong = uint)(string s)
@@ -118,4 +127,25 @@ T fromHex(T : ulong = uint)(string s)
 	T result = parse!T(s, 16);
 	enforce(s.length==0, new ConvException("Could not parse entire string"));
 	return result;
+}
+
+ubyte[] arrayFromHex(string s)
+{
+	enforce(s.length % 2 == 0, "Odd length");
+	auto result = new ubyte[s.length/2];
+	foreach (i, ref b; result)
+		b = fromHex!ubyte(s[i*2..i*2+2]);
+	return result;
+}
+
+// ************************************************************************
+
+import std.random;
+
+string randomString(int length=20, string chars="abcdefghijklmnopqrstuvwxyz")
+{
+	char[] result = new char[length];
+	foreach (ref c; result)
+		c = chars[uniform(0, $)];
+	return assumeUnique(result);
 }

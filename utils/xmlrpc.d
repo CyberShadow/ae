@@ -37,6 +37,7 @@ module ae.utils.xmlrpc;
 
 import std.string;
 import std.conv;
+import std.exception;
 
 import ae.utils.xml;
 
@@ -190,7 +191,7 @@ T parseXmlValue(T)(XmlNode value)
 		XmlNode contentNode = typeNode[0];
 		enforce(contentNode.type==XmlNodeType.Text, "Expected <double> child to be text node");
 		string s = contentNode.tag;
-		return toDouble(s);
+		return to!double(s);
 	}
 	else
 	static if (is(T U : U[]))
@@ -260,8 +261,8 @@ T parseXmlRpcResponse(T)(XmlDocument doc)
 			int faultCode;
 			string faultString;
 		}
-		with (parseXmlValue!(Fault)(fault["value"]))
-			throw new XmlRpcException(faultCode, faultString);
+		auto details = parseXmlValue!(Fault)(fault["value"]);
+		throw new XmlRpcException(details.faultCode, details.faultString);
 	}
 
 	auto params = methodResponse.findChild("params");
