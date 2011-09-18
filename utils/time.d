@@ -56,6 +56,9 @@ static:
 	const W3C = `Y-m-d\TH:i:sP`;
 
 	const HTML5DATE = `Y-m-d`;
+
+	/// Format produced by std.date.toString, e.g. "Tue Jun 07 13:23:19 GMT+0100 2011"
+	const STD_DATE = `D M d H:i:s \G\M\TO Y`;
 }
 
 private const WeekdayShortNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -191,12 +194,14 @@ string formatTime(string fmt, SysTime t = Clock.currTime)
 				break;
 			case 'O':
 			{
+				// TODO: is this correct?
 				auto minutes = (t.stdTime - t.timezone.utcToTZ(t.stdTime)) / 10_000_000 / 60;
 				result ~= format("%+03d%02d", minutes/60, abs(minutes%60));
 				break;
 			}
 			case 'P':
 			{
+				// TODO: is this correct?
 				auto minutes = (t.stdTime - t.timezone.utcToTZ(t.stdTime)) / 10_000_000 / 60;
 				result ~= format("%+03d:%02d", minutes/60, abs(minutes%60));
 				break;
@@ -205,6 +210,7 @@ string formatTime(string fmt, SysTime t = Clock.currTime)
 				result ~= t.timezone.stdName;
 				break;
 			case 'Z':
+				// TODO: is this correct?
 				result ~= format("%d", (t.stdTime - t.timezone.utcToTZ(t.stdTime)) / 10_000_000);
 				break;
 
@@ -379,6 +385,7 @@ SysTime parseTime(string fmt, string t)
 				break;
 			case 'O':
 			{
+				// TODO: is this correct?
 				auto tzStr = take(5);
 				enforce(tzStr[0]=='-' || tzStr[0]=='+', "-/+ expected");
 				auto minutes = (to!int(tzStr[1..3]) * 60 + to!int(tzStr[3..5])) * (tzStr[0]=='-' ? -1 : 1);
@@ -387,6 +394,7 @@ SysTime parseTime(string fmt, string t)
 			}
 			case 'P':
 			{
+				// TODO: is this correct?
 				auto tzStr = take(6);
 				enforce(tzStr[0]=='-' || tzStr[0]=='+', "-/+ expected");
 				enforce(tzStr[3]==':', ": expected");
@@ -399,6 +407,7 @@ SysTime parseTime(string fmt, string t)
 				break;
 			case 'Z':
 			{
+				// TODO: is this correct?
 				auto seconds = takeNumber(1, 6);
 				enforce(seconds % 60 == 0, "Timezone granularity lower than minutes not supported");
 				tz = new SimpleTimeZone(seconds / 60);
