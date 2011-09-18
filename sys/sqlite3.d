@@ -44,7 +44,7 @@ import std.conv : to;
 final class SQLite
 {
 	private sqlite3* db;
-	
+
 	this(string fn)
 	{
 		sqenforce(sqlite3_open(toStringz(fn), &db));
@@ -55,7 +55,7 @@ final class SQLite
 		sqlite3_close(db);
 	}
 
-	auto exec(string sql)
+	auto query(string sql)
 	{
 		struct Iterator
 		{
@@ -64,17 +64,17 @@ final class SQLite
 			string sql;
 			sqlite3* db;
 			F dg;
-			int res;
+			int fres;
 
 			int opApply(F dg)
 			{
 				this.dg = dg;
-				auto ret = sqlite3_exec(db, toStringz(sql), &callback, &this, null);
-				if (ret == SQLITE_ABORT)
-					return res;
+				auto res = sqlite3_exec(db, toStringz(sql), &callback, &this, null);
+				if (res == SQLITE_ABORT)
+					return fres;
 				else
-				if (ret != SQLITE_OK)
-					throw new SQLiteException(db);
+				if (res != SQLITE_OK)
+					throw new SQLiteException(db, res);
 				return 0;
 			}
 
@@ -86,24 +86,144 @@ final class SQLite
 				foreach (n; 0..argc)
 					args[n] = to!(const(char)[])(argv[n]),
 					cols[n] = to!(const(char)[])(colv[n]);
-				return i.res = i.dg(args, cols);
+				return i.fres = i.dg(args, cols);
 			}
 		}
 
 		return Iterator(sql, db);
 	}
 
+	void exec(string sql)
+	{
+		foreach (cells, columns; query(sql))
+			break;
+	}
+
+	final class SQLitePreparedStatement
+	{
+		sqlite3_stmt* stmt;
+
+		void bind(int idx, int v)
+		{
+			sqlite3_bind_int(stmt, idx, v);
+		}
+
+		void bind(int idx, long v)
+		{
+			sqlite3_bind_int64(stmt, idx, v);
+		}
+
+		void bind(int idx, double v)
+		{
+			sqlite3_bind_double(stmt, idx, v);
+		}
+
+		void bind(int idx, in char[] v)
+		{
+			sqlite3_bind_text(stmt, idx, v.ptr, v.length, SQLITE_TRANSIENT);
+		}
+
+		void bind(int idx, in wchar[] v)
+		{
+			sqlite3_bind_text16(stmt, idx, v.ptr, v.length*2, SQLITE_TRANSIENT);
+		}
+
+		void bind(int idx, void* n)
+		{
+			assert(n is null);
+			sqlite3_bind_null(stmt, idx);
+		}
+
+		void bind(int idx, in ubyte[] v)
+		{
+			sqlite3_bind_blob(stmt, idx, v.ptr, v.length, SQLITE_TRANSIENT);
+		}
+
+		void bindAll(T...)(T args)
+		{
+			foreach (int n, arg; args)
+				bind(n+1, arg);
+		}
+
+		/// Return "true" if a row is available, "false" if done.
+		bool step()
+		{
+			auto res = sqlite3_step(stmt);
+			if (res == SQLITE_DONE)
+			{
+				reset();
+				return false;
+			}
+			else
+			if (res == SQLITE_ROW)
+				return true;
+			else
+			{
+				sqenforce(res);
+				return false; // only on SQLITE_OK, which shouldn't happen
+			}
+		}
+
+		void reset()
+		{
+			sqenforce(sqlite3_reset(stmt));
+		}
+
+		void run(T...)(T args)
+		{
+			static if (T.length)
+				bindAll!T(args);
+			while (step()) {}
+		}
+
+		T column(T)(int idx)
+		{
+			static if (is(T == string))
+			{
+				string result = new string[sqlite3_column_bytes(stmt, idx)];
+				result[] = cast(char*)sqlite3_column_blob(stmt, idx)[0..result.length];
+				return result;
+			}
+			else
+			static if (is(T == int))
+				return sqlite3_column_int(stmt, idx);
+			else
+			static if (is(T == long))
+				return sqlite3_column_int64(stmt, idx);
+			else
+			static if (is(T == double))
+				return sqlite3_column_double(stmt, idx);
+			else
+				static assert(0, "Can't get column with type " ~ T.stringof);
+		}
+
+		~this()
+		{
+			sqlite3_finalize(stmt);
+		}
+	}
+
+	SQLitePreparedStatement prepare(string sql)
+	{
+		auto s = new SQLitePreparedStatement;
+		sqenforce(sqlite3_prepare_v2(db, toStringz(sql), -1, &s.stmt, null));
+		return s;
+	}
+
 	private void sqenforce(int res)
 	{
 		if (res != SQLITE_OK)
-			throw new SQLiteException(db);
+			throw new SQLiteException(db, res);
 	}
 }
 
 class SQLiteException : Exception
 {
-	this(sqlite3* db)
+	int code;
+
+	this(sqlite3* db, int code)
 	{
+		this.code = code;
 		super(to!string(sqlite3_errmsg(db)));
 	}
 }

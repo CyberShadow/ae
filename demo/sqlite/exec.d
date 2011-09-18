@@ -44,7 +44,7 @@ void main(string[] args)
 		return stderr.writeln("Usage: exec DATABASE COMMAND");
 	auto db = new SQLite(args[1]);
 	int row = 0;
-	foreach (cells, columns; db.exec(args[2]))
+	foreach (cells, columns; db.query(args[2]))
 	{
 		foreach (i; 0..cells.length)
 			writefln("%s[%d] = %s", columns[i], row, cells[i]);
