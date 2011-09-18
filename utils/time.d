@@ -368,6 +368,9 @@ SysTime parseTime(string fmt, string t)
 			case 'u':
 				usecs = takeNumber(6);
 				break;
+			case 'E': // not standard
+				usecs = 1000 * takeNumber(3);
+				break;
 
 			// Timezone
 			// case 'e': ???
@@ -423,7 +426,7 @@ SysTime parseTime(string fmt, string t)
 			{
 				enforce(t.length, to!string([c]) ~ " expected or unsupported format character");
 				uint stride = 0;
-				enforce(decode(t, stride) == c);
+				enforce(decode(t, stride) == c, to!string([c]) ~ " expected or unsupported format character");
 				t = t[stride..$];
 			}
 		}
