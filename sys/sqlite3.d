@@ -187,6 +187,9 @@ final class SQLite
 			static if (is(T == long))
 				return sqlite3_column_int64(stmt, idx);
 			else
+			static if (is(T == bool))
+				return sqlite3_column_int(stmt, idx) != 0;
+			else
 			static if (is(T == double))
 				return sqlite3_column_double(stmt, idx);
 			else
