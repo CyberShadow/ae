@@ -99,7 +99,7 @@ final class SQLite
 			break;
 	}
 
-	final class SQLitePreparedStatement
+	final class PreparedStatement
 	{
 		sqlite3_stmt* stmt;
 
@@ -169,7 +169,7 @@ final class SQLite
 			sqenforce(sqlite3_reset(stmt));
 		}
 
-		void run(T...)(T args)
+		void exec(T...)(T args)
 		{
 			static if (T.length)
 				bindAll!T(args);
@@ -179,11 +179,7 @@ final class SQLite
 		T column(T)(int idx)
 		{
 			static if (is(T == string))
-			{
-				string result = new string[sqlite3_column_bytes(stmt, idx)];
-				result[] = cast(char*)sqlite3_column_blob(stmt, idx)[0..result.length];
-				return result;
-			}
+				return (cast(char*)sqlite3_column_blob(stmt, idx))[0..sqlite3_column_bytes(stmt, idx)].idup;
 			else
 			static if (is(T == int))
 				return sqlite3_column_int(stmt, idx);
@@ -197,15 +193,25 @@ final class SQLite
 				static assert(0, "Can't get column with type " ~ T.stringof);
 		}
 
+		int columnCount()
+		{
+			return sqlite3_column_count(stmt);
+		}
+
+		int dataCount()
+		{
+			return sqlite3_data_count(stmt);
+		}
+
 		~this()
 		{
 			sqlite3_finalize(stmt);
 		}
 	}
 
-	SQLitePreparedStatement prepare(string sql)
+	PreparedStatement prepare(string sql)
 	{
-		auto s = new SQLitePreparedStatement;
+		auto s = new PreparedStatement;
 		sqenforce(sqlite3_prepare_v2(db, toStringz(sql), -1, &s.stmt, null));
 		return s;
 	}
