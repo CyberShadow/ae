@@ -233,7 +233,7 @@ string formatTime(string fmt, SysTime t = Clock.currTime)
 
 import std.exception : enforce;
 import std.conv : to;
-import std.ascii : isDigit;
+import std.ascii : isDigit, isWhite;
 
 /// Attempt to parse a time string using a PHP date() format string.
 /// Supports only a small subset of format characters.
@@ -252,10 +252,10 @@ SysTime parseTime(string fmt, string t)
 		if (max==-1) max=n;
 		enforce(t.length >= n, "Not enough characters in date string");
 		foreach (i, c; t[0..n])
-			enforce((i==0 && c=='-') || isDigit(c), "Number expected");
+			enforce((i==0 && c=='-') || isDigit(c) || isWhite(c), "Number expected");
 		while (n < max && t.length > n && isDigit(t[n]))
 			n++;
-		return to!int(take(n));
+		return to!int(strip(take(n)));
 	}
 
 	int takeWord(in string[] words, string name)
