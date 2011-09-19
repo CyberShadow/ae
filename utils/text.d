@@ -118,6 +118,17 @@ unittest
 	}
 }
 
+string forceValidUTF8(string s)
+{
+	try
+	{
+		validate(s);
+		return s;
+	}
+	catch (UtfException)
+		return rawToUTF8(s);
+}
+
 // ************************************************************************
 
 import std.conv;
