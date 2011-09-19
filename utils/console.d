@@ -1,4 +1,4 @@
-﻿/* ***** BEGIN LICENSE BLOCK *****
+/* ***** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 3.0
  *
  * The contents of this file are subject to the Mozilla Public License Version
@@ -15,7 +15,7 @@
  *
  * The Initial Developer of the Original Code is
  * Vladimir Panteleev <vladimir@thecybershadow.net>
- * Portions created by the Initial Developer are Copyright (C) 2009-2011
+ * Portions created by the Initial Developer are Copyright (C) 2011
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -32,55 +32,26 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-module ae.demo.sqlite.exec;
+/// Enable UTF-8 output on Windows.
+module ae.utils.console;
 
-import std.stdio;
-import std.algorithm;
-import std.array;
-import std.conv;
-
-import ae.sys.sqlite3;
-import ae.utils.console;
-
-void main(string[] args)
+version(Windows)
 {
-	if (args.length != 3)
-		return stderr.writeln("Usage: exec DATABASE COMMAND");
-	auto db = new SQLite(args[1]);
-	int idx = 0;
-	string[][] rows;
-	foreach (cells, columns; db.query(args[2]))
+	import std.c.windows.windows;
+	UINT oldCP, oldOutputCP;
+
+	shared static this()
 	{
-		if (rows is null)
-			rows ~= ["#"] ~ array(map!`a.idup`(columns));
-		rows ~= [to!string(idx++)] ~ array(map!`a.idup`(cells));
+		oldCP = GetConsoleCP();
+		oldOutputCP = GetConsoleOutputCP();
+
+		SetConsoleCP(65001);
+		SetConsoleOutputCP(65001);
 	}
-	if (rows.length == 0)
-		return;
-	auto widths = new int[rows[0].length];
-	foreach (row; rows)
+
+	shared static ~this()
 	{
-		assert(row.length == rows[0].length);
-		foreach (i, cell; row)
-			widths[i] = max(widths[i], cell.length);
+		SetConsoleCP(oldCP);
+		SetConsoleOutputCP(oldOutputCP);
 	}
-	foreach (j, row; rows)
-	{
-		foreach (i, col; row)
-		{
-			if (i) write(" │ ");
-			write(col, std.array.replicate(" ", widths[i]-col.length));
-		}
-		writeln();
-		if (j==0)
-		{
-			foreach (i, w; widths)
-			{
-				if (i) write("─┼─");
-				write(std.array.replicate("─", w));
-			}
-			writeln();
-		}
-	}
-	writeln();
 }
