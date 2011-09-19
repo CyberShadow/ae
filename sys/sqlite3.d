@@ -196,6 +196,12 @@ final class SQLite
 				static assert(0, "Can't get column with type " ~ T.stringof);
 		}
 
+		void columns(T...)(ref T args)
+		{
+			foreach (i, arg; args)
+				args[i] = column!(typeof(arg))(i);
+		}
+
 		int columnCount()
 		{
 			return sqlite3_column_count(stmt);
