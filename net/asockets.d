@@ -63,7 +63,7 @@ int eventCounter;
 struct SocketManager
 {
 private:
-	enum FD_SETSIZE = 4096;
+	enum FD_SETSIZE = 1024;
 
 	/// List of all sockets to poll.
 	GenericSocket[] sockets;
