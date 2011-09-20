@@ -112,30 +112,30 @@ public:
 		setStatus(HttpStatusCode.OK);
 		switch (toLower(extension(filename)))
 		{
-			case "txt":
+			case ".txt":
 				headers["Content-Type"] = "text/plain";
 				break;
-			case "htm":
-			case "html":
+			case ".htm":
+			case ".html":
 				headers["Content-Type"] = "text/html";
 				break;
-			case "js":
+			case ".js":
 				headers["Content-Type"] = "text/javascript";
 				break;
-			case "css":
+			case ".css":
 				headers["Content-Type"] = "text/css";
 				break;
-			case "png":
+			case ".png":
 				headers["Content-Type"] = "image/png";
 				break;
-			case "gif":
+			case ".gif":
 				headers["Content-Type"] = "image/gif";
 				break;
-			case "jpg":
-			case "jpeg":
+			case ".jpg":
+			case ".jpeg":
 				headers["Content-Type"] = "image/jpeg";
 				break;
-			case "ico":
+			case ".ico":
 				headers["Content-Type"] = "image/vnd.microsoft.icon";
 				break;
 			default:
