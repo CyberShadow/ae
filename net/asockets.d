@@ -86,7 +86,7 @@ private:
 	}
 
 public:
-	int size()
+	size_t size()
 	{
 		return sockets.length;
 	}
@@ -106,9 +106,9 @@ public:
 			// TODO: this is inaccurate on POSIX, "max" means maximum fd value
 			if (sockets.length > readset.max || sockets.length > writeset.max || sockets.length > errorset.max)
 			{
-				readset  = new SocketSet(sockets.length*2);
-				writeset = new SocketSet(sockets.length*2);
-				errorset = new SocketSet(sockets.length*2);
+				readset  = new SocketSet(to!uint(sockets.length*2));
+				writeset = new SocketSet(to!uint(sockets.length*2));
+				errorset = new SocketSet(to!uint(sockets.length*2));
 			}
 			else
 			{
@@ -325,7 +325,7 @@ protected:
 	{
 		// TODO: use FIONREAD when Phobos gets ioctl support (issue 6649)
 		static ubyte[0x10000] inBuffer;
-		int received = conn.receive(inBuffer);
+		auto received = conn.receive(inBuffer);
 
 		if (received == 0)
 			return disconnect("Connection closed", DisconnectType.Graceful);

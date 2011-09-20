@@ -120,12 +120,12 @@ final class SQLite
 
 		void bind(int idx, in char[] v)
 		{
-			sqlite3_bind_text(stmt, idx, v.ptr, v.length, SQLITE_TRANSIENT);
+			sqlite3_bind_text(stmt, idx, v.ptr, to!int(v.length), SQLITE_TRANSIENT);
 		}
 
 		void bind(int idx, in wchar[] v)
 		{
-			sqlite3_bind_text16(stmt, idx, v.ptr, v.length*2, SQLITE_TRANSIENT);
+			sqlite3_bind_text16(stmt, idx, v.ptr, to!int(v.length*2), SQLITE_TRANSIENT);
 		}
 
 		void bind(int idx, void* n)
@@ -136,7 +136,7 @@ final class SQLite
 
 		void bind(int idx, in ubyte[] v)
 		{
-			sqlite3_bind_blob(stmt, idx, v.ptr, v.length, SQLITE_TRANSIENT);
+			sqlite3_bind_blob(stmt, idx, v.ptr, to!int(v.length), SQLITE_TRANSIENT);
 		}
 
 		void bindAll(T...)(T args)

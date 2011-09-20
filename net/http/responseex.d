@@ -155,10 +155,10 @@ public:
 	{
 		for(;;)
 		{
-			int startpos = data.indexOf("<?");
+			auto startpos = data.indexOf("<?");
 			if(startpos==-1)
 				return data;
-			int endpos = data[startpos .. $].indexOf("?>");
+			auto endpos = data[startpos .. $].indexOf("?>");
 			if(endpos<2)
 				throw new Exception("Bad syntax in template");
 			string token = data[startpos+2 .. startpos+endpos];

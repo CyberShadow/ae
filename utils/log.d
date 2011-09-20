@@ -122,7 +122,7 @@ protected:
 	override void open()
 	{
 		string path = "logs/" ~ name;
-		int p = path.lastIndexOf('/');
+		auto p = path.lastIndexOf('/');
 		string baseName = path[p+1..$];
 		path = path[0..p];
 		string[] segments = path.split("/");

@@ -80,7 +80,7 @@ private:
 			inBuffer ~= data;
 
 			auto inBufferStr = cast(string)inBuffer.contents;
-			int headersend = inBufferStr.indexOf("\r\n\r\n");
+			auto headersend = inBufferStr.indexOf("\r\n\r\n");
 			if (headersend == -1)
 				return;
 
@@ -92,12 +92,12 @@ private:
 
 			currentRequest = new HttpRequest();
 
-			int methodend = reqline.indexOf(' ');
+			auto methodend = reqline.indexOf(' ');
 			enforce(methodend > 0);
 			currentRequest.method = reqline[0 .. methodend].idup;
 			reqline = reqline[methodend + 1 .. reqline.length];
 
-			int resourceend = reqline.lastIndexOf(' ');
+			auto resourceend = reqline.lastIndexOf(' ');
 			enforce(resourceend > 0);
 			currentRequest.resource = reqline[0 .. resourceend].idup;
 
@@ -107,7 +107,7 @@ private:
 
 			foreach (string line; lines)
 			{
-				int valuestart = line.indexOf(": ");
+				auto valuestart = line.indexOf(": ");
 				if (valuestart > 0)
 					currentRequest.headers[line[0 .. valuestart].idup] = line[valuestart + 2 .. line.length].idup;
 			}

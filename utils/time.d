@@ -270,7 +270,7 @@ SysTime parseTime(string fmt, string t)
 			if (t.startsWith(word))
 			{
 				t = t[word.length..$];
-				return idx;
+				return cast(int)idx;
 			}
 		throw new Exception(name ~ " expected");
 	}
@@ -434,7 +434,7 @@ SysTime parseTime(string fmt, string t)
 			default:
 			{
 				enforce(t.length, to!string([c]) ~ " expected or unsupported format character");
-				uint stride = 0;
+				size_t stride = 0;
 				enforce(decode(t, stride) == c, to!string([c]) ~ " expected or unsupported format character");
 				t = t[stride..$];
 			}

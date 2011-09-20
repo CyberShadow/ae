@@ -448,13 +448,13 @@ public string encodeAllEntities(string str)
 
 public string decodeEntities(string str)
 {
-	int i=0, p;
+	sizediff_t i=0, p;
 	while ((p=str[i..$].indexOf('&'))>=0)
 	{
 		i += p;
 		if ((p=str[i..$].indexOf(';'))>=0)
 		{
-			int j = i+p;
+			auto j = i+p;
 			string entity = str[i+1..j];
 			if (entity.length>0)
 			{

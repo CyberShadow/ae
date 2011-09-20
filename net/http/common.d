@@ -82,7 +82,7 @@ public:
 		// applies to both Client/Server as some clients put a full URL in the GET line instead of using a "Host" header
 		if (resource_.length>7 && resource_[0 .. 7] == "http://")
 		{
-			int pathstart = resource_[7 .. $].indexOf('/');
+			auto pathstart = resource_[7 .. $].indexOf('/');
 			if (pathstart == -1)
 			{
 				host = resource_[7 .. $];
@@ -93,7 +93,7 @@ public:
 				host = resource_[7 .. 7 + pathstart];
 				resource_ = resource_[7 + pathstart .. $];
 			}
-			int portstart = host().indexOf(':');
+			auto portstart = host().indexOf(':');
 			if (portstart != -1)
 			{
 				port = to!ushort(host[portstart+1..$]);
@@ -119,7 +119,7 @@ public:
 
 	string proxyHost()
 	{
-		int portstart = proxy.indexOf(':');
+		auto portstart = proxy.indexOf(':');
 		if (portstart != -1)
 			return proxy[0..portstart];
 		return proxy;
@@ -127,7 +127,7 @@ public:
 
 	ushort proxyPort()
 	{
-		int portstart = proxy.indexOf(':');
+		auto portstart = proxy.indexOf(':');
 		if (portstart != -1)
 			return to!ushort(proxy[portstart+1..$]);
 		return 80;
@@ -341,12 +341,12 @@ string[] parseItemList(string s)
 		static Item opCall(string s)
 		{
 			Item i;
-			int p;
+			sizediff_t p;
 			while((p=s.lastIndexOf(';'))!=-1)
 			{
 				string param = s[p+1..$];
 				s = strip(s[0..p]);
-				int p2 = param.indexOf('=');
+				auto p2 = param.indexOf('=');
 				assert(p2!=-1);
 				string name=strip(param[0..p2]), value=strip(param[p2+1..$]);
 				switch(name)
@@ -444,7 +444,7 @@ string[string] decodeUrlParameters(string qs)
 	string[string] dic;
 	foreach (pair; segs)
 	{
-		int p = pair.indexOf('=');
+		auto p = pair.indexOf('=');
 		if (p < 0)
 			dic[decodeUrlParameter(pair)] = null;
 		else

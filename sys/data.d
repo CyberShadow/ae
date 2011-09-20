@@ -362,7 +362,10 @@ private:
 version (Windows)
 	import std.c.windows.windows;
 else
+{
 	import core.sys.posix.unistd;
+	import core.sys.posix.sys.mman;
+}
 
 /// Actual wrapper.
 final class DataWrapper
