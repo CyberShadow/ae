@@ -34,13 +34,22 @@
 
 module ae.ui.app.application;
 
-import ae.sys.os.os;
+import ae.sys.desktop;
+import ae.sys.config;
 import ae.ui.shell.events;
 import ae.ui.video.surface;
 
 /// The purpose of this class is to allow the application to provide app-specific information to the framework.
+// This class could theoretically be split up into more layers (ShellApplication, etc.)
 class Application
 {
+	Config config;
+
+	this()
+	{
+		config = new Config(getName(), getCompanyName());
+	}
+
 	// ************************** Application information **************************
 
 	/// Returns a string containing the application name, as visible in the window caption and taskbar, and used in filesystem/registry paths.
@@ -58,27 +67,33 @@ class Application
 
 	// ************************** Default screen settings **************************
 
-	void getDefaultFullScreenResolution(out uint x, out uint y) { return OS.getDefaultResolution(x, y); }
+	void getDefaultFullScreenResolution(out uint x, out uint y)
+	{
+		static if (is(typeof(getDesktopResolution)))
+			getDesktopResolution(x, y);
+		else
+			x = 1024, y = 768;
+	}
 	void getDefaultWindowSize(out uint x, out uint y) { x = 800; y = 600; }
 	bool isFullScreenByDefault() { return false; }
 
 	void getFullScreenResolution(out uint x, out uint y)
 	{
 		getDefaultFullScreenResolution(x, y);
-		x = OS.Config.read("FullScreenX", x);
-		y = OS.Config.read("FullScreenY", y);
+		x = config.read("FullScreenX", x);
+		y = config.read("FullScreenY", y);
 	}
 
 	void getWindowSize(out uint x, out uint y)
 	{
 		getDefaultWindowSize(x, y);
-		x = OS.Config.read("WindowX", x);
-		y = OS.Config.read("WindowY", y);
+		x = config.read("WindowX", x);
+		y = config.read("WindowY", y);
 	}
 
 	bool isFullScreen()
 	{
-		return OS.Config.read("FullScreen", isFullScreenByDefault());
+		return config.read("FullScreen", isFullScreenByDefault());
 	}
 
 	// ****************************** Event handlers *******************************

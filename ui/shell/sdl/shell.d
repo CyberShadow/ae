@@ -43,7 +43,6 @@ import ae.ui.shell.shell;
 import ae.ui.shell.events;
 import ae.ui.video.video;
 import ae.ui.app.application;
-import ae.sys.os.os;
 
 final class SDLShell : Shell
 {
