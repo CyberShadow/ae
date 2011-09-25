@@ -35,8 +35,10 @@
 module ae.ui.app.windows.main;
 
 import core.runtime;
-import std.c.windows.windows;
-import std.windows.charset : toMBSz;
+import std.utf;
+
+import win32.windef;
+import win32.winuser;
 
 import ae.ui.app.main;
 
@@ -64,7 +66,7 @@ int WinMain(HINSTANCE hInstance,
 
 	catch (Throwable o)				// catch any uncaught exceptions
 	{
-		MessageBoxA(null, toMBSz(o.toString()), "Error",
+		MessageBoxW(null, toUTFz!LPCWSTR(o.toString()), "Error",
 					MB_OK | MB_ICONEXCLAMATION);
 		result = 1;				// failed
 	}
@@ -72,20 +74,15 @@ int WinMain(HINSTANCE hInstance,
 	return result;
 }
 
-// Following code is from D's druntime\src\rt\dmain2.d
+private:
+// Following code is adapted from D's druntime\src\rt\dmain2.d
 
-private import core.stdc.wchar_;
-private import core.stdc.stdlib;
+import core.stdc.wchar_;
+import core.stdc.stdlib;
 
-extern (Windows) alias int function() FARPROC;
-extern (Windows) FARPROC    GetProcAddress(void*, in char*);
-extern (Windows) void*      LoadLibraryA(in char*);
-extern (Windows) int        FreeLibrary(void*);
-extern (Windows) void*      LocalFree(void*);
-extern (Windows) wchar_t*   GetCommandLineW();
-extern (Windows) wchar_t**  CommandLineToArgvW(wchar_t*, int*);
-extern (Windows) export int WideCharToMultiByte(uint, uint, wchar_t*, int, char*, int, char*, int);
-pragma(lib, "shell32.lib"); // needed for CommandLineToArgvW
+import win32.winbase;
+import win32.shellapi;
+import win32.winnls;
 
 string[] getArgs()
 {
@@ -93,9 +90,8 @@ string[] getArgs()
 	size_t    wclen = wcslen(wcbuf);
 	int       wargc = 0;
 	wchar_t** wargs = CommandLineToArgvW(wcbuf, &wargc);
-	//assert(wargc == argc);
 
-	size_t    cargl = WideCharToMultiByte(65001, 0, wcbuf, wclen, null, 0, null, 0);
+	size_t    cargl = WideCharToMultiByte(CP_UTF8, 0, wcbuf, wclen, null, 0, null, null);
 
 	char*     cargp = cast(char*) alloca(cargl);
 	char[][]  args  = ((cast(char[]*) alloca(wargc * (char[]).sizeof)))[0 .. wargc];
@@ -103,12 +99,12 @@ string[] getArgs()
 	for (size_t i = 0, p = 0; i < wargc; i++)
 	{
 		int wlen = wcslen(wargs[i]);
-		int clen = WideCharToMultiByte(65001, 0, &wargs[i][0], wlen, null, 0, null, 0);
+		int clen = WideCharToMultiByte(CP_UTF8, 0, &wargs[i][0], wlen, null, 0, null, null);
 		args[i]  = cargp[p .. p+clen];
 		p += clen; assert(p <= cargl);
-		WideCharToMultiByte(65001, 0, &wargs[i][0], wlen, &args[i][0], clen, null, 0);
+		WideCharToMultiByte(CP_UTF8, 0, &wargs[i][0], wlen, &args[i][0], clen, null, null);
 	}
-	LocalFree(wargs);
+	LocalFree(cast(HLOCAL)wargs);
 	wargs = null;
 	wargc = 0;
 
