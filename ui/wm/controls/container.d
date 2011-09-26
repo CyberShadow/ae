@@ -73,7 +73,7 @@ class ContainerControl : Control
 			child.handleMouseMove(x-child.x, y-child.y, buttons);
 	}
 
-	override void render(Surface s, int x, int y)
+	abstract override void render(Surface s, int x, int y)
 	{
 		// background should be rendered upstream
 		foreach (child; children)
