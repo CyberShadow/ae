@@ -37,6 +37,7 @@ module ae.ui.video.surface;
 /// Abstract class for a video surface.
 class Surface
 {
+	/// BGRX/BGRA-only.
 	struct Bitmap
 	{
 		uint* pixels;
@@ -59,6 +60,10 @@ class Surface
 		}
 	}
 
+	/// Lock a 32-bit, BGRX/BGRA surface
+	// We could do some RAII here to automate unlocking, but it will probably get
+	// in the way of bundle rendering
 	abstract Bitmap lock();
+
 	abstract void unlock();
 }

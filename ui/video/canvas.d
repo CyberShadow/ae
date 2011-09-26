@@ -32,38 +32,32 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-module ae.ui.video.sdl.surface;
+/// Canvas for Surface.Bitmap
+module ae.ui.video.canvas;
 
-import std.exception;
+public import ae.ui.video.surface;
+public import ae.utils.graphics.canvas;
 
-import derelict.sdl.sdl;
-
-import ae.ui.video.surface;
-import ae.ui.shell.sdl.shell;
-
-final class SDLSurface : Surface
+struct CustomBitmapCanvas(COLOR)
 {
-	SDL_Surface* s;
+	static assert(COLOR.sizeof == uint.sizeof);
 
-	this(SDL_Surface* s)
-	{
-		this.s = s;
-	}
+	COLOR* pixels;
+	int w, h, stride;
 
-	override Bitmap lock()
-	{
-		sdlEnforce(SDL_LockSurface(s)==0, "Can't lock surface");
-		enforce(s.format.BytesPerPixel == 4 && s.format.Bmask == 0xFF, "Invalid pixel format");
-		return Bitmap(cast(uint*)s.pixels, s.w, s.h, s.pitch);
-	}
+	mixin Canvas;
 
-	override void unlock()
+	this(Surface.Bitmap bitmap)
 	{
-		SDL_UnlockSurface(s);
-	}
-
-	void flip()
-	{
-		sdlEnforce(SDL_Flip(s)==0);
+		w = bitmap.w;
+		h = bitmap.h;
+		stride = bitmap.stride / uint.sizeof;
+		pixels = cast(COLOR*)bitmap.pixels;
 	}
 }
+
+struct BGRX { ubyte b, g, r, x; }
+struct BGRA { ubyte b, g, r, a; }
+
+alias CustomBitmapCanvas!BGRX BitmapCanvas;
+alias CustomBitmapCanvas!BGRA AlphaBitmapCanvas;

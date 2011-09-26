@@ -1,0 +1,6 @@
+* resize events:
+  * inbound (container resize, e.g. due to resolution change)
+  * outbound, when container fits content
+    * only inside scrollable containers?
+  * an inbound event shouldn't result in an outbound event
+
