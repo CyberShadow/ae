@@ -44,7 +44,11 @@ class Shell
 	void quit()
 	{
 		quitting = true;
+		prod();
 	}
+
+	/// Wake event thread with a no-op event.
+	abstract void prod();
 
 protected:
 	bool quitting;

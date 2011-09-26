@@ -40,6 +40,7 @@ import derelict.sdl.sdl;
 
 import ae.ui.video.video;
 import ae.ui.app.application;
+import ae.ui.shell.shell;
 import ae.ui.shell.sdl.shell;
 import ae.ui.video.sdl.surface;
 
@@ -91,6 +92,7 @@ private:
 			// TODO: predict flip (vblank wait) duration and render at the last moment
 			synchronized (application)
 			{
+				scope(failure) shell.quit();
 				application.render(surface);
 			}
 			surface.flip();

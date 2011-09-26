@@ -87,21 +87,30 @@ final class SDLShell : Shell
 		SDL_Quit();
 	}
 
-	private enum CustomEvents : int
+	private enum CustomEvent : int
 	{
+		None,
 		SetCaption
+	}
+
+	private void sendCustomEvent(CustomEvent code, void* data1)
+	{
+		SDL_Event event;
+		event.type = SDL_USEREVENT;
+		event.user.code = code;
+		event.user.data1 = data1;
+		SDL_PushEvent(&event);
+	}
+
+	override void prod()
+	{
+		sendCustomEvent(CustomEvent.None, null);
 	}
 
 	override void setCaption(string caption)
 	{
 		// Send a message to event thread to avoid SendMessage(WM_TEXTCHANGED) deadlock
-		auto szCaption = toStringz(caption);
-
-		SDL_Event event;
-		event.type = SDL_USEREVENT;
-		event.user.code = CustomEvents.SetCaption;
-		event.user.data1 = cast(void*)szCaption;
-		SDL_PushEvent(&event);
+		sendCustomEvent(CustomEvent.SetCaption, cast(void*)toStringz(caption));
 	}
 
 	MouseButton translateMouseButton(ubyte sdlButton)
@@ -148,14 +157,14 @@ final class SDLShell : Shell
 			application.handleQuit();
 			break;
 		case SDL_USEREVENT:
-			switch (event.user.code)
+			final switch (cast(CustomEvent)event.user.code)
 			{
-			case CustomEvents.SetCaption:
+			case CustomEvent.None:
+				break;
+			case CustomEvent.SetCaption:
 				auto szCaption = cast(char*)event.user.data1;
 				SDL_WM_SetCaption(szCaption, szCaption);
 				break;
-			default:
-				assert(0);
 			}
 			break;
 		default:
