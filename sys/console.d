@@ -33,7 +33,7 @@
  * ***** END LICENSE BLOCK ***** */
 
 /// Enable UTF-8 output on Windows.
-module ae.utils.console;
+module ae.sys.console;
 
 version(Windows)
 {

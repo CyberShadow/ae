@@ -40,7 +40,7 @@ import std.array;
 import std.conv;
 
 import ae.sys.sqlite3;
-import ae.utils.console;
+import ae.sys.console;
 
 void main(string[] args)
 {
