@@ -39,12 +39,3 @@ version(Windows)
 	import ae.ui.app.windows.main;
 else
 	import ae.ui.app.posix.main;
-
-import ae.ui.app.application;
-
-int ngmain(string[] args)
-{
-	if (application is null)
-		throw new Exception("Application object not set");
-	return application.run(args);
-}

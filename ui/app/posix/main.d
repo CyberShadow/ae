@@ -34,9 +34,11 @@
 
 module ae.ui.app.posix.main;
 
-import ae.ui.app.main;
+import ae.ui.app.application;
 
 int main(string[] args)
 {
-	return ngmain(args);
+	if (application is null)
+		throw new Exception("Application object not set");
+	return application.run(args);
 }

@@ -40,7 +40,7 @@ import std.utf;
 import win32.windef;
 import win32.winuser;
 
-import ae.ui.app.main;
+import ae.ui.app.application;
 
 extern (Windows)
 int WinMain(HINSTANCE hInstance,
@@ -59,7 +59,9 @@ int WinMain(HINSTANCE hInstance,
 	{		
 		Runtime.initialize(&exceptionHandler);
 
-		result = ngmain(getArgs());
+		if (application is null)
+			throw new Exception("Application object not set");
+		result = application.run(getArgs());
 
 		Runtime.terminate(&exceptionHandler);
 	}
