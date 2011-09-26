@@ -66,7 +66,7 @@ int WinMain(HINSTANCE hInstance,
 
 	catch (Throwable o)				// catch any uncaught exceptions
 	{
-		MessageBoxW(null, toUTFz!LPCWSTR(o.toString()), "Error",
+		MessageBoxA(null, toUTFz!LPCSTR(o.toString()), "Error",
 					MB_OK | MB_ICONEXCLAMATION);
 		result = 1;				// failed
 	}
