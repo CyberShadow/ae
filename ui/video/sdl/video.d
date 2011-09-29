@@ -48,21 +48,24 @@ class SDLVideo : Video
 {
 	override void initialize()
 	{
-		auto surface = SDL_GetVideoSurface();
-		if (surface)
-			SDL_FreeSurface(surface);
+		//auto surface = SDL_GetVideoSurface();
+		//if (surface)
+		//	SDL_FreeSurface(surface);
 
 		uint screenWidth, screenHeight, flags;
 		if (application.isFullScreen())
 		{
-		    application.getFullScreenResolution(screenWidth, screenHeight);
-		    flags = SDL_HWSURFACE | SDL_DOUBLEBUF | SDL_FULLSCREEN;
+			application.getFullScreenResolution(screenWidth, screenHeight);
+			flags = SDL_HWSURFACE | SDL_DOUBLEBUF | SDL_FULLSCREEN;
 		}
 		else
 		{
 			application.getWindowSize(screenWidth, screenHeight);
 			flags = SDL_HWSURFACE | SDL_DOUBLEBUF;
 		}
+
+		if (application.isResizable())
+			flags |= SDL_RESIZABLE;
 
 		sdlEnforce(SDL_SetVideoMode(screenWidth, screenHeight, 32, flags), "can't set video mode");
 	}
@@ -80,9 +83,14 @@ class SDLVideo : Video
 		renderThread.join();
 	}
 
+	override void stopAsync()
+	{
+		notifyStopped = stopping = true;
+	}
+
 private:
 	Thread renderThread;
-	bool stopping;
+	bool stopping, notifyStopped;
 
 	void renderThreadProc()
 	{
@@ -97,5 +105,7 @@ private:
 			}
 			surface.flip();
 		}
+		if (notifyStopped)
+			shell.videoStopped();
 	}
 }

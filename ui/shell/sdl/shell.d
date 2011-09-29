@@ -90,10 +90,11 @@ final class SDLShell : Shell
 	private enum CustomEvent : int
 	{
 		None,
-		SetCaption
+		SetCaption,
+		VideoStopped,
 	}
 
-	private void sendCustomEvent(CustomEvent code, void* data1)
+	private void sendCustomEvent(CustomEvent code, void* data1 = null)
 	{
 		SDL_Event event;
 		event.type = SDL_USEREVENT;
@@ -104,13 +105,18 @@ final class SDLShell : Shell
 
 	override void prod()
 	{
-		sendCustomEvent(CustomEvent.None, null);
+		sendCustomEvent(CustomEvent.None);
 	}
 
 	override void setCaption(string caption)
 	{
 		// Send a message to event thread to avoid SendMessage(WM_TEXTCHANGED) deadlock
 		sendCustomEvent(CustomEvent.SetCaption, cast(void*)toStringz(caption));
+	}
+
+	override void videoStopped()
+	{
+		sendCustomEvent(CustomEvent.VideoStopped);
 	}
 
 	MouseButton translateMouseButton(ubyte sdlButton)
@@ -169,6 +175,10 @@ final class SDLShell : Shell
 		case SDL_MOUSEMOTION:
 			application.handleMouseMove(event.motion.x, event.motion.y, translateMouseButtons(event.motion.state));
 			break;
+		case SDL_VIDEORESIZE:
+			application.setWindowSize(event.resize.w, event.resize.h);
+			video.stopAsync();
+			break;
 		case SDL_QUIT:
 			application.handleQuit();
 			break;
@@ -180,6 +190,10 @@ final class SDLShell : Shell
 			case CustomEvent.SetCaption:
 				auto szCaption = cast(char*)event.user.data1;
 				SDL_WM_SetCaption(szCaption, szCaption);
+				break;
+			case CustomEvent.VideoStopped:
+				video.initialize();
+				video.start();
 				break;
 			}
 			break;

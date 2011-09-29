@@ -46,6 +46,7 @@ import ae.ui.video.video;
 import ae.ui.video.sdl.video;
 import ae.ui.video.surface;
 import ae.ui.video.canvas;
+import ae.utils.math;
 
 final class MyApplication : Application
 {

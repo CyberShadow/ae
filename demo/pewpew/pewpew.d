@@ -96,6 +96,13 @@ final class MyApplication : Application
 
 	}
 
+	void step(uint deltaTicks)
+	{
+		foreach (plane; planes)
+			foreach_reverse (obj; plane.dup)
+				obj.step(deltaTicks);
+	}
+
 	override void handleKeyDown(Key key, dchar character)
 	{
 		switch (key)
@@ -120,13 +127,6 @@ final class MyApplication : Application
 			case Key.space: space = false; break;
 			default       :                break;
 		}
-	}
-
-	void step(uint deltaTicks)
-	{
-		foreach (plane; planes)
-			foreach_reverse (obj; plane.dup)
-				obj.step(deltaTicks);
 	}
 
 	override int run(string[] args)

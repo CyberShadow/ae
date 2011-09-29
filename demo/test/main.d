@@ -48,6 +48,7 @@ final class MyApplication : WMApplication
 {
 	override string getName() { return "Demo/Test"; }
 	override string getCompanyName() { return "CyberShadow"; }
+	override bool isResizable() { return false; }
 
 	override int run(string[] args)
 	{

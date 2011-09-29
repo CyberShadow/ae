@@ -50,6 +50,9 @@ class Shell
 	/// Wake event thread with a no-op event.
 	abstract void prod();
 
+	/// Notification of asynchronous stop from video thread.
+	abstract void videoStopped();
+
 protected:
 	bool quitting;
 }

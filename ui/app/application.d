@@ -76,7 +76,10 @@ class Application
 	}
 	void getDefaultWindowSize(out uint x, out uint y) { x = 800; y = 600; }
 	bool isFullScreenByDefault() { return false; }
-	bool toggleFullScreen() { config.write("FullScreen", !isFullScreen()); return true; }
+	bool isResizable() { return true; }
+
+	bool setFullScreen() { config.write("FullScreen", !isFullScreen()); return true; }
+	bool setWindowSize(uint x, uint y) { config.write("WindowX", x); config.write("WindowY", y); return true; }
 
 	void getFullScreenResolution(out uint x, out uint y)
 	{

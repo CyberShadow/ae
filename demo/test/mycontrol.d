@@ -74,7 +74,8 @@ class MyControl : Control
 
 		auto b = s.lock();
 		foreach (coord; coords)
-			b[coord.x, coord.y] = coord.c;
+			if (coord.x < b.w && coord.y < b.h)
+				b[coord.x, coord.y] = coord.c;
 		s.unlock();
 	}
 }

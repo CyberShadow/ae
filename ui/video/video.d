@@ -44,6 +44,9 @@ class Video
 
 	/// Stop render thread (may block).
 	abstract void stop();
+
+	/// Stop render thread (asynchronous).
+	abstract void stopAsync();
 }
 
 __gshared Video video;

@@ -282,7 +282,7 @@ class Bullet : GameObject
 				frands()*0.000_010,
 				frand ()*0.000_100 + 0.000_200);
 
-		collideWith(Plane.Enemies);
+		collideWith(Plane.Enemies, Plane.EnemyBullets);
 	}
 
 	override void die()
@@ -312,11 +312,12 @@ class BulletParticles : GameEntity
 	}
 
 	enum MAX_PARTICLES = 1024*32;
-	static Particle[MAX_PARTICLES] particles;
-	static int particleCount;
+	static __gshared Particle* particles;
+	static __gshared int particleCount;
 
 	static void create(Bullet source, float vx, float vy, float s = 0.001)
 	{
+		assert(particles, "Not initialized?");
 		if (particleCount == MAX_PARTICLES)
 			return;
 		particles[particleCount++] = Particle(source.x, source.y, vx, vy, 0, s);
@@ -324,6 +325,7 @@ class BulletParticles : GameEntity
 
 	this()
 	{
+		particles = (new Particle[MAX_PARTICLES]).ptr;
 		add(Plane.BulletParticles);
 	}
 
@@ -460,7 +462,7 @@ class Missile : Enemy
 
 	override void render()
 	{
-		float r = 0.008+0.002*sin(t/100f);
+		r = 0.008+0.002*sin(t/100f);
 		canvas.softEdgedCircle(cf(x), cf(y), cf(r-0.003), cf(r), G16(canvas.tofracBounded(0.75+0.25*(-sin(t/100f)))));
 	}
 }
