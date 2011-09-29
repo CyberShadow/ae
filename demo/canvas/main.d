@@ -75,7 +75,7 @@ final class MyApplication : Application
 		int randY() { return uniform(0, canvas.h); }
 
 		static bool first = true;
-		//if (first)
+		if (first)
 			canvas.whiteNoise(),
 			first = false;
 
@@ -84,7 +84,7 @@ final class MyApplication : Application
 			pixel, hline, vline, rect, fillRect, fillRect2, circle, sector, poly,
 			softEdgedCircle, aaLine,
 		}
-		final switch (cast(Shape) uniform!"[]"(cast(int)Shape.aaLine, Shape.max))
+		final switch (cast(Shape) uniform!"[]"(0, Shape.max))
 		{
 			case Shape.pixel:
 				return canvas[randX(), randY()] = randColor();
