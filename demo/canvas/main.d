@@ -75,16 +75,16 @@ final class MyApplication : Application
 		int randY() { return uniform(0, canvas.h); }
 
 		static bool first = true;
-		if (first)
+		//if (first)
 			canvas.whiteNoise(),
 			first = false;
 
 		enum Shape
 		{
 			pixel, hline, vline, rect, fillRect, fillRect2, circle, sector, poly,
-			softEdgedCircle,
+			softEdgedCircle, aaLine,
 		}
-		final switch (cast(Shape) uniform!"[]"(0, Shape.max))
+		final switch (cast(Shape) uniform!"[]"(cast(int)Shape.aaLine, Shape.max))
 		{
 			case Shape.pixel:
 				return canvas[randX(), randY()] = randColor();
@@ -125,6 +125,8 @@ final class MyApplication : Application
 				int r0 = uniform(0, r1-5);
 				return canvas.softEdgedCircle(uniform(r1, canvas.w-r1), uniform(r1, canvas.h-r1), r0, r1, randColor());
 			}
+			case Shape.aaLine:
+				return canvas.aaLine(randX(), randY(), randX(), randY(), randColor());
 		}
 	}
 

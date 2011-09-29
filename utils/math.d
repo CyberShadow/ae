@@ -35,8 +35,8 @@
 /// Number stuff
 module ae.utils.math;
 
-public import std.algorithm : min, max, swap;
-import std.math;
+public import std.algorithm : min, max, abs, swap;
+public import std.math;
 import std.traits : Signed, Unsigned;
 
 enum TAU = 2*PI;
@@ -51,3 +51,5 @@ T itpl(T, U)(T low, T high, U r, U rLow, U rHigh)
 {
 	return cast(T)(low + (cast(Signed!T)high-cast(Signed!T)low) * (cast(Signed!U)r - cast(Signed!U)rLow) / (cast(Signed!U)rHigh - cast(Signed!U)rLow));
 }
+
+byte sign(T)(T x) { return x<0 ? -1 : x>0 ? 1 : 0; }

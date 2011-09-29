@@ -485,6 +485,16 @@ mixin template Canvas()
 
 		fillRect(x1i+1, y1i+1, x2i, y2i, color);
 	}
+
+	void aaLine(float x1, float x2, float y1, float y2, COLOR color)
+	{
+		if (abs(x1-x2) > abs(y1-y2))
+			for (auto x=x1; sign(x1-x2)!=sign(x2-x); x += sign(x2-x1))
+				aaPutPixel(x, itpl(y1, y2, x, x1, x2), color);
+		else
+			for (auto y=y1; sign(y1-y2)!=sign(y2-y); y += sign(y2-y1))
+				aaPutPixel(itpl(x1, x2, y, y1, y2), y, color);
+	}
 }
 
 private bool isSameType(T)()
