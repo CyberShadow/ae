@@ -35,21 +35,23 @@
 /// Gamma conversion.
 module ae.utils.graphics.gamma;
 
-import ae.utils.graphics.image;
+import std.math;
+
+import ae.utils.graphics.canvas;
 
 enum ColorSpace { sRGB }
 
 struct GammaRamp(LUM_COLOR, PIX_COLOR)
 {
-	LUM_COLOR[PIX_COLOR.max+1] pix2lum;
-	PIX_COLOR[LUM_COLOR.max+1] lum2pix;
+	LUM_COLOR[PIX_COLOR.max+1] pix2lumValues;
+	PIX_COLOR[LUM_COLOR.max+1] lum2pixValues;
 
 	this(double gamma)
 	{
 		foreach (pix; 0..PIX_COLOR.max+1)
-			pix2lum[pix] = cast(LUM_COLOR)(pow(pix/cast(double)PIX_COLOR.max,   gamma)*LUM_COLOR.max);
+			pix2lumValues[pix] = cast(LUM_COLOR)(pow(pix/cast(double)PIX_COLOR.max,   gamma)*LUM_COLOR.max);
 		foreach (lum; 0..LUM_COLOR.max+1)
-			lum2pix[lum] = cast(PIX_COLOR)(pow(lum/cast(double)LUM_COLOR.max, 1/gamma)*PIX_COLOR.max);
+			lum2pixValues[lum] = cast(PIX_COLOR)(pow(lum/cast(double)LUM_COLOR.max, 1/gamma)*PIX_COLOR.max);
 	}
 
 	this(ColorSpace colorSpace)
@@ -75,15 +77,25 @@ struct GammaRamp(LUM_COLOR, PIX_COLOR)
 				}
 
 				foreach (pix; 0..PIX_COLOR.max+1)
-					pix2lum[pix] = cast(LUM_COLOR)(sRGB_to_linear(pix/cast(double)PIX_COLOR.max)*LUM_COLOR.max);
+					pix2lumValues[pix] = cast(LUM_COLOR)(sRGB_to_linear(pix/cast(double)PIX_COLOR.max)*LUM_COLOR.max);
 				foreach (lum; 0..LUM_COLOR.max+1)
-					lum2pix[lum] = cast(PIX_COLOR)(linear_to_sRGB(lum/cast(double)LUM_COLOR.max)*PIX_COLOR.max);
+					lum2pixValues[lum] = cast(PIX_COLOR)(linear_to_sRGB(lum/cast(double)LUM_COLOR.max)*PIX_COLOR.max);
 				break;
 			}
 		}
 	}
 
-	static string mixConvert(T)(string srcVar, string destVar, string convArray)
+	void lum2pix(SRCCANVAS, DSTCANVAS)(ref SRCCANVAS src, ref DSTCANVAS dst)
+		if (IsCanvas!SRCCANVAS && IsCanvas(DSTCANVAS) && is(SRCCANVAS.COLOR==LUM_COLOR) && is(DSTCANVAS.COLOR==PIX_COLOR))
+	{
+		dst.transformDraw!q{
+			dst.COLOR.op!q{
+				b[a]
+			}(c, extraArgs[0])
+		}(src, 0, 0, lum2pixValues[]);
+	}
+
+	/*static string mixConvert(T)(string srcVar, string destVar, string convArray)
 	{
 		static if (is(T==struct))
 		{
@@ -100,7 +112,7 @@ struct GammaRamp(LUM_COLOR, PIX_COLOR)
 	{
 		auto lumImage = Image!COLOR2(pixImage.w, pixImage.h);
 		foreach (i, p; pixImage.pixels)
-			mixin(mixConvert!COLOR(`p`, `lumImage.pixels[i]`, `pix2lum`));
+			mixin(mixConvert!COLOR(`p`, `lumImage.pixels[i]`, `pix2lumValues`));
 		return lumImage;
 	}
 
@@ -108,7 +120,7 @@ struct GammaRamp(LUM_COLOR, PIX_COLOR)
 	{
 		auto pixImage = Image!COLOR2(lumImage.w, lumImage.h);
 		foreach (i, p; lumImage.pixels)
-			mixin(mixConvert!COLOR(`p`, `pixImage.pixels[i]`, `lum2pix`));
+			mixin(mixConvert!COLOR(`p`, `pixImage.pixels[i]`, `lum2pixValues`));
 		return pixImage;
-	}
+	}*/
 }

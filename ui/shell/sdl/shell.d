@@ -40,9 +40,9 @@ import std.string;
 import derelict.sdl.sdl;
 
 import ae.ui.shell.shell;
-import ae.ui.shell.events;
 import ae.ui.video.video;
 import ae.ui.app.application;
+public import ae.ui.shell.events;
 
 final class SDLShell : Shell
 {
@@ -144,6 +144,22 @@ final class SDLShell : Shell
 	{
 		switch (event.type)
 		{
+		case SDL_KEYDOWN:
+			/+if ( event.key.keysym.sym == SDLK_RETURN && (keypressed[SDLK_RALT] || keypressed[SDLK_LALT]))
+			{
+				if (application.toggleFullScreen())
+				{
+					video.stop();
+					video.initialize();
+					video.start();
+					return false;
+				}
+			}+/
+			application.handleKeyDown(sdlKeys[event.key.keysym.sym], event.key.keysym.unicode);
+			break;
+		case SDL_KEYUP:
+			application.handleKeyUp(sdlKeys[event.key.keysym.sym]);
+			break;
 		case SDL_MOUSEBUTTONDOWN:
 			application.handleMouseDown(event.button.x, event.button.y, translateMouseButton(event.button.button));
 			break;
@@ -185,4 +201,15 @@ T sdlEnforce(T)(T result, string message = null)
 	if (!result)
 		throw new SdlException("SDL error: " ~ (message ? message ~ ": " : "") ~ to!string(SDL_GetError()));
 	return result;
+}
+
+Key[SDLK_LAST] sdlKeys;
+
+shared static this()
+{
+	sdlKeys[SDLK_UP   ] = Key.up   ;
+	sdlKeys[SDLK_DOWN ] = Key.down ;
+	sdlKeys[SDLK_LEFT ] = Key.left ;
+	sdlKeys[SDLK_RIGHT] = Key.right;
+	sdlKeys[SDLK_SPACE] = Key.space;
 }

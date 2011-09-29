@@ -35,16 +35,9 @@
 /// Abstract drawing functions.
 module ae.utils.graphics.canvas;
 
-//import std.file;
 import std.string;
-//import std.ascii;
-//import std.exception;
-//import std.conv;
 import std.math;
-//import std.traits;
-//import std.zlib;
-//import crc32;
-//static import core.bitop;
+import std.traits;
 
 struct Coord { int x, y; string toString() { return format([this.tupleof]); } }
 
@@ -59,11 +52,11 @@ template IsCanvas(T)
 
 mixin template Canvas()
 {
-	import std.algorithm : min, max;
+	import ae.utils.math;
 	import std.math : atan2, sqrt;
+	import std.random: uniform;
 
-	alias typeof(this) SELF;
-	static assert(IsCanvas!(SELF));
+	static assert(IsCanvas!(typeof(this)));
 
 	alias typeof(pixels[0]) COLOR;
 
@@ -101,15 +94,41 @@ mixin template Canvas()
 			pixels[0..h*stride] = c;
 	}
 
-	void draw(OTHER)(OTHER canvas, int x, int y)
-		if (IsCanvas!OTHER && is(COLOR == OTHER.COLOR))
+	void draw(SRCCANVAS)(SRCCANVAS src, int x, int y)
+		if (IsCanvas!SRCCANVAS && is(COLOR == SRCCANVAS.COLOR))
 	{
+		assert(x+src.w <= w && y+src.h <= h);
 		// TODO: alpha blending
 		size_t dstStart = y*stride+x, srcStart = 0;
-		foreach (j; 0..canvas.h)
-			pixels[dstStart..dstStart+canvas.stride] = canvas.pixels[srcStart..srcStart+canvas.stride],
+		foreach (j; 0..src.h)
+			pixels[dstStart..dstStart+src.stride] = src.pixels[srcStart..srcStart+src.stride],
 			dstStart += stride,
-			srcStart += canvas.stride;
+			srcStart += src.stride;
+	}
+
+	/// Copy another canvas while applying a pixel transformation.
+	/// Context of pred:
+	///   c            = source color
+	///   src          = source canvas
+	///   extraArgs[n] = any extra arguments passed to transformDraw
+	void transformDraw(string pred, SRCCANVAS, T...)(ref SRCCANVAS src, int x, int y, T extraArgs)
+		if (IsCanvas!SRCCANVAS)
+	{
+		assert(x+src.w <= w && y+src.h <= h);
+		size_t dstSlack = stride-src.w, srcSlack = src.stride-src.w;
+		auto dstPtr = pixels + (y*stride+x);
+		auto srcPtr = &src.pixels[0];
+		auto endPtr = srcPtr + src.h*src.stride;
+		while (srcPtr < endPtr)
+		{
+			foreach (i; 0..src.w)
+			{
+				auto c = *srcPtr++;
+				*dstPtr++ = mixin(pred);
+			}
+			srcPtr += srcSlack;
+			dstPtr += dstSlack;
+		}
 	}
 
 	void hline(bool CHECKED=false)(int x1, int x2, int y, COLOR c)
@@ -131,29 +150,35 @@ mixin template Canvas()
 			pixels[y*stride+x] = c;
 	}
 
-	void rect(int x1, int y1, int x2, int y2, COLOR c) // []
+	void rect(int x1, int y1, int x2, int y2, COLOR c) // [)
 	{
-		hline(x1, x2+1, y1, c);
-		hline(x1, x2+1, y2, c);
-		vline(x1, y1, y2+1, c);
-		vline(x2, y1, y2+1, c);
+		sort2(x1, x2);
+		sort2(y1, y2);
+		hline(x1, x2-1, y1, c);
+		hline(x1, x2-1, y2, c);
+		vline(x1, y1, y2-1, c);
+		vline(x2, y1, y2-1, c);
 	}
 
 	void fillRect(int x1, int y1, int x2, int y2, COLOR b) // [)
 	{
+		sort2(x1, x2);
+		sort2(y1, y2);
 		foreach (y; y1..y2)
 			pixels[y*stride+x1..y*stride+x2] = b;
 	}
 
-	void fillRect(int x1, int y1, int x2, int y2, COLOR c, COLOR b) // []
+	void fillRect(int x1, int y1, int x2, int y2, COLOR c, COLOR b) // [)
 	{
+		sort2(x1, x2);
+		sort2(y1, y2);
 		rect(x1, y1, x2, y2, c);
-		if (x1 <= x2 || y1 <= y2) return;
-		foreach (y; y1+1..y2)
-			pixels[y*stride+x1+1..y*stride+x2] = b;
+		if (x2-x1>2 && y2-y1>2)
+			foreach (y; y1+1..y2-1)
+				pixels[y*stride+x1+1..y*stride+x2-1] = b;
 	}
 
-	// Unchecked! Make sure area is bounded.
+	/// Unchecked! Make sure area is bounded.
 	void uncheckedFloodFill(int x, int y, COLOR c)
 	{
 		floodFillPtr(&this[x, y], c, this[x, y]);
@@ -285,16 +310,276 @@ mixin template Canvas()
 		foreach (i; 0..coords.length)
 			thickLine(coords[i].tupleof, coords[(i+1)%$].tupleof, r, c);
 	}
+
+    // ************************************************************************************************************************************
+
+    /// Maximum number of bits used in a coordinate (assumption)
+    enum CoordinateBits = 16;
+
+    static assert(COLOR.SameType, "Asymmetric color types not supported, fix me!");
+    /// Fixed-point type, big enough to hold a coordinate, with fractionary precision corresponding to channel precision.
+    typedef SignedBitsType!(COLOR.BaseTypeBits   + CoordinateBits) fix;
+    /// Type to hold temporary values for multiplication and division
+    typedef SignedBitsType!(COLOR.BaseTypeBits*2 + CoordinateBits) fix2;
+
+    static assert(COLOR.BaseTypeBits < 32, "Shift operators are broken for shifts over 32 bits, fix me!");
+    fix tofix(T:int  )(T x) { return cast(fix) (x<<COLOR.BaseTypeBits); }
+    fix tofix(T:float)(T x) { return cast(fix) (x*(1<<COLOR.BaseTypeBits)); }
+    T fixto(T:int)(fix x) { return cast(T)(x>>COLOR.BaseTypeBits); }
+
+    fix fixsqr(fix x)        { return cast(fix)((cast(fix2)x*x) >> COLOR.BaseTypeBits); }
+	fix fixmul(fix x, fix y) { return cast(fix)((cast(fix2)x*y) >> COLOR.BaseTypeBits); }
+    fix fixdiv(fix x, fix y) { return cast(fix)((cast(fix2)x << COLOR.BaseTypeBits)/y); }
+
+    static assert(COLOR.BaseType.sizeof*8 == COLOR.BaseTypeBits, "COLORs with BaseType not corresponding to native type not currently supported, fix me!");
+    /// Type only large enough to hold a fractionary part of a "fix" (i.e. color channel precision). Used for alpha values, etc.
+    alias COLOR.BaseType frac;
+    /// Type to hold temporary values for multiplication and division
+    typedef UnsignedBitsType!(COLOR.BaseTypeBits*2) frac2;
+
+    frac tofrac(T:float)(T x) { return cast(frac) (x*(1<<COLOR.BaseTypeBits)); }
+    frac fixfpart(fix x) { return cast(frac)x; }
+	frac fracsqr(frac x        ) { return cast(frac)((cast(frac2)x*x) >> COLOR.BaseTypeBits); }
+	frac fracmul(frac x, frac y) { return cast(frac)((cast(frac2)x*y) >> COLOR.BaseTypeBits); }
+
+    // ************************************************************************************************************************************
+
+	void whiteNoise()
+	{
+		for (int y=0;y<h/2;y++)
+			for (int x=0;x<w/2;x++)
+				pixels[y*2  *stride + x*2  ] = COLOR.monochrome(uniform!(COLOR.BaseType)());
+
+		// interpolate
+		enum AVERAGE = q{(a+b)/2};
+
+		for (int y=0;y<h/2;y++)
+			for (int x=0;x<w/2-1;x++)
+				pixels[y*2  *stride + x*2+1] = COLOR.op!AVERAGE(pixels[y*2*stride + x*2], pixels[y*2*stride + x*2+2]);
+		for (int y=0;y<h/2-1;y++)
+			for (int x=0;x<w/2;x++)
+				pixels[(y*2+1)*stride + x*2  ] = COLOR.op!AVERAGE(pixels[y*2*stride + x*2], pixels[(y*2+2)*stride + x*2]);
+		for (int y=0;y<h/2-1;y++)
+			for (int x=0;x<w/2-1;x++)
+				pixels[(y*2+1)*stride + x*2+1] = COLOR.op!AVERAGE(pixels[y*2*stride + x*2+1], pixels[(y*2+2)*stride + x*2+2]);
+	}
+
+	void softEdgedCircle(T)(T x, T y, T r1, T r2, COLOR color)
+		if (is(T : int) || is(T : float))
+	{
+		assert(r1 < r2);
+		assert(r2 < 256); // precision constraint
+		//int ix = cast(int)x;
+		//int iy = cast(int)y;
+		//int ir1 = cast(int)sqr(r1-1);
+		//int ir2 = cast(int)sqr(r2+1);
+		int x1 = cast(int)(x-r2-1); if (x1<0) x1=0;
+		int y1 = cast(int)(y-r2-1); if (y1<0) y1=0;
+		int x2 = cast(int)(x+r2+1); if (x2>w ) x2 = w;
+		int y2 = cast(int)(y+r2+1); if (y2>h) y2 = h;
+		auto r1s = r1*r1;
+		auto r2s = r2*r2;
+		//float rds = r2s - r1s;
+		fix fx = tofix(x);
+		fix fy = tofix(y);
+		fix fr1s = tofix(r1s);
+		fix fr2s = tofix(r2s);
+		fix frds = fr2s - fr1s;
+		for (int cy=y1;cy<y2;cy++)
+		{
+			auto row = &pixels[cy*stride];
+			for (int cx=x1;cx<x2;cx++)
+			{
+				alias SignedBitsType!(2*(8 + COLOR.BaseTypeBits)) SqrType; // fit the square of radius expressed as fixed-point
+				fix frs = cast(fix)((sqr(cast(SqrType)fx-tofix(cx)) + sqr(cast(SqrType)fy-tofix(cy))) >> COLOR.BaseTypeBits); // shift-right only once instead of once-per-sqr
+				if (frs<fr1s)
+					row[cx] = color;
+				else
+				if (frs<fr2s)
+				{
+					frac alpha = ~fracsqr(cast(frac)fixdiv(frs-fr1s, frds));
+					row[cx] = COLOR.op!q{blend(a, b, c)}(color, row[cx], alpha);
+				}
+			}
+		}
+	}
+
+	void aaPutPixel(bool useAlpha=true, F:float)(F x, F y, COLOR color, frac alpha)
+	{
+		void plot(int x, int y, frac f)
+		{
+			if (x>=0 && x<w && y>=0 && y<h)
+			{
+				COLOR* p = &pixels[y*stride + x];
+				static if (useAlpha) f = fracmul(f, alpha);
+				*p = COLOR.op!q{blend(a, b, c)}(color, *p, f);
+			}
+		}
+
+		fix fx = tofix(x);
+		fix fy = tofix(y);
+		int ix = fixto!int(fx);
+		int iy = fixto!int(fy);
+		plot(ix  , iy  , fracmul(~fixfpart(fx), ~fixfpart(fy)));
+		plot(ix  , iy+1, fracmul(~fixfpart(fx),  fixfpart(fy)));
+		plot(ix+1, iy  , fracmul( fixfpart(fx), ~fixfpart(fy)));
+		plot(ix+1, iy+1, fracmul( fixfpart(fx),  fixfpart(fy)));
+	}
+
+	void aaPutPixel(F:float)(F x, F y, COLOR color)
+	{
+		//aaPutPixel!(false, F)(x, y, color, 0); // doesn't work, wtf
+		alias aaPutPixel!(false, F) f;
+		f(x, y, color, 0);
+	}
+
+	void hline()(int x1, int x2, int y, COLOR color, frac alpha)
+	{
+		sort2(x1, x2);
+		if (alpha==0)
+			return;
+		else
+		if (alpha==frac.max)
+			pixels[y*stride + x1 .. (y)*stride + x2] = color;
+		else
+			foreach (ref p; pixels[y*stride + x1 .. y*stride + x2])
+				p = COLOR.op!q{blend(a, b, c)}(color, p, alpha);
+	}
+
+	void vline(int x, int y1, int y2, COLOR color, frac alpha)
+	{
+		sort2(y1, y2);
+		if (alpha==0)
+			return;
+		else
+		if (alpha==frac.max)
+			foreach (y; y1..y2)
+				this[x, y] = color;
+		else
+			foreach (y; y1..y2)
+			{
+				auto p = &pixels[y*stride + x];
+				*p = COLOR.op!q{blend(a, b, c)}(color, *p, alpha);
+			}
+	}
+
+	void aaFillRect(F:float)(F x1, F y1, F x2, F y2, COLOR color)
+	{
+		sort2(x1, x2);
+		sort2(y1, y2);
+		fix x1f = tofix(x1); int x1i = fixto!int(x1f);
+		fix y1f = tofix(y1); int y1i = fixto!int(y1f);
+		fix x2f = tofix(x2); int x2i = fixto!int(x2f);
+		fix y2f = tofix(y2); int y2i = fixto!int(y2f);
+
+		vline(x1i, y1i+1, y2i, color, ~fixfpart(x1f));
+		vline(x2i, y1i+1, y2i, color,  fixfpart(x2f));
+		hline(x1i+1, x2i, y1i, color, ~fixfpart(y1f));
+		hline(x1i+1, x2i, y2i, color,  fixfpart(y2f));
+		aaPutPixel(x1i, y1i, color, fracmul(~fixfpart(x1f), ~fixfpart(y1f)));
+		aaPutPixel(x1i, y2i, color, fracmul(~fixfpart(x1f),  fixfpart(y2f)));
+		aaPutPixel(x2i, y1i, color, fracmul( fixfpart(x2f), ~fixfpart(y1f)));
+		aaPutPixel(x2i, y2i, color, fracmul( fixfpart(x2f),  fixfpart(y2f)));
+
+		fillRect(x1i+1, y1i+1, x2i, y2i, color);
+	}
 }
 
-struct RGB    { ubyte  r, g, b; }
-struct RGB16  { ushort r, g, b; }
-struct RGBX   { ubyte  r, g, b, x; }
-struct RGBX16 { ushort r, g, b, x; }
-struct RGBA   { ubyte  r, g, b, a; }
-struct RGBA16 { ushort r, g, b, a; }
-struct GA     { ubyte  g, a; }
-struct GA16   { ushort g, a; }
+private bool isSameType(T)()
+{
+	foreach (i, f; T.init.tupleof)
+		if (!is(typeof(T.init.tupleof[i]) == typeof(T.init.tupleof[0])))
+			return false;
+	return true;
+}
+
+struct Color(string FIELDS)
+{
+	struct Fields { mixin(FIELDS); } // for iteration
+
+	// alias this bugs out with operator overloading, so just paste the fields here
+	mixin(FIELDS);
+
+	/// Whether or not all channel fields have the same base type.
+	// Only "true" supported for now, may change in the future (e.g. for 5:6:5)
+	enum SameType = isSameType!Fields();
+
+	static if (SameType)
+	{
+		alias typeof(this.init.tupleof[0]) BaseType;
+		enum BaseTypeBits = BaseType.sizeof*8;
+	}
+
+	/// Return a Color instance with all fields set to "value".
+	static typeof(this) monochrome(BaseType value)
+	{
+		typeof(this) r;
+		foreach (i, f; r.tupleof)
+			r.tupleof[i] = value;
+		return r;
+	}
+
+	/// Warning: overloaded operators preserve types and may cause overflows
+	typeof(this) opBinary(string op, T)(T o)
+		if (is(T == typeof(this)))
+	{
+		typeof(this) r;
+		foreach (i, f; r.tupleof)
+			static if(r.tupleof[i].stringof != "r.x") // skip padding
+				r.tupleof[i] = cast(typeof(r.tupleof[i])) mixin(`this.tupleof[i]` ~ op ~ `o.tupleof[i]`);
+		return r;
+	}
+
+	/// ditto
+	typeof(this) opBinary(string op)(int o)
+	{
+		typeof(this) r;
+		foreach (i, f; r.tupleof)
+			static if(r.tupleof[i].stringof != "r.x") // skip padding
+				r.tupleof[i] = cast(typeof(r.tupleof[i])) mixin(`this.tupleof[i]` ~ op ~ `o`);
+		return r;
+	}
+
+	/// Apply a custom operation for each channel. Example:
+	/// COLOR.op!q{(a + b) / 2}(colorA, colorB);
+	static typeof(this) op(string expr, T...)(T values)
+	{
+		static assert(values.length <= 10);
+
+		string genVars()
+		{
+			string result;
+			foreach (j, Tj; T)
+			{
+				static if (is(Tj == struct)) // TODO: tighter constraint (same color channels)?
+					result ~= "auto " ~ cast(char)('a' + j) ~ " = values[" ~ cast(char)('0' + j) ~ "].tupleof[i];\n";
+				else
+					result ~= "auto " ~ cast(char)('a' + j) ~ " = values[" ~ cast(char)('0' + j) ~ "];\n";
+			}
+			return result;
+		}
+
+		typeof(this) r;
+		foreach (i, f; r.tupleof)
+			static if(r.tupleof[i].stringof != "r.x") // skip padding
+			{
+				mixin(genVars());
+				r.tupleof[i] = mixin(expr);
+			}
+		return r;
+	}
+}
+
+// The "x" has the special meaning of "padding" and is ignored in some circumstances
+alias Color!q{ubyte  r, g, b;    } RGB    ;
+alias Color!q{ushort r, g, b;    } RGB16  ;
+alias Color!q{ubyte  r, g, b, x; } RGBX   ;
+//alias Color!q{ushort r, g, b, x; } RGBX16 ;
+alias Color!q{ubyte  r, g, b, a; } RGBA   ;
+//alias Color!q{ushort r, g, b, a; } RGBA16 ;
+alias Color!q{ushort g;          } G16    ;
+alias Color!q{ubyte  g, a;       } GA     ;
+alias Color!q{ushort g, a;       } GA16   ;
 
 private
 {
@@ -305,22 +590,34 @@ private
 
 // *****************************************************************************
 
+/// Unsigned integer type big enough to fit N bits of precision.
+template UnsignedBitsType(uint BITS)
+{
+	static if (BITS <= 8)
+		alias ubyte UnsignedBitsType;
+	else
+	static if (BITS <= 16)
+		alias ushort UnsignedBitsType;
+	else
+	static if (BITS <= 32)
+		alias uint UnsignedBitsType;
+	else
+	static if (BITS <= 64)
+		alias ulong UnsignedBitsType;
+	else
+		static assert(0, "No integer type big enough to fit " ~ BITS.stringof ~ " bits");
+}
+
+template SignedBitsType(uint BITS)
+{
+	alias Signed!(UnsignedBitsType!BITS) SignedBitsType;
+}
+
 /// Create a type where each integer member of T is expanded by BYTES bytes.
 template ExpandType(T, uint BYTES)
 {
 	static if (is(T : ulong))
-	{
-		static if (T.sizeof + BYTES <= 2)
-			alias ushort ExpandType;
-		else
-		static if (T.sizeof + BYTES <= 4)
-			alias uint ExpandType;
-		else
-		static if (T.sizeof + BYTES <= 8)
-			alias ulong ExpandType;
-		else
-			static assert(0, "No type big enough to fit " ~ T.sizeof.stringof ~ " + " ~ BYTES.stringof ~ " bytes");
-	}
+		alias UnsignedBitsType!((T.sizeof + BYTES) * 8) ExpandType;
 	else
 	static if (is(T==struct))
 		struct ExpandType
@@ -388,11 +685,13 @@ enum TAU = 2*PI;
 
 T itpl(T, U)(T low, T high, U r, U rLow, U rHigh)
 {
-	import std.traits;
 	return cast(T)(low + (cast(Signed!T)high-cast(Signed!T)low) * (cast(Signed!U)r - cast(Signed!U)rLow) / (cast(Signed!U)rHigh - cast(Signed!U)rLow));
 }
 
 T sqr(T)(T x) { return x*x; }
+
+// TODO: type expansion?
+T blend(T)(T f, T b, T a) { return cast(T) ( ((f*a) + (b*~a)) / T.max ); }
 
 private string[] structFields(T)()
 {
@@ -407,4 +706,25 @@ private string[] structFields(T)()
 			fields ~= field;
 	}
 	return fields;
+}
+
+// *****************************************************************************
+
+private
+{
+	// test intantiation
+	struct TestCanvas(COLOR)
+	{
+		int w, h, stride;
+		COLOR* pixels;
+		mixin Canvas;
+	}
+
+	TestCanvas!RGB    testRGB;
+	TestCanvas!RGBX   testRGBX;
+	TestCanvas!RGBA   testRGBA;
+	//TestCanvas!RGBX16 testRGBX16;
+	//TestCanvas!RGBA16 testRGBA16;
+	TestCanvas!GA     testGA;
+	TestCanvas!GA16   testGA16;
 }

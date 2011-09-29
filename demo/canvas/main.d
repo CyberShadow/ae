@@ -36,6 +36,7 @@ module ae.demo.canvas.main;
 
 import std.random;
 import std.algorithm : min, max;
+import std.datetime, std.conv;
 
 import ae.ui.app.application;
 import ae.ui.app.main;
@@ -51,8 +52,19 @@ final class MyApplication : Application
 	override string getName() { return "Demo/Canvas"; }
 	override string getCompanyName() { return "CyberShadow"; }
 
+	int frames, lastSecond;
+
 	override void render(Surface s)
 	{
+		frames++;
+		auto thisSecond = Clock.currTime().second;
+		if (thisSecond != lastSecond)
+		{
+			shell.setCaption(to!string(frames));
+			frames = 0;
+			lastSecond = thisSecond;
+		}
+
 		auto canvas = BitmapCanvas(s.lock());
 		scope(exit) s.unlock();
 
@@ -60,14 +72,17 @@ final class MyApplication : Application
 		BGRX randColor() { return BGRX(randByte(), randByte(), randByte()); }
 		int randX() { return uniform(0, canvas.w); }
 		int randY() { return uniform(0, canvas.h); }
-		auto randRect()()
-		{
-			struct Rect { int x1, y1, x2, y2; }
-			auto r = Rect(randX(), randY(), randX(), randY());
-			return Rect(min(r.x1, r.x2), min(r.y1, r.y2), max(r.x1, r.x2), max(r.y1, r.y2));
-		}
 
-		enum Shape { pixel, hline, vline, rect, fillRect, fillRect2, circle, sector, poly }
+		static bool first = true;
+		if (first)
+			canvas.whiteNoise(),
+			first = false;
+
+		enum Shape
+		{
+			pixel, hline, vline, rect, fillRect, fillRect2, circle, sector, poly,
+			softEdgedCircle,
+		}
 		final switch (cast(Shape) uniform!"[]"(0, Shape.max))
 		{
 			case Shape.pixel:
@@ -79,20 +94,11 @@ final class MyApplication : Application
 				return canvas.vline(randX(), randY(), randY(), randColor());
 
 			case Shape.rect:
-			{
-				auto rect = randRect();
-				return canvas.rect    (rect.tupleof, randColor());
-			}
+				return canvas.rect    (randX(), randY(), randX(), randY(), randColor());
 			case Shape.fillRect:
-			{
-				auto rect = randRect();
-				return canvas.fillRect(rect.tupleof, randColor());
-			}
+				return canvas.fillRect(randX(), randY(), randX(), randY(), randColor());
 			case Shape.fillRect2:
-			{
-				auto rect = randRect();
-				return canvas.fillRect(rect.tupleof, randColor(), randColor());
-			}
+				return canvas.fillRect(randX(), randY(), randX(), randY(), randColor(), randColor());
 
 			case Shape.circle:
 			{
@@ -111,6 +117,12 @@ final class MyApplication : Application
 				foreach (ref coord; coords)
 					coord = Coord(randX(), randY());
 				return canvas.fillPoly(coords, randColor());
+			}
+			case Shape.softEdgedCircle:
+			{
+				int r1 = uniform(10, 100);
+				int r0 = uniform(0, r1-5);
+				return canvas.softEdgedCircle(uniform(r1, canvas.w-r1), uniform(r1, canvas.h-r1), r0, r1, randColor());
 			}
 		}
 	}

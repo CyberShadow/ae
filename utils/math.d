@@ -11,11 +11,11 @@
  * for the specific language governing rights and limitations under the
  * License.
  *
- * The Original Code is the ArmageddonEngine library.
+ * The Original Code is the Team15 library.
  *
  * The Initial Developer of the Original Code is
  * Vladimir Panteleev <vladimir@thecybershadow.net>
- * Portions created by the Initial Developer are Copyright (C) 2011
+ * Portions created by the Initial Developer are Copyright (C) 2007-2011
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -32,35 +32,13 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-module ae.ui.shell.events;
+/// Number stuff
+module ae.utils.math;
 
-enum MouseButton : ubyte
-{
-	Left,
-	Right,
-	Middle,
-	WheelUp,
-	WheelDown,
-	Max
-}
+public import std.algorithm : min, max, swap;
+import std.math;
 
-enum MouseButtons : ubyte
-{
-	None = 0,
-	Left      = 1<<0,
-	Right     = 1<<1,
-	Middle    = 1<<2,
-	WheelUp   = 1<<3,
-	WheelDown = 1<<4
-}
+typeof(Ta+Tb+Tc) bound(Ta, Tb, Tc)(Ta a, Tb b, Tc c) { return a<b?b:a>c?c:a; }
+auto dist(T)(T x, T y) { return sqrt(x*x+y*y); }
 
-enum Key
-{
-	unknown,
-	esc,
-	up,
-	down,
-	left,
-	right,
-	space
-}
+void sort2(T)(ref T x, ref T y) { if (x > y) { T z=x; x=y; y=z; } }

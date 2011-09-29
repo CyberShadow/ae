@@ -37,6 +37,10 @@ module ae.utils.graphics.image;
 
 public import ae.utils.graphics.canvas;
 
+// TODO: many of the below functions allocate. This is convenient but very
+// inefficient - they should take a destination image as a parameter, and moved
+// to the Canvas mixin.
+
 struct Image(COLOR)
 {
 	int w, h;
@@ -50,10 +54,9 @@ struct Image(COLOR)
 		size(w, h);
 	}
 
+	/// Does not resize
 	void size(int w, int h)
 	{
-		if ((this.w && this.h) && (w && h))
-			throw new Exception("Resize not implemented");
 		this.w = w;
 		this.h = h;
 		pixels.length = w*h;

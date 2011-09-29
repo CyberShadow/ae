@@ -76,6 +76,7 @@ class Application
 	}
 	void getDefaultWindowSize(out uint x, out uint y) { x = 800; y = 600; }
 	bool isFullScreenByDefault() { return false; }
+	bool toggleFullScreen() { config.write("FullScreen", !isFullScreen()); return true; }
 
 	void getFullScreenResolution(out uint x, out uint y)
 	{
@@ -105,8 +106,8 @@ class Application
 	//void handleMinimize() {}
 	//void handleRestore() {}
 
-	//void handleKeyDown(Key key/*, modifiers? */, dchar character) {}
-	//void handleKeyUp(Key key/*, modifiers? */) {}
+	void handleKeyDown(Key key/*, modifiers? */, dchar character) {}
+	void handleKeyUp(Key key/*, modifiers? */) {}
 
 	void handleMouseDown(uint x, uint y, MouseButton button) {}
 	void handleMouseUp(uint x, uint y, MouseButton button) {}
