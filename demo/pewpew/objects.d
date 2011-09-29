@@ -49,24 +49,27 @@ enum Plane
 	BG3,
 	BG2,
 	BG1,
-	Bullets,
 	Explosions,
+	EnemyBullets,
 	Enemies,
+	BulletParticles,
+	ShipBullets,
 	Ship,
 	Max
 }
 
-GameObject[][Plane.Max] planes;
+GameEntity[][Plane.Max] planes;
 bool initializing = true;
 
 Image!G16 canvas;
 float cf(float x) { assert(canvas.w == canvas.h); return x*canvas.w; }
 int   ci(float x) { assert(canvas.w == canvas.h); return cast(int)round(x*canvas.w); }
+auto BLACK = G16(0x0000);
 auto WHITE = G16(0xFFFF);
 
 bool up, down, left, right, space;
 
-class GameObject
+class GameEntity
 {
 	Plane plane;
 
@@ -81,7 +84,7 @@ class GameObject
 
 	void remove()
 	{
-		foreach(i,obj;planes[plane])
+		foreach(i, obj; planes[plane])
 			if (this is obj)
 			{
 				planes[plane] = planes[plane][0..i] ~ planes[plane][i+1..$];
@@ -93,11 +96,12 @@ class GameObject
 
 // *********************************************************
 
-class Game : GameObject
+class Game : GameEntity
 {
 	this()
 	{
 		add(Plane.Logic);
+		new BulletParticles();
 	}
 
 	override void step(uint deltaTicks)
@@ -106,7 +110,7 @@ class Game : GameObject
 			new Star();
 		if (!initializing && planes[Plane.Ship].length!=0 && uniform(0, 1000)==0)
 			new Thingy(uniform(0., 1.), frands()*0.0003, 0.0002+frand()*0.0003);
-		if (!initializing && planes[Plane.Ship].length==0 && planes[Plane.Enemies].length==0 && planes[Plane.Bullets].length==0 && planes[Plane.Explosions].length==0)
+		if (!initializing && planes[Plane.Ship].length==0 && planes[Plane.Enemies].length==0 && planes[Plane.EnemyBullets].length==0 && planes[Plane.Explosions].length==0)
 			new Ship();
 	}
 
@@ -115,10 +119,54 @@ class Game : GameObject
 
 // *********************************************************
 
+class GameObject : GameEntity
+{
+	float x, y, vx=0, vy=0, r=0;
+	bool dead;
+
+	enum DEATHBRAKES = 0.998;
+
+	override void step(uint deltaTicks)
+	{
+		x += vx*deltaTicks;
+		y += vy*deltaTicks;
+		if (dead)
+			vx *= DEATHBRAKES,
+			vy *= DEATHBRAKES;
+	}
+
+	final void collideWith(Plane[] planeIndices...)
+	{
+		assert(!dead);
+
+		foreach (plane; planeIndices)
+			foreach (obj; planes[plane])
+			{
+				auto enemy = cast(GameObject) obj;
+				if (enemy && !enemy.dead)
+					if (dist(x-enemy.x, y-enemy.y) < r+enemy.r)
+					{
+						die();
+						enemy.die();
+						return;
+					}
+			}
+	}
+
+	void die()
+	{
+		if (r)
+			new Explosion(this);
+		remove();
+	}
+}
+
+// *********************************************************
+
 float frand () { return uniform!`[)`( 0.0f, 1.0f); }
 float frands() { return uniform!`()`(-1.0f, 1.0f); }
 
-class Star : GameObject
+class Star : GameEntity
 {
 	float x, y, z;
 
@@ -132,7 +180,7 @@ class Star : GameObject
 
 	override void step(uint deltaTicks)
 	{
-		y += deltaTicks * (0.0002+(1-z)*0.0001);
+		y += deltaTicks * (0.0001+(1-z)*0.00005);
 		if (y>1)
 			remove();
 	}
@@ -145,12 +193,11 @@ class Star : GameObject
 
 class Ship : GameObject
 {
-	float x, y, vx, vy;
-
 	this()
 	{
 		x = 0.5;
 		y = 0.9;
+		r = 0.040;
 		vx = vy = 0;
 		add(Plane.Ship);
 	}
@@ -175,30 +222,27 @@ class Ship : GameObject
 			vy = bound(vy+a*deltaTicks, 0,  maxv);
 		else
 			vy = 0;
-		x = bound(x+vx*deltaTicks, 0.05, 0.95);
-		y = bound(y+vy*deltaTicks, 0.05, 0.95);
-
-		foreach (obj; planes[Plane.Enemies] ~ planes[Plane.Bullets])
-		{
-			auto enemy = cast(Enemy)obj;
-			if (enemy)
-				if (dist(x-enemy.x, y-enemy.y)<0.040+enemy.r)
-				{
-					remove();
-					enemy.remove();
-					new Explosion(x, y, 0.150);
-					new Explosion(enemy.x, enemy.y, enemy.r*2);
-					return;
-				}
-		}
+		super.step(deltaTicks);
+		if (x<0.05 || x>0.95) vx = 0;
+		if (y<0.05 || y>0.95) vy = 0;
+		x = bound(x, 0.05, 0.95);
+		y = bound(y, 0.05, 0.95);
 
 		static bool lastSpace;
 		if (space && !lastSpace)
 		{
-			new Bullet(x-0.034, y-0.026);
-			new Bullet(x+0.034, y-0.026);
+			new Bullet(this, -0.034, -0.026);
+			new Bullet(this, +0.034, -0.026);
 		}
 		lastSpace = space;
+
+		collideWith(Plane.Enemies, Plane.EnemyBullets);
+	}
+
+	override void die()
+	{
+		new Explosion(this, 0.150);
+		remove();
 	}
 
 	override void render()
@@ -216,50 +260,104 @@ class Ship : GameObject
 
 class Bullet : GameObject
 {
-	float x, y;
-
-	this(float x, float y)
+	this(Ship ship, float dx, float dy)
 	{
-		this.x = x;
-		this.y = y;
-		add(Plane.Bullets);
+		this.x = ship.x + dx;
+		this.y = ship.y + dy;
+		this.vx = ship.vx;
+		this.vy = ship.vy - 0.000_500;
+		add(Plane.ShipBullets);
 	}
+
+	int t;
 
 	override void step(uint deltaTicks)
 	{
-		y -= 0.0004 * deltaTicks;
-		if (y < 0)
+		super.step(deltaTicks);
+		if (y < -0.25 || x < 0 || x > 1)
 			return remove();
 
-		foreach (obj; planes[Plane.Enemies])
+		//if ((t+=deltaTicks) % 1 == 0)
+			BulletParticles.create(this,
+				frands()*0.000_010,
+				frand ()*0.000_100 + 0.000_200);
+
+		collideWith(Plane.Enemies);
+	}
+
+	override void die()
+	{
+		super.die();
+		foreach (n; 0..500)
 		{
-			auto enemy = cast(Enemy)obj;
-			if (enemy)
-				if (dist(x-enemy.x, y-enemy.y)<enemy.r)
-				{
-					remove();
-					enemy.remove();
-					new Explosion(enemy.x, enemy.y);
-					return;
-				}
+			auto a = uniform(0, TAU);
+			BulletParticles.create(this,
+				frand()*cos(a)*0.000_300,
+				frand()*sin(a)*0.000_300 - 0.000_100,
+				0.003);
 		}
 	}
 
 	override void render()
 	{
-		//ThinLine!(false)(x, y, x, y+5, 255, 255);
-		canvas.vline(ci(x), ci(y), ci(y+0.010), WHITE);
+		canvas.aaPutPixel(cf(x), cf(y), WHITE);
+	}
+}
+
+class BulletParticles : GameEntity
+{
+	struct Particle
+	{
+		float x, y, vx, vy, t, s;
+	}
+
+	enum MAX_PARTICLES = 1024*32;
+	static Particle[MAX_PARTICLES] particles;
+	static int particleCount;
+
+	static void create(Bullet source, float vx, float vy, float s = 0.001)
+	{
+		if (particleCount == MAX_PARTICLES)
+			return;
+		particles[particleCount++] = Particle(source.x, source.y, vx, vy, 0, s);
+	}
+
+	this()
+	{
+		add(Plane.BulletParticles);
+	}
+
+	override void step(uint deltaTicks)
+	{
+		int i = 0;
+		while (i < particleCount)
+			with (particles[i])
+			{
+				x += vx;
+				y += vy;
+				t += s;
+				if (t >= 1)
+					particles[i] = particles[--particleCount];
+				else
+					i++;
+			}
+	}
+
+	override void render()
+	{
+		foreach (ref particle; particles[0..particleCount])
+			with (particle)
+				canvas.aaPutPixel(cf(x), cf(y), WHITE, canvas.tofracBounded(1-t));
 	}
 }
 
 class Enemy : GameObject
 {
-	float x, y, r;
 }
 
 class Thingy : Enemy
 {
-	float vx, vy, a;
+	float a, death;
 	int t;
 
 	this(float x, float vx, float vy)
@@ -282,8 +380,7 @@ class Thingy : Enemy
 				vx = max(vx, -vx);
 			if (x > 0.980)
 				vx = min(vx, -vx);
-			x += vx;
-			y += vy;
+			super.step(1);
 			if (y > 1.060)
 			{
 				remove();
@@ -292,24 +389,47 @@ class Thingy : Enemy
 			a += 0.001;
 			t++;
 
-			if (t%1000==0 && planes[Plane.Ship].length)
+			if (!dead)
 			{
-				new Missile(this);
+				if (t%1000==0 && planes[Plane.Ship].length)
+					new Missile(this);
+			}
+			else
+			{
+				death += 0.002;
+				if (death > 1)
+					remove();
 			}
 		}
 	}
 
+	override void die()
+	{
+		dead = true;
+		death = 0;
+		new Explosion(this);
+	}
+
 	override void render()
 	{
-		canvas.softEdgedCircle(cf(x), cf(y), cf(0.020), cf(0.030), WHITE);
-		canvas.softEdgedCircle(cf(x+0.040*cos(a)), cf(y+0.040*sin(a)), cf(0.010), cf(0.014), WHITE);
-		canvas.softEdgedCircle(cf(x-0.040*cos(a)), cf(y-0.040*sin(a)), cf(0.010), cf(0.014), WHITE);
+		void disc(float x, float y, float r0, float r1)
+		{
+			if (!dead)
+				canvas.softEdgedCircle(cf(x), cf(y), cf(r0), cf(r1), WHITE);
+			else
+			{
+				canvas.softEdgedCircle(cf(x), cf(y), cf(r0), cf(r1), G16(canvas.tofracBounded(1-death)));
+				canvas.softEdgedCircle(cf(x), cf(y), cf(0), cf(r1*death), BLACK);
+			}
+		}
+		disc(x, y, 0.020, 0.030);
+		disc(x+0.040*cos(a), y+0.040*sin(a), 0.010, 0.014);
+		disc(x-0.040*cos(a), y-0.040*sin(a), 0.010, 0.014);
 	}
 }
 
 class Missile : Enemy
 {
-	float vx, vy;
 	int t;
 
 	this(Enemy parent)
@@ -318,19 +438,21 @@ class Missile : Enemy
 		this.y = parent.y;
 		this.r = 0.008;
 		t = 0;
-		Ship ship = cast(Ship)planes[Plane.Ship][0];
-		vx = ship.x - parent.x;
-		vy = ship.y - parent.y;
+		if (planes[Plane.Ship].length)
+		{
+			Ship ship = cast(Ship)planes[Plane.Ship][0];
+			vx = ship.x - parent.x;
+			vy = ship.y - parent.y;
+		}
 		float f = 0.0002/dist(this.vx, this.vy);
 		vx *= f;
 		vy *= f;
-		add(Plane.Bullets);
+		add(Plane.EnemyBullets);
 	}
 
 	override void step(uint deltaTicks)
 	{
-		x += vx*deltaTicks;
-		y += vy*deltaTicks;
+		super.step(deltaTicks);
 		if (x<0 || x>1 || y<0 || y>1)
 			return remove();
 		t += deltaTicks;
@@ -339,28 +461,34 @@ class Missile : Enemy
 	override void render()
 	{
 		float r = 0.008+0.002*sin(t/100f);
-		canvas.softEdgedCircle(cf(x), cf(y), cf(r-0.003), cf(r), G16(canvas.tofrac(0.75+0.25*(-sin(t/100f)))));
+		canvas.softEdgedCircle(cf(x), cf(y), cf(r-0.003), cf(r), G16(canvas.tofracBounded(0.75+0.25*(-sin(t/100f)))));
 	}
 }
 
 class Explosion : GameObject
 {
-	float x, y, size, maxt;
+	float size, maxt;
 	int t;
 
-	this(float x, float y, float size=0.060f)
+	this(GameObject source, float size = 0)
 	{
-		this.x = x;
-		this.y = y;
+		if (size==0) size = source.r*2;
+		this.x = source.x;
+		this.y = source.y;
+		this.vx = source.vx;
+		this.vy = source.vy;
 		this.size = size;
 		this.t = 0;
 		this.maxt = size*16500;
+		this.dead = true;
 		add(Plane.Explosions);
 	}
 
 	override void step(uint deltaTicks)
 	{
 		t += deltaTicks;
+		super.step(deltaTicks);
+
 		if (t>maxt)
 			remove;
 		else
@@ -383,7 +511,7 @@ class Explosion : GameObject
 	}
 }
 
-class Splode : GameObject
+class Splode : GameEntity
 {
 	float x, y, r, cr;
 	bool growing;

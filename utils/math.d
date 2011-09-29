@@ -37,8 +37,17 @@ module ae.utils.math;
 
 public import std.algorithm : min, max, swap;
 import std.math;
+import std.traits : Signed, Unsigned;
+
+enum TAU = 2*PI;
 
 typeof(Ta+Tb+Tc) bound(Ta, Tb, Tc)(Ta a, Tb b, Tc c) { return a<b?b:a>c?c:a; }
+T sqr(T)(T x) { return x*x; }
 auto dist(T)(T x, T y) { return sqrt(x*x+y*y); }
 
 void sort2(T)(ref T x, ref T y) { if (x > y) { T z=x; x=y; y=z; } }
+
+T itpl(T, U)(T low, T high, U r, U rLow, U rHigh)
+{
+	return cast(T)(low + (cast(Signed!T)high-cast(Signed!T)low) * (cast(Signed!U)r - cast(Signed!U)rLow) / (cast(Signed!U)rHigh - cast(Signed!U)rLow));
+}

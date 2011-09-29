@@ -71,7 +71,7 @@ final class MyApplication : Application
 		{
 			gamma = Gamma16_8(ColorSpace.sRGB);
 			new Game();
-			foreach (i; 0..5000) step(1);
+			foreach (i; 0..1000) step(10);
 			ticks = currentTick();
 			initializing = false;
 		}

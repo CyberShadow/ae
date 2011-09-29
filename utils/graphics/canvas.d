@@ -311,38 +311,40 @@ mixin template Canvas()
 			thickLine(coords[i].tupleof, coords[(i+1)%$].tupleof, r, c);
 	}
 
-    // ************************************************************************************************************************************
+	// ************************************************************************************************************************************
 
-    /// Maximum number of bits used in a coordinate (assumption)
-    enum CoordinateBits = 16;
+	/// Maximum number of bits used in a coordinate (assumption)
+	enum CoordinateBits = 16;
 
-    static assert(COLOR.SameType, "Asymmetric color types not supported, fix me!");
-    /// Fixed-point type, big enough to hold a coordinate, with fractionary precision corresponding to channel precision.
-    typedef SignedBitsType!(COLOR.BaseTypeBits   + CoordinateBits) fix;
-    /// Type to hold temporary values for multiplication and division
-    typedef SignedBitsType!(COLOR.BaseTypeBits*2 + CoordinateBits) fix2;
+	static assert(COLOR.SameType, "Asymmetric color types not supported, fix me!");
+	/// Fixed-point type, big enough to hold a coordinate, with fractionary precision corresponding to channel precision.
+	typedef SignedBitsType!(COLOR.BaseTypeBits   + CoordinateBits) fix;
+	/// Type to hold temporary values for multiplication and division
+	typedef SignedBitsType!(COLOR.BaseTypeBits*2 + CoordinateBits) fix2;
 
-    static assert(COLOR.BaseTypeBits < 32, "Shift operators are broken for shifts over 32 bits, fix me!");
-    fix tofix(T:int  )(T x) { return cast(fix) (x<<COLOR.BaseTypeBits); }
-    fix tofix(T:float)(T x) { return cast(fix) (x*(1<<COLOR.BaseTypeBits)); }
-    T fixto(T:int)(fix x) { return cast(T)(x>>COLOR.BaseTypeBits); }
+	static assert(COLOR.BaseTypeBits < 32, "Shift operators are broken for shifts over 32 bits, fix me!");
+	fix tofix(T:int  )(T x) { return cast(fix) (x<<COLOR.BaseTypeBits); }
+	fix tofix(T:float)(T x) { return cast(fix) (x*(1<<COLOR.BaseTypeBits)); }
+	T fixto(T:int)(fix x) { return cast(T)(x>>COLOR.BaseTypeBits); }
 
-    fix fixsqr(fix x)        { return cast(fix)((cast(fix2)x*x) >> COLOR.BaseTypeBits); }
+	fix fixsqr(fix x)        { return cast(fix)((cast(fix2)x*x) >> COLOR.BaseTypeBits); }
 	fix fixmul(fix x, fix y) { return cast(fix)((cast(fix2)x*y) >> COLOR.BaseTypeBits); }
-    fix fixdiv(fix x, fix y) { return cast(fix)((cast(fix2)x << COLOR.BaseTypeBits)/y); }
+	fix fixdiv(fix x, fix y) { return cast(fix)((cast(fix2)x << COLOR.BaseTypeBits)/y); }
 
-    static assert(COLOR.BaseType.sizeof*8 == COLOR.BaseTypeBits, "COLORs with BaseType not corresponding to native type not currently supported, fix me!");
-    /// Type only large enough to hold a fractionary part of a "fix" (i.e. color channel precision). Used for alpha values, etc.
-    alias COLOR.BaseType frac;
-    /// Type to hold temporary values for multiplication and division
-    typedef UnsignedBitsType!(COLOR.BaseTypeBits*2) frac2;
+	static assert(COLOR.BaseType.sizeof*8 == COLOR.BaseTypeBits, "COLORs with BaseType not corresponding to native type not currently supported, fix me!");
+	/// Type only large enough to hold a fractionary part of a "fix" (i.e. color channel precision). Used for alpha values, etc.
+	alias COLOR.BaseType frac;
+	/// Type to hold temporary values for multiplication and division
+	typedef UnsignedBitsType!(COLOR.BaseTypeBits*2) frac2;
 
-    frac tofrac(T:float)(T x) { return cast(frac) (x*(1<<COLOR.BaseTypeBits)); }
-    frac fixfpart(fix x) { return cast(frac)x; }
+	frac tofrac(T:float)(T x) { return cast(frac) (x*(1<<COLOR.BaseTypeBits)); }
+	frac fixfpart(fix x) { return cast(frac)x; }
 	frac fracsqr(frac x        ) { return cast(frac)((cast(frac2)x*x) >> COLOR.BaseTypeBits); }
 	frac fracmul(frac x, frac y) { return cast(frac)((cast(frac2)x*y) >> COLOR.BaseTypeBits); }
 
-    // ************************************************************************************************************************************
+	frac tofracBounded(T:float)(T x) { return cast(frac) bound(tofix(x), 0, frac.max); }
+
+	// ************************************************************************************************************************************
 
 	void whiteNoise()
 	{
@@ -367,7 +369,7 @@ mixin template Canvas()
 	void softEdgedCircle(T)(T x, T y, T r1, T r2, COLOR color)
 		if (is(T : int) || is(T : float))
 	{
-		assert(r1 < r2);
+		assert(r1 <= r2);
 		assert(r2 < 256); // precision constraint
 		//int ix = cast(int)x;
 		//int iy = cast(int)y;
@@ -680,15 +682,6 @@ template ReplaceType(T, FROM, TO)
 }
 
 // *****************************************************************************
-
-enum TAU = 2*PI;
-
-T itpl(T, U)(T low, T high, U r, U rLow, U rHigh)
-{
-	return cast(T)(low + (cast(Signed!T)high-cast(Signed!T)low) * (cast(Signed!U)r - cast(Signed!U)rLow) / (cast(Signed!U)rHigh - cast(Signed!U)rLow));
-}
-
-T sqr(T)(T x) { return x*x; }
 
 // TODO: type expansion?
 T blend(T)(T f, T b, T a) { return cast(T) ( ((f*a) + (b*~a)) / T.max ); }
