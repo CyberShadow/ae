@@ -94,12 +94,11 @@ final class SDLShell : Shell
 		VideoStopped,
 	}
 
-	private void sendCustomEvent(CustomEvent code, void* data1 = null)
+	private void sendCustomEvent(CustomEvent code)
 	{
 		SDL_Event event;
 		event.type = SDL_USEREVENT;
 		event.user.code = code;
-		event.user.data1 = data1;
 		SDL_PushEvent(&event);
 	}
 
@@ -108,10 +107,14 @@ final class SDLShell : Shell
 		sendCustomEvent(CustomEvent.None);
 	}
 
+	private string newCaption;
+
 	override void setCaption(string caption)
 	{
+		// We can't pass the string in the message because the GC won't see it
+		newCaption = caption;
 		// Send a message to event thread to avoid SendMessage(WM_TEXTCHANGED) deadlock
-		sendCustomEvent(CustomEvent.SetCaption, cast(void*)toStringz(caption));
+		sendCustomEvent(CustomEvent.SetCaption);
 	}
 
 	override void videoStopped()
@@ -188,7 +191,7 @@ final class SDLShell : Shell
 			case CustomEvent.None:
 				break;
 			case CustomEvent.SetCaption:
-				auto szCaption = cast(char*)event.user.data1;
+				auto szCaption = toStringz(newCaption);
 				SDL_WM_SetCaption(szCaption, szCaption);
 				break;
 			case CustomEvent.VideoStopped:
@@ -221,9 +224,10 @@ Key[SDLK_LAST] sdlKeys;
 
 shared static this()
 {
-	sdlKeys[SDLK_UP   ] = Key.up   ;
-	sdlKeys[SDLK_DOWN ] = Key.down ;
-	sdlKeys[SDLK_LEFT ] = Key.left ;
-	sdlKeys[SDLK_RIGHT] = Key.right;
-	sdlKeys[SDLK_SPACE] = Key.space;
+	sdlKeys[SDLK_UP    ] = Key.up   ;
+	sdlKeys[SDLK_DOWN  ] = Key.down ;
+	sdlKeys[SDLK_LEFT  ] = Key.left ;
+	sdlKeys[SDLK_RIGHT ] = Key.right;
+	sdlKeys[SDLK_SPACE ] = Key.space;
+	sdlKeys[SDLK_ESCAPE] = Key.esc  ;
 }

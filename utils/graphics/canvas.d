@@ -53,6 +53,7 @@ template IsCanvas(T)
 mixin template Canvas()
 {
 	import ae.utils.math;
+	import ae.utils.geometry;
 	import std.math : atan2, sqrt;
 	import std.random: uniform;
 
@@ -101,7 +102,7 @@ mixin template Canvas()
 		// TODO: alpha blending
 		size_t dstStart = y*stride+x, srcStart = 0;
 		foreach (j; 0..src.h)
-			pixels[dstStart..dstStart+src.stride] = src.pixels[srcStart..srcStart+src.stride],
+			pixels[dstStart..dstStart+src.w] = src.pixels[srcStart..srcStart+src.w],
 			dstStart += stride,
 			srcStart += src.stride;
 	}
@@ -131,51 +132,81 @@ mixin template Canvas()
 		}
 	}
 
-	void hline(bool CHECKED=false)(int x1, int x2, int y, COLOR c)
+	/// Does not make a copy - only returns a "view" onto this canvas.
+	auto window()(int x1, int y1, int x2, int y2)
 	{
+		assert(x1 >= 0 && y1 >= 0 && x2 < w && y2 < h && x1 <= x2 && y1 <= y2);
+
+		return RefCanvas!COLOR(x2-x1, y2-y1, stride, &pixels[0] + (stride*y1) + x1);
+	}
+
+	enum CheckHLine =
+	q{
 		static if (CHECKED)
 		{
-			if (x1 >= w || x2 < 0 || y < 0 || y>=h) return;
-			if (x1 <  0) x1=0;
-			if (x2 >= w) x2=w;
+			if (x1 >= w || x2 <= 0 || y < 0 || y >= h || x1 >= x2) return;
+			if (x1 <  0) x1 = 0;
+			if (x2 >= w) x2 = w;
 		}
-		if (x1 >= x2) return;
+		assert(x1 <= x2);
+	};
+
+	enum CheckVLine =
+	q{
+		static if (CHECKED)
+		{
+			if (x < 0 || x >= w || y1 >= h || y2 <= 0 || y1 >= y2) return;
+			if (y1 <  0) y1 = 0;
+			if (y2 >= h) y2 = h;
+		}
+		assert(y1 <= y2);
+	};
+
+	void hline(bool CHECKED=true)(int x1, int x2, int y, COLOR c)
+	{
+		mixin(CheckHLine);
 		auto rowOffset = y*stride;
 		pixels[rowOffset+x1..rowOffset+x2] = c;
 	}
 
-	void vline(int x, int y1, int y2, COLOR c)
+	void vline(bool CHECKED=true)(int x, int y1, int y2, COLOR c)
 	{
+		mixin(CheckVLine);
 		foreach (y; y1..y2) // TODO: optimize
 			pixels[y*stride+x] = c;
 	}
 
-	void rect(int x1, int y1, int x2, int y2, COLOR c) // [)
+	void rect(bool CHECKED=true)(int x1, int y1, int x2, int y2, COLOR c) // [)
 	{
 		sort2(x1, x2);
 		sort2(y1, y2);
-		hline(x1, x2-1, y1, c);
-		hline(x1, x2-1, y2, c);
-		vline(x1, y1, y2-1, c);
-		vline(x2, y1, y2-1, c);
+		hline!CHECKED(x1, x2-1, y1, c);
+		hline!CHECKED(x1, x2-1, y2, c);
+		vline!CHECKED(x1, y1, y2-1, c);
+		vline!CHECKED(x2, y1, y2-1, c);
 	}
 
-	void fillRect(int x1, int y1, int x2, int y2, COLOR b) // [)
+	void fillRect(bool CHECKED=true)(int x1, int y1, int x2, int y2, COLOR b) // [)
 	{
 		sort2(x1, x2);
 		sort2(y1, y2);
+		static if (CHECKED)
+		{
+			if (x1 >= w || y1 >= h || x2 <= 0 || y2 <= 0 || x1==x2 || y1==y2) return;
+			if (x1 <  0) x1 = 0;
+			if (y1 <  0) y1 = 0;
+			if (x2 >= w) x2 = w;
+			if (y2 >= h) y2 = h;
+		}
 		foreach (y; y1..y2)
 			pixels[y*stride+x1..y*stride+x2] = b;
 	}
 
-	void fillRect(int x1, int y1, int x2, int y2, COLOR c, COLOR b) // [)
+	void fillRect(bool CHECKED=true)(int x1, int y1, int x2, int y2, COLOR c, COLOR b) // [)
 	{
-		sort2(x1, x2);
-		sort2(y1, y2);
-		rect(x1, y1, x2, y2, c);
+		rect!CHECKED(x1, y1, x2, y2, c);
 		if (x2-x1>2 && y2-y1>2)
-			foreach (y; y1+1..y2-1)
-				pixels[y*stride+x1+1..y*stride+x2-1] = b;
+			fillRect!CHECKED(x1+1, y1+1, x2-1, y2-1, b);
 	}
 
 	/// Unchecked! Make sure area is bounded.
@@ -366,11 +397,13 @@ mixin template Canvas()
 				pixels[(y*2+1)*stride + x*2+1] = COLOR.op!AVERAGE(pixels[y*2*stride + x*2+1], pixels[(y*2+2)*stride + x*2+2]);
 	}
 
-	void softEdgedCircle(T)(T x, T y, T r1, T r2, COLOR color)
+	private void softRoundShape(bool RING, T)(T x, T y, T r0, T r1, T r2, COLOR color)
 		if (is(T : int) || is(T : float))
 	{
+		scope(failure) std.stdio.writeln([r0, r1, r2]);
+		assert(r0 <= r1);
 		assert(r1 <= r2);
-		assert(r2 < 256); // precision constraint
+		assert(r2 < 256); // precision constraint - see SqrType
 		//int ix = cast(int)x;
 		//int iy = cast(int)y;
 		//int ir1 = cast(int)sqr(r1-1);
@@ -379,14 +412,25 @@ mixin template Canvas()
 		int y1 = cast(int)(y-r2-1); if (y1<0) y1=0;
 		int x2 = cast(int)(x+r2+1); if (x2>w ) x2 = w;
 		int y2 = cast(int)(y+r2+1); if (y2>h) y2 = h;
+
+		static if (RING)
+		auto r0s = r0*r0;
 		auto r1s = r1*r1;
 		auto r2s = r2*r2;
 		//float rds = r2s - r1s;
+
 		fix fx = tofix(x);
 		fix fy = tofix(y);
+
+		static if (RING)
+		fix fr0s = tofix(r0s);
 		fix fr1s = tofix(r1s);
 		fix fr2s = tofix(r2s);
-		fix frds = fr2s - fr1s;
+
+		static if (RING)
+		fix fr10 = fr1s - fr0s;
+		fix fr21 = fr2s - fr1s;
+
 		for (int cy=y1;cy<y2;cy++)
 		{
 			auto row = &pixels[cy*stride];
@@ -394,50 +438,94 @@ mixin template Canvas()
 			{
 				alias SignedBitsType!(2*(8 + COLOR.BaseTypeBits)) SqrType; // fit the square of radius expressed as fixed-point
 				fix frs = cast(fix)((sqr(cast(SqrType)fx-tofix(cx)) + sqr(cast(SqrType)fy-tofix(cy))) >> COLOR.BaseTypeBits); // shift-right only once instead of once-per-sqr
-				if (frs<fr1s)
-					row[cx] = color;
-				else
-				if (frs<fr2s)
+
+				//static frac alphafunc(frac x) { return fracsqr(x); }
+				static frac alphafunc(frac x) { return x; }
+
+				static if (RING)
 				{
-					frac alpha = ~fracsqr(cast(frac)fixdiv(frs-fr1s, frds));
-					row[cx] = COLOR.op!q{blend(a, b, c)}(color, row[cx], alpha);
+					if (frs<fr0s)
+						{}
+					else
+					if (frs<fr2s)
+					{
+						frac alpha;
+						if (frs<fr1s)
+							alpha =  alphafunc(cast(frac)fixdiv(frs-fr0s, fr10));
+						else
+							alpha = ~alphafunc(cast(frac)fixdiv(frs-fr1s, fr21));
+						row[cx] = COLOR.op!q{blend(a, b, c)}(color, row[cx], alpha);
+					}
+				}
+				else
+				{
+					if (frs<fr1s)
+						row[cx] = color;
+					else
+					if (frs<fr2s)
+					{
+						frac alpha = ~alphafunc(cast(frac)fixdiv(frs-fr1s, fr21));
+						row[cx] = COLOR.op!q{blend(a, b, c)}(color, row[cx], alpha);
+					}
 				}
 			}
 		}
 	}
 
-	void aaPutPixel(bool useAlpha=true, F:float)(F x, F y, COLOR color, frac alpha)
+	void softRing(T)(T x, T y, T r0, T r1, T r2, COLOR color)
 	{
-		void plot(int x, int y, frac f)
+		softRoundShape!(true, T)(x, y, r0, r1, r2, color);
+	}
+
+	void softCircle(T)(T x, T y, T r1, T r2, COLOR color)
+		if (is(T : int) || is(T : float))
+	{
+		softRoundShape!(false, T)(x, y, 0, r1, r2, color);
+	}
+
+	void aaPutPixel(bool CHECKED=true, bool useAlpha=true, F:float)(F x, F y, COLOR color, frac alpha)
+	{
+		void plot(bool CHECKED2)(int x, int y, frac f)
 		{
-			if (x>=0 && x<w && y>=0 && y<h)
-			{
-				COLOR* p = &pixels[y*stride + x];
-				static if (useAlpha) f = fracmul(f, alpha);
-				*p = COLOR.op!q{blend(a, b, c)}(color, *p, f);
-			}
+			static if (CHECKED2)
+				if (x<0 || x>=w || y<0 || y>=h)
+					return;
+
+			COLOR* p = &pixels[y*stride + x];
+			static if (useAlpha) f = fracmul(f, alpha);
+			*p = COLOR.op!q{blend(a, b, c)}(color, *p, f);
 		}
 
 		fix fx = tofix(x);
 		fix fy = tofix(y);
 		int ix = fixto!int(fx);
 		int iy = fixto!int(fy);
-		plot(ix  , iy  , fracmul(~fixfpart(fx), ~fixfpart(fy)));
-		plot(ix  , iy+1, fracmul(~fixfpart(fx),  fixfpart(fy)));
-		plot(ix+1, iy  , fracmul( fixfpart(fx), ~fixfpart(fy)));
-		plot(ix+1, iy+1, fracmul( fixfpart(fx),  fixfpart(fy)));
+		static if (CHECKED)
+			if (ix>=0 && iy>=0 && ix+1<w && iy+1<h)
+			{
+				plot!false(ix  , iy  , fracmul(~fixfpart(fx), ~fixfpart(fy)));
+				plot!false(ix  , iy+1, fracmul(~fixfpart(fx),  fixfpart(fy)));
+				plot!false(ix+1, iy  , fracmul( fixfpart(fx), ~fixfpart(fy)));
+				plot!false(ix+1, iy+1, fracmul( fixfpart(fx),  fixfpart(fy)));
+				return;
+			}
+		plot!CHECKED(ix  , iy  , fracmul(~fixfpart(fx), ~fixfpart(fy)));
+		plot!CHECKED(ix  , iy+1, fracmul(~fixfpart(fx),  fixfpart(fy)));
+		plot!CHECKED(ix+1, iy  , fracmul( fixfpart(fx), ~fixfpart(fy)));
+		plot!CHECKED(ix+1, iy+1, fracmul( fixfpart(fx),  fixfpart(fy)));
 	}
 
-	void aaPutPixel(F:float)(F x, F y, COLOR color)
+	void aaPutPixel(bool CHECKED=true, F:float)(F x, F y, COLOR color)
 	{
 		//aaPutPixel!(false, F)(x, y, color, 0); // doesn't work, wtf
-		alias aaPutPixel!(false, F) f;
+		alias aaPutPixel!(CHECKED, false, F) f;
 		f(x, y, color, 0);
 	}
 
-	void hline()(int x1, int x2, int y, COLOR color, frac alpha)
+	void hline(bool CHECKED=true)(int x1, int x2, int y, COLOR color, frac alpha)
 	{
-		sort2(x1, x2);
+		mixin(CheckHLine);
+
 		if (alpha==0)
 			return;
 		else
@@ -448,9 +536,10 @@ mixin template Canvas()
 				p = COLOR.op!q{blend(a, b, c)}(color, p, alpha);
 	}
 
-	void vline(int x, int y1, int y2, COLOR color, frac alpha)
+	void vline(bool CHECKED=true)(int x, int y1, int y2, COLOR color, frac alpha)
 	{
-		sort2(y1, y2);
+		mixin(CheckVLine);
+
 		if (alpha==0)
 			return;
 		else
@@ -465,7 +554,7 @@ mixin template Canvas()
 			}
 	}
 
-	void aaFillRect(F:float)(F x1, F y1, F x2, F y2, COLOR color)
+	void aaFillRect(bool CHECKED=true, F:float)(F x1, F y1, F x2, F y2, COLOR color)
 	{
 		sort2(x1, x2);
 		sort2(y1, y2);
@@ -474,26 +563,27 @@ mixin template Canvas()
 		fix x2f = tofix(x2); int x2i = fixto!int(x2f);
 		fix y2f = tofix(y2); int y2i = fixto!int(y2f);
 
-		vline(x1i, y1i+1, y2i, color, ~fixfpart(x1f));
-		vline(x2i, y1i+1, y2i, color,  fixfpart(x2f));
-		hline(x1i+1, x2i, y1i, color, ~fixfpart(y1f));
-		hline(x1i+1, x2i, y2i, color,  fixfpart(y2f));
-		aaPutPixel(x1i, y1i, color, fracmul(~fixfpart(x1f), ~fixfpart(y1f)));
-		aaPutPixel(x1i, y2i, color, fracmul(~fixfpart(x1f),  fixfpart(y2f)));
-		aaPutPixel(x2i, y1i, color, fracmul( fixfpart(x2f), ~fixfpart(y1f)));
-		aaPutPixel(x2i, y2i, color, fracmul( fixfpart(x2f),  fixfpart(y2f)));
+		vline!CHECKED(x1i, y1i+1, y2i, color, ~fixfpart(x1f));
+		vline!CHECKED(x2i, y1i+1, y2i, color,  fixfpart(x2f));
+		hline!CHECKED(x1i+1, x2i, y1i, color, ~fixfpart(y1f));
+		hline!CHECKED(x1i+1, x2i, y2i, color,  fixfpart(y2f));
+		aaPutPixel!CHECKED(x1i, y1i, color, fracmul(~fixfpart(x1f), ~fixfpart(y1f)));
+		aaPutPixel!CHECKED(x1i, y2i, color, fracmul(~fixfpart(x1f),  fixfpart(y2f)));
+		aaPutPixel!CHECKED(x2i, y1i, color, fracmul( fixfpart(x2f), ~fixfpart(y1f)));
+		aaPutPixel!CHECKED(x2i, y2i, color, fracmul( fixfpart(x2f),  fixfpart(y2f)));
 
-		fillRect(x1i+1, y1i+1, x2i, y2i, color);
+		fillRect!CHECKED(x1i+1, y1i+1, x2i, y2i, color);
 	}
 
-	void aaLine(float x1, float x2, float y1, float y2, COLOR color)
+	void aaLine(bool CHECKED=true)(float x1, float x2, float y1, float y2, COLOR color)
 	{
+		// Simplistic straight-forward implementation. TODO: optimize
 		if (abs(x1-x2) > abs(y1-y2))
 			for (auto x=x1; sign(x1-x2)!=sign(x2-x); x += sign(x2-x1))
-				aaPutPixel(x, itpl(y1, y2, x, x1, x2), color);
+				aaPutPixel!CHECKED(x, itpl(y1, y2, x, x1, x2), color);
 		else
 			for (auto y=y1; sign(y1-y2)!=sign(y2-y); y += sign(y2-y1))
-				aaPutPixel(itpl(x1, x2, y, y1, y2), y, color);
+				aaPutPixel!CHECKED(itpl(x1, x2, y, y1, y2), y, color);
 	}
 }
 
@@ -589,6 +679,7 @@ alias Color!q{ubyte  r, g, b, x; } RGBX   ;
 //alias Color!q{ushort r, g, b, x; } RGBX16 ;
 alias Color!q{ubyte  r, g, b, a; } RGBA   ;
 //alias Color!q{ushort r, g, b, a; } RGBA16 ;
+alias Color!q{ubyte  g;          } G8     ;
 alias Color!q{ushort g;          } G16    ;
 alias Color!q{ubyte  g, a;       } GA     ;
 alias Color!q{ushort g, a;       } GA16   ;
@@ -709,6 +800,16 @@ private string[] structFields(T)()
 			fields ~= field;
 	}
 	return fields;
+}
+
+// *****************************************************************************
+
+struct RefCanvas(COLOR)
+{
+	int w, h, stride;
+	COLOR* pixels;
+
+	mixin Canvas;
 }
 
 // *****************************************************************************

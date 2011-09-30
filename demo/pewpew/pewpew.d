@@ -38,6 +38,7 @@ module ae.demo.pewpew.pewpew;
 import std.random;
 import std.datetime;
 import std.algorithm : min;
+import std.conv;
 
 import ae.ui.app.application;
 import ae.ui.app.posix.main;
@@ -48,6 +49,7 @@ import ae.ui.video.sdl.video;
 import ae.ui.video.surface;
 import ae.ui.video.canvas;
 import ae.utils.graphics.gamma;
+import ae.utils.fps;
 
 import ae.demo.pewpew.objects;
 
@@ -57,19 +59,22 @@ final class MyApplication : Application
 	override string getCompanyName() { return "CyberShadow"; }
 
 	uint ticks;
-	alias GammaRamp!(ushort, ubyte) Gamma16_8;
-	Gamma16_8 gamma;
+	alias GammaRamp!(COLOR.BaseType, ubyte) MyGamma;
+	MyGamma gamma;
+	FPSCounter fps;
 
 	static uint currentTick() { return TickDuration.currSystemTick().to!("msecs", uint)(); }
 
 	override void render(Surface s)
 	{
+		fps.tick(&shell.setCaption);
+
 		auto screenCanvas = BitmapCanvas(s.lock());
 		scope(exit) s.unlock();
 
 		if (initializing)
 		{
-			gamma = Gamma16_8(ColorSpace.sRGB);
+			gamma = MyGamma(ColorSpace.sRGB);
 			new Game();
 			foreach (i; 0..1000) step(10);
 			ticks = currentTick();
@@ -91,8 +96,9 @@ final class MyApplication : Application
 				obj.render();
 
 		screenCanvas.transformDraw!q{
-			COLOR.monochrome(extraArgs[0][c.g])
-		}(canvas, (screenCanvas.w-canvasSize)/2, (screenCanvas.h-canvasSize)/2, gamma.lum2pixValues[]);
+			//COLOR.monochrome(extraArgs[0][c.g]) // won't inline
+			COLOR(extraArgs[0][c.g], extraArgs[0][c.g], extraArgs[0][c.g])
+		}(canvas, (screenCanvas.w-canvasSize)/2, (screenCanvas.h-canvasSize)/2, gamma.lum2pixValues.ptr);
 
 	}
 
@@ -112,6 +118,7 @@ final class MyApplication : Application
 			case Key.left : left  = true ; break;
 			case Key.right: right = true ; break;
 			case Key.space: space = true ; break;
+			case Key.esc  : shell.quit();  break;
 			default       :                break;
 		}
 	}

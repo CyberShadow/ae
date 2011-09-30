@@ -35,6 +35,7 @@
 module ae.ui.video.sdl.video;
 
 import core.thread;
+import std.process : environment;
 
 import derelict.sdl.sdl;
 
@@ -46,6 +47,8 @@ import ae.ui.video.sdl.surface;
 
 class SDLVideo : Video
 {
+	bool firstStart = true;
+
 	override void initialize()
 	{
 		//auto surface = SDL_GetVideoSurface();
@@ -67,7 +70,14 @@ class SDLVideo : Video
 		if (application.isResizable())
 			flags |= SDL_RESIZABLE;
 
+		if (firstStart)
+			environment["SDL_VIDEO_CENTERED"] = "1";
+		else
+			environment.remove("SDL_VIDEO_CENTERED");
+
 		sdlEnforce(SDL_SetVideoMode(screenWidth, screenHeight, 32, flags), "can't set video mode");
+
+		firstStart = false;
 	}
 
 	override void start()

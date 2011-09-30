@@ -47,24 +47,19 @@ import ae.ui.video.sdl.video;
 import ae.ui.video.surface;
 import ae.ui.video.canvas;
 import ae.utils.math;
+import ae.utils.geometry;
+import ae.utils.fps;
 
 final class MyApplication : Application
 {
 	override string getName() { return "Demo/Canvas"; }
 	override string getCompanyName() { return "CyberShadow"; }
 
-	int frames, lastSecond;
+	FPSCounter fps;
 
 	override void render(Surface s)
 	{
-		frames++;
-		auto thisSecond = Clock.currTime().second;
-		if (thisSecond != lastSecond)
-		{
-			shell.setCaption(to!string(frames));
-			frames = 0;
-			lastSecond = thisSecond;
-		}
+		fps.tick(&shell.setCaption);
 
 		auto canvas = BitmapCanvas(s.lock());
 		scope(exit) s.unlock();

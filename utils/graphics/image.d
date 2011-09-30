@@ -343,6 +343,14 @@ struct Image(COLOR)
 	}
 }
 
+auto copyCanvas(C)(C c)
+{
+	Image!(C.COLOR) image;
+	image.size(c.w, c.h);
+	image.draw(c, 0, 0);
+	return image;
+}
+
 private
 {
 	// test intantiation

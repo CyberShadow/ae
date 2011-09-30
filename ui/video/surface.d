@@ -48,12 +48,12 @@ class Surface
 			assert(x<w && y<h);
 			return cast(uint*)(cast(ubyte*)pixels + y*stride) + x;
 		}
-		
+
 		uint opIndex(uint x, uint y)
 		{
 			return *pixelPtr(x, y);
 		}
-		
+
 		void opIndexAssign(uint value, uint x, uint y)
 		{
 			*pixelPtr(x, y) = value;

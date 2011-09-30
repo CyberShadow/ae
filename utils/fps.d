@@ -32,33 +32,26 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-/// Number stuff
-module ae.utils.math;
+/// FPS counter
+module ae.utils.fps;
 
-public import std.algorithm : min, max, abs, swap;
-public import std.math;
-import std.traits : Signed, Unsigned;
+import std.datetime;
+import std.conv;
 
-typeof(Ta+Tb+Tc) bound(Ta, Tb, Tc)(Ta a, Tb b, Tc c) { return a<b?b:a>c?c:a; }
-bool between(T)(T point, T a, T b) { return a <= point && point <= b; } /// Assumes points are sorted (was there a faster way?)
-T sqr(T)(T x) { return x*x; }
-
-void sort2(T)(ref T x, ref T y) { if (x > y) { T z=x; x=y; y=z; } }
-
-T itpl(T, U)(T low, T high, U r, U rLow, U rHigh)
+struct FPSCounter
 {
-	return cast(T)(low + (cast(Signed!T)high-cast(Signed!T)low) * (cast(Signed!U)r - cast(Signed!U)rLow) / (cast(Signed!U)rHigh - cast(Signed!U)rLow));
+	void tick(void delegate(string) setter)
+	{
+		auto thisSecond = Clock.currTime().second;
+		if (thisSecond != lastSecond)
+		{
+			setter(to!string(frames));
+			frames = 0;
+			lastSecond = thisSecond;
+		}
+		frames++;
+	}
+
+private:
+	uint frames, lastSecond;
 }
-
-byte sign(T)(T x) { return x<0 ? -1 : x>0 ? 1 : 0; }
-
-auto op(string OP, T...)(T args)
-{
-	auto result = args[0];
-	foreach (arg; args[1..$])
-		mixin("result" ~ OP ~ "=arg;");
-	return result;
-}
-
-auto sum(T...)(T args) { return op!"+"(args); }
-auto average(T...)(T args) { return sum(args) / args.length; }
