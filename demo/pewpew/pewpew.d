@@ -122,13 +122,13 @@ final class MyApplication : Application
 	{
 		switch (key)
 		{
-			case Key.up   : up    = true ; break;
-			case Key.down : down  = true ; break;
-			case Key.left : left  = true ; break;
-			case Key.right: right = true ; break;
-			case Key.space: space = true ; break;
-			case Key.esc  : shell.quit();  break;
-			default       :                break;
+			case Key.up   : up   ++; break;
+			case Key.down : down ++; break;
+			case Key.left : left ++; break;
+			case Key.right: right++; break;
+			case Key.space: fire ++; break;
+			case Key.esc  : shell.quit(); break;
+			default       : break;
 		}
 	}
 
@@ -136,13 +136,61 @@ final class MyApplication : Application
 	{
 		switch (key)
 		{
-			case Key.up   : up    = false; break;
-			case Key.down : down  = false; break;
-			case Key.left : left  = false; break;
-			case Key.right: right = false; break;
-			case Key.space: space = false; break;
-			default       :                break;
+			case Key.up   : up   --; break;
+			case Key.down : down --; break;
+			case Key.left : left --; break;
+			case Key.right: right--; break;
+			case Key.space: fire --; break;
+			default       : break;
 		}
+	}
+
+	override bool needJoystick() { return true; }
+
+	int axisInitial[2];
+	bool axisCalibrated[2];
+
+	override void handleJoyAxisMotion(int axis, short svalue)
+	{
+		if (axis >= 2) return;
+
+		int value = svalue;
+		if (!axisCalibrated[axis]) // assume first input event is inert
+			axisInitial[axis] = value,
+			axisCalibrated[axis] = true;
+		value -= axisInitial[axis];
+
+		import ae.utils.math;
+		if (abs(value) > short.max/2) // hack?
+			useAnalog = true;
+		auto fvalue = bound(cast(float)value / short.max, -1f, 1f);
+		(axis==0 ? analogX : analogY) = fvalue;
+	}
+
+	JoystickHatState lastState = cast(JoystickHatState)0;
+
+	override void handleJoyHatMotion (int hat, JoystickHatState state)
+	{
+		void checkDirection(JoystickHatState direction, ref int var)
+		{
+			if (!(lastState & direction) && (state & direction)) var++;
+			if ((lastState & direction) && !(state & direction)) var--;
+		}
+		checkDirection(JoystickHatState.up   , up   );
+		checkDirection(JoystickHatState.down , down );
+		checkDirection(JoystickHatState.left , left );
+		checkDirection(JoystickHatState.right, right);
+		lastState = state;
+	}
+
+	override void handleJoyButtonDown(int button)
+	{
+		fire++;
+	}
+
+	override void handleJoyButtonUp  (int button)
+	{
+		fire--;
 	}
 
 	override int run(string[] args)

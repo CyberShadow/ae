@@ -100,6 +100,9 @@ class Application
 		return config.read("FullScreen", isFullScreenByDefault());
 	}
 
+	bool needSound() { return false; }
+	bool needJoystick() { return false; }
+
 	// ****************************** Event handlers *******************************
 
 	//void handleMouseEnter() {}
@@ -116,6 +119,11 @@ class Application
 	void handleMouseUp(uint x, uint y, MouseButton button) {}
 	void handleMouseMove(uint x, uint y, MouseButtons buttons) {}
 	//void handleMouseRelMove(int dx, int dy) {} /// when cursor is clipped
+
+	void handleJoyAxisMotion(int axis, short value);
+	void handleJoyHatMotion (int hat, JoystickHatState state);
+	void handleJoyButtonDown(int button);
+	void handleJoyButtonUp  (int button);
 
 	//void handleResize(uint w, uint h) {}
 	void handleQuit() {}

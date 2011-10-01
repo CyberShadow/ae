@@ -49,9 +49,21 @@ final class SDLShell : Shell
 	this()
 	{
 		DerelictSDL.load();
-		sdlEnforce(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)==0);
+		auto components = SDL_INIT_VIDEO;
+		if (application.needSound())
+			components |= SDL_INIT_AUDIO;
+		if (application.needJoystick())
+			components |= SDL_INIT_JOYSTICK;
+		sdlEnforce(SDL_Init(components)==0);
+
 		SDL_EnableKeyRepeat(SDL_DEFAULT_REPEAT_DELAY, SDL_DEFAULT_REPEAT_INTERVAL);
 		SDL_EnableUNICODE(1);
+
+		if (application.needJoystick() && SDL_NumJoysticks())
+		{
+			SDL_JoystickEventState(SDL_ENABLE);
+			SDL_JoystickOpen(0);
+		}
 	}
 
 	override void run()
@@ -164,20 +176,26 @@ final class SDLShell : Shell
 					return false;
 				}
 			}+/
-			application.handleKeyDown(sdlKeys[event.key.keysym.sym], event.key.keysym.unicode);
-			break;
+			return application.handleKeyDown(sdlKeys[event.key.keysym.sym], event.key.keysym.unicode);
 		case SDL_KEYUP:
-			application.handleKeyUp(sdlKeys[event.key.keysym.sym]);
-			break;
+			return application.handleKeyUp(sdlKeys[event.key.keysym.sym]);
+
 		case SDL_MOUSEBUTTONDOWN:
-			application.handleMouseDown(event.button.x, event.button.y, translateMouseButton(event.button.button));
-			break;
+			return application.handleMouseDown(event.button.x, event.button.y, translateMouseButton(event.button.button));
 		case SDL_MOUSEBUTTONUP:
-			application.handleMouseUp(event.button.x, event.button.y, translateMouseButton(event.button.button));
-			break;
+			return application.handleMouseUp(event.button.x, event.button.y, translateMouseButton(event.button.button));
 		case SDL_MOUSEMOTION:
-			application.handleMouseMove(event.motion.x, event.motion.y, translateMouseButtons(event.motion.state));
-			break;
+			return application.handleMouseMove(event.motion.x, event.motion.y, translateMouseButtons(event.motion.state));
+
+		case SDL_JOYAXISMOTION:
+			return application.handleJoyAxisMotion(event.jaxis.axis, event.jaxis.value);
+		case SDL_JOYHATMOTION:
+			return application.handleJoyHatMotion (event.jhat.hat, cast(JoystickHatState)event.jhat.value);
+		case SDL_JOYBUTTONDOWN:
+			return application.handleJoyButtonDown(event.jbutton.button);
+		case SDL_JOYBUTTONUP:
+			return application.handleJoyButtonUp  (event.jbutton.button);
+
 		case SDL_VIDEORESIZE:
 			application.setWindowSize(event.resize.w, event.resize.h);
 			video.stopAsync();

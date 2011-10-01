@@ -74,7 +74,8 @@ T cbound(T)(T x) { return bound(x, 0, canvas.w); }
 auto BLACK = COLOR(0);
 auto WHITE = COLOR(COLOR.BaseType.max);
 
-bool up, down, left, right, space;
+int up, down, left, right, fire;
+bool useAnalog; float analogX, analogY;
 
 float frand () { return uniform!`[)`( 0.0f, 1.0f); }
 float frands() { return uniform!`()`(-1.0f, 1.0f); }
@@ -337,30 +338,27 @@ class Ship : GameObject
 			const a    = 0.000_001f;
 			const maxv = 0.000_500f;
 
-			if (left)
-				vx = bound(vx-a*deltaTicks, -maxv, 0);
+			if (useAnalog)
+				vx = analogX * maxv,
+				vy = analogY * maxv;
 			else
-			if (right)
-				vx = bound(vx+a*deltaTicks, 0,  maxv);
-			else
-				vx = 0;
-
-			if (up)
-				vy = bound(vy-a*deltaTicks, -maxv, 0);
-			else
-			if (down)
-				vy = bound(vy+a*deltaTicks, 0,  maxv);
-			else
-				vy = 0;
-
-			static bool lastSpace;
-			//space = t % 250 == 0;
-			if (space && !lastSpace)
 			{
-				new Torpedo(-0.034f, -0.020f);
-				new Torpedo(+0.034f, -0.020f);
+				if (left)
+					vx = bound(vx-a*deltaTicks, -maxv, 0);
+				else
+				if (right)
+					vx = bound(vx+a*deltaTicks, 0,  maxv);
+				else
+					vx = 0;
+
+				if (up)
+					vy = bound(vy-a*deltaTicks, -maxv, 0);
+				else
+				if (down)
+					vy = bound(vy+a*deltaTicks, 0,  maxv);
+				else
+					vy = 0;
 			}
-			lastSpace = space;
 
 			t += deltaTicks;
 		}
@@ -372,6 +370,15 @@ class Ship : GameObject
 			if (y<0.05f || y>0.95f) vy = 0;
 			x = bound(x, 0.05f, 0.95f);
 			y = bound(y, 0.05f, 0.95f);
+
+			static bool wasFiring;
+			//fire = t % 250 == 0;
+			if (fire && !wasFiring)
+			{
+				new Torpedo(-0.034f, -0.020f);
+				new Torpedo(+0.034f, -0.020f);
+			}
+			wasFiring = !!fire;
 
 			collideWith(Plane.Enemies, Plane.PlasmaOrbs);
 		}
