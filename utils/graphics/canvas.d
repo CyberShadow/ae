@@ -132,10 +132,21 @@ mixin template Canvas()
 		}
 	}
 
+	void warp(string pred, SRCCANVAS, T...)(ref SRCCANVAS src, T extraArgs)
+		if (IsCanvas!SRCCANVAS)
+	{
+		assert(src.w == w && src.h == h);
+		foreach (y; 0..h)
+			foreach (x, ref c; pixels[y*stride..y*stride+w])
+			{
+				mixin(pred);
+			}
+	}
+
 	/// Does not make a copy - only returns a "view" onto this canvas.
 	auto window()(int x1, int y1, int x2, int y2)
 	{
-		assert(x1 >= 0 && y1 >= 0 && x2 < w && y2 < h && x1 <= x2 && y1 <= y2);
+		assert(x1 >= 0 && y1 >= 0 && x2 <= w && y2 <= h && x1 <= x2 && y1 <= y2);
 
 		return RefCanvas!COLOR(x2-x1, y2-y1, stride, &pixels[0] + (stride*y1) + x1);
 	}
@@ -400,7 +411,6 @@ mixin template Canvas()
 	private void softRoundShape(bool RING, T)(T x, T y, T r0, T r1, T r2, COLOR color)
 		if (is(T : int) || is(T : float))
 	{
-		scope(failure) std.stdio.writeln([r0, r1, r2]);
 		assert(r0 <= r1);
 		assert(r1 <= r2);
 		assert(r2 < 256); // precision constraint - see SqrType
@@ -473,6 +483,7 @@ mixin template Canvas()
 	}
 
 	void softRing(T)(T x, T y, T r0, T r1, T r2, COLOR color)
+		if (is(T : int) || is(T : float))
 	{
 		softRoundShape!(true, T)(x, y, r0, r1, r2, color);
 	}
@@ -483,7 +494,7 @@ mixin template Canvas()
 		softRoundShape!(false, T)(x, y, 0, r1, r2, color);
 	}
 
-	void aaPutPixel(bool CHECKED=true, bool useAlpha=true, F:float)(F x, F y, COLOR color, frac alpha)
+	void aaPutPixel(bool CHECKED=true, bool USE_ALPHA=true, F:float)(F x, F y, COLOR color, frac alpha)
 	{
 		void plot(bool CHECKED2)(int x, int y, frac f)
 		{
@@ -492,7 +503,7 @@ mixin template Canvas()
 					return;
 
 			COLOR* p = &pixels[y*stride + x];
-			static if (useAlpha) f = fracmul(f, alpha);
+			static if (USE_ALPHA) f = fracmul(f, alpha);
 			*p = COLOR.op!q{blend(a, b, c)}(color, *p, f);
 		}
 
@@ -575,7 +586,7 @@ mixin template Canvas()
 		fillRect!CHECKED(x1i+1, y1i+1, x2i, y2i, color);
 	}
 
-	void aaLine(bool CHECKED=true)(float x1, float x2, float y1, float y2, COLOR color)
+	void aaLine(bool CHECKED=true)(float x1, float y1, float x2, float y2, COLOR color)
 	{
 		// Simplistic straight-forward implementation. TODO: optimize
 		if (abs(x1-x2) > abs(y1-y2))
@@ -584,6 +595,17 @@ mixin template Canvas()
 		else
 			for (auto y=y1; sign(y1-y2)!=sign(y2-y); y += sign(y2-y1))
 				aaPutPixel!CHECKED(itpl(x1, x2, y, y1, y2), y, color);
+	}
+
+	void aaLine(bool CHECKED=true)(float x1, float y1, float x2, float y2, COLOR color, frac alpha)
+	{
+		// ditto
+		if (abs(x1-x2) > abs(y1-y2))
+			for (auto x=x1; sign(x1-x2)!=sign(x2-x); x += sign(x2-x1))
+				aaPutPixel!CHECKED(x, itpl(y1, y2, x, x1, x2), color, alpha);
+		else
+			for (auto y=y1; sign(y1-y2)!=sign(y2-y); y += sign(y2-y1))
+				aaPutPixel!CHECKED(itpl(x1, x2, y, y1, y2), y, color, alpha);
 	}
 }
 

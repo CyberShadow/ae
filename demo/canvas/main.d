@@ -39,7 +39,7 @@ import std.algorithm : min, max;
 import std.datetime, std.conv;
 
 import ae.ui.app.application;
-import ae.ui.app.main;
+import ae.ui.app.posix.main;
 import ae.ui.shell.shell;
 import ae.ui.shell.sdl.shell;
 import ae.ui.video.video;
@@ -56,6 +56,7 @@ final class MyApplication : Application
 	override string getCompanyName() { return "CyberShadow"; }
 
 	FPSCounter fps;
+	static __gshared bool first = true;
 
 	override void render(Surface s)
 	{
@@ -69,17 +70,19 @@ final class MyApplication : Application
 		int randX() { return uniform(0, canvas.w); }
 		int randY() { return uniform(0, canvas.h); }
 
-		static bool first = true;
-		if (first)
-			canvas.whiteNoise(),
-			first = false;
-
 		enum Shape
 		{
 			pixel, hline, vline, rect, fillRect, fillRect2, circle, sector, poly,
-			softEdgedCircle, aaLine,
+			softCircle, softRing, aaLine,
 		}
-		final switch (cast(Shape) uniform!"[]"(0, Shape.max))
+
+		static Shape shape;
+		if (first)
+			canvas.whiteNoise(),
+			shape = cast(Shape) uniform!"(]"(0, Shape.max),
+			first = false;
+
+		final switch (shape)
 		{
 			case Shape.pixel:
 				return canvas[randX(), randY()] = randColor();
@@ -114,15 +117,33 @@ final class MyApplication : Application
 					coord = Coord(randX(), randY());
 				return canvas.fillPoly(coords, randColor());
 			}
-			case Shape.softEdgedCircle:
+			case Shape.softCircle:
 			{
 				int r1 = uniform(10, 100);
 				int r0 = uniform(0, r1-5);
-				return canvas.softEdgedCircle(uniform(r1, canvas.w-r1), uniform(r1, canvas.h-r1), r0, r1, randColor());
+				return canvas.softCircle(uniform(r1, canvas.w-r1), uniform(r1, canvas.h-r1), r0, r1, randColor());
+			}
+			case Shape.softRing:
+			{
+				int r2 = uniform(15, 100);
+				int r0 = uniform(0, r2-10);
+				int r1 = uniform(r0+5, r2-5);
+				return canvas.softRing(uniform(r2, canvas.w-r2), uniform(r2, canvas.h-r2), r0, r1, r2, randColor());
 			}
 			case Shape.aaLine:
 				return canvas.aaLine(randX(), randY(), randX(), randY(), randColor());
 		}
+	}
+
+	override void handleMouseDown(uint x, uint y, MouseButton button)
+	{
+		first = true;
+	}
+
+	override bool setWindowSize(uint x, uint y)
+	{
+		first = true;
+		return super.setWindowSize(x, y);
 	}
 
 	override int run(string[] args)

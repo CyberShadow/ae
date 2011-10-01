@@ -343,12 +343,10 @@ struct Image(COLOR)
 	}
 }
 
-auto copyCanvas(C)(C c)
+void copyCanvas(C, I)(C c, ref I image)
 {
-	Image!(C.COLOR) image;
 	image.size(c.w, c.h);
 	image.draw(c, 0, 0);
-	return image;
 }
 
 private

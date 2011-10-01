@@ -68,8 +68,8 @@ class MyControl : Control
 
 	override void render(Surface s, int x, int y)
 	{
-		foreach (i; 0..100)
-			coords ~= Coord(uniform(0, w), uniform(0, h), uniform(0, 0x1_00_00_00));
+		//foreach (i; 0..100)
+		//	coords ~= Coord(uniform(0, w), uniform(0, h), uniform(0, 0x1_00_00_00));
 		shell.setCaption(to!string(coords.length));
 
 		auto b = s.lock();

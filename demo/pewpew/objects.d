@@ -70,6 +70,7 @@ alias G16 COLOR;
 Image!COLOR canvas;
 float cf(float x) { assert(canvas.w == canvas.h); return x*canvas.w; }
 int   ci(float x) { assert(canvas.w == canvas.h); return cast(int)(x*canvas.w); }
+T cbound(T)(T x) { return bound(x, 0, canvas.w); }
 auto BLACK = COLOR(0);
 auto WHITE = COLOR(COLOR.BaseType.max);
 
@@ -125,8 +126,12 @@ class Game : GameEntity
 	{
 		foreach (i; 0..deltaTicks)
 		{
-			auto star = Star(frand(), 0, frand());
-			auto layer = cast(int)((1-star.z)*3);
+			auto z = frand();
+			auto star = Star(
+				frand(), 0,
+				0.0001f + (1-z) * 0.00005f,
+				canvas.COLOR(canvas.fixfpart(canvas.tofix((1-z)*0.5f))));
+			auto layer = cast(int)((1-z)*3);
 			starFields[layer].add(star);
 		}
 		if (!initializing && ship && !ship.dead && spawnTimer--==0)
@@ -175,7 +180,8 @@ class ParticleManager(Particle) : GameEntity
 
 	override void render()
 	{
-		foreach (ref particle; particles[0..particleCount])
+		import std.parallelism;
+		foreach (ref particle; taskPool.parallel(particles[0..particleCount]))
 			with (particle)
 			{
 				mixin(Particle.RENDER);
@@ -222,13 +228,14 @@ class ParticleManager(Particle) : GameEntity
 
 struct Star
 {
-	float x, y, z;
+	float x, y, vy;
+	COLOR color;
 
 	enum MAX = 1024*32;
 
 	enum STEP =
 	q{
-		y += deltaTicks * (0.0001f+(1-z)*0.00005f);
+		y += deltaTicks * vy;
 		if (y > 1f)
 			{ mixin(REMOVE); }
 		else
@@ -237,7 +244,7 @@ struct Star
 
 	enum RENDER =
 	q{
-		canvas.aaPutPixel(cf(x), cf(y), canvas.COLOR(canvas.fixfpart(canvas.tofix((1-z)*0.5f))));
+		canvas.aaPutPixel(cf(x), cf(y), color);
 	};
 }
 
@@ -305,10 +312,13 @@ class Ship : GameObject
 	bool spawning;
 	uint t;
 
+	enum SPAWN_START = 0.3f;
+	enum SPAWN_END = 0.3f;
+
 	this()
 	{
 		x = 0.5f;
-		y = 0.9f;
+		y = 0.85f;
 		vx = vy = 0;
 		shapes ~= shape(rect(-0.040f, -0.020f, -0.028f, +0.040f)); // left wing
 		shapes ~= shape(rect(+0.040f, -0.020f, +0.028f, +0.040f)); // right wing
@@ -344,10 +354,11 @@ class Ship : GameObject
 				vy = 0;
 
 			static bool lastSpace;
+			//space = t % 250 == 0;
 			if (space && !lastSpace)
 			{
-				new Torpedo(-0.034f, -0.026f);
-				new Torpedo(+0.034f, -0.026f);
+				new Torpedo(-0.034f, -0.020f);
+				new Torpedo(+0.034f, -0.020f);
 			}
 			lastSpace = space;
 
@@ -367,18 +378,20 @@ class Ship : GameObject
 		else
 		if (spawning)
 		{
-			foreach (n; 0..10)
-			{
-				float px = frands()*0.050f;
-				spawnParticles.add(SpawnParticle(
-					x + px*1.7f + frands ()*0.010f,
-					spawnY()    + frands2()*0.050f,
-					x + px,
-				));
-			}
-
 			spawn += 0.0005f;
-			if (spawn >= 1f)
+
+			if (spawn < SPAWN_START+1f)
+				foreach (n; 0..5)
+				{
+					float px = frands()*0.050f;
+					spawnParticles.add(SpawnParticle(
+						x + px*1.7f + frands ()*0.010f,
+						spawnY()    + frands2()*0.050f,
+						x + px,
+					));
+				}
+
+			if (spawn >= SPAWN_START+1f+SPAWN_END)
 				spawning = dead = false;
 		}
 		else
@@ -417,13 +430,50 @@ class Ship : GameObject
 			canvas.softCircle(cf(x+c.x), cf(y+c.y), cf(c.r*0.7f), cf(c.r), color);
 		}
 
-		Image!COLOR bg;
-		int bgx, bgy;
+
+		void warp(float x, float y, float r)
+		{
+			auto bgx0 = cbound(ci(x-r));
+			auto bgy0 = cbound(ci(y-r));
+			auto bgx1 = cbound(ci(x+r));
+			auto bgy1 = cbound(ci(y+r));
+			auto window = canvas.window(bgx0, bgy0, bgx1, bgy1);
+			static Image!COLOR bg;
+			copyCanvas(window, bg);
+			window.warp!q{
+				alias extraArgs[0] cx;
+				alias extraArgs[1] cy;
+				int dx = x-cx;
+				int dy = y-cy;
+				float f = dist(dx, dy) / cx;
+				if (f < 1f && f > 0f)
+				{
+					float f2 = (1-f)*sqrt(sqrt(f)) + f*f;
+					assert(f2 < 1f);
+					int sx = cx + cast(int)(dx / f * f2);
+					int sy = cy + cast(int)(dy / f * f2);
+
+					if (sx>=0 && sx<w && sy>=0 && sy<h)
+						c = src[sx, sy];
+					else
+						c = COLOR(0);
+				}
+			}(bg, ci(x)-bgx0, ci(y)-bgy0);
+		}
+
 		if (spawning)
 		{
-			bgx = ci(x-0.050f);
-			bgy = ci(y-0.070f + 0.120f*spawn);
-			bg = copyCanvas(canvas.window(bgx, bgy, ci(x+0.050f), ci(y+0.050f)));
+			enum R = 0.15f;
+			warp(x, spawnY(), R * sqrt(sin(spawn/(SPAWN_START+1f+SPAWN_END)*PI)));
+		}
+
+		Image!COLOR bg;
+		int bgx0, bgyS;
+		if (spawning)
+		{
+			bgx0 = ci(x-0.050f);
+			bgyS = ci(spawnY());
+			copyCanvas(canvas.window(bgx0, bgyS, ci(x+0.050f), ci(y+0.050f)), bg);
 		}
 
 		drawRect2 (shapes[0].rect);
@@ -433,10 +483,13 @@ class Ship : GameObject
 		drawCircle(shapes[4].circle      , COLOR(Gray75));
 
 		if (spawning)
-			canvas.draw(bg, bgx, bgy);
+			canvas.draw(bg, bgx0, bgyS);
 	}
 
-	float spawnY() { return y-0.070f + 0.120f*spawn; }
+	float spawnY()
+	{
+		return y-0.050f + (0.100f * bound(spawn-SPAWN_START, 0f, 1f));
+	}
 }
 
 Ship ship;
@@ -449,7 +502,7 @@ struct SpawnParticle
 
 	enum STEP =
 	q{
-		t += 0.005f;
+		t += 0.002f;
 		if (t > 1f)
 			{ mixin(REMOVE); }
 		else
@@ -459,10 +512,14 @@ struct SpawnParticle
 	enum RENDER =
 	q{
 		float y1 = ship.spawnY();
-		float tt = sqr(t);
-		float x = x0 + tt*(x1-x0);
-		float y = y0 + tt*(y1-y0);
-		canvas.aaPutPixel(cf(x), cf(y), WHITE, canvas.tofracBounded(tt));
+		float tt0 = sqr(sqr(t));
+		float tt1 = min(1, tt0+0.15f);
+		float lx0 = x0 + tt0*(x1-x0);
+		float ly0 = y0 + tt0*(y1-y0);
+		float lx1 = x0 + tt1*(x1-x0);
+		float ly1 = y0 + tt1*(y1-y0);
+		//canvas.aaPutPixel(cf(x), cf(y), WHITE, canvas.tofracBounded(tt));
+		canvas.aaLine(cf(lx0), cf(ly0), cf(lx1), cf(ly1), WHITE, canvas.tofracBounded(sqr(tt0)));
 	};
 }
 
@@ -872,7 +929,7 @@ class Splode : GameEntity
 
 	override void render()
 	{
-		//std.stdio.writefln("%f %f %f", x, y, cr);
+		//std.stdio.writeln([x, y, cr]);
 		canvas.softCircle(cf(x), cf(y), max(0f, cf(cr)-1.5f), cf(cr), COLOR(canvas.tofracBounded(cr/r)));
 	}
 }
