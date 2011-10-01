@@ -36,7 +36,7 @@
 module ae.utils.fps;
 
 import std.datetime;
-import std.conv;
+import std.string;
 
 struct FPSCounter
 {
@@ -45,7 +45,7 @@ struct FPSCounter
 		auto thisSecond = Clock.currTime().second;
 		if (thisSecond != lastSecond)
 		{
-			setter(to!string(frames));
+			setter(format("%03d (%d us)", frames, frames?1_000_000/frames:0));
 			frames = 0;
 			lastSecond = thisSecond;
 		}

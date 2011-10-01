@@ -95,11 +95,20 @@ final class MyApplication : Application
 			foreach_reverse (obj; plane)
 				obj.render();
 
-		screenCanvas.transformDraw!q{
-			//COLOR.monochrome(extraArgs[0][c.g]) // won't inline
-			COLOR(extraArgs[0][c.g], extraArgs[0][c.g], extraArgs[0][c.g])
-		}(canvas, (screenCanvas.w-canvasSize)/2, (screenCanvas.h-canvasSize)/2, gamma.lum2pixValues.ptr);
+		auto x = (screenCanvas.w-canvasSize)/2;
+		auto y = (screenCanvas.h-canvasSize)/2;
+		auto dest = screenCanvas.window(x, y, x+canvasSize, y+canvasSize);
 
+		import std.parallelism;
+		import std.range;
+		foreach (j; taskPool.parallel(iota(canvasSize)))
+		{
+			auto src = canvas.window(0, j, canvasSize, j+1);
+			dest.transformDraw!q{
+				//COLOR.monochrome(extraArgs[0][c.g]) // won't inline
+				COLOR(extraArgs[0][c.g], extraArgs[0][c.g], extraArgs[0][c.g])
+			}(src, 0, j, gamma.lum2pixValues.ptr);// +/
+		}
 	}
 
 	void step(uint deltaTicks)
