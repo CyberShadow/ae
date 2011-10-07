@@ -121,8 +121,13 @@ struct Image(COLOR)
 			static assert(0, "Can't get channel type of " ~ T.stringof);
 	}
 
+	// ***********************************************************************
+
 	import std.ascii;
 	import std.exception;
+	import std.file : read, write;
+	import crc32;
+	import std.zlib;
 
 	static string[] readPNMHeader(ref ubyte[] data)
 	{
@@ -195,6 +200,8 @@ struct Image(COLOR)
 		this.w = w;
 		this.h = h;
 	}
+
+	// ***********************************************************************
 
 	void savePNG()(string filename)
 	{
@@ -315,6 +322,63 @@ struct Image(COLOR)
 		else
 			static assert(false, "Don't know how to bswap " ~ T.stringof);
 	}
+
+	// ***********************************************************************
+
+	align(1)
+	struct BitmapHeader
+	{
+		// BITMAPFILEHEADER
+		char[2] bfType = "BM";
+		uint    bfSize;
+		ushort  bfReserved1;
+		ushort  bfReserved2;
+		uint    bfOffBits;
+
+		// BITMAPCOREINFO
+		uint   bcSize = this.sizeof - bcSize.offsetof;
+		int    bcWidth;
+		int    bcHeight;
+		ushort bcPlanes;
+		ushort bcBitCount;
+	}
+
+	void loadBMP()(string filename)
+	{
+		ubyte[] data = cast(ubyte[])read(filename);
+		enforce(data.length > BitmapHeader.sizeof);
+		BitmapHeader* header = cast(BitmapHeader*) data.ptr;
+		enforce(header.bfType == "BM", "Invalid signature");
+		enforce(header.bfSize == data.length, "Incorrect file size");
+		enforce(header.bcSize >= BitmapHeader.sizeof - header.bcSize.offsetof);
+
+		w = stride = header.bcWidth;
+		h = header.bcHeight;
+		enforce(header.bcPlanes==1, "Multiplane BMPs not supported");
+
+		static if (is(COLOR == BGR))
+			enforce(header.bcBitCount == 24);
+		else
+		static if (is(COLOR == G8))
+			enforce(header.bcBitCount == 8);
+		else
+			static assert(0, "Unsupported BMP color type: " ~ COLOR.stringof);
+
+		if (h < 0)
+		{
+			pixels = cast(COLOR[])data[header.bfOffBits..$];
+			h = -h;
+		}
+		else
+		{
+			auto flippedPixels = cast(COLOR[])data[header.bfOffBits..$];
+			size(w, h);
+			foreach (y; 0..h)
+				pixels[y*stride..y*stride+w] = flippedPixels[(h-y-1)*stride..(h-y-1)*stride+w];
+		}
+	}
+
+	// ***********************************************************************
 
 	Image!COLOR crop(int x1, int y1, int x2, int y2)
 	{

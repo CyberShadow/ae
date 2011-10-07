@@ -56,8 +56,5 @@ struct CustomBitmapCanvas(COLOR)
 	}
 }
 
-alias Color!q{ubyte  b, g, r, x;} BGRX;
-alias Color!q{ubyte  b, g, r, a;} BGRA;
-
 alias CustomBitmapCanvas!BGRX BitmapCanvas;
 alias CustomBitmapCanvas!BGRA AlphaBitmapCanvas;

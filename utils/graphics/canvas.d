@@ -701,6 +701,11 @@ alias Color!q{ubyte  r, g, b, x; } RGBX   ;
 //alias Color!q{ushort r, g, b, x; } RGBX16 ;
 alias Color!q{ubyte  r, g, b, a; } RGBA   ;
 //alias Color!q{ushort r, g, b, a; } RGBA16 ;
+
+alias Color!q{ubyte  b, g, r;    } BGR    ;
+alias Color!q{ubyte  b, g, r, x; } BGRX   ;
+alias Color!q{ubyte  b, g, r, a; } BGRA   ;
+
 alias Color!q{ubyte  g;          } G8     ;
 alias Color!q{ushort g;          } G16    ;
 alias Color!q{ubyte  g, a;       } GA     ;
@@ -809,7 +814,7 @@ template ReplaceType(T, FROM, TO)
 // TODO: type expansion?
 T blend(T)(T f, T b, T a) { return cast(T) ( ((f*a) + (b*~a)) / T.max ); }
 
-private string[] structFields(T)()
+string[] structFields(T)()
 {
 	string[] fields;
 	foreach (i, f; T.init.tupleof)
