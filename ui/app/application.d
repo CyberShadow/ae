@@ -120,10 +120,10 @@ class Application
 	void handleMouseMove(uint x, uint y, MouseButtons buttons) {}
 	//void handleMouseRelMove(int dx, int dy) {} /// when cursor is clipped
 
-	void handleJoyAxisMotion(int axis, short value);
-	void handleJoyHatMotion (int hat, JoystickHatState state);
-	void handleJoyButtonDown(int button);
-	void handleJoyButtonUp  (int button);
+	void handleJoyAxisMotion(int axis, short value) {}
+	void handleJoyHatMotion (int hat, JoystickHatState state) {}
+	void handleJoyButtonDown(int button) {}
+	void handleJoyButtonUp  (int button) {}
 
 	//void handleResize(uint w, uint h) {}
 	void handleQuit() {}
