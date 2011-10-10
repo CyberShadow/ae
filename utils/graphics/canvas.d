@@ -39,6 +39,8 @@ import std.string;
 import std.math;
 import std.traits;
 
+// TODO: rewrite everything to use stride in bytes, not pixels
+
 struct Coord { int x, y; string toString() { return format([this.tupleof]); } }
 
 template IsCanvas(T)

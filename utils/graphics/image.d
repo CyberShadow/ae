@@ -364,17 +364,24 @@ struct Image(COLOR)
 		else
 			static assert(0, "Unsupported BMP color type: " ~ COLOR.stringof);
 
+		auto pixelData = data[header.bfOffBits..$];
+		int pixelStride = w * COLOR.sizeof;
+		pixelStride = (pixelStride+3) & ~3;
+		size_t pos = 0;
+
 		if (h < 0)
-		{
-			pixels = cast(COLOR[])data[header.bfOffBits..$];
 			h = -h;
-		}
 		else
 		{
-			auto flippedPixels = cast(COLOR[])data[header.bfOffBits..$];
-			size(w, h);
-			foreach (y; 0..h)
-				pixels[y*stride..y*stride+w] = flippedPixels[(h-y-1)*stride..(h-y-1)*stride+w];
+			pos = pixelStride*(h-1);
+			pixelStride = -pixelStride;
+		}
+
+		size(w, h);
+		foreach (y; 0..h)
+		{
+			pixels[y*stride..y*stride+w] = (cast(COLOR*)(pixelData.ptr+pos))[0..w];
+			pos += pixelStride;
 		}
 	}
 
@@ -389,10 +396,9 @@ struct Image(COLOR)
 		auto newOffset = 0;
 		foreach (y; y1..y2)
 		{
-			auto oldOffset2 = oldOffset + w;
 			auto newOffset2 = newOffset + nw;
-			newImage.pixels[newOffset..newOffset2] = pixels[oldOffset..oldOffset2];
-			oldOffset = oldOffset2;
+			newImage.pixels[newOffset..newOffset2] = pixels[oldOffset..oldOffset+nw];
+			oldOffset += w;
 			newOffset = newOffset2;
 		}
 		return newImage;
