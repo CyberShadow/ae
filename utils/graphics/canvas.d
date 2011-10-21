@@ -685,13 +685,13 @@ struct Color(string FIELDS)
 	{
 		static assert(values.length <= 10);
 
-		string genVars()
+		string genVars(string channel)
 		{
 			string result;
 			foreach (j, Tj; T)
 			{
 				static if (is(Tj == struct)) // TODO: tighter constraint (same color channels)?
-					result ~= "auto " ~ cast(char)('a' + j) ~ " = values[" ~ cast(char)('0' + j) ~ "].tupleof[i];\n";
+					result ~= "auto " ~ cast(char)('a' + j) ~ " = values[" ~ cast(char)('0' + j) ~ "]." ~  channel ~ ";\n";
 				else
 					result ~= "auto " ~ cast(char)('a' + j) ~ " = values[" ~ cast(char)('0' + j) ~ "];\n";
 			}
@@ -702,7 +702,7 @@ struct Color(string FIELDS)
 		foreach (i, f; r.tupleof)
 			static if(r.tupleof[i].stringof != "r.x") // skip padding
 			{
-				mixin(genVars());
+				mixin(genVars(r.tupleof[i].stringof[2..$]));
 				r.tupleof[i] = mixin(expr);
 			}
 		return r;
