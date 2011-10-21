@@ -41,7 +41,7 @@ import std.traits : Signed, Unsigned;
 
 typeof(Ta+Tb+Tc) bound(Ta, Tb, Tc)(Ta a, Tb b, Tc c) { return a<b?b:a>c?c:a; }
 bool between(T)(T point, T a, T b) { return a <= point && point <= b; } /// Assumes points are sorted (was there a faster way?)
-T sqr(T)(T x) { return x*x; }
+auto sqr(T)(T x) { return x*x; }
 
 void sort2(T)(ref T x, ref T y) { if (x > y) { T z=x; x=y; y=z; } }
 
