@@ -126,6 +126,7 @@ struct Image(COLOR)
 	import std.ascii;
 	import std.exception;
 	import std.file : read, write;
+	import std.conv : to;
 	import crc32;
 	import std.zlib;
 
@@ -144,6 +145,22 @@ struct Image(COLOR)
 		enforce(fields.length==4, "Header too short");
 		enforce(fields[0].length==2 && fields[0][0]=='P', "Invalid signature");
 		return fields;
+	}
+
+	void loadPNM()(string filename)
+	{
+		static assert(__traits(allMembers, COLOR.Fields).stringof == `tuple("r","g","b")`, "PNM only supports RGB, not " ~ __traits(allMembers, COLOR.Fields).stringof);
+		ubyte[] data = cast(ubyte[])read(filename);
+		string[] fields = readPNMHeader(data);
+		enforce(fields[0]=="P6", "Invalid signature");
+		w = to!uint(fields[1]);
+		h = to!uint(fields[2]);
+		enforce(data.length / COLOR.sizeof == w*h, "Dimension / filesize mismatch");
+		enforce(to!uint(fields[3]) == COLOR.tupleof[0].max);
+		pixels = cast(COLOR[])data;
+		static if (COLOR.tupleof[0].sizeof > 1)
+			foreach (ref pixel; pixels)
+				pixel = COLOR.op!q{bswap(a)}(pixel);
 	}
 
 	void savePNM()(string filename) // RGB only
@@ -166,14 +183,14 @@ struct Image(COLOR)
 
 	void loadPGM()(string filename)
 	{
-		static assert(is(typeof(COLOR.init == 0)), "PGM only supports grayscale");
+		static assert(__traits(allMembers, COLOR.Fields).stringof == `tuple("g")`, "PGM only supports grayscale");
 		ubyte[] data = cast(ubyte[])read(filename);
 		string[] fields = readPNMHeader(data);
 		enforce(fields[0]=="P5", "Invalid signature");
 		w = to!uint(fields[1]);
 		h = to!uint(fields[2]);
 		enforce(data.length / COLOR.sizeof == w*h, "Dimension / filesize mismatch");
-		enforce(to!uint(fields[3]) == COLOR.max);
+		enforce(to!uint(fields[3]) == COLOR.init.g.max);
 		pixels = cast(COLOR[])data;
 		static if (COLOR.sizeof > 1)
 			foreach (ref pixel; pixels)
@@ -182,7 +199,7 @@ struct Image(COLOR)
 
 	void savePGM()(string filename)
 	{
-		static assert(is(typeof(COLOR.init == 0)), "PGM only supports grayscale");
+		static assert(__traits(allMembers, COLOR.Fields).stringof == `tuple("g")`, "PGM only supports grayscale");
 		ubyte[] header = cast(ubyte[])format("P5\n%d %d\n%d\n", w, h, COLOR.max);
 		ubyte[] data = new ubyte[header.length + pixels.length * COLOR.sizeof];
 		data[0..header.length] = header;
@@ -307,20 +324,6 @@ struct Image(COLOR)
 			assert(pos == i+12+chunk.data.length);
 		}
 		std.file.write(filename, data);
-	}
-
-	static T bswap(T)(T b)
-	{
-		static if (b.sizeof == 1)
-			return b;
-		else
-		static if (b.sizeof == 2)
-			return cast(T)((b >> 8) | (b << 8));
-		else
-		static if (b.sizeof == 4)
-			return core.bitop.bswap(b);
-		else
-			static assert(false, "Don't know how to bswap " ~ T.stringof);
 	}
 
 	// ***********************************************************************

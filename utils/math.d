@@ -62,3 +62,17 @@ auto op(string OP, T...)(T args)
 
 auto sum(T...)(T args) { return op!"+"(args); }
 auto average(T...)(T args) { return sum(args) / args.length; }
+
+T bswap(T)(T b)
+{
+	static if (b.sizeof == 1)
+		return b;
+	else
+	static if (b.sizeof == 2)
+		return cast(T)((b >> 8) | (b << 8));
+	else
+	static if (b.sizeof == 4)
+		return core.bitop.bswap(b);
+	else
+		static assert(false, "Don't know how to bswap " ~ T.stringof);
+}

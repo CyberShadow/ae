@@ -39,6 +39,8 @@ import std.string;
 import std.math;
 import std.traits;
 
+public import ae.utils.math;
+
 // TODO: rewrite everything to use stride in bytes, not pixels
 
 struct Coord { int x, y; string toString() { return format([this.tupleof]); } }
@@ -54,7 +56,6 @@ template IsCanvas(T)
 
 mixin template Canvas()
 {
-	import ae.utils.math;
 	import ae.utils.geometry;
 	import std.math : atan2, sqrt;
 	import std.random: uniform;
