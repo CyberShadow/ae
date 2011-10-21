@@ -89,6 +89,18 @@ mixin template Canvas()
 			pixels[y*stride+x] = value;
 	}
 
+	COLOR* scanline(int y)
+	{
+		assert(y>=0 && y<h);
+		return &pixels[stride*y];
+	}
+
+	COLOR* pixelPtr(int x, int y)
+	{
+		assert(x>=0 && y>=0 && x<w && y<h);
+		return &pixels[stride*y + x];
+	}
+
 	void clear(COLOR c)
 	{
 		static if (is(typeof(pixels[]))) // pixels is an array
@@ -150,7 +162,7 @@ mixin template Canvas()
 	{
 		assert(x1 >= 0 && y1 >= 0 && x2 <= w && y2 <= h && x1 <= x2 && y1 <= y2);
 
-		return RefCanvas!COLOR(x2-x1, y2-y1, stride, &pixels[0] + (stride*y1) + x1);
+		return RefCanvas!COLOR(x2-x1, y2-y1, stride, pixelPtr(x1, y1));
 	}
 
 	enum CheckHLine =
@@ -445,7 +457,7 @@ mixin template Canvas()
 
 		for (int cy=y1;cy<y2;cy++)
 		{
-			auto row = &pixels[cy*stride];
+			auto row = scanline(cy);
 			for (int cx=x1;cx<x2;cx++)
 			{
 				alias SignedBitsType!(2*(8 + COLOR.BaseTypeBits)) SqrType; // fit the square of radius expressed as fixed-point
@@ -504,7 +516,7 @@ mixin template Canvas()
 				if (x<0 || x>=w || y<0 || y>=h)
 					return;
 
-			COLOR* p = &pixels[y*stride + x];
+			COLOR* p = pixelPtr(x, y);
 			static if (USE_ALPHA) f = fracmul(f, alpha);
 			*p = COLOR.op!q{blend(a, b, c)}(color, *p, f);
 		}
@@ -562,7 +574,7 @@ mixin template Canvas()
 		else
 			foreach (y; y1..y2)
 			{
-				auto p = &pixels[y*stride + x];
+				auto p = pixelPtr(x, y);
 				*p = COLOR.op!q{blend(a, b, c)}(color, *p, alpha);
 			}
 	}
