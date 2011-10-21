@@ -726,6 +726,9 @@ alias Color!q{ushort g;          } G16    ;
 alias Color!q{ubyte  g, a;       } GA     ;
 alias Color!q{ushort g, a;       } GA16   ;
 
+alias Color!q{byte   g;          } S8     ;
+alias Color!q{short  g;          } S16    ;
+
 private
 {
 	static assert(RGB.sizeof == 3);
