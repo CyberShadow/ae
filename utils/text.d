@@ -84,6 +84,15 @@ string hexDump(const(void)[] b)
 	return s;
 }
 
+string[] splitAsciiLines(string text)
+{
+	auto lines = text.split("\n");
+	foreach (ref line; lines)
+		if (line.length && line[$-1]=='\r')
+			line = line[0..$-1];
+	return lines;
+}
+
 import std.utf;
 
 /// Convert any data to a valid UTF-8 bytestream, so D's string functions can
