@@ -360,10 +360,10 @@ struct Image(COLOR)
 		enforce(header.bcPlanes==1, "Multiplane BMPs not supported");
 
 		static if (is(COLOR == BGR))
-			enforce(header.bcBitCount == 24);
+			enforce(header.bcBitCount == 24, "Not a 24-bit BMP image");
 		else
 		static if (is(COLOR == G8))
-			enforce(header.bcBitCount == 8);
+			enforce(header.bcBitCount == 8, "Not an 8-bit BMP image");
 		else
 			static assert(0, "Unsupported BMP color type: " ~ COLOR.stringof);
 
