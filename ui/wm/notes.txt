@@ -1,6 +1,25 @@
+== Resizing ==
+
+* goals:
+  * box layout containers:
+    * fit content on one dimension, full width/height on another
+      * example: accordions
+    * even/fraction divide
+      * strict or lenient?
+      * example: menu screens
+    * rubber table?
+    * scroller - can take any size, can fit any size
+    * proportional resizer (takes any size, stretches while preserving proportion of one child)?
+      * example: main menu buttons
+
+* a minimum root window size (640x480), to avoid ridiculous layout issues
+  * we could let content of all windows dictate minimum size, but added controls could no longer fit
+* shrink resizes might fail?
+  * divide and conquer search for minimum acceptable size?
+
 * resize events:
   * inbound (container resize, e.g. due to resolution change)
   * outbound, when container fits content
+    * e.g. expanding a collapsed box inside an accordion
     * only inside scrollable containers?
   * an inbound event shouldn't result in an outbound event
-
