@@ -95,8 +95,8 @@ string[] getArgs()
 
 	size_t    cargl = WideCharToMultiByte(CP_UTF8, 0, wcbuf, wclen, null, 0, null, null);
 
-	char*     cargp = cast(char*) alloca(cargl);
-	char[][]  args  = ((cast(char[]*) alloca(wargc * (char[]).sizeof)))[0 .. wargc];
+	char*     cargp = cast(char*) malloc(cargl);
+	char[][]  args  = ((cast(char[]*) malloc(wargc * (char[]).sizeof)))[0 .. wargc];
 
 	for (size_t i = 0, p = 0; i < wargc; i++)
 	{
