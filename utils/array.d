@@ -94,7 +94,6 @@ T[] countSort(alias value = "a", T)(T[] arr)
 		if (max < v)
 			max = v;
 	}
-	std.stdio.writeln([min, max]);
 	auto n = max-min+1;
 	auto counts = new size_t[n];
 	foreach (el; arr)
