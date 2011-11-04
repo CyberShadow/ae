@@ -77,3 +77,33 @@ bool inArray(T)(T[] arr, T val)
 			return true;
 	return false;
 }
+
+import std.functional;
+
+T[] countSort(alias value = "a", T)(T[] arr)
+{
+	alias unaryFun!value getValue;
+	alias typeof(getValue(arr[0])) V;
+	if (arr.length == 0) return arr;
+	V min = getValue(arr[0]), max = getValue(arr[0]);
+	foreach (el; arr[1..$])
+	{
+		auto v = getValue(el);
+		if (min > v)
+			min = v;
+		if (max < v)
+			max = v;
+	}
+	std.stdio.writeln([min, max]);
+	auto n = max-min+1;
+	auto counts = new size_t[n];
+	foreach (el; arr)
+		counts[getValue(el)-min]++;
+	auto indices = new size_t[n];
+	foreach (i; 1..n)
+		indices[i] = indices[i-1] + counts[i-1];
+	T[] result = new T[arr.length];
+	foreach (el; arr)
+		result[indices[getValue(el)-min]++] = el;
+	return result;
+}
