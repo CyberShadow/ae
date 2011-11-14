@@ -38,20 +38,21 @@ module ae.utils.graphics.gamma;
 import std.math;
 
 import ae.utils.graphics.canvas;
+import ae.utils.graphics.image;
 
 enum ColorSpace { sRGB }
 
-struct GammaRamp(LUM_COLOR, PIX_COLOR)
+struct GammaRamp(LUM_BASETYPE, PIX_BASETYPE)
 {
-	LUM_COLOR[PIX_COLOR.max+1] pix2lumValues;
-	PIX_COLOR[LUM_COLOR.max+1] lum2pixValues;
+	LUM_BASETYPE[PIX_BASETYPE.max+1] pix2lumValues;
+	PIX_BASETYPE[LUM_BASETYPE.max+1] lum2pixValues;
 
 	this(double gamma)
 	{
-		foreach (pix; 0..PIX_COLOR.max+1)
-			pix2lumValues[pix] = cast(LUM_COLOR)(pow(pix/cast(double)PIX_COLOR.max,   gamma)*LUM_COLOR.max);
-		foreach (lum; 0..LUM_COLOR.max+1)
-			lum2pixValues[lum] = cast(PIX_COLOR)(pow(lum/cast(double)LUM_COLOR.max, 1/gamma)*PIX_COLOR.max);
+		foreach (pix; 0..PIX_BASETYPE.max+1)
+			pix2lumValues[pix] = cast(LUM_BASETYPE)(pow(pix/cast(double)PIX_BASETYPE.max,   gamma)*LUM_BASETYPE.max);
+		foreach (lum; 0..LUM_BASETYPE.max+1)
+			lum2pixValues[lum] = cast(PIX_BASETYPE)(pow(lum/cast(double)LUM_BASETYPE.max, 1/gamma)*PIX_BASETYPE.max);
 	}
 
 	this(ColorSpace colorSpace)
@@ -76,23 +77,44 @@ struct GammaRamp(LUM_COLOR, PIX_COLOR)
 						return 1.055*pow(cf, 1/2.4L) - 0.055;
 				}
 
-				foreach (pix; 0..PIX_COLOR.max+1)
-					pix2lumValues[pix] = cast(LUM_COLOR)(sRGB_to_linear(pix/cast(double)PIX_COLOR.max)*LUM_COLOR.max);
-				foreach (lum; 0..LUM_COLOR.max+1)
-					lum2pixValues[lum] = cast(PIX_COLOR)(linear_to_sRGB(lum/cast(double)LUM_COLOR.max)*PIX_COLOR.max);
+				foreach (pix; 0..PIX_BASETYPE.max+1)
+					pix2lumValues[pix] = cast(LUM_BASETYPE)(sRGB_to_linear(pix/cast(double)PIX_BASETYPE.max)*LUM_BASETYPE.max);
+				foreach (lum; 0..LUM_BASETYPE.max+1)
+					lum2pixValues[lum] = cast(PIX_BASETYPE)(linear_to_sRGB(lum/cast(double)LUM_BASETYPE.max)*PIX_BASETYPE.max);
 				break;
 			}
 		}
 	}
 
+	// TODO: compute destination color type automatically (ReplaceType doesn't handle methods)
+
+	/*PIX_BASETYPE lum2pix()(LUM_BASETYPE c)
+	{
+		return PIX_BASETYPE.op!q{b[a]}(c, lum2pixValues[]);
+	}*/
+
 	void lum2pix(SRCCANVAS, DSTCANVAS)(ref SRCCANVAS src, ref DSTCANVAS dst)
-		if (IsCanvas!SRCCANVAS && IsCanvas(DSTCANVAS) && is(SRCCANVAS.COLOR==LUM_COLOR) && is(DSTCANVAS.COLOR==PIX_COLOR))
+		if (IsCanvas!SRCCANVAS && IsCanvas!DSTCANVAS && is(SRCCANVAS.COLOR.BaseType==LUM_BASETYPE) && is(DSTCANVAS.COLOR.BaseType==PIX_BASETYPE))
 	{
 		dst.transformDraw!q{
-			dst.COLOR.op!q{
+			COLOR.op!q{
 				b[a]
 			}(c, extraArgs[0])
 		}(src, 0, 0, lum2pixValues[]);
+	}
+
+	auto lum2pix(DSTCOLOR, SRCCANVAS)(ref SRCCANVAS src)
+		if (IsCanvas!SRCCANVAS && is(SRCCANVAS.COLOR.BaseType==LUM_BASETYPE))
+	{
+		Image!DSTCOLOR dst;
+		dst.size(src.w, src.h);
+		lum2pix(src, dst);
+		return dst;
+	}
+
+	LUM_COLOR pix2lum(LUM_COLOR, PIX_COLOR)(PIX_COLOR c)
+	{
+		return LUM_COLOR.op!q{b[a]}(c, pix2lumValues[]);
 	}
 
 	/*static string mixConvert(T)(string srcVar, string destVar, string convArray)
@@ -108,7 +130,7 @@ struct GammaRamp(LUM_COLOR, PIX_COLOR)
 			return destVar~" = "~convArray~"["~srcVar~"];";
 	}
 
-	auto pix2image(COLOR, COLOR2 = ReplaceType!(COLOR, PIX_COLOR, LUM_COLOR))(in Image!COLOR pixImage)
+	auto pix2image(COLOR, COLOR2 = ReplaceType!(COLOR, PIX_BASETYPE, LUM_BASETYPE))(in Image!COLOR pixImage)
 	{
 		auto lumImage = Image!COLOR2(pixImage.w, pixImage.h);
 		foreach (i, p; pixImage.pixels)
@@ -116,7 +138,7 @@ struct GammaRamp(LUM_COLOR, PIX_COLOR)
 		return lumImage;
 	}
 
-	auto image2pix(COLOR, COLOR2 = ReplaceType!(COLOR, LUM_COLOR, PIX_COLOR))(in Image!COLOR lumImage)
+	auto image2pix(COLOR, COLOR2 = ReplaceType!(COLOR, LUM_BASETYPE, PIX_BASETYPE))(in Image!COLOR lumImage)
 	{
 		auto pixImage = Image!COLOR2(lumImage.w, lumImage.h);
 		foreach (i, p; lumImage.pixels)

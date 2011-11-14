@@ -132,7 +132,7 @@ mixin template Canvas()
 	{
 		assert(x+src.w <= w && y+src.h <= h);
 		size_t dstSlack = stride-src.w, srcSlack = src.stride-src.w;
-		auto dstPtr = pixels + (y*stride+x);
+		auto dstPtr = &pixels[0] + (y*stride+x);
 		auto srcPtr = &src.pixels[0];
 		auto endPtr = srcPtr + src.h*src.stride;
 		while (srcPtr < endPtr)
@@ -776,7 +776,7 @@ template ExpandType(T, uint BYTES)
 				string[] fields = structFields!T;
 
 				foreach (field; fields)
-					s ~= "ExpandType!(typeof(" ~ T.stringof ~ ".init." ~ field ~ "), "~BYTES.stringof~") " ~ field ~ ";\n";
+					s ~= "ExpandType!(typeof(T.init." ~ field ~ "), "~BYTES.stringof~") " ~ field ~ ";\n";
 				s ~= "\n";
 
 				s ~= "void opOpAssign(string OP)(" ~ T.stringof ~ " color) if (OP==`+`)\n";
@@ -816,7 +816,7 @@ template ReplaceType(T, FROM, TO)
 			{
 				string s;
 				foreach (field; structFields!T)
-					s ~= "ReplaceType!(typeof(" ~ T.stringof ~ ".init." ~ field ~ "), FROM, TO) " ~ field ~ ";\n";
+					s ~= "ReplaceType!(typeof(T.init." ~ field ~ "), FROM, TO) " ~ field ~ ";\n";
 				return s;
 			}
 
