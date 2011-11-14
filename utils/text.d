@@ -127,6 +127,9 @@ unittest
 	}
 }
 
+/// Where a delegate with this signature is required.
+string nullStringTransform(in char[] s) { return s.idup; }
+
 string forceValidUTF8(string s)
 {
 	try
