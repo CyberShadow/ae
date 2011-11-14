@@ -485,12 +485,12 @@ final class DataWrapper
 			(cast(ubyte*)p)[0..size] = 0xDA;
 		}
 		version(Windows)
-			return VirtualFree(p, 0, MEM_RELEASE);
+			VirtualFree(p, 0, MEM_RELEASE);
 		else
 		version(Posix)
-			return munmap(p, size);
+			munmap(p, size);
 		else
-			return std.c.free(size);
+			std.c.free(size);
 	}
 }
 
