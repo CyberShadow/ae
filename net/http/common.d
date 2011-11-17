@@ -70,12 +70,12 @@ public:
 		this.resource = resource;
 	}
 
-	string resource()
+	@property string resource()
 	{
 		return resource_;
 	}
 
-	void resource(string value)
+	@property void resource(string value)
 	{
 		resource_ = value;
 
@@ -102,22 +102,22 @@ public:
 		}
 	}
 
-	string host()
+	@property string host()
 	{
 		return headers["Host"];
 	}
 
-	void host(string value)
+	@property void host(string value)
 	{
 		headers["Host"] = value;
 	}
 
-	string url()
+	@property string url()
 	{
 		return "http://" ~ host ~ (port==80 ? null : to!string(port)) ~ resource;
 	}
 
-	string proxyHost()
+	@property string proxyHost()
 	{
 		auto portstart = proxy.indexOf(':');
 		if (portstart != -1)
@@ -125,7 +125,7 @@ public:
 		return proxy;
 	}
 
-	ushort proxyPort()
+	@property ushort proxyPort()
 	{
 		auto portstart = proxy.indexOf(':');
 		if (portstart != -1)
@@ -151,7 +151,7 @@ public:
 			case "application/x-www-form-urlencoded":
 				return decodeUrlParameters(data);
 			default:
-				throw new Exception("Unknown Content-Type: " ~ *contentType);
+				throw new Exception("Unknown Content-Type: " ~ contentType);
 		}
 	}
 
