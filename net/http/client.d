@@ -42,6 +42,7 @@ import std.string;
 import std.conv;
 import std.datetime;
 import std.uri;
+import std.utf;
 
 import ae.net.asockets;
 import ae.sys.data;
@@ -214,4 +215,38 @@ public:
 public:
 	// Provide the following callbacks
 	void delegate(HttpResponse response, string disconnectReason) handleResponse;
+}
+
+/// Asynchronous HTTP request
+void httpGet(string url, void delegate(Data) resultHandler, void delegate(string) errorHandler)
+{
+	void responseHandler(HttpResponse response, string disconnectReason)
+	{
+		if (!response)
+			errorHandler(disconnectReason);
+		else
+			try
+				resultHandler(response.data);
+			catch (Exception e)
+				errorHandler(e.msg);
+	}
+
+	auto client = new HttpClient;
+	auto request = new HttpRequest;
+	request.resource = url;
+	client.handleResponse = &responseHandler;
+	client.request(request);
+}
+
+/// ditto
+void httpGet(string url, void delegate(string) resultHandler, void delegate(string) errorHandler)
+{
+	httpGet(url,
+		(Data data)
+		{
+			auto result = (cast(string)data.contents).idup;
+			std.utf.validate(result);
+			resultHandler(result);
+		},
+		errorHandler);
 }
