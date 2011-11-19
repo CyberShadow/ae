@@ -233,7 +233,7 @@ public:
 		if (value == length) // no change
 			return;
 		if (value < length)  // shorten
-			_contents.length = value;
+			_contents = _contents[0..value];
 		else                 // lengthen
 			expand(value, value);
 	}
