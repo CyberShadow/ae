@@ -42,7 +42,8 @@ import std.exception;
 
 import ae.utils.text;
 import ae.sys.data;
-// TODO: zlib/gzip support
+import zlib = ae.utils.zlib;
+import gzip = ae.utils.gzip;
 
 /// Base HTTP message class
 private abstract class HttpMessage
@@ -273,12 +274,10 @@ public:
 	Data getContent()
 	{
 		if ("Content-Encoding" in headers && headers["Content-Encoding"]=="deflate")
-			//return zlib.uncompress(data);
-			enforce(false, "TODO: deflate");
+			return zlib.uncompress(data);
 		else
 		if ("Content-Encoding" in headers && headers["Content-Encoding"]=="gzip")
-			//return gzip.uncompress(data);
-			enforce(false, "TODO: gzip");
+			return gzip.uncompress(data);
 		else
 			return data;
 		assert(0);
@@ -289,14 +288,14 @@ public:
 		foreach(method;supported ~ ["*"])
 			switch(method)
 			{
-				/*case "deflate":
+				case "deflate":
 					headers["Content-Encoding"] = method;
 					data = zlib.compress(content);
 					return;
 				case "gzip":
 					headers["Content-Encoding"] = method;
 					data = gzip.compress(content);
-					return;*/
+					return;
 				case "*":
 					if("Content-Encoding" in headers)
 						headers.remove("Content-Encoding");

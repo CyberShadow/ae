@@ -226,7 +226,7 @@ void httpGet(string url, void delegate(Data) resultHandler, void delegate(string
 			errorHandler(disconnectReason);
 		else
 			try
-				resultHandler(response.data);
+				resultHandler(response.getContent());
 			catch (Exception e)
 				errorHandler(e.msg);
 	}
