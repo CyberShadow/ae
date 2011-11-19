@@ -47,6 +47,14 @@ public import std.socket : Address, Socket;
 debug import std.stdio;
 private import std.conv : to;
 
+version(Windows)
+{
+	import std.c.windows.windows : Sleep;
+	enum USE_SLEEP = true; // avoid convoluted mix of static and runtime conditions
+}
+else
+	enum USE_SLEEP = false;
+
 /// Flags that determine socket wake-up events.
 private struct PollFlags
 {
@@ -149,6 +157,17 @@ public:
 				break;
 
 			int events;
+			if (USE_SLEEP && sockcount==0)
+			{
+				version(Windows)
+				{
+					Sleep(mainTimer.getRemainingTime().to!("msecs", int)());
+					events = 0;
+				}
+				else
+					static assert(0);
+			}
+			else
 			if (mainTimer.isWaiting())
 				events = Socket.select(readset, writeset, errorset, mainTimer.getRemainingTime().to!("usecs", int)());
 			else
