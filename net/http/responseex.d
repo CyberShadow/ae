@@ -148,7 +148,7 @@ public:
 
 	static string loadTemplate(string filename, string[string] dictionary)
 	{
-		return parseTemplate(cast(string)read(filename), dictionary);
+		return parseTemplate(readText(filename), dictionary);
 	}
 
 	static string parseTemplate(string data, string[string] dictionary)
