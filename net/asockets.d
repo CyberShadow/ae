@@ -785,12 +785,11 @@ private:
 		while ((index=indexOf(cast(string)inBuffer.contents, delimiter)) >= 0)
 		{
 			gotLines = true;
-			if (handleReadLine)
-			{
-				string line = cast(string)inBuffer.contents[0..index];
-				handleReadLine(this, line.idup);
-			}
+			string line = cast(string)inBuffer.contents[0..index];
 			inBuffer = inBuffer[index+delimiter.length..inBuffer.length];
+
+			if (handleReadLine)
+				handleReadLine(this, line.idup);
 		}
 
 		if (gotLines)
