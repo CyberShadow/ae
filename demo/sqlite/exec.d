@@ -38,6 +38,7 @@ import std.stdio;
 import std.algorithm;
 import std.array;
 import std.conv;
+import std.datetime;
 
 import ae.sys.sqlite3;
 import ae.sys.console;
@@ -49,12 +50,18 @@ void main(string[] args)
 	auto db = new SQLite(args[1]);
 	int idx = 0;
 	string[][] rows;
+	StopWatch sw;
+	sw.start();
 	foreach (cells, columns; db.query(args[2]))
 	{
+		sw.stop();
 		if (rows is null)
 			rows ~= ["#"] ~ array(map!`a.idup`(columns));
 		rows ~= [to!string(idx++)] ~ array(map!`a.idup`(cells));
+		sw.start();
 	}
+	sw.stop();
+	writeln("Query executed in ", dur!"hnsecs"(sw.peek().hnsecs));
 	if (rows.length == 0)
 		return;
 	auto widths = new int[rows[0].length];
