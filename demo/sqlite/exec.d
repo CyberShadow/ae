@@ -62,16 +62,23 @@ void main(string[] args)
 	{
 		assert(row.length == rows[0].length);
 		foreach (i, cell; row)
-			widths[i] = max(widths[i], cell.length);
+			widths[i] = max(widths[i], textWidth(cell));
 	}
 	foreach (j, row; rows)
 	{
-		foreach (i, col; row)
+		auto rowLines = array(map!textLines(row));
+		auto lineCount = reduce!max(map!`a.length`(rowLines));
+
+		foreach (line; 0..lineCount)
 		{
-			if (i) write(" │ ");
-			write(col, std.array.replicate(" ", widths[i]-col.length));
+			foreach (i, lines; rowLines)
+			{
+				if (i) write(" │ ");
+				string col = line < lines.length ? lines[line] : null;
+				write(col, std.array.replicate(" ", widths[i]-col.length));
+			}
+			writeln();
 		}
-		writeln();
 		if (j==0)
 		{
 			foreach (i, w; widths)
@@ -83,4 +90,29 @@ void main(string[] args)
 		}
 	}
 	writeln();
+}
+
+import std.utf;
+import std.string;
+
+size_t textWidth(string s)
+{
+	try
+	{
+		auto lines = splitLines(s);
+		size_t w = 0;
+		foreach (line; lines)
+			w = max(w, std.utf.count(line));
+		return w;
+	}
+	catch (Exception e)
+		return s.length;
+}
+
+string[] textLines(string s)
+{
+	try
+		return splitLines(s);
+	catch (Exception e)
+		return [s];
 }
