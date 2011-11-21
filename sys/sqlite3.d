@@ -176,6 +176,35 @@ final class SQLite
 			while (step()) {}
 		}
 
+		auto iterate(T...)(T args)
+		{
+			struct Iterator
+			{
+				PreparedStatement stmt;
+
+				@trusted int opApply(T...)(int delegate(ref T args) dg)
+				{
+					int res = 0;
+					while (stmt.step())
+					{
+						T columns;
+						stmt.columns(columns);
+						res = dg(columns);
+						if (res)
+						{
+							stmt.reset();
+							break;
+						}
+					}
+					return res;
+				}
+			}
+
+			static if (T.length)
+				bindAll!T(args);
+			return Iterator(this);
+		}
+
 		T column(T)(int idx)
 		{
 			static if (is(T == string))
