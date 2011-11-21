@@ -106,3 +106,15 @@ T[] countSort(alias value = "a", T)(T[] arr)
 		result[indices[getValue(el)-min]++] = el;
 	return result;
 }
+
+// ***************************************************************************
+
+/// Get a value from an AA, with a fallback default value
+V aaGet(K, V)(V[K] aa, K key, V def)
+{
+	auto p = key in aa;
+	if (p)
+		return *p;
+	else
+		return def;
+}
