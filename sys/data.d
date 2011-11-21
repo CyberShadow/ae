@@ -167,9 +167,11 @@ public:
 	/// Get mutable contents
 	@property void[] mcontents()
 	{
-		if (!mutable)
+		if (!mutable && length)
+		{
 			reallocate(length, length);
-		assert(mutable);
+			assert(mutable);
+		}
 		return cast(void[])_contents;
 	}
 
