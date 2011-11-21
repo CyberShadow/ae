@@ -89,4 +89,5 @@ void clearTimes()
 {
 	timedActions = null;
 	timeNameIndices = null;
+	lastTime = Clock.currTime();
 }
