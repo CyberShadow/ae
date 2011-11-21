@@ -38,7 +38,7 @@ module ae.demo.portforward.replayincoming;
 import ae.demo.portforward.replay;
 import ae.net.asockets;
 import ae.sys.timing;
-import ae.utils.log;
+import ae.sys.log;
 
 import std.datetime : SysTime, Duration, Clock;
 import std.string : format;

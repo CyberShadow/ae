@@ -33,7 +33,7 @@
  * ***** END LICENSE BLOCK ***** */
 
 /// Simple execution of shell commands, and wrappers for common utilities.
-module ae.utils.cmd;
+module ae.sys.cmd;
 
 string getTempFileName(string extension)
 {

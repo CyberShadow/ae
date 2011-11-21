@@ -35,7 +35,7 @@
 /// Data digest (hashes etc.)
 module ae.utils.digest;
 
-import ae.utils.cmd;
+import ae.sys.cmd;
 import ae.utils.text;
 import ae.utils.array;
 

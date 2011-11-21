@@ -36,7 +36,7 @@
 module ae.demo.portforward.portforward;
 
 import ae.net.asockets;
-import ae.utils.log;
+import ae.sys.log;
 import ae.utils.text;
 
 import std.stdio;

@@ -34,7 +34,7 @@
  * ***** END LICENSE BLOCK ***** */
 
 /// Logging support.
-module ae.utils.log;
+module ae.sys.log;
 
 import std.stdio;
 import std.datetime;
