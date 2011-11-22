@@ -58,9 +58,9 @@ public:
 	}
 
 	/// Redirect the UA to another location
-	HttpResponseEx redirect(string location)
+	HttpResponseEx redirect(string location, HttpStatusCode status = HttpStatusCode.SeeOther)
 	{
-		setStatus(HttpStatusCode.SeeOther);
+		setStatus(status);
 		headers["Location"] = location;
 		return this;
 	}
