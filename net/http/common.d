@@ -310,6 +310,9 @@ public:
 	/// called by the server to compress content if possible
 	void compress(string acceptEncoding)
 	{
+		auto contentType = "Content-Type" in headers ? headers["Content-Type"] : null;
+		if (!contentType.startsWith("text/") && contentType!="application/json")
+			return;
 		if ("Content-Encoding" in headers)
 			return;
 		setContent(data, parseItemList(acceptEncoding));
