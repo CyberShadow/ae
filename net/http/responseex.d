@@ -234,6 +234,13 @@ public:
 		headers["Pragma"] = "no-cache";
 	}
 
+	void cacheForever()
+	{
+		// Better stay within the UNIX epoch.
+		// TODO: update or properly fix this by 2030
+		headers["Expires"] = "Wed, 01 Jan 2030 00:00:00 GMT";
+	}
+
 	static pageTemplate =
 `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 
