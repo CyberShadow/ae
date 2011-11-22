@@ -48,7 +48,7 @@ import ae.sys.data;
 
 public import ae.net.http.common;
 
-debug (HTTP) import std.stdio;
+debug (HTTP) import std.stdio, std.datetime;
 
 class HttpServer
 {
@@ -76,7 +76,7 @@ private:
 
 		void onNewRequest(ClientSocket sender, Data data)
 		{
-			debug (HTTP) writefln("Receiving start of request: \n%s---", cast(string)data.contents);
+			debug (HTTP) writefln("[%s] Receiving start of request: \n%s---", Clock.currTime(), cast(string)data.contents);
 			inBuffer ~= data;
 
 			auto inBufferStr = cast(string)inBuffer.contents;
@@ -84,7 +84,7 @@ private:
 			if (headersend == -1)
 				return;
 
-			debug (HTTP) writefln("Got headers, %d bytes total", headersend+4);
+			debug (HTTP) writefln("[%s] Got headers, %d bytes total", Clock.currTime(), headersend+4);
 			string[] lines = splitLines(inBufferStr[0 .. headersend]);
 			string reqline = lines[0];
 			enforce(reqline.length > 10);
@@ -121,7 +121,7 @@ private:
 					persistent = !("Connection" in currentRequest.headers && currentRequest.headers["Connection"] == "close");
 					break;
 			}
-			debug (HTTP) writefln("This %s connection %s persistent", currentRequest.protocolVersion, persistent ? "IS" : "is NOT");
+			debug (HTTP) writefln("[%s] This %s connection %s persistent", Clock.currTime(), currentRequest.protocolVersion, persistent ? "IS" : "is NOT");
 
 			expect = 0;
 			if ("Content-Length" in currentRequest.headers)
@@ -143,17 +143,17 @@ private:
 		debug (HTTP)
 		void onDisconnect(ClientSocket sender, string reason, DisconnectType type)
 		{
-			writefln("Disconnect: %s", reason);
+			writefln("[%s] Disconnect: %s", Clock.currTime(), reason);
 		}
 
 		void onContinuation(ClientSocket sender, Data data)
 		{
-			debug (HTTP) writefln("Receiving continuation of request: \n%s---", cast(string)data.contents);
+			debug (HTTP) writefln("[%s] Receiving continuation of request: \n%s---", Clock.currTime(), cast(string)data.contents);
 			inBuffer ~= data;
 
 			if (inBuffer.length >= expect)
 			{
-				debug (HTTP) writefln(inBuffer.length, "/", expect);
+				debug (HTTP) writefln("[%s] %s/%s", Clock.currTime(), inBuffer.length, expect);
 				processRequest(inBuffer.popFront(expect));
 			}
 		}
@@ -203,7 +203,7 @@ private:
 				data ~= response.data;
 
 			conn.send(data.contents);
-			debug (HTTP) writefln("Sent response (%d bytes)", data.length);
+			debug (HTTP) writefln("[%s] Sent response (%d bytes)", Clock.currTime(), data.length);
 		}
 	}
 
@@ -216,7 +216,7 @@ private:
 
 	void onAccept(ClientSocket incoming)
 	{
-		debug (HTTP) writefln("New connection from " ~ incoming.remoteAddress);
+		debug (HTTP) writefln("[%s] New connection from %s", Clock.currTime(), incoming.remoteAddress);
 		new Connection(incoming);
 	}
 
