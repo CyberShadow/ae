@@ -221,9 +221,10 @@ public:
 
 	void setRefresh(int seconds, string location=null)
 	{
-		headers["Refresh"] = to!string(seconds);
+		auto refresh = to!string(seconds);
 		if (location)
-			headers["Refresh"] ~= ";URL=" ~ location;
+			refresh ~= ";URL=" ~ location;
+		headers["Refresh"] = refresh;
 	}
 
 	void disableCache()
