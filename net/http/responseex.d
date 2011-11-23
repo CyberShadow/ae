@@ -88,6 +88,11 @@ public:
 			return serveData(data, "application/json");
 	}
 
+	HttpResponseEx serveText(string data)
+	{
+		return serveData(Data(data), "text/plain");
+	}
+
 	/// Send a file from the disk
 	HttpResponseEx serveFile(string file, string location)
 	{
