@@ -135,10 +135,10 @@ private:
 		if (log) log("< " ~ line);
 		string nick, username, hostname;
 		debug (IRC) std.stdio.writefln("< %s", line);
-		int colon = line.indexOf(':');
+		auto colon = line.indexOf(':');
 		if (colon == 0)
 		{
-			int space = line.indexOf(' ');
+			auto space = line.indexOf(' ');
 			string target = line[1 .. space];
 			parseTarget(target, nick, username, hostname);
 			//std.stdio.writefln("%s => %s!%s@%s", target, nick, username, hostname);
@@ -441,14 +441,14 @@ private:
 	void parseTarget(string target, out string nickname, out string username, out string hostname)
 	{
 		username = hostname = null;
-		int userdelimpos = target.indexOf('!');
+		auto userdelimpos = target.indexOf('!');
 		if (userdelimpos == -1)
 			nickname = target;
 		else
 		{
 			nickname = target[0 .. userdelimpos];
 
-			int hostdelimpos = target.indexOf('@');
+			auto hostdelimpos = target.indexOf('@');
 			if (hostdelimpos == -1)
 				assert(0);
 			else
