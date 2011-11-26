@@ -182,12 +182,12 @@ final class SQLite
 			{
 				PreparedStatement stmt;
 
-				@trusted int opApply(T...)(int delegate(ref T args) dg)
+				@trusted int opApply(U...)(int delegate(ref U args) @system dg)
 				{
 					int res = 0;
 					while (stmt.step())
 					{
-						T columns;
+						U columns;
 						stmt.columns(columns);
 						res = dg(columns);
 						if (res)
