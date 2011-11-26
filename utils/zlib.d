@@ -18,6 +18,7 @@ module ae.utils.zlib;
 
 private import etc.c.zlib;
 import ae.sys.data;
+import std.conv; // to!int
 debug import std.stdio;
 
 // Values for 'mode'
@@ -62,7 +63,7 @@ class ZlibException : Exception
 
 uint adler32(uint adler, void[] buf)
 {
-	return etc.c.zlib.adler32(adler, cast(ubyte *)buf, buf.length);
+	return etc.c.zlib.adler32(adler, cast(ubyte *)buf, to!int(buf.length));
 }
 
 unittest
@@ -84,7 +85,7 @@ unittest
 
 uint crc32(uint crc, void[] buf)
 {
-	return etc.c.zlib.crc32(crc, cast(ubyte *)buf, buf.length);
+	return etc.c.zlib.crc32(crc, cast(ubyte *)buf, to!int(buf.length));
 }
 
 unittest
@@ -116,7 +117,7 @@ body
 {
 	int err;
 	Data destbuf;
-	uint destlen;
+	size_t destlen;
 
 	destlen = srcbuf.length + ((srcbuf.length + 1023) / 1024) + 12;
 	destbuf = Data(destlen);
@@ -147,7 +148,7 @@ Data compress(Data buf)
  * Returns: the decompressed data.
  */
 
-Data uncompress(Data srcbuf, uint destlen = 0u, int winbits = 15)
+Data uncompress(Data srcbuf, size_t destlen = 0u, int winbits = 15)
 {
 	int err;
 	Data destbuf;
@@ -162,10 +163,10 @@ Data uncompress(Data srcbuf, uint destlen = 0u, int winbits = 15)
 		destbuf = Data(destlen);
 
 		zs.next_in = cast(ubyte*) srcbuf.ptr;
-		zs.avail_in = srcbuf.length;
+		zs.avail_in = to!int(srcbuf.length);
 
 		zs.next_out = cast(ubyte*) destbuf.ptr;
-		zs.avail_out = destlen;
+		zs.avail_out = to!int(destlen);
 
 		err = etc.c.zlib.inflateInit2(&zs, winbits);
 		if (err)
@@ -300,13 +301,13 @@ class Compress
 
 		destbuf = Data(zs.avail_in + buf.length);
 		zs.next_out = cast(ubyte*)destbuf.ptr;
-		zs.avail_out = destbuf.length;
+		zs.avail_out = to!int(destbuf.length);
 
 		if (zs.avail_in)
 			buf = zs.next_in[0 .. zs.avail_in] ~ buf;
 
 		zs.next_in = cast(ubyte*) buf.ptr;
-		zs.avail_in = buf.length;
+		zs.avail_in = to!int(buf.length);
 		zs_in = buf; // hold reference
 
 		err = deflate(&zs, Z_NO_FLUSH);
@@ -398,7 +399,7 @@ class UnCompress
 	z_stream zs;
 	int inited;
 	int done;
-	uint destbufsize;
+	size_t destbufsize;
 	Data zs_in;
 
 	void error(int err)
@@ -415,7 +416,7 @@ class UnCompress
 	/**
 	 * Construct. destbufsize is the same as for D.zlib.uncompress().
 	 */
-	this(uint destbufsize)
+	this(size_t destbufsize)
 	{
 		this.destbufsize = destbufsize;
 	}
@@ -467,13 +468,13 @@ class UnCompress
 			destbufsize = buf.length * 2;
 		destbuf = Data(zs.avail_in * 2 + destbufsize);
 		zs.next_out = cast(ubyte*) destbuf.ptr;
-		zs.avail_out = destbuf.length;
+		zs.avail_out = to!int(destbuf.length);
 
 		if (zs.avail_in)
 			buf = zs.next_in[0 .. zs.avail_in] ~ buf;
 
 		zs.next_in = cast(ubyte*) buf.ptr;
-		zs.avail_in = buf.length;
+		zs.avail_in = to!int(buf.length);
 		zs_in = buf; // hold reference
 
 		err = inflate(&zs, Z_NO_FLUSH);
@@ -511,7 +512,7 @@ class UnCompress
 	  L1:
 		destbuf = Data(zs.avail_in * 2 + 100);
 		zs.next_out = cast(ubyte*) destbuf.ptr;
-		zs.avail_out = destbuf.length;
+		zs.avail_out = to!int(destbuf.length);
 
 		err = etc.c.zlib.inflate(&zs, Z_NO_FLUSH);
 		if (err == Z_OK && zs.avail_out == 0)
@@ -568,7 +569,7 @@ class StreamUnCompress
 		inited = true;
 
 		zs.next_in = cast(ubyte*) input.ptr;
-		zs.avail_in = input.length;
+		zs.avail_in = to!int(input.length);
 	}
 
 	~this()
@@ -590,7 +591,7 @@ class StreamUnCompress
 	body
 	{
 		zs.next_out = cast(ubyte*) output.ptr;
-		zs.avail_out = output.length;
+		zs.avail_out = to!int(output.length);
 
 		int err = inflate(&zs, Z_NO_FLUSH);
 		if (err != Z_STREAM_END && err != Z_OK)

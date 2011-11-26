@@ -71,7 +71,7 @@ Data compress(Data data)
 	header[3..8] = 0;  // TODO: set MTIME
 	header[8] = 4;
 	header[9] = 3;     // TODO: set OS
-	uint[2] footer = [crc32(data.contents), data.length];
+	uint[2] footer = [crc32(data.contents), std.conv.to!uint(data.length)];
 	Data compressed = zlib.compress(data, 9);
 	return header ~ compressed[2..compressed.length-4] ~ cast(ubyte[])footer;
 }
