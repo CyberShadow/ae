@@ -68,7 +68,7 @@ void main(string[] args)
 		writeln("Query executed in ", dur!"hnsecs"(sw.peek().hnsecs));
 		if (rows.length == 0)
 			return;
-		auto widths = new int[rows[0].length];
+		auto widths = new size_t[rows[0].length];
 		foreach (row; rows)
 		{
 			assert(row.length == rows[0].length);
