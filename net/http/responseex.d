@@ -45,6 +45,7 @@ public import ae.net.http.common;
 import ae.sys.data;
 import ae.sys.dataio;
 import ae.utils.json;
+import ae.utils.xml;
 
 /// HttpResponse with some code to ease creating responses
 final class HttpResponseEx : HttpResponse
@@ -93,25 +94,53 @@ public:
 		return serveData(Data(data), "text/plain");
 	}
 
-	/// Send a file from the disk
-	HttpResponseEx serveFile(string file, string location)
+	static bool checkPath(string file)
 	{
 		if (file.length && (file.indexOf("..") != -1 || file[0]=='/' || file[0]=='\\' || file.indexOf("//") != -1 || file.indexOf("\\\\") != -1))
+			return false;
+		return true;
+	}
+
+	/// Send a file from the disk
+	HttpResponseEx serveFile(string file, string location, bool enableIndex = false)
+	{
+		if (!checkPath(file))
 		{
 			writeError(HttpStatusCode.Forbidden);
 			return this;
 		}
 
 		string filename = location ~ file;
-		if (!(exists(filename) && isFile(filename)))
+
+		if ((filename=="" || isDir(filename)))
 		{
-			if(exists(filename ~ "index.html"))
+			if (filename.length && !filename.endsWith("/"))
+				return redirect(filename ~ "/");
+			else
+			if (exists(filename ~ "index.html"))
 				filename ~= "index.html";
 			else
+			if (!enableIndex)
 			{
-				writeError(HttpStatusCode.NotFound);
+				writeError(HttpStatusCode.Forbidden);
 				return this;
 			}
+			else
+			{
+				string title = `Directory listing of /` ~ encodeEntities(file);
+				string html = `<ul>`;
+				foreach (DirEntry de; dirEntries(filename, SpanMode.shallow))
+					html ~= `<li><a href="` ~ encodeEntities(de.name) ~ `">` ~ encodeEntities(de.name) ~ `</a></li>`;
+				html ~= `</ul>`;
+				writePage(title, html);
+				return this;
+			}
+		}
+
+		if (!exists(filename) || !isFile(filename))
+		{
+			writeError(HttpStatusCode.NotFound);
+			return this;
 		}
 
 		setStatus(HttpStatusCode.OK);
@@ -184,6 +213,9 @@ public:
 
 	void writePage(string title, string[] text ...)
 	{
+		if (!status)
+			status = HttpStatusCode.OK;
+
 		string content;
 		foreach (string p; text)
 			content ~= "<p>" ~ p ~ "</p>\n";
