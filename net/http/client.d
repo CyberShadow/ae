@@ -105,7 +105,7 @@ protected:
 		//debug (HTTP) writefln("%s", fromWAEncoding(cast(string)data));
 
 		auto inBufferStr = cast(string)inBuffer.contents;
-		int headersend = inBufferStr.indexOf("\r\n\r\n");
+		auto headersend = inBufferStr.indexOf("\r\n\r\n");
 		if (headersend == -1)
 			return;
 
@@ -113,7 +113,7 @@ protected:
 		string statusline = lines[0];
 		lines = lines[1 .. lines.length];
 
-		int versionend = statusline.indexOf(' ');
+		auto versionend = statusline.indexOf(' ');
 		if (versionend == -1)
 			return;
 		string httpversion = statusline[0 .. versionend];
@@ -121,7 +121,7 @@ protected:
 
 		currentResponse = new HttpResponse();
 
-		int statusend = statusline.indexOf(' ');
+		auto statusend = statusline.indexOf(' ');
 		if (statusend == -1)
 			return;
 		currentResponse.status = to!ushort(statusline[0 .. statusend]);
@@ -129,7 +129,7 @@ protected:
 
 		foreach (string line; lines)
 		{
-			int valuestart = line.indexOf(": ");
+			auto valuestart = line.indexOf(": ");
 			if (valuestart > 0)
 				currentResponse.headers[line[0 .. valuestart].idup] = line[valuestart + 2 .. line.length].idup;
 		}
