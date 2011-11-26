@@ -165,7 +165,7 @@ public:
 					events = 0;
 				}
 				else
-					static assert(0);
+					assert(0);
 			}
 			else
 			if (mainTimer.isWaiting())
