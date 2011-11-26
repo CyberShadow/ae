@@ -475,11 +475,16 @@ public:
 		if (conn || connected)
 			throw new Exception("Socket object is already connected");
 
-		conn = new Socket(cast(AddressFamily)AddressFamily.INET, SocketType.STREAM, ProtocolType.TCP);
-		conn.blocking = false;
 
 		try
-			conn.connect(getAddress(host, port)[0]);
+		{
+			auto address = getAddress(host, port)[0];
+
+			conn = new Socket(address.addressFamily(), SocketType.STREAM, ProtocolType.TCP);
+			conn.blocking = false;
+
+			conn.connect(address);
+		}
 		catch (SocketException e)
 			return onError("Connect error: " ~ e.msg);
 
