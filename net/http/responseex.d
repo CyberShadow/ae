@@ -103,6 +103,13 @@ public:
 		return true;
 	}
 
+	static string httpTime(SysTime time)
+	{
+		// Apache is bad at timezones
+		time.timezone = UTC();
+		return formatTime(TimeFormats.RFC2822, time);
+	}
+
 	/// Send a file from the disk
 	HttpResponseEx serveFile(string file, string location, bool enableIndex = false)
 	{
@@ -145,8 +152,11 @@ public:
 			return this;
 		}
 
-		setStatus(HttpStatusCode.OK);
-		switch (toLower(extension(filename)))
+		string ext = toLower(extension(filename));
+		if (ext.endsWith("-opt"))
+			ext = ext[0..$-4]; // HACK
+
+		switch (ext)
 		{
 			case ".txt":
 				headers["Content-Type"] = "text/plain";
@@ -178,8 +188,10 @@ public:
 				// let the UA decide
 				break;
 		}
+
+		setStatus(HttpStatusCode.OK);
 		data = readData(filename);
-		headers["Last-Modified"] = formatTime(TimeFormats.RFC2822, timeLastModified(filename));
+		headers["Last-Modified"] = httpTime(timeLastModified(filename));
 		return this;
 	}
 
@@ -277,7 +289,7 @@ public:
 
 	void cacheForever()
 	{
-		headers["Expires"] = formatTime(TimeFormats.RFC2822, Clock.currTime().add!"years"(1));
+		headers["Expires"] = httpTime(Clock.currTime().add!"years"(1));
 		headers["Cache-Control"] = "public, max-age=31536000";
 	}
 
