@@ -194,15 +194,13 @@ string formatTime(string fmt, SysTime t = Clock.currTime)
 				break;
 			case 'O':
 			{
-				// TODO: is this correct?
-				auto minutes = (t.stdTime - t.timezone.utcToTZ(t.stdTime)) / 10_000_000 / 60;
+				auto minutes = (t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000 / 60;
 				result ~= format("%+03d%02d", minutes/60, abs(minutes%60));
 				break;
 			}
 			case 'P':
 			{
-				// TODO: is this correct?
-				auto minutes = (t.stdTime - t.timezone.utcToTZ(t.stdTime)) / 10_000_000 / 60;
+				auto minutes = (t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000 / 60;
 				result ~= format("%+03d:%02d", minutes/60, abs(minutes%60));
 				break;
 			}
@@ -210,8 +208,7 @@ string formatTime(string fmt, SysTime t = Clock.currTime)
 				result ~= t.timezone.stdName;
 				break;
 			case 'Z':
-				// TODO: is this correct?
-				result ~= format("%d", (t.stdTime - t.timezone.utcToTZ(t.stdTime)) / 10_000_000);
+				result ~= format("%d", (t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000);
 				break;
 
 			// Full date/time
@@ -385,7 +382,6 @@ SysTime parseTime(string fmt, string t)
 				break;
 			case 'O':
 			{
-				// TODO: is this correct?
 				auto tzStr = take(5);
 				enforce(tzStr[0]=='-' || tzStr[0]=='+', "-/+ expected");
 				auto minutes = (to!int(tzStr[1..3]) * 60 + to!int(tzStr[3..5])) * (tzStr[0]=='-' ? -1 : 1);
@@ -394,7 +390,6 @@ SysTime parseTime(string fmt, string t)
 			}
 			case 'P':
 			{
-				// TODO: is this correct?
 				auto tzStr = take(6);
 				enforce(tzStr[0]=='-' || tzStr[0]=='+', "-/+ expected");
 				enforce(tzStr[3]==':', ": expected");
