@@ -40,12 +40,14 @@ import std.string;
 import std.conv;
 import std.file;
 import std.path;
+import std.datetime;
 
 public import ae.net.http.common;
 import ae.sys.data;
 import ae.sys.dataio;
 import ae.utils.json;
 import ae.utils.xml;
+import ae.utils.time;
 
 /// HttpResponse with some code to ease creating responses
 final class HttpResponseEx : HttpResponse
@@ -66,7 +68,7 @@ public:
 		return this;
 	}
 
-	HttpResponseEx serveData(string data, string contentType = "text/html")
+	HttpResponseEx serveData(string data, string contentType = "text/html; charset=utf-8")
 	{
 		return serveData(Data(data), contentType);
 	}
@@ -177,6 +179,7 @@ public:
 				break;
 		}
 		data = readData(filename);
+		headers["Last-Modified"] = formatTime(TimeFormats.RFC2822, timeLastModified(filename));
 		return this;
 	}
 
@@ -208,7 +211,7 @@ public:
 		dictionary["title"] = title;
 		dictionary["content"] = content;
 		data = Data(parseTemplate(pageTemplate, dictionary));
-		headers["Content-Type"] = "text/html";
+		headers["Content-Type"] = "text/html; charset=utf-8";
 	}
 
 	void writePage(string title, string[] text ...)
@@ -274,9 +277,8 @@ public:
 
 	void cacheForever()
 	{
-		// Better stay within the UNIX epoch.
-		// TODO: update or properly fix this by 2030
-		headers["Expires"] = "Wed, 01 Jan 2030 00:00:00 GMT";
+		headers["Expires"] = formatTime(TimeFormats.RFC2822, Clock.currTime().add!"years"(1));
+		headers["Cache-Control"] = "public, max-age=31536000";
 	}
 
 	static pageTemplate =
@@ -285,7 +287,7 @@ public:
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
   <head>
     <title><?title?></title>
-    <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
     <style type="text/css">
       body
       {

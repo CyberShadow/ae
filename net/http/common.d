@@ -347,10 +347,12 @@ public:
 			{
 				case "deflate":
 					headers["Content-Encoding"] = method;
+					headers.add("Vary", "Accept-Encoding");
 					data = zlib.compress(content);
 					return;
 				case "gzip":
 					headers["Content-Encoding"] = method;
+					headers.add("Vary", "Accept-Encoding");
 					data = gzip.compress(content);
 					return;
 				case "*":
