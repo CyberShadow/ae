@@ -37,6 +37,7 @@ module ae.utils.text;
 
 import std.exception;
 import std.string;
+import std.ascii;
 
 bool contains(string str, string what)
 {
@@ -91,6 +92,28 @@ string[] splitAsciiLines(string text)
 		if (line.length && line[$-1]=='\r')
 			line = line[0..$-1];
 	return lines;
+}
+
+/// Covering slice-list of s with interleaved whitespace.
+string[] segmentByWhitespace(string s)
+{
+	if (!s.length)
+		return null;
+
+	string[] segments;
+	bool wasWhite = isWhite(s[0]);
+	size_t start = 0;
+	foreach (p, char c; s)
+	{
+		bool isWhite = isWhite(c);
+		if (isWhite != wasWhite)
+			segments ~= s[start..p],
+			start = p;
+		wasWhite = isWhite;
+	}
+	segments ~= s[start..$];
+
+	return segments;
 }
 
 import std.utf;
