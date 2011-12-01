@@ -48,6 +48,7 @@ import ae.sys.dataio;
 import ae.utils.json;
 import ae.utils.xml;
 import ae.utils.time;
+import ae.utils.mime;
 
 /// HttpResponse with some code to ease creating responses
 final class HttpResponseEx : HttpResponse
@@ -152,42 +153,9 @@ public:
 			return this;
 		}
 
-		string ext = toLower(extension(filename));
-		if (ext.endsWith("-opt"))
-			ext = ext[0..$-4]; // HACK
-
-		switch (ext)
-		{
-			case ".txt":
-				headers["Content-Type"] = "text/plain";
-				break;
-			case ".htm":
-			case ".html":
-				headers["Content-Type"] = "text/html";
-				break;
-			case ".js":
-				headers["Content-Type"] = "text/javascript";
-				break;
-			case ".css":
-				headers["Content-Type"] = "text/css";
-				break;
-			case ".png":
-				headers["Content-Type"] = "image/png";
-				break;
-			case ".gif":
-				headers["Content-Type"] = "image/gif";
-				break;
-			case ".jpg":
-			case ".jpeg":
-				headers["Content-Type"] = "image/jpeg";
-				break;
-			case ".ico":
-				headers["Content-Type"] = "image/vnd.microsoft.icon";
-				break;
-			default:
-				// let the UA decide
-				break;
-		}
+		auto mimeType = guessMime(filename);
+		if (mimeType)
+			headers["Content-Type"] = mimeType;
 
 		setStatus(HttpStatusCode.OK);
 		data = readData(filename);
