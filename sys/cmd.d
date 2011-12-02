@@ -49,6 +49,81 @@ string getTempFileName(string extension)
 
 // ************************************************************************
 
+// Quote an argument in a manner conforming to the behavior of CommandLineToArgvW.
+// References:
+// * http://msdn.microsoft.com/en-us/library/windows/desktop/bb776391(v=vs.85).aspx
+// * http://blogs.msdn.com/b/oldnewthing/archive/2010/09/17/10063629.aspx
+
+string escapeWindowsArgument(string arg)
+{
+	// Escape trailing backslashes, so they don't escape the ending quote.
+	// Backslashes elsewhere should NOT be escaped.
+	for (int i=arg.length-1; i>=0 && arg[i]=='\\'; i--)
+		arg ~= '\\';
+	return '"' ~ std.array.replace(arg, `"`, `\"`) ~ '"';
+}
+
+version(Windows) version(unittest)
+{
+	extern (Windows) wchar_t**  CommandLineToArgvW(wchar_t*, int*);
+	extern (C) size_t wcslen(in wchar *);
+
+	unittest
+	{
+		string[] testStrings = [
+			``, `\`, `"`, `""`, `"\`, `\"`, `\\`, `\\"`,
+			`Hello`,
+			`Hello, world`
+			`Hello, "world"`,
+			`C:\`,
+			`C:\dmd`,
+			`C:\Program Files\`,
+		];
+
+		import std.conv;
+
+		foreach (s; testStrings)
+		{
+			auto q = escapeWindowsArgument(s);
+			LPWSTR lpCommandLine = (to!(wchar[])("Dummy.exe " ~ q) ~ "\0"w).ptr;
+			int numArgs;
+			LPWSTR* args = CommandLineToArgvW(lpCommandLine, &numArgs);
+			scope(exit) LocalFree(args);
+			assert(numArgs==2, s ~ " => " ~ q ~ " #" ~ text(numArgs-1));
+			auto arg = to!string(args[1][0..wcslen(args[1])]);
+			assert(arg == s, s ~ " => " ~ q ~ " => " ~ arg);
+		}
+	}
+}
+
+string escapeShellArgument(string arg)
+{
+	version (Windows)
+	{
+		return escapeWindowsArgument(arg);
+	}
+	else
+	{
+		// '\'' means: close quoted part of argument, append an escaped
+		// single quote, and reopen quotes
+		return `'` ~ std.array.replace(arg, `'`, `'\''`) ~ `'`;
+	}
+}
+
+string escapeShellCommand(string[] args)
+{
+	import std.array, std.algorithm;
+	string command = array(map!escapeShellArgument(args)).join(" ");
+	version (Windows)
+	{
+		// Follow CMD's rules for quote parsing (see "cmd /?").
+		command = '"' ~ command ~ '"';
+	}
+	return command;
+}
+
+// ************************************************************************
+
 import std.process;
 import std.string;
 import std.array;
@@ -65,29 +140,18 @@ string run(string command, string input = null)
 		command ~= " < " ~ tempfn2;
 	}
 	version(Windows)
-		system(`"` ~ command ~ `" 2>&1 > ` ~ tempfn);
+		system(command ~ ` 2>&1 > ` ~ tempfn);
 	else
-		system(command ~ " &> " ~ tempfn);
+		system(command ~ ` &> ` ~ tempfn);
 	string result = cast(string)std.file.read(tempfn);
 	std.file.remove(tempfn);
 	if (tempfn2) std.file.remove(tempfn2);
 	return result;
 }
 
-string escapeShellArg(string s)
-{
-	version(Windows)
-		return `"` ~ s.replace(`\`, `\\`).replace(`"`, `\"`) ~ `"`;
-	else
-		return `'` ~ s.replace(`'`, `'\''`) ~ `'`;
-}
-
 string run(string[] args)
 {
-	string[] escaped;
-	foreach (ref arg; args)
-		escaped ~= escapeShellArg(arg);
-	return run(escaped.join(" "));
+	return run(escapeShellCommand(args));
 }
 
 // ************************************************************************
