@@ -282,7 +282,7 @@ import std.ascii : isDigit, isWhite;
 /// Supports only a small subset of format characters.
 SysTime parseTime(string fmt, string t)
 {
-	string take(int n)
+	string take(size_t n)
 	{
 		enforce(t.length >= n, "Not enough characters in date string");
 		auto result = t[0..n];
@@ -290,7 +290,7 @@ SysTime parseTime(string fmt, string t)
 		return result;
 	}
 
-	int takeNumber(int n, int max = -1)
+	int takeNumber(size_t n, sizediff_t max = -1)
 	{
 		if (max==-1) max=n;
 		enforce(t.length >= n, "Not enough characters in date string");
