@@ -81,7 +81,7 @@ string jsonEscape(bool UNICODE = true)(string str)
 		if (c=='\t')
 			result ~= `\t`;
 		else
-		if (c<'\x20' || c >= '\x7F')
+		if (c<'\x20' || c >= '\x7F' || c=='<' || c=='>' || c=='&')
 			result ~= format(`\u%04x`, c);
 		else
 			result ~= [cast(char)c];
