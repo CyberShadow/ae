@@ -37,8 +37,10 @@ module ae.utils.time;
 
 import std.datetime;
 import std.string;
+import std.conv : text;
 import std.utf : decode, stride;
 import std.math : abs;
+import ae.utils.array;
 
 struct TimeFormats
 {
@@ -69,7 +71,45 @@ private const MonthLongNames = ["January", "February", "March", "April", "May", 
 /// Format a SysTime using a PHP date() format string.
 string formatTime(string fmt, SysTime t = Clock.currTime)
 {
-	string result = null;
+	auto dt = cast(DateTime)t;
+	auto date = dt.date;
+
+	static char oneDigit(uint i)
+	{
+		debug assert(i < 10);
+		return cast(char)('0' + i);
+	}
+
+	static char[2] twoDigits(uint i)
+	{
+		debug assert(i < 100);
+		char[2] result;
+		result[0] = cast(char)('0' + i / 10);
+		result[1] = cast(char)('0' + i % 10);
+		return result;
+	}
+
+	static string oneOrTwoDigits(uint i)
+	{
+		debug assert(i < 100);
+		if (i < 10)
+			return [cast(char)('0' + i)];
+		else
+			return cast(string)twoDigits(i);
+	}
+
+	static char[4] fourDigits(uint i)
+	{
+		debug assert(i < 10000);
+		char[4] result;
+		result[0] = cast(char)('0' + i / 1000     );
+		result[1] = cast(char)('0' + i / 100  % 10);
+		result[2] = cast(char)('0' + i / 10   % 10);
+		result[3] = cast(char)('0' + i        % 10);
+		return result;
+	}
+
+	auto result = StringBuilder(48);
 	size_t idx = 0;
 	dchar c;
 	while (idx < fmt.length)
@@ -77,22 +117,22 @@ string formatTime(string fmt, SysTime t = Clock.currTime)
 		{
 			// Day
 			case 'd':
-				result ~= format("%02d", t.day);
+				result ~= twoDigits(dt.day);
 				break;
 			case 'D':
-				result ~= WeekdayShortNames[t.dayOfWeek];
+				result ~= WeekdayShortNames[dt.dayOfWeek];
 				break;
 			case 'j':
-				result ~= format("%d", t.day);
+				result ~= oneOrTwoDigits(dt.day);
 				break;
 			case 'l':
-				result ~= WeekdayLongNames[t.dayOfWeek];
+				result ~= WeekdayLongNames[dt.dayOfWeek];
 				break;
 			case 'N':
-				result ~= format("%d", (t.dayOfWeek+6)%7 + 1);
+				result ~= oneDigit((dt.dayOfWeek+6)%7 + 1);
 				break;
 			case 'S':
-				switch (t.day)
+				switch (dt.day)
 				{
 					case 1:
 					case 21:
@@ -112,71 +152,71 @@ string formatTime(string fmt, SysTime t = Clock.currTime)
 				}
 				break;
 			case 'w':
-				result ~= format("%d", cast(int)t.dayOfWeek);
+				result ~= oneDigit(cast(int)dt.dayOfWeek);
 				break;
 			case 'z':
-				result ~= format("%d", t.dayOfYear-1);
+				result ~= text(dt.dayOfYear-1);
 				break;
 
 			// Week
 			case 'W':
-				result ~= format("%02d", t.isoWeek);
+				result ~= twoDigits(dt.isoWeek);
 				break;
 
 			// Month
 			case 'F':
-				result ~= MonthLongNames[t.month-1];
+				result ~= MonthLongNames[dt.month-1];
 				break;
 			case 'm':
-				result ~= format("%02d", t.month);
+				result ~= twoDigits(dt.month);
 				break;
 			case 'M':
-				result ~= MonthShortNames[t.month-1];
+				result ~= MonthShortNames[dt.month-1];
 				break;
 			case 'n':
-				result ~= format("%d", t.month);
+				result ~= oneOrTwoDigits(dt.month);
 				break;
 			case 't':
-				result ~= format("%d", t.daysInMonth);
+				result ~= oneOrTwoDigits(dt.daysInMonth);
 				break;
 
 			// Year
 			case 'L':
-				result ~= t.isLeapYear ? '1' : '0';
+				result ~= dt.isLeapYear ? '1' : '0';
 				break;
 			// case 'o': TODO (ISO 8601 year number)
 			case 'Y':
-				result ~= format("%04d", t.year);
+				result ~= fourDigits(dt.year);
 				break;
 			case 'y':
-				result ~= format("%02d", t.year % 100);
+				result ~= twoDigits(dt.year % 100);
 				break;
 
 			// Time
 			case 'a':
-				result ~= t.hour < 12 ? "am" : "pm";
+				result ~= dt.hour < 12 ? "am" : "pm";
 				break;
 			case 'A':
-				result ~= t.hour < 12 ? "AM" : "PM";
+				result ~= dt.hour < 12 ? "AM" : "PM";
 				break;
 			// case 'B': TODO (Swatch Internet time)
 			case 'g':
-				result ~= format("%d", (t.hour+11)%12 + 1);
+				result ~= oneOrTwoDigits((dt.hour+11)%12 + 1);
 				break;
 			case 'G':
-				result ~= format("%d", t.hour);
+				result ~= oneOrTwoDigits(dt.hour);
 				break;
 			case 'h':
-				result ~= format("%02d", (t.hour+11)%12 + 1);
+				result ~= twoDigits((dt.hour+11)%12 + 1);
 				break;
 			case 'H':
-				result ~= format("%02d", t.hour);
+				result ~= twoDigits(dt.hour);
 				break;
 			case 'i':
-				result ~= format("%02d", t.minute);
+				result ~= twoDigits(dt.minute);
 				break;
 			case 's':
-				result ~= format("%02d", t.second);
+				result ~= twoDigits(dt.second);
 				break;
 			case 'u':
 				result ~= format("%06d", t.fracSec.usecs);
@@ -208,18 +248,18 @@ string formatTime(string fmt, SysTime t = Clock.currTime)
 				result ~= t.timezone.stdName;
 				break;
 			case 'Z':
-				result ~= format("%d", (t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000);
+				result ~= text((t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000);
 				break;
 
 			// Full date/time
 			case 'c':
-				result ~= t.toISOExtString();
+				result ~= dt.toISOExtString();
 				break;
 			case 'r':
 				result ~= formatTime(TimeFormats.RFC2822, t);
 				break;
 			case 'U':
-				result ~= format("%d", t.toUnixTime);
+				result ~= text(t.toUnixTime);
 				break;
 
 			// Escape next character
@@ -231,7 +271,7 @@ string formatTime(string fmt, SysTime t = Clock.currTime)
 			default:
 				result ~= c;
 		}
-	return result;
+	return result.data;
 }
 
 import std.exception : enforce;
@@ -398,7 +438,7 @@ SysTime parseTime(string fmt, string t)
 				break;
 			}
 			case 'T':
-				tz = cast(TimeZone)TimeZone.getTimeZone(take(3)); // $!#%!$# constness
+				tz = cast(TimeZone)TimeZone.getTimeZone(take(t.length)); // $!#%!$# constness
 				break;
 			case 'Z':
 			{

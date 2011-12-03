@@ -37,16 +37,16 @@ module ae.utils.bench;
 
 import std.datetime;
 
-SysTime lastTime;
+TickDuration lastTime;
 
 static this()
 {
-	lastTime = Clock.currTime();
+	lastTime = TickDuration.currSystemTick();
 }
 
-Duration elapsedTime()
+TickDuration elapsedTime()
 {
-	auto c = Clock.currTime();
+	auto c = TickDuration.currSystemTick();
 	auto d = c - lastTime;
 	lastTime = c;
 	return d;
@@ -55,14 +55,25 @@ Duration elapsedTime()
 struct TimedAction
 {
 	string name;
-	Duration duration;
+	TickDuration duration;
+
+	@property long ticks() { return duration.length; }
 }
 
 TimedAction[] timedActions;
 size_t[string] timeNameIndices;
+string currentAction = null;
 
-void timeEnd(string action)
+void timeEnd(string action = null)
 {
+	if (action && currentAction && action != currentAction)
+		action = currentAction ~ " / " ~ action;
+	if (action is null)
+		action = currentAction;
+	if (action is null)
+		action = "other";
+	currentAction = null;
+
 	// ordered
 	if (action !in timeNameIndices)
 	{
@@ -73,14 +84,16 @@ void timeEnd(string action)
 		timedActions[timeNameIndices[action]].duration += elapsedTime();
 }
 
-void timeStart()
+
+void timeStart(string action = null)
 {
-	timeEnd("other");
+	timeEnd();
+	currentAction = action;
 }
 
 void timeAction(string action, void delegate() p)
 {
-	timeStart();
+	timeStart(action);
 	p();
 	timeEnd(action);
 }
@@ -89,5 +102,34 @@ void clearTimes()
 {
 	timedActions = null;
 	timeNameIndices = null;
-	lastTime = Clock.currTime();
+	lastTime = TickDuration.currSystemTick();
+}
+
+/// Retrieves current times and clears them.
+string getTimes()()
+{
+	timeEnd();
+
+	import std.string, std.array;
+	string[] lines;
+	int maxLength;
+	foreach (action; timedActions)
+		if (action.ticks)
+			if (maxLength < action.name.length)
+				maxLength = action.name.length;
+	string fmt = format("%%%ds : %%10d (%%s)", maxLength);
+	foreach (action; timedActions)
+		if (action.ticks)
+			lines ~= format(fmt, action.name, action.ticks, dur!"hnsecs"(action.ticks));
+	clearTimes();
+	return join(lines, "\n");
+}
+
+void dumpTimes()()
+{
+	import std.stdio;
+	import ae.sys.console;
+	auto times = getTimes();
+	if (times.length)
+		writeln(times);
 }

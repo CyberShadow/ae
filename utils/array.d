@@ -35,6 +35,8 @@
 /// Array utility functions
 module ae.utils.array;
 
+public import ae.utils.appender;
+
 T[] vector(string op, T)(T[] a, T[] b)
 {
 	assert(a.length == b.length);
