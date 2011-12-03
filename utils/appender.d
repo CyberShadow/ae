@@ -10,6 +10,7 @@ import core.bitop;
 
 /// Rob Jacques' std.array.Appender rewrite, with a few tweaks.
 /// http://d.puremagic.com/issues/show_bug.cgi?id=5813
+/// Never reallocates - faster for high amount of data.
 /// Presumably under the Boost license.
 
 struct FastAppender(A : T[], T) {
@@ -351,12 +352,14 @@ struct FastAppender(A : T[], T) {
 	}
 }
 
-/// Based on Phobos appender from std.array (Boost license).
+/// An ugly hack of Phobos' appender from std.array (Boost license).
 /// Changes:
 /// * Rewrote put method (ditched range support, added static array support)
 /// * Multi-put
 /// * Constructor with capacity
-/// * ~=
+/// * Added assign, append and opCall operator support
+/// * Added reset (like clear(this))
+/// * Added getString (assumeUnique + reset)
 /// * Ditched reference semantics to get rid of one level of indirection
 /// * Ditched Data structure
 
@@ -387,33 +390,43 @@ struct Appender2(A : T[], T)
 		Unqual!(T)[] _arr;
 	}
 
-/**
-Construct an appender with a given array.  Note that this does not copy the
-data.  If the array has a larger capacity as determined by arr.capacity,
-it will be used by the appender.  After initializing an appender on an array,
-appending to the original array will reallocate.
-*/
-	this(T[] arr)
+	void opAssign(U)(U item)
 	{
-		// initialize to a given array.
-		_arr = cast(Unqual!(T)[])arr;
+		static if (is(typeof(_arr = item)))
+		{
+			// initialize to a given array.
+			_arr = cast(Unqual!(T)[])item;
 
-		if (__ctfe)
-			return;
+			if (__ctfe)
+				return;
 
-		// We want to use up as much of the block the array is in as possible.
-		// if we consume all the block that we can, then array appending is
-		// safe WRT built-in append, and we can use the entire block.
-		auto cap = arr.capacity;
-		if(cap > arr.length)
-			arr.length = cap;
-		// we assume no reallocation occurred
-		assert(arr.ptr is _arr.ptr);
-		_capacity = arr.length;
+			// We want to use up as much of the block the array is in as possible.
+			// if we consume all the block that we can, then array appending is
+			// safe WRT built-in append, and we can use the entire block.
+			auto cap = item.capacity;
+			if(cap > item.length)
+				item.length = cap;
+			// we assume no reallocation occurred
+			assert(item.ptr is _arr.ptr);
+			_capacity = item.length;
+		}
+		else
+		static if (is(typeof(_arr[] = item[])))
+		{
+			allocate(item.length);
+			_arr = _arr.ptr[0..item.length];
+			_arr[] = item[];
+		}
+		else
+		static if (is(typeof(_arr[0] = item)))
+		{
+			allocate(1);
+			_arr[0] = item;
+		}
 	}
 
-	/// Preallocate with given capacity.
-	this(size_t capacity)
+	// Does not copy data.
+	private void allocate(size_t capacity)
 	{
 		if (__ctfe)
 		{
@@ -428,8 +441,26 @@ appending to the original array will reallocate.
 		_arr = (cast(Unqual!(T)*)bi.base)[0..0];
 	}
 
+/**
+Construct an appender with a given array.  Note that this does not copy the
+data.  If the array has a larger capacity as determined by arr.capacity,
+it will be used by the appender.  After initializing an appender on an array,
+appending to the original array will reallocate.
+*/
+	this(T[] arr)
+	{
+		opAssign(arr);
+	}
+
+	/// Preallocate with given capacity.
+	this(size_t capacity)
+	{
+		allocate(capacity);
+	}
+
 	// Value semantics will probably result in undefined behavior on copy.
-	@disable this(this) {}
+	// this(this) conflicts with opAssign
+	//@disable this(this) {}
 
 /**
 Reserve at least newCapacity elements for appending.  Note that more elements
@@ -651,7 +682,7 @@ Appends an entire range to the managed array.
 
 	/// Multi-put
 	void put(U...)(U items) //if ( isOutputRange!(Unqual!T[],U) )
-		if (U.length > 1)
+		if (U.length > 1 && CanPutAll!U)
 	{
 		size_t totalLength;
 		foreach (item; items)
@@ -681,6 +712,14 @@ Appends an entire range to the managed array.
 		}
 	}
 
+	template CanPutAll(U...)
+	{
+		static if (U.length==0)
+			enum CanPutAll = true;
+		else
+			enum CanPutAll = is(typeof(put!(U[0]))) && CanPutAll!(U[1..$]);
+	}
+
 	// only allow overwriting data on non-immutable and non-const data
 	static if(!is(T == immutable) && !is(T == const))
 	{
@@ -693,10 +732,7 @@ possibility that $(D Appender2) might overwrite immutable data.
 */
 		void clear()
 		{
-			if (_data)
-			{
-				_arr = _arr.ptr[0..0];
-			}
+			_arr = _arr.ptr[0..0];
 		}
 
 /**
@@ -705,31 +741,53 @@ greater than the current array length throws an enforce exception.
 */
 		void shrinkTo(size_t newlength)
 		{
-			if(_data)
-			{
-				enforce(newlength <= _arr.length);
-				_arr = _arr.ptr[0..newlength];
-			}
-			else
-				enforce(newlength == 0);
+			enforce(newlength <= _arr.length);
+			_arr = _arr.ptr[0..newlength];
 		}
+	}
+
+	void reset()
+	{
+		_arr = null;
+		_capacity = 0;
 	}
 
 	// VP 2011.12.02
 	void opOpAssign(string op, U)(U item)
-		if (is(typeof(put!U)))
+		if (op=="~" && is(typeof(put!U)))
 	{
 		put(item);
 	}
 
-	static if(is(Unqual!T == char))
+	/+ blocked by http://d.puremagic.com/issues/show_bug.cgi?id=6036
+	void opCall(U...)(U items)
+		if (is(typeof(put(items))))
+	{
+		put(items);
+	}
+    +/
+
+	@property size_t length()
+	{
+		return _arr.length;
+	}
+
+	static if(is(T == immutable(char)))
 	string toString()
 	{
 		return data;
 	}
+
+	static if (is(T == char))
+	string getString()
+	{
+		auto result = data;
+		reset();
+		return assumeUnique(result);
+	}
 }
 
-alias Appender2!string StringBuilder;
+alias Appender2!(char[]) StringBuilder;
 
 private:
 
@@ -745,11 +803,14 @@ string test()
 
 string test2()
 {
-	Appender2!string a;
+	StringBuilder a;
+	a = " ";
+	a.clear();
 	a.put("He", "llo");
 	char[2] x = [',', ' '];
 	a.put(x);
 	a.put("world");
 	//a ~= x;
-	return a.data;
+	auto result = a.data;
+	return assumeUnique(result);
 }

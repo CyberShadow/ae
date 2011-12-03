@@ -170,19 +170,25 @@ public:
 
 	static string parseTemplate(string data, string[string] dictionary)
 	{
+		import ae.utils.array;
+		StringBuilder sb;
 		for(;;)
 		{
 			auto startpos = data.indexOf("<?");
 			if(startpos==-1)
-				return data;
-			auto endpos = data[startpos .. $].indexOf("?>");
-			if(endpos<2)
+				break;
+			auto endpos = data.indexOf("?>");
+			if (endpos<startpos+2)
 				throw new Exception("Bad syntax in template");
-			string token = data[startpos+2 .. startpos+endpos];
-			if(!(token in dictionary))
+			string token = data[startpos+2 .. endpos];
+			auto pvalue = token in dictionary;
+			if(!pvalue)
 				throw new Exception("Unrecognized token: " ~ token);
-			data = data[0 .. startpos] ~ dictionary[token] ~ data[startpos+endpos+2 .. $];
+			sb.put(data[0 .. startpos], *pvalue);
+			data = data[endpos+2 .. $];
 		}
+		sb.put(data);
+		return sb.getString();
 	}
 
 	void writePageContents(string title, string content)

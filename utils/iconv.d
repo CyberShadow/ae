@@ -52,20 +52,17 @@ string toUtf8(immutable(ubyte)[] data, string cp, bool force)
 	switch (cp)
 	{
 		case "utf8":
+		case "usascii":
 			return cast(string)data;
 		case "utf16":
 			return to!string(cast(wstring)data);
 		case "utf32":
 			return to!string(cast(dstring)data);
-		case "usascii":
-		{
-			char[] result = new char[data.length];
-			foreach (size_t i, ubyte b; data)
-				result[i] = b & 0x7F;
-			return assumeUnique(result);
-		}
 		default:
 		{
+			if (!hasHighAsciiChars(data))
+				return cast(string)data;
+
 			if (cp in codepages)
 			{
 				wstring cpData = codepages[cp];
@@ -87,6 +84,15 @@ string toUtf8(immutable(ubyte)[] data, string cp, bool force)
 		}
 	}
 }
+
+bool hasHighAsciiChars(in ubyte[] bytes)
+{
+	foreach (char b; bytes)
+		if (b >= 0x80)
+			return true;
+	return false;
+}
+
 
 wstring[string] codepages;
 

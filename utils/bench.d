@@ -133,3 +133,18 @@ void dumpTimes()()
 	if (times.length)
 		writeln(times);
 }
+
+private string[] timeStack;
+
+void timePush(string action = null)
+{
+	timeStack ~= currentAction;
+	timeStart(action);
+}
+
+void timePop(string action = null)
+{
+	timeEnd(action);
+	timeStart(timeStack[$-1]);
+	timeStack = timeStack[0..$-1];
+}

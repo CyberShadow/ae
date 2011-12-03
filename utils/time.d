@@ -271,7 +271,7 @@ string formatTime(string fmt, SysTime t = Clock.currTime)
 			default:
 				result ~= c;
 		}
-	return result.data;
+	return result.getString();
 }
 
 import std.exception : enforce;

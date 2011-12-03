@@ -38,51 +38,141 @@ module ae.utils.text;
 import std.exception;
 import std.string;
 import std.ascii;
+import ae.utils.array;
+import core.stdc.string;
+
+// ************************************************************************
 
 bool contains(string str, string what)
 {
 	return str.indexOf(what)>=0;
 }
 
-// ************************************************************************
-
-/// Formats binary data as a hex dump (three-column layout consisting of hex
-/// offset, byte values in hex, and printable low-ASCII characters).
-string hexDump(const(void)[] b)
+string fastReplace(string what, string from, string to)
 {
-	auto data = cast(const(ubyte)[]) b;
-	int i=0;
-	string s;
-	while (i<data.length)
+	enum RAM = cast(char*)null;
+
+	if (from.length==1)
 	{
-		s ~= format("%08X:  ", i);
-		for (int x=0;x<16;x++)
+		auto fromc = from[0];
+		if (to.length==1)
 		{
-			if (i+x<data.length)
-				s ~= format("%02X ", data[i+x]);
-			else
-				s ~= "   ";
-			if (x==7)
-				s ~= "| ";
+			auto result = what.dup;
+			foreach (ref c; result)
+				if (c == fromc)
+					c = to[0];
+			return assumeUnique(result);
 		}
-		s ~= "  ";
-		for (int x=0;x<16;x++)
+		else
 		{
-			if (i+x<data.length)
-				if (data[i+x]==0)
-					s ~= ' ';
-				else
-				if (data[i+x]<32 || data[i+x]>=128)
-					s ~= '.';
-				else
-					s ~= cast(char)data[i+x];
-			else
-				s ~= ' ';
+			auto p = cast(immutable(char)*)memchr(what.ptr, fromc, what.length);
+			if (!p)
+				return what;
+
+			auto sb = new StringBuilder(what.length);
+			do
+			{
+				sb.put(what[0..p-what.ptr], to);
+				what = what[p-what.ptr+1..$];
+				p = cast(immutable(char)*)memchr(what.ptr, fromc, what.length);
+			}
+			while (p);
+
+			sb.put(what);
+			return sb.getString();
 		}
-		s ~= "\n";
-		i += 16;
 	}
-	return s;
+	else
+	if (from.length == to.length)
+	{
+		auto head = from[0];
+		auto p = cast(char*)memchr(what.ptr, head, what.length);
+		if (!p)
+			return what;
+
+		auto result = what.dup;
+		auto s = result;
+		p = p-what.ptr+s.ptr;
+
+		from = from[1..$];
+		alias from tail;
+
+		do
+		{
+			p++;
+			if (p[0..tail.length] == tail)
+				(p-1)[0..to.length] = to;
+			s = s[p-s.ptr..$];
+			p = cast(char*)memchr(s.ptr, head, s.length);
+		}
+		while (p);
+
+		return assumeUnique(result);
+	}
+	else
+	{
+		auto head = from[0];
+		auto p = cast(immutable(char)*)memchr(what.ptr, head, what.length);
+		if (!p)
+			return what;
+
+		auto start = what.ptr;
+		from = from[1..$];
+		alias from tail;
+
+		auto sb = StringBuilder(what.length);
+		do
+		{
+			p++;
+			if (p[0..tail.length] == tail)
+			{
+				sb.put(RAM[cast(size_t)start .. cast(size_t)p-1], to);
+				start = p + tail.length;
+				what = what[start-what.ptr..$];
+			}
+			else
+			{
+				what = what[p-what.ptr..$];
+			}
+			p = cast(immutable(char)*)memchr(what.ptr, head, what.length);
+		}
+		while (p);
+
+		//sb.put(what);
+		sb.put(RAM[cast(size_t)start..cast(size_t)(what.ptr+what.length)]);
+		return sb.getString();
+	}
+}
+
+string[] fastSplit(string s, char d)
+{
+	auto p = cast(immutable(char)*) memchr(s.ptr, d, s.length);
+	if (!p)
+		return [s];
+	size_t n;
+	auto end = s.ptr + s.length;
+	do
+	{
+		n++;
+		p++;
+		p = cast(immutable(char)*) memchr(p, d, end-p);
+	}
+	while (p);
+
+	auto result = new string[n+1];
+	n = 0;
+	auto start = s.ptr;
+	p = cast(immutable(char)*) memchr(start, d, s.length);
+	do
+	{
+		result[n++] = start[0..p-start];
+		start = ++p;
+		p = cast(immutable(char)*) memchr(p, d, end-p);
+	}
+	while (p);
+	result[n] = start[0..end-start];
+
+	return result;
 }
 
 string[] splitAsciiLines(string text)
@@ -165,6 +255,45 @@ string forceValidUTF8(string s)
 }
 
 // ************************************************************************
+
+/// Formats binary data as a hex dump (three-column layout consisting of hex
+/// offset, byte values in hex, and printable low-ASCII characters).
+string hexDump(const(void)[] b)
+{
+	auto data = cast(const(ubyte)[]) b;
+	int i=0;
+	string s;
+	while (i<data.length)
+	{
+		s ~= format("%08X:  ", i);
+		for (int x=0;x<16;x++)
+		{
+			if (i+x<data.length)
+				s ~= format("%02X ", data[i+x]);
+			else
+				s ~= "   ";
+			if (x==7)
+				s ~= "| ";
+		}
+		s ~= "  ";
+		for (int x=0;x<16;x++)
+		{
+			if (i+x<data.length)
+				if (data[i+x]==0)
+					s ~= ' ';
+				else
+				if (data[i+x]<32 || data[i+x]>=128)
+					s ~= '.';
+				else
+					s ~= cast(char)data[i+x];
+			else
+				s ~= ' ';
+		}
+		s ~= "\n";
+		i += 16;
+	}
+	return s;
+}
 
 import std.conv;
 
