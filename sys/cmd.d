@@ -58,7 +58,7 @@ string escapeWindowsArgument(string arg)
 {
 	// Escape trailing backslashes, so they don't escape the ending quote.
 	// Backslashes elsewhere should NOT be escaped.
-	for (int i=arg.length-1; i>=0 && arg[i]=='\\'; i--)
+	for (sizediff_t i=arg.length-1; i>=0 && arg[i]=='\\'; i--)
 		arg ~= '\\';
 	return '"' ~ std.array.replace(arg, `"`, `\"`) ~ '"';
 }
