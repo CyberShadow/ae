@@ -41,6 +41,7 @@ import std.string, std.conv, std.ascii;
 import std.exception;
 
 import ae.utils.text;
+import ae.net.ietf.headers;
 import ae.sys.data;
 import zlib = ae.utils.zlib;
 import gzip = ae.utils.gzip;
@@ -50,65 +51,8 @@ private abstract class HttpMessage
 {
 public:
 	string protocolVersion = "1.0";
-	HttpHeaders headers;
+	Headers headers;
 	Data data;
-}
-
-/// AA-like superset structure with the purpose of maintaining
-/// compatibility with the old string[string] headers field
-struct HttpHeaders
-{
-	// TODO: normalize header names
-
-	private string[][string] headers;
-
-	string opIndex(string name)
-	{
-		auto values = headers[name];
-		assert(values.length == 1);
-		return values[0];
-	}
-
-	string opIndexAssign(string value, string name)
-	{
-		headers[name] = [value];
-		return value;
-	}
-
-	string* opIn_r(string name)
-	{
-		auto pvalues = name in headers;
-		if (pvalues && (*pvalues).length)
-			return (*pvalues).ptr;
-		return null;
-	}
-
-	void remove(string name)
-	{
-		headers.remove(name);
-	}
-
-	int opApply(int delegate(ref string name, ref string value) dg)
-	{
-		int ret;
-		outer:
-		foreach (name, values; headers)
-			foreach (value; values)
-			{
-				ret = dg(name, value);
-				if (ret)
-					break outer;
-			}
-		return ret;
-	}
-
-	void add(string name, string value)
-	{
-		if (name !in headers)
-			headers[name] = [value];
-		else
-			headers[name] ~= value;
-	}
 }
 
 /// HTTP request class
@@ -193,7 +137,7 @@ public:
 
 	string[string] decodePostData()
 	{
-		auto data = cast(string)data.contents;
+		auto data = (cast(string)data.contents).idup;
 		if (data.length is 0)
 			return null;
 
