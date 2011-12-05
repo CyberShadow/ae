@@ -111,6 +111,21 @@ T[] countSort(alias value = "a", T)(T[] arr)
 
 // ***************************************************************************
 
+/// Get a value from an AA, and throw an exception (not an error) if not found
+V aaGet(K, V)(V[K] aa, K key)
+{
+	import std.conv;
+
+	auto p = key in aa;
+	if (p)
+		return *p;
+	else
+		static if (is(typeof(text(key))))
+			throw new Exception("Absent value: " ~ text(key));
+		else
+			throw new Exception("Absent value");
+}
+
 /// Get a value from an AA, with a fallback default value
 V aaGet(K, V)(V[K] aa, K key, V def)
 {
