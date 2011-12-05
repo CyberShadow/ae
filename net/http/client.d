@@ -218,7 +218,7 @@ public:
 }
 
 /// Asynchronous HTTP request
-void httpGet(string url, void delegate(Data) resultHandler, void delegate(string) errorHandler)
+void httpRequest(HttpRequest request, void delegate(Data) resultHandler, void delegate(string) errorHandler)
 {
 	void responseHandler(HttpResponse response, string disconnectReason)
 	{
@@ -232,16 +232,40 @@ void httpGet(string url, void delegate(Data) resultHandler, void delegate(string
 	}
 
 	auto client = new HttpClient;
-	auto request = new HttpRequest;
-	request.resource = url;
 	client.handleResponse = &responseHandler;
 	client.request(request);
+}
+
+/// ditto
+void httpGet(string url, void delegate(Data) resultHandler, void delegate(string) errorHandler)
+{
+	auto request = new HttpRequest;
+	request.resource = url;
+	httpRequest(request, resultHandler, errorHandler);
 }
 
 /// ditto
 void httpGet(string url, void delegate(string) resultHandler, void delegate(string) errorHandler)
 {
 	httpGet(url,
+		(Data data)
+		{
+			auto result = (cast(string)data.contents).idup;
+			std.utf.validate(result);
+			resultHandler(result);
+		},
+		errorHandler);
+}
+
+/// ditto
+void httpPost(string url, string[string] vars, void delegate(string) resultHandler, void delegate(string) errorHandler)
+{
+	auto request = new HttpRequest;
+	request.resource = url;
+	request.method = "POST";
+	request.headers["Content-Type"] = "application/x-www-form-urlencoded";
+	request.data = Data(encodeUrlParameters(vars));
+	httpRequest(request,
 		(Data data)
 		{
 			auto result = (cast(string)data.contents).idup;
