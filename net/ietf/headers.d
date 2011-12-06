@@ -102,7 +102,7 @@ struct Headers
 	{
 		string[string] result;
 		foreach (key, value; this)
-			result[normalizeHeaderName(key)] = value;
+			result[key] = value;
 		return result;
 	}
 }
@@ -122,7 +122,7 @@ string normalizeHeaderName(string header)
 {
 	auto s = header.dup;
 	auto segments = s.split("-");
-	foreach (ref segment; segments)
+	foreach (segment; segments)
 	{
 		foreach (ref c; segment)
 			c = cast(char)toUpper(c);
@@ -135,7 +135,7 @@ string normalizeHeaderName(string header)
 			case "WWW":
 				continue;
 			case "ETAG":
-				segment = "ETag".dup;
+				segment[] = "ETag";
 				break;
 			default:
 				foreach (ref c; segment[1..$])
