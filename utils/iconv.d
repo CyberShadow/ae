@@ -52,8 +52,18 @@ string toUtf8(immutable(ubyte)[] data, string cp, bool force)
 	switch (cp)
 	{
 		case "utf8":
+		{
+			import std.utf;
+			auto s = cast(string)data;
+			validate(s);
+			return s;
+		}
 		case "usascii":
+		{
+			if (hasHighAsciiChars(data))
+				throw new Exception("Non-ASCII characters in US-ASCII text");
 			return cast(string)data;
+		}
 		case "utf16":
 			return to!string(cast(wstring)data);
 		case "utf32":
