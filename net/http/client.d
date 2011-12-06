@@ -223,12 +223,18 @@ void httpRequest(HttpRequest request, void delegate(Data) resultHandler, void de
 	void responseHandler(HttpResponse response, string disconnectReason)
 	{
 		if (!response)
-			errorHandler(disconnectReason);
+			if (errorHandler)
+				errorHandler(disconnectReason);
+			else
+				throw new Exception(disconnectReason);
 		else
-			try
+			if (errorHandler)
+				try
+					resultHandler(response.getContent());
+				catch (Exception e)
+					errorHandler(e.msg);
+			else
 				resultHandler(response.getContent());
-			catch (Exception e)
-				errorHandler(e.msg);
 	}
 
 	auto client = new HttpClient;
