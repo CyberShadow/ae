@@ -408,6 +408,23 @@ private:
 			onUserParted(user, channel);
 			break;
 
+		case "NICK":
+			if (params.length != 1)
+				return;
+
+			auto newNick = params[0];
+			users[newNick] = users[nick];
+			users.remove(nick);
+
+			foreach (ref channel; channels)
+				if (nick in channel.users)
+				{
+					channel.users[newNick] = channel.users[nick];
+					channel.users.remove(nick);
+				}
+
+			break;
+
 		default:
 			break;
 		}
