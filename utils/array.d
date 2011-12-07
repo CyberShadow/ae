@@ -135,3 +135,30 @@ V aaGet(K, V)(V[K] aa, K key, V def)
 	else
 		return def;
 }
+
+// ***************************************************************************
+
+void stackPush(T)(ref T[] arr, T val)
+{
+	arr ~= val;
+}
+alias stackPush queuePush;
+
+T stackPeek(T)(T[] arr) { return arr[$-1]; }
+
+T stackPop(T)(ref T[] arr)
+{
+	auto ret = arr[$-1];
+	arr = arr[0..$-1];
+	return ret;
+}
+
+T queuePeek(T)(T[] arr) { return arr[0]; }
+
+T queuePop(T)(ref T[] arr)
+{
+	auto ret = arr[0];
+	arr = arr[1..$];
+	if (!arr.length) arr = null;
+	return ret;
+}
