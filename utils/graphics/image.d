@@ -362,6 +362,9 @@ struct Image(COLOR)
 		static if (is(COLOR == BGR))
 			enforce(header.bcBitCount == 24, "Not a 24-bit BMP image");
 		else
+		static if (is(COLOR == BGRX) || is(COLOR == BGRA))
+			enforce(header.bcBitCount == 32, "Not a 32-bit BMP image");
+		else
 		static if (is(COLOR == G8))
 			enforce(header.bcBitCount == 8, "Not an 8-bit BMP image");
 		else
