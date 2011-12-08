@@ -109,6 +109,14 @@ string formatTime(string fmt, SysTime t = Clock.currTime)
 		return result;
 	}
 
+	string timezoneFallback(string tzStr, string fallbackFormat)
+	{
+		if (tzStr.length)
+			return tzStr;
+		else
+			return formatTime(fallbackFormat, t);
+	}
+
 	auto result = StringBuilder(48);
 	size_t idx = 0;
 	dchar c;
@@ -227,7 +235,7 @@ string formatTime(string fmt, SysTime t = Clock.currTime)
 
 			// Timezone
 			case 'e':
-				result ~= t.timezone.name;
+				result ~= timezoneFallback(t.timezone.name, "P");
 				break;
 			case 'I':
 				result ~= t.dstInEffect ? '1': '0';
@@ -245,7 +253,7 @@ string formatTime(string fmt, SysTime t = Clock.currTime)
 				break;
 			}
 			case 'T':
-				result ~= t.timezone.stdName;
+				result ~= timezoneFallback(t.timezone.stdName, "P");
 				break;
 			case 'Z':
 				result ~= text((t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000);
