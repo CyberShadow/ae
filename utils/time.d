@@ -95,7 +95,7 @@ string formatTime(string fmt, SysTime t = Clock.currTime)
 		if (i < 10)
 			return [cast(char)('0' + i)];
 		else
-			return cast(string)twoDigits(i);
+			return twoDigits(i).idup;
 	}
 
 	static char[4] fourDigits(uint i)
