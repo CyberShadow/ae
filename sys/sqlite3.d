@@ -159,6 +159,7 @@ final class SQLite
 				return true;
 			else
 			{
+				sqlite3_reset(stmt);
 				sqenforce(res);
 				return false; // only on SQLITE_OK, which shouldn't happen
 			}
