@@ -79,8 +79,7 @@ final class MyApplication : Application
 		static Shape shape;
 		if (first)
 			canvas.whiteNoise(),
-			//shape = cast(Shape) uniform!"(]"(0, Shape.max),
-			shape = Shape.line,
+			shape = cast(Shape) uniform!"(]"(0, Shape.max),
 			first = false;
 
 		final switch (shape)
