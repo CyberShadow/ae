@@ -90,6 +90,15 @@ mixin template Canvas()
 			pixels[y*stride+x] = value;
 	}
 
+	// For easy passing of CHECKED parameter
+	void putPixel(bool CHECKED)(int x, int y, COLOR value)
+	{
+		static if (CHECKED)
+			safePut(x, y, value);
+		else
+			this[x, y] = value;
+	}
+
 	COLOR* scanline(int y)
 	{
 		assert(y>=0 && y<h);
@@ -200,6 +209,55 @@ mixin template Canvas()
 		mixin(CheckVLine);
 		foreach (y; y1..y2) // TODO: optimize
 			pixels[y*stride+x] = c;
+	}
+
+	void line(bool CHECKED=true)(int x1, int y1, int x2, int y2, COLOR c)
+	{
+		enum DrawLine = q{
+			// Axis-independent part. Mixin context:
+			// a0 .. a1  - longer side
+			// b0 .. b1  - shorter side
+			// DrawPixel - mixin to draw a pixel at coordinates (a, b)
+
+			if (a0 == a1)
+				return;
+
+			if (a0 > a1)
+			{
+				 swap(a0, a1);
+				 swap(b0, b1);
+			}
+
+			// Use fixed-point for b position and offset per 1 pixel along "a" axis
+			assert(b0 < (1L<<CoordinateBits) && b1 < (1L<<CoordinateBits));
+			SignedBitsType!(CoordinateBits*2) bPos = b0 << CoordinateBits;
+			SignedBitsType!(CoordinateBits*2) bOff = ((b1-b0) << CoordinateBits) / (a1-a0);
+
+			foreach (a; a0..a1+1)
+			{
+				int b = (bPos += bOff) >> CoordinateBits;
+				mixin(DrawPixel);
+			}
+		};
+
+		if (abs(x2-x1) > abs(y2-y1))
+		{
+			alias x1 a0;
+			alias x2 a1;
+			alias y1 b0;
+			alias y2 b1;
+			enum DrawPixel = q{ putPixel!CHECKED(a, b, c); };
+			mixin(DrawLine);
+		}
+		else
+		{
+			alias y1 a0;
+			alias y2 a1;
+			alias x1 b0;
+			alias x2 b1;
+			enum DrawPixel = q{ putPixel!CHECKED(b, a, c); };
+			mixin(DrawLine);
+		}
 	}
 
 	void rect(bool CHECKED=true)(int x1, int y1, int x2, int y2, COLOR c) // [)

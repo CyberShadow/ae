@@ -72,14 +72,15 @@ final class MyApplication : Application
 
 		enum Shape
 		{
-			pixel, hline, vline, rect, fillRect, fillRect2, circle, sector, poly,
+			pixel, hline, vline, line, rect, fillRect, fillRect2, circle, sector, poly,
 			softCircle, softRing, aaLine,
 		}
 
 		static Shape shape;
 		if (first)
 			canvas.whiteNoise(),
-			shape = cast(Shape) uniform!"(]"(0, Shape.max),
+			//shape = cast(Shape) uniform!"(]"(0, Shape.max),
+			shape = Shape.line,
 			first = false;
 
 		final switch (shape)
@@ -91,6 +92,8 @@ final class MyApplication : Application
 				return canvas.hline(randX(), randX(), randY(), randColor());
 			case Shape.vline:
 				return canvas.vline(randX(), randY(), randY(), randColor());
+			case Shape.line:
+				return canvas.line(randX(), randY(), randX(), randY(), randColor());
 
 			case Shape.rect:
 				return canvas.rect    (randX(), randY(), randX(), randY(), randColor());
