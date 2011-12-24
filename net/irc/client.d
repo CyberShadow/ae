@@ -412,17 +412,7 @@ private:
 			if (params.length != 1)
 				return;
 
-			auto newNick = params[0];
-			users[newNick] = users[nick];
-			users.remove(nick);
-
-			foreach (ref channel; channels)
-				if (nick in channel.users)
-				{
-					channel.users[newNick] = channel.users[nick];
-					channel.users.remove(nick);
-				}
-
+			onNick(nick, params[0]);
 			break;
 
 		default:
@@ -508,6 +498,21 @@ protected: // overridable methods
 		canonicalUserNames.remove(rfc1459toLower(nick));
 		if (handleLeave)
 			handleLeave(this, nick);
+	}
+
+	void onNick(string oldNick, string newNick)
+	{
+		users[newNick] = users[oldNick];
+		users.remove(oldNick);
+		canonicalUserNames.remove(rfc1459toLower(oldNick));
+		canonicalUserNames[rfc1459toLower(newNick)] = newNick;
+
+		foreach (ref channel; channels)
+			if (oldNick in channel.users)
+			{
+				channel.users[newNick] = channel.users[oldNick];
+				channel.users.remove(oldNick);
+			}
 	}
 
 	void onMessage(string from, string to, string message, IrcMessageType type)
