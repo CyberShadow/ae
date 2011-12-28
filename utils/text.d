@@ -38,7 +38,7 @@ module ae.utils.text;
 import std.exception;
 import std.string;
 import std.ascii;
-import ae.utils.array;
+import ae.utils.textout;
 import core.stdc.string;
 
 // ************************************************************************
@@ -69,7 +69,7 @@ string fastReplace(string what, string from, string to)
 			if (!p)
 				return what;
 
-			auto sb = new StringBuilder(what.length);
+			auto sb = StringBuilder(what.length);
 			do
 			{
 				sb.put(what[0..p-what.ptr], to);
@@ -79,7 +79,7 @@ string fastReplace(string what, string from, string to)
 			while (p);
 
 			sb.put(what);
-			return sb.getString();
+			return sb.get();
 		}
 	}
 	else
@@ -140,7 +140,7 @@ string fastReplace(string what, string from, string to)
 
 		//sb.put(what);
 		sb.put(RAM[cast(size_t)start..cast(size_t)(what.ptr+what.length)]);
-		return sb.getString();
+		return sb.get();
 	}
 }
 

@@ -170,7 +170,7 @@ public:
 
 	static string parseTemplate(string data, string[string] dictionary)
 	{
-		import ae.utils.array;
+		import ae.utils.textout;
 		StringBuilder sb;
 		for(;;)
 		{
@@ -188,7 +188,7 @@ public:
 			data = data[endpos+2 .. $];
 		}
 		sb.put(data);
-		return sb.getString();
+		return sb.get();
 	}
 
 	void writePageContents(string title, string content)

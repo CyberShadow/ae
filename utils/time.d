@@ -40,7 +40,7 @@ import std.string;
 import std.conv : text;
 import std.utf : decode, stride;
 import std.math : abs;
-import ae.utils.array;
+import ae.utils.textout;
 
 struct TimeFormats
 {
@@ -70,6 +70,15 @@ private const MonthLongNames = ["January", "February", "March", "April", "May", 
 
 /// Format a SysTime using a PHP date() format string.
 string formatTime(string fmt, SysTime t = Clock.currTime)
+{
+	auto result = StringBuilder(48);
+	putTime(result, fmt, t);
+	return result.get();
+}
+
+/// ditto
+void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime)
+//	if (IsStringSink!S)
 {
 	auto dt = cast(DateTime)t;
 	auto date = dt.date;
@@ -117,7 +126,6 @@ string formatTime(string fmt, SysTime t = Clock.currTime)
 			return formatTime(fallbackFormat, t);
 	}
 
-	auto result = StringBuilder(48);
 	size_t idx = 0;
 	dchar c;
 	while (idx < fmt.length)
@@ -125,19 +133,19 @@ string formatTime(string fmt, SysTime t = Clock.currTime)
 		{
 			// Day
 			case 'd':
-				result ~= twoDigits(dt.day);
+				sink.put(twoDigits(dt.day));
 				break;
 			case 'D':
-				result ~= WeekdayShortNames[dt.dayOfWeek];
+				sink.put(WeekdayShortNames[dt.dayOfWeek]);
 				break;
 			case 'j':
-				result ~= oneOrTwoDigits(dt.day);
+				sink.put(oneOrTwoDigits(dt.day));
 				break;
 			case 'l':
-				result ~= WeekdayLongNames[dt.dayOfWeek];
+				sink.put(WeekdayLongNames[dt.dayOfWeek]);
 				break;
 			case 'N':
-				result ~= oneDigit((dt.dayOfWeek+6)%7 + 1);
+				sink.put(oneDigit((dt.dayOfWeek+6)%7 + 1));
 				break;
 			case 'S':
 				switch (dt.day)
@@ -145,141 +153,140 @@ string formatTime(string fmt, SysTime t = Clock.currTime)
 					case 1:
 					case 21:
 					case 31:
-						result ~= "st";
+						sink.put("st");
 						break;
 					case 2:
 					case 22:
-						result ~= "nd";
+						sink.put("nd");
 						break;
 					case 3:
 					case 23:
-						result ~= "rd";
+						sink.put("rd");
 						break;
 					default:
-						result ~= "th";
+						sink.put("th");
 				}
 				break;
 			case 'w':
-				result ~= oneDigit(cast(int)dt.dayOfWeek);
+				sink.put(oneDigit(cast(int)dt.dayOfWeek));
 				break;
 			case 'z':
-				result ~= text(dt.dayOfYear-1);
+				sink.put(text(dt.dayOfYear-1));
 				break;
 
 			// Week
 			case 'W':
-				result ~= twoDigits(dt.isoWeek);
+				sink.put(twoDigits(dt.isoWeek));
 				break;
 
 			// Month
 			case 'F':
-				result ~= MonthLongNames[dt.month-1];
+				sink.put(MonthLongNames[dt.month-1]);
 				break;
 			case 'm':
-				result ~= twoDigits(dt.month);
+				sink.put(twoDigits(dt.month));
 				break;
 			case 'M':
-				result ~= MonthShortNames[dt.month-1];
+				sink.put(MonthShortNames[dt.month-1]);
 				break;
 			case 'n':
-				result ~= oneOrTwoDigits(dt.month);
+				sink.put(oneOrTwoDigits(dt.month));
 				break;
 			case 't':
-				result ~= oneOrTwoDigits(dt.daysInMonth);
+				sink.put(oneOrTwoDigits(dt.daysInMonth));
 				break;
 
 			// Year
 			case 'L':
-				result ~= dt.isLeapYear ? '1' : '0';
+				sink.put(dt.isLeapYear ? '1' : '0');
 				break;
 			// case 'o': TODO (ISO 8601 year number)
 			case 'Y':
-				result ~= fourDigits(dt.year);
+				sink.put(fourDigits(dt.year));
 				break;
 			case 'y':
-				result ~= twoDigits(dt.year % 100);
+				sink.put(twoDigits(dt.year % 100));
 				break;
 
 			// Time
 			case 'a':
-				result ~= dt.hour < 12 ? "am" : "pm";
+				sink.put(dt.hour < 12 ? "am" : "pm");
 				break;
 			case 'A':
-				result ~= dt.hour < 12 ? "AM" : "PM";
+				sink.put(dt.hour < 12 ? "AM" : "PM");
 				break;
 			// case 'B': TODO (Swatch Internet time)
 			case 'g':
-				result ~= oneOrTwoDigits((dt.hour+11)%12 + 1);
+				sink.put(oneOrTwoDigits((dt.hour+11)%12 + 1));
 				break;
 			case 'G':
-				result ~= oneOrTwoDigits(dt.hour);
+				sink.put(oneOrTwoDigits(dt.hour));
 				break;
 			case 'h':
-				result ~= twoDigits((dt.hour+11)%12 + 1);
+				sink.put(twoDigits((dt.hour+11)%12 + 1));
 				break;
 			case 'H':
-				result ~= twoDigits(dt.hour);
+				sink.put(twoDigits(dt.hour));
 				break;
 			case 'i':
-				result ~= twoDigits(dt.minute);
+				sink.put(twoDigits(dt.minute));
 				break;
 			case 's':
-				result ~= twoDigits(dt.second);
+				sink.put(twoDigits(dt.second));
 				break;
 			case 'u':
-				result ~= format("%06d", t.fracSec.usecs);
+				sink.put(format("%06d", t.fracSec.usecs));
 				break;
 			case 'E': // not standard
-				result ~= format("%03d", t.fracSec.msecs);
+				sink.put(format("%03d", t.fracSec.msecs));
 				break;
 
 			// Timezone
 			case 'e':
-				result ~= timezoneFallback(t.timezone.name, "P");
+				sink.put(timezoneFallback(t.timezone.name, "P"));
 				break;
 			case 'I':
-				result ~= t.dstInEffect ? '1': '0';
+				sink.put(t.dstInEffect ? '1': '0');
 				break;
 			case 'O':
 			{
 				auto minutes = (t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000 / 60;
-				result ~= format("%+03d%02d", minutes/60, abs(minutes%60));
+				sink.put(format("%+03d%02d", minutes/60, abs(minutes%60)));
 				break;
 			}
 			case 'P':
 			{
 				auto minutes = (t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000 / 60;
-				result ~= format("%+03d:%02d", minutes/60, abs(minutes%60));
+				sink.put(format("%+03d:%02d", minutes/60, abs(minutes%60)));
 				break;
 			}
 			case 'T':
-				result ~= timezoneFallback(t.timezone.stdName, "P");
+				sink.put(timezoneFallback(t.timezone.stdName, "P"));
 				break;
 			case 'Z':
-				result ~= text((t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000);
+				sink.put(text((t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000));
 				break;
 
 			// Full date/time
 			case 'c':
-				result ~= dt.toISOExtString();
+				sink.put(dt.toISOExtString());
 				break;
 			case 'r':
-				result ~= formatTime(TimeFormats.RFC2822, t);
+				sink.put(formatTime(TimeFormats.RFC2822, t));
 				break;
 			case 'U':
-				result ~= text(t.toUnixTime);
+				sink.put(text(t.toUnixTime));
 				break;
 
 			// Escape next character
 			case '\\':
-				result ~= decode(fmt, idx);
+				put(sink, decode(fmt, idx));
 				break;
 
 			// Other characters (whitespace, delimiters)
 			default:
-				result ~= c;
+				put(sink, c);
 		}
-	return result.getString();
 }
 
 import std.exception : enforce;
