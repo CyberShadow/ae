@@ -186,6 +186,11 @@ public:
 		return cast(I[])start[0..cursor-start];
 	}
 
+	@property size_t length()
+	{
+		return cursor-start;
+	}
+
 	static if (is(I == T)) // mutable types only
 	{
 		/// Effectively empties the data, but preserves the storage for reuse
