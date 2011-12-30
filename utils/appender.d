@@ -43,8 +43,8 @@ struct FastAppender(I)
 	static assert(T.sizeof == 1, "TODO");
 
 private:
-	enum MIN_SIZE  = 4096;
 	enum PAGE_SIZE = 4096;
+	enum MIN_SIZE  = PAGE_SIZE / 2 + 1; // smallest size that can expand
 
 	alias Unqual!I T;
 
@@ -67,8 +67,7 @@ private:
 			}
 		}
 
-		auto newCapacity = nextCapacity(newSize);
-		//auto newStart = (new T[newCapacity]).ptr;
+		auto newCapacity = newSize < MIN_SIZE ? MIN_SIZE : newSize * 2;
 
 		auto bi = GC.qalloc(newCapacity * T.sizeof, (typeid(T[]).next.flags & 1) ? 0 : GC.BlkAttr.NO_SCAN);
 		auto newStart = cast(T*)bi.base;
@@ -78,34 +77,6 @@ private:
 		start = newStart;
 		cursor = start + size;
 		end = start + newCapacity;
-	}
-
-	// Round up to the next power of two, but after PAGE_SIZE only add PAGE_SIZE.
-	private static size_t nextCapacity(size_t size)
-	{
-		if (size < MIN_SIZE)
-			return MIN_SIZE;
-
-		size--;
-		auto sub = size;
-		sub |= sub >>  1;
-		sub |= sub >>  2;
-		sub |= sub >>  4;
-		sub |= sub >>  8;
-		sub |= sub >> 16;
-		static if (size_t.sizeof > 4)
-			sub |= sub >> 32;
-
-		return (size | (sub & (PAGE_SIZE-1))) + 1;
-	}
-
-	unittest
-	{
-		assert(nextCapacity(  PAGE_SIZE-1) ==   PAGE_SIZE);
-		assert(nextCapacity(  PAGE_SIZE  ) ==   PAGE_SIZE);
-		assert(nextCapacity(  PAGE_SIZE+1) == 2*PAGE_SIZE);
-		assert(nextCapacity(2*PAGE_SIZE  ) == 2*PAGE_SIZE);
-		assert(nextCapacity(2*PAGE_SIZE+1) == 3*PAGE_SIZE);
 	}
 
 public:
