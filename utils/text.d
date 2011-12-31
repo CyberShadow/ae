@@ -144,6 +144,35 @@ string fastReplace(string what, string from, string to)
 	}
 }
 
+unittest
+{
+	import std.array;
+	void test(string haystack, string from, string to)
+	{
+		auto description = `("` ~ haystack ~ `", "` ~ from ~ `", "` ~ to ~ `")`;
+
+		auto r1 = fastReplace(haystack, from, to);
+		auto r2 =     replace(haystack, from, to);
+		assert(r1 == r2, `Bad replace: ` ~ description ~ ` == "` ~ r1 ~ `"`);
+
+		if (r1 == haystack)
+			assert(r1 is haystack, `Pointless reallocation: ` ~ description);
+	}
+
+	test("Mary had a little lamb", "a", "b");
+	test("Mary had a little lamb", "a", "aaa");
+	test("Mary had a little lamb", "Mary", "Lucy");
+	test("Mary had a little lamb", "Mary", "Jimmy");
+	test("Mary had a little lamb", " l", " x");
+	test("Mary had a little lamb", " l", " xx");
+
+	// TODO - pointless reallocations
+	//test("Mary had a little lamb", "X" , "Y" );
+	//test("Mary had a little lamb", "XX", "Y" );
+	//test("Mary had a little lamb", "X" , "YY");
+	//test("Mary had a little lamb", "XX", "YY");
+}
+
 string[] fastSplit(string s, char d)
 {
 	auto p = cast(immutable(char)*) memchr(s.ptr, d, s.length);
