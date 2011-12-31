@@ -57,10 +57,20 @@ string fastReplace(string what, string from, string to)
 		auto fromc = from[0];
 		if (to.length==1)
 		{
+			auto p = cast(char*)memchr(what.ptr, fromc, what.length);
+			if (!p)
+				return what;
+
 			auto result = what.dup;
-			foreach (ref c; result)
-				if (c == fromc)
-					c = to[0];
+			auto delta = result.ptr - what.ptr;
+			auto toChar = to[0];
+			auto end = what.ptr + what.length;
+			do
+			{
+				p[delta] = toChar; // zomg hax lol
+				p++;
+				p = cast(char*)memchr(p, fromc, end - p);
+			} while (p);
 			return assumeUnique(result);
 		}
 		else
@@ -82,66 +92,76 @@ string fastReplace(string what, string from, string to)
 			return sb.get();
 		}
 	}
-	else
-	if (from.length == to.length)
+
+	auto head = from[0];
+	auto tail = from[1..$];
+
+	auto p = cast(char*)what.ptr;
+	auto end = p + what.length;
+	p = cast(char*)memchr(p, head, end-p);
+	while (p)
 	{
-		auto head = from[0];
-		auto p = cast(char*)memchr(what.ptr, head, what.length);
-		if (!p)
-			return what;
-
-		auto result = what.dup;
-		auto s = result;
-		p = p-what.ptr+s.ptr;
-
-		from = from[1..$];
-		alias from tail;
-
-		do
+		p++;
+		if (p[0..tail.length] == tail)
 		{
-			p++;
-			if (p[0..tail.length] == tail)
-				(p-1)[0..to.length] = to;
-			s = s[p-s.ptr..$];
-			p = cast(char*)memchr(s.ptr, head, s.length);
-		}
-		while (p);
-
-		return assumeUnique(result);
-	}
-	else
-	{
-		auto head = from[0];
-		auto p = cast(immutable(char)*)memchr(what.ptr, head, what.length);
-		if (!p)
-			return what;
-
-		auto start = what.ptr;
-		from = from[1..$];
-		alias from tail;
-
-		auto sb = StringBuilder(what.length);
-		do
-		{
-			p++;
-			if (p[0..tail.length] == tail)
+			if (from.length == to.length)
 			{
-				sb.put(RAM[cast(size_t)start .. cast(size_t)p-1], to);
-				start = p + tail.length;
-				what = what[start-what.ptr..$];
+				auto result = what.dup;
+				auto deltaMinusOne = (result.ptr - what.ptr) - 1;
+
+				goto replaceA;
+			dummyA: // compiler complains
+
+				do
+				{
+					p++;
+					if (p[0..tail.length] == tail)
+					{
+					replaceA:
+						(p+deltaMinusOne)[0..to.length] = to;
+					}
+					p = cast(char*)memchr(p, head, end-p);
+				}
+				while (p);
+
+				return assumeUnique(result);
 			}
 			else
 			{
-				what = what[p-what.ptr..$];
-			}
-			p = cast(immutable(char)*)memchr(what.ptr, head, what.length);
-		}
-		while (p);
+				auto start = cast(char*)what.ptr;
+				auto sb = StringBuilder(what.length);
+				goto replaceB;
+			dummyB: // compiler complains
 
-		//sb.put(what);
-		sb.put(RAM[cast(size_t)start..cast(size_t)(what.ptr+what.length)]);
-		return sb.get();
+				do
+				{
+					p++;
+					if (p[0..tail.length] == tail)
+					{
+					replaceB:
+						sb.put(RAM[cast(size_t)start .. cast(size_t)p-1], to);
+						start = p + tail.length;
+						what = what[start-what.ptr..$];
+					}
+					else
+					{
+						what = what[p-what.ptr..$];
+					}
+					p = cast(char*)memchr(what.ptr, head, what.length);
+				}
+				while (p);
+
+				//sb.put(what);
+				sb.put(RAM[cast(size_t)start..cast(size_t)(what.ptr+what.length)]);
+				return sb.get();
+			}
+
+			assert(0);
+		}
+		p = cast(char*)memchr(p, head, end-p);
 	}
+
+	return what;
 }
 
 unittest
@@ -166,11 +186,12 @@ unittest
 	test("Mary had a little lamb", " l", " x");
 	test("Mary had a little lamb", " l", " xx");
 
-	// TODO - pointless reallocations
-	//test("Mary had a little lamb", "X" , "Y" );
-	//test("Mary had a little lamb", "XX", "Y" );
-	//test("Mary had a little lamb", "X" , "YY");
-	//test("Mary had a little lamb", "XX", "YY");
+	test("Mary had a little lamb", "X" , "Y" );
+	test("Mary had a little lamb", "XX", "Y" );
+	test("Mary had a little lamb", "X" , "YY");
+	test("Mary had a little lamb", "XX", "YY");
+	test("Mary had a little lamb", "aX", "Y" );
+	test("Mary had a little lamb", "aX", "YY");
 }
 
 string[] fastSplit(string s, char d)
