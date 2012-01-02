@@ -262,22 +262,23 @@ import std.utf;
 /// properly work on it.
 string rawToUTF8(in char[] s)
 {
-	dstring d;
-	foreach (char c; s)
-		d ~= c;
+	auto d = new dchar[s.length];
+	foreach (i, char c; s)
+		d[i] = c;
 	return toUTF8(d);
 }
 
 /// Undo rawToUTF8.
 string UTF8ToRaw(in char[] r)
 {
-	string s;
+	auto s = new char[r.length];
+	size_t i = 0;
 	foreach (dchar c; r)
 	{
 		assert(c < '\u0100');
-		s ~= cast(char)c;
+		s[i++] = cast(char)c;
 	}
-	return s;
+	return assumeUnique(s[0..i]);
 }
 
 unittest
