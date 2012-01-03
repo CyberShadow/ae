@@ -56,7 +56,7 @@ final class MyApplication : Application
 	override string getCompanyName() { return "CyberShadow"; }
 
 	FPSCounter fps;
-	static __gshared bool first = true;
+	bool first = true;
 
 	override void render(Surface s)
 	{

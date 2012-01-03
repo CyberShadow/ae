@@ -57,38 +57,35 @@ final class MyApplication : Application
 
 	FPSCounter fps;
 
-	__gshared
+	int dx, dy;
+	real ax=0, ay=0;
+
+	struct Pixel
 	{
-		int dx, dy;
-		real ax=0, ay=0;
+		BGRX color;
+		int x0, y0, z0;
+		int x, y, z;
 
-		struct Pixel
+		this(ubyte r, ubyte g, ubyte b)
 		{
-			BGRX color;
-			int x0, y0, z0;
-			int x, y, z;
-
-			this(ubyte r, ubyte g, ubyte b)
-			{
-				color = BGRX(b, g, r);
-				x0 = r-128;
-				y0 = g-128;
-				z0 = b-128;
-			}
-
-			void rotate(real sinx, real cosx, real siny, real cosy)
-			{
-				auto z1 = x0 *-siny + z0 * cosy;
-				x = cast(int)(10000 + x0 * cosy + z0 * siny) - 10000; // hack: this is faster than lrint
-				y = cast(int)(10000 + y0 * cosx - z1 * sinx) - 10000;
-				z = cast(int)(10000 + y0 * sinx + z1 * cosx) - 10000;
-			}
+			color = BGRX(b, g, r);
+			x0 = r-128;
+			y0 = g-128;
+			z0 = b-128;
 		}
 
-		Pixel[] pixels;
-
-		SysTime lastFrame;
+		void rotate(real sinx, real cosx, real siny, real cosy)
+		{
+			auto z1 = x0 *-siny + z0 * cosy;
+			x = cast(int)(10000 + x0 * cosy + z0 * siny) - 10000; // hack: this is faster than lrint
+			y = cast(int)(10000 + y0 * cosx - z1 * sinx) - 10000;
+			z = cast(int)(10000 + y0 * sinx + z1 * cosx) - 10000;
+		}
 	}
+
+	Pixel[] pixels;
+
+	SysTime lastFrame;
 
 	/// Angular rotation speed (radians per second)
 	enum RV = PI; // per second
