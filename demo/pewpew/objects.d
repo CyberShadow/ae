@@ -588,7 +588,7 @@ struct TorpedoParticle
 {
 	float x, y, vx, vy, s = 0.001f, t = 0;
 
-	enum MAX = 1024*32;
+	enum MAX = 1024*64;
 
 	enum STEP =
 	q{
