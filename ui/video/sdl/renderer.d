@@ -48,7 +48,8 @@ final class SDLRenderer : Renderer
 	this(SDL_Surface* s)
 	{
 		this.s = s;
-		this.canFastLock = (s.flags & SDL_HWSURFACE) == 0;
+		//this.canFastLock = (s.flags & SDL_HWSURFACE) == 0;
+		this.canFastLock = !SDL_MUSTLOCK(s);
 	}
 
 	override Bitmap fastLock()
