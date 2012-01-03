@@ -15,7 +15,7 @@
  *
  * The Initial Developer of the Original Code is
  * Vladimir Panteleev <vladimir@thecybershadow.net>
- * Portions created by the Initial Developer are Copyright (C) 2007-2011
+ * Portions created by the Initial Developer are Copyright (C) 2007-2012
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -427,6 +427,6 @@ void copyCanvas(C, I)(C c, ref I image)
 
 private
 {
-	// test intantiation
+	// test instantiation
 	alias Image!RGB RGBImage;
 }
