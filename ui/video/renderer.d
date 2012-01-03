@@ -15,7 +15,7 @@
  *
  * The Initial Developer of the Original Code is
  * Vladimir Panteleev <vladimir@thecybershadow.net>
- * Portions created by the Initial Developer are Copyright (C) 2011
+ * Portions created by the Initial Developer are Copyright (C) 2011-2012
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -32,38 +32,42 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-module ae.ui.video.sdl.surface;
+module ae.ui.video.renderer;
 
-import std.exception;
-
-import derelict.sdl.sdl;
-
-import ae.ui.video.surface;
-import ae.ui.shell.sdl.shell;
-
-final class SDLSurface : Surface
+/// Abstract class for a video renderer.
+class Renderer
 {
-	SDL_Surface* s;
-
-	this(SDL_Surface* s)
+	/// BGRX/BGRA-only.
+	struct Bitmap
 	{
-		this.s = s;
+		uint* pixels;
+		uint w, h, stride;
+
+		uint* pixelPtr(uint x, uint y)
+		{
+			assert(x<w && y<h);
+			return cast(uint*)(cast(ubyte*)pixels + y*stride) + x;
+		}
+
+		uint opIndex(uint x, uint y)
+		{
+			return *pixelPtr(x, y);
+		}
+
+		void opIndexAssign(uint value, uint x, uint y)
+		{
+			*pixelPtr(x, y) = value;
+		}
 	}
 
-	override Bitmap lock()
-	{
-		sdlEnforce(SDL_LockSurface(s)==0, "Can't lock surface");
-		enforce(s.format.BytesPerPixel == 4 && s.format.Bmask == 0xFF, "Invalid pixel format");
-		return Bitmap(cast(uint*)s.pixels, s.w, s.h, s.pitch);
-	}
+	/// True when this renderer can lock quickly (usually when it's rendering in software).
+	/*immutable*/ bool canFastLock;
 
-	override void unlock()
-	{
-		SDL_UnlockSurface(s);
-	}
+	/// Lock a 32-bit, BGRX/BGRA surface
+	abstract Bitmap fastLock();
 
-	void flip()
-	{
-		sdlEnforce(SDL_Flip(s)==0);
-	}
+	/// ditto
+	abstract Bitmap lock();
+
+	abstract void unlock();
 }

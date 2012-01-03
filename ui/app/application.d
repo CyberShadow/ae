@@ -37,7 +37,7 @@ module ae.ui.app.application;
 import ae.sys.desktop;
 import ae.sys.config;
 import ae.ui.shell.events;
-import ae.ui.video.surface;
+import ae.ui.video.renderer;
 
 /// The purpose of this class is to allow the application to provide app-specific information to the framework.
 // This class could theoretically be split up into more layers (ShellApplication, etc.)
@@ -130,7 +130,7 @@ class Application
 
 	// ********************************* Rendering *********************************
 
-	void render(Surface s) {}
+	void render(Renderer r) {}
 }
 
 private __gshared Application application;

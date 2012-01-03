@@ -35,12 +35,12 @@
 module ae.ui.wm.controls.root;
 
 import ae.ui.wm.controls.container;
-import ae.ui.video.surface;
+import ae.ui.video.renderer;
 
 /// Container for all top-level windows.
 final class RootControl : ContainerControl
 {
-	override void render(Surface s, int x, int y)
+	override void render(Renderer s, int x, int y)
 	{
 		// TODO: fill background
 		super.render(s, x, y);

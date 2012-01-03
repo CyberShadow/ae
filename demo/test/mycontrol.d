@@ -36,7 +36,7 @@ module ae.demo.test.mycontrol;
 
 import ae.ui.shell.shell;
 import ae.ui.shell.events;
-import ae.ui.video.surface;
+import ae.ui.video.renderer;
 import ae.ui.wm.controls.control;
 import std.conv;
 
@@ -69,7 +69,7 @@ class MyControl : Control
 		}
 	}
 
-	override void render(Surface s, int x, int y)
+	override void render(Renderer s, int x, int y)
 	{
 		//foreach (i; 0..100)
 		//	coords ~= Coord(uniform(0, w), uniform(0, h), uniform(0, 0x1_00_00_00));

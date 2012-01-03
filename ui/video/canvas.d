@@ -15,7 +15,7 @@
  *
  * The Initial Developer of the Original Code is
  * Vladimir Panteleev <vladimir@thecybershadow.net>
- * Portions created by the Initial Developer are Copyright (C) 2011
+ * Portions created by the Initial Developer are Copyright (C) 2011-2012
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -35,7 +35,7 @@
 /// Canvas for Surface.Bitmap
 module ae.ui.video.canvas;
 
-public import ae.ui.video.surface;
+public import ae.ui.video.renderer;
 public import ae.utils.graphics.canvas;
 
 struct CustomBitmapCanvas(COLOR)
@@ -47,7 +47,7 @@ struct CustomBitmapCanvas(COLOR)
 
 	mixin Canvas;
 
-	this(Surface.Bitmap bitmap)
+	this(Renderer.Bitmap bitmap)
 	{
 		w = bitmap.w;
 		h = bitmap.h;

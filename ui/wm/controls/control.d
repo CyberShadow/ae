@@ -35,7 +35,7 @@
 module ae.ui.wm.controls.control;
 
 import ae.ui.shell.events;
-import ae.ui.video.surface;
+import ae.ui.video.renderer;
 
 /// Root control class.
 class Control

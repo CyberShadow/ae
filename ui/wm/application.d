@@ -38,7 +38,7 @@ import ae.ui.app.application;
 import ae.ui.shell.shell;
 import ae.ui.shell.events;
 import ae.ui.wm.controls.root;
-import ae.ui.video.surface;
+import ae.ui.video.renderer;
 
 /// Specialization of Application class which automatically handles framework messages.
 class WMApplication : Application
@@ -75,7 +75,7 @@ class WMApplication : Application
 
 	// ********************************* Rendering *********************************
 
-	override void render(Surface s)
+	override void render(Renderer s)
 	{
 		root.render(s, 0, 0);
 	}

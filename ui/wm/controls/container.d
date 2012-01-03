@@ -36,7 +36,7 @@ module ae.ui.wm.controls.container;
 
 import ae.ui.wm.controls.control;
 import ae.ui.shell.events;
-import ae.ui.video.surface;
+import ae.ui.video.renderer;
 
 /// Base class for a control with children.
 class ContainerControl : Control
@@ -73,7 +73,7 @@ class ContainerControl : Control
 			child.handleMouseMove(x-child.x, y-child.y, buttons);
 	}
 
-	abstract override void render(Surface s, int x, int y)
+	abstract override void render(Renderer s, int x, int y)
 	{
 		// background should be rendered upstream
 		foreach (child; children)

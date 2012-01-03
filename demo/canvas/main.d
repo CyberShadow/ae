@@ -44,7 +44,7 @@ import ae.ui.shell.shell;
 import ae.ui.shell.sdl.shell;
 import ae.ui.video.video;
 import ae.ui.video.sdl.video;
-import ae.ui.video.surface;
+import ae.ui.video.renderer;
 import ae.ui.video.canvas;
 import ae.utils.math;
 import ae.utils.geometry;
@@ -59,7 +59,7 @@ final class MyApplication : Application
 	FPSCounter fps;
 	bool first = true;
 
-	override void render(Surface s)
+	override void render(Renderer s)
 	{
 		fps.tick(&shell.setCaption);
 

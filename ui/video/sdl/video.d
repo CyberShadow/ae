@@ -43,8 +43,8 @@ import ae.ui.video.video;
 import ae.ui.app.application;
 import ae.ui.shell.shell;
 import ae.ui.shell.sdl.shell;
-import ae.ui.video.sdl.surface;
-import ae.ui.video.surface;
+import ae.ui.video.sdl.renderer;
+import ae.ui.video.renderer;
 
 class SDLVideo : Video
 {
@@ -52,10 +52,6 @@ class SDLVideo : Video
 
 	override void initialize(Application application)
 	{
-		//auto surface = SDL_GetVideoSurface();
-		//if (surface)
-		//	SDL_FreeSurface(surface);
-
 		uint screenWidth, screenHeight, flags;
 		if (application.isFullScreen())
 		{
@@ -106,18 +102,18 @@ private:
 	Thread renderThread;
 	bool stopping;
 	AppCallback stopCallback;
-	AppCallbackEx!(Surface) renderCallback;
+	AppCallbackEx!(Renderer) renderCallback;
 
 	void renderThreadProc()
 	{
 		scope(failure) if (errorCallback) try { errorCallback.call(); } catch {}
 
-		auto surface = new SDLSurface(sdlEnforce(SDL_GetVideoSurface()));
+		auto renderer = new SDLRenderer(sdlEnforce(SDL_GetVideoSurface()));
 		while (!stopping)
 		{
 			// TODO: predict flip (vblank wait) duration and render at the last moment
-			renderCallback.call(surface);
-			surface.flip();
+			renderCallback.call(renderer);
+			renderer.flip();
 		}
 		if (stopCallback)
 			stopCallback.call();
