@@ -45,7 +45,6 @@ import ae.ui.shell.sdl.shell;
 import ae.ui.video.video;
 import ae.ui.video.sdl.video;
 import ae.ui.video.renderer;
-import ae.ui.video.canvas;
 import ae.utils.math;
 import ae.utils.geometry;
 import ae.utils.fps;
@@ -63,7 +62,7 @@ final class MyApplication : Application
 	{
 		fps.tick(&shell.setCaption);
 
-		auto canvas = BitmapCanvas(s.lock());
+		auto canvas = s.lock();
 		scope(exit) s.unlock();
 
 		ubyte randByte() { return cast(ubyte)uniform(0, 256); }

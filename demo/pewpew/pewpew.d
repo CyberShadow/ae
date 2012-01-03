@@ -48,7 +48,6 @@ import ae.ui.shell.sdl.shell;
 import ae.ui.video.video;
 import ae.ui.video.sdl.video;
 import ae.ui.video.renderer;
-import ae.ui.video.canvas;
 import ae.utils.graphics.gamma;
 import ae.utils.fps;
 
@@ -76,7 +75,7 @@ final class MyApplication : Application
 	{
 		fps.tick(&shell.setCaption);
 
-		auto screenCanvas = BitmapCanvas(s.lock());
+		auto screenCanvas = s.lock();
 		scope(exit) s.unlock();
 
 		if (initializing)

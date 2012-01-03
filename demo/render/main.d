@@ -32,29 +32,48 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-/// Canvas for Surface.Bitmap
-module ae.ui.video.canvas;
+module ae.demo.render.main;
 
-public import ae.ui.video.renderer;
-public import ae.utils.graphics.canvas;
+import std.random;
 
-struct CustomBitmapCanvas(COLOR)
+import ae.ui.app.application;
+import ae.ui.app.posix.main;
+import ae.ui.shell.shell;
+import ae.ui.shell.sdl.shell;
+import ae.ui.video.sdl.video;
+import ae.ui.video.renderer;
+import ae.utils.fps;
+
+final class MyApplication : Application
 {
-	static assert(COLOR.sizeof == uint.sizeof);
+	override string getName() { return "Demo/Render"; }
+	override string getCompanyName() { return "CyberShadow"; }
 
-	COLOR* pixels;
-	int w, h, stride;
+	Shell shell;
+	FPSCounter fps;
 
-	mixin Canvas;
-
-	this(Renderer.Bitmap bitmap)
+	override void render(Renderer s)
 	{
-		w = bitmap.w;
-		h = bitmap.h;
-		stride = bitmap.stride / uint.sizeof;
-		pixels = cast(COLOR*)bitmap.pixels;
+		fps.tick(&shell.setCaption);
+
+		s.putPixel(uniform(0, s.width), uniform(0, s.height), BGRX(uniform!ubyte(), uniform!ubyte(), uniform!ubyte()));
+	}
+
+	override int run(string[] args)
+	{
+		shell = new SDLShell(this);
+		shell.video = new SDLVideo();
+		shell.run();
+		return 0;
+	}
+
+	override void handleQuit()
+	{
+		shell.quit();
 	}
 }
 
-alias CustomBitmapCanvas!BGRX BitmapCanvas;
-alias CustomBitmapCanvas!BGRA AlphaBitmapCanvas;
+shared static this()
+{
+	createApplication!MyApplication();
+}

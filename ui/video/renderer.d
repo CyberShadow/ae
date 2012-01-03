@@ -34,30 +34,23 @@
 
 module ae.ui.video.renderer;
 
+public import ae.utils.graphics.canvas;
+
 /// Abstract class for a video renderer.
 class Renderer
 {
+	alias BGRX COLOR;
+
+	// TODO: can we expect all hardware surfaces to be in this format? What can we do if they aren't?
 	/// BGRX/BGRA-only.
 	struct Bitmap
 	{
-		uint* pixels;
-		uint w, h, stride;
+		static assert(COLOR.sizeof == uint.sizeof);
 
-		uint* pixelPtr(uint x, uint y)
-		{
-			assert(x<w && y<h);
-			return cast(uint*)(cast(ubyte*)pixels + y*stride) + x;
-		}
+		COLOR* pixels;
+		int w, h, stride;
 
-		uint opIndex(uint x, uint y)
-		{
-			return *pixelPtr(x, y);
-		}
-
-		void opIndexAssign(uint value, uint x, uint y)
-		{
-			*pixelPtr(x, y) = value;
-		}
+		mixin Canvas;
 	}
 
 	/// True when this renderer can lock quickly (usually when it's rendering in software).
@@ -74,4 +67,11 @@ class Renderer
 
 	/// Finalize rendering and present it to the user (flip buffers etc.)
 	abstract void present();
+
+	// **********************************************************************
+
+	abstract @property uint width();
+	abstract @property uint height();
+
+	abstract void putPixel(int x, int y, COLOR color);
 }

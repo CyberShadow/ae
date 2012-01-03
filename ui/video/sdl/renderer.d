@@ -55,6 +55,7 @@ final class SDLRenderer : Renderer
 	override Bitmap fastLock()
 	{
 		assert(canFastLock, "Can't fastLock this");
+		// TODO: cache bitmap for recursive locks?
 		return lock();
 	}
 
@@ -62,7 +63,7 @@ final class SDLRenderer : Renderer
 	{
 		sdlEnforce(SDL_LockSurface(s)==0, "Can't lock surface");
 		enforce(s.format.BytesPerPixel == 4 && s.format.Bmask == 0xFF, "Invalid pixel format");
-		return Bitmap(cast(uint*)s.pixels, s.w, s.h, s.pitch);
+		return Bitmap(cast(COLOR*)s.pixels, s.w, s.h, s.pitch / uint.sizeof);
 	}
 
 	override void unlock()
@@ -73,5 +74,24 @@ final class SDLRenderer : Renderer
 	override void present()
 	{
 		sdlEnforce(SDL_Flip(s)==0);
+	}
+
+	// **********************************************************************
+
+	override @property uint width()
+	{
+		return s.w;
+	}
+
+	override @property uint height()
+	{
+		return s.h;
+	}
+
+	override void putPixel(int x, int y, COLOR color)
+	{
+		auto bitmap = fastLock();
+		bitmap.safePut(x, y, color);
+		unlock();
 	}
 }
