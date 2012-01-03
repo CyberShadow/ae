@@ -171,7 +171,6 @@ final class SDLShell : Shell
 
 	void handleEvent(SDL_Event* event)
 	{
-		std.stdio.writeln(event.type);
 		switch (event.type)
 		{
 		case SDL_KEYDOWN:
@@ -210,7 +209,6 @@ final class SDLShell : Shell
 			video.stopAsync(AppCallback(&videoStopped));
 			break;
 		case SDL_QUIT:
-			std.stdio.writeln("!!!!!!!! SDL_QUIT");
 			application.handleQuit();
 			break;
 		case SDL_USEREVENT:
