@@ -69,7 +69,7 @@ final class SDLRenderer : Renderer
 		SDL_UnlockSurface(s);
 	}
 
-	void flip()
+	override void present()
 	{
 		sdlEnforce(SDL_Flip(s)==0);
 	}

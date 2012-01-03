@@ -34,88 +34,23 @@
 
 module ae.ui.video.sdl.video;
 
-import core.thread;
-import std.process : environment;
-
 import derelict.sdl.sdl;
 
-import ae.ui.video.video;
-import ae.ui.app.application;
-import ae.ui.shell.shell;
 import ae.ui.shell.sdl.shell;
-import ae.ui.video.sdl.renderer;
+import ae.ui.video.sdlcommon.video;
 import ae.ui.video.renderer;
+import ae.ui.video.sdl.renderer;
 
-class SDLVideo : Video
+class SDLVideo : SDLCommonVideo
 {
-	bool firstStart = true;
-
-	override void initialize(Application application)
+protected:
+	override uint getSDLFlags()
 	{
-		uint screenWidth, screenHeight, flags;
-		if (application.isFullScreen())
-		{
-			application.getFullScreenResolution(screenWidth, screenHeight);
-			flags = SDL_HWSURFACE | SDL_DOUBLEBUF | SDL_FULLSCREEN;
-		}
-		else
-		{
-			application.getWindowSize(screenWidth, screenHeight);
-			flags = SDL_HWSURFACE | SDL_DOUBLEBUF;
-		}
-
-		if (application.isResizable())
-			flags |= SDL_RESIZABLE;
-
-		if (firstStart)
-			environment["SDL_VIDEO_CENTERED"] = "1";
-		else
-			environment.remove("SDL_VIDEO_CENTERED");
-
-		sdlEnforce(SDL_SetVideoMode(screenWidth, screenHeight, 32, flags), "can't set video mode");
-
-		renderCallback.bind(&application.render);
-
-		firstStart = false;
+		return SDL_HWSURFACE | SDL_DOUBLEBUF;
 	}
 
-	override void start()
+	override Renderer getRenderer()
 	{
-		stopping = false;
-		renderThread = new Thread(&renderThreadProc);
-		renderThread.start();
-	}
-
-	override void stop()
-	{
-		stopping = true;
-		renderThread.join();
-	}
-
-	override void stopAsync(AppCallback callback)
-	{
-		stopCallback = callback;
-		stopping = true;
-	}
-
-private:
-	Thread renderThread;
-	bool stopping;
-	AppCallback stopCallback;
-	AppCallbackEx!(Renderer) renderCallback;
-
-	void renderThreadProc()
-	{
-		scope(failure) if (errorCallback) try { errorCallback.call(); } catch {}
-
-		auto renderer = new SDLRenderer(sdlEnforce(SDL_GetVideoSurface()));
-		while (!stopping)
-		{
-			// TODO: predict flip (vblank wait) duration and render at the last moment
-			renderCallback.call(renderer);
-			renderer.flip();
-		}
-		if (stopCallback)
-			stopCallback.call();
+		return new SDLRenderer(sdlEnforce(SDL_GetVideoSurface()));
 	}
 }

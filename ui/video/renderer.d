@@ -69,5 +69,9 @@ class Renderer
 	/// ditto
 	abstract Bitmap lock();
 
+	/// Unlock what was previously locked
 	abstract void unlock();
+
+	/// Finalize rendering and present it to the user (flip buffers etc.)
+	abstract void present();
 }
