@@ -23,3 +23,50 @@
     * e.g. expanding a collapsed box inside an accordion
     * only inside scrollable containers?
   * an inbound event shouldn't result in an outbound event
+
+* inbound resize event:
+  * pass recommended size
+
+
+problem:
+- box that takes at most 100px
+
+
+
+
+
+
+
+inbound:
+ * resize REQUESTS - they pass size recommendations, but controls may or may not resize themselves
+
+outbound:
+ * the size changed, so notify parent to rearrange children
+
+
+methods:
+ * arrange() [protected]
+   * calculate recommended sizes
+   * for each child:
+     * call child.fit(recommendedSize)
+     * take into account real child size
+   * iterate, as needed
+   * set own size
+ * rearrange()                   <- upwards
+   * arrange()
+   * if size changed, call parent.rearrange()
+ * fit(recommendedSize)          <- downwards
+   * set size to recommended
+   * arrange()
+
+alternative:
+ * arrange method
+   * arrange children, set size
+ * sizeChanged method (bool outwards)
+   * arrange
+   * if size changed && outwards
+     * parent.sizeChanged
+
+self resize:
+ * parent.rearrange()
+ * parent will call .fit(allocatedSize)
