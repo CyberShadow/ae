@@ -15,7 +15,7 @@
  *
  * The Initial Developer of the Original Code is
  * Vladimir Panteleev <vladimir@thecybershadow.net>
- * Portions created by the Initial Developer are Copyright (C) 2011
+ * Portions created by the Initial Developer are Copyright (C) 2011-2012
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -74,7 +74,8 @@ T cbound(T)(T x) { return bound(x, 0, canvas.w); }
 auto BLACK = COLOR(0);
 auto WHITE = COLOR(COLOR.BaseType.max);
 
-int up, down, left, right, fire;
+bool up, down, left, right, fire;
+
 bool useAnalog; float analogX, analogY;
 
 float frand () { return uniform!`[)`( 0.0f, 1.0f); }

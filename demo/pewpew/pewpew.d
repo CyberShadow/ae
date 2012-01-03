@@ -39,6 +39,7 @@ import std.random;
 import std.datetime;
 import std.algorithm : min;
 import std.conv;
+import std.traits, std.typecons;
 
 import ae.ui.app.application;
 import ae.ui.app.posix.main;
@@ -66,6 +67,11 @@ final class MyApplication : Application
 
 	static uint currentTick() { return TickDuration.currSystemTick().to!("msecs", uint)(); }
 
+	enum InputSource { keyboard, joystick, max }
+	enum GameKey { up, down, left, right, fire, none }
+
+	int[InputSource.max][GameKey.max] inputMatrix;
+
 	override void render(Surface s)
 	{
 		fps.tick(&shell.setCaption);
@@ -80,6 +86,16 @@ final class MyApplication : Application
 			foreach (i; 0..1000) step(10);
 			ticks = currentTick();
 			initializing = false;
+		}
+
+		foreach (i, key; EnumMembers!GameKey[0..$-1])
+		{
+			enum name = __traits(allMembers, GameKey)[i];
+			bool pressed;
+			foreach (input; inputMatrix[key])
+				if (input)
+					pressed = true;
+			mixin(name ~ " = pressed;");
 		}
 
 		//auto destTicks = ticks+deltaTicks;
@@ -119,31 +135,34 @@ final class MyApplication : Application
 				obj.step(deltaTicks);
 	}
 
-	override void handleKeyDown(Key key, dchar character)
+	GameKey keyToGameKey(Key key)
 	{
 		switch (key)
 		{
-			case Key.up   : up   ++; break;
-			case Key.down : down ++; break;
-			case Key.left : left ++; break;
-			case Key.right: right++; break;
-			case Key.space: fire ++; break;
-			case Key.esc  : shell.quit(); break;
-			default       : break;
+			case Key.up   : return GameKey.up   ;
+			case Key.down : return GameKey.down ;
+			case Key.left : return GameKey.left ;
+			case Key.right: return GameKey.right;
+			case Key.space: return GameKey.fire ;
+			default       : return GameKey.none ;
 		}
+	}
+
+	override void handleKeyDown(Key key, dchar character)
+	{
+		auto gameKey = keyToGameKey(key);
+		if (gameKey != GameKey.none)
+			inputMatrix[gameKey][InputSource.keyboard]++;
+		else
+		if (key == Key.esc)
+			shell.quit();
 	}
 
 	override void handleKeyUp(Key key)
 	{
-		switch (key)
-		{
-			case Key.up   : up   --; break;
-			case Key.down : down --; break;
-			case Key.left : left --; break;
-			case Key.right: right--; break;
-			case Key.space: fire --; break;
-			default       : break;
-		}
+		auto gameKey = keyToGameKey(key);
+		if (gameKey != GameKey.none)
+			inputMatrix[gameKey][InputSource.keyboard] = 0;
 	}
 
 	override bool needJoystick() { return true; }
@@ -172,26 +191,26 @@ final class MyApplication : Application
 
 	override void handleJoyHatMotion (int hat, JoystickHatState state)
 	{
-		void checkDirection(JoystickHatState direction, ref int var)
+		void checkDirection(JoystickHatState direction, GameKey key)
 		{
-			if (!(lastState & direction) && (state & direction)) var++;
-			if ((lastState & direction) && !(state & direction)) var--;
+			if (!(lastState & direction) && (state & direction)) inputMatrix[key][InputSource.joystick]++;
+			if ((lastState & direction) && !(state & direction)) inputMatrix[key][InputSource.joystick]--;
 		}
-		checkDirection(JoystickHatState.up   , up   );
-		checkDirection(JoystickHatState.down , down );
-		checkDirection(JoystickHatState.left , left );
-		checkDirection(JoystickHatState.right, right);
+		checkDirection(JoystickHatState.up   , GameKey.up   );
+		checkDirection(JoystickHatState.down , GameKey.down );
+		checkDirection(JoystickHatState.left , GameKey.left );
+		checkDirection(JoystickHatState.right, GameKey.right);
 		lastState = state;
 	}
 
 	override void handleJoyButtonDown(int button)
 	{
-		fire++;
+		inputMatrix[GameKey.fire][InputSource.joystick]++;
 	}
 
 	override void handleJoyButtonUp  (int button)
 	{
-		fire--;
+		inputMatrix[GameKey.fire][InputSource.joystick]--;
 	}
 
 	override int run(string[] args)
