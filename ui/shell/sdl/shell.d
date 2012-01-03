@@ -15,7 +15,7 @@
  *
  * The Initial Developer of the Original Code is
  * Vladimir Panteleev <vladimir@thecybershadow.net>
- * Portions created by the Initial Developer are Copyright (C) 2011
+ * Portions created by the Initial Developer are Copyright (C) 2011-2012
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -46,8 +46,12 @@ public import ae.ui.shell.events;
 
 final class SDLShell : Shell
 {
-	this()
+	Application application;
+
+	this(Application application)
 	{
+		this.application = application;
+
 		DerelictSDL.load();
 		auto components = SDL_INIT_VIDEO;
 		if (application.needSound())
@@ -70,11 +74,13 @@ final class SDLShell : Shell
 	{
 		assert(video !is null, "Video object not set");
 
+		video.errorCallback = AppCallback(&quit);
+
 		// video (re-)initialization loop
 		while (!quitting)
 		{
 			reinitPending = false;
-			video.initialize();
+			video.initialize(application);
 			setCaption(application.getName());
 
 			// start renderer
@@ -106,12 +112,14 @@ final class SDLShell : Shell
 		VideoStopped,
 	}
 
+	// Note: calling this too often seems to fill up SDL's event queue.
+	// This can result in this function throwing, and SDL skipping events like SDL_QUIT.
 	private void sendCustomEvent(CustomEvent code)
 	{
 		SDL_Event event;
 		event.type = SDL_USEREVENT;
 		event.user.code = code;
-		SDL_PushEvent(&event);
+		sdlEnforce(SDL_PushEvent(&event) == 0, "SDL_PushEvent");
 	}
 
 	override void prod()
@@ -129,7 +137,7 @@ final class SDLShell : Shell
 		sendCustomEvent(CustomEvent.SetCaption);
 	}
 
-	override void videoStopped()
+	void videoStopped()
 	{
 		sendCustomEvent(CustomEvent.VideoStopped);
 	}
@@ -163,6 +171,7 @@ final class SDLShell : Shell
 
 	void handleEvent(SDL_Event* event)
 	{
+		std.stdio.writeln(event.type);
 		switch (event.type)
 		{
 		case SDL_KEYDOWN:
@@ -198,9 +207,10 @@ final class SDLShell : Shell
 
 		case SDL_VIDEORESIZE:
 			application.setWindowSize(event.resize.w, event.resize.h);
-			video.stopAsync();
+			video.stopAsync(AppCallback(&videoStopped));
 			break;
 		case SDL_QUIT:
+			std.stdio.writeln("!!!!!!!! SDL_QUIT");
 			application.handleQuit();
 			break;
 		case SDL_USEREVENT:
@@ -213,7 +223,7 @@ final class SDLShell : Shell
 				SDL_WM_SetCaption(szCaption, szCaption);
 				break;
 			case CustomEvent.VideoStopped:
-				video.initialize();
+				video.initialize(application);
 				video.start();
 				break;
 			}

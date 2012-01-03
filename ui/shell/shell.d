@@ -15,7 +15,7 @@
  *
  * The Initial Developer of the Original Code is
  * Vladimir Panteleev <vladimir@thecybershadow.net>
- * Portions created by the Initial Developer are Copyright (C) 2011
+ * Portions created by the Initial Developer are Copyright (C) 2011-2012
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -34,6 +34,8 @@
 
 module ae.ui.shell.shell;
 
+import ae.ui.video.video;
+
 /// A "shell" handles OS window management, input handling, and various other platform-dependent tasks.
 class Shell
 {
@@ -43,18 +45,18 @@ class Shell
 
 	void quit()
 	{
-		quitting = true;
-		prod();
+		if (!quitting)
+		{
+			quitting = true;
+			prod();
+		}
 	}
 
 	/// Wake event thread with a no-op event.
 	abstract void prod();
 
-	/// Notification of asynchronous stop from video thread.
-	abstract void videoStopped();
+	Video video;
 
 protected:
 	bool quitting;
 }
-
-__gshared Shell shell;

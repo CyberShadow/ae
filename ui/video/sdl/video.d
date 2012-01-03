@@ -15,7 +15,7 @@
  *
  * The Initial Developer of the Original Code is
  * Vladimir Panteleev <vladimir@thecybershadow.net>
- * Portions created by the Initial Developer are Copyright (C) 2011
+ * Portions created by the Initial Developer are Copyright (C) 2011-2012
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -44,12 +44,13 @@ import ae.ui.app.application;
 import ae.ui.shell.shell;
 import ae.ui.shell.sdl.shell;
 import ae.ui.video.sdl.surface;
+import ae.ui.video.surface;
 
 class SDLVideo : Video
 {
 	bool firstStart = true;
 
-	override void initialize()
+	override void initialize(Application application)
 	{
 		//auto surface = SDL_GetVideoSurface();
 		//if (surface)
@@ -77,6 +78,8 @@ class SDLVideo : Video
 
 		sdlEnforce(SDL_SetVideoMode(screenWidth, screenHeight, 32, flags), "can't set video mode");
 
+		renderCallback.bind(&application.render);
+
 		firstStart = false;
 	}
 
@@ -93,29 +96,30 @@ class SDLVideo : Video
 		renderThread.join();
 	}
 
-	override void stopAsync()
+	override void stopAsync(AppCallback callback)
 	{
-		notifyStopped = stopping = true;
+		stopCallback = callback;
+		stopping = true;
 	}
 
 private:
 	Thread renderThread;
-	bool stopping, notifyStopped;
+	bool stopping;
+	AppCallback stopCallback;
+	AppCallbackEx!(Surface) renderCallback;
 
 	void renderThreadProc()
 	{
+		scope(failure) if (errorCallback) try { errorCallback.call(); } catch {}
+
 		auto surface = new SDLSurface(sdlEnforce(SDL_GetVideoSurface()));
 		while (!stopping)
 		{
 			// TODO: predict flip (vblank wait) duration and render at the last moment
-			synchronized (application)
-			{
-				scope(failure) shell.quit();
-				application.render(surface);
-			}
+			renderCallback.call(surface);
 			surface.flip();
 		}
-		if (notifyStopped)
-			shell.videoStopped();
+		if (stopCallback)
+			stopCallback.call();
 	}
 }

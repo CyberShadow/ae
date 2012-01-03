@@ -15,7 +15,7 @@
  *
  * The Initial Developer of the Original Code is
  * Vladimir Panteleev <vladimir@thecybershadow.net>
- * Portions created by the Initial Developer are Copyright (C) 2011
+ * Portions created by the Initial Developer are Copyright (C) 2011-2012
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -35,7 +35,7 @@
 module ae.demo.test.main;
 
 import ae.ui.app.application;
-import ae.ui.app.main;
+import ae.ui.app.posix.main;
 import ae.ui.shell.shell;
 import ae.ui.shell.sdl.shell;
 import ae.ui.video.video;
@@ -52,9 +52,9 @@ final class MyApplication : WMApplication
 
 	override int run(string[] args)
 	{
-		shell = new SDLShell();
-		video = new SDLVideo();
-		root.children ~= new MyControl();
+		shell = new SDLShell(this);
+		shell.video = new SDLVideo();
+		root.children ~= new MyControl(shell);
 		shell.run();
 		return 0;
 	}
@@ -62,5 +62,5 @@ final class MyApplication : WMApplication
 
 shared static this()
 {
-	application = new MyApplication;
+	createApplication!MyApplication();
 }

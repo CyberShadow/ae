@@ -11,11 +11,11 @@
  * for the specific language governing rights and limitations under the
  * License.
  *
- * The Original Code is the ArmageddonEngine library.
+ * The Original Code is the Team15 library.
  *
  * The Initial Developer of the Original Code is
  * Vladimir Panteleev <vladimir@thecybershadow.net>
- * Portions created by the Initial Developer are Copyright (C) 2011-2012
+ * Portions created by the Initial Developer are Copyright (C) 2012
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -32,25 +32,16 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-module ae.ui.video.video;
+/// Exception formatting
+module ae.utils.exception;
 
-import ae.ui.app.application;
+import std.string;
 
-class Video
+string formatException(Throwable e)
 {
-public:
-	/// Initialize video.
-	abstract void initialize(Application application);
-
-	/// Start render thread.
-	abstract void start();
-
-	/// Stop render thread (may block).
-	abstract void stop();
-
-	/// Stop render thread (asynchronous).
-	abstract void stopAsync(AppCallback callback);
-
-	/// Shell hooks.
-	AppCallback errorCallback;
+	string[] descriptions;
+	while (e)
+		descriptions ~= e.toString(),
+		e = e.next;
+	return descriptions.join("-----------------------------------\n");
 }

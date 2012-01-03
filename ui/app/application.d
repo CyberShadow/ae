@@ -15,7 +15,7 @@
  *
  * The Initial Developer of the Original Code is
  * Vladimir Panteleev <vladimir@thecybershadow.net>
- * Portions created by the Initial Developer are Copyright (C) 2011
+ * Portions created by the Initial Developer are Copyright (C) 2011-2012
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -133,5 +133,46 @@ class Application
 	void render(Surface s) {}
 }
 
-/// The application must initialise this with an instance of an Application implementation in a static constructor.
-__gshared Application application;
+private __gshared Application application;
+
+/// The application must call this function with its own Application implementation in a static constructor.
+void createApplication(A : Application)()
+{
+	assert(application is null, "Application already set");
+	application = new A;
+}
+
+// for use in ae.ui.app.*
+int runApplication(string[] args)
+{
+	assert(application !is null, "Application object not set");
+	return application.run(args);
+}
+
+/// Wraps a delegate that is to be called only from the application thread context.
+struct AppCallbackEx(A...)
+{
+	private void delegate(A) f;
+
+	void bind(void delegate(A) f)
+	{
+		this.f = f;
+	}
+
+	/// Blocks.
+	void call(A args)
+	{
+		synchronized(application)
+		{
+			f(args);
+		}
+	}
+
+	bool opCast(T)()
+		if (is(T == bool))
+	{
+		return f !is null;
+	}
+}
+
+alias AppCallbackEx!() AppCallback;

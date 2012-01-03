@@ -15,7 +15,7 @@
  *
  * The Initial Developer of the Original Code is
  * Vladimir Panteleev <vladimir@thecybershadow.net>
- * Portions created by the Initial Developer are Copyright (C) 2011
+ * Portions created by the Initial Developer are Copyright (C) 2011-2012
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -44,10 +44,13 @@ import std.random;
 
 class MyControl : Control
 {
-	this()
+	Shell shell;
+
+	this(Shell shell)
 	{
 		w = 800;
 		h = 600;
+		this.shell = shell;
 	}
 
 	struct Coord { uint x, y, c; void* dummy; }
@@ -70,7 +73,14 @@ class MyControl : Control
 	{
 		//foreach (i; 0..100)
 		//	coords ~= Coord(uniform(0, w), uniform(0, h), uniform(0, 0x1_00_00_00));
-		shell.setCaption(to!string(coords.length));
+		static size_t oldCoordsLength;
+		if (coords.length != oldCoordsLength)
+		{
+			shell.setCaption(to!string(coords.length));
+			oldCoordsLength = coords.length;
+		}
+
+		// if (coords.length > 100) throw new Exception("derp");
 
 		auto b = s.lock();
 		foreach (coord; coords)

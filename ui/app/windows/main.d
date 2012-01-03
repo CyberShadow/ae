@@ -15,7 +15,7 @@
  *
  * The Initial Developer of the Original Code is
  * Vladimir Panteleev <vladimir@thecybershadow.net>
- * Portions created by the Initial Developer are Copyright (C) 2011
+ * Portions created by the Initial Developer are Copyright (C) 2011-2012
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -41,6 +41,7 @@ import win32.windef;
 import win32.winuser;
 
 import ae.ui.app.application;
+import ae.utils.exception;
 
 extern (Windows)
 int WinMain(HINSTANCE hInstance,
@@ -58,17 +59,13 @@ int WinMain(HINSTANCE hInstance,
 	try
 	{		
 		Runtime.initialize(&exceptionHandler);
-
-		if (application is null)
-			throw new Exception("Application object not set");
-		result = application.run(getArgs());
-
+		result = runApplication(getArgs());
 		Runtime.terminate(&exceptionHandler);
 	}
 
 	catch (Throwable o)				// catch any uncaught exceptions
 	{
-		MessageBoxA(null, toUTFz!LPCSTR(o.toString()), "Error",
+		MessageBoxA(null, toUTFz!LPCSTR(formatException(o)), "Error",
 					MB_OK | MB_ICONEXCLAMATION);
 		result = 1;				// failed
 	}

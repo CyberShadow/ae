@@ -15,7 +15,7 @@
  *
  * The Initial Developer of the Original Code is
  * Vladimir Panteleev <vladimir@thecybershadow.net>
- * Portions created by the Initial Developer are Copyright (C) 2011
+ * Portions created by the Initial Developer are Copyright (C) 2011-2012
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -34,11 +34,17 @@
 
 module ae.ui.app.posix.main;
 
+import std.stdio;
+import ae.utils.exception;
 import ae.ui.app.application;
 
 int main(string[] args)
 {
-	if (application is null)
-		throw new Exception("Application object not set");
-	return application.run(args);
+	try
+		return runApplication(args);
+	catch (Throwable o)
+	{
+		stderr.writeln(formatException(o));
+		return 1;
+	}
 }

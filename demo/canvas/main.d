@@ -15,7 +15,7 @@
  *
  * The Initial Developer of the Original Code is
  * Vladimir Panteleev <vladimir@thecybershadow.net>
- * Portions created by the Initial Developer are Copyright (C) 2011
+ * Portions created by the Initial Developer are Copyright (C) 2011-2012
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -55,6 +55,7 @@ final class MyApplication : Application
 	override string getName() { return "Demo/Canvas"; }
 	override string getCompanyName() { return "CyberShadow"; }
 
+	Shell shell;
 	FPSCounter fps;
 	bool first = true;
 
@@ -150,8 +151,8 @@ final class MyApplication : Application
 
 	override int run(string[] args)
 	{
-		shell = new SDLShell();
-		video = new SDLVideo();
+		shell = new SDLShell(this);
+		shell.video = new SDLVideo();
 		shell.run();
 		return 0;
 	}
@@ -164,5 +165,5 @@ final class MyApplication : Application
 
 shared static this()
 {
-	application = new MyApplication;
+	createApplication!MyApplication();
 }

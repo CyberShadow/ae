@@ -15,7 +15,7 @@
  *
  * The Initial Developer of the Original Code is
  * Vladimir Panteleev <vladimir@thecybershadow.net>
- * Portions created by the Initial Developer are Copyright (C) 2011
+ * Portions created by the Initial Developer are Copyright (C) 2011-2012
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -43,6 +43,7 @@ import ae.ui.video.surface;
 /// Specialization of Application class which automatically handles framework messages.
 class WMApplication : Application
 {
+	Shell shell;
 	RootControl root;
 
 	this()
