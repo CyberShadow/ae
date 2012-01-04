@@ -70,6 +70,21 @@ final class SDLShell : Shell
 		}
 	}
 
+	/// A version of SDL_WaitEvent that sleeps less than 10ms at a time.
+	private int waitEvent()
+	{
+		while (true)
+		{
+			SDL_PumpEvents();
+			switch (SDL_PeepEvents(null, 1, SDL_GETEVENT, SDL_ALLEVENTS))
+			{
+				case -1: return 0;
+				case  1: return 1;
+				case  0: SDL_Delay(1);
+			}
+		}
+	}
+
 	override void run()
 	{
 		assert(video !is null, "Video object not set");
@@ -89,7 +104,7 @@ final class SDLShell : Shell
 			// pump events
 			while (!reinitPending && !quitting)
 			{
-				sdlEnforce(SDL_WaitEvent(null));
+				sdlEnforce(waitEvent());
 
 				synchronized(application)
 				{
