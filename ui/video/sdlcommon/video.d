@@ -49,11 +49,11 @@ import ae.ui.video.renderer;
 class SDLCommonVideo : Video
 {
 	bool firstStart = true;
+	uint screenWidth, screenHeight, flags;
 
 	override void initialize(Application application)
 	{
-		uint screenWidth, screenHeight;
-		uint flags = getSDLFlags();
+		flags = getSDLFlags();
 
 		if (application.isFullScreen())
 		{
@@ -70,8 +70,6 @@ class SDLCommonVideo : Video
 			environment["SDL_VIDEO_CENTERED"] = "1";
 		else
 			environment.remove("SDL_VIDEO_CENTERED");
-
-		sdlEnforce(SDL_SetVideoMode(screenWidth, screenHeight, 32, flags), "can't set video mode");
 
 		renderCallback.bind(&application.render);
 
@@ -110,6 +108,9 @@ private:
 	void renderThreadProc()
 	{
 		scope(failure) if (errorCallback) try { errorCallback.call(); } catch {}
+
+		// OpenGL commands must come from the same thread that initialized video
+		sdlEnforce(SDL_SetVideoMode(screenWidth, screenHeight, 32, flags), "can't set video mode");
 
 		auto renderer = getRenderer();
 		while (!stopping)

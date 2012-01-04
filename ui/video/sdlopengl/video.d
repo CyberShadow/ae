@@ -32,50 +32,37 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-module ae.demo.render.main;
+module ae.ui.video.sdlopengl.video;
 
-import std.random;
+import derelict.sdl.sdl;
+import derelict.opengl.gl;
+import derelict.opengl.glu;
 
 import ae.ui.app.application;
-import ae.ui.app.posix.main;
-import ae.ui.shell.shell;
 import ae.ui.shell.sdl.shell;
-import ae.ui.video.sdl.video;
-import ae.ui.video.sdlopengl.video;
+import ae.ui.video.sdlcommon.video;
 import ae.ui.video.renderer;
-import ae.utils.fps;
+import ae.ui.video.sdlopengl.renderer;
 
-final class MyApplication : Application
+class SDLOpenGLVideo : SDLCommonVideo
 {
-	override string getName() { return "Demo/Render"; }
-	override string getCompanyName() { return "CyberShadow"; }
-
-	Shell shell;
-	FPSCounter fps;
-
-	override void render(Renderer s)
+	override void initialize(Application application)
 	{
-		fps.tick(&shell.setCaption);
+        DerelictGL.load();
+        DerelictGLU.load();
 
-		s.putPixel(uniform(0, s.width), uniform(0, s.height), BGRX(uniform!ubyte(), uniform!ubyte(), uniform!ubyte()));
+		super.initialize(application);
 	}
 
-	override int run(string[] args)
+protected:
+	override uint getSDLFlags()
 	{
-		shell = new SDLShell(this);
-		//shell.video = new SDLVideo();
-		shell.video = new SDLOpenGLVideo();
-		shell.run();
-		return 0;
+		return SDL_OPENGL;
 	}
 
-	override void handleQuit()
+	override Renderer getRenderer()
 	{
-		shell.quit();
+		auto s = sdlEnforce(SDL_GetVideoSurface());
+		return new SDLOpenGLRenderer(s.w, s.h);
 	}
-}
-
-shared static this()
-{
-	createApplication!MyApplication();
 }

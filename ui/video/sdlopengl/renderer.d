@@ -32,50 +32,70 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-module ae.demo.render.main;
+module ae.ui.video.sdlopengl.renderer;
 
-import std.random;
+import std.exception;
 
-import ae.ui.app.application;
-import ae.ui.app.posix.main;
-import ae.ui.shell.shell;
-import ae.ui.shell.sdl.shell;
-import ae.ui.video.sdl.video;
-import ae.ui.video.sdlopengl.video;
+import derelict.sdl.sdl;
+import derelict.opengl.gl;
+import derelict.opengl.glu;
+
 import ae.ui.video.renderer;
-import ae.utils.fps;
+import ae.ui.shell.sdl.shell;
 
-final class MyApplication : Application
+final class SDLOpenGLRenderer : Renderer
 {
-	override string getName() { return "Demo/Render"; }
-	override string getCompanyName() { return "CyberShadow"; }
-
-	Shell shell;
-	FPSCounter fps;
-
-	override void render(Renderer s)
+	this(uint w, uint h)
 	{
-		fps.tick(&shell.setCaption);
+		this.w = w;		
+		this.h = h;
+		this.canFastLock = false;
 
-		s.putPixel(uniform(0, s.width), uniform(0, s.height), BGRX(uniform!ubyte(), uniform!ubyte(), uniform!ubyte()));
+		glMatrixMode(GL_PROJECTION);
+		glLoadIdentity();
+		glOrtho(0, w, h, 0, 0, 1);
+		glMatrixMode(GL_MODELVIEW);
 	}
 
-	override int run(string[] args)
+	override Bitmap fastLock()
 	{
-		shell = new SDLShell(this);
-		//shell.video = new SDLVideo();
-		shell.video = new SDLOpenGLVideo();
-		shell.run();
-		return 0;
+		assert(false, "Can't fastLock OpenGL");
 	}
 
-	override void handleQuit()
+	override Bitmap lock()
 	{
-		shell.quit();
+		assert(false, "Not implemented");
 	}
-}
 
-shared static this()
-{
-	createApplication!MyApplication();
+	override void unlock()
+	{
+		assert(false, "Not implemented");
+	}
+
+	override void present()
+	{
+		SDL_GL_SwapBuffers();
+	}
+
+	// **********************************************************************
+
+	private uint w, h;
+
+	override @property uint width()
+	{
+		return w;
+	}
+
+	override @property uint height()
+	{
+		return h;
+	}
+
+	override void putPixel(int x, int y, COLOR color)
+	{
+		glColor3b(color.r, color.g, color.b);
+		glBegin(GL_POINTS);
+		glVertex2f(x+0.5f, y+0.5f);
+		glEnd();
+	}
 }
