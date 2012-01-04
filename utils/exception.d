@@ -43,5 +43,5 @@ string formatException(Throwable e)
 	while (e)
 		descriptions ~= e.toString(),
 		e = e.next;
-	return descriptions.join("-----------------------------------\n");
+	return descriptions.join("\n===================================\n");
 }

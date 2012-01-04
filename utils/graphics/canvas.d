@@ -15,7 +15,7 @@
  *
  * The Initial Developer of the Original Code is
  * Vladimir Panteleev <vladimir@thecybershadow.net>
- * Portions created by the Initial Developer are Copyright (C) 2007-2011
+ * Portions created by the Initial Developer are Copyright (C) 2007-2012
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -119,16 +119,39 @@ mixin template Canvas()
 			pixels[0..h*stride] = c;
 	}
 
-	void draw(SRCCANVAS)(SRCCANVAS src, int x, int y)
+	void draw(bool CHECKED=true, SRCCANVAS)(SRCCANVAS src, int x, int y)
 		if (IsCanvas!SRCCANVAS && is(COLOR == SRCCANVAS.COLOR))
 	{
-		assert(x+src.w <= w && y+src.h <= h);
-		// TODO: alpha blending
-		size_t dstStart = y*stride+x, srcStart = 0;
-		foreach (j; 0..src.h)
-			pixels[dstStart..dstStart+src.w] = src.pixels[srcStart..srcStart+src.w],
-			dstStart += stride,
-			srcStart += src.stride;
+		static if (CHECKED)
+		{
+			if (x+src.w <= 0 || y+src.h <= 0 || x >= w || y >= h)
+				return;
+
+			auto r = src.window(0, 0, src.w, src.h);
+			if (x < 0)
+				r = r.window(-x, 0, r.w, r.h),
+				x = 0;
+			if (y < 0)
+				r = r.window(0, -y, r.w, r.h),
+				y = 0;
+			if (x+r.w > w)
+				r = r.window(0, 0, w-x, r.h);
+			if (y+r.h > h)
+				r = r.window(0, 0, r.w, h-y);
+
+			draw!false(r, x, y);
+		}
+		else
+		{
+			assert(x >= 0 && x+src.w <= w && y >= 0 && y+src.h <= h);
+
+			// TODO: alpha blending
+			size_t dstStart = y*stride+x, srcStart = 0;
+			foreach (j; 0..src.h)
+				pixels[dstStart..dstStart+src.w] = src.pixels[srcStart..srcStart+src.w],
+				dstStart += stride,
+				srcStart += src.stride;
+		}
 	}
 
 	/// Copy another canvas while applying a pixel transformation.
