@@ -74,4 +74,11 @@ class Renderer
 	abstract @property uint height();
 
 	abstract void putPixel(int x, int y, COLOR color);
+
+	struct Pixel { int x, y; COLOR color; }
+	void putPixels(Pixel[] pixels)
+	{
+		foreach (ref pixel; pixels)
+			putPixel(pixel.tupleof);
+	}
 }

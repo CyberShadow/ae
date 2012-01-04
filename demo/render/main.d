@@ -52,21 +52,55 @@ final class MyApplication : Application
 
 	Shell shell;
 	FPSCounter fps;
+	Renderer.Pixel[] pixels;
+	bool useOpenGL, switching;
+
+	this()
+	{
+		foreach (x; 0..256)
+			foreach (y; 0..256)
+				pixels ~= Renderer.Pixel(x, y, BGRX(cast(ubyte)x, cast(ubyte)y, 0));
+	}
+
+	void updateFPS(string fps)
+	{
+		shell.setCaption((useOpenGL ? "OpenGL" : "SDL") ~ " - " ~ fps);
+	}
 
 	override void render(Renderer s)
 	{
-		fps.tick(&shell.setCaption);
+		fps.tick(&updateFPS);
 
-		s.putPixel(uniform(0, s.width), uniform(0, s.height), BGRX(uniform!ubyte(), uniform!ubyte(), uniform!ubyte()));
+		pixels ~= Renderer.Pixel(uniform(0, s.width), uniform(0, s.height), BGRX(uniform!ubyte(), uniform!ubyte(), uniform!ubyte()));
+		s.putPixels(pixels);
 	}
 
 	override int run(string[] args)
 	{
-		shell = new SDLShell(this);
-		//shell.video = new SDLVideo();
-		shell.video = new SDLOpenGLVideo();
-		shell.run();
+		do
+		{
+			switching = false;
+			useOpenGL = !useOpenGL;
+			shell = new SDLShell(this);
+			shell.video = useOpenGL ? new SDLOpenGLVideo() : new SDLVideo();
+			shell.run();
+		} while (switching);
 		return 0;
+	}
+
+	override void handleKeyDown(Key key, dchar character)
+	{
+		switch (key)
+		{
+		case Key.space:
+			switching = true;
+			goto case;
+		case Key.esc:
+			shell.quit();
+			break;
+		default:
+			break;
+		}
 	}
 
 	override void handleQuit()

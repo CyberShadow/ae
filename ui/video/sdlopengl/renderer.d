@@ -93,9 +93,20 @@ final class SDLOpenGLRenderer : Renderer
 
 	override void putPixel(int x, int y, COLOR color)
 	{
-		glColor3b(color.r, color.g, color.b);
+		glColor3ub(color.r, color.g, color.b);
 		glBegin(GL_POINTS);
 		glVertex2f(x+0.5f, y+0.5f);
+		glEnd();
+	}
+
+	override void putPixels(Pixel[] pixels)
+	{
+		glBegin(GL_POINTS);
+		foreach (ref pixel; pixels)
+		{
+			glColor3ub(pixel.color.r, pixel.color.g, pixel.color.b);
+			glVertex2f(pixel.x+0.5f, pixel.y+0.5f);
+		}
 		glEnd();
 	}
 }
