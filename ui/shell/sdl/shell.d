@@ -90,6 +90,7 @@ final class SDLShell : Shell
 		assert(video !is null, "Video object not set");
 
 		video.errorCallback = AppCallback(&quit);
+		quitting = false;
 
 		// video (re-)initialization loop
 		while (!quitting)
@@ -117,6 +118,10 @@ final class SDLShell : Shell
 			// wait for renderer to stop
 			video.stop();
 		}
+	}
+
+	~this()
+	{
 		SDL_Quit();
 	}
 

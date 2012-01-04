@@ -77,11 +77,11 @@ final class MyApplication : Application
 
 	override int run(string[] args)
 	{
+		shell = new SDLShell(this);
 		do
 		{
 			switching = false;
 			useOpenGL = !useOpenGL;
-			shell = new SDLShell(this);
 			shell.video = useOpenGL ? new SDLOpenGLVideo() : new SDLVideo();
 			shell.run();
 		} while (switching);
