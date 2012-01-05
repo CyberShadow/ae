@@ -15,7 +15,7 @@
  *
  * The Initial Developer of the Original Code is
  * Vladimir Panteleev <vladimir@thecybershadow.net>
- * Portions created by the Initial Developer are Copyright (C) 2011-2012
+ * Portions created by the Initial Developer are Copyright (C) 2012
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -32,65 +32,25 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-module ae.ui.video.sdl.renderer;
+module ae.ui.video.software.common;
 
-import std.exception;
-
-import derelict.sdl.sdl;
-
-import ae.ui.shell.sdl.shell;
-import ae.ui.video.renderer;
-import ae.ui.video.software.common;
-
-/// Wrapper for a software SDL_Surface.
-final class SDLRenderer : Renderer
+/// Mixin implementing Renderer methods using Canvas.
+/// Mixin context: "bitmap" must return a Canvas-like object.
+mixin template SoftwareRenderer()
 {
-	SDL_Surface* s;
-	Bitmap bitmap;
-
-	this(SDL_Surface* s)
+	override void putPixel(int x, int y, COLOR color)
 	{
-		this.s = s;
-		enforce(!SDL_MUSTLOCK(s), "Renderer surface is not fastlocking");
-		//this.canFastLock = (s.flags & SDL_HWSURFACE) == 0;
-		this.canFastLock = true;
-
-		enforce(s.format.BytesPerPixel == 4 && s.format.Bmask == 0xFF, "Invalid pixel format");
-		bitmap = Bitmap(cast(COLOR*)s.pixels, s.w, s.h, s.pitch / uint.sizeof);
+		bitmap.safePut(x, y, color);
 	}
 
-	override Bitmap fastLock()
+	override void putPixels(Pixel[] pixels)
 	{
-		return bitmap;
+		foreach (ref pixel; pixels)
+			bitmap.safePut(pixel.x, pixel.y, pixel.color);
 	}
 
-	override Bitmap lock()
+	override void clear()
 	{
-		//sdlEnforce(SDL_LockSurface(s)==0, "Can't lock surface");
-		return bitmap;
+		bitmap.clear(COLOR.init);
 	}
-
-	override void unlock()
-	{
-		//SDL_UnlockSurface(s);
-	}
-
-	override void present()
-	{
-		sdlEnforce(SDL_Flip(s)==0);
-	}
-
-	// **********************************************************************
-
-	override @property uint width()
-	{
-		return s.w;
-	}
-
-	override @property uint height()
-	{
-		return s.h;
-	}
-
-	mixin SoftwareRenderer;
 }
