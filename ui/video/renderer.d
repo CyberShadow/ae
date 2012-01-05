@@ -81,4 +81,6 @@ class Renderer
 		foreach (ref pixel; pixels)
 			putPixel(pixel.tupleof);
 	}
+
+	abstract void clear();
 }

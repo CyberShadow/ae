@@ -102,4 +102,11 @@ final class SDLRenderer : Renderer
 			bitmap.safePut(pixel.x, pixel.y, pixel.color);
 		unlock();
 	}
+
+	override void clear()
+	{
+		auto bitmap = fastLock();
+		bitmap.clear(COLOR.init);
+		unlock();
+	}
 }

@@ -72,6 +72,7 @@ final class MyApplication : Application
 		fps.tick(&updateFPS);
 
 		pixels ~= Renderer.Pixel(uniform(0, s.width), uniform(0, s.height), BGRX(uniform!ubyte(), uniform!ubyte(), uniform!ubyte()));
+		s.clear();
 		s.putPixels(pixels);
 	}
 

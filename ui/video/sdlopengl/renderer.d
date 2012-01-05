@@ -109,4 +109,9 @@ final class SDLOpenGLRenderer : Renderer
 		}
 		glEnd();
 	}
+
+	override void clear()
+	{
+		glClear(GL_COLOR_BUFFER_BIT);
+	}
 }
