@@ -48,10 +48,52 @@ import ae.ui.video.renderer;
 
 class SDLCommonVideo : Video
 {
-	bool firstStart = true;
-	uint screenWidth, screenHeight, flags;
+	this()
+	{
+		starting = false;
+		renderThread = new Thread(&renderThreadProc);
+		renderThread.start();
+	}
 
-	override void initialize(Application application)
+	override void shutdown()
+	{
+		stopping = quitting = true;
+		renderThread.join();
+	}
+
+	override void start(Application application)
+	{
+		configure(application);
+
+		started = stopping = false;
+		starting = true;
+		volatile while (!started) { SDL_Delay(1); SDL_PumpEvents(); }
+	}
+
+	override void stop()
+	{
+		stopped = false;
+		stopping = true;
+		volatile while (!stopped) { SDL_Delay(1); SDL_PumpEvents(); }
+	}
+
+	override void stopAsync(AppCallback callback)
+	{
+		stopCallback = callback;
+		stopped = false;
+		stopping = true;
+	}
+
+protected:
+	abstract uint getSDLFlags();
+	abstract Renderer getRenderer();
+	void prepare() {}
+
+private:
+	uint screenWidth, screenHeight, flags;
+	bool firstStart = true;
+
+	final void configure(Application application)
 	{
 		flags = getSDLFlags();
 
@@ -76,50 +118,46 @@ class SDLCommonVideo : Video
 		firstStart = false;
 	}
 
-	override void start()
-	{
-		stopping = false;
-		renderThread = new Thread(&renderThreadProc);
-		renderThread.start();
-	}
-
-	override void stop()
-	{
-		stopping = true;
-		renderThread.join();
-	}
-
-	override void stopAsync(AppCallback callback)
-	{
-		stopCallback = callback;
-		stopping = true;
-	}
-
-protected:
-	abstract uint getSDLFlags();
-	abstract Renderer getRenderer();
-
-private:
 	Thread renderThread;
-	bool stopping;
+	shared bool starting, started, stopping, stopped, quitting, quit;
 	AppCallback stopCallback;
 	AppCallbackEx!(Renderer) renderCallback;
 
-	void renderThreadProc()
+	final void renderThreadProc()
 	{
-		scope(failure) if (errorCallback) try { errorCallback.call(); } catch {}
-
-		// OpenGL commands must come from the same thread that initialized video
-		sdlEnforce(SDL_SetVideoMode(screenWidth, screenHeight, 32, flags), "can't set video mode");
-
-		auto renderer = getRenderer();
-		while (!stopping)
+		// SDL expects that only one thread across the program's lifetime will do OpenGL initialization.
+		// Thus, re-initialization must happen from only one thread.
+		// This thread sleeps and polls while it's not told to run.
+	outer:
+		while (!quitting)
 		{
-			// TODO: predict flip (vblank wait) duration and render at the last moment
-			renderCallback.call(renderer);
-			renderer.present();
+			volatile while (!starting)
+			{
+				// TODO: use proper semaphores
+				if (quitting) return;
+				SDL_Delay(1);
+			}
+			started = true;
+			starting = false;
+
+			scope(failure) if (errorCallback) try { errorCallback.call(); } catch {}
+
+			// OpenGL commands must come from the same thread that initialized video.
+			// SDL does not expose anything like wglMakeCurrent.
+			prepare();
+			sdlEnforce(SDL_SetVideoMode(screenWidth, screenHeight, 32, flags), "can't set video mode");
+
+			auto renderer = getRenderer();
+			while (!stopping)
+			{
+				// TODO: predict flip (vblank wait) duration and render at the last moment
+				renderCallback.call(renderer);
+				renderer.present();
+			}
+			if (stopCallback)
+				stopCallback.call();
+			stopped = true;
+			stopping = false;
 		}
-		if (stopCallback)
-			stopCallback.call();
 	}
 }

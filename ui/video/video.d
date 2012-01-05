@@ -39,17 +39,17 @@ import ae.ui.app.application;
 class Video
 {
 public:
-	/// Initialize video.
-	abstract void initialize(Application application);
+	/// Start driver (Application dictates settings).
+	abstract void start(Application application);
 
-	/// Start render thread.
-	abstract void start();
-
-	/// Stop render thread (may block).
+	/// Stop driver (may block).
 	abstract void stop();
 
-	/// Stop render thread (asynchronous).
+	/// Stop driver (asynchronous).
 	abstract void stopAsync(AppCallback callback);
+
+	/// Shutdown (de-initialize) video driver. Blocks.
+	abstract void shutdown();
 
 	/// Shell hooks.
 	AppCallback errorCallback;

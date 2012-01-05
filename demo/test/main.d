@@ -56,6 +56,7 @@ final class MyApplication : WMApplication
 		shell.video = new SDLVideo();
 		root.children ~= new MyControl(shell);
 		shell.run();
+		shell.video.shutdown();
 		return 0;
 	}
 }

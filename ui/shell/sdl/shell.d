@@ -96,11 +96,10 @@ final class SDLShell : Shell
 		while (!quitting)
 		{
 			reinitPending = false;
-			video.initialize(application);
 			setCaption(application.getName());
 
 			// start renderer
-			video.start();
+			video.start(application);
 
 			// pump events
 			while (!reinitPending && !quitting)
@@ -129,7 +128,6 @@ final class SDLShell : Shell
 	{
 		None,
 		SetCaption,
-		VideoStopped,
 	}
 
 	// Note: calling this too often seems to fill up SDL's event queue.
@@ -155,11 +153,6 @@ final class SDLShell : Shell
 		newCaption = caption;
 		// Send a message to event thread to avoid SendMessage(WM_TEXTCHANGED) deadlock
 		sendCustomEvent(CustomEvent.SetCaption);
-	}
-
-	void videoStopped()
-	{
-		sendCustomEvent(CustomEvent.VideoStopped);
 	}
 
 	MouseButton translateMouseButton(ubyte sdlButton)
@@ -226,7 +219,7 @@ final class SDLShell : Shell
 
 		case SDL_VIDEORESIZE:
 			application.setWindowSize(event.resize.w, event.resize.h);
-			video.stopAsync(AppCallback(&videoStopped));
+			reinitPending = true;
 			break;
 		case SDL_QUIT:
 			application.handleQuit();
@@ -239,10 +232,6 @@ final class SDLShell : Shell
 			case CustomEvent.SetCaption:
 				auto szCaption = toStringz(newCaption);
 				SDL_WM_SetCaption(szCaption, szCaption);
-				break;
-			case CustomEvent.VideoStopped:
-				video.initialize(application);
-				video.start();
 				break;
 			}
 			break;

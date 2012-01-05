@@ -46,12 +46,10 @@ import ae.ui.video.sdlopengl.renderer;
 
 class SDLOpenGLVideo : SDLCommonVideo
 {
-	override void initialize(Application application)
+	this()
 	{
-        DerelictGL.load();
-        DerelictGLU.load();
-
-		super.initialize(application);
+		DerelictGL.load();
+		DerelictGLU.load();
 	}
 
 protected:
@@ -64,5 +62,11 @@ protected:
 	{
 		auto s = sdlEnforce(SDL_GetVideoSurface());
 		return new SDLOpenGLRenderer(s.w, s.h);
+	}
+
+	override void prepare()
+	{
+		SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+		SDL_GL_SetAttribute(SDL_GL_SWAP_CONTROL, 0);
 	}
 }

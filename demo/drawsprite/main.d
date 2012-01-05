@@ -74,6 +74,7 @@ final class MyApplication : Application
 		shell = new SDLShell(this);
 		shell.video = new SDLVideo();
 		shell.run();
+		shell.video.shutdown();
 		return 0;
 	}
 
