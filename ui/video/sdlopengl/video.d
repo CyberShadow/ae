@@ -46,6 +46,8 @@ import ae.ui.video.sdlopengl.renderer;
 
 class SDLOpenGLVideo : SDLCommonVideo
 {
+	bool vsync = true;
+
 	this()
 	{
 		DerelictGL.load();
@@ -67,6 +69,6 @@ protected:
 	override void prepare()
 	{
 		SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-		SDL_GL_SetAttribute(SDL_GL_SWAP_CONTROL, 0);
+		SDL_GL_SetAttribute(SDL_GL_SWAP_CONTROL, vsync ? 1 : 0);
 	}
 }
