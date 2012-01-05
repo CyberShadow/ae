@@ -51,6 +51,7 @@ final class SDLOpenGLRenderer : Renderer
 		this.h = h;
 		this.canFastLock = false;
 
+		glViewport(0, 0, w, h);
 		glMatrixMode(GL_PROJECTION);
 		glLoadIdentity();
 		glOrtho(0, w, h, 0, 0, 1);
