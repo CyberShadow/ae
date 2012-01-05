@@ -94,4 +94,12 @@ final class SDLRenderer : Renderer
 		bitmap.safePut(x, y, color);
 		unlock();
 	}
+
+	override void putPixels(Pixel[] pixels)
+	{
+		auto bitmap = fastLock();
+		foreach (ref pixel; pixels)
+			bitmap.safePut(pixel.x, pixel.y, pixel.color);
+		unlock();
+	}
 }
