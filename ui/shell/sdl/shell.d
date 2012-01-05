@@ -51,6 +51,7 @@ final class SDLShell : Shell
 	this(Application application)
 	{
 		this.application = application;
+		this.caption = application.getName();
 
 		DerelictSDL.load();
 		auto components = SDL_INIT_VIDEO;
@@ -96,7 +97,7 @@ final class SDLShell : Shell
 		while (!quitting)
 		{
 			reinitPending = false;
-			setCaption(application.getName());
+			setCaption(caption);
 
 			// start renderer
 			video.start(application);
@@ -127,7 +128,7 @@ final class SDLShell : Shell
 	private enum CustomEvent : int
 	{
 		None,
-		SetCaption,
+		UpdateCaption,
 	}
 
 	// Note: calling this too often seems to fill up SDL's event queue.
@@ -145,14 +146,14 @@ final class SDLShell : Shell
 		sendCustomEvent(CustomEvent.None);
 	}
 
-	private string newCaption;
+	private string caption;
 
 	override void setCaption(string caption)
 	{
 		// We can't pass the string in the message because the GC won't see it
-		newCaption = caption;
+		this.caption = caption;
 		// Send a message to event thread to avoid SendMessage(WM_TEXTCHANGED) deadlock
-		sendCustomEvent(CustomEvent.SetCaption);
+		sendCustomEvent(CustomEvent.UpdateCaption);
 	}
 
 	MouseButton translateMouseButton(ubyte sdlButton)
@@ -229,8 +230,8 @@ final class SDLShell : Shell
 			{
 			case CustomEvent.None:
 				break;
-			case CustomEvent.SetCaption:
-				auto szCaption = toStringz(newCaption);
+			case CustomEvent.UpdateCaption:
+				auto szCaption = toStringz(caption);
 				SDL_WM_SetCaption(szCaption, szCaption);
 				break;
 			}

@@ -64,7 +64,7 @@ final class MyApplication : Application
 
 	void updateFPS(string fps)
 	{
-		shell.setCaption((useOpenGL ? "OpenGL" : "SDL") ~ " - " ~ fps);
+		shell.setCaption((useOpenGL ? "SDL/OpenGL" : "SDL/Software") ~ " - " ~ fps);
 	}
 
 	override void render(Renderer s)
@@ -86,6 +86,7 @@ final class MyApplication : Application
 			switching = false;
 			useOpenGL = !useOpenGL;
 			shell.video = useOpenGL ? opengl : sdl ;
+			updateFPS("?");
 			shell.run();
 		} while (switching);
 		sdl.shutdown();
