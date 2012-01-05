@@ -56,6 +56,8 @@ final class SDLOpenGLRenderer : Renderer
 		glLoadIdentity();
 		glOrtho(0, w, h, 0, 0, 1);
 		glMatrixMode(GL_MODELVIEW);
+		glLoadIdentity();
+		glDisable(GL_DEPTH_TEST);
 	}
 
 	override Bitmap fastLock()
