@@ -456,9 +456,9 @@ mixin template Canvas()
 
 	static assert(COLOR.SameType, "Asymmetric color types not supported, fix me!");
 	/// Fixed-point type, big enough to hold a coordinate, with fractionary precision corresponding to channel precision.
-	typedef SignedBitsType!(COLOR.BaseTypeBits   + CoordinateBits) fix;
+	alias SignedBitsType!(COLOR.BaseTypeBits   + CoordinateBits) fix;
 	/// Type to hold temporary values for multiplication and division
-	typedef SignedBitsType!(COLOR.BaseTypeBits*2 + CoordinateBits) fix2;
+	alias SignedBitsType!(COLOR.BaseTypeBits*2 + CoordinateBits) fix2;
 
 	static assert(COLOR.BaseTypeBits < 32, "Shift operators are broken for shifts over 32 bits, fix me!");
 	fix tofix(T:int  )(T x) { return cast(fix) (x<<COLOR.BaseTypeBits); }
@@ -473,7 +473,7 @@ mixin template Canvas()
 	/// Type only large enough to hold a fractionary part of a "fix" (i.e. color channel precision). Used for alpha values, etc.
 	alias COLOR.BaseType frac;
 	/// Type to hold temporary values for multiplication and division
-	typedef UnsignedBitsType!(COLOR.BaseTypeBits*2) frac2;
+	alias UnsignedBitsType!(COLOR.BaseTypeBits*2) frac2;
 
 	frac tofrac(T:float)(T x) { return cast(frac) (x*(1<<COLOR.BaseTypeBits)); }
 	frac fixfpart(fix x) { return cast(frac)x; }

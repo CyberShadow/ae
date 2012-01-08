@@ -81,7 +81,8 @@ final class SDLShell : Shell
 			{
 				case -1: return 0;
 				case  1: return 1;
-				case  0: SDL_Delay(1);
+				case  0: SDL_Delay(1); break;
+				default: assert(0);
 			}
 		}
 	}

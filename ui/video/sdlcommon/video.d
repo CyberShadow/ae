@@ -67,14 +67,14 @@ class SDLCommonVideo : Video
 
 		started = stopping = false;
 		starting = true;
-		volatile while (!started) { SDL_Delay(1); SDL_PumpEvents(); }
+		while (!started) { SDL_Delay(1); SDL_PumpEvents(); }
 	}
 
 	override void stop()
 	{
 		stopped = false;
 		stopping = true;
-		volatile while (!stopped) { SDL_Delay(1); SDL_PumpEvents(); }
+		while (!stopped) { SDL_Delay(1); SDL_PumpEvents(); }
 	}
 
 	override void stopAsync(AppCallback callback)
@@ -131,7 +131,7 @@ private:
 	outer:
 		while (!quitting)
 		{
-			volatile while (!starting)
+			while (!starting)
 			{
 				// TODO: use proper semaphores
 				if (quitting) return;
