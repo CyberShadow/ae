@@ -43,6 +43,7 @@ import ae.ui.shell.shell;
 import ae.ui.video.video;
 import ae.ui.app.application;
 public import ae.ui.shell.events;
+import ae.ui.timer.timer;
 
 final class SDLShell : Shell
 {
@@ -54,7 +55,7 @@ final class SDLShell : Shell
 		this.caption = application.getName();
 
 		DerelictSDL.load();
-		auto components = SDL_INIT_VIDEO;
+		auto components = SDL_INIT_VIDEO | SDL_INIT_TIMER;
 		if (application.needSound())
 			components |= SDL_INIT_AUDIO;
 		if (application.needJoystick())

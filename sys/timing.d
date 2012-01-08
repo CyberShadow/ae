@@ -56,8 +56,6 @@ private:
 	TimerTask tail;
 	size_t count;
 
-	this() {}
-
 	void add(TimerTask task, TimerTask start)
 	{
 		auto now = TickDuration.currSystemTick();
@@ -207,11 +205,13 @@ public:
 		return head !is null;
 	}
 
-	/// Return the time until the first scheduled task, or TickDuration(long.max) if no tasks are scheduled.
+	enum NEVER = TickDuration(long.max);
+
+	/// Return the time until the first scheduled task, or NEVER if no tasks are scheduled.
 	TickDuration getRemainingTime()
 	{
 		if (head is null)
-			return TickDuration(long.max);
+			return NEVER;
 
 		auto now = TickDuration.currSystemTick();
 		if (now < head.when)
@@ -306,8 +306,7 @@ TimerTask setTimeout(void delegate() handler, TickDuration delay)
 
 TimerTask setInterval(void delegate() handler, TickDuration delay)
 {
-	TimerTask task;
-	task = new TimerTask(delay, (Timer timer, TimerTask task) { mainTimer.add(task); handler(); });
+	auto task = new TimerTask(delay, (Timer timer, TimerTask task) { mainTimer.add(task); handler(); });
 	mainTimer.add(task);
 	return task;
 }
