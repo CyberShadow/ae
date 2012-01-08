@@ -82,5 +82,8 @@ class Renderer
 			putPixel(pixel.tupleof);
 	}
 
+	abstract void fillRect(int x0, int y0, int x1, int y1, COLOR color);
+	abstract void fillRect(float x0, float y0, float x1, float y1, COLOR color);
+
 	abstract void clear();
 }

@@ -47,6 +47,8 @@ import ae.ui.video.sdlopengl.renderer;
 class SDLOpenGLVideo : SDLCommonVideo
 {
 	bool vsync = true;
+	bool aa = true;
+	uint aaSamples = 4;
 
 	this()
 	{
@@ -70,5 +72,11 @@ protected:
 	{
 		SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 		SDL_GL_SetAttribute(SDL_GL_SWAP_CONTROL, vsync ? 1 : 0);
+
+		if (aa)
+		{
+			SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
+			SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, aaSamples);
+		}
 	}
 }

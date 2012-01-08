@@ -43,6 +43,8 @@ import ae.ui.shell.sdl.shell;
 import ae.ui.video.sdl.video;
 import ae.ui.video.sdlopengl.video;
 import ae.ui.video.renderer;
+import ae.ui.timer.sdl.timer;
+import ae.ui.timer.thread.timer;
 import ae.utils.fps;
 
 final class MyApplication : Application
@@ -51,15 +53,23 @@ final class MyApplication : Application
 	override string getCompanyName() { return "CyberShadow"; }
 
 	Shell shell;
+	Timer timer;
 	FPSCounter fps;
 	Renderer.Pixel[] pixels;
 	bool useOpenGL, switching;
+	float x=100f, y=100f;
+	enum DELTA = 1f / 16;
 
 	this()
 	{
 		foreach (x; 0..256)
 			foreach (y; 0..256)
 				pixels ~= Renderer.Pixel(x, y, BGRX(cast(ubyte)x, cast(ubyte)y, 0));
+
+		foreach (ubyte r; 0..2)
+		foreach (ubyte g; 0..2)
+		foreach (ubyte b; 0..2)
+		pixels ~= Renderer.Pixel(300 + r*3 + b*12, 100 + g*3, BGRX(cast(ubyte)(r*255), cast(ubyte)(g*255), cast(ubyte)(b*255)));
 	}
 
 	void updateFPS(string fps)
@@ -71,9 +81,10 @@ final class MyApplication : Application
 	{
 		fps.tick(&updateFPS);
 
-		pixels ~= Renderer.Pixel(uniform(0, s.width), uniform(0, s.height), BGRX(uniform!ubyte(), uniform!ubyte(), uniform!ubyte()));
+		//pixels ~= Renderer.Pixel(uniform(0, s.width), uniform(0, s.height), BGRX(uniform!ubyte(), uniform!ubyte(), uniform!ubyte()));
 		s.clear();
 		s.putPixels(pixels);
+		s.fillRect(x, y, x+100, y+100, BGRX(0, 0, 255));
 	}
 
 	override int run(string[] args)
@@ -81,11 +92,16 @@ final class MyApplication : Application
 		shell = new SDLShell(this);
 		auto sdl    = new SDLVideo();
 		auto opengl = new SDLOpenGLVideo();
+
+		timer = new SDLTimer();
+		//timer = new ThreadTimer();
+		timer.setInterval(AppCallback({ x += DELTA; y += DELTA; }), 10);
+
 		do
 		{
 			switching = false;
 			useOpenGL = !useOpenGL;
-			shell.video = useOpenGL ? opengl : sdl ;
+			shell.video = useOpenGL ? opengl : sdl;
 			updateFPS("?");
 			shell.run();
 		} while (switching);

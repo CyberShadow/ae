@@ -96,21 +96,29 @@ final class SDLOpenGLRenderer : Renderer
 
 	override void putPixel(int x, int y, COLOR color)
 	{
-		glColor3ub(color.r, color.g, color.b);
-		glBegin(GL_POINTS);
-		glVertex2f(x+0.5f, y+0.5f);
-		glEnd();
+		// GL_POINTS is blurry when using multisampling
+		fillRect(x, y, x+1, y+1, color);
 	}
 
 	override void putPixels(Pixel[] pixels)
 	{
-		glBegin(GL_POINTS);
 		foreach (ref pixel; pixels)
 		{
 			glColor3ub(pixel.color.r, pixel.color.g, pixel.color.b);
-			glVertex2f(pixel.x+0.5f, pixel.y+0.5f);
+			glRecti(pixel.x, pixel.y, pixel.x+1, pixel.y+1);
 		}
-		glEnd();
+	}
+
+	override void fillRect(int x0, int y0, int x1, int y1, COLOR color)
+	{
+		glColor3ub(color.r, color.g, color.b);
+		glRecti(x0, y0, x1, y1);
+	}
+
+	override void fillRect(float x0, float y0, float x1, float y1, COLOR color)
+	{
+		glColor3ub(color.r, color.g, color.b);
+		glRectf(x0, y0, x1, y1);
 	}
 
 	override void clear()
