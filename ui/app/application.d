@@ -162,6 +162,7 @@ struct AppCallbackEx(A...)
 	/// Blocks.
 	void call(A args)
 	{
+		assert(f, "Attempting to call unbound AppCallback");
 		synchronized(application)
 		{
 			f(args);
