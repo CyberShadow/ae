@@ -38,6 +38,7 @@ import std.conv;
 import std.string;
 
 import derelict.sdl.sdl;
+import derelict.util.loader;
 
 import ae.ui.shell.shell;
 import ae.ui.video.video;
@@ -54,6 +55,7 @@ final class SDLShell : Shell
 		this.application = application;
 		this.caption = application.getName();
 
+		SharedLibLoader.disableAutoUnload(); // SDL MM timers may crash on exit
 		DerelictSDL.load();
 		auto components = SDL_INIT_VIDEO | SDL_INIT_TIMER;
 		if (application.needSound())
