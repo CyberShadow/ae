@@ -726,7 +726,7 @@ struct Color(string FIELDS)
 
 	static if (SameType)
 	{
-		alias typeof(this.init.tupleof[0]) BaseType;
+		alias typeof(Fields.init.tupleof[0]) BaseType;
 		enum BaseTypeBits = BaseType.sizeof*8;
 	}
 
