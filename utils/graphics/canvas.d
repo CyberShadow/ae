@@ -124,7 +124,8 @@ mixin template Canvas()
 	{
 		static if (CHECKED)
 		{
-			if (x+src.w <= 0 || y+src.h <= 0 || x >= w || y >= h)
+			if (src.w == 0 || src.h == 0 ||
+				x+src.w <= 0 || y+src.h <= 0 || x >= w || y >= h)
 				return;
 
 			auto r = src.window(0, 0, src.w, src.h);
@@ -143,6 +144,7 @@ mixin template Canvas()
 		}
 		else
 		{
+			assert(src.w > 0 && src.h > 0);
 			assert(x >= 0 && x+src.w <= w && y >= 0 && y+src.h <= h);
 
 			// TODO: alpha blending
