@@ -67,14 +67,14 @@ class SDLCommonVideo : Video
 
 		started = stopping = false;
 		starting = true;
-		while (!started) { SDL_Delay(1); SDL_PumpEvents(); }
+		while (!started) wait();
 	}
 
 	override void stop()
 	{
 		stopped = false;
 		stopping = true;
-		while (!stopped) { SDL_Delay(1); SDL_PumpEvents(); }
+		while (!stopped) wait();
 	}
 
 	override void stopAsync(AppCallback callback)
@@ -90,6 +90,14 @@ protected:
 	void prepare() {}
 
 private:
+	void wait()
+	{
+		if (error)
+			renderThread.join(); // collect exception
+		SDL_Delay(1);
+		SDL_PumpEvents();
+	}
+
 	uint screenWidth, screenHeight, flags;
 	bool firstStart = true;
 
@@ -119,12 +127,14 @@ private:
 	}
 
 	Thread renderThread;
-	shared bool starting, started, stopping, stopped, quitting, quit;
+	shared bool starting, started, stopping, stopped, quitting, quit, error;
 	AppCallback stopCallback;
 	AppCallbackEx!(Renderer) renderCallback;
 
 	final void renderThreadProc()
 	{
+		scope(failure) error = true;
+
 		// SDL expects that only one thread across the program's lifetime will do OpenGL initialization.
 		// Thus, re-initialization must happen from only one thread.
 		// This thread sleeps and polls while it's not told to run.
