@@ -158,13 +158,14 @@ else // POSIX
 	import std.stdio;
 	import std.file;
 	import std.path;
+	import std.conv;
 
 	// Cache values from memory, and save them to disk when the program exits.
 	class Config
 	{
 		this(string appName = null, string companyName = null)
 		{
-			string fileName = getRoamingAppProfile(appName) ~ "/config";
+			fileName = getRoamingAppProfile(appName) ~ "/config";
 			if (!exists(fileName))
 				return;
 			foreach (line; File(fileName, "rt").byLine())
@@ -184,8 +185,6 @@ else // POSIX
 
 		T read(T)(string name, T defaultValue = T.init)
 		{
-			if (!loaded)
-				load();
 			auto pvalue = name in values;
 			if (pvalue)
 				return to!T(*pvalue);
@@ -204,7 +203,7 @@ else // POSIX
 		{
 			if (!dirty)
 				return;
-			auto f = File(getFilename(), "wt");
+			auto f = File(fileName, "wt");
 			foreach (name, value; values)
 				f.writefln("%s=%s", name, value);
 			dirty = false;
