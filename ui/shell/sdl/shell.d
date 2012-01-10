@@ -46,6 +46,8 @@ import ae.ui.app.application;
 public import ae.ui.shell.events;
 import ae.ui.timer.timer;
 
+version(Posix) pragma(lib, "dl"); // for Derelict
+
 final class SDLShell : Shell
 {
 	Application application;

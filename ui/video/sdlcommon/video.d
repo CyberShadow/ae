@@ -46,6 +46,14 @@ import ae.ui.shell.shell;
 import ae.ui.shell.sdl.shell;
 import ae.ui.video.renderer;
 
+// On Windows, OpenGL commands must come from the same thread that initialized video,
+// since SDL does not expose anything like wglMakeCurrent.
+// However, on X11 (and probably other platforms) video initialization must happen in the main thread.
+version (Windows)
+	enum InitializeVideoInRenderThread = true;
+else
+	enum InitializeVideoInRenderThread = false;
+
 class SDLCommonVideo : Video
 {
 	this()
@@ -64,6 +72,9 @@ class SDLCommonVideo : Video
 	override void start(Application application)
 	{
 		configure(application);
+
+		static if (!InitializeVideoInRenderThread)
+			initialize();
 
 		started = stopping = false;
 		starting = true;
@@ -126,6 +137,12 @@ private:
 		firstStart = false;
 	}
 
+	final void initialize()
+	{
+		prepare();
+		sdlEnforce(SDL_SetVideoMode(screenWidth, screenHeight, 32, flags), "can't set video mode");
+	}
+
 	Thread renderThread;
 	shared bool starting, started, stopping, stopped, quitting, quit, error;
 	AppCallback stopCallback;
@@ -152,10 +169,8 @@ private:
 
 			scope(failure) if (errorCallback) try { errorCallback.call(); } catch {}
 
-			// OpenGL commands must come from the same thread that initialized video.
-			// SDL does not expose anything like wglMakeCurrent.
-			prepare();
-			sdlEnforce(SDL_SetVideoMode(screenWidth, screenHeight, 32, flags), "can't set video mode");
+			static if (InitializeVideoInRenderThread)
+				initialize();
 
 			auto renderer = getRenderer();
 			while (!stopping)
