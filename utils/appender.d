@@ -11,7 +11,7 @@
  * for the specific language governing rights and limitations under the
  * License.
  *
- * The Original Code is the Team15 library.
+ * The Original Code is the ArmageddonEngine library.
  *
  * The Initial Developer of the Original Code is
  * Vladimir Panteleev <vladimir@thecybershadow.net>
