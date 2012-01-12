@@ -38,6 +38,7 @@ module ae.demo.pewpew.objects;
 import std.random;
 import std.math;
 
+import ae.utils.container;
 import ae.utils.math;
 import ae.utils.geometry;
 import ae.utils.graphics.image;
@@ -61,7 +62,7 @@ enum Plane
 
 enum STAR_LAYERS = 3;
 
-GameEntity[][Plane.Max] planes;
+DListContainer!GameEntity[Plane.Max] planes;
 bool initializing = true;
 
 alias G16 COLOR;
@@ -88,6 +89,7 @@ float frands2() { return ssqr(frands()); }
 
 class GameEntity
 {
+	mixin DListItem;
 	Plane plane;
 
 	abstract void step(uint deltaTicks);
@@ -96,18 +98,12 @@ class GameEntity
 	void add(Plane plane)
 	{
 		this.plane = plane;
-		planes[plane] ~= this;
+		planes[plane].add(this);
 	}
 
 	void remove()
 	{
-		foreach(i, obj; planes[plane])
-			if (this is obj)
-			{
-				planes[plane] = planes[plane][0..i] ~ planes[plane][i+1..$];
-				return;
-			}
-		assert(0, "Not found");
+		planes[plane].remove(this);
 	}
 }
 
@@ -141,7 +137,7 @@ class Game : GameEntity
 			new Thingy();
 			spawnTimer = uniform(1500, 2500);
 		}
-		if (!initializing && planes[Plane.Ship].length==0 && planes[Plane.Enemies].length==0 && planes[Plane.PlasmaOrbs].length==0 && planes[Plane.Explosions].length==0)
+		if (!initializing && planes[Plane.Ship].empty && planes[Plane.Enemies].empty && planes[Plane.PlasmaOrbs].empty && planes[Plane.Explosions].empty)
 			new Ship();
 	}
 
@@ -475,7 +471,7 @@ class Ship : GameObject
 			warp(x, spawnY(), R * sqrt(sin(spawn/(SPAWN_START+1f+SPAWN_END)*PI)));
 		}
 
-		Image!COLOR bg;
+		static Image!COLOR bg;
 		int bgx0, bgyS;
 		if (spawning)
 		{

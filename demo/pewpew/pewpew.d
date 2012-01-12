@@ -107,8 +107,8 @@ final class MyApplication : Application
 		auto canvasSize = min(screenCanvas.w, screenCanvas.h);
 		canvas.size(canvasSize, canvasSize);
 		canvas.clear(canvas.COLOR.init);
-		foreach (plane; planes)
-			foreach_reverse (obj; plane)
+		foreach (ref plane; planes)
+			foreach (obj; plane)
 				obj.render();
 
 		auto x = (screenCanvas.w-canvasSize)/2;
@@ -129,8 +129,8 @@ final class MyApplication : Application
 
 	void step(uint deltaTicks)
 	{
-		foreach (plane; planes)
-			foreach_reverse (obj; plane.dup)
+		foreach (ref plane; planes)
+			foreach (obj; plane)
 				obj.step(deltaTicks);
 	}
 
