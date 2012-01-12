@@ -63,4 +63,15 @@ mixin template SoftwareRenderer()
 	{
 		bitmap.clear(COLOR.init);
 	}
+
+	override void draw(int x, int y, TextureSource source, int u0, int v0, int u1, int v1)
+	{
+		auto w = bitmap.window(x, y, x+(u1-u0), y+(v1-v0));
+		source.drawTo(w);
+	}
+
+	override void draw(float x0, float y0, float x1, float y1, TextureSource source, int u0, int v0, int u1, int v1)
+	{
+		// assert(0, "TODO");
+	}
 }

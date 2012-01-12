@@ -104,7 +104,7 @@ The above plan relies on two conditions:
 	{
 		TextureRenderData[Renderers.max] renderData;
 
-		uint version;
+		uint textureVersion;
 
 		// PixelInfo is a simple struct holding a pointer and e.g. stride.
 
@@ -112,7 +112,7 @@ The above plan relies on two conditions:
 		abstract void drawTo(PixelInfo dest);
 
 		/// Used when a pointer is needed to existing pixel memory
-		void PixelInfo getPixels();
+		abstract PixelInfo getPixels();
 
 		~this()
 		{

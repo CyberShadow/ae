@@ -200,6 +200,17 @@ mixin template Canvas()
 		return RefCanvas!COLOR(x2-x1, y2-y1, stride, pixelPtr(x1, y1));
 	}
 
+	/// Construct a reference type pointing to the same data
+	R getRef(R)()
+	{
+		R r;
+		r.w = w;
+		r.h = h;
+		r.stride = stride;
+		r.pixels = pixelPtr(0, 0);
+		return r;
+	}
+
 	enum CheckHLine =
 	q{
 		static if (CHECKED)
@@ -725,6 +736,8 @@ struct Color(string FIELDS)
 	/// Whether or not all channel fields have the same base type.
 	// Only "true" supported for now, may change in the future (e.g. for 5:6:5)
 	enum SameType = isSameType!Fields();
+
+	enum Components = Fields.init.tupleof.length;
 
 	static if (SameType)
 	{

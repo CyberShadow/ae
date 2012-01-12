@@ -15,7 +15,7 @@
  *
  * The Initial Developer of the Original Code is
  * Vladimir Panteleev <vladimir@thecybershadow.net>
- * Portions created by the Initial Developer are Copyright (C) 2007-2011
+ * Portions created by the Initial Developer are Copyright (C) 2007-2012
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -75,4 +75,20 @@ T bswap(T)(T b)
 		return core.bitop.bswap(b);
 	else
 		static assert(false, "Don't know how to bswap " ~ T.stringof);
+}
+
+bool isPowerOfTwo(T)(T x) { return (x & (x-1)) == 0; }
+T roundUpToPowerOfTwo(T)(T x) { return nextPowerOfTwo(x-1); }
+T nextPowerOfTwo(T)(T x)
+{
+	x |= x >>  1;
+	x |= x >>  2;
+	x |= x >>  4;
+	static if (T.sizeof > 1)
+		x |= x >>  8;
+	static if (T.sizeof > 2)
+		x |= x >> 16;
+	static if (T.sizeof > 4)
+		x |= x >> 32;
+	return x + 1;
 }

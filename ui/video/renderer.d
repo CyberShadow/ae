@@ -68,6 +68,9 @@ class Renderer
 	/// Finalize rendering and present it to the user (flip buffers etc.)
 	abstract void present();
 
+	/// Destroy any bound resources
+	abstract void shutdown();
+
 	// **********************************************************************
 
 	abstract @property uint width();
@@ -86,4 +89,64 @@ class Renderer
 	abstract void fillRect(float x0, float y0, float x1, float y1, COLOR color);
 
 	abstract void clear();
+
+	abstract void draw(int x, int y, TextureSource source, int u0, int v0, int u1, int v1);
+	abstract void draw(float x0, float y0, float x1, float y1, TextureSource source, int u0, int v0, int u1, int v1);
+}
+
+/// Uniquely identify private data owned by different renderers
+enum Renderers
+{
+	SDLSoftware,
+	SDLOpenGL,
+	max
+}
+
+/// Base class for all renderer-specific texture data
+class TextureRenderData
+{
+	bool destroyed;
+	uint textureVersion = 0;
+
+	static shared bool cleanupNeeded;
+}
+
+/// Base class for logical textures
+class TextureSource
+{
+	TextureRenderData[Renderers.max] renderData;
+
+	uint textureVersion = 1;
+
+	alias RefCanvas!(Renderer.COLOR) TextureCanvas;
+
+	/// Used when the target pixel memory is already allocated
+	abstract void drawTo(TextureCanvas dest);
+
+	/// Used when a pointer is needed to existing pixel memory
+	abstract TextureCanvas getPixels();
+
+	~this()
+	{
+		foreach (r; renderData)
+			if (r)
+				r.destroyed = true;
+		TextureRenderData.cleanupNeeded = true;
+	}
+}
+
+class ImageTextureSource : TextureSource
+{
+	import ae.utils.graphics.image;
+	Image!BGRX image;
+
+	override void drawTo(TextureCanvas dest)
+	{
+		dest.draw(image, 0, 0);
+	}
+
+	override TextureCanvas getPixels()
+	{
+		return image.getRef!TextureCanvas();
+	}
 }

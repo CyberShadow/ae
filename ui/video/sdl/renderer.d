@@ -80,6 +80,8 @@ final class SDLRenderer : Renderer
 		sdlEnforce(SDL_Flip(s)==0);
 	}
 
+	override void shutdown() {}
+
 	// **********************************************************************
 
 	override @property uint width()

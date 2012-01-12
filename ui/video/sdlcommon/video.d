@@ -179,6 +179,7 @@ private:
 				renderCallback.call(renderer);
 				renderer.present();
 			}
+			renderer.shutdown();
 			if (stopCallback)
 				stopCallback.call();
 			stopped = true;

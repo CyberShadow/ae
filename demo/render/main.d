@@ -46,6 +46,7 @@ import ae.ui.video.renderer;
 import ae.ui.timer.sdl.timer;
 import ae.ui.timer.thread.timer;
 import ae.utils.fps;
+import ae.utils.graphics.image;
 
 final class MyApplication : Application
 {
@@ -59,6 +60,7 @@ final class MyApplication : Application
 	bool useOpenGL, switching;
 	float x=100f, y=100f;
 	enum DELTA = 1f / 16;
+	ImageTextureSource img;
 
 	this()
 	{
@@ -85,10 +87,26 @@ final class MyApplication : Application
 		s.clear();
 		s.putPixels(pixels);
 		s.fillRect(x, y, x+100, y+100, BGRX(0, 0, 255));
+
+		s.draw(0, 0, img, 0, 0, img.image.w, img.image.h);
+		s.draw(img.image.w/4, img.image.h/4, img.image.w/4*3, img.image.h/4*3, img, 0, 0, img.image.w, img.image.h);
 	}
 
 	override int run(string[] args)
 	{
+		{
+			img = new ImageTextureSource;
+			enum W = 100, H = 100;
+			img.image.size(W, H);
+			foreach (y; 0..H)
+				foreach (x; 0..W)
+					if (x==0 || y==0 || x==W-1 || y==H-1)
+						img.image[x, y] = BGRX(0, 0, 255);
+					else
+					if ((x+y)%2)
+						img.image[x, y] = BGRX(255, 255, 255);
+		}
+
 		shell = new SDLShell(this);
 		auto sdl    = new SDLVideo();
 		auto opengl = new SDLOpenGLVideo();
