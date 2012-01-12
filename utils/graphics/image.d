@@ -54,12 +54,13 @@ struct Image(COLOR)
 		size(w, h);
 	}
 
-	/// Does not resize
+	/// Does not scale image
 	void size(int w, int h)
 	{
 		this.w = w;
 		this.h = h;
-		pixels.length = w*h;
+		if (pixels.length < w*h)
+			pixels.length = w*h;
 	}
 
 	static Image!COLOR hjoin(Image!COLOR[] images)
