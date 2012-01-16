@@ -1,7 +1,7 @@
 Renderers
 =========
 
-Currently, we only only have SDL 1.2 support.
+Currently, we only only have SDL 1.2 support. [Addendum: there are now SDL and OpenGL renderers.]
 
 SDL 1.2 apparently does most rendering in software. 
 This is fine for most of our use cases, except smooth resizing.
@@ -32,9 +32,6 @@ Possible options are:
 
 There really isn't that much of a choice.
 
-[Addendum: there is now an OpenGL renderer.]
-
--------------------------------------------------------------------------------------------------------------------------------------------
 
 Textures
 ========
@@ -122,3 +119,30 @@ The above plan relies on two conditions:
 			renderDataNeedsCleanup = true;
 		}
 	}
+
+
+Fonts and text
+==============
+
+Questions:
+
+* UI font config: passing around "Font" object, or font parameters (name/size)?
+* Immediate or cached rendering?
+
+Observations:
+
+* UI font config: name is specified separately from size (scaling UIs) ?
+* Text rendering is slow
+
+Requirements:
+
+* Caching fonts
+* Caching rendered text
+
+Necessities:
+
+* ~~Font manager (AA by name/size)~~
+* Font object for just the size
+  * avoids AA lookups
+  * provides encapsulation, avoids using globals
+* Object encapsulating a "rendered text" surface
