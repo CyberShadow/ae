@@ -58,9 +58,9 @@ final class MyApplication : Application
 	FPSCounter fps;
 	Renderer.Pixel[] pixels;
 	bool useOpenGL, switching;
-	float x=100f, y=100f;
-	enum DELTA = 1f / 16;
-	ImageTextureSource img;
+	float x=0f, y=0f, dx=0f, dy=0f;
+	enum DELTA = 1f / 256;
+	ImageTextureSource[5] imgs;
 
 	this()
 	{
@@ -86,34 +86,44 @@ final class MyApplication : Application
 		//pixels ~= Renderer.Pixel(uniform(0, s.width), uniform(0, s.height), BGRX(uniform!ubyte(), uniform!ubyte(), uniform!ubyte()));
 		s.clear();
 		s.putPixels(pixels);
-		s.fillRect(x, y, x+100, y+100, BGRX(0, 0, 255));
 
-		s.draw(0, 0, img, 0, 0, img.image.w, img.image.h);
-		s.draw(img.image.w/4, img.image.h/4, img.image.w/4*3, img.image.h/4*3, img, 0, 0, img.image.w, img.image.h);
+		foreach (i, img; imgs)
+		{
+			s.draw(i*128, 300, img, 0, 0, img.image.w, img.image.h);
+			s.draw(
+				i*128 + x+img.image.w/4  , 428 + img.image.h/4  ,
+				i*128 + x+img.image.w/4*3, 428 + img.image.h/4*3,
+				img, 0, 0, img.image.w, img.image.h);
+		}
 	}
 
 	override int run(string[] args)
 	{
 		{
-			img = new ImageTextureSource;
 			enum W = 100, H = 100;
-			img.image.size(W, H);
-			foreach (y; 0..H)
-				foreach (x; 0..W)
-					if (x==0 || y==0 || x==W-1 || y==H-1)
-						img.image[x, y] = BGRX(0, 0, 255);
-					else
-					if ((x+y)%2)
-						img.image[x, y] = BGRX(255, 255, 255);
+
+			foreach (i, ref img; imgs)
+			{
+				img = new ImageTextureSource;
+				img.image.size(W, H);
+				foreach (y; 0..H)
+					foreach (x; 0..W)
+						if (x==0 || y==0 || x==W-1 || y==H-1)
+							img.image[x, y] = BGRX(255, 0, 0);
+						else
+						if (i && (x/(1<<(i-1))+y/(1<<(i-1)))%2)
+							img.image[x, y] = BGRX(255, 255, 255);
+			}
 		}
 
 		shell = new SDLShell(this);
 		auto sdl    = new SDLVideo();
 		auto opengl = new SDLOpenGLVideo();
+	//	opengl.aa = false;
 
 		timer = new SDLTimer();
 		//timer = new ThreadTimer();
-		timer.setInterval(AppCallback({ x += DELTA; y += DELTA; }), 10);
+		timer.setInterval(AppCallback({ x += dx; y += dy; }), 10);
 
 		do
 		{
@@ -138,6 +148,23 @@ final class MyApplication : Application
 		case Key.esc:
 			shell.quit();
 			break;
+		case Key.left : dx = -DELTA; break;
+		case Key.right: dx = +DELTA; break;
+		case Key.up   : dy = -DELTA; break;
+		case Key.down : dy = +DELTA; break;
+		default:
+			break;
+		}
+	}
+
+	override void handleKeyUp(Key key)
+	{
+		switch (key)
+		{
+		case Key.left : dx = 0f; break;
+		case Key.right: dx = 0f; break;
+		case Key.up   : dy = 0f; break;
+		case Key.down : dy = 0f; break;
 		default:
 			break;
 		}
