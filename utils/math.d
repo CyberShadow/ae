@@ -38,6 +38,7 @@ module ae.utils.math;
 public import std.algorithm : min, max, abs, swap;
 public import std.math;
 import std.traits : Signed, Unsigned;
+import core.bitop : bswap;
 
 typeof(Ta+Tb+Tc) bound(Ta, Tb, Tc)(Ta a, Tb b, Tc c) { return a<b?b:a>c?c:a; }
 bool between(T)(T point, T a, T b) { return a <= point && point <= b; } /// Assumes points are sorted (was there a faster way?)
@@ -72,7 +73,7 @@ T bswap(T)(T b)
 		return cast(T)((b >> 8) | (b << 8));
 	else
 	static if (b.sizeof == 4)
-		return core.bitop.bswap(b);
+		return bswap(b);
 	else
 		static assert(false, "Don't know how to bswap " ~ T.stringof);
 }

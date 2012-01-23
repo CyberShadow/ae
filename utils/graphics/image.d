@@ -130,6 +130,7 @@ struct Image(COLOR)
 	import std.conv : to;
 	import crc32;
 	import std.zlib;
+	import core.bitop : bswap;
 
 	static string[] readPNMHeader(ref ubyte[] data)
 	{
@@ -166,7 +167,8 @@ struct Image(COLOR)
 
 	void savePNM()(string filename) // RGB only
 	{
-		static assert(__traits(allMembers, COLOR).stringof == `tuple("r","g","b")`, "PNM only supports RGB");
+		import std.string;
+		static assert(__traits(allMembers, COLOR.Fields).stringof == `tuple("r","g","b")`, "PNM only supports RGB");
 		alias ChannelType!COLOR CHANNEL_TYPE;
 		enforce(w*h == pixels.length, "Dimension mismatch");
 		ubyte[] header = cast(ubyte[])format("P6\n%d %d %d\n", w, h, CHANNEL_TYPE.max);
