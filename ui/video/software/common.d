@@ -49,6 +49,21 @@ mixin template SoftwareRenderer()
 			bitmap.safePut(pixel.x, pixel.y, pixel.color);
 	}
 
+	override void line(float x0, float y0, float x1, float y1, COLOR color)
+	{
+		bitmap.aaLine(x0, y0, x1, y1, color);
+	}
+
+	override void vline(int x, int y0, int y1, COLOR color)
+	{
+		bitmap.vline(x, y0, y1, color);
+	}
+
+	override void hline(int x0, int x1, int y, COLOR color)
+	{
+		bitmap.hline(x0, x1, y, color);
+	}
+
 	override void fillRect(int x0, int y0, int x1, int y1, COLOR color)
 	{
 		bitmap.fillRect(x0, y0, x1, y1, color);

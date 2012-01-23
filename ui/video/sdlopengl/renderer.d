@@ -112,6 +112,37 @@ final class SDLOpenGLRenderer : Renderer
 		}
 	}
 
+	override void line(float x0, float y0, float x1, float y1, COLOR color)
+	{
+		x0 += 0.5f;
+		y0 += 0.5f;
+		x1 += 0.5f;
+		y1 += 0.5f;
+
+		auto a = atan2(y1-y0, x1-x0);
+		float ca = 0.5 * cos(a);
+		float sa = 0.5 * sin(a);
+		x0 -= ca;
+		y0 -= sa;
+		x1 -= ca;
+		y1 -= sa;
+
+		glColor3ub(color.r, color.g, color.b);
+		glBegin(GL_LINES);
+		glVertex2f(x0, y0);
+		glVertex2f(x1, y1);
+		glEnd();
+	}
+
+	/*override void hline(int x0, int x1, int y, COLOR color)
+	{
+		glColor3ub(color.r, color.g, color.b);
+		glBegin(GL_LINES);
+		glVertex2f(x0, y+0.5f);
+		glVertex2f(x1, y+0.5f);
+		glEnd();
+	}*/
+
 	override void fillRect(int x0, int y0, int x1, int y1, COLOR color)
 	{
 		glColor3ub(color.r, color.g, color.b);
