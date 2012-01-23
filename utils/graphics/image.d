@@ -347,6 +347,30 @@ struct Image(COLOR)
 		int    bcHeight;
 		ushort bcPlanes;
 		ushort bcBitCount;
+		uint   biCompression;
+		uint   biSizeImage;
+		uint   biXPelsPerMeter;
+		uint   biYPelsPerMeter;
+		uint   biClrUsed;
+		uint   biClrImportant;
+	}
+
+	static if (is(COLOR == BGR))
+		enum BitmapBitCount = 24;
+	else
+	static if (is(COLOR == BGRX) || is(COLOR == BGRA))
+		enum BitmapBitCount = 32;
+	else
+	static if (is(COLOR == G8))
+		enum BitmapBitCount = 8;
+	else
+		enum BitmapBitCount = 0;
+
+	@property int bitmapPixelStride()
+	{
+		int pixelStride = w * COLOR.sizeof;
+		pixelStride = (pixelStride+3) & ~3;
+		return pixelStride;
 	}
 
 	void loadBMP()(string filename)
@@ -362,20 +386,11 @@ struct Image(COLOR)
 		h = header.bcHeight;
 		enforce(header.bcPlanes==1, "Multiplane BMPs not supported");
 
-		static if (is(COLOR == BGR))
-			enforce(header.bcBitCount == 24, "Not a 24-bit BMP image");
-		else
-		static if (is(COLOR == BGRX) || is(COLOR == BGRA))
-			enforce(header.bcBitCount == 32, "Not a 32-bit BMP image");
-		else
-		static if (is(COLOR == G8))
-			enforce(header.bcBitCount == 8, "Not an 8-bit BMP image");
-		else
-			static assert(0, "Unsupported BMP color type: " ~ COLOR.stringof);
+		static assert(BitmapBitCount, "Unsupported BMP color type: " ~ COLOR.stringof);
+		enforce(header.bcBitCount == BitmapBitCount, "Mismatching BMP bcBitCount");
 
 		auto pixelData = data[header.bfOffBits..$];
-		int pixelStride = w * COLOR.sizeof;
-		pixelStride = (pixelStride+3) & ~3;
+		auto pixelStride = bitmapPixelStride;
 		size_t pos = 0;
 
 		if (h < 0)
@@ -392,6 +407,33 @@ struct Image(COLOR)
 			pixels[y*stride..y*stride+w] = (cast(COLOR*)(pixelData.ptr+pos))[0..w];
 			pos += pixelStride;
 		}
+	}
+
+	void saveBMP()(string filename)
+	{
+		ubyte[] data = new ubyte[BitmapHeader.sizeof + h*bitmapPixelStride];
+		auto header = cast(BitmapHeader*)data.ptr;
+		*header = BitmapHeader.init;
+		header.bfSize = data.length;
+		header.bfOffBits = BitmapHeader.sizeof;
+		header.bcWidth = w;
+		header.bcHeight = -h;
+		header.bcPlanes = 1;
+		static assert(BitmapBitCount, "Unsupported BMP color type: " ~ COLOR.stringof);
+		header.bcBitCount = BitmapBitCount;
+
+		auto pixelData = data[header.bfOffBits..$];
+		auto pixelStride = bitmapPixelStride;
+		auto ptr = pixelData.ptr;
+		size_t pos = 0;
+
+		foreach (y; 0..h)
+		{
+			(cast(COLOR*)ptr)[0..w] = pixels[y*stride..y*stride+w];
+			ptr += pixelStride;
+		}
+
+		std.file.write(filename, data);
 	}
 
 	// ***********************************************************************
