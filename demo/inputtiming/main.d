@@ -1,0 +1,152 @@
+/* ***** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 3.0
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
+ * The Original Code is the ArmageddonEngine library.
+ *
+ * The Initial Developer of the Original Code is
+ * Vladimir Panteleev <vladimir@thecybershadow.net>
+ * Portions created by the Initial Developer are Copyright (C) 2011-2012
+ * the Initial Developer. All Rights Reserved.
+ *
+ * Contributor(s):
+ *
+ * Alternatively, the contents of this file may be used under the terms of the
+ * GNU General Public License Version 3 (the "GPL") or later, in which case
+ * the provisions of the GPL are applicable instead of those above. If you
+ * wish to allow use of your version of this file only under the terms of the
+ * GPL, and not to allow others to use your version of this file under the
+ * terms of the MPL, indicate your decision by deleting the provisions above
+ * and replace them with the notice and other provisions required by the GPL.
+ * If you do not delete the provisions above, a recipient may use your version
+ * of this file under the terms of either the MPL or the GPL.
+ *
+ * ***** END LICENSE BLOCK ***** */
+
+module ae.demo.inputtiming.main;
+
+import core.time;
+
+import ae.ui.app.application;
+import ae.ui.app.posix.main;
+import ae.ui.shell.shell;
+import ae.ui.shell.sdl.shell;
+import ae.ui.video.sdlopengl.video;
+import ae.ui.video.renderer;
+import ae.utils.fps;
+import ae.utils.graphics.image;
+
+final class MyApplication : Application
+{
+	override string getName() { return "Demo/Input"; }
+	override string getCompanyName() { return "CyberShadow"; }
+
+	Shell shell;
+
+	enum BAND_WIDTH = 800;
+	enum BAND_INTERVAL = 100;
+	enum BAND_TOP = 50;
+	enum BAND_HEIGHT = 30;
+	enum BAND_HNSECS_PER_PIXEL = 100_000;
+	enum HISTORY_TOP = 200;
+	enum HISTORY_HEIGHT = 50;
+
+	enum Device : int { keyboard, joypad, max }
+	enum SampleType : int { precision, duration, max }
+
+	int[] history[Device.max][SampleType.max];
+	enum SAMPLE_COLORS = [BGRX(0, 0, 255), BGRX(0, 255, 0)];
+
+	override void render(Renderer s)
+	{
+		auto x = TickDuration.currSystemTick.length / BAND_HNSECS_PER_PIXEL;
+
+		s.clear();
+		s.line(BAND_WIDTH/2, BAND_TOP, BAND_WIDTH/2, BAND_TOP + BAND_HEIGHT, BGRX(0, 0, 255));
+		foreach (lx; 0..BAND_WIDTH)
+			if ((lx+x)%BAND_INTERVAL == 0)
+				s.line(lx, BAND_TOP+BAND_HEIGHT, lx, BAND_TOP+BAND_HEIGHT*2, BGRX(0, 255, 0));
+
+		foreach (device, deviceSamples; history)
+			foreach (sampleType, samples; deviceSamples)
+			{
+				auto y = HISTORY_TOP + HISTORY_HEIGHT * (device*2 + sampleType + 1);
+				foreach (index, sample; samples)
+				{
+					if (sample > HISTORY_HEIGHT)
+						sample = HISTORY_HEIGHT;
+					s.line(index, y - sample, index, y, SAMPLE_COLORS[sampleType]);
+				}
+			}
+	}
+
+	override int run(string[] args)
+	{
+		shell = new SDLShell(this);
+		shell.video = new SDLOpenGLVideo();
+		shell.run();
+		shell.video.shutdown();
+		return 0;
+	}
+
+	TickDuration pressed;
+
+	void keyDown(Device device)
+	{
+		pressed = TickDuration.currSystemTick;
+		auto x = cast(int)(pressed.length / BAND_HNSECS_PER_PIXEL + BAND_WIDTH/2) % BAND_INTERVAL;
+		if (x > BAND_INTERVAL/2)
+			x -= BAND_INTERVAL;
+		history[device][SampleType.precision] ~= abs(x);
+	}
+
+	void keyUp(Device device)
+	{
+		auto duration = TickDuration.currSystemTick - pressed;
+		history[device][SampleType.duration] ~= cast(int)(duration.length / BAND_HNSECS_PER_PIXEL);
+	}
+
+	override void handleKeyDown(Key key, dchar character)
+	{
+		if (key == Key.esc)
+			shell.quit();
+		else
+			keyDown(Device.keyboard);
+	}
+
+	override void handleKeyUp(Key key)
+	{
+		keyUp  (Device.keyboard);
+	}
+
+	override bool needJoystick() { return true; }
+
+	override void handleJoyButtonDown(int button)
+	{
+		keyDown(Device.joypad);
+	}
+
+	override void handleJoyButtonUp  (int button)
+	{
+		keyUp  (Device.joypad);
+	}
+
+	override void handleQuit()
+	{
+		shell.quit();
+	}
+}
+
+shared static this()
+{
+	createApplication!MyApplication();
+}
