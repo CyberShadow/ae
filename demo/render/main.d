@@ -61,6 +61,7 @@ final class MyApplication : Application
 	float x=0f, y=0f, dx=0f, dy=0f;
 	enum DELTA = 1f / 256;
 	ImageTextureSource[5] imgs;
+	ImageTextureSource imgT;
 
 	this()
 	{
@@ -95,25 +96,46 @@ final class MyApplication : Application
 				i*128 + x+img.image.w/4*3, 428 + img.image.h/4*3,
 				img, 0, 0, img.image.w, img.image.h);
 		}
+
+		static int offset;
+		offset++;
+		auto w = imgT.image.window(0, 0, imgT.image.w, imgT.image.h);
+		for (int l=5; l>=0; l--)
+		{
+			checker(w, l, l%2 ? 0 : (offset%60==0?offset+0:offset) >> (3-l/2));
+			w = w.window(w.w/4, w.h/4, w.w/4*3, w.h/4*3);
+		}
+		imgT.textureVersion++;
+		s.draw(400, 50, imgT, 0, 0, imgT.image.w, imgT.image.h);
+	}
+
+	void checker(CANVAS)(CANVAS img, int level, int offset)
+	{
+		foreach (y; 0..img.h)
+			foreach (x; 0..img.w)
+				if (x==0 || y==0 || x==img.w-1 || y==img.h-1)
+					img[x, y] = BGRX(255, 0, 0);
+				else
+				if (level && ((x+offset)/(1<<(level-1))+y/(1<<(level-1)))%2)
+					img[x, y] = BGRX(255, 255, 255);
+				else
+					img[x, y] = BGRX(0, 0, 0);
 	}
 
 	override int run(string[] args)
 	{
 		{
-			enum W = 100, H = 100;
+			enum W = 96, H = 96;
 
 			foreach (i, ref img; imgs)
 			{
 				img = new ImageTextureSource;
 				img.image.size(W, H);
-				foreach (y; 0..H)
-					foreach (x; 0..W)
-						if (x==0 || y==0 || x==W-1 || y==H-1)
-							img.image[x, y] = BGRX(255, 0, 0);
-						else
-						if (i && (x/(1<<(i-1))+y/(1<<(i-1)))%2)
-							img.image[x, y] = BGRX(255, 255, 255);
+				checker(img.image, i, 0);
 			}
+
+			imgT = new ImageTextureSource;
+			imgT.image.size(W*2, H*2);
 		}
 
 		shell = new SDLShell(this);
