@@ -708,15 +708,9 @@ public:
 			if (addressInfo.family != AddressFamily.INET && port == 0)
 				continue;  // listen on random ports only on IPv4 for now
 
-			version (Windows) enum { IPV6_V6ONLY = 27 }
-
-			int one = 1;
-			int flags;
-			Socket conn;
-
 			try
 			{
-				conn = new Socket(addressInfo);
+				Socket conn = new Socket(addressInfo);
 				conn.blocking = false;
 				if (addressInfo.family == AddressFamily.INET6)
 					conn.setOption(SocketOptionLevel.IPV6, SocketOption.IPV6_V6ONLY, true);
