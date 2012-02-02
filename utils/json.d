@@ -200,7 +200,7 @@ private struct JsonParser
 		static if (is(T==struct))
 			return readObject!(T)();
 		else
-		static if (is(typeof(T.keys)) && is(typeof(T.values)) && is(typeof(T.keys[0])==string))
+		static if (is(typeof(T.init.keys)) && is(typeof(T.init.values)) && is(typeof(T.init.keys[0])==string))
 			return readAA!(T)();
 		else
 		static if (is(T U : U*))
@@ -342,6 +342,37 @@ private struct JsonParser
 					break;
 				}
 			enforce(found, "Unknown field " ~ jsonField);
+
+			skipWhitespace();
+			if (peek()=='}')
+			{
+				p++;
+				return v;
+			}
+			else
+				expect(',');
+		}
+	}
+
+	T readAA(T)()
+	{
+		skipWhitespace();
+		expect('{');
+		skipWhitespace();
+		T v;
+		if (peek()=='}')
+		{
+			p++;
+			return v;
+		}
+
+		while (true)
+		{
+			string jsonField = readString();
+			skipWhitespace();
+			expect(':');
+
+			v[jsonField] = read!(typeof(v.values[0]));
 
 			skipWhitespace();
 			if (peek()=='}')
