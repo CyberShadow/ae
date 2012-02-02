@@ -15,7 +15,7 @@
  *
  * The Initial Developer of the Original Code is
  * Vladimir Panteleev <vladimir@thecybershadow.net>
- * Portions created by the Initial Developer are Copyright (C) 2006-2011
+ * Portions created by the Initial Developer are Copyright (C) 2006-2012
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -174,13 +174,13 @@ private struct JsonParser
 
 	void skipWhitespace()
 	{
-		while (isWhite(peek))
+		while (isWhite(peek()))
 			p++;
 	}
 
 	void expect(char c)
 	{
-		enforce(next==c, c ~ " expected");
+		enforce(next()==c, c ~ " expected");
 	}
 
 	T read(T)()
@@ -216,12 +216,12 @@ private struct JsonParser
 		string result;
 		while (true)
 		{
-			auto c = next;
+			auto c = next();
 			if (c=='"')
 				break;
 			else
 			if (c=='\\')
-				switch (next)
+				switch (next())
 				{
 					case '"':  result ~= '"'; break;
 					case '/':  result ~= '/'; break;
@@ -243,7 +243,7 @@ private struct JsonParser
 	bool readBool()
 	{
 		skipWhitespace();
-		if (peek=='t')
+		if (peek()=='t')
 		{
 			enforce(readN(4) == "true", "Bad boolean");
 			return true;
@@ -261,7 +261,7 @@ private struct JsonParser
 		T v;
 		string s;
 		char c;
-		while (c=peek, c=='-' || (c>='0' && c<='9'))
+		while (c=peek(), c=='-' || (c>='0' && c<='9'))
 			s ~= c, p++;
 		static if (is(T==byte))
 			return to!byte(s);
@@ -295,7 +295,7 @@ private struct JsonParser
 		skipWhitespace();
 		expect('[');
 		skipWhitespace();
-		if (peek==']')
+		if (peek()==']')
 		{
 			p++;
 			return [];
@@ -305,7 +305,7 @@ private struct JsonParser
 		{
 			result ~= read!(T)();
 			skipWhitespace();
-			if (peek==']')
+			if (peek()==']')
 			{
 				p++;
 				return result;
@@ -321,7 +321,7 @@ private struct JsonParser
 		expect('{');
 		skipWhitespace();
 		T v;
-		if (peek=='}')
+		if (peek()=='}')
 			return v;
 
 		while (true)
@@ -341,7 +341,7 @@ private struct JsonParser
 			enforce(found, "Unknown field " ~ jsonField);
 
 			skipWhitespace();
-			if (peek=='}')
+			if (peek()=='}')
 			{
 				p++;
 				return v;
