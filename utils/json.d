@@ -387,3 +387,12 @@ private struct JsonParser
 }
 
 T jsonParse(T)(string s) { return JsonParser(s).read!(T); }
+
+unittest
+{
+	struct S { int i; S[] arr; string[string] dic; }
+	S s = S(42, [S(1), S(2)], ["apple":"fruit", "pizza":"vegetable"]);
+	auto s2 = jsonParse!S(toJson(s));
+	// assert(s == s2); // Issue 3789
+	assert(s.i == s2.i && s.arr == s2.arr && s.dic == s2.dic);
+}
