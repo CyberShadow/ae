@@ -295,12 +295,12 @@ private struct JsonParser
 		skipWhitespace();
 		expect('[');
 		skipWhitespace();
+		T[] result;
 		if (peek()==']')
 		{
 			p++;
-			return [];
+			return result;
 		}
-		T[] result;
 		while(true)
 		{
 			result ~= read!(T)();
@@ -322,7 +322,10 @@ private struct JsonParser
 		skipWhitespace();
 		T v;
 		if (peek()=='}')
+		{
+			p++;
 			return v;
+		}
 
 		while (true)
 		{
