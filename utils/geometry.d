@@ -15,7 +15,7 @@
  *
  * The Initial Developer of the Original Code is
  * Vladimir Panteleev <vladimir@thecybershadow.net>
- * Portions created by the Initial Developer are Copyright (C) 2007-2011
+ * Portions created by the Initial Developer are Copyright (C) 2007-2012
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -36,13 +36,22 @@
 module ae.utils.geometry;
 
 import std.traits;
+import std.math;
 
 import ae.utils.math;
 
 enum TAU = 2*PI;
 
-auto dist (T)(T x, T y) { return sqrt(x*x+y*y); }
-auto dist2(T)(T x, T y) { return      x*x+y*y ; }
+auto sqrtx(T)(T x)
+{
+	static if (is(T : int))
+		return std.math.sqrt(cast(float)x);
+	else
+		return std.math.sqrt(x);
+}
+
+auto dist (T)(T x, T y) { return sqrtx(x*x+y*y); }
+auto dist2(T)(T x, T y) { return       x*x+y*y ; }
 
 struct Point(T)
 {

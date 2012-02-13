@@ -69,7 +69,7 @@ auto op(string OP, T...)(T args)
 auto sum(T...)(T args) { return op!"+"(args); }
 auto average(T...)(T args) { return sum(args) / args.length; }
 
-T bswap(T)(T b)
+T swapBytes(T)(T b)
 {
 	static if (b.sizeof == 1)
 		return b;

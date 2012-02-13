@@ -130,7 +130,7 @@ struct Image(COLOR)
 	import std.conv : to;
 	import crc32;
 	import std.zlib;
-	import core.bitop : bswap;
+	import ae.utils.math : swapBytes;
 
 	static string[] readPNMHeader(ref ubyte[] data)
 	{
@@ -162,7 +162,7 @@ struct Image(COLOR)
 		pixels = cast(COLOR[])data;
 		static if (COLOR.tupleof[0].sizeof > 1)
 			foreach (ref pixel; pixels)
-				pixel = COLOR.op!q{bswap(a)}(pixel);
+				pixel = COLOR.op!q{swapBytes(a)}(pixel);
 	}
 
 	void savePNM()(string filename) // RGB only
@@ -179,7 +179,7 @@ struct Image(COLOR)
 		{
 			auto end = cast(CHANNEL_TYPE*)data.ptr+data.length;
 			for (CHANNEL_TYPE* p = cast(CHANNEL_TYPE*)(data.ptr + header.length); p<end; p++)
-				*p = bswap(*p);
+				*p = swapBytes(*p);
 		}
 		std.file.write(filename, data);
 	}
@@ -197,7 +197,7 @@ struct Image(COLOR)
 		pixels = cast(COLOR[])data;
 		static if (COLOR.sizeof > 1)
 			foreach (ref pixel; pixels)
-				pixel = bswap(pixel);
+				pixel = swapBytes(pixel);
 	}
 
 	void savePGM()(string filename)
@@ -208,7 +208,7 @@ struct Image(COLOR)
 		data[0..header.length] = header;
 		COLOR* p = cast(COLOR*)(data.ptr + header.length);
 		foreach (c; pixels)
-			*p++ = bswap(c);
+			*p++ = swapBytes(c);
 		std.file.write(filename, data);
 	}
 
@@ -284,8 +284,8 @@ struct Image(COLOR)
 
 		PNGChunk[] chunks;
 		PNGHeader header = {
-			width : bswap(w),
-			height : bswap(h),
+			width : swapBytes(w),
+			height : swapBytes(h),
 			colourDepth : CHANNEL_TYPE.sizeof * 8,
 			colourType : COLOUR_TYPE,
 			compressionMethod : PNGCompressionMethod.DEFLATE,
@@ -303,7 +303,7 @@ struct Image(COLOR)
 
 			static if (CHANNEL_TYPE.sizeof > 1)
 				foreach (ref p; cast(CHANNEL_TYPE[])rowPixels)
-					p = bswap(p);
+					p = swapBytes(p);
 		}
 		chunks ~= PNGChunk("IDAT", compress(idatData, 5));
 		chunks ~= PNGChunk("IEND", null);
@@ -320,10 +320,10 @@ struct Image(COLOR)
 			uint i = pos;
 			uint chunkLength = chunk.data.length;
 			pos += 12 + chunkLength;
-			*cast(uint*)&data[i] = bswap(chunkLength);
+			*cast(uint*)&data[i] = swapBytes(chunkLength);
 			(cast(char[])data[i+4 .. i+8])[] = chunk.type;
 			data[i+8 .. i+8+chunk.data.length] = cast(ubyte[])chunk.data;
-			*cast(uint*)&data[i+8+chunk.data.length] = bswap(chunk.crc32());
+			*cast(uint*)&data[i+8+chunk.data.length] = swapBytes(chunk.crc32());
 			assert(pos == i+12+chunk.data.length);
 		}
 		std.file.write(filename, data);
