@@ -229,7 +229,7 @@ public:
 		}
 		else
 		{
-			TimerTask t = head;
+			TimerTask t = cast(TimerTask)head;
 			assert(t.prev is null);
 			int n=1;
 			while (t.next)
