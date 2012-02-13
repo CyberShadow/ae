@@ -441,7 +441,7 @@ mixin template Canvas()
 	{
 		int dx = x2-x1;
 		int dy = y2-y1;
-		int d  = cast(int)sqrt(sqr(dx)+sqr(dy));
+		int d  = cast(int)sqrt(cast(float)(sqr(dx)+sqr(dy)));
 		if (d==0) return;
 
 		int nx = dx*r/d;
@@ -755,6 +755,17 @@ struct Color(string FIELDS)
 	}
 
 	/// Warning: overloaded operators preserve types and may cause overflows
+	typeof(this) opUnary(string op)()
+		if (op=="~" || op=="-")
+	{
+		typeof(this) r;
+		foreach (i, f; r.tupleof)
+			static if(r.tupleof[i].stringof != "r.x") // skip padding
+				r.tupleof[i] = cast(typeof(r.tupleof[i])) mixin(op ~ `this.tupleof[i]`);
+		return r;
+	}
+
+	/// ditto
 	typeof(this) opBinary(string op, T)(T o)
 		if (is(T == typeof(this)))
 	{
