@@ -438,6 +438,13 @@ struct Image(COLOR)
 
 	// ***********************************************************************
 
+	Image!COLOR dup()
+	{
+		auto newImage = Image!COLOR(w, h);
+		newImage.pixels = pixels[0..w*h].dup;
+		return newImage;
+	}
+
 	Image!COLOR crop(int x1, int y1, int x2, int y2)
 	{
 		auto nw = x2-x1;
