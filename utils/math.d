@@ -53,6 +53,11 @@ T itpl(T, U)(T low, T high, U r, U rLow, U rHigh)
 
 byte sign(T)(T x) { return x<0 ? -1 : x>0 ? 1 : 0; }
 
+int compare(T)(T a, T b)
+{
+	return a<b ? -1 : a>b ? 1 : 0;
+}
+
 auto op(string OP, T...)(T args)
 {
 	auto result = args[0];
