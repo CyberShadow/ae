@@ -15,7 +15,7 @@
  *
  * The Initial Developer of the Original Code is
  * Vladimir Panteleev <vladimir@thecybershadow.net>
- * Portions created by the Initial Developer are Copyright (C) 2011
+ * Portions created by the Initial Developer are Copyright (C) 2011-2012
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -132,3 +132,25 @@ version (linux)
 }
 else
 	static assert(0, "TODO");
+
+import std.datetime;
+import std.exception;
+
+SysTime getMTime(string name)
+{
+	version(Windows)
+	{
+		auto h = CreateFileW(std.utf.toUTF16z(name), GENERIC_READ, 0, null, OPEN_EXISTING, 0, HANDLE.init);
+		enforce(h!=INVALID_HANDLE_VALUE, "CreateFile");
+		FILETIME ft;
+		enforce(GetFileTime(h, null, null, &ft), "GetFileTime");
+		CloseHandle(h);
+		return FILETIMEToSysTime(&ft);
+	}
+	else
+	{
+		d_time ftc, fta, ftm;
+		std.file.getTimes(name, ftc, fta, ftm);
+		return ftm;
+	}
+}
