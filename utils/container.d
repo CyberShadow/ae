@@ -71,6 +71,8 @@ unittest
 	assert(s.items == [1, 3]);
 }
 
+// ***************************************************************************
+
 import ae.utils.alloc;
 
 mixin template DListCommon(NODEREF)
@@ -210,4 +212,98 @@ unittest
 	foreach (c; l)
 		a ~= c.x;
 	assert(a == [1, 3]);
+}
+
+// ***************************************************************************
+
+/// BulkAllocator adapter for HashTable
+template HashTableBulkAllocator(uint BLOCKSIZE, alias ALLOCATOR = HeapAllocator)
+{
+	template HashTableBulkAllocator(T)
+	{
+		alias ArrayBulkAllocator!(T, BLOCKSIZE, ALLOCATOR) HashTableBulkAllocator;
+	}
+}
+
+struct HashTable(K, V, uint SIZE, alias ALLOCATOR, string HASHFUNC="k")
+{
+	// HASHFUNC returns a hash, get its type
+	alias typeof(((){ K k; return mixin(HASHFUNC); })()) H;
+	static assert(is(H : ulong), "Numeric hash type expected");
+
+	struct Item
+	{
+		K k;
+		Item* next;
+		V v;
+	}
+	Item*[SIZE] items;
+
+	ALLOCATOR!(Item) allocator;
+
+	V* get(ref K k)
+	{
+		auto h = mixin(HASHFUNC) % SIZE;
+		auto item = items[h];
+		while (item)
+		{
+			if (item.k == k)
+				return &item.v;
+			item = item.next;
+		}
+		return null;
+	}
+
+	V* add(ref K k)
+	{
+		auto h = mixin(HASHFUNC) % SIZE;
+		auto newItem = allocator.allocate();
+		newItem.k = k;
+		newItem.next = items[h];
+		items[h] = newItem;
+		return &newItem.v;
+	}
+
+	V* getOrAdd(ref K k)
+	{
+		auto h = mixin(HASHFUNC) % SIZE;
+		auto item = items[h];
+		while (item)
+		{
+			if (item.k == k)
+				return &item.v;
+			item = item.next;
+		}
+
+		auto newItem = allocator.allocate();
+		newItem.k = k;
+		newItem.next = items[h];
+		items[h] = newItem;
+		return &newItem.v;
+	}
+
+	int opApply(int delegate(ref K, ref V) dg)
+	{
+		int result = 0;
+
+		outerLoop:
+		for (uint h=0; h<SIZE; h++)
+		{
+			auto item = items[h];
+			while (item)
+			{
+				result = dg(item.k, item.v);
+				if (result)
+					break outerLoop;
+				item = item.next;
+			}
+		}
+		return result;
+	}
+
+	void freeAll()
+	{
+		static if (is(typeof(allocator.freeAll())))
+			allocator.freeAll();
+	}
 }
