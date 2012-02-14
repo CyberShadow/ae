@@ -243,6 +243,20 @@ string newlinesToSpaces(string s)
 	return slices.join();
 }
 
+string normalizeWhitespace(string s)
+{
+	auto slices = segmentByWhitespace(strip(s));
+	foreach (i, ref slice; slices)
+		if (i & 1) // odd
+			slice = " ";
+	return slices.join();
+}
+
+unittest
+{
+	assert(normalizeWhitespace(" Mary  had\ta\nlittle\r\n\tlamb") == "Mary had a little lamb");
+}
+
 import std.utf;
 
 /// Convert any data to a valid UTF-8 bytestream, so D's string functions can
