@@ -636,6 +636,7 @@ public:
 	void sendRaw(string message)
 	{
 		debug (IRC) std.stdio.writefln("> %s", message);
+		assert(!message.contains("\n"), "Newline in outgoing IRC line: " ~ message);
 		if (log) log("> " ~ message);
 		conn.send(encoder(message));
 	}
