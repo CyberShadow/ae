@@ -15,7 +15,7 @@
  *
  * The Initial Developer of the Original Code is
  * Vladimir Panteleev <vladimir@thecybershadow.net>
- * Portions created by the Initial Developer are Copyright (C) 2006-2011
+ * Portions created by the Initial Developer are Copyright (C) 2006-2012
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -191,26 +191,26 @@ public:
 		return sb.get();
 	}
 
-	void writePageContents(string title, string content)
+	void writePageContents(string title, string contentHTML)
 	{
 		string[string] dictionary;
-		dictionary["title"] = title;
-		dictionary["content"] = content;
+		dictionary["title"] = encodeEntities(title);
+		dictionary["content"] = contentHTML;
 		data = Data(parseTemplate(pageTemplate, dictionary));
 		headers["Content-Type"] = "text/html; charset=utf-8";
 	}
 
-	void writePage(string title, string[] text ...)
+	void writePage(string title, string[] html ...)
 	{
 		if (!status)
 			status = HttpStatusCode.OK;
 
 		string content;
-		foreach (string p; text)
+		foreach (string p; html)
 			content ~= "<p>" ~ p ~ "</p>\n";
 
 		string[string] dictionary;
-		dictionary["title"] = title;
+		dictionary["title"] = encodeEntities(title);
 		dictionary["content"] = content;
 		writePageContents(title, parseTemplate(contentTemplate, dictionary));
 	}
@@ -236,12 +236,13 @@ public:
 
 		string[string] dictionary;
 		dictionary["code"] = to!string(cast(int)code);
-		dictionary["message"] = getStatusMessage(code);
-		dictionary["explanation"] = getStatusExplanation(code);
-		dictionary["details"] = details ? "Error details:<br/><strong>" ~ details ~ "</strong>"  : "";
-		string data = parseTemplate(errorTemplate, dictionary);
+		dictionary["message"] = encodeEntities(getStatusMessage(code));
+		dictionary["explanation"] = encodeEntities(getStatusExplanation(code));
+		dictionary["details"] = details ? "Error details:<br/><strong>" ~ encodeEntities(details) ~ "</strong>"  : "";
+		string title = to!string(cast(int)code) ~ " - " ~ getStatusMessage(code);
+		string html = parseTemplate(errorTemplate, dictionary);
 
-		writePageContents(to!string(cast(int)code) ~ " - " ~ getStatusMessage(code), data);
+		writePageContents(title, html);
 		return this;
 	}
 
