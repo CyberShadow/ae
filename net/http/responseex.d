@@ -72,7 +72,7 @@ public:
 
 	HttpResponseEx serveText(string data)
 	{
-		return serveData(Data(data), "text/plain");
+		return serveData(Data(data), "text/plain; charset=utf-8");
 	}
 
 	static bool checkPath(string file)
