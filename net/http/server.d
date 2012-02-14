@@ -45,6 +45,7 @@ import std.exception;
 
 import ae.net.asockets;
 import ae.sys.data;
+import ae.utils.text;
 
 public import ae.net.http.common;
 
@@ -85,7 +86,7 @@ private:
 				return;
 
 			debug (HTTP) writefln("[%s] Got headers, %d bytes total", Clock.currTime(), headersend+4);
-			string[] lines = splitLines(inBufferStr[0 .. headersend]);
+			string[] lines = splitAsciiLines(inBufferStr[0 .. headersend]);
 			string reqline = lines[0];
 			enforce(reqline.length > 10);
 			lines = lines[1 .. lines.length];
