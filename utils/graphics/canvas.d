@@ -170,6 +170,83 @@ mixin template Canvas()
 			}
 	}
 
+	/// Nearest-neighbor upscale
+	void upscaleDraw(int HRX, int HRY, SRCCANVAS)(ref SRCCANVAS src)
+	{
+		alias src  lr;
+		alias this hr;
+
+		assert(hr.w == lr.w*HRX && hr.h == lr.h*HRY, "Size mismatch");
+
+		foreach (y; 0..lr.h)
+			foreach (x, c; lr.pixels[y*lr.w..(y+1)*lr.w])
+				hr.fillRect(x*HRX, y*HRY, x*HRX+HRX, y*HRY+HRY, c);
+	}
+
+	/// Linear downscale
+	void downscaleDraw(int HRX, int HRY, SRCCANVAS)(ref SRCCANVAS src)
+	{
+		alias this lr;
+		alias src  hr;
+
+		assert(hr.w == lr.w*HRX && hr.h == lr.h*HRY, "Size mismatch");
+
+		foreach (y; 0..lr.h)
+			foreach (x; 0..lr.w)
+			{
+				static if (HRX*HRY <= 0x100)
+					enum EXPAND_BYTES = 1;
+				else
+				static if (HRX*HRY <= 0x10000)
+					enum EXPAND_BYTES = 2;
+				else
+					static assert(0);
+				static if (is(typeof(COLOR.init.a))) // downscale with alpha
+				{
+					ExpandType!(COLOR, EXPAND_BYTES+COLOR.init.a.sizeof) sum;
+					ExpandType!(typeof(COLOR.init.a), EXPAND_BYTES) alphaSum;
+					auto start = y*HRY*hr.stride + x*HRX;
+					foreach (j; 0..HRY)
+					{
+						foreach (p; hr.pixels[start..start+HRX])
+						{
+							foreach (i, f; p.tupleof)
+								static if (p.tupleof[i].stringof != "p.a")
+								{
+									enum FIELD = p.tupleof[i].stringof[2..$];
+									mixin("sum."~FIELD~" += cast(typeof(sum."~FIELD~"))p."~FIELD~" * p.a;");
+								}
+							alphaSum += p.a;
+						}
+						start += hr.stride;
+					}
+					if (alphaSum)
+					{
+						auto result = cast(COLOR)(sum / alphaSum);
+						result.a = cast(typeof(result.a))(alphaSum / (HRX*HRY));
+						lr[x, y] = result;
+					}
+					else
+					{
+						static assert(COLOR.init.a == 0);
+						lr[x, y] = COLOR.init;
+					}
+				}
+				else
+				{
+					ExpandType!(COLOR, EXPAND_BYTES) sum;
+					auto start = y*HRY*hr.stride + x*HRX;
+					foreach (j; 0..HRY)
+					{
+						foreach (p; hr.pixels[start..start+HRX])
+							sum += p;
+						start += hr.stride;
+					}
+					lr[x, y] = cast(COLOR)(sum / (HRX*HRY));
+				}
+			}
+	}
+
 	/// Does not make a copy - only returns a "view" onto this canvas.
 	auto window()(int x1, int y1, int x2, int y2)
 	{
@@ -946,7 +1023,7 @@ struct RefCanvas(COLOR)
 
 private
 {
-	// test intantiation
+	// test instantiation
 	struct TestCanvas(COLOR)
 	{
 		int w, h, stride;
