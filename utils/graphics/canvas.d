@@ -17,6 +17,7 @@ import std.string;
 import std.math;
 import std.traits;
 
+import ae.utils.meta;
 public import ae.utils.math;
 
 // TODO: rewrite everything to use stride in bytes, not pixels
@@ -781,12 +782,12 @@ private bool isSameType(T)()
 	return true;
 }
 
-struct Color(string FIELDS)
+struct Color(FieldTuple...)
 {
-	struct Fields { mixin(FIELDS); } // for iteration
+	struct Fields { mixin FieldList!FieldTuple; } // for iteration
 
 	// alias this bugs out with operator overloading, so just paste the fields here
-	mixin(FIELDS);
+	mixin FieldList!FieldTuple;
 
 	/// Whether or not all channel fields have the same base type.
 	// Only "true" supported for now, may change in the future (e.g. for 5:6:5)
@@ -872,24 +873,24 @@ struct Color(string FIELDS)
 }
 
 // The "x" has the special meaning of "padding" and is ignored in some circumstances
-alias Color!q{ubyte  r, g, b;    } RGB    ;
-alias Color!q{ushort r, g, b;    } RGB16  ;
-alias Color!q{ubyte  r, g, b, x; } RGBX   ;
-//alias Color!q{ushort r, g, b, x; } RGBX16 ;
-alias Color!q{ubyte  r, g, b, a; } RGBA   ;
-//alias Color!q{ushort r, g, b, a; } RGBA16 ;
+alias Color!(ubyte  , "r", "g", "b"     ) RGB    ;
+alias Color!(ushort , "r", "g", "b"     ) RGB16  ;
+alias Color!(ubyte  , "r", "g", "b", "x") RGBX   ;
+alias Color!(ushort , "r", "g", "b", "x") RGBX16 ;
+alias Color!(ubyte  , "r", "g", "b", "a") RGBA   ;
+alias Color!(ushort , "r", "g", "b", "a") RGBA16 ;
 
-alias Color!q{ubyte  b, g, r;    } BGR    ;
-alias Color!q{ubyte  b, g, r, x; } BGRX   ;
-alias Color!q{ubyte  b, g, r, a; } BGRA   ;
+alias Color!(ubyte  , "b", "g", "r"     ) BGR    ;
+alias Color!(ubyte  , "b", "g", "r", "x") BGRX   ;
+alias Color!(ubyte  , "b", "g", "r", "a") BGRA   ;
 
-alias Color!q{ubyte  g;          } G8     ;
-alias Color!q{ushort g;          } G16    ;
-alias Color!q{ubyte  g, a;       } GA     ;
-alias Color!q{ushort g, a;       } GA16   ;
+alias Color!(ubyte  , "g"               ) G8     ;
+alias Color!(ushort , "g"               ) G16    ;
+alias Color!(ubyte  , "g", "a"          ) GA     ;
+alias Color!(ushort , "g", "a"          ) GA16   ;
 
-alias Color!q{byte   g;          } S8     ;
-alias Color!q{short  g;          } S16    ;
+alias Color!(byte   , "g"               ) S8     ;
+alias Color!(short  , "g"               ) S16    ;
 
 private
 {
