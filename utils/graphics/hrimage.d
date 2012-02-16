@@ -36,6 +36,38 @@ struct HRImage(COLOR, int HRX, int HRY=HRX)
 		lr.downscaleDraw!(HRX, HRY)(hr);
 	}
 
+	static if (structFields!COLOR()==["r","g","b"] || structFields!COLOR()==["b","g","r"])
+	void subpixelDownscale()
+	{
+		Image!COLOR i;
+		i.size(HRX + hr.w*3 + HRX, hr.h);
+		i.draw(0, 0, hr.window(0, 0, HRX, hr.h));
+		i.window(HRX, 0, HRX+hr.w*3, hr.h).upscaleDraw!(3, 1)(hr);
+		i.draw(HRX + hr.w*3, 0, hr.window(hr.w-HRX, 0, hr.w, hr.h));
+		alias Color!(COLOR.BaseType, "g") BASE;
+		Image!BASE[3] channels;
+		Image!BASE scratch;
+		scratch.size(hr.w*3, hr.h);
+
+		foreach (int cx, char c; ValueTuple!('r', 'g', 'b'))
+		{
+			auto w = i.window(cx*HRX, 0, cx*HRX+hr.w*3, hr.h);
+			scratch.transformDraw!(`COLOR(c.`~c~`)`)(0, 0, w);
+			channels[cx].size(lr.w, lr.h);
+			channels[cx].downscaleDraw!(3*HRX, HRY)(scratch);
+		}
+
+		foreach (y; 0..lr.h)
+			foreach (x; 0..lr.w)
+			{
+				COLOR c;
+				c.r = channels[0][x, y].g;
+				c.g = channels[1][x, y].g;
+				c.b = channels[2][x, y].g;
+				lr[x, y] = c;
+			}
+	}
+
 	void pixel(int x, int y, COLOR c)
 	{
 		pixelHR(x*HRX, y*HRY, c);
