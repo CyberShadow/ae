@@ -101,6 +101,9 @@ void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime)
 		if (tzStr.length)
 			return tzStr;
 		else
+		if (t.timezone.utcToTZ(t.stdTime) == t.stdTime)
+			return "UTC";
+		else
 			return formatTime(fallbackFormat, t);
 	}
 
