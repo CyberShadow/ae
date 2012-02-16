@@ -94,7 +94,7 @@ unittest
 	import ae.utils.graphics.image;
 	Image!RGB i;
 	i.size(b.w, b.h);
-	i.transformDraw!`RGB(c.r,c.g,c.b)`(b, 0, 0);
+	i.transformDraw!`RGB(c.r,c.g,c.b)`(0, 0, b);
 	assert(i[5, 5] == RGB(0, 0, 255));
 	assert(i[6, 6] == RGB(0, 0, 255));
 

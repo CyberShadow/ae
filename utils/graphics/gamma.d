@@ -78,7 +78,7 @@ struct GammaRamp(LUM_BASETYPE, PIX_BASETYPE)
 			COLOR.op!q{
 				b[a]
 			}(c, extraArgs[0])
-		}(src, 0, 0, lum2pixValues[]);
+		}(0, 0, src, lum2pixValues[]);
 	}
 
 	auto lum2pix(DSTCOLOR, SRCCANVAS)(ref SRCCANVAS src)
@@ -123,4 +123,12 @@ struct GammaRamp(LUM_BASETYPE, PIX_BASETYPE)
 			mixin(mixConvert!COLOR(`p`, `pixImage.pixels[i]`, `lum2pixValues`));
 		return pixImage;
 	}*/
+}
+
+unittest
+{
+	// test instantiation
+	auto gamma = GammaRamp!(ushort, ubyte)(ColorSpace.sRGB);
+	auto image = Image!RGB16(1, 1);
+	auto image2 = gamma.lum2pix!RGB(image);
 }
