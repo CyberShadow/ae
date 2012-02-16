@@ -38,6 +38,7 @@ mixin template Canvas()
 	import ae.utils.geometry;
 	import std.math : atan2, sqrt;
 	import std.random: uniform;
+	import std.string : format;
 
 	static assert(IsCanvas!(typeof(this)));
 
@@ -177,7 +178,7 @@ mixin template Canvas()
 		alias src  lr;
 		alias this hr;
 
-		assert(hr.w == lr.w*HRX && hr.h == lr.h*HRY, "Size mismatch");
+		assert(hr.w == lr.w*HRX && hr.h == lr.h*HRY, format("Size mismatch: (%d x %d) * (%d x %d) => (%d x %d)", lr.w, lr.h, HRX, HRY, hr.w, hr.h));
 
 		foreach (y; 0..lr.h)
 			foreach (x, c; lr.pixels[y*lr.w..(y+1)*lr.w])
@@ -190,7 +191,7 @@ mixin template Canvas()
 		alias this lr;
 		alias src  hr;
 
-		assert(hr.w == lr.w*HRX && hr.h == lr.h*HRY, "Size mismatch");
+		assert(hr.w == lr.w*HRX && hr.h == lr.h*HRY, format("Size mismatch: (%d x %d) * (%d x %d) <= (%d x %d)", lr.w, lr.h, HRX, HRY, hr.w, hr.h));
 
 		foreach (y; 0..lr.h)
 			foreach (x; 0..lr.w)
@@ -1025,18 +1026,13 @@ struct RefCanvas(COLOR)
 private
 {
 	// test instantiation
-	struct TestCanvas(COLOR)
-	{
-		int w, h, stride;
-		COLOR* pixels;
-		mixin Canvas;
-	}
+	RefCanvas!RGB    testRGB;
+	RefCanvas!RGBX   testRGBX;
+	RefCanvas!RGBA   testRGBA;
+	//RefCanvas!RGBX16 testRGBX16;
+	//RefCanvas!RGBA16 testRGBA16;
+	RefCanvas!GA     testGA;
+	RefCanvas!GA16   testGA16;
 
-	TestCanvas!RGB    testRGB;
-	TestCanvas!RGBX   testRGBX;
-	TestCanvas!RGBA   testRGBA;
-	//TestCanvas!RGBX16 testRGBX16;
-	//TestCanvas!RGBA16 testRGBA16;
-	TestCanvas!GA     testGA;
-	TestCanvas!GA16   testGA16;
+	static assert(IsCanvas!(RefCanvas!RGB));
 }
