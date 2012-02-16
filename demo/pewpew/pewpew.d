@@ -101,7 +101,7 @@ final class MyApplication : Application
 			dest.transformDraw!q{
 				//COLOR.monochrome(extraArgs[0][c.g]) // won't inline
 				COLOR(extraArgs[0][c.g], extraArgs[0][c.g], extraArgs[0][c.g])
-			}(src, 0, j, gamma.lum2pixValues.ptr);// +/
+			}(0, j, src, gamma.lum2pixValues.ptr);// +/
 		}
 	}
 

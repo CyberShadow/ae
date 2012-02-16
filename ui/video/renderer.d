@@ -125,7 +125,7 @@ class ImageTextureSource : TextureSource
 
 	override void drawTo(TextureCanvas dest)
 	{
-		dest.draw(image, 0, 0);
+		dest.draw(0, 0, image);
 	}
 
 	override TextureCanvas getPixels()

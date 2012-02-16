@@ -465,7 +465,7 @@ class Ship : GameObject
 		drawCircle(shapes[4].circle      , COLOR(Gray75));
 
 		if (spawning)
-			canvas.draw(bg, bgx0, bgyS);
+			canvas.draw(bgx0, bgyS, bg);
 	}
 
 	float spawnY()

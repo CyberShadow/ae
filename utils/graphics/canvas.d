@@ -97,7 +97,7 @@ mixin template Canvas()
 			pixels[0..h*stride] = c;
 	}
 
-	void draw(bool CHECKED=true, SRCCANVAS)(SRCCANVAS src, int x, int y)
+	void draw(bool CHECKED=true, SRCCANVAS)(int x, int y, SRCCANVAS src)
 		if (IsCanvas!SRCCANVAS && is(COLOR == SRCCANVAS.COLOR))
 	{
 		static if (CHECKED)
@@ -118,7 +118,7 @@ mixin template Canvas()
 			if (y+r.h > h)
 				r = r.window(0, 0, r.w, h-y);
 
-			draw!false(r, x, y);
+			draw!false(x, y, r);
 		}
 		else
 		{
@@ -139,7 +139,7 @@ mixin template Canvas()
 	///   c            = source color
 	///   src          = source canvas
 	///   extraArgs[n] = any extra arguments passed to transformDraw
-	void transformDraw(string pred, SRCCANVAS, T...)(ref SRCCANVAS src, int x, int y, T extraArgs)
+	void transformDraw(string pred, SRCCANVAS, T...)(int x, int y, ref SRCCANVAS src, T extraArgs)
 		if (IsCanvas!SRCCANVAS)
 	{
 		assert(x+src.w <= w && y+src.h <= h);

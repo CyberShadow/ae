@@ -50,7 +50,7 @@ struct Image(COLOR)
 		auto result = Image!COLOR(w, h);
 		int x;
 		foreach (ref image; images)
-			result.draw(image, x, 0),
+			result.draw(x, 0, image),
 			x += image.w;
 		return result;
 	}
@@ -64,7 +64,7 @@ struct Image(COLOR)
 		auto result = Image!COLOR(w, h);
 		int y;
 		foreach (ref image; images)
-			result.draw(image, 0, y),
+			result.draw(0, y, image),
 			y += image.h;
 		return result;
 	}
@@ -452,7 +452,7 @@ struct Image(COLOR)
 void copyCanvas(C, I)(C c, ref I image)
 {
 	image.size(c.w, c.h);
-	image.draw(c, 0, 0);
+	image.draw(0, 0, c);
 }
 
 private
