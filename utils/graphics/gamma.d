@@ -90,6 +90,25 @@ struct GammaRamp(LUM_BASETYPE, PIX_BASETYPE)
 		return dst;
 	}
 
+	void pix2lum(SRCCANVAS, DSTCANVAS)(ref SRCCANVAS src, ref DSTCANVAS dst)
+		if (IsCanvas!SRCCANVAS && IsCanvas!DSTCANVAS && is(SRCCANVAS.COLOR.BaseType==PIX_BASETYPE) && is(DSTCANVAS.COLOR.BaseType==LUM_BASETYPE))
+	{
+		dst.transformDraw!q{
+			COLOR.op!q{
+				b[a]
+			}(c, extraArgs[0])
+		}(0, 0, src, pix2lumValues[]);
+	}
+
+	auto pix2lum(DSTCOLOR, SRCCANVAS)(ref SRCCANVAS src)
+		if (IsCanvas!SRCCANVAS && is(SRCCANVAS.COLOR.BaseType==PIX_BASETYPE))
+	{
+		Image!DSTCOLOR dst;
+		dst.size(src.w, src.h);
+		pix2lum(src, dst);
+		return dst;
+	}
+
 	LUM_COLOR pix2lum(LUM_COLOR, PIX_COLOR)(PIX_COLOR c)
 	{
 		return LUM_COLOR.op!q{b[a]}(c, pix2lumValues[]);
