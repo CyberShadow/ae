@@ -34,29 +34,55 @@ string getTempFileName(string extension)
 
 string escapeWindowsArgument(string arg)
 {
-	// Escape trailing backslashes, so they don't escape the ending quote.
-	// Backslashes elsewhere should NOT be escaped.
-	for (sizediff_t i=arg.length-1; i>=0 && arg[i]=='\\'; i--)
-		arg ~= '\\';
-	return '"' ~ std.array.replace(arg, `"`, `\"`) ~ '"';
+	auto escapeIt = new bool[arg.length];
+	bool escaping = true;
+	foreach_reverse (i, c; arg)
+	{
+		if (c == '"')
+			escapeIt[i] = escaping = true;
+		else
+		if (c == '\\')
+			escapeIt[i] = escaping;
+		else
+			escaping = false;
+	}
+
+	string s = `"`;
+	foreach (i, c; arg)
+	{
+		if (escapeIt[i])
+			s ~= '\\';
+		s ~= c;
+	}
+	s ~= '"';
+
+	return s;
 }
 
 version(Windows) version(unittest)
 {
+	import win32.windows;
+	import core.stdc.stddef;
+
 	extern (Windows) wchar_t**  CommandLineToArgvW(wchar_t*, int*);
 	extern (C) size_t wcslen(in wchar *);
 
 	unittest
 	{
 		string[] testStrings = [
-			``, `\`, `"`, `""`, `"\`, `\"`, `\\`, `\\"`,
 			`Hello`,
-			`Hello, world`
+			`Hello, world`,
 			`Hello, "world"`,
 			`C:\`,
 			`C:\dmd`,
 			`C:\Program Files\`,
 		];
+
+		foreach (c1; `\" _*`)
+		foreach (c2; `\" _*`)
+		foreach (c3; `\" _*`)
+		foreach (c4; `\" _*`)
+			testStrings ~= [c1, c2, c3, c4].replace("*", "");
 
 		import std.conv;
 
