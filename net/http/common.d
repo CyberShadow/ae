@@ -300,6 +300,8 @@ public:
 	}
 }
 
+import std.algorithm : sort;
+
 /// parses a list in the format of "a, b, c;q=0.5, d" and returns an array of items sorted by "q" (["a", "b", "d", "c"])
 // NOTE: this code is crap.
 string[] parseItemList(string s)
@@ -313,17 +315,8 @@ string[] parseItemList(string s)
 		float q=1.0;
 		string str;
 
-		int opCmp(Item* i)
+		this(string s)
 		{
-			if(q<i.q) return  1;
-			else
-			if(q>i.q) return -1;
-			else      return  0;
-		}
-
-		static Item opCall(string s)
-		{
-			Item i;
 			sizediff_t p;
 			while((p=s.lastIndexOf(';'))!=-1)
 			{
@@ -335,21 +328,20 @@ string[] parseItemList(string s)
 				switch(name)
 				{
 					case "q":
-						i.q = to!float(value);
+						q = to!float(value);
 						break;
 					default:
 					// fail on unsupported
 				}
 			}
-			i.str = s;
-			return i;
+			str = s;
 		}
 	}
 
 	Item[] structs;
 	foreach(item;items)
 		structs ~= [Item(item)];
-	structs.sort;
+	structs.sort!`a.q > b.q`();
 	string[] result;
 	foreach(item;structs)
 		result ~= [item.str];
