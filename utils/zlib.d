@@ -207,7 +207,7 @@ the quick brown fox jumps over the lazy dog\r
 	ubyte[] result;
 
 	//arrayPrint(src);
-	result = cast(ubyte[])uncompress(compress(new Data(src))).contents;
+	result = cast(ubyte[])uncompress(compress(Data(src))).contents;
 	//arrayPrint(result);
 	assert(result == src);
 }
