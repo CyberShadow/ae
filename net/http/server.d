@@ -55,68 +55,75 @@ private:
 
 		void onNewRequest(ClientSocket sender, Data data)
 		{
-			debug (HTTP) writefln("[%s] Receiving start of request: \n%s---", Clock.currTime(), cast(string)data.contents);
-			inBuffer ~= data;
-
-			auto inBufferStr = cast(string)inBuffer.contents;
-			auto headersend = inBufferStr.indexOf("\r\n\r\n");
-			if (headersend == -1)
-				return;
-
-			debug (HTTP) writefln("[%s] Got headers, %d bytes total", Clock.currTime(), headersend+4);
-			string[] lines = splitAsciiLines(inBufferStr[0 .. headersend]);
-			string reqline = lines[0];
-			enforce(reqline.length > 10);
-			lines = lines[1 .. lines.length];
-
-			currentRequest = new HttpRequest();
-
-			auto methodend = reqline.indexOf(' ');
-			enforce(methodend > 0);
-			currentRequest.method = reqline[0 .. methodend].idup;
-			reqline = reqline[methodend + 1 .. reqline.length];
-
-			auto resourceend = reqline.lastIndexOf(' ');
-			enforce(resourceend > 0);
-			currentRequest.resource = reqline[0 .. resourceend].idup;
-
-			string protocol = reqline[resourceend+1..$];
-			enforce(protocol.startsWith("HTTP/"));
-			currentRequest.protocolVersion = protocol[5..$].idup;
-
-			foreach (string line; lines)
+			try
 			{
-				auto valuestart = line.indexOf(": ");
-				if (valuestart > 0)
-					currentRequest.headers[line[0 .. valuestart].idup] = line[valuestart + 2 .. line.length].idup;
-			}
+				debug (HTTP) writefln("[%s] Receiving start of request: \n%s---", Clock.currTime(), cast(string)data.contents);
+				inBuffer ~= data;
 
-			switch (currentRequest.protocolVersion)
-			{
-				case "1.0":
-					persistent =  ("Connection" in currentRequest.headers && currentRequest.headers["Connection"] == "Keep-Alive");
-					break;
-				default: // 1.1+
-					persistent = !("Connection" in currentRequest.headers && currentRequest.headers["Connection"] == "close");
-					break;
-			}
-			debug (HTTP) writefln("[%s] This %s connection %s persistent", Clock.currTime(), currentRequest.protocolVersion, persistent ? "IS" : "is NOT");
+				auto inBufferStr = cast(string)inBuffer.contents;
+				auto headersend = inBufferStr.indexOf("\r\n\r\n");
+				if (headersend == -1)
+					return;
 
-			expect = 0;
-			if ("Content-Length" in currentRequest.headers)
-				expect = to!uint(currentRequest.headers["Content-Length"]);
+				debug (HTTP) writefln("[%s] Got headers, %d bytes total", Clock.currTime(), headersend+4);
+				string[] lines = splitAsciiLines(inBufferStr[0 .. headersend]);
+				string reqline = lines[0];
+				enforce(reqline.length > 10);
+				lines = lines[1 .. lines.length];
 
-			inBuffer.popFront(headersend+4);
+				currentRequest = new HttpRequest();
 
-			if (expect > 0)
-			{
-				if (expect > inBuffer.length)
-					conn.handleReadData = &onContinuation;
+				auto methodend = reqline.indexOf(' ');
+				enforce(methodend > 0);
+				currentRequest.method = reqline[0 .. methodend].idup;
+				reqline = reqline[methodend + 1 .. reqline.length];
+
+				auto resourceend = reqline.lastIndexOf(' ');
+				enforce(resourceend > 0);
+				currentRequest.resource = reqline[0 .. resourceend].idup;
+
+				string protocol = reqline[resourceend+1..$];
+				enforce(protocol.startsWith("HTTP/"));
+				currentRequest.protocolVersion = protocol[5..$].idup;
+
+				foreach (string line; lines)
+				{
+					auto valuestart = line.indexOf(": ");
+					if (valuestart > 0)
+						currentRequest.headers[line[0 .. valuestart].idup] = line[valuestart + 2 .. line.length].idup;
+				}
+
+				switch (currentRequest.protocolVersion)
+				{
+					case "1.0":
+						persistent =  ("Connection" in currentRequest.headers && currentRequest.headers["Connection"] == "Keep-Alive");
+						break;
+					default: // 1.1+
+						persistent = !("Connection" in currentRequest.headers && currentRequest.headers["Connection"] == "close");
+						break;
+				}
+				debug (HTTP) writefln("[%s] This %s connection %s persistent", Clock.currTime(), currentRequest.protocolVersion, persistent ? "IS" : "is NOT");
+
+				expect = 0;
+				if ("Content-Length" in currentRequest.headers)
+					expect = to!uint(currentRequest.headers["Content-Length"]);
+
+				inBuffer.popFront(headersend+4);
+
+				if (expect > 0)
+				{
+					if (expect > inBuffer.length)
+						conn.handleReadData = &onContinuation;
+					else
+						processRequest(inBuffer.popFront(expect));
+				}
 				else
-					processRequest(inBuffer.popFront(expect));
+					processRequest(Data());
 			}
-			else
-				processRequest(Data());
+			catch (Exception e)
+			{
+				sendResponse(null);
+			}
 		}
 
 		debug (HTTP)
