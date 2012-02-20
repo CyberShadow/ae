@@ -77,6 +77,11 @@ final class SQLite
 			break;
 	}
 
+	long lastInsertRowID()
+	{
+		return sqlite3_last_insert_rowid(db);
+	}
+
 	final class PreparedStatement
 	{
 		sqlite3_stmt* stmt;
