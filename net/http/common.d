@@ -15,6 +15,8 @@
 
 module ae.net.http.common;
 
+import core.time;
+
 import std.string;
 import std.conv;
 import std.ascii;
@@ -34,6 +36,17 @@ public:
 	string protocolVersion = "1.0";
 	Headers headers;
 	Data data;
+	TickDuration creationTime;
+
+	this()
+	{
+		creationTime = TickDuration.currSystemTick();
+	}
+
+	@property TickDuration age()
+	{
+		return TickDuration.currSystemTick() - creationTime;
+	}
 }
 
 /// HTTP request class

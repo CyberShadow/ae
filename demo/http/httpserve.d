@@ -19,6 +19,7 @@ import std.datetime;
 import std.exception;
 import std.string;
 
+import ae.sys.log;
 import ae.net.http.server;
 import ae.net.http.common;
 import ae.net.http.responseex;
@@ -31,15 +32,14 @@ class FileServer
 	this(ushort port)
 	{
 		server = new HttpServer();
+		server.log = new ConsoleLogger("Web");
 		server.handleRequest = &onRequest;
 		port = server.listen(port);
-		writefln("Listening on http://localhost:%d/", port);
 	}
 
 	HttpResponse onRequest(HttpRequest request, ClientSocket conn)
 	{
 		auto response = new HttpResponseEx();
-		scope(exit) writefln("[%s] %s - %s - %s", Clock.currTime(), conn.remoteAddress, request.resource, response.status);
 
 		try
 			response.serveFile(request.resource[1..$], "", true);

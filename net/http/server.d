@@ -22,7 +22,9 @@ import std.uri;
 import std.exception;
 
 import ae.net.asockets;
+import ae.net.ietf.headers;
 import ae.sys.data;
+import ae.sys.log;
 import ae.utils.text;
 
 public import ae.net.http.common;
@@ -31,17 +33,20 @@ debug (HTTP) import std.stdio, std.datetime;
 
 class HttpServer
 {
+public:
+	Logger log;
+
 private:
 	ServerSocket conn;
 	TickDuration timeout;
 
-private:
 	class Connection
 	{
 		ClientSocket conn;
 		Data inBuffer;
 
 		HttpRequest currentRequest;
+		Address localAddress, remoteAddress;
 		int expect;  // VP 2007.01.21: changing from size_t to int because size_t is unsigned
 		bool persistent;
 
@@ -50,6 +55,8 @@ private:
 			this.conn = conn;
 			conn.handleReadData = &onNewRequest;
 			conn.setIdleTimeout(timeout);
+			localAddress = conn.localAddress;
+			remoteAddress = conn.remoteAddress;
 			debug (HTTP) conn.handleDisconnect = &onDisconnect;
 		}
 
@@ -83,7 +90,7 @@ private:
 				currentRequest.resource = reqline[0 .. resourceend].idup;
 
 				string protocol = reqline[resourceend+1..$];
-				enforce(protocol.startsWith("HTTP/"));
+				enforce(protocol.startsWith("HTTP/1."));
 				currentRequest.protocolVersion = protocol[5..$].idup;
 
 				foreach (string line; lines)
@@ -148,7 +155,12 @@ private:
 		{
 			currentRequest.data = data;
 			if (handleRequest)
+			{
+				// Log unhandled exceptions, but don't mess up the stack trace
+				scope(failure) logRequest(currentRequest, null);
+
 				sendResponse(handleRequest(currentRequest, conn));
+			}
 
 			if (persistent)
 			{
@@ -190,6 +202,29 @@ private:
 
 			conn.send(data.contents);
 			debug (HTTP) writefln("[%s] Sent response (%d bytes)", Clock.currTime(), data.length);
+
+			logRequest(currentRequest, response);
+		}
+
+		void logRequest(HttpRequest request, HttpResponse response)
+		{
+			debug // avoid linewrap in terminal during development
+				enum DEBUG = true;
+			else
+				enum DEBUG = false;
+
+			if (log) log(([
+				"", // align IP to tab
+				request.remoteHosts(remoteAddress.toAddrString())[0],
+				response ? text(response.status) : "-",
+				format("%9.2f ms", request.age.usecs / 100f),
+				request.method,
+				"http://" ~ formatAddress(localAddress, aaGet(request.headers, "Host", null)) ~ request.resource,
+				response ? aaGet(response.headers, "Content-Type", "-") : "-",
+			] ~ (DEBUG ? [] : [
+				aaGet(request.headers, "Referer", "-"),
+				aaGet(request.headers, "User-Agent", "-"),
+			])).join("\t"));
 		}
 	}
 
@@ -206,6 +241,15 @@ private:
 		new Connection(incoming);
 	}
 
+	static string formatAddress(Address address, string vhost = null)
+	{
+		string addr = address.toAddrString();
+		string port = address.toPortString();
+		return "http://" ~
+			(vhost ? vhost : addr == "0.0.0.0" || addr == "::" ? "*" : addr.contains(":") ? "[" ~ addr ~ "]" : addr) ~
+			(port == "80" ? "" : ":" ~ port);
+	}
+
 public:
 	this(TickDuration timeout = TickDuration.from!"seconds"(30))
 	{
@@ -219,7 +263,13 @@ public:
 
 	ushort listen(ushort port, string addr = null)
 	{
-		return conn.listen(port, addr);
+		port = conn.listen(port, addr);
+		if (log)
+			foreach (address; conn.localAddresses)
+			{
+				log("Listening on " ~ formatAddress(address) ~ " [" ~ to!string(address.addressFamily) ~ "]");
+			}
+		return port;
 	}
 
 	void close()

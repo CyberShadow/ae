@@ -86,7 +86,12 @@ struct Headers
 }
 
 /// Overload for aaGet from ae.utils.array.
-string aaGet(ref Headers headers, string key, string def)
+string aaGet(Headers headers, string key, string def)
+{
+	return aaGetLazy(headers, key, def);
+}
+
+string aaGetLazy(Headers headers, string key, lazy string def)
 {
 	auto pvalue = key in headers;
 	if (pvalue)
