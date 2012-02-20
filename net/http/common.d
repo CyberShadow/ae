@@ -15,10 +15,13 @@
 
 module ae.net.http.common;
 
-import std.string, std.conv, std.ascii;
+import std.string;
+import std.conv;
+import std.ascii;
 import std.exception;
 
 import ae.utils.text;
+import ae.utils.array;
 import ae.net.ietf.headers;
 import ae.sys.data;
 import zlib = ae.utils.zlib;
@@ -133,6 +136,31 @@ public:
 			default:
 				throw new Exception("Unknown Content-Type: " ~ contentType);
 		}
+	}
+
+	/// Get list of hosts as specified in headers (e.g. X-Forwarded-For).
+	/// First item in returned array is the node furthest away.
+	/// Duplicates are removed.
+	/// Specify socket remote address in remoteHost to add it to the list.
+	string[] remoteHosts(string remoteHost = null)
+	{
+		return
+			(aaGet(headers, "X-Forwarded-For", null).split(",").amap!strip() ~
+			 aaGet(headers, "X-Forwarded-Host", null) ~
+			 remoteHost)
+			.afilter!`a`()
+			.auniq();
+	}
+
+	unittest
+	{
+		auto req = new HttpRequest();
+		assert(req.remoteHosts() == []);
+		assert(req.remoteHosts("3.3.3.3") == ["3.3.3.3"]);
+
+		req.headers["X-Forwarded-For"] = "1.1.1.1, 2.2.2.2";
+		req.headers["X-Forwarded-Host"] = "2.2.2.2";
+		assert(req.remoteHosts("3.3.3.3") == ["1.1.1.1", "2.2.2.2", "3.3.3.3"]);
 	}
 
 private:
