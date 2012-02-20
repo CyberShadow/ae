@@ -140,3 +140,19 @@ T queuePop(T)(ref T[] arr)
 	if (!arr.length) arr = null;
 	return ret;
 }
+
+// ***************************************************************************
+
+import std.algorithm;
+import std.array;
+
+// Equivalents of array(xxx(...)), but less parens and UFCS-able.
+auto amap(alias pred, T)(T[] arr) { return array(map!pred(arr)); }
+auto afilter(alias pred, T)(T[] arr) { return array(filter!pred(arr)); }
+auto auniq(T)(T[] arr) { return array(uniq(arr)); }
+
+unittest
+{
+	assert([1, 2, 3].amap!`a*2`() == [2, 4, 6]);
+	assert([1, 2, 3].amap!(n => n*n)() == [1, 4, 9]);
+}
