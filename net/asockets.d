@@ -231,20 +231,28 @@ protected:
 
 public:
 	/// allow getting the address of connections that are already disconnected
-	private string cachedRemoteAddress = null;
+	private Address cachedLocalAddress, cachedRemoteAddress;
 
-	final string remoteAddress()
+	final @property Address localAddress()
+	{
+		if (cachedLocalAddress !is null)
+			return cachedLocalAddress;
+		else
+		if (conn is null)
+			return null;
+		else
+			return cachedLocalAddress = conn.localAddress();
+	}
+
+	final @property Address remoteAddress()
 	{
 		if (cachedRemoteAddress !is null)
 			return cachedRemoteAddress;
 		else
 		if (conn is null)
-			return "(null)";
+			return null;
 		else
-		try
-			return cachedRemoteAddress = conn.remoteAddress().toString();
-		catch (Exception e)
-			return e.msg;
+			return cachedRemoteAddress = conn.remoteAddress();
 	}
 
 	final void setKeepAlive(bool enabled=true, int time=10, int interval=5)
@@ -716,6 +724,14 @@ public:
 		this.addr = addr;
 
 		return port;
+	}
+
+	@property Address[] localAddresses()
+	{
+		Address[] result;
+		foreach (listener; listeners)
+			result ~= listener.localAddress;
+		return result;
 	}
 
 	/// Stop listening on this socket.
