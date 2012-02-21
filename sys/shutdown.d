@@ -34,12 +34,21 @@ void shutdown()
 
 private:
 
+import core.thread;
+
+void syncShutdown()
+{
+	thread_suspendAll();
+	shutdown();
+	thread_resumeAll();
+}
+
 void register()
 {
 	version(Posix)
 	{
 		import ae.sys.signals;
-		addSignalHandler(SIGTERM, { shutdown(); });
+		addSignalHandler(SIGTERM, { syncShutdown(); });
 	}
 	else
 	version(Windows)
@@ -56,8 +65,12 @@ void register()
 				closing = true;
 				auto msg = "Shutdown event received, shutting down.\r\n";
 				DWORD written;
-				WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), msg.ptr, msg.length, &written, null);
-				shutdown();
+				WriteConsoleA(GetStdHandle(STD_ERROR_HANDLE), msg.ptr, msg.length, &written, null);
+
+				thread_attachThis();
+				syncShutdown();
+				thread_detachThis();
+
 				return TRUE;
 			}
 			return FALSE;
