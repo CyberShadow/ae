@@ -839,4 +839,5 @@ public:
 }
 
 /// The default socket manager.
-SocketManager socketManager;
+// __gshared for ae.sys.shutdown
+__gshared SocketManager socketManager;

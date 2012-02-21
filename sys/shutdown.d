@@ -5,6 +5,7 @@
  * that are done as part of the shutdown process.
  *
  * Note: thread safety of this module is questionable.
+ * TODO: transition to thread-safe centralized event loop.
  *
  * License:
  *   This Source Code Form is subject to the terms of
