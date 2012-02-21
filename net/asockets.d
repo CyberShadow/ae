@@ -67,8 +67,9 @@ private:
 			if (j is conn)
 			{
 				sockets = sockets[0 .. i] ~ sockets[i + 1 .. sockets.length];
-				break;
+				return;
 			}
+		assert(false, "Socket not registered");
 	}
 
 public:
