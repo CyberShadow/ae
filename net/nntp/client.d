@@ -270,10 +270,7 @@ public:
 	void listGroupXover(string name, int from = 1)
 	{
 		selectGroup(name);
-		if (from > 1)
-			send(format("XOVER %d-", from));
-		else
-			send("XOVER");
+		send(format("XOVER %d-", from));
 	}
 
 	void getMessage(string numOrID)
