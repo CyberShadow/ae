@@ -104,7 +104,7 @@ public:
 			}
 
 			sockcount = 0;
-			debug (ASOCKETS) writefln("Populating sets");
+			debug (ASOCKETS) writeln("Populating sets");
 			foreach (GenericSocket conn; sockets)
 			{
 				if (!conn.socket)
@@ -116,21 +116,21 @@ public:
 				if (flags.read)
 				{
 					readset.add(conn.socket);
-					debug (ASOCKETS) writef(" READ");
+					debug (ASOCKETS) write(" READ");
 				}
 				if (flags.write)
 				{
 					writeset.add(conn.socket);
-					debug (ASOCKETS) writef(" WRITE");
+					debug (ASOCKETS) write(" WRITE");
 				}
 				if (flags.error)
 				{
 					errorset.add(conn.socket);
-					debug (ASOCKETS) writef(" ERROR");
+					debug (ASOCKETS) write(" ERROR");
 				}
-				debug (ASOCKETS) writefln();
+				debug (ASOCKETS) writeln();
 			}
-			debug (ASOCKETS) { writefln("Waiting..."); fflush(stdout); }
+			debug (ASOCKETS) writeln("Waiting...");
 			if (sockcount == 0 && !mainTimer.isWaiting())
 				break;
 
@@ -151,6 +151,7 @@ public:
 			else
 				events = Socket.select(readset, writeset, errorset);
 
+			debug (ASOCKETS) writefln("%d events fired.", events);
 			mainTimer.prod();
 
 			if (events > 0)
@@ -158,7 +159,10 @@ public:
 				foreach (GenericSocket conn; sockets)
 				{
 					if (!conn.socket)
+					{
+						debug (ASOCKETS) writefln("\t%s is unset", cast(void*)conn);
 						continue;
+					}
 					if (readset.isSet(conn.socket))
 					{
 						debug (ASOCKETS) writefln("\t%s is readable", cast(void*)conn);
@@ -166,7 +170,10 @@ public:
 					}
 
 					if (!conn.socket)
+					{
+						debug (ASOCKETS) writefln("\t%s is unset", cast(void*)conn);
 						continue;
+					}
 					if (writeset.isSet(conn.socket))
 					{
 						debug (ASOCKETS) writefln("\t%s is writable", cast(void*)conn);
@@ -174,7 +181,10 @@ public:
 					}
 
 					if (!conn.socket)
+					{
+						debug (ASOCKETS) writefln("\t%s is unset", cast(void*)conn);
 						continue;
+					}
 					if (errorset.isSet(conn.socket))
 					{
 						debug (ASOCKETS) writefln("\t%s is errored", cast(void*)conn);
