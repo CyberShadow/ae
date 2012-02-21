@@ -32,6 +32,7 @@ version(Windows)
 }
 else
 	enum USE_SLEEP = false;
+version(Posix) import ae.sys.signals;
 
 /// Flags that determine socket wake-up events.
 private struct PollFlags
@@ -597,6 +598,13 @@ public:
 		return connected;
 	}
 
+	/// Automatically disconnect when receiving SIGTERM.
+	void stopAutomatically()
+	{
+		version (Posix)
+			addSignalHandler(SIGTERM, { if (conn && !disconnecting) disconnect(); });
+	}
+
 public:
 	/// Callback for when a connection has been established.
 	void delegate(ClientSocket sender) handleConnect;
@@ -744,6 +752,13 @@ public:
 		listening = false;
 		if (handleClose)
 			handleClose();
+	}
+
+	/// Automatically stop listening when receiving SIGTERM.
+	void stopAutomatically()
+	{
+		version (Posix)
+			addSignalHandler(SIGTERM, { if (listening) close(); });
 	}
 
 public:
