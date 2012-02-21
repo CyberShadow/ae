@@ -512,8 +512,8 @@ public:
 		conn = null;
 		outQueue[] = null;
 		connected = false;
-		if (idleTask !is null && idleTask.isWaiting())
-			mainTimer.remove(idleTask);
+		if (idleTask && idleTask.isWaiting())
+			idleTask.cancel();
 		if (handleDisconnect && !disconnecting)
 			handleDisconnect(this, reason, type);
 	}
@@ -566,7 +566,7 @@ public:
 	{
 		assert(idleTask !is null);
 		assert(idleTask.isWaiting());
-		mainTimer.remove(idleTask);
+		idleTask.cancel();
 	}
 
 	void resumeIdleTimeout()
@@ -588,7 +588,7 @@ public:
 		else
 		{
 			if (idleTask.isWaiting())
-				mainTimer.remove(idleTask);
+				idleTask.cancel();
 			idleTask.delay = duration;
 		}
 		if (connected)

@@ -56,11 +56,12 @@ private:
 		log("* Disconnected (" ~ reason ~ ")");
 		if (handleDisconnect)
 			handleDisconnect(reason);
-		if (polling && type != DisconnectType.Requested)
+		if (polling)
 		{
-			if (pollTimer && pollTimer.isWaiting)
-				mainTimer.remove(pollTimer);
-			setTimeout(&reconnect, TickDuration.from!"seconds"(10));
+			if (pollTimer && pollTimer.isWaiting())
+				pollTimer.cancel();
+			if (type != DisconnectType.Requested)
+				setTimeout(&reconnect, TickDuration.from!"seconds"(10));
 		}
 		expectingGroupList = null;
 	}
