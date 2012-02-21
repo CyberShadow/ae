@@ -284,6 +284,12 @@ public:
 		send("POST");
 	}
 
+	void stopAutomatically()
+	{
+		assert(conn);
+		conn.stopAutomatically();
+	}
+
 	void delegate() handleConnect;
 	void delegate(string reason) handleDisconnect;
 	void delegate(string error) handleError;
