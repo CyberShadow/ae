@@ -205,11 +205,16 @@ string[] fastSplit(string s, char d)
 
 string[] splitAsciiLines(string text)
 {
-	auto lines = text.split("\n");
+	auto lines = text.fastSplit('\n');
 	foreach (ref line; lines)
 		if (line.length && line[$-1]=='\r')
 			line = line[0..$-1];
 	return lines;
+}
+
+unittest
+{
+	assert(splitAsciiLines("a\nb\r\nc\r\rd\n\re\r\n\nf") == ["a", "b", "c\r\rd", "\re", "", "f"]);
 }
 
 /// Covering slice-list of s with interleaved whitespace.
