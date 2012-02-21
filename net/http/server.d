@@ -266,14 +266,13 @@ public:
 		port = conn.listen(port, addr);
 		if (log)
 			foreach (address; conn.localAddresses)
-			{
 				log("Listening on " ~ formatAddress(address) ~ " [" ~ to!string(address.addressFamily) ~ "]");
-			}
 		return port;
 	}
 
 	void close()
 	{
+		if (log) log("Shutting down.");
 		conn.close();
 		conn = null;
 	}
