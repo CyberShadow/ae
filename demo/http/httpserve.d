@@ -20,6 +20,7 @@ import std.exception;
 import std.string;
 
 import ae.sys.log;
+import ae.sys.shutdown;
 import ae.net.http.server;
 import ae.net.http.common;
 import ae.net.http.responseex;
@@ -35,6 +36,7 @@ class FileServer
 		server.log = new ConsoleLogger("Web");
 		server.handleRequest = &onRequest;
 		port = server.listen(port);
+		addShutdownHandler({ server.close(); });
 	}
 
 	HttpResponse onRequest(HttpRequest request, ClientSocket conn)
