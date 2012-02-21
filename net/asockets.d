@@ -488,6 +488,7 @@ public:
 		{
 			// queue disconnect after all data is sent
 			//debug writefln("[%s] Queueing disconnect: ", remoteAddress, reason);
+			assert(!disconnecting, "Already disconnecting");
 			disconnecting = true;
 			setIdleTimeout(TickDuration.from!"seconds"(30));
 			if (handleDisconnect)
