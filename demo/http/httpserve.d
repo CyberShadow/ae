@@ -34,7 +34,6 @@ class FileServer
 		server = new HttpServer();
 		server.log = new ConsoleLogger("Web");
 		server.handleRequest = &onRequest;
-		server.stopAutomatically();
 		port = server.listen(port);
 	}
 

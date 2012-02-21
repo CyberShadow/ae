@@ -228,12 +228,6 @@ private:
 		}
 	}
 
-	void stopAutomatically()
-	{
-		assert(conn);
-		conn.stopAutomatically();
-	}
-
 private:
 	void onClose()
 	{
