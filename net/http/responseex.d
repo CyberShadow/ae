@@ -118,7 +118,10 @@ public:
 				string title = `Directory listing of /` ~ encodeEntities(file);
 				string html = `<ul>`;
 				foreach (DirEntry de; dirEntries(filename, SpanMode.shallow))
-					html ~= `<li><a href="` ~ encodeEntities(de.name) ~ `">` ~ encodeEntities(de.name) ~ `</a></li>`;
+					if (de.isDir)
+						html ~= `<li><a href="` ~ split(encodeEntities(de.name),`/`)[$-1] ~ `/">/` ~ split(encodeEntities(de.name),`/`)[$-1] ~ `/</a></li>`;
+					else
+						html ~= `<li><a href="` ~ split(encodeEntities(de.name),`/`)[$-1] ~ `">` ~ split(encodeEntities(de.name),`/`)[$-1] ~ `</a></li>`;
 				html ~= `</ul>`;
 				writePage(title, html);
 				return this;
