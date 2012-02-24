@@ -119,9 +119,9 @@ public:
 				string html = `<ul>`;
 				foreach (DirEntry de; dirEntries(filename, SpanMode.shallow))
 				{
-					string realfilename = split(encodeEntities(de.name),`/`)[$-1];
+					string realfilename = basename(encodeEntities(de.name));
 					if (de.isDir)
-						html ~= `<li><a href="` ~ realfilename ~ `/">/` ~ realfilename ~ `/</a></li>`;
+						html ~= `<li><a href="` ~ realfilename ~ `/">` ~ realfilename ~ `/</a></li>`;
 					else
 						html ~= `<li><a href="` ~ realfilename ~ `">` ~ realfilename ~ `</a></li>`;
 				}
