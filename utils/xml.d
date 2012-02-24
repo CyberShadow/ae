@@ -424,42 +424,40 @@ public string encodeAllEntities(string str)
 	return str;
 }
 
+import ae.utils.text;
+import std.conv;
+
 public string decodeEntities(string str)
 {
-	sizediff_t i=0, p;
-	while ((p=str[i..$].indexOf('&'))>=0)
+	auto fragments = str.fastSplit('&');
+	if (fragments.length < 1)
+		return str;
+
+	auto interleaved = new string[fragments.length*2 - 1];
+	auto buffers = new char[4][fragments.length-1];
+	interleaved[0] = fragments[0];
+
+	foreach (n, fragment; fragments[1..$])
 	{
-		i += p;
-		if ((p=str[i..$].indexOf(';'))>=0)
+		auto p = fragment.indexOf(';');
+		enforce(p>0, "Invalid entity (unescaped ampersand?)");
+
+		dchar c;
+		if (fragment[0]=='#')
 		{
-			auto j = i+p;
-			string entity = str[i+1..j];
-			if (entity.length>0)
-			{
-				if (entity[0]=='#')
-					if (entity.length>1 && entity[1]=='x')
-					{
-						dchar c;
-						enforce(sscanf(toStringz(entity[2..$]), "%x", &c)==1, "Invalid entity hex code");
-						str = str[0..i] ~ toUTF8([c]) ~ str[j+1..$];
-					}
-					else
-					{
-						dchar c;
-						enforce(sscanf(toStringz(entity[1..$]), "%d", &c)==1, "Invalid entity code");
-						str = str[0..i] ~ toUTF8([c]) ~ str[j+1..$];
-					}
-				else
-				{
-					auto c = entity in entities;
-					if (c)
-						str = str[0..i] ~ toUTF8([*c]) ~ str[j+1..$];
-				}
-			}
+			if (fragment[1]=='x')
+				c = fromHex!uint(fragment[2..p]);
+			else
+				c = to!uint(fragment[1..p]);
 		}
-		i++;
+		else
+			c = entities[fragment[0..p]];
+
+		interleaved[1+n*2] = cast(string) buffers[n][0..std.utf.encode(buffers[n], c)];
+		interleaved[2+n*2] = fragment[p+1..$];
 	}
-	return str;
+
+	return interleaved.join();
 }
 
 deprecated alias decodeEntities convertEntities;

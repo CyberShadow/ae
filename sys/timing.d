@@ -85,6 +85,49 @@ private:
 		count++;
 	}
 
+	/// Unschedule a task.
+	void remove(TimerTask task)
+	{
+		debug (TIMER_VERBOSE) writefln("Removing a task which waits for %d tick%s.", task.delay, task.delay==1?"":"s");
+		assert(task.owner is this);
+		if (task is head)
+		{
+			if (head.next)
+			{
+				head = head.next;
+				head.prev = null;
+				debug (TIMER_VERBOSE) writefln("Removed current task, next task is waiting for %d tick%s, %d remaining.", head.delay, head.delay==1?"":"s", head.remaining);
+			}
+			else
+			{
+				debug (TIMER_VERBOSE) writefln("Removed last task.");
+				assert(tail is task);
+				head = tail = null;
+			}
+		}
+		else
+		if (task is tail)
+		{
+			tail = task.prev;
+			if (tail)
+				tail.next = null;
+		}
+		else
+		{
+			TimerTask tmp = task.prev;
+			if (task.prev)
+				task.prev.next = task.next;
+			if (task.next)
+			{
+				task.next.prev = task.prev;
+				task.next = tmp;
+			}
+		}
+		task.owner = null;
+		task.next = task.prev = null;
+		count--;
+	}
+
 public:
 	/// Run scheduled tasks.
 	void prod()
@@ -132,49 +175,6 @@ public:
 
 		add(task, tmp);
 		assert(task.owner is this);
-	}
-
-	/// Unschedule a task.
-	void remove(TimerTask task)
-	{
-		debug (TIMER_VERBOSE) writefln("Removing a task which waits for %d tick%s.", task.delay, task.delay==1?"":"s");
-		assert(task.owner is this);
-		if (task is head)
-		{
-			if (head.next)
-			{
-				head = head.next;
-				head.prev = null;
-				debug (TIMER_VERBOSE) writefln("Removed current task, next task is waiting for %d tick%s, %d remaining.", head.delay, head.delay==1?"":"s", head.remaining);
-			}
-			else
-			{
-				debug (TIMER_VERBOSE) writefln("Removed last task.");
-				assert(tail is task);
-				head = tail = null;
-			}
-		}
-		else
-		if (task is tail)
-		{
-			tail = task.prev;
-			if (tail)
-				tail.next = null;
-		}
-		else
-		{
-			TimerTask tmp = task.prev;
-			if (task.prev)
-				task.prev.next = task.next;
-			if (task.next)
-			{
-				task.next.prev = task.prev;
-				task.next = tmp;
-			}
-		}
-		task.owner = null;
-		task.next = task.prev = null;
-		count--;
 	}
 
 	/// Return true if there are pending tasks scheduled.
@@ -252,6 +252,13 @@ public:
 		return owner !is null;
 	}
 
+	void cancel()
+	{
+		assert(isWaiting());
+		owner.remove(this);
+		assert(!isWaiting());
+	}
+
 	@property TickDuration delay()
 	{
 		return _delay;
@@ -268,7 +275,8 @@ public:
 }
 
 /// The default timer
-Timer mainTimer;
+// __gshared for ae.sys.shutdown
+__gshared Timer mainTimer;
 
 static this()
 {
@@ -287,4 +295,9 @@ TimerTask setInterval(void delegate() handler, TickDuration delay)
 	auto task = new TimerTask(delay, (Timer timer, TimerTask task) { mainTimer.add(task); handler(); });
 	mainTimer.add(task);
 	return task;
+}
+
+void clearTimeout(TimerTask task)
+{
+	task.cancel();
 }

@@ -4,6 +4,9 @@
  * of graceful shutdown, as opposed to cleanup actions
  * that are done as part of the shutdown process.
  *
+ * Note: thread safety of this module is questionable.
+ * TODO: transition to thread-safe centralized event loop.
+ *
  * License:
  *   This Source Code Form is subject to the terms of
  *   the Mozilla Public License, v. 2.0. If a copy of
@@ -16,12 +19,10 @@
 
 module ae.sys.shutdown;
 
-import ae.sys.signals;
-
 void addShutdownHandler(void delegate() fn)
 {
 	if (handlers.length == 0)
-		addSignalHandler(SIGTERM, { shutdown(); });
+		register();
 	handlers ~= fn;
 }
 
@@ -33,5 +34,51 @@ void shutdown()
 }
 
 private:
+
+import core.thread;
+
+void syncShutdown()
+{
+	thread_suspendAll();
+	shutdown();
+	thread_resumeAll();
+}
+
+void register()
+{
+	version(Posix)
+	{
+		import ae.sys.signals;
+		addSignalHandler(SIGTERM, { syncShutdown(); });
+	}
+	else
+	version(Windows)
+	{
+		import core.sys.windows.windows;
+
+		static shared bool closing = false;
+
+		extern(Windows)
+		static BOOL handlerRoutine(DWORD dwCtrlType)
+		{
+			if (!closing)
+			{
+				closing = true;
+				auto msg = "Shutdown event received, shutting down.\r\n";
+				DWORD written;
+				WriteConsoleA(GetStdHandle(STD_ERROR_HANDLE), msg.ptr, msg.length, &written, null);
+
+				thread_attachThis();
+				syncShutdown();
+				thread_detachThis();
+
+				return TRUE;
+			}
+			return FALSE;
+		}
+
+		SetConsoleCtrlHandler(&handlerRoutine, TRUE);
+	}
+}
 
 shared void delegate()[] handlers;

@@ -61,3 +61,5 @@ unittest
 	static assert(is(typeof(s.b) == ubyte));
 	static assert(is(typeof(s.a) == ushort));
 }
+
+public import ae.utils.meta_x;

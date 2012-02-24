@@ -93,3 +93,54 @@ uint murmurHash2(in void[] data, uint seed=0)
 
 	return h;
 }
+
+import ae.utils.digest_murmurhash3;
+
+uint murmurHash3_32(in void[] data, uint seed=0)
+{
+	uint result;
+	MurmurHash3_x86_32(data.ptr, data.length, seed, &result);
+	return result;
+}
+
+alias uint[4] MH3Digest128;
+
+MH3Digest128 murmurHash3_x86_128(in void[] data, uint seed=0)
+{
+	MH3Digest128 result;
+	MurmurHash3_x86_128(data.ptr, data.length, seed, &result);
+	return result;
+}
+
+MH3Digest128 murmurHash3_x64_128(in void[] data, uint seed=0)
+{
+	MH3Digest128 result;
+	MurmurHash3_x64_128(data.ptr, data.length, seed, &result);
+	return result;
+}
+
+/// Select version optimized for target platform.
+/// WARNING: Output depends on platform.
+version(D_LP64)
+	alias murmurHash3_x64_128 murmurHash3_128;
+else
+	alias murmurHash3_x86_128 murmurHash3_128;
+
+string digestToStringMH3(MH3Digest128 digest)
+{
+	return std.string.format("%08X%08X%08X%08X", digest[0], digest[1], digest[2], digest[3]);
+}
+
+unittest
+{
+	assert(murmurHash3_32("The quick brown fox jumps over the lazy dog") == 0x2e4ff723);
+	assert(murmurHash3_32("The quick brown fox jumps over the lazy cog") == 0xf08200fc);
+
+	assert(murmurHash3_x86_128("The quick brown fox jumps over the lazy dog") == [ 0x2f1583c3 , 0xecee2c67 , 0x5d7bf66c , 0xe5e91d2c ]);
+	assert(murmurHash3_x86_128("The quick brown fox jumps over the lazy cog") == [ 0x0ed64388 , 0x3e9ae779 , 0x97034593 , 0x49b3f32f ]);
+
+	assert(murmurHash3_x64_128("The quick brown fox jumps over the lazy dog") == [ 0xbc071b6c , 0xe34bbc7b , 0xc49a9347 , 0x7a433ca9 ]);
+	assert(murmurHash3_x64_128("The quick brown fox jumps over the lazy cog") == [ 0xff85269a , 0x658ca970 , 0xa68e5c3e , 0x43fee3ea ]);
+
+	assert(digestToStringMH3(murmurHash3_x86_128("The quick brown fox jumps over the lazy dog")) == "2F1583C3ECEE2C675D7BF66CE5E91D2C");
+}

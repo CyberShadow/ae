@@ -110,6 +110,19 @@ public:
 		}
 	}
 
+	T[] allocate(size_t len)
+	{
+		auto cursorEnd = cursor + len;
+		if (cursorEnd > end)
+		{
+			reserve(len);
+			cursorEnd = cursor + len;
+		}
+		auto result = cursor[0..len];
+		cursor = cursorEnd;
+		return result;
+	}
+
 	template CanPutAll(U...)
 	{
 		static if (U.length==0)
