@@ -115,7 +115,7 @@ public:
 			}
 			else
 			{
-				string title = "";
+				string title = `Directory listing of <a href="/"><i>&lt;root&gt;</i></a>/`;
 				if (file.length)
 				{
 					string[] trailofbreadcrumbs = split(file,`/`)[0..$-1];
@@ -127,10 +127,8 @@ public:
 							breadcrumbpath ~= `/` ~ crummycrumb;
 						breadcrumblinks ~= `<a href="` ~ breadcrumbpath ~ `/">` ~ breadcrumb ~ `</a>/`;
 					}
-					title = `Directory listing of <a href="/"><i>&lt;server root&gt;</i></a>/` ~ breadcrumblinks;
+					title ~= breadcrumblinks;
 				}
-				else
-					title = `Directory listing of <a href="/"><i>&lt;root&gt;</i></a>/`;
 				string html =  `<ul>`;
 				foreach (DirEntry de; dirEntries(filename, SpanMode.shallow))
 				{
