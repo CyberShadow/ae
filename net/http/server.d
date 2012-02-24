@@ -100,13 +100,14 @@ private:
 						currentRequest.headers[line[0 .. valuestart].idup] = line[valuestart + 2 .. line.length].idup;
 				}
 
+				auto connection = toLower(aaGet(currentRequest.headers, "Connection", null));
 				switch (currentRequest.protocolVersion)
 				{
 					case "1.0":
-						persistent =  ("Connection" in currentRequest.headers && currentRequest.headers["Connection"] == "Keep-Alive");
+						persistent = connection == "keep-alive";
 						break;
 					default: // 1.1+
-						persistent = !("Connection" in currentRequest.headers && currentRequest.headers["Connection"] == "close");
+						persistent = connection != "close";
 						break;
 				}
 				debug (HTTP) writefln("[%s] This %s connection %s persistent", Clock.currTime(), currentRequest.protocolVersion, persistent ? "IS" : "is NOT");
