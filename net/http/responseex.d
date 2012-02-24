@@ -115,8 +115,23 @@ public:
 			}
 			else
 			{
-				string title = `Directory listing of /` ~ encodeEntities(file);
-				string html = `<ul>`;
+				string title = "";
+				if (file.length)
+				{
+					string[] trailofbreadcrumbs = split(file,`/`)[0..$-1];
+					string breadcrumblinks;
+					foreach (uint i, string breadcrumb; trailofbreadcrumbs)
+					{
+						string breadcrumbpath = [];
+						foreach (string crummycrumb; trailofbreadcrumbs[0..i+1])
+							breadcrumbpath ~= `/` ~ crummycrumb;
+						breadcrumblinks ~= `<a href="` ~ breadcrumbpath ~ `/">` ~ breadcrumb ~ `</a>/`;
+					}
+					title = `Directory listing of <a href="/"><i>&lt;server root&gt;</i></a>/` ~ breadcrumblinks;
+				}
+				else
+					title = `Directory listing of <a href="/"><i>&lt;root&gt;</i></a>/`;
+				string html =  `<ul>`;
 				foreach (DirEntry de; dirEntries(filename, SpanMode.shallow))
 				{
 					string basefilename = encodeEntities(baseName(de.name));
@@ -178,7 +193,7 @@ public:
 	void writePageContents(string title, string contentHTML)
 	{
 		string[string] dictionary;
-		dictionary["title"] = encodeEntities(title);
+		dictionary["title"] = title;
 		dictionary["content"] = contentHTML;
 		data = Data(parseTemplate(pageTemplate, dictionary));
 		headers["Content-Type"] = "text/html; charset=utf-8";
@@ -194,7 +209,7 @@ public:
 			content ~= "<p>" ~ p ~ "</p>\n";
 
 		string[string] dictionary;
-		dictionary["title"] = encodeEntities(title);
+		dictionary["title"] = title;
 		dictionary["content"] = content;
 		writePageContents(title, parseTemplate(contentTemplate, dictionary));
 	}
