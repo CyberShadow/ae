@@ -119,11 +119,11 @@ public:
 				string html = `<ul>`;
 				foreach (DirEntry de; dirEntries(filename, SpanMode.shallow))
 				{
-					string realfilename = basename(encodeEntities(de.name));
+					string basefilename = baseName(encodeEntities(de.name));
 					if (de.isDir)
-						html ~= `<li><a href="` ~ realfilename ~ `/">` ~ realfilename ~ `/</a></li>`;
+						html ~= `<li><a href="` ~ basefilename ~ `/">` ~ basefilename ~ `/</a></li>`;
 					else
-						html ~= `<li><a href="` ~ realfilename ~ `">` ~ realfilename ~ `</a></li>`;
+						html ~= `<li><a href="` ~ basefilename ~ `">` ~ basefilename ~ `</a></li>`;
 				}
 				html ~= `</ul>`;
 				writePage(title, html);
