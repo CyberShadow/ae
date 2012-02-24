@@ -103,7 +103,7 @@ public:
 		if ((filename=="" || isDir(filename)))
 		{
 			if (filename.length && !filename.endsWith("/"))
-				return redirect(filename ~ "/");
+				return redirect("/" ~ file ~ "/");
 			else
 			if (exists(filename ~ "index.html"))
 				filename ~= "index.html";
@@ -119,7 +119,7 @@ public:
 				string html = `<ul>`;
 				foreach (DirEntry de; dirEntries(filename, SpanMode.shallow))
 				{
-					string basefilename = baseName(encodeEntities(de.name));
+					string basefilename = encodeEntities(baseName(de.name));
 					if (de.isDir)
 						html ~= `<li><a href="` ~ basefilename ~ `/">` ~ basefilename ~ `/</a></li>`;
 					else
