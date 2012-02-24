@@ -157,7 +157,7 @@ private:
 			if (handleRequest)
 			{
 				// Log unhandled exceptions, but don't mess up the stack trace
-				scope(failure) logRequest(currentRequest, null);
+				//scope(failure) logRequest(currentRequest, null);
 
 				sendResponse(handleRequest(currentRequest, conn));
 			}
@@ -196,12 +196,12 @@ private:
 				respMessage ~= "500 Internal Server Error\r\n\r\n";
 			}
 
-			auto data = Data(respMessage);
-			if (response)
-				data ~= response.data;
+			conn.send(respMessage);
+			if (response && response.data.length)
+				conn.send(response.data);
 
-			conn.send(data.contents);
-			debug (HTTP) writefln("[%s] Sent response (%d bytes)", Clock.currTime(), data.length);
+			debug (HTTP) writefln("[%s] Sent response (%d bytes headers, %d bytes data)",
+				Clock.currTime(), respMessage.length, response ? response.data.length : 0);
 
 			logRequest(currentRequest, response);
 		}
