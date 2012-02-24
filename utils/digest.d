@@ -119,6 +119,18 @@ MH3Digest128 murmurHash3_x64_128(in void[] data, uint seed=0)
 	return result;
 }
 
+/// Select version optimized for target platform.
+/// WARNING: Output depends on platform.
+version(D_LP64)
+	alias murmurHash3_x64_128 murmurHash3_128;
+else
+	alias murmurHash3_x86_128 murmurHash3_128;
+
+string digestToStringMH3(MH3Digest128 digest)
+{
+	return std.string.format("%08X%08X%08X%08X", digest[0], digest[1], digest[2], digest[3]);
+}
+
 unittest
 {
 	assert(murmurHash3_32("The quick brown fox jumps over the lazy dog") == 0x2e4ff723);
@@ -129,4 +141,6 @@ unittest
 
 	assert(murmurHash3_x64_128("The quick brown fox jumps over the lazy dog") == [ 0xbc071b6c , 0xe34bbc7b , 0xc49a9347 , 0x7a433ca9 ]);
 	assert(murmurHash3_x64_128("The quick brown fox jumps over the lazy cog") == [ 0xff85269a , 0x658ca970 , 0xa68e5c3e , 0x43fee3ea ]);
+
+	assert(digestToStringMH3(murmurHash3_x86_128("The quick brown fox jumps over the lazy dog")) == "2F1583C3ECEE2C675D7BF66CE5E91D2C");
 }
