@@ -242,15 +242,6 @@ private:
 		new Connection(incoming);
 	}
 
-	static string formatAddress(Address address, string vhost = null)
-	{
-		string addr = address.toAddrString();
-		string port = address.toPortString();
-		return "http://" ~
-			(vhost ? vhost : addr == "0.0.0.0" || addr == "::" ? "*" : addr.contains(":") ? "[" ~ addr ~ "]" : addr) ~
-			(port == "80" ? "" : ":" ~ port);
-	}
-
 public:
 	this(TickDuration timeout = TickDuration.from!"seconds"(30))
 	{
@@ -276,6 +267,15 @@ public:
 		if (log) log("Shutting down.");
 		conn.close();
 		conn = null;
+	}
+
+	static string formatAddress(Address address, string vhost = null)
+	{
+		string addr = address.toAddrString();
+		string port = address.toPortString();
+		return "http://" ~
+			(vhost ? vhost : addr == "0.0.0.0" || addr == "::" ? "*" : addr.contains(":") ? "[" ~ addr ~ "]" : addr) ~
+			(port == "80" ? "" : ":" ~ port);
 	}
 
 public:

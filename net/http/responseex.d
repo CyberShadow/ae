@@ -23,8 +23,10 @@ import std.datetime;
 public import ae.net.http.common;
 import ae.sys.data;
 import ae.sys.dataio;
+import ae.utils.array;
 import ae.utils.json;
 import ae.utils.xml;
+import ae.utils.text;
 import ae.utils.time;
 import ae.utils.mime;
 
@@ -75,9 +77,9 @@ public:
 		return serveData(Data(data), "text/plain; charset=utf-8");
 	}
 
-	static bool checkPath(string file)
+	static bool checkPath(string path)
 	{
-		if (file.length && (file.indexOf("..") != -1 || file[0]=='/' || file[0]=='\\' || file.indexOf("//") != -1 || file.indexOf("\\\\") != -1))
+		if (path.length && (path.contains("..") || path[0]=='/' || path[0]=='\\' || path.contains("//") || path.contains("\\\\")))
 			return false;
 		return true;
 	}
@@ -90,20 +92,23 @@ public:
 	}
 
 	/// Send a file from the disk
-	HttpResponseEx serveFile(string file, string location, bool enableIndex = false)
+	HttpResponseEx serveFile(string path, string fsBase, string urlBase, bool enableIndex = false)
 	{
-		if (!checkPath(file))
+		if (!checkPath(path))
 		{
 			writeError(HttpStatusCode.Forbidden);
 			return this;
 		}
 
-		string filename = location ~ file;
+		assert(fsBase=="" || fsBase.endsWith("/"));
+		assert(urlBase.endsWith("/"));
+
+		string filename = fsBase ~ path;
 
 		if ((filename=="" || isDir(filename)))
 		{
 			if (filename.length && !filename.endsWith("/"))
-				return redirect(filename ~ "/");
+				return redirect("/" ~ path ~ "/");
 			else
 			if (exists(filename ~ "index.html"))
 				filename ~= "index.html";
@@ -115,10 +120,25 @@ public:
 			}
 			else
 			{
-				string title = `Directory listing of /` ~ encodeEntities(file);
-				string html = `<ul>`;
+				path = path.length ? path[0..$-1] : path;
+				string title = `Directory listing of ` ~ encodeEntities(path=="" ? "/" : baseName(path));
+
+				auto segments = [urlBase[0..$-1]] ~ path.split("/");
+				string segmentUrl;
+				string html;
+				foreach (i, segment; segments)
+				{
+					segmentUrl ~= (i ? encodeUrlParameter(segment) : segment) ~ "/";
+					html ~= `<a style="margin-left: 5px" href="` ~ segmentUrl ~ `">` ~ encodeEntities(segment) ~ `/</a>`;
+				}
+
+				html ~= `<ul>`;
 				foreach (DirEntry de; dirEntries(filename, SpanMode.shallow))
-					html ~= `<li><a href="` ~ encodeEntities(de.name) ~ `">` ~ encodeEntities(de.name) ~ `</a></li>`;
+				{
+					auto name = baseName(de.name);
+					auto suffix = de.isDir ? "/" : "";
+					html ~= `<li><a href="` ~ encodeUrlParameter(name) ~ suffix ~ `">` ~ encodeEntities(name) ~ suffix ~ `</a></li>`;
+				}
 				html ~= `</ul>`;
 				writePage(title, html);
 				return this;

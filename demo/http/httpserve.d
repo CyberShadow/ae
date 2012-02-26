@@ -24,6 +24,7 @@ import ae.sys.shutdown;
 import ae.net.http.server;
 import ae.net.http.common;
 import ae.net.http.responseex;
+import ae.net.ietf.headers;
 import ae.net.asockets;
 
 class FileServer
@@ -44,7 +45,11 @@ class FileServer
 		auto response = new HttpResponseEx();
 
 		try
-			response.serveFile(decodeUrlParameter(request.resource[1..$]), "", true);
+			response.serveFile(
+				decodeUrlParameter(request.resource[1..$]),
+				"",
+				HttpServer.formatAddress(conn.localAddress, aaGet(request.headers, "Host", null)) ~ "/",
+				true);
 		catch (Exception e)
 			response.writeError(HttpStatusCode.InternalServerError, e.msg);
 		return response;
