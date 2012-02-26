@@ -44,18 +44,20 @@ void syncShutdown()
 	thread_resumeAll();
 }
 
+// http://d.puremagic.com/issues/show_bug.cgi?id=7016
+version(Posix)
+	import ae.sys.signals;
+else
+version(Windows)
+	import core.sys.windows.windows;
+
 void register()
 {
 	version(Posix)
-	{
-		import ae.sys.signals;
 		addSignalHandler(SIGTERM, { syncShutdown(); });
-	}
 	else
 	version(Windows)
 	{
-		import core.sys.windows.windows;
-
 		static shared bool closing = false;
 
 		extern(Windows)
