@@ -44,7 +44,7 @@ class FileServer
 		auto response = new HttpResponseEx();
 
 		try
-			response.serveFile(request.resource[1..$], "", true);
+			response.serveFile(decodeUrlParameter(request.resource[1..$]), "", true);
 		catch (Exception e)
 			response.writeError(HttpStatusCode.InternalServerError, e.msg);
 		return response;

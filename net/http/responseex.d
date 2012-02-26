@@ -103,7 +103,7 @@ public:
 		if ((filename=="" || isDir(filename)))
 		{
 			if (filename.length && !filename.endsWith("/"))
-				return redirect(filename ~ "/");
+				return redirect("/" ~ file ~ "/");
 			else
 			if (exists(filename ~ "index.html"))
 				filename ~= "index.html";
@@ -115,10 +115,29 @@ public:
 			}
 			else
 			{
-				string title = `Directory listing of /` ~ encodeEntities(file);
-				string html = `<ul>`;
+				string title = `Directory listing of <a href="/"><i>&lt;root&gt;</i></a>/`;
+				if (file.length)
+				{
+					string[] trailofbreadcrumbs = split(file,`/`)[0..$-1];
+					string breadcrumblinks;
+					foreach (uint i, string breadcrumb; trailofbreadcrumbs)
+					{
+						string breadcrumbpath = [];
+						foreach (string crummycrumb; trailofbreadcrumbs[0..i+1])
+							breadcrumbpath ~= `/` ~ crummycrumb;
+						breadcrumblinks ~= `<a href="` ~ breadcrumbpath ~ `/">` ~ breadcrumb ~ `</a>/`;
+					}
+					title ~= breadcrumblinks;
+				}
+				string html =  `<ul>`;
 				foreach (DirEntry de; dirEntries(filename, SpanMode.shallow))
-					html ~= `<li><a href="` ~ encodeEntities(de.name) ~ `">` ~ encodeEntities(de.name) ~ `</a></li>`;
+				{
+					string basefilename = encodeEntities(baseName(de.name));
+					if (de.isDir)
+						html ~= `<li><a href="` ~ basefilename ~ `/">` ~ basefilename ~ `/</a></li>`;
+					else
+						html ~= `<li><a href="` ~ basefilename ~ `">` ~ basefilename ~ `</a></li>`;
+				}
 				html ~= `</ul>`;
 				writePage(title, html);
 				return this;
@@ -172,7 +191,7 @@ public:
 	void writePageContents(string title, string contentHTML)
 	{
 		string[string] dictionary;
-		dictionary["title"] = encodeEntities(title);
+		dictionary["title"] = title;
 		dictionary["content"] = contentHTML;
 		data = Data(parseTemplate(pageTemplate, dictionary));
 		headers["Content-Type"] = "text/html; charset=utf-8";
@@ -188,7 +207,7 @@ public:
 			content ~= "<p>" ~ p ~ "</p>\n";
 
 		string[string] dictionary;
-		dictionary["title"] = encodeEntities(title);
+		dictionary["title"] = title;
 		dictionary["content"] = content;
 		writePageContents(title, parseTemplate(contentTemplate, dictionary));
 	}
