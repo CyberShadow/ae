@@ -472,7 +472,6 @@ public:
 		if (conn || connected)
 			throw new Exception("Socket object is already connected");
 
-
 		try
 		{
 			auto address = getAddress(host, port)[0];
@@ -480,12 +479,11 @@ public:
 			conn = new Socket(address.addressFamily(), SocketType.STREAM, ProtocolType.TCP);
 			conn.blocking = false;
 
+			socketManager.register(this);
 			conn.connect(address);
 		}
 		catch (SocketException e)
 			return onError("Connect error: " ~ e.msg);
-
-		socketManager.register(this);
 	}
 
 	const DefaultDisconnectReason = "Software closed the connection";
@@ -493,10 +491,9 @@ public:
 	/// Close a connection. If there is queued data waiting to be sent, wait until it is sent before disconnecting.
 	void disconnect(string reason = DefaultDisconnectReason, DisconnectType type = DisconnectType.Requested)
 	{
-		assert(conn);
-
 		if (writePending && type==DisconnectType.Requested)
 		{
+			assert(conn);
 			// queue disconnect after all data is sent
 			//debug writefln("[%s] Queueing disconnect: ", remoteAddress, reason);
 			assert(!disconnecting, "Already disconnecting");
@@ -508,11 +505,18 @@ public:
 		}
 
 		//debug writefln("[%s] Disconnecting: %s", remoteAddress, reason);
-		socketManager.unregister(this);
-		conn.close();
-		conn = null;
-		outQueue[] = null;
-		connected = false;
+		if (conn)
+		{
+			socketManager.unregister(this);
+			conn.close();
+			conn = null;
+			outQueue[] = null;
+			connected = false;
+		}
+		else
+		{
+			assert(!connected);
+		}
 		if (idleTask && idleTask.isWaiting())
 			idleTask.cancel();
 		if (handleDisconnect && !disconnecting)
