@@ -47,7 +47,7 @@ private const MonthShortNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul"
 private const MonthLongNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 /// Format a SysTime using a PHP date() format string.
-string formatTime(string fmt, SysTime t = Clock.currTime)
+string formatTime(string fmt, SysTime t = Clock.currTime())
 {
 	auto result = StringBuilder(48);
 	putTime(result, fmt, t);
