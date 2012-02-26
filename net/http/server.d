@@ -220,7 +220,7 @@ private:
 				response ? text(response.status) : "-",
 				format("%9.2f ms", request.age.usecs / 1000f),
 				request.method,
-				"http://" ~ formatAddress(localAddress, aaGet(request.headers, "Host", null)) ~ request.resource,
+				formatAddress(localAddress, aaGet(request.headers, "Host", null)) ~ request.resource,
 				response ? aaGet(response.headers, "Content-Type", "-") : "-",
 			] ~ (DEBUG ? [] : [
 				aaGet(request.headers, "Referer", "-"),
