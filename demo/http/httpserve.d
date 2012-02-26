@@ -48,8 +48,8 @@ class FileServer
 			response.serveFile(
 				decodeUrlParameter(request.resource[1..$]),
 				"",
-				HttpServer.formatAddress(conn.localAddress, aaGet(request.headers, "Host", null)) ~ "/",
-				true);
+				true,
+				HttpServer.formatAddress(conn.localAddress, aaGet(request.headers, "Host", null)) ~ "/");
 		catch (Exception e)
 			response.writeError(HttpStatusCode.InternalServerError, e.msg);
 		return response;

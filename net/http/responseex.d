@@ -92,7 +92,7 @@ public:
 	}
 
 	/// Send a file from the disk
-	HttpResponseEx serveFile(string path, string fsBase, string urlBase, bool enableIndex = false)
+	HttpResponseEx serveFile(string path, string fsBase, bool enableIndex = false, string urlBase="/")
 	{
 		if (!checkPath(path))
 		{
