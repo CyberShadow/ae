@@ -70,6 +70,7 @@ string toJson(T)(T v)
 {
 	static if (is(T == enum))
 		return "\"" ~ jsonEscape(to!string(v)) ~ "\"";
+	else
 	static if (is(T : string))
 		return "\"" ~ jsonEscape(v) ~ "\"";
 	else
