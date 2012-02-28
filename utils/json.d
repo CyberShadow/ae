@@ -68,6 +68,8 @@ string jsonEscape(bool UNICODE = true)(string str)
 
 string toJson(T)(T v)
 {
+	static if (is(T == enum))
+		return "\"" ~ jsonEscape(to!string(v)) ~ "\"";
 	static if (is(T : string))
 		return "\"" ~ jsonEscape(v) ~ "\"";
 	else
@@ -163,6 +165,9 @@ private struct JsonParser
 
 	T read(T)()
 	{
+		static if (is(T==enum))
+			return readEnum!(T)();
+		else
 		static if (is(T==string))
 			return readString();
 		else
@@ -362,15 +367,21 @@ private struct JsonParser
 				expect(',');
 		}
 	}
+
+	T readEnum(T)()
+	{
+		return to!T(readString());
+	}
 }
 
 T jsonParse(T)(string s) { return JsonParser(s).read!(T); }
 
 unittest
 {
-	struct S { int i; S[] arr; string[string] dic; }
-	S s = S(42, [S(1), S(2)], ["apple":"fruit", "pizza":"vegetable"]);
+	enum En { one, two }
+	struct S { int i; S[] arr; string[string] dic; En en; }
+	S s = S(42, [S(1), S(2)], ["apple":"fruit", "pizza":"vegetable"], En.two);
 	auto s2 = jsonParse!S(toJson(s));
 	// assert(s == s2); // Issue 3789
-	assert(s.i == s2.i && s.arr == s2.arr && s.dic == s2.dic);
+	assert(s.i == s2.i && s.arr == s2.arr && s.dic == s2.dic && s.en == En.two);
 }
