@@ -24,6 +24,8 @@ import ae.ui.video.renderer;
 import ae.utils.fps;
 import ae.utils.graphics.image;
 
+alias ae.utils.math.abs abs; // Issue 314?
+
 final class MyApplication : Application
 {
 	override string getName() { return "Demo/Input"; }

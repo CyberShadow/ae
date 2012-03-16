@@ -19,9 +19,9 @@ import ae.ui.video.renderer;
 /// Container for all top-level windows.
 final class RootControl : ContainerControl
 {
-	override void render(Renderer s, int x, int y)
+	override void render(Renderer r, int x, int y)
 	{
 		// TODO: fill background
-		super.render(s, x, y);
+		super.render(r, x, y);
 	}
 }

@@ -41,7 +41,7 @@ final class MyApplication : Application
 
 		int x0 = (canvas.w - image.w) / 2;
 		int y0 = (canvas.h - image.h) / 2;
-		canvas.draw(image, x0, y0);
+		canvas.draw(x0, y0, image);
 	}
 
 	override int run(string[] args)

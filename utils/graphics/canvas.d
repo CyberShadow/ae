@@ -40,7 +40,8 @@ mixin template Canvas()
 	import std.random: uniform;
 	import std.string : format;
 
-	static assert(IsCanvas!(typeof(this)));
+	// http://d.puremagic.com/issues/show_bug.cgi?id=7717
+	//static assert(IsCanvas!(typeof(this)));
 
 	alias typeof(pixels[0]) COLOR;
 

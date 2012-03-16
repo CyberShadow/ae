@@ -89,10 +89,10 @@ private:
 		override void cancel()
 		{
 			if (prodding) // cancel called from timer event handler, synchronization would cause a deadlock
-				sysTimer.remove(task);
+				task.cancel();
 			else
 			synchronized(sysTimer)
-				sysTimer.remove(task);
+				task.cancel();
 		}
 	}
 }

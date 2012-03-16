@@ -32,7 +32,7 @@ class MyControl : Control
 		this.shell = shell;
 	}
 
-	struct Coord { uint x, y, c; void* dummy; }
+	struct Coord { uint x, y; BGRX c; void* dummy; }
 	Coord[] coords;
 
 	override void handleMouseMove(uint x, uint y, MouseButtons buttons)
@@ -40,11 +40,8 @@ class MyControl : Control
 		if (buttons)
 		{
 			uint b = cast(uint)buttons;
-			b = (b&1)|((b&2)<<7)|((b&4)<<14);
-			b |= b<<4;
-			b |= b<<2;
-			b |= b<<1;
-			coords ~= Coord(x, y, b);
+			ubyte channel(ubyte m) { return ((b>>m)&1) ? 0xFF : 0; }
+			coords ~= Coord(x, y, BGRX(channel(2), channel(1), channel(0)));
 		}
 	}
 
