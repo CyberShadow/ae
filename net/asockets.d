@@ -491,17 +491,20 @@ public:
 	/// Close a connection. If there is queued data waiting to be sent, wait until it is sent before disconnecting.
 	void disconnect(string reason = DefaultDisconnectReason, DisconnectType type = DisconnectType.Requested)
 	{
-		if (writePending && type==DisconnectType.Requested)
+		if (writePending)
 		{
-			assert(conn);
-			// queue disconnect after all data is sent
-			//debug writefln("[%s] Queueing disconnect: ", remoteAddress, reason);
-			assert(!disconnecting, "Already disconnecting");
-			disconnecting = true;
-			setIdleTimeout(TickDuration.from!"seconds"(30));
-			if (handleDisconnect)
-				handleDisconnect(this, reason, type);
-			return;
+			if (type==DisconnectType.Requested)
+			{
+				assert(conn);
+				// queue disconnect after all data is sent
+				//debug writefln("[%s] Queueing disconnect: ", remoteAddress, reason);
+				assert(!disconnecting, "Already disconnecting");
+				disconnecting = true;
+				setIdleTimeout(TickDuration.from!"seconds"(30));
+				return;
+			}
+			else
+				discardQueues();
 		}
 
 		//debug writefln("[%s] Disconnecting: %s", remoteAddress, reason);
@@ -519,7 +522,7 @@ public:
 		}
 		if (idleTask && idleTask.isWaiting())
 			idleTask.cancel();
-		if (handleDisconnect && !disconnecting)
+		if (handleDisconnect)
 			handleDisconnect(this, reason, type);
 	}
 
@@ -545,6 +548,16 @@ public:
 		}
 		else
 			outQueue[priority] = null;
+	}
+
+	/// Clears all queues, even partially sent content.
+	private final void discardQueues()
+	{
+		foreach (priority; 0..MAX_PRIORITY+1)
+		{
+			outQueue[priority] = null;
+			partiallySent[priority] = false;
+		}
 	}
 
 	@property
