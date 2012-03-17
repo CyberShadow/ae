@@ -27,7 +27,6 @@ private:
 	alias Unqual!I T;
 
 	T* cursor, start, end;
-	static struct Arr { size_t length; T* ptr; }
 
 	void reserve(size_t len)
 	{
