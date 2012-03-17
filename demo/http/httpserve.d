@@ -49,7 +49,7 @@ class FileServer
 				decodeUrlParameter(request.resource[1..$]),
 				"",
 				true,
-				HttpServer.formatAddress(conn.localAddress, aaGet(request.headers, "Host", null)) ~ "/");
+				formatAddress(conn.localAddress, aaGet(request.headers, "Host", null)) ~ "/");
 		catch (Exception e)
 			response.writeError(HttpStatusCode.InternalServerError, e.msg);
 		return response;
