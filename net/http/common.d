@@ -55,7 +55,6 @@ class HttpRequest : HttpMessage
 public:
 	string method = "GET";
 	string proxy;
-	ushort port = 80; // client only
 
 	this()
 	{
@@ -68,26 +67,26 @@ public:
 
 	@property string resource()
 	{
-		return resource_;
+		return _resource;
 	}
 
 	@property void resource(string value)
 	{
-		resource_ = value;
+		_resource = value;
 
 		// applies to both Client/Server as some clients put a full URL in the GET line instead of using a "Host" header
-		if (resource_.length>7 && resource_[0 .. 7] == "http://")
+		if (_resource.length>7 && _resource[0 .. 7] == "http://")
 		{
-			auto pathstart = resource_[7 .. $].indexOf('/');
+			auto pathstart = _resource[7 .. $].indexOf('/');
 			if (pathstart == -1)
 			{
-				host = resource_[7 .. $];
-				resource_ = "/";
+				host = _resource[7 .. $];
+				_resource = "/";
 			}
 			else
 			{
-				host = resource_[7 .. 7 + pathstart];
-				resource_ = resource_[7 + pathstart .. $];
+				host = _resource[7 .. 7 + pathstart];
+				_resource = _resource[7 + pathstart .. $];
 			}
 			auto portstart = host().indexOf(':');
 			if (portstart != -1)
@@ -100,12 +99,40 @@ public:
 
 	@property string host()
 	{
-		return headers["Host"];
+		string _host = headers["Host"];
+		auto colon = _host.lastIndexOf(":");
+		return colon<0 ? _host : _host[0..colon];
 	}
 
-	@property void host(string value)
+	@property void host(string _host)
 	{
-		headers["Host"] = value;
+		auto _port = this.port;
+		headers["Host"] = _port==80 ? _host : _host ~ ":" ~ text(_port);
+	}
+
+	@property ushort port()
+	{
+		if ("Host" in headers)
+		{
+			string _host = headers["Host"];
+			auto colon = _host.lastIndexOf(":");
+			return colon<0 ? 80 : to!ushort(_host[0..colon]);
+		}
+		else
+			return _port;
+	}
+
+	@property void port(ushort _port)
+	{
+		if ("Host" in headers)
+		{
+			if (_port == 80)
+				headers["Host"] = this.host;
+			else
+				headers["Host"] = this.host ~ ":" ~ text(_port);
+		}
+		else
+			this._port = _port;
 	}
 
 	@property string url()
@@ -177,7 +204,8 @@ public:
 	}
 
 private:
-	string resource_;
+	string _resource;
+	ushort _port = 80; // used only when no "Host" in headers; otherwise, taken from there
 }
 
 /// HTTP response status codes
