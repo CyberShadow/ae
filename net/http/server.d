@@ -84,7 +84,7 @@ public:
 	/// Callback for when the socket was closed.
 	void delegate() handleClose;
 	/// Callback for an incoming request.
-	HttpResponse delegate(HttpRequest request, ClientSocket conn) handleRequest;
+	void delegate(HttpRequest request, HttpServerConnection conn) handleRequest;
 }
 
 final class HttpServerConnection
@@ -99,6 +99,7 @@ private:
 	Data inBuffer;
 	int expect;  // VP 2007.01.21: changing from size_t to int because size_t is unsigned
 	bool persistent;
+	bool requestProcessing; // user code is asynchronously processing current request
 
 	this(HttpServer server, ClientSocket conn)
 	{
@@ -196,7 +197,7 @@ private:
 		debug (HTTP) writefln("[%s] Receiving continuation of request: \n%s---", Clock.currTime(), cast(string)data.contents);
 		inBuffer ~= data;
 
-		if (inBuffer.length >= expect)
+		if (!requestProcessing && inBuffer.length >= expect)
 		{
 			debug (HTTP) writefln("[%s] %s/%s", Clock.currTime(), inBuffer.length, expect);
 			processRequest(inBuffer.popFront(expect));
@@ -211,18 +212,10 @@ private:
 			// Log unhandled exceptions, but don't mess up the stack trace
 			//scope(failure) logRequest(currentRequest, null);
 
-			sendResponse(server.handleRequest(currentRequest, conn));
+			// sendResponse may be called immediately, or later
+			requestProcessing = true;
+			server.handleRequest(currentRequest, this);
 		}
-
-		if (persistent)
-		{
-			// reset for next request
-			conn.handleReadData = &onNewRequest;
-			if (inBuffer.length) // a second request has been pipelined
-				onNewRequest(conn, Data());
-		}
-		else
-			conn.disconnect();
 	}
 
 	void logRequest(HttpRequest request, HttpResponse response)
@@ -249,6 +242,7 @@ private:
 public:
 	void sendResponse(HttpResponse response)
 	{
+		requestProcessing = false;
 		string respMessage = "HTTP/" ~ currentRequest.protocolVersion ~ " ";
 		if (response)
 		{
@@ -276,6 +270,16 @@ public:
 
 		debug (HTTP) writefln("[%s] Sent response (%d bytes headers, %d bytes data)",
 			Clock.currTime(), respMessage.length, response ? response.data.length : 0);
+
+		if (persistent)
+		{
+			// reset for next request
+			conn.handleReadData = &onNewRequest;
+			if (inBuffer.length) // a second request has been pipelined
+				onNewRequest(conn, Data());
+		}
+		else
+			conn.disconnect();
 
 		logRequest(currentRequest, response);
 	}

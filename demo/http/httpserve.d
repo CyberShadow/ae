@@ -40,7 +40,7 @@ class FileServer
 		addShutdownHandler({ server.close(); });
 	}
 
-	HttpResponse onRequest(HttpRequest request, ClientSocket conn)
+	void onRequest(HttpRequest request, HttpServerConnection conn)
 	{
 		auto response = new HttpResponseEx();
 
@@ -52,7 +52,7 @@ class FileServer
 				formatAddress(conn.localAddress, aaGet(request.headers, "Host", null)) ~ "/");
 		catch (Exception e)
 			response.writeError(HttpStatusCode.InternalServerError, e.msg);
-		return response;
+		conn.sendResponse(response);
 	}
 }
 
