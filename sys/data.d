@@ -174,6 +174,20 @@ public:
 		return contents is null;
 	}
 
+	@property size_t capacity() const
+	{
+		if (wrapper is null)
+			return length;
+		// We can only safely expand if the memory slice is at the end of the used unmanaged memory block.
+		auto pos = ptr - wrapper.contents.ptr; // start position in wrapper data
+		auto end = pos + length;               // end   position in wrapper data
+		assert(end <= wrapper.size);
+		if (end == wrapper.size && end < wrapper.capacity)
+			return wrapper.capacity - pos;
+		else
+			return length;
+	}
+
 	private void reallocate(size_t size, size_t capacity)
 	{
 		wrapper = new DataWrapper(size, capacity);
@@ -195,13 +209,9 @@ public:
 	}
 	body
 	{
-		if (wrapper is null)
-			return reallocate(newSize, newCapacity);
-		// We can only safely expand if the memory slice is at the end of the used unmanaged memory block.
-		auto pos = ptr - wrapper.contents.ptr;
-		assert(pos + length <= wrapper.size);
-		if (pos + length == wrapper.size && pos + newSize <= wrapper.capacity)
+		if (newCapacity <= capacity)
 		{
+			auto pos = ptr - wrapper.contents.ptr; // start position in wrapper data
 			wrapper.size = pos + newSize;
 			contents = ptr[0..newSize];
 		}
@@ -331,6 +341,44 @@ public:
 		this  .contents = contents[size..$];
 		return result;
 	}
+
+	/// Join an array of Data to a single Data.
+	static Data join(Data[] arr)
+	{
+		if (arr.length == 0)
+			return Data();
+		else
+		if (arr.length == 1)
+			return arr[0];
+
+		size_t size = 0;
+		foreach (ref d; arr)
+			size += d.length;
+		Data result = Data(size);
+		size_t pos = 0;
+		foreach (ref d; arr)
+		{
+			result.mcontents[pos..pos+d.length] = d.contents;
+			pos += d.length;
+		}
+		return result;
+	}
+
+	/// Join an array of Data to a memory block on the managed heap.
+	static void[] joinToHeap(Data[] arr)
+	{
+		size_t size = 0;
+		foreach (ref d; arr)
+			size += d.length;
+		auto result = new void[size];
+		size_t pos = 0;
+		foreach (ref d; arr)
+		{
+			result[pos..pos+d.length] = d.contents;
+			pos += d.length;
+		}
+		return result;
+	}
 }
 
 // ************************************************************************
@@ -413,7 +461,8 @@ final class DataWrapper
 		dataCount --;
 	}
 
-	void[] contents()
+	@property
+	inout(void)[] contents() inout
 	{
 		return data[0..size];
 	}
