@@ -18,6 +18,7 @@ module ae.utils.gzip;
 // reimplement this module as zlib flags
 
 static import zlib = ae.utils.zlib;
+import ae.utils.zlib : ZlibOptions, ZlibMode;
 static import stdcrc32 = crc32;
 debug import std.stdio, std.file;
 import ae.sys.data;
@@ -51,7 +52,7 @@ Data compress(Data data)
 	header[8] = 4;
 	header[9] = 3;     // TODO: set OS
 	uint[2] footer = [crc32(data.contents), std.conv.to!uint(data.length)];
-	Data compressed = zlib.compress(data, 9);
+	Data compressed = zlib.compress(data);
 	return header ~ compressed[2..compressed.length-4] ~ cast(ubyte[])footer;
 }
 
@@ -71,7 +72,8 @@ Data uncompress(Data data)
 		while (bytes[start]) start++;
 		start++;
 	}
-	Data uncompressed = zlib.uncompress(data[start..data.length-8], 0, -15);
+	ZlibOptions options; options.mode = ZlibMode.raw;
+	Data uncompressed = zlib.uncompress(data[start..data.length-8], options);
 	enforce(uncompressed.length == *cast(uint*)(&data.contents[$-4]), "Decompressed data length mismatch");
 	return uncompressed;
 }
