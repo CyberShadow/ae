@@ -527,13 +527,14 @@ public:
 	}
 
 	/// Append data to the send buffer.
-	final void send(const(void)[] data, int priority = DEFAULT_PRIORITY)
+	final void send(Data data, int priority = DEFAULT_PRIORITY)
 	{
-		send(Data(data), priority);
+		assert(connected && !disconnecting);
+		outQueue[priority] ~= data;
 	}
 
 	/// ditto
-	final void send(Data data, int priority = DEFAULT_PRIORITY)
+	final void send(Data[] data, int priority = DEFAULT_PRIORITY)
 	{
 		assert(connected && !disconnecting);
 		outQueue[priority] ~= data;
@@ -847,7 +848,7 @@ public:
 	/// Append a line to the send buffer.
 	final void send(string line)
 	{
-		super.send(line ~ delimiter);
+		super.send(Data(line ~ delimiter));
 	}
 
 public:

@@ -54,12 +54,17 @@ public:
 		return serveData(Data(data), contentType);
 	}
 
-	HttpResponseEx serveData(Data data, string contentType)
+	HttpResponseEx serveData(Data[] data, string contentType)
 	{
 		setStatus(HttpStatusCode.OK);
 		headers["Content-Type"] = contentType;
 		this.data = data;
 		return this;
+	}
+
+	HttpResponseEx serveData(Data data, string contentType)
+	{
+		return serveData([data], contentType);
 	}
 
 	string jsonCallback;
@@ -156,7 +161,7 @@ public:
 			headers["Content-Type"] = mimeType;
 
 		setStatus(HttpStatusCode.OK);
-		data = readData(filename);
+		data = [readData(filename)];
 		headers["Last-Modified"] = httpTime(timeLastModified(filename));
 		return this;
 	}
@@ -194,7 +199,7 @@ public:
 		string[string] dictionary;
 		dictionary["title"] = encodeEntities(title);
 		dictionary["content"] = contentHTML;
-		data = Data(parseTemplate(pageTemplate, dictionary));
+		data = [Data(parseTemplate(pageTemplate, dictionary))];
 		headers["Content-Type"] = "text/html; charset=utf-8";
 	}
 

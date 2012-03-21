@@ -91,20 +91,22 @@ struct ZlibProcess(bool COMPRESSING)
 			zenforce(inflateInit2(&zs, options.zwindowBits));
 	}
 
-	void processChunk(Data data)
+	void processChunk(Data chunk)
 	{
-		if (!data.length)
+		if (!chunk.length)
 			return;
 
 		assert(zs.avail_in == 0);
-		zs.next_in  = cast(ubyte*) data.ptr;
-		zs.avail_in = data.length;
+		zs.next_in  = cast(ubyte*) chunk.ptr;
+		zs.avail_in = chunk.length;
 
 		do
 		{
 			if (zs.avail_out == 0)
 				allocChunk(adjustSize(zs.avail_in));
 
+			assert(zs.avail_in  && zs.next_in );
+			assert(zs.avail_out && zs.next_out);
 			if (zend(processFunc(&zs, Z_NO_FLUSH)))
 				enforce(zs.avail_in==0, new ZlibException("Trailing data"));
 		} while (zs.avail_in);
@@ -119,18 +121,18 @@ struct ZlibProcess(bool COMPRESSING)
 		return outputChunks;
 	}
 
-	static Data[] processChunks(Data[] input, ZlibOptions options = ZlibOptions.init)
+	static Data[] process(Data[] input, ZlibOptions options = ZlibOptions.init)
 	{
 		typeof(this) zp;
 		zp.init(options);
-		foreach (ref data; input)
-			zp.processChunk(data);
+		foreach (ref chunk; input)
+			zp.processChunk(chunk);
 		return zp.flush();
 	}
 
 	static Data process(Data input, ZlibOptions options = ZlibOptions.init)
 	{
-		return Data.join(processChunks([input], options));
+		return process([input], options).joinData();
 	}
 
 private:
@@ -143,14 +145,14 @@ private:
 		alias deflate processFunc;
 		alias deflateEnd endFunc;
 
-		size_t adjustSize(size_t sz) { return sz / 4; }
+		size_t adjustSize(size_t sz) { return sz / 4 + 1; }
 	}
 	else
 	{
 		alias inflate processFunc;
 		alias inflateEnd endFunc;
 
-		size_t adjustSize(size_t sz) { return sz * 4; }
+		size_t adjustSize(size_t sz) { return sz * 4 + 1; }
 	}
 
 	void zenforce(int ret)
@@ -198,6 +200,11 @@ alias ZlibProcess!false ZlibInflater;
 alias ZlibDeflater.process compress;
 alias ZlibInflater.process uncompress;
 
+Data compress(Data input, int level)
+{
+	return compress(input, ZlibOptions(level));
+}
+
 unittest
 {
 	ubyte[] src = cast(ubyte[])
@@ -206,6 +213,5 @@ the quick brown fox jumps over the lazy dog\r
 ";
 	ubyte[] def = cast(ubyte[])  compress(Data(src)).contents;
 	ubyte[] res = cast(ubyte[])uncompress(Data(def)).contents;
-	//arrayPrint(result);
 	assert(res == src);
 }

@@ -23,6 +23,8 @@ import std.uri;
 import std.utf;
 
 import ae.net.asockets;
+import ae.net.ietf.headers;
+import ae.net.ietf.headerparse;
 import ae.sys.data;
 debug import std.stdio;
 
@@ -33,7 +35,7 @@ class HttpClient
 {
 private:
 	ClientSocket conn;
-	Data inBuffer;
+	Data[] inBuffer;
 
 	HttpRequest currentRequest;
 
@@ -56,8 +58,8 @@ protected:
 		if (!compat) {
 			if (!("Accept-Encoding" in currentRequest.headers))
 				currentRequest.headers["Accept-Encoding"] = "gzip, deflate, *;q=0";
-			if (!currentRequest.data.empty)
-				currentRequest.headers["Content-Length"] = to!string(currentRequest.data.length);
+			if (currentRequest.data)
+				currentRequest.headers["Content-Length"] = to!string(currentRequest.data.bytes.length);
 		} else {
 			if (!("Pragma" in currentRequest.headers))
 				currentRequest.headers["Pragma"] = "No-Cache";
@@ -67,63 +69,42 @@ protected:
 
 		reqMessage ~= "\r\n";
 
-		Data data = Data(reqMessage);
-		data ~= currentRequest.data;
-
-		//debug (HTTP) writefln("%s", fromWAEncoding(reqMessage));
-		conn.send(data.contents);
+		conn.send(Data(reqMessage));
+		conn.send(currentRequest.data);
 	}
 
 	void onNewResponse(ClientSocket sender, Data data)
 	{
-		inBuffer ~= data;
-
-		conn.markNonIdle();
-
-		//debug (HTTP) writefln("%s", fromWAEncoding(cast(string)data));
-
-		auto inBufferStr = cast(string)inBuffer.contents;
-		auto headersend = inBufferStr.indexOf("\r\n\r\n");
-		if (headersend == -1)
-			return;
-
-		string[] lines = splitLines(inBufferStr[0 .. headersend]);
-		string statusline = lines[0];
-		lines = lines[1 .. lines.length];
-
-		auto versionend = statusline.indexOf(' ');
-		if (versionend == -1)
-			return;
-		string httpversion = statusline[0 .. versionend];
-		statusline = statusline[versionend + 1 .. statusline.length];
-
-		currentResponse = new HttpResponse();
-
-		auto statusend = statusline.indexOf(' ');
-		if (statusend == -1)
-			return;
-		currentResponse.status = to!ushort(statusline[0 .. statusend]);
-		currentResponse.statusMessage = statusline[statusend + 1 .. statusline.length].idup;
-
-		foreach (string line; lines)
+		try
 		{
-			auto valuestart = line.indexOf(": ");
-			if (valuestart > 0)
-				currentResponse.headers[line[0 .. valuestart].idup] = line[valuestart + 2 .. line.length].idup;
+			inBuffer ~= data;
+			conn.markNonIdle();
+
+			string statusLine;
+			Headers headers;
+
+			if (!parseHeaders(inBuffer, statusLine, headers))
+				return;
+
+			currentResponse = new HttpResponse;
+			currentResponse.parseStatusLine(statusLine);
+			currentResponse.headers = headers;
+
+			expect = size_t.max;
+			if ("Content-Length" in currentResponse.headers)
+				expect = to!size_t(strip(currentResponse.headers["Content-Length"]));
+
+			if (expect > inBuffer.bytes.length)
+				conn.handleReadData = &onContinuation;
+			else
+			{
+				currentResponse.data = inBuffer.bytes[0 .. expect];
+				conn.disconnect("All data read");
+			}
 		}
-
-		expect = size_t.max;
-		if ("Content-Length" in currentResponse.headers)
-			expect = to!uint(strip(currentResponse.headers["Content-Length"]));
-
-		inBuffer = inBuffer[(headersend + 4) * char.sizeof .. inBuffer.length];
-
-		if (expect > inBuffer.length)
-			conn.handleReadData = &onContinuation;
-		else
+		catch (Exception e)
 		{
-			currentResponse.data = inBuffer[0 .. expect];
-			conn.disconnect("All data read");
+			conn.disconnect(e.msg, DisconnectType.Error);
 		}
 	}
 
@@ -248,7 +229,7 @@ void httpPost(string url, string[string] vars, void delegate(string) resultHandl
 	request.resource = url;
 	request.method = "POST";
 	request.headers["Content-Type"] = "application/x-www-form-urlencoded";
-	request.data = Data(encodeUrlParameters(vars));
+	request.data = [Data(encodeUrlParameters(vars))];
 	httpRequest(request,
 		(Data data)
 		{

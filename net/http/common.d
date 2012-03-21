@@ -35,7 +35,7 @@ private abstract class HttpMessage
 public:
 	string protocolVersion = "1.0";
 	Headers headers;
-	Data data;
+	Data[] data;
 	TickDuration creationTime;
 
 	this()
@@ -116,7 +116,7 @@ public:
 		{
 			string _host = headers["Host"];
 			auto colon = _host.lastIndexOf(":");
-			return colon<0 ? 80 : to!ushort(_host[0..colon]);
+			return colon<0 ? 80 : to!ushort(_host[colon+1..$]);
 		}
 		else
 			return _port;
@@ -156,9 +156,26 @@ public:
 		return 80;
 	}
 
+	void parseRequestLine(string reqLine)
+	{
+		enforce(reqLine.length > 10, "Request line too short");
+		auto methodEnd = reqLine.indexOf(' ');
+		enforce(methodEnd > 0, "Malformed request line");
+		method = reqLine[0 .. methodEnd];
+		reqLine = reqLine[methodEnd + 1 .. reqLine.length];
+
+		auto resourceEnd = reqLine.lastIndexOf(' ');
+		enforce(resourceEnd > 0, "Malformed request line");
+		resource = reqLine[0 .. resourceEnd];
+
+		string protocol = reqLine[resourceEnd+1..$];
+		enforce(protocol.startsWith("HTTP/"));
+		protocolVersion = protocol[5..$];
+	}
+
 	string[string] decodePostData()
 	{
-		auto data = (cast(string)data.contents).idup;
+		auto data = cast(string)data.joinToHeap();
 		if (data.length is 0)
 			return null;
 
@@ -322,16 +339,16 @@ public:
 	Data getContent()
 	{
 		if ("Content-Encoding" in headers && headers["Content-Encoding"]=="deflate")
-			return zlib.uncompress(data);
+			return zlib.uncompress(data).joinData();
 		else
 		if ("Content-Encoding" in headers && headers["Content-Encoding"]=="gzip")
-			return gzip.uncompress(data);
+			return gzip.uncompress(data).joinData();
 		else
-			return data;
+			return data.joinData();
 		assert(0);
 	}
 
-	void setContent(Data content, string[] supported)
+	void setContent(Data[] content, string[] supported)
 	{
 		foreach(method;supported ~ ["*"])
 			switch(method)
@@ -355,6 +372,26 @@ public:
 					break;
 			}
 		assert(0);
+	}
+
+	void setContent(Data content, string[] supported)
+	{
+		setContent([content], supported);
+	}
+
+	void parseStatusLine(string statusLine)
+	{
+		auto versionEnd = statusLine.indexOf(' ');
+		if (versionEnd == -1)
+			throw new Exception("Malformed status line");
+		protocolVersion = statusLine[0..versionEnd];
+		statusLine = statusLine[versionEnd+1..statusLine.length];
+
+		auto statusEnd = statusLine.indexOf(' ');
+		if (statusEnd == -1)
+			throw new Exception("Malformed status line");
+		status = to!ushort(statusLine[0 .. statusEnd]);
+		statusMessage = statusLine[statusEnd+1..statusLine.length];
 	}
 
 	/// called by the server to compress content if possible
@@ -468,7 +505,7 @@ string encodeUrlParameters(string[string] dic)
 string decodeUrlParameter(string encoded)
 {
 	string s;
-	for (int i=0; i<encoded.length; i++)
+	for (auto i=0; i<encoded.length; i++)
 		if (encoded[i] == '%')
 		{
 			s ~= cast(char)fromHex!ubyte(encoded[i+1..i+3]);

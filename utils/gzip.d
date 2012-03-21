@@ -33,15 +33,16 @@ private enum
 	FCOMMENT = 16
 }
 
-uint crc32(const(void)[] data)
+uint crc32(Data[] data)
 {
 	uint crc = stdcrc32.init_crc32();
-	foreach(v;cast(ubyte[])data)
-		crc = stdcrc32.update_crc32(v, crc);
+	foreach (ref d; data)
+		foreach (v; cast(ubyte[])d.contents)
+			crc = stdcrc32.update_crc32(v, crc);
 	return ~crc;
 }
 
-Data compress(Data data)
+Data[] compress(Data[] data)
 {
 	ubyte[] header;
 	header.length = 10;
@@ -51,15 +52,21 @@ Data compress(Data data)
 	header[3..8] = 0;  // TODO: set MTIME
 	header[8] = 4;
 	header[9] = 3;     // TODO: set OS
-	uint[2] footer = [crc32(data.contents), std.conv.to!uint(data.length)];
-	Data compressed = zlib.compress(data);
-	return header ~ compressed[2..compressed.length-4] ~ cast(ubyte[])footer;
+	uint[2] footer = [crc32(data), std.conv.to!uint(data.length)];
+
+	Data[] compressed = zlib.compress(data);
+	compressed[0  ] = compressed[0  ][2..compressed[0  ].length];
+	compressed[$-1] = compressed[$-1][0..compressed[$-1].length-4];
+
+	return [Data(header)] ~ compressed ~ [Data(footer)];
 }
 
-Data uncompress(Data data)
+Data compress(Data input) { return compress([input]).joinData(); }
+
+Data[] uncompress(Data[] data)
 {
-	enforce(data.length>=10, "Gzip too short");
-	ubyte[] bytes = cast(ubyte[])data.contents;
+	enforce(data.bytes.length >= 10, "Gzip too short");
+	auto bytes = data.bytes;
 	enforce(bytes[0] == 0x1F && bytes[1] == 0x8B, "Invalid Gzip signature");
 	enforce(bytes[2] == 0x08, "Unsupported Gzip compression method");
 	ubyte flg = bytes[3];
@@ -73,7 +80,20 @@ Data uncompress(Data data)
 		start++;
 	}
 	ZlibOptions options; options.mode = ZlibMode.raw;
-	Data uncompressed = zlib.uncompress(data[start..data.length-8], options);
-	enforce(uncompressed.length == *cast(uint*)(&data.contents[$-4]), "Decompressed data length mismatch");
+	Data[] uncompressed = zlib.uncompress(bytes[start..bytes.length-8], options);
+	enforce(uncompressed.length == *cast(uint*)(&data[$-1].contents[$-4]), "Decompressed data length mismatch");
 	return uncompressed;
+}
+
+Data uncompress(Data input) { return uncompress([input]).joinData(); }
+
+unittest
+{
+	ubyte[] src = cast(ubyte[])
+"the quick brown fox jumps over the lazy dog\r
+the quick brown fox jumps over the lazy dog\r
+";
+	ubyte[] def = cast(ubyte[])  compress(Data(src)).contents;
+	ubyte[] res = cast(ubyte[])uncompress(Data(def)).contents;
+	assert(res == src);
 }

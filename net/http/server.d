@@ -23,9 +23,11 @@ import std.exception;
 
 import ae.net.asockets;
 import ae.net.ietf.headers;
+import ae.net.ietf.headerparse;
 import ae.sys.data;
 import ae.sys.log;
 import ae.utils.text;
+import ae.utils.textout;
 
 public import ae.net.http.common;
 
@@ -96,8 +98,8 @@ public:
 	Address localAddress, remoteAddress;
 
 private:
-	Data inBuffer;
-	int expect;  // VP 2007.01.21: changing from size_t to int because size_t is unsigned
+	Data[] inBuffer;
+	sizediff_t expect;
 	bool persistent;
 	bool requestProcessing; // user code is asynchronously processing current request
 
@@ -119,38 +121,15 @@ private:
 			debug (HTTP) writefln("[%s] Receiving start of request: \n%s---", Clock.currTime(), cast(string)data.contents);
 			inBuffer ~= data;
 
-			auto inBufferStr = cast(string)inBuffer.contents;
-			auto headersend = inBufferStr.indexOf("\r\n\r\n");
-			if (headersend == -1)
+			string reqLine;
+			Headers headers;
+
+			if (!parseHeaders(inBuffer, reqLine, headers))
 				return;
 
-			debug (HTTP) writefln("[%s] Got headers, %d bytes total", Clock.currTime(), headersend+4);
-			string[] lines = splitAsciiLines(inBufferStr[0 .. headersend]);
-			string reqline = lines[0];
-			enforce(reqline.length > 10);
-			lines = lines[1 .. lines.length];
-
-			currentRequest = new HttpRequest();
-
-			auto methodend = reqline.indexOf(' ');
-			enforce(methodend > 0);
-			currentRequest.method = reqline[0 .. methodend].idup;
-			reqline = reqline[methodend + 1 .. reqline.length];
-
-			auto resourceend = reqline.lastIndexOf(' ');
-			enforce(resourceend > 0);
-			currentRequest.resource = reqline[0 .. resourceend].idup;
-
-			string protocol = reqline[resourceend+1..$];
-			enforce(protocol.startsWith("HTTP/1."));
-			currentRequest.protocolVersion = protocol[5..$].idup;
-
-			foreach (string line; lines)
-			{
-				auto valuestart = line.indexOf(": ");
-				if (valuestart > 0)
-					currentRequest.headers[line[0 .. valuestart].idup] = line[valuestart + 2 .. line.length].idup;
-			}
+			currentRequest = new HttpRequest;
+			currentRequest.parseRequestLine(reqLine);
+			currentRequest.headers = headers;
 
 			auto connection = toLower(aaGet(currentRequest.headers, "Connection", null));
 			switch (currentRequest.protocolVersion)
@@ -166,19 +145,17 @@ private:
 
 			expect = 0;
 			if ("Content-Length" in currentRequest.headers)
-				expect = to!uint(currentRequest.headers["Content-Length"]);
-
-			inBuffer.popFront(headersend+4);
+				expect = to!size_t(currentRequest.headers["Content-Length"]);
 
 			if (expect > 0)
 			{
-				if (expect > inBuffer.length)
+				if (expect > inBuffer.bytes.length)
 					conn.handleReadData = &onContinuation;
 				else
 					processRequest(inBuffer.popFront(expect));
 			}
 			else
-				processRequest(Data());
+				processRequest(null);
 		}
 		catch (Exception e)
 		{
@@ -194,17 +171,17 @@ private:
 
 	void onContinuation(ClientSocket sender, Data data)
 	{
-		debug (HTTP) writefln("[%s] Receiving continuation of request: \n%s---", Clock.currTime(), cast(string)data.contents);
+		debug (HTTP) writefln("[%s] Receiving continuation of request: \n%s---", Clock.currTime(), cast(string)data.joinToHeap());
 		inBuffer ~= data;
 
-		if (!requestProcessing && inBuffer.length >= expect)
+		if (!requestProcessing && inBuffer.bytes.length >= expect)
 		{
-			debug (HTTP) writefln("[%s] %s/%s", Clock.currTime(), inBuffer.length, expect);
+			debug (HTTP) writefln("[%s] %s/%s", Clock.currTime(), inBuffer.bytes.length, expect);
 			processRequest(inBuffer.popFront(expect));
 		}
 	}
 
-	void processRequest(Data data)
+	void processRequest(Data[] data)
 	{
 		currentRequest.data = data;
 		if (server.handleRequest)
@@ -243,33 +220,34 @@ public:
 	void sendResponse(HttpResponse response)
 	{
 		requestProcessing = false;
-		string respMessage = "HTTP/" ~ currentRequest.protocolVersion ~ " ";
+		StringBuilder respMessage;
+		respMessage.put("HTTP/", currentRequest.protocolVersion, " ");
 		if (response)
 		{
 			if ("Accept-Encoding" in currentRequest.headers)
 				response.compress(currentRequest.headers["Accept-Encoding"]);
-			response.headers["Content-Length"] = response ? to!string(response.data.length) : "0";
+			response.headers["Content-Length"] = response ? to!string(response.data.bytes.length) : "0";
 			response.headers["X-Powered-By"] = "DHttp";
 			if (persistent && currentRequest.protocolVersion=="1.0")
 				response.headers["Connection"] = "Keep-Alive";
 
-			respMessage ~= to!string(response.status) ~ " " ~ response.statusMessage ~ "\r\n";
+			respMessage.put(to!string(response.status), " ", response.statusMessage, "\r\n");
 			foreach (string header, string value; response.headers)
-				respMessage ~= header ~ ": " ~ value ~ "\r\n";
+				respMessage.put(header, ": ", value, "\r\n");
 
-			respMessage ~= "\r\n";
+			respMessage.put("\r\n");
 		}
 		else
 		{
-			respMessage ~= "500 Internal Server Error\r\n\r\n";
+			respMessage.put("500 Internal Server Error\r\n\r\n");
 		}
 
-		conn.send(respMessage);
+		conn.send(Data(respMessage.get()));
 		if (response && response.data.length)
 			conn.send(response.data);
 
 		debug (HTTP) writefln("[%s] Sent response (%d bytes headers, %d bytes data)",
-			Clock.currTime(), respMessage.length, response ? response.data.length : 0);
+			Clock.currTime(), respMessage.length, response ? response.data.bytes.length : 0);
 
 		if (persistent)
 		{
@@ -292,4 +270,26 @@ string formatAddress(Address address, string vhost = null)
 	return "http://" ~
 		(vhost ? vhost : addr == "0.0.0.0" || addr == "::" ? "*" : addr.contains(":") ? "[" ~ addr ~ "]" : addr) ~
 		(port == "80" ? "" : ":" ~ port);
+}
+
+unittest
+{
+	import ae.net.http.client;
+	import ae.net.http.responseex;
+
+	// Sum "a" from GET and "b" from POST
+	auto s = new HttpServer;
+	s.handleRequest = (HttpRequest request, HttpServerConnection conn) {
+		auto queryString = request.resource[request.resource.indexOf('?')+1..$];
+		auto get  = decodeUrlParameters(queryString);
+		auto post = request.decodePostData();
+		auto response = new HttpResponseEx;
+		conn.sendResponse(response.serveJson(to!int(get["a"]) + to!int(post["b"])));
+		s.close();
+	};
+	auto port = s.listen(0, "127.0.0.1");
+
+	httpPost("http://127.0.0.1:" ~ to!string(port) ~ "/?a=2", ["b":"3"], (string s) { assert(s=="5"); }, null);
+
+	socketManager.loop();
 }

@@ -15,10 +15,12 @@ module ae.sys.data;
 
 static import std.c.stdlib;
 import std.c.string : memmove;
+import std.traits;
 import core.memory;
 import core.exception;
 debug(DATA) import std.stdio;
 debug(DATA) import std.string;
+public import ae.sys.dataset;
 
 // ideas/todo:
 // * templatize (and forbid using aliased types)?
@@ -252,7 +254,7 @@ public:
 		contents = null;
 	}
 
-	Data opCat(const(void)[] data)
+	Data concat(const(void)[] data)
 	{
 		if (data.length==0)
 			return this;
@@ -262,17 +264,29 @@ public:
 		return result;
 	}
 
-	Data opCat(Data data)
+	Data opCat(T)(const(T)[] data)
+		if (!hasIndirections!T)
 	{
-		return this.opCat(data.contents);
+		return concat(data);
 	}
 
-	Data opCat_r(const(void)[] data)
+	Data opCat()(Data data)
+	{
+		return concat(data.contents);
+	}
+
+	Data prepend(const(void)[] data)
 	{
 		Data result = Data(data.length + length);
 		result.mcontents[0..data.length] = data;
 		result.mcontents[data.length..$] = contents;
 		return result;
+	}
+
+	Data opCat_r(T)(const(T)[] data)
+		if (!hasIndirections!T)
+	{
+		return prepend(data);
 	}
 
 	private static size_t getPreallocSize(size_t length)
@@ -283,8 +297,7 @@ public:
 			return ((length-1) | (MAX_PREALLOC-1)) + 1;
 	}
 
-	/// Note that unlike opCat (a ~ b), opCatAssign (a ~= b) will preallocate.
-	Data opCatAssign(const(void)[] data)
+	Data append(const(void)[] data)
 	{
 		if (data.length==0)
 			return this;
@@ -292,18 +305,25 @@ public:
 		size_t newLength = length + data.length;
 		expand(newLength, getPreallocSize(newLength));
 		auto newContents = cast(void[])_contents[oldLength..$];
-		newContents[] = data;
+		newContents[] = cast(void[])data;
 		return this;
 	}
 
-	Data opCatAssign(Data data)
+	/// Note that unlike opCat (a ~ b), opCatAssign (a ~= b) will preallocate.
+	Data opCatAssign(T)(const(T)[] data)
+		if (!hasIndirections!T)
 	{
-		return this.opCatAssign(data.contents);
+		return append(data);
 	}
 
-	Data opCatAssign(ubyte value) // hack?
+	Data opCatAssign()(Data data)
 	{
-		return this.opCatAssign((&value)[0..1]);
+		return append(data.contents);
+	}
+
+	Data opCatAssign()(ubyte value) // hack?
+	{
+		return append((&value)[0..1]);
 	}
 
 	Data opSlice(size_t x, size_t y)
@@ -339,44 +359,6 @@ public:
 		Data result = this;
 		result.contents = contents[0..size];
 		this  .contents = contents[size..$];
-		return result;
-	}
-
-	/// Join an array of Data to a single Data.
-	static Data join(Data[] arr)
-	{
-		if (arr.length == 0)
-			return Data();
-		else
-		if (arr.length == 1)
-			return arr[0];
-
-		size_t size = 0;
-		foreach (ref d; arr)
-			size += d.length;
-		Data result = Data(size);
-		size_t pos = 0;
-		foreach (ref d; arr)
-		{
-			result.mcontents[pos..pos+d.length] = d.contents;
-			pos += d.length;
-		}
-		return result;
-	}
-
-	/// Join an array of Data to a memory block on the managed heap.
-	static void[] joinToHeap(Data[] arr)
-	{
-		size_t size = 0;
-		foreach (ref d; arr)
-			size += d.length;
-		auto result = new void[size];
-		size_t pos = 0;
-		foreach (ref d; arr)
-		{
-			result[pos..pos+d.length] = d.contents;
-			pos += d.length;
-		}
 		return result;
 	}
 }
