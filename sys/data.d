@@ -1,5 +1,32 @@
 /**
- * ae.sys.data
+ * Wrappers for raw _data located in unmanaged memory.
+ *
+ * Using the Data type will only place a small object in managed memory,
+ * keeping the actual _data in unmanaged memory.
+ * A proxy class (DataWrapper) is used to safely allow multiple references to
+ * the same block of unmanaged memory.
+ * When the DataWrapper object is destroyed (either manually or by the garbage
+ * collector when there are no remaining Data references), the unmanaged
+ * memory is deallocated.
+ *
+ * This has the following advantage over using managed memory:
+ * $(UL
+ *  $(LI Faster allocation and deallocation, since memory is requested from
+ *       the OS directly as whole pages)
+ *  $(LI Greatly reduced chance of memory leaks (on 32-bit platforms) due to
+ *       stray pointers)
+ *  $(LI Overall improved GC performance due to reduced size of managed heap)
+ *  $(LI Memory is immediately returned to the OS when _data is deallocated)
+ * )
+ * On the other hand, using Data has the following disadvantages:
+ * $(UL
+ *  $(LI This module is designed to store raw _data which does not have any
+ *       pointers. Storing objects containing pointers to managed memory is
+ *       unsupported, and may result in memory corruption.)
+ *  $(LI Small objects may be stored inefficiently, as the module requests
+ *       entire pages of memory from the OS. Considering allocating one large
+ *       object and use slices (Data instances) for individual objects.)
+ * )
  *
  * License:
  *   This Source Code Form is subject to the terms of
