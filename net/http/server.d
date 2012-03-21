@@ -280,8 +280,7 @@ unittest
 	// Sum "a" from GET and "b" from POST
 	auto s = new HttpServer;
 	s.handleRequest = (HttpRequest request, HttpServerConnection conn) {
-		auto queryString = request.resource[request.resource.indexOf('?')+1..$];
-		auto get  = decodeUrlParameters(queryString);
+		auto get  = request.urlParameters;
 		auto post = request.decodePostData();
 		auto response = new HttpResponseEx;
 		conn.sendResponse(response.serveJson(to!int(get["a"]) + to!int(post["b"])));
@@ -289,7 +288,7 @@ unittest
 	};
 	auto port = s.listen(0, "127.0.0.1");
 
-	httpPost("http://127.0.0.1:" ~ to!string(port) ~ "/?a=2", ["b":"3"], (string s) { assert(s=="5"); }, null);
+	httpPost("http://127.0.0.1:" ~ to!string(port) ~ "/?" ~ encodeUrlParameters(["a":"2"]), ["b":"3"], (string s) { assert(s=="5"); }, null);
 
 	socketManager.loop();
 }

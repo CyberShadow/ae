@@ -65,11 +65,13 @@ public:
 		this.resource = resource;
 	}
 
+	/// Resource part of URL (everything after the hostname)
 	@property string resource()
 	{
 		return _resource;
 	}
 
+	/// Setting the resource to a full URL will fill in the Host header, as well.
 	@property void resource(string value)
 	{
 		_resource = value;
@@ -97,6 +99,7 @@ public:
 		}
 	}
 
+	/// The hostname, without the port number
 	@property string host()
 	{
 		string _host = headers["Host"];
@@ -110,6 +113,7 @@ public:
 		headers["Host"] = _port==80 ? _host : _host ~ ":" ~ text(_port);
 	}
 
+	/// Port number, from Host header (defaults to 80)
 	@property ushort port()
 	{
 		if ("Host" in headers)
@@ -135,6 +139,33 @@ public:
 			this._port = _port;
 	}
 
+	/// Path part of request (until the ?)
+	@property string path()
+	{
+		auto p = resource.indexOf('?');
+		if (p >= 0)
+			return resource[0..p];
+		else
+			return resource;
+	}
+
+	/// Query string part of request (atfer the ?)
+	@property string queryString()
+	{
+		auto p = resource.indexOf('?');
+		if (p >= 0)
+			return resource[p+1..$];
+		else
+			return null;
+	}
+
+	/// AA of query string parameters
+	string[string] urlParameters()
+	{
+		return decodeUrlParameters(queryString);
+	}
+
+	/// Reconstruct full URL from host, port and resource
 	@property string url()
 	{
 		return "http://" ~ host ~ (port==80 ? null : to!string(port)) ~ resource;
@@ -156,6 +187,7 @@ public:
 		return 80;
 	}
 
+	/// Parse the first line in a HTTP request ("METHOD /resource HTTP/1.x").
 	void parseRequestLine(string reqLine)
 	{
 		enforce(reqLine.length > 10, "Request line too short");
@@ -173,6 +205,7 @@ public:
 		protocolVersion = protocol[5..$];
 	}
 
+	/// Decodes submitted form data, and returns an AA of values.
 	string[string] decodePostData()
 	{
 		auto data = cast(string)data.joinToHeap();
