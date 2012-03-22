@@ -286,9 +286,9 @@ unittest
 		conn.sendResponse(response.serveJson(to!int(get["a"]) + to!int(post["b"])));
 		s.close();
 	};
-	auto port = s.listen(0, "127.0.0.1");
+	auto port = s.listen(0, "localhost");
 
-	httpPost("http://127.0.0.1:" ~ to!string(port) ~ "/?" ~ encodeUrlParameters(["a":"2"]), ["b":"3"], (string s) { assert(s=="5"); }, null);
+	httpPost("http://localhost:" ~ to!string(port) ~ "/?" ~ encodeUrlParameters(["a":"2"]), ["b":"3"], (string s) { assert(s=="5"); }, null);
 
 	socketManager.loop();
 }

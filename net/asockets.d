@@ -291,6 +291,9 @@ private:
 	/// requirement.
 	enum UNMANAGED_THRESHOLD = 256;
 
+	/// Queue of addresses to try connecting to.
+	Address[] addressQueue;
+
 public:
 	/// Whether the socket is connected.
 	bool connected;
@@ -306,7 +309,6 @@ protected:
 	/// Whether a disconnect is pending after all data is sent
 	bool disconnecting;
 
-protected:
 	/// Constructor used by a ServerSocket for new connections
 	this(Socket conn)
 	{
@@ -317,7 +319,6 @@ protected:
 			socketManager.register(this);
 	}
 
-protected:
 	/// Retrieve the poll flags for this socket.
 	override PollFlags pollFlags()
 	{
@@ -435,6 +436,8 @@ protected:
 	/// Called when an error occurs on the socket.
 	override void onError(string reason)
 	{
+		if (!connected && addressQueue.length)
+			return tryNextAddress();
 		disconnect("Socket error: " ~ reason, DisconnectType.Error);
 	}
 
@@ -459,6 +462,23 @@ protected:
 			disconnect("Time-out", DisconnectType.Error);
 	}
 
+	final void tryNextAddress()
+	{
+		auto address = addressQueue[0];
+		addressQueue = addressQueue[1..$];
+
+		try
+		{
+			conn = new Socket(address.addressFamily(), SocketType.STREAM, ProtocolType.TCP);
+			conn.blocking = false;
+
+			socketManager.register(this);
+			conn.connect(address);
+		}
+		catch (SocketException e)
+			return onError("Connect error: " ~ e.msg);
+	}
+
 public:
 	/// Default constructor
 	this()
@@ -474,16 +494,13 @@ public:
 
 		try
 		{
-			auto address = getAddress(host, port)[0];
-
-			conn = new Socket(address.addressFamily(), SocketType.STREAM, ProtocolType.TCP);
-			conn.blocking = false;
-
-			socketManager.register(this);
-			conn.connect(address);
+			addressQueue = getAddress(host, port);
+			enforce(addressQueue.length, "No addresses found");
 		}
 		catch (SocketException e)
-			return onError("Connect error: " ~ e.msg);
+			return onError("Lookup error: " ~ e.msg);
+
+		tryNextAddress();
 	}
 
 	const DefaultDisconnectReason = "Software closed the connection";
