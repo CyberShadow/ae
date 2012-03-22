@@ -49,18 +49,25 @@ bool parseHeadersImpl(bool FIRST_LINE)(ref Data[] data, out string firstLine, ou
 	if (!data.length)
 		return false;
 
-	static const END_OF_HEADERS = "\r\n\r\n";
+	static const DELIM1 = "\r\n\r\n";
+	static const DELIM2 = "\n\n";
 
 	size_t startFrom = 0;
+	string delim;
 searchAgain:
 	string data0 = cast(string)data[0].contents;
-	auto headersEnd = data0[startFrom..$].indexOf(END_OF_HEADERS);
+	sizediff_t headersEnd;
+	delim = DELIM1; headersEnd = data0[startFrom..$].indexOf(delim);
+	if (headersEnd < 0)
+	{
+		delim = DELIM2; headersEnd = data0[startFrom..$].indexOf(delim);
+	}
 	if (headersEnd < 0)
 	{
 		if (data.length > 1)
 		{
 			// coagulate first two blocks
-			startFrom = data0.length > END_OF_HEADERS.length ? data0.length - (END_OF_HEADERS.length-1) : 0;
+			startFrom = data0.length > delim.length ? data0.length - (delim.length-1) : 0;
 			data = [data[0] ~ data[1]] ~ data[2..$];
 			goto searchAgain;
 		}
@@ -70,7 +77,7 @@ searchAgain:
 	headersEnd += startFrom;
 
 	auto headerData = data0[0..headersEnd].idup; // copy Data slice to heap
-	data[0] = data[0][headersEnd + END_OF_HEADERS.length .. data[0].length];
+	data[0] = data[0][headersEnd + delim.length .. data[0].length];
 
 	headers = parseHeadersImpl!FIRST_LINE(headerData, firstLine);
 	return true;
@@ -78,7 +85,7 @@ searchAgain:
 
 Headers parseHeadersImpl(bool FIRST_LINE)(string headerData, out string firstLine)
 {
-	headerData = headerData.replace("\n\t", " ").replace("\n ", " ");
+	headerData = headerData.replace("\r\n", "\n").replace("\n\t", " ").replace("\n ", " ");
 	string[] lines = splitAsciiLines(headerData);
 	static if (FIRST_LINE)
 	{
@@ -95,4 +102,33 @@ Headers parseHeadersImpl(bool FIRST_LINE)(string headerData, out string firstLin
 	}
 
 	return headers;
+}
+
+unittest
+{
+	void test(string message)
+	{
+		auto data = [Data(message)];
+		Headers headers;
+		assert(parseHeaders(data, headers));
+		assert(headers["From"] == "John Smith <john@smith.net>");
+		assert(headers["To"] == "Mary Smith <john@smith.net>");
+		assert(headers["Subject"] == "Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.");
+		assert(cast(string)data.joinToHeap() == "Message body goes here");
+	}
+
+	string message = q"EOS
+From : John Smith <john@smith.net>
+to:Mary Smith <john@smith.net> 
+Subject: Lorem ipsum dolor sit amet, consectetur
+ adipisicing elit, sed do eiusmod tempor
+	incididunt ut labore et dolore magna aliqua.
+
+Message body goes here
+EOS".strip();
+
+	message = message.replace("\r\n", "\n");
+	test(message);
+	message = message.replace("\n", "\r\n");
+	test(message);
 }
