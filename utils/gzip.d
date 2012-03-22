@@ -17,12 +17,15 @@ module ae.utils.gzip;
 // TODO: recent zlib versions support gzip headers,
 // reimplement this module as zlib flags
 
+import std.exception;
+import std.conv;
+debug import std.stdio, std.file;
+
+import ae.sys.data;
+
 static import zlib = ae.utils.zlib;
 import ae.utils.zlib : ZlibOptions, ZlibMode;
 static import stdcrc32 = crc32;
-debug import std.stdio, std.file;
-import ae.sys.data;
-import std.exception;
 
 private enum
 {
@@ -52,7 +55,7 @@ Data[] compress(Data[] data)
 	header[3..8] = 0;  // TODO: set MTIME
 	header[8] = 4;
 	header[9] = 3;     // TODO: set OS
-	uint[2] footer = [crc32(data), std.conv.to!uint(data.length)];
+	uint[2] footer = [crc32(data), std.conv.to!uint(data.bytes.length)];
 
 	Data[] compressed = zlib.compress(data);
 	compressed[0  ] = compressed[0  ][2..compressed[0  ].length];
@@ -81,7 +84,7 @@ Data[] uncompress(Data[] data)
 	}
 	ZlibOptions options; options.mode = ZlibMode.raw;
 	Data[] uncompressed = zlib.uncompress(bytes[start..bytes.length-8], options);
-	enforce(uncompressed.length == *cast(uint*)(&data[$-1].contents[$-4]), "Decompressed data length mismatch");
+	enforce(uncompressed.bytes.length == *cast(uint*)(&data[$-1].contents[$-4]), "Decompressed data length mismatch");
 	return uncompressed;
 }
 
@@ -95,5 +98,11 @@ the quick brown fox jumps over the lazy dog\r
 ";
 	ubyte[] def = cast(ubyte[])  compress(Data(src)).contents;
 	ubyte[] res = cast(ubyte[])uncompress(Data(def)).contents;
+	assert(res == src);
+
+	Data[] srcData;
+	foreach (c; src)
+		srcData ~= Data([c]);
+	res = cast(ubyte[])uncompress(compress(srcData)).joinToHeap;
 	assert(res == src);
 }
