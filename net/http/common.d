@@ -212,17 +212,14 @@ public:
 		if (data.length is 0)
 			return null;
 
-		string contentType;
-		foreach (header, value; headers)
-			if (icmp(header, "Content-Type")==0)
-				contentType = value;
-		if (contentType is null)
-			throw new Exception("Can't get content type header");
+		string contentType = aaGet(headers, "Content-Type", "");
 
 		switch (contentType)
 		{
 			case "application/x-www-form-urlencoded":
 				return decodeUrlParameters(data);
+			case "":
+				throw new Exception("No Content-Type");
 			default:
 				throw new Exception("Unknown Content-Type: " ~ contentType);
 		}

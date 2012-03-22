@@ -79,7 +79,6 @@ public:
 	{
 		if (log) log("Shutting down.");
 		conn.close();
-		conn = null;
 	}
 
 public:
@@ -125,7 +124,10 @@ private:
 			Headers headers;
 
 			if (!parseHeaders(inBuffer, reqLine, headers))
+			{
+				debug (HTTP) writefln("[%s] Headers not yet received. Data in buffer:\n%s---", Clock.currTime(), cast(string)inBuffer.joinToHeap());
 				return;
+			}
 
 			currentRequest = new HttpRequest;
 			currentRequest.parseRequestLine(reqLine);
@@ -159,6 +161,7 @@ private:
 		}
 		catch (Exception e)
 		{
+			debug (HTTP) writefln("[%s] Exception onNewRequest: %s", Clock.currTime(), e);
 			sendResponse(null);
 		}
 	}
@@ -171,7 +174,7 @@ private:
 
 	void onContinuation(ClientSocket sender, Data data)
 	{
-		debug (HTTP) writefln("[%s] Receiving continuation of request: \n%s---", Clock.currTime(), cast(string)data.joinToHeap());
+		debug (HTTP) writefln("[%s] Receiving continuation of request: \n%s---", Clock.currTime(), cast(string)data.contents);
 		inBuffer ~= data;
 
 		if (!requestProcessing && inBuffer.bytes.length >= expect)
@@ -222,25 +225,26 @@ public:
 		requestProcessing = false;
 		StringBuilder respMessage;
 		respMessage.put("HTTP/", currentRequest.protocolVersion, " ");
-		if (response)
+		if (!response)
 		{
-			if ("Accept-Encoding" in currentRequest.headers)
-				response.compress(currentRequest.headers["Accept-Encoding"]);
-			response.headers["Content-Length"] = response ? to!string(response.data.bytes.length) : "0";
-			response.headers["X-Powered-By"] = "DHttp";
-			if (persistent && currentRequest.protocolVersion=="1.0")
-				response.headers["Connection"] = "Keep-Alive";
-
-			respMessage.put(to!string(response.status), " ", response.statusMessage, "\r\n");
-			foreach (string header, string value; response.headers)
-				respMessage.put(header, ": ", value, "\r\n");
-
-			respMessage.put("\r\n");
+			response = new HttpResponse();
+			response.status = HttpStatusCode.InternalServerError;
+			response.statusMessage = HttpResponse.getStatusMessage(HttpStatusCode.InternalServerError);
+			response.data = [Data("Internal Server Error")];
 		}
-		else
-		{
-			respMessage.put("500 Internal Server Error\r\n\r\n");
-		}
+
+		if ("Accept-Encoding" in currentRequest.headers)
+			response.compress(currentRequest.headers["Accept-Encoding"]);
+		response.headers["Content-Length"] = response ? to!string(response.data.bytes.length) : "0";
+		response.headers["X-Powered-By"] = "DHttp";
+		if (persistent && currentRequest.protocolVersion=="1.0")
+			response.headers["Connection"] = "Keep-Alive";
+
+		respMessage.put(to!string(response.status), " ", response.statusMessage, "\r\n");
+		foreach (string header, string value; response.headers)
+			respMessage.put(header, ": ", value, "\r\n");
+
+		respMessage.put("\r\n");
 
 		conn.send(Data(respMessage.get()));
 		if (response && response.data.length)
@@ -277,18 +281,55 @@ unittest
 	import ae.net.http.client;
 	import ae.net.http.responseex;
 
+	int[] replies;
+	int closeAfter;
+
 	// Sum "a" from GET and "b" from POST
 	auto s = new HttpServer;
 	s.handleRequest = (HttpRequest request, HttpServerConnection conn) {
 		auto get  = request.urlParameters;
 		auto post = request.decodePostData();
 		auto response = new HttpResponseEx;
-		conn.sendResponse(response.serveJson(to!int(get["a"]) + to!int(post["b"])));
-		s.close();
+		auto result = to!int(get["a"]) + to!int(post["b"]);
+		replies ~= result;
+		conn.sendResponse(response.serveJson(result));
+		if (--closeAfter == 0)
+			s.close();
 	};
-	auto port = s.listen(0, "localhost");
 
+	// Test server, client, parameter encoding
+	replies = null;
+	closeAfter = 1;
+	auto port = s.listen(0, "localhost");
 	httpPost("http://localhost:" ~ to!string(port) ~ "/?" ~ encodeUrlParameters(["a":"2"]), ["b":"3"], (string s) { assert(s=="5"); }, null);
+	socketManager.loop();
+
+	// Test pipelining, protocol errors
+	replies = null;
+	closeAfter = 2;
+	port = s.listen(0, "localhost");
+	ClientSocket c = new ClientSocket;
+	c.handleConnect = (ClientSocket sender) {
+		c.send(Data(
+"GET /?a=123456 HTTP/1.1
+Content-length: 8
+Content-type: application/x-www-form-urlencoded
+
+b=654321" ~
+"GET /derp HTTP/1.1
+Content-length: cheese
+
+" ~
+"GET /?a=1234567 HTTP/1.1
+Content-length: 9
+Content-type: application/x-www-form-urlencoded
+
+b=7654321"));
+		c.disconnect();
+	};
+	c.connect("localhost", port);
 
 	socketManager.loop();
+
+	assert(replies == [777777, 8888888]);
 }
