@@ -98,7 +98,7 @@ struct ZlibProcess(bool COMPRESSING)
 
 		assert(zs.avail_in == 0);
 		zs.next_in  = cast(ubyte*) chunk.ptr;
-		zs.avail_in = chunk.length;
+		zs.avail_in = to!uint(chunk.length);
 
 		do
 		{
@@ -185,7 +185,7 @@ private:
 		currentChunk = Data(sz);
 		currentChunk.length = currentChunk.capacity;
 		zs.next_out  = cast(ubyte*)currentChunk.mptr;
-		zs.avail_out = currentChunk.length;
+		zs.avail_out = to!uint(currentChunk.length);
 	}
 
 	~this()
