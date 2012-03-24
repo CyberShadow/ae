@@ -45,7 +45,7 @@ uint crc32(Data[] data)
 	return ~crc;
 }
 
-Data[] compress(Data[] data)
+Data[] compress(Data[] data, ZlibOptions options = ZlibOptions.init)
 {
 	ubyte[] header;
 	header.length = 10;
@@ -57,7 +57,7 @@ Data[] compress(Data[] data)
 	header[9] = 3;     // TODO: set OS
 	uint[2] footer = [crc32(data), std.conv.to!uint(data.bytes.length)];
 
-	Data[] compressed = zlib.compress(data);
+	Data[] compressed = zlib.compress(data, options);
 	compressed[0  ] = compressed[0  ][2..compressed[0  ].length];
 	compressed[$-1] = compressed[$-1][0..compressed[$-1].length-4];
 

@@ -312,6 +312,8 @@ public:
 	ushort status;
 	string statusMessage;
 
+	int compressionLevel = 1;
+
 	static string getStatusMessage(HttpStatusCode code)
 	{
 		switch(code)
@@ -386,12 +388,12 @@ public:
 				case "deflate":
 					headers["Content-Encoding"] = method;
 					headers.add("Vary", "Accept-Encoding");
-					data = zlib.compress(content);
+					data = zlib.compress(content, zlib.ZlibOptions(compressionLevel));
 					return;
 				case "gzip":
 					headers["Content-Encoding"] = method;
 					headers.add("Vary", "Accept-Encoding");
-					data = gzip.compress(content);
+					data = gzip.compress(content, zlib.ZlibOptions(compressionLevel));
 					return;
 				case "*":
 					if("Content-Encoding" in headers)
