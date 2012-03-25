@@ -58,8 +58,7 @@ Data[] compress(Data[] data, ZlibOptions options = ZlibOptions.init)
 	uint[2] footer = [crc32(data), std.conv.to!uint(data.bytes.length)];
 
 	Data[] compressed = zlib.compress(data, options);
-	compressed[0  ] = compressed[0  ][2..compressed[0  ].length];
-	compressed[$-1] = compressed[$-1][0..compressed[$-1].length-4];
+	compressed = compressed.bytes[2..compressed.bytes.length-4];
 
 	return [Data(header)] ~ compressed ~ [Data(footer)];
 }
@@ -92,17 +91,35 @@ Data uncompress(Data input) { return uncompress([input]).joinData(); }
 
 unittest
 {
-	ubyte[] src = cast(ubyte[])
+	void testRoundtrip(ubyte[] src)
+	{
+		ubyte[] def = cast(ubyte[])  compress(Data(src)).contents;
+		ubyte[] res = cast(ubyte[])uncompress(Data(def)).contents;
+		assert(res == src);
+
+		Data[] srcData;
+		foreach (c; src)
+			srcData ~= Data([c]);
+		res = cast(ubyte[])uncompress(compress(srcData)).joinToHeap;
+		assert(res == src);
+	}
+
+	testRoundtrip(cast(ubyte[])
 "the quick brown fox jumps over the lazy dog\r
 the quick brown fox jumps over the lazy dog\r
-";
-	ubyte[] def = cast(ubyte[])  compress(Data(src)).contents;
-	ubyte[] res = cast(ubyte[])uncompress(Data(def)).contents;
-	assert(res == src);
+");
+	testRoundtrip([0]);
+	testRoundtrip(null);
 
-	Data[] srcData;
-	foreach (c; src)
-		srcData ~= Data([c]);
-	res = cast(ubyte[])uncompress(compress(srcData)).joinToHeap;
-	assert(res == src);
+	void testUncompress(ubyte[] src, ubyte[] dst)
+	{
+		assert(cast(ubyte[])uncompress(Data(src)).contents == dst);
+	}
+
+	testUncompress([
+		0x1F, 0x8B, 0x08, 0x08, 0xD3, 0xB2, 0x6E, 0x4F, 0x02, 0x00, 0x74, 0x65, 0x73, 0x74, 0x2E, 0x74,
+		0x78, 0x74, 0x00, 0x2B, 0xC9, 0x48, 0x55, 0x28, 0x2C, 0xCD, 0x4C, 0xCE, 0x56, 0x48, 0x2A, 0xCA,
+		0x2F, 0xCF, 0x53, 0x48, 0xCB, 0xAF, 0x50, 0xC8, 0x2A, 0xCD, 0x2D, 0x28, 0x56, 0xC8, 0x2F, 0x4B,
+		0x2D, 0x52, 0x00, 0x49, 0xE7, 0x24, 0x56, 0x55, 0x2A, 0xA4, 0xE4, 0xA7, 0x03, 0x00, 0x14, 0x51,
+		0x0C, 0xCE, 0x2B, 0x00, 0x00, 0x00], cast(ubyte[])"the quick brown fox jumps over the lazy dog");
 }

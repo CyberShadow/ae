@@ -114,6 +114,9 @@ struct ZlibProcess(bool COMPRESSING)
 
 	Data[] flush()
 	{
+		if (zs.avail_out == 0)
+			allocChunk(adjustSize(zs.avail_in));
+
 		while (!zend(processFunc(&zs, Z_FINISH)))
 			allocChunk(zs.avail_out*2+1);
 
@@ -207,11 +210,17 @@ Data compress(Data input, int level)
 
 unittest
 {
-	ubyte[] src = cast(ubyte[])
+	void testRoundtrip(ubyte[] src)
+	{
+		ubyte[] def = cast(ubyte[])  compress(Data(src)).contents;
+		ubyte[] res = cast(ubyte[])uncompress(Data(def)).contents;
+		assert(res == src);
+	}
+
+	testRoundtrip(cast(ubyte[])
 "the quick brown fox jumps over the lazy dog\r
 the quick brown fox jumps over the lazy dog\r
-";
-	ubyte[] def = cast(ubyte[])  compress(Data(src)).contents;
-	ubyte[] res = cast(ubyte[])uncompress(Data(def)).contents;
-	assert(res == src);
+");
+	testRoundtrip([0]);
+	testRoundtrip(null);
 }
