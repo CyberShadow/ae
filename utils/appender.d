@@ -57,11 +57,11 @@ private:
 	}
 
 public:
-    /// Preallocate
-    this(size_t capacity)
-    {
-    	reserve(capacity);
-    }
+	/// Preallocate
+	this(size_t capacity)
+	{
+		reserve(capacity);
+	}
 
 	void put(U...)(U items)
 		if (CanPutAll!U)
@@ -109,6 +109,12 @@ public:
 		}
 	}
 
+	void preallocate(size_t len)
+	{
+		if (end - cursor < len)
+			reserve(len);
+	}
+
 	T[] allocate(size_t len)
 	{
 		auto cursorEnd = cursor + len;
@@ -150,6 +156,13 @@ public:
 	@property size_t length()
 	{
 		return cursor-start;
+	}
+
+	/// Does not resize. Use preallocate for that.
+	@property void length(size_t value)
+	{
+		cursor = start + value;
+		assert(cursor <= end);
 	}
 
 	static if (is(I == T)) // mutable types only
