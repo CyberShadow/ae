@@ -88,8 +88,22 @@ string toJson(T)(T v)
 	static if (is(T==struct))
 	{
 		string json;
-		foreach (i, field; v.tupleof)
-			json ~= toJson(v.tupleof[i].stringof[2..$]) ~ ":" ~ toJson(field) ~ ",";
+		static if (hasSkipFields!T)
+		{
+			enum skipFields = getSkipHash!T;
+			foreach (i, field; v.tupleof)
+			{
+				if (v.tupleof[i].stringof[2..$] in skipFields)
+					json ~= toJson(v.tupleof[i].stringof[2..$]) ~ ":" ~ toJson(field.init) ~ ",";
+				else
+					json ~= toJson(v.tupleof[i].stringof[2..$]) ~ ":" ~ toJson(field) ~ ",";
+			}
+		}
+		else
+		{
+			foreach (i, field; v.tupleof)
+				json ~= toJson(v.tupleof[i].stringof[2..$]) ~ ":" ~ toJson(field) ~ ",";
+		}
 		if(json.length>0)
 			json=json[0..$-1];
 		return "{" ~ json ~ "}";
@@ -375,6 +389,51 @@ private struct JsonParser
 	}
 }
 
+enum string _skipHashName = "__nonSerialized";
+
+/** Converts a tuple of aliases to a hash of strings for quick lookup. */
+static int[string] fieldsToHash(Fields...)()
+{
+	typeof(return) result;
+	foreach (i, _ ; typeof(Fields))
+		result[Fields[i].stringof] = 1;
+	return result;
+}
+
+template hasSkipFields(T)
+{
+	enum bool hasSkipFields = __traits(hasMember, T, T.stringof ~ _skipHashName);
+}
+
+template getSkipHash(T)
+{
+	enum getSkipHash = __traits(getMember, T, T.stringof ~ _skipHashName);
+}
+
+/*
+ * A mixin template that designates fields which should not be serialized to Json.
+ * The first argument must be a structure, followed by the fields.
+ *
+ * Example:
+ * ---
+ * struct Foo { int x, y, z; mixin SkipJson!(Foo, x, z); }
+ * assert(jsonParse!Foo(toJson(Foo(1, 2, 3))) == Foo(0, 2, 0));
+ * ---
+ */
+mixin template SkipJson(Members...)
+{
+	alias Members[0] Root;
+	static assert(is(Root == struct), "First template argument to SkipJson must be a struct.");
+	alias Members[1 .. $] Fields;
+
+	mixin(q{
+	static if(Fields.length == 0)
+		static enum } ~ Root.stringof ~ _skipHashName ~ q{ = ["this"[] : 1];
+	else
+		static enum } ~ Root.stringof ~ _skipHashName ~ q{ = fieldsToHash!(Fields)();
+	});
+}
+
 T jsonParse(T)(string s) { return JsonParser(s).read!(T); }
 
 unittest
@@ -385,4 +444,17 @@ unittest
 	auto s2 = jsonParse!S(toJson(s));
 	// assert(s == s2); // Issue 3789
 	assert(s.i == s2.i && s.arr == s2.arr && s.dic == s2.dic && s.en == En.two);
+}
+
+unittest
+{
+	struct Foo { int i; Foo[] arr; string[string] dic; }
+	struct Bar { Foo foo; int i; Foo[] arr; string[string] dic; mixin SkipJson!(Bar, dic, i); }
+	Foo foo = Foo(42, [Foo(1), Foo(2)], ["apple":"fruit", "pizza":"vegetable"]);
+	Bar bar = Bar(foo, 42, [Foo(1), Foo(2)], ["apple":"fruit", "pizza":"vegetable"]);
+	auto bar2 = jsonParse!Bar(toJson(bar));
+	// assert(bar2.foo == foo); // Issue 3789
+	auto barFoo = bar2.foo;
+	assert(barFoo.i == foo.i && barFoo.arr == foo.arr && barFoo.dic == foo.dic);
+	assert(bar2.i == typeof(Bar.i).init && bar2.arr == bar.arr && bar2.dic == typeof(Bar.dic).init);
 }
