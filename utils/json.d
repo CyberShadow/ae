@@ -90,9 +90,7 @@ string toJson(T)(T v)
 		string json;
 		foreach (i, field; v.tupleof)
 		{
-			static if (doSkipSerialize!(T, v.tupleof[i].stringof[2..$]))
-				json ~= toJson(v.tupleof[i].stringof[2..$]) ~ ":" ~ toJson(typeof(field).init) ~ ",";
-			else
+			static if (!doSkipSerialize!(T, v.tupleof[i].stringof[2..$]))
 				json ~= toJson(v.tupleof[i].stringof[2..$]) ~ ":" ~ toJson(field) ~ ",";
 		}        
 		if(json.length>0)
