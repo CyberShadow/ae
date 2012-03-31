@@ -109,6 +109,25 @@ public:
 		}
 	}
 
+	/// Unsafe. Use together with preallocate().
+	void uncheckedPut(U...)(U items)
+		if (CanPutAll!U)
+	{
+		auto cursor = this.cursor;
+
+		foreach (item; items)
+			static if (is(typeof(cursor[0] = item)))
+				*cursor++ = item;
+			else
+			static if (is(typeof(cursor[0..1] = item[0..1])))
+			{
+				cursor[0..item.length] = item;
+				cursor += item.length;
+			}
+
+		this.cursor = cursor;
+	}
+
 	void preallocate(size_t len)
 	{
 		if (end - cursor < len)
