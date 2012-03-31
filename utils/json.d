@@ -89,7 +89,10 @@ string toJson(T)(T v)
 	{
 		string json;
 		foreach (i, field; v.tupleof)
-			json ~= toJson(v.tupleof[i].stringof[2..$]) ~ ":" ~ toJson(field) ~ ",";
+		{
+			static if (!doSkipSerialize!(T, v.tupleof[i].stringof[2..$]))
+				json ~= toJson(v.tupleof[i].stringof[2..$]) ~ ":" ~ toJson(field) ~ ",";
+		}        
 		if(json.length>0)
 			json=json[0..$-1];
 		return "{" ~ json ~ "}";
@@ -375,14 +378,48 @@ private struct JsonParser
 	}
 }
 
+static string[] toArray(Args...)()
+{
+	string[] args;
+	foreach (i, _ ; typeof(Args))
+		args ~= Args[i].stringof;
+	return args;
+}
+
+string NonSerializedFields(string[] fields)
+{
+	string result;
+	foreach (field; fields)
+		result ~= "enum bool " ~ field ~ "_nonSerialized = 1;";
+	return result;
+}
+
+template doSkipSerialize(T, string member)
+{
+	enum bool doSkipSerialize = __traits(hasMember, T, member ~ "_nonSerialized");
+}
+
+/*
+ * A template that designates fields which should not be serialized to Json.
+ *
+ * Example:
+ * ---
+ * struct Point { int x, y, z; mixin NonSerialized!(x, z); }
+ * assert(jsonParse!Point(toJson(Point(1, 2, 3))) == Point(0, 2, 0));
+ * ---
+ */
+template NonSerialized(fields...)
+{
+	mixin(NonSerializedFields(toArray!fields()));
+}
+
 T jsonParse(T)(string s) { return JsonParser(s).read!(T); }
 
 unittest
 {
 	enum En { one, two }
-	struct S { int i; S[] arr; string[string] dic; En en; }
-	S s = S(42, [S(1), S(2)], ["apple":"fruit", "pizza":"vegetable"], En.two);
+	struct S { int i; int d; S[] arr; S[] arr2; string[string] dic; En en; mixin NonSerialized!(d, arr2); }
+	S s = S(42, 5, [S(1), S(2)], [S(3), S(4)], ["apple":"fruit", "pizza":"vegetable"], En.two);
 	auto s2 = jsonParse!S(toJson(s));
-	// assert(s == s2); // Issue 3789
-	assert(s.i == s2.i && s.arr == s2.arr && s.dic == s2.dic && s.en == En.two);
+	assert(s.i == s2.i && s2.d == 0 && s.arr == s2.arr && s2.arr2 == null && s.dic == s2.dic && s.en == En.two);
 }
