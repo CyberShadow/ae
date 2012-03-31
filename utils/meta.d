@@ -63,3 +63,14 @@ unittest
 }
 
 public import ae.utils.meta_x;
+
+// ************************************************************************
+
+static // http://d.puremagic.com/issues/show_bug.cgi?id=7805
+string[] toArray(Args...)()
+{
+	string[] args;
+	foreach (i, _ ; typeof(Args))
+		args ~= Args[i].stringof;
+	return args;
+}

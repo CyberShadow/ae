@@ -16,6 +16,8 @@ module ae.utils.json;
 import std.string;
 import std.exception;
 
+import ae.utils.meta;
+
 string jsonEscape(bool UNICODE = true)(string str)
 {
 	static if (UNICODE)
@@ -123,7 +125,7 @@ unittest
 	assert(toJson(arr) == `[1,5,7]`);
 }
 
-// -------------------------------------------------------------------------------------------
+// ************************************************************************
 
 import std.ascii;
 import std.utf;
@@ -378,28 +380,20 @@ private struct JsonParser
 	}
 }
 
-static string[] toArray(Args...)()
+T jsonParse(T)(string s) { return JsonParser(s).read!(T); }
+
+unittest
 {
-	string[] args;
-	foreach (i, _ ; typeof(Args))
-		args ~= Args[i].stringof;
-	return args;
+	struct S { int i; S[] arr; }
+	S s = S(42, [S(1), S(2)]);
+	auto s2 = jsonParse!S(toJson(s));
+	//assert(s == s2); // Issue 3789
+	assert(s.i == s2.i && s.arr == s2.arr);
 }
 
-string NonSerializedFields(string[] fields)
-{
-	string result;
-	foreach (field; fields)
-		result ~= "enum bool " ~ field ~ "_nonSerialized = 1;";
-	return result;
-}
+// ************************************************************************
 
-template doSkipSerialize(T, string member)
-{
-	enum bool doSkipSerialize = __traits(hasMember, T, member ~ "_nonSerialized");
-}
-
-/*
+/**
  * A template that designates fields which should not be serialized to Json.
  *
  * Example:
@@ -413,13 +407,30 @@ template NonSerialized(fields...)
 	mixin(NonSerializedFields(toArray!fields()));
 }
 
-T jsonParse(T)(string s) { return JsonParser(s).read!(T); }
+private string NonSerializedFields(string[] fields)
+{
+	string result;
+	foreach (field; fields)
+		result ~= "enum bool " ~ field ~ "_nonSerialized = 1;";
+	return result;
+}
+
+private template doSkipSerialize(T, string member)
+{
+	enum bool doSkipSerialize = __traits(hasMember, T, member ~ "_nonSerialized");
+}
+
+unittest
+{
+	struct Point { int x, y, z; mixin NonSerialized!(x, z); }
+	assert(jsonParse!Point(toJson(Point(1, 2, 3))) == Point(0, 2, 0));
+}
 
 unittest
 {
 	enum En { one, two }
-	struct S { int i; int d; S[] arr; S[] arr2; string[string] dic; En en; mixin NonSerialized!(d, arr2); }
+	struct S { int i1, i2; S[] arr1, arr2; string[string] dic; En en; mixin NonSerialized!(i2, arr2); }
 	S s = S(42, 5, [S(1), S(2)], [S(3), S(4)], ["apple":"fruit", "pizza":"vegetable"], En.two);
 	auto s2 = jsonParse!S(toJson(s));
-	assert(s.i == s2.i && s2.d == 0 && s.arr == s2.arr && s2.arr2 == null && s.dic == s2.dic && s.en == En.two);
+	assert(s.i1 == s2.i1 && s2.i2 is int.init && s.arr1 == s2.arr1 && s2.arr2 is null && s.dic == s2.dic && s.en == En.two);
 }
