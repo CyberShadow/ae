@@ -39,6 +39,11 @@ struct CustomXmlWriter(WRITER, bool PRETTY)
 	{
 		string[] tagStack;
 		void pushTag(string tag) { tagStack ~= tag; }
+		void popTag ()
+		{
+			assert(tagStack.length, "No tag to close");
+			tagStack = tagStack[0..$-1];
+		}
 		void popTag (string tag)
 		{
 			assert(tagStack.length, "No tag to close");
@@ -107,6 +112,15 @@ struct CustomXmlWriter(WRITER, bool PRETTY)
 		debug inAttributes = false;
 	}
 
+	void endAttributesAndTag()
+	{
+		debug assert(inAttributes, "endAttributes without startTagWithAttributes");
+		output.put(" />");
+		static if (PRETTY) newLine();
+		debug inAttributes = false;
+		debug popTag();
+	}
+
 	void endTag(string name)()
 	{
 		debug assert(!inAttributes, "no endAttributes");
@@ -116,8 +130,8 @@ struct CustomXmlWriter(WRITER, bool PRETTY)
 	}
 }
 
-alias CustomXmlWriter!(StringBuffer, false) XmlWriter;
-alias CustomXmlWriter!(StringBuffer, true ) PrettyXmlWriter;
+alias CustomXmlWriter!(StringBuilder, false) XmlWriter;
+alias CustomXmlWriter!(StringBuilder, true ) PrettyXmlWriter;
 
 private:
 
@@ -174,3 +188,6 @@ unittest
 			`</quote>`
 		`</quotes>`);
 }
+
+// TODO: StringBuilder-compatible XML-encoding string sink/filter?
+// e.g. to allow putTime to write directly to an XML node contents

@@ -46,6 +46,9 @@ private const WeekdayLongNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "T
 private const MonthShortNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 private const MonthLongNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
+// TODO: format time should be parsed at compile-time;
+// then, we can preallocate StringBuilder space and use uncheckedPut
+
 /// Format a SysTime using a PHP date() format string.
 string formatTime(string fmt, SysTime t = Clock.currTime())
 {
