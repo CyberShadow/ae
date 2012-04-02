@@ -150,6 +150,7 @@ import std.array;
 auto amap(alias pred, T)(T[] arr) { return array(map!pred(arr)); }
 auto afilter(alias pred, T)(T[] arr) { return array(filter!pred(arr)); }
 auto auniq(T)(T[] arr) { return array(uniq(arr)); }
+auto asort(alias pred, T)(T[] arr) { sort!pred(arr); return arr; }
 
 unittest
 {

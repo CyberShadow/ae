@@ -440,52 +440,38 @@ public:
 
 import std.algorithm : sort;
 
-/// parses a list in the format of "a, b, c;q=0.5, d" and returns an array of items sorted by "q" (["a", "b", "d", "c"])
-// NOTE: this code is crap.
+/// Parses a list in the format of "a, b, c;q=0.5, d" and returns
+/// an array of items sorted by "q" (["a", "b", "d", "c"])
 string[] parseItemList(string s)
 {
-	string[] items = s.split(",");
-	foreach(ref item;items)
-		item = strip(item);
-
 	struct Item
 	{
-		float q=1.0;
+		float q = 1.0;
 		string str;
 
 		this(string s)
 		{
-			sizediff_t p;
-			while((p=s.lastIndexOf(';'))!=-1)
-			{
-				string param = s[p+1..$];
-				s = strip(s[0..p]);
-				auto p2 = param.indexOf('=');
-				assert(p2!=-1);
-				string name=strip(param[0..p2]), value=strip(param[p2+1..$]);
-				switch(name)
-				{
-					case "q":
-						q = to!float(value);
-						break;
-					default:
-					// fail on unsupported
-				}
-			}
-			str = s;
+			auto params = s.split(";");
+			str = params[0];
+			foreach (param; params[1..$])
+				if (param.startsWith("q="))
+					q = to!float(param[2..$]);
 		}
 	}
 
-	Item[] structs;
-	foreach(item;items)
-		structs ~= [Item(item)];
-	structs.sort!`a.q > b.q`();
-	string[] result;
-	foreach(item;structs)
-		result ~= [item.str];
-	return result;
+	return s
+		.split(",")
+		.amap!(a => Item(strip(a)))()
+		.asort!`a.q > b.q`()
+		.amap!`a.str`();
 }
 
+unittest
+{
+	assert(parseItemList("a, b, c;q=0.5, d") == ["a", "b", "d", "c"]);
+}
+
+// TODO: optimize / move to HtmlWriter
 string httpEscape(string str)
 {
 	string result;
@@ -508,11 +494,6 @@ string httpEscape(string str)
 				result ~= [c];
 		}
 	return result;
-}
-
-unittest
-{
-	assert(parseItemList("a, b, c;q=0.5, d") == ["a", "b", "d", "c"]);
 }
 
 string encodeUrlParameter(string param)
