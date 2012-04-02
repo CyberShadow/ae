@@ -45,7 +45,7 @@ uint crc32(Data[] data)
 	return ~crc;
 }
 
-Data[] compress(Data[] data, ZlibOptions options = ZlibOptions.init)
+Data[] deflate2gzip(Data[] compressed, uint dataCrc, size_t dataLength)
 {
 	ubyte[] header;
 	header.length = 10;
@@ -55,17 +55,21 @@ Data[] compress(Data[] data, ZlibOptions options = ZlibOptions.init)
 	header[3..8] = 0;  // TODO: set MTIME
 	header[8] = 4;
 	header[9] = 3;     // TODO: set OS
-	uint[2] footer = [crc32(data), std.conv.to!uint(data.bytes.length)];
+	uint[2] footer = [dataCrc, std.conv.to!uint(dataLength)];
 
-	Data[] compressed = zlib.compress(data, options);
 	compressed = compressed.bytes[2..compressed.bytes.length-4];
 
 	return [Data(header)] ~ compressed ~ [Data(footer)];
 }
 
+Data[] compress(Data[] data, ZlibOptions options = ZlibOptions.init)
+{
+	return deflate2gzip(zlib.compress(data, options), crc32(data), data.bytes.length);
+}
+
 Data compress(Data input) { return compress([input]).joinData(); }
 
-Data[] uncompress(Data[] data)
+Data[] gzipToRawDeflate(Data[] data)
 {
 	enforce(data.bytes.length >= 10, "Gzip too short");
 	auto bytes = data.bytes;
@@ -81,8 +85,13 @@ Data[] uncompress(Data[] data)
 		while (bytes[start]) start++;
 		start++;
 	}
+	return bytes[start..bytes.length-8];
+}
+
+Data[] uncompress(Data[] data)
+{
 	ZlibOptions options; options.mode = ZlibMode.raw;
-	Data[] uncompressed = zlib.uncompress(bytes[start..bytes.length-8], options);
+	Data[] uncompressed = zlib.uncompress(gzipToRawDeflate(data), options);
 	enforce(uncompressed.bytes.length == *cast(uint*)(&data[$-1].contents[$-4]), "Decompressed data length mismatch");
 	return uncompressed;
 }
