@@ -212,8 +212,8 @@ unittest
 {
 	void testRoundtrip(ubyte[] src)
 	{
-		ubyte[] def = cast(ubyte[])  compress(Data(src)).contents;
-		ubyte[] res = cast(ubyte[])uncompress(Data(def)).contents;
+		ubyte[] def = cast(ubyte[])  compress(Data(src)).toHeap;
+		ubyte[] res = cast(ubyte[])uncompress(Data(def)).toHeap;
 		assert(res == src);
 	}
 

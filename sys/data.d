@@ -65,7 +65,14 @@ public import ae.sys.dataset;
  * to keep a GC anchor towards the unmanaged data.
  *
  * Concatenations and appends to Data contents will cause reallocations on the heap, consider using Data instead.
+ *
  * Be sure not to lose Data references while using their contents!
+ * For example, avoid code like this:
+ * ----
+ * fun(cast(string)transformSomeData(someData).contents);
+ * ----
+ * The Data return value may be unreachable once .contents is evaluated.
+ * Use .toHeap instead of .contents in such cases to get a safe heap copy.
  */
 struct Data
 {
@@ -215,6 +222,13 @@ public:
 			return wrapper.capacity - pos;
 		else
 			return length;
+	}
+
+	/// Put a copy of the data on D's managed heap, and return it.
+	@property
+	void[] toHeap() const
+	{
+		return _contents.dup;
 	}
 
 	private void reallocate(size_t size, size_t capacity)

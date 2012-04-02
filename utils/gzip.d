@@ -93,8 +93,8 @@ unittest
 {
 	void testRoundtrip(ubyte[] src)
 	{
-		ubyte[] def = cast(ubyte[])  compress(Data(src)).contents;
-		ubyte[] res = cast(ubyte[])uncompress(Data(def)).contents;
+		ubyte[] def = cast(ubyte[])  compress(Data(src)).toHeap;
+		ubyte[] res = cast(ubyte[])uncompress(Data(def)).toHeap;
 		assert(res == src);
 
 		Data[] srcData;
@@ -113,7 +113,7 @@ the quick brown fox jumps over the lazy dog\r
 
 	void testUncompress(ubyte[] src, ubyte[] dst)
 	{
-		assert(cast(ubyte[])uncompress(Data(src)).contents == dst);
+		assert(cast(ubyte[])uncompress(Data(src)).toHeap == dst);
 	}
 
 	testUncompress([
