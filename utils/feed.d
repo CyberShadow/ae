@@ -19,7 +19,7 @@ import ae.utils.xmlwriter;
 import ae.utils.time;
 
 /// ATOM writer
-struct AtomFeed
+struct AtomFeedWriter
 {
 	XmlWriter xml;
 
@@ -56,7 +56,7 @@ struct AtomFeed
 		putTimeTag!"updated"(updated);
 	}
 
-	void putEntry(string url, string title, string authorName, SysTime time, string contentHtml)
+	void putEntry(string url, string title, string authorName, SysTime time, string contentHtml, string link=null)
 	{
 		xml.startTag!"entry"();
 
@@ -68,6 +68,13 @@ struct AtomFeed
 		xml.startTag!"author"();
 		putTag!"name"(authorName);
 		xml.endTag!"author"();
+
+		if (link)
+		{
+			xml.startTagWithAttributes!"link"();
+			xml.addAttribute!"href"(link);
+			xml.endAttributesAndTag();
+		}
 
 		xml.startTagWithAttributes!"content"();
 		xml.addAttribute!"type"("html");
