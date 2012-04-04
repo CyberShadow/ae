@@ -160,30 +160,30 @@ final class SQLite
 			while (step()) {}
 		}
 
-		auto iterate(T...)(T args)
+		static struct Iterator
 		{
-			struct Iterator
+			PreparedStatement stmt;
+
+			@trusted int opApply(U...)(int delegate(ref U args) @system dg)
 			{
-				PreparedStatement stmt;
-
-				@trusted int opApply(U...)(int delegate(ref U args) @system dg)
+				int res = 0;
+				while (stmt.step())
 				{
-					int res = 0;
-					while (stmt.step())
+					U columns;
+					stmt.columns(columns);
+					res = dg(columns);
+					if (res)
 					{
-						U columns;
-						stmt.columns(columns);
-						res = dg(columns);
-						if (res)
-						{
-							stmt.reset();
-							break;
-						}
+						stmt.reset();
+						break;
 					}
-					return res;
 				}
+				return res;
 			}
+		}
 
+		Iterator iterate(T...)(T args)
+		{
 			static if (T.length)
 				bindAll!T(args);
 			return Iterator(this);
