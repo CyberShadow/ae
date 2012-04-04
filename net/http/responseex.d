@@ -18,7 +18,6 @@ import std.string;
 import std.conv;
 import std.file;
 import std.path;
-import std.datetime;
 
 public import ae.net.http.common;
 import ae.sys.data;
@@ -27,20 +26,12 @@ import ae.utils.array;
 import ae.utils.json;
 import ae.utils.xml;
 import ae.utils.text;
-import ae.utils.time;
 import ae.utils.mime;
 
 /// HttpResponse with some code to ease creating responses
 final class HttpResponseEx : HttpResponse
 {
 public:
-	/// Set the response status code and message
-	void setStatus(HttpStatusCode code)
-	{
-		status = code;
-		statusMessage = getStatusMessage(code);
-	}
-
 	/// Redirect the UA to another location
 	HttpResponseEx redirect(string location, HttpStatusCode status = HttpStatusCode.SeeOther)
 	{
@@ -87,13 +78,6 @@ public:
 		if (path.length && (path.contains("..") || path[0]=='/' || path[0]=='\\' || path.contains("//") || path.contains("\\\\")))
 			return false;
 		return true;
-	}
-
-	static string httpTime(SysTime time)
-	{
-		// Apache is bad at timezones
-		time.timezone = UTC();
-		return formatTime(TimeFormats.RFC2822, time);
 	}
 
 	/// Send a file from the disk
@@ -259,16 +243,12 @@ public:
 
 	void disableCache()
 	{
-		headers["Expires"] = "Mon, 26 Jul 1997 05:00:00 GMT";  // disable IE caching
-		//headers["Last-Modified"] = "" . gmdate( "D, d M Y H:i:s" ) . " GMT";
-		headers["Cache-Control"] = "no-cache, must-revalidate";
-		headers["Pragma"] = "no-cache";
+		.disableCache(headers);
 	}
 
 	void cacheForever()
 	{
-		headers["Expires"] = httpTime(Clock.currTime().add!"years"(1));
-		headers["Cache-Control"] = "public, max-age=31536000";
+		.cacheForever(headers);
 	}
 
 	static pageTemplate =

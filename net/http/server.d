@@ -234,9 +234,10 @@ public:
 		}
 
 		if ("Accept-Encoding" in currentRequest.headers)
-			response.compress(currentRequest.headers["Accept-Encoding"]);
+			response.optimizeData(currentRequest.headers["Accept-Encoding"]);
 		response.headers["Content-Length"] = response ? to!string(response.data.bytes.length) : "0";
-		response.headers["X-Powered-By"] = "DHttp";
+		response.headers["X-Powered-By"] = "ae.net.http.server (+https://github.com/CyberShadow/ae)";
+		response.headers["Date"] = httpTime(Clock.currTime);
 		if (persistent && currentRequest.protocolVersion=="1.0")
 			response.headers["Connection"] = "Keep-Alive";
 
@@ -317,7 +318,7 @@ Content-type: application/x-www-form-urlencoded
 
 b=654321" ~
 "GET /derp HTTP/1.1
-Content-length: cheese
+Content-length: potato
 
 " ~
 "GET /?a=1234567 HTTP/1.1

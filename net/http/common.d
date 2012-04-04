@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Concepts shared between HTTP clients and servers.
  *
  * License:
@@ -21,9 +21,11 @@ import std.string;
 import std.conv;
 import std.ascii;
 import std.exception;
+import std.datetime;
 
 import ae.utils.text;
 import ae.utils.array;
+import ae.utils.time;
 import ae.net.ietf.headers;
 import ae.sys.data;
 import zlib = ae.utils.zlib;
@@ -362,12 +364,35 @@ public:
 			case 503: return "Service Unavailable";
 			case 504: return "Gateway Timeout";
 			case 505: return "HTTP Version Not Supported";
-			default: return "";
+			default: return null;
 		}
+	}
+
+	/// Set the response status code and message
+	void setStatus(HttpStatusCode code)
+	{
+		status = code;
+		statusMessage = getStatusMessage(code);
+	}
+
+	final void parseStatusLine(string statusLine)
+	{
+		auto versionEnd = statusLine.indexOf(' ');
+		if (versionEnd == -1)
+			throw new Exception("Malformed status line");
+		protocolVersion = statusLine[0..versionEnd];
+		statusLine = statusLine[versionEnd+1..statusLine.length];
+
+		auto statusEnd = statusLine.indexOf(' ');
+		if (statusEnd == -1)
+			throw new Exception("Malformed status line");
+		status = cast(HttpStatusCode)to!ushort(statusLine[0 .. statusEnd]);
+		statusMessage = statusLine[statusEnd+1..statusLine.length];
 	}
 
 	/// If the data is compressed, return the decompressed data
 	// this is not a property on purpose - to avoid using it multiple times as it will unpack the data on every access
+	// TODO: there is no reason for above limitation
 	Data getContent()
 	{
 		if ("Content-Encoding" in headers && headers["Content-Encoding"]=="deflate")
@@ -380,62 +405,70 @@ public:
 		assert(0);
 	}
 
-	void setContent(Data[] content, string[] supported)
+	protected void compressWithDeflate()
 	{
-		foreach(method;supported ~ ["*"])
-			switch(method)
-			{
-				case "deflate":
-					headers["Content-Encoding"] = method;
-					headers.add("Vary", "Accept-Encoding");
-					data = zlib.compress(content, zlib.ZlibOptions(compressionLevel));
-					return;
-				case "gzip":
-					headers["Content-Encoding"] = method;
-					headers.add("Vary", "Accept-Encoding");
-					data = gzip.compress(content, zlib.ZlibOptions(compressionLevel));
-					return;
-				case "*":
-					if("Content-Encoding" in headers)
-						headers.remove("Content-Encoding");
-					data = content;
-					return;
-				default:
-					break;
-			}
-		assert(0);
+		data = zlib.compress(data, zlib.ZlibOptions(compressionLevel));
 	}
 
-	void setContent(Data content, string[] supported)
+	protected void compressWithGzip()
 	{
-		setContent([content], supported);
+		data = gzip.compress(data, zlib.ZlibOptions(compressionLevel));
 	}
 
-	void parseStatusLine(string statusLine)
+	/// Called by the server to compress content, if possible/appropriate
+	final package void optimizeData(string acceptEncoding)
 	{
-		auto versionEnd = statusLine.indexOf(' ');
-		if (versionEnd == -1)
-			throw new Exception("Malformed status line");
-		protocolVersion = statusLine[0..versionEnd];
-		statusLine = statusLine[versionEnd+1..statusLine.length];
-
-		auto statusEnd = statusLine.indexOf(' ');
-		if (statusEnd == -1)
-			throw new Exception("Malformed status line");
-		status = to!ushort(statusLine[0 .. statusEnd]);
-		statusMessage = statusLine[statusEnd+1..statusLine.length];
-	}
-
-	/// called by the server to compress content if possible
-	void compress(string acceptEncoding)
-	{
-		auto contentType = "Content-Type" in headers ? headers["Content-Type"] : null;
-		if (!contentType.startsWith("text/") && contentType!="application/json")
-			return;
 		if ("Content-Encoding" in headers)
-			return;
-		setContent(data, parseItemList(acceptEncoding));
+			return; // data is already encoded
+		auto contentType = aaGet(headers, "Content-Type", null);
+		if (contentType.startsWith("text/") || contentType=="application/json")
+		{
+			auto supported = parseItemList(acceptEncoding) ~ ["*"];
+
+			foreach (method; supported)
+				switch (method)
+				{
+					case "deflate":
+						headers["Content-Encoding"] = method;
+						headers.add("Vary", "Accept-Encoding");
+						compressWithDeflate();
+						return;
+					case "gzip":
+						headers["Content-Encoding"] = method;
+						headers.add("Vary", "Accept-Encoding");
+						compressWithGzip();
+						return;
+					case "*":
+						if("Content-Encoding" in headers)
+							headers.remove("Content-Encoding");
+						return;
+					default:
+						break;
+				}
+			assert(0);
+		}
 	}
+}
+
+void disableCache(ref Headers headers)
+{
+	headers["Expires"] = "Mon, 26 Jul 1997 05:00:00 GMT";  // disable IE caching
+	//headers["Last-Modified"] = "" . gmdate( "D, d M Y H:i:s" ) . " GMT";
+	headers["Cache-Control"] = "no-cache, must-revalidate";
+	headers["Pragma"] = "no-cache";
+}
+
+void cacheForever(ref Headers headers)
+{
+	headers["Expires"] = httpTime(Clock.currTime().add!"years"(1));
+	headers["Cache-Control"] = "public, max-age=31536000";
+}
+
+string httpTime(SysTime time)
+{
+	// Apache is bad at timezones
+	time.timezone = UTC();
+	return formatTime(TimeFormats.RFC2822, time);
 }
 
 import std.algorithm : sort;

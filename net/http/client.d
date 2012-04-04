@@ -139,7 +139,7 @@ protected:
 	}
 
 public:
-	string agent = "DHttp/0.1";
+	string agent = "ae.net.http.client (+https://github.com/CyberShadow/ae)";
 	bool compat = false;
 	string[] cookies;
 
