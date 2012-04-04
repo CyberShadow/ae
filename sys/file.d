@@ -117,6 +117,9 @@ else
 import std.datetime;
 import std.exception;
 
+// Will be made redundant by:
+// https://github.com/D-Programming-Language/phobos/pull/513
+// https://github.com/D-Programming-Language/phobos/pull/518
 SysTime getMTime(string name)
 {
 	version(Windows)
@@ -193,6 +196,7 @@ version (Windows)
 version(Windows)
 {
 	/// Find*File and CreateFile may fail in certain situations
+	// Will be made redundant by https://github.com/D-Programming-Language/phobos/pull/513
 	ulong getSize2(string name)
 	{
 		import win32.winnt;
