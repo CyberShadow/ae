@@ -114,6 +114,26 @@ V aaGet(K, V)(V[K] aa, K key, V def)
 		return def;
 }
 
+struct KeyValuePair(K, V) { K key; V value; }
+
+/// Get key/value pairs from AA, sorted by keys
+KeyValuePair!(K, V)[] sortedPairs(K, V)(V[K] aa)
+{
+	KeyValuePair!(K, V)[] result;
+	foreach (key; aa.keys.sort)
+		result ~= KeyValuePair!(K, V)(key, aa[key]);
+	return result;
+}
+
+/// Get values from AA, sorted by keys
+V[] sortedValues(K, V)(V[K] aa)
+{
+	V[] result;
+	foreach (key; aa.keys.sort)
+		result ~= aa[key];
+	return result;
+}
+
 // ***************************************************************************
 
 void stackPush(T)(ref T[] arr, T val)
