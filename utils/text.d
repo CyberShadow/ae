@@ -398,6 +398,58 @@ string toHex(ubyte[] data, char[] buf = null)
 
 // ************************************************************************
 
+/// Take a string, and return a regular expression that matches that string
+/// exactly (escape RE metacharacters).
+string escapeRE(string s)
+{
+	// TODO: test
+
+	string result;
+	foreach (c; s)
+		switch (c)
+		{
+		//	case '!':
+		//	case '"':
+		//	case '#':
+			case '$':
+		//	case '%':
+		//	case '&':
+			case '\'':
+			case '(':
+			case ')':
+			case '*':
+			case '+':
+		//	case ',':
+		//	case '-':
+			case '.':
+			case '/':
+		//	case ':':
+		//	case ';':
+		//	case '<':
+		//	case '=':
+		//	case '>':
+			case '?':
+		//	case '@':
+			case '[':
+			case '\\':
+			case ']':
+			case '^':
+		//	case '_':
+		//	case '`':
+			case '{':
+			case '|':
+			case '}':
+		//	case '~':
+				result ~= '\\';
+				goto default;
+			default:
+				result ~= c;
+		}
+	return result;
+}
+
+// ************************************************************************
+
 import std.random;
 
 string randomString(int length=20, string chars="abcdefghijklmnopqrstuvwxyz")
