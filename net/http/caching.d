@@ -194,6 +194,9 @@ protected:
 		if (!exists(filename) || !isFile(filename)) // TODO: 404
 			throw new Exception("Static resource does not exist on disk");
 
+		// maybe use mmap?
+		// mmap implies either file locking, or risk of bad data (file content changes, mapped length not)
+
 		import ae.sys.dataio;
 		return [readData(filename)];
 	}
