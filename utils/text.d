@@ -366,13 +366,34 @@ T fromHex(T : ulong = uint)(string s)
 	return result;
 }
 
-ubyte[] arrayFromHex(string s)
+const hexDigits = "0123456789abcdef";
+
+ubyte[] arrayFromHex(string hex, ubyte[] buf = null)
 {
-	enforce(s.length % 2 == 0, "Odd length");
-	auto result = new ubyte[s.length/2];
-	foreach (i, ref b; result)
-		b = fromHex!ubyte(s[i*2..i*2+2]);
-	return result;
+	if (buf is null)
+		buf = new ubyte[hex.length/2];
+	else
+		assert(buf.length == hex.length/2);
+	for (int i=0; i<hex.length; i+=2)
+		buf[i/2] = cast(ubyte)(
+			hexDigits.indexOf(hex[i  ], CaseSensitive.no)*16 +
+			hexDigits.indexOf(hex[i+1], CaseSensitive.no)
+		);
+	return buf;
+}
+
+string toHex(ubyte[] data, char[] buf = null)
+{
+	if (buf is null)
+		buf = new char[data.length*2];
+	else
+		assert(buf.length == data.length*2);
+	foreach (i, b; data)
+	{
+		buf[i*2  ] = hexDigits[b>>4];
+		buf[i*2+1] = hexDigits[b&15];
+	}
+	return assumeUnique(buf);
 }
 
 // ************************************************************************
