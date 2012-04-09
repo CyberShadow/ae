@@ -150,6 +150,17 @@ SysTime getMTime(string name)
 	}
 }
 
+void touch(string fn)
+{
+	if (exists(fn))
+	{
+		auto now = Clock.currTime;
+		setTimes(fn, now, now);
+	}
+	else
+		std.file.write(fn, "");
+}
+
 void forceDelete(string fn)
 {
 	version(Windows)
