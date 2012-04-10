@@ -161,6 +161,14 @@ void touch(string fn)
 		std.file.write(fn, "");
 }
 
+/// Make sure that the path exists (and create directories as necessary).
+void mkPathTo(string fn)
+{
+	auto path = dirName(fn);
+	if (!exists(path))
+		mkdirRecurse(path);
+}
+
 void forceDelete(string fn)
 {
 	version(Windows)
