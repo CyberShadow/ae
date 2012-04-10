@@ -525,3 +525,10 @@ string sha1sum(void[] data)
 
 	return run(["sha1sum", "-b", dataFile])[0..40];
 }
+
+// ************************************************************************
+
+version (Windows)
+	enum NULL_FILE = "nul";
+else
+	enum NULL_FILE = "/dev/null";
