@@ -162,7 +162,7 @@ void touch(string fn)
 }
 
 /// Make sure that the path exists (and create directories as necessary).
-void mkPathTo(string fn)
+void ensurePathExists(string fn)
 {
 	auto path = dirName(fn);
 	if (!exists(path))
