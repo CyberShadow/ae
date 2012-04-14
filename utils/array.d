@@ -58,6 +58,16 @@ bool contains(T)(T[] arr, T val)
 	return false;
 }
 
+bool isIn(T)(T val, T[] arr)
+{
+	return arr.contains(val);
+}
+
+bool isOneOf(T)(T val, T[] arr...)
+{
+	return arr.contains(val);
+}
+
 import std.functional;
 
 T[] countSort(alias value = "a", T)(T[] arr)
