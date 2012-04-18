@@ -28,7 +28,7 @@ version(Windows)
 		string c;
 		HANDLE h;
 
-		c = std.path.join(pathname, "*.*");
+		c = buildPath(pathname, "*.*");
 		WIN32_FIND_DATAW fileinfo;
 
 		h = FindFirstFileW(toUTF16z(c), &fileinfo);
@@ -51,7 +51,7 @@ version(Windows)
 
 				size_t clength = std.string.wcslen(fileinfo.cFileName.ptr);
 				string name = std.utf.toUTF8(fileinfo.cFileName[0 .. clength]);
-				string path = std.path.join(pathname, name);
+				string path = buildPath(pathname, name);
 
 				static if (recursive)
 				{
