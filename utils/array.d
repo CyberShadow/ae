@@ -50,7 +50,8 @@ T[] repeatOne(T)(T c, size_t l)
 	return result;
 }
 
-bool contains(T)(T[] arr, T val)
+bool contains(T, V)(T[] arr, V val)
+	if (is(typeof(arr[0]==val)))
 {
 	foreach (v; arr)
 		if (v == val)
