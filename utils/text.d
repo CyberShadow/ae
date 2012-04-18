@@ -396,6 +396,26 @@ string toHex(ubyte[] data, char[] buf = null)
 	return assumeUnique(buf);
 }
 
+/// Get shortest string representation of a double that still converts to exactly the same number.
+// TODO: generalize
+string doubleToString(double v)
+{
+	string s = format("%.18g", v);
+
+	/// Force IEEE double (bypass FPU register)
+	static double forceDouble(double d) { static double n; n = d; return n; }
+
+	if (s != "nan" && s != "inf" && s != "-inf")
+	{
+		foreach_reverse (i; 1..s.length)
+			if (s[i]>='0' && s[i]<='8' && forceDouble(to!double(s[0..i] ~ cast(char)(s[i]+1)))==v)
+				s = s[0..i] ~ cast(char)(s[i]+1);
+		while (s.length>2 && s[$-1]!='.' && forceDouble(to!double(s[0..$-1]))==v)
+			s = s[0..$-1];
+	}
+	return s;
+}
+
 // ************************************************************************
 
 /// Take a string, and return a regular expression that matches that string
