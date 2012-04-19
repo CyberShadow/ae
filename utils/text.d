@@ -468,6 +468,51 @@ string escapeRE(string s)
 	return result;
 }
 
+/// Apply regex transformation (in the form of "s/FROM/TO/FLAGS") to a string.
+string applyRE()(string str, string transformation)
+{
+	import std.regex;
+	auto params = splitRETransformation(transformation);
+	enforce(params[0] == "s", "Unsupported regex transformation");
+	enforce(params.length == 4, "Wrong number of regex transformation parameters");
+	auto r = regex(params[1], params[3]);
+	return replace(str, r, params[2]);
+}
+
+unittest
+{
+	assert("12000 + 42100 = 54100".applyRE(`s/(?<=\d)(?=(\d\d\d)+\b)/,/g`) == "12,000 + 42,100 = 54,100");
+}
+
+private string[] splitRETransformation(string t)
+{
+	enforce(t.length >= 2, "Bad transformation");
+	string[] result = [t[0..1]];
+	auto boundary = t[1];
+	t = t[2..$];
+	size_t start = 0;
+	bool escaped = false;
+	foreach (i, c; t)
+		if (escaped)
+			escaped = false;
+		else
+		if (c=='\\')
+			escaped = true;
+		else
+		if (c == boundary)
+		{
+			result ~= t[start..i];
+			start = i+1;
+		}
+	result ~= t[start..$];
+	return result;
+}
+
+unittest
+{
+	assert(splitRETransformation("s/from/to/") == ["s", "from", "to", ""]);
+}
+
 // ************************************************************************
 
 import std.random;
