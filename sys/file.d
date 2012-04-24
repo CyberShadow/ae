@@ -264,6 +264,53 @@ version (Windows)
 	}
 }
 
+version (Windows)
+{
+	// avoid Unicode limitations of DigitalMars C runtime
+
+	struct FileEx
+	{
+		import win32.winnt;
+		import win32.winbase;
+
+		static const(wchar)* pathW(string fn)
+		{
+			return toUTF16z(longPath(fn));
+		}
+
+		HANDLE h;
+
+		void openExisting(string fn)
+		{
+			h = CreateFileW(pathW(fn), GENERIC_READ, 0, null, OPEN_EXISTING, 0, HANDLE.init);
+			enforce(h!=INVALID_HANDLE_VALUE, new FileException(fn));
+		}
+
+		this(string fn) { openExisting(fn); }
+
+		void close()
+		{
+			assert(h);
+			CloseHandle(h);
+		}
+
+		~this()
+		{
+			if (h)
+				close();
+		}
+
+		void[] rawRead(void[] buffer)
+		{
+			DWORD bytesRead;
+			enforce(ReadFile(h, buffer.ptr, buffer.length, &bytesRead, null), new FileException("ReadFile"));
+			return buffer[0..bytesRead];
+		}
+	}
+}
+else
+	alias std.file.File FileEx; // only partial compatibility
+
 ubyte[16] mdFile()(string fn)
 {
 	import std.md5, std.stdio;
@@ -272,34 +319,16 @@ ubyte[16] mdFile()(string fn)
 	MD5_CTX context;
 	context.start();
 
-	version (Windows)
+	auto f = FileEx(fn);
+	static ubyte[64 * 1024] buffer;
+	while (true)
 	{
-		// avoid Unicode limitations of DigitalMars C runtime
-
-		import win32.winnt;
-		import win32.winbase;
-
-		auto h = CreateFileW(toUTF16z(fn), GENERIC_READ, 0, null, OPEN_EXISTING, 0, HANDLE.init);
-		enforce(h!=INVALID_HANDLE_VALUE, new FileException(fn));
-		scope(exit) CloseHandle(h);
-
-		static ubyte[64 * 1024] buffer;
-		while (true)
-		{
-			DWORD bytesRead;
-			enforce(ReadFile(h, buffer.ptr, buffer.length, &bytesRead, null), new FileException(fn));
-			if (!bytesRead)
-				break;
-			context.update(buffer[0..bytesRead]);
-		}
+		auto readBuffer = f.rawRead(buffer);
+		if (!readBuffer.length)
+			break;
+		context.update(readBuffer);
 	}
-	else
-	{
-		auto f = File(fn);
-		foreach (buffer; f.byChunk(64 * 1024))
-			context.update(buffer);
-		f.close();
-	}
+	f.close();
 
 	context.finish(digest);
 	return digest;
