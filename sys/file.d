@@ -169,6 +169,7 @@ void ensurePathExists(string fn)
 		mkdirRecurse(path);
 }
 
+/// Forcibly remove a file or empty directory.
 void forceDelete(string fn)
 {
 	version(Windows)
@@ -181,9 +182,38 @@ void forceDelete(string fn)
 		enforce(attr != INVALID_FILE_ATTRIBUTES, "GetFileAttributesW error");
 		if (attr & FILE_ATTRIBUTE_READONLY)
 			SetFileAttributesW(fnW, attr & ~FILE_ATTRIBUTE_READONLY);
+
+		// avoid zombifying locked directories
+		// TODO: better way of finding a temporary directory on the same volume
+		auto lfn = longPath(fn);
+		if (exists(lfn[0..7]~"Temp"))
+		{
+			import ae.utils.text;
+			string newfn;
+			do
+				newfn = lfn[0..7] ~ `Temp\` ~ randomString();
+			while (exists(newfn));
+			if (MoveFileW(toUTF16z(lfn), toUTF16z(newfn)))
+			{
+				if (attr & FILE_ATTRIBUTE_DIRECTORY)
+					RemoveDirectoryW(toUTF16z(newfn));
+				else
+					DeleteFileW(toUTF16z(newfn));
+				return;
+			}
+		}
+
+		if (attr & FILE_ATTRIBUTE_DIRECTORY)
+			enforce(RemoveDirectoryW(toUTF16z(lfn)), "RemoveDirectoryW: " ~ fn);
+		else
+			enforce(DeleteFileW(toUTF16z(lfn)), "DeleteFileW: " ~ fn);
+		return;
 	}
 
-	remove(fn);
+	if (isDir(fn))
+		rmdir(fn);
+	else
+		remove(fn);
 }
 
 version (Windows)
