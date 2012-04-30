@@ -169,6 +169,8 @@ void ensurePathExists(string fn)
 		mkdirRecurse(path);
 }
 
+import ae.utils.text;
+
 /// Forcibly remove a file or empty directory.
 void forceDelete(string fn)
 {
@@ -188,7 +190,6 @@ void forceDelete(string fn)
 		auto lfn = longPath(fn);
 		if (exists(lfn[0..7]~"Temp"))
 		{
-			import ae.utils.text;
 			string newfn;
 			do
 				newfn = lfn[0..7] ~ `Temp\` ~ randomString();
