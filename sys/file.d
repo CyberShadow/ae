@@ -217,6 +217,19 @@ void forceDelete(string fn)
 		remove(fn);
 }
 
+bool isHidden(string fn)
+{
+	if (baseName(fn).startsWith("."))
+		return true;
+	version (Windows)
+	{
+		import win32.winnt;
+		if (getAttributes(fn) & FILE_ATTRIBUTE_HIDDEN)
+			return true;
+	}
+	return false;
+}
+
 version (Windows)
 {
 	/// Return a file's unique ID.
