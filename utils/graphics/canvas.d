@@ -250,6 +250,14 @@ mixin template Canvas()
 			}
 	}
 
+	/// Simple nearest-neighbor scale draw
+	void scaleDraw(SRCCANVAS)(ref SRCCANVAS src)
+	{
+		foreach (y; 0..h)
+			foreach (x; 0..w)
+				this[x, y] = src[x * src.w / w, y * src.h / h];
+	}
+
 	/// Does not make a copy - only returns a "view" onto this canvas.
 	auto window()(int x1, int y1, int x2, int y2)
 	{
