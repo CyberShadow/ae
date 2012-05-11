@@ -26,9 +26,12 @@ struct CustomXmlWriter(WRITER, bool PRETTY)
 
 		void newLine()
 		{
-			auto whitespace = output.allocate(indentLevel+1);
-			whitespace[0] = '\n';
-			whitespace[1..$] = '\t';
+			output.put('\n');
+		}
+
+		void startLine()
+		{
+			output.allocate(indentLevel)[] = '\t';
 		}
 
 		void indent () {                      indentLevel++; }
@@ -83,6 +86,7 @@ struct CustomXmlWriter(WRITER, bool PRETTY)
 	void startTag(string name)()
 	{
 		debug assert(!inAttributes, "no endAttributes");
+		static if (PRETTY) startLine();
 		output.put('<' ~ name ~ '>');
 		static if (PRETTY) { newLine(); indent(); }
 		debug pushTag(name);
@@ -91,6 +95,7 @@ struct CustomXmlWriter(WRITER, bool PRETTY)
 	void startTagWithAttributes(string name)()
 	{
 		debug assert(!inAttributes, "no endAttributes");
+		static if (PRETTY) startLine();
 		output.put('<' ~ name);
 		debug inAttributes = true;
 		debug pushTag(name);
@@ -124,8 +129,9 @@ struct CustomXmlWriter(WRITER, bool PRETTY)
 	void endTag(string name)()
 	{
 		debug assert(!inAttributes, "no endAttributes");
+		static if (PRETTY) { outdent(); startLine(); }
 		output.put("</" ~ name ~ ">");
-		static if (PRETTY) { outdent(); newLine(); }
+		static if (PRETTY) newLine();
 		debug popTag(name);
 	}
 }
