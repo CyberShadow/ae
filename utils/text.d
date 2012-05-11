@@ -21,7 +21,7 @@ import core.stdc.string;
 
 // ************************************************************************
 
-bool contains(string str, string what)
+bool contains(in char[] str, in char[] what)
 {
 	return str.indexOf(what)>=0;
 }

@@ -114,6 +114,40 @@ version (linux)
 else
 	static assert(0, "TODO");
 
+// ************************************************************************
+
+string buildPath2(string[] segments...) { return segments.length ? buildPath(segments) : null; }
+
+/// Shell-like expansion of ?, * and ** in path components
+DirEntry[] fileList(string pattern)
+{
+	auto components = cast(string[])array(pathSplitter(pattern));
+	foreach (i, component; components[0..$-1])
+		if (component.contains("?") || component.contains("*")) // TODO: escape?
+		{
+			DirEntry[] expansions; // TODO: filter range instead?
+			auto dir = buildPath2(components[0..i]);
+			if (component == "**")
+				expansions = array(dirEntries(dir, SpanMode.depth));
+			else
+				expansions = array(dirEntries(dir, component, SpanMode.shallow));
+
+			DirEntry[] result;
+			foreach (expansion; expansions)
+				if (expansion.isDir())
+					result ~= fileList(buildPath(expansion.name ~ components[i+1..$]));
+			return result;
+		}
+
+	auto dir = buildPath2(components[0..$-1]);
+	if (!dir || exists(dir))
+		return array(dirEntries(dir, components[$-1], SpanMode.shallow));
+	else
+		return null;
+}
+
+// ************************************************************************
+
 import std.datetime;
 import std.exception;
 
