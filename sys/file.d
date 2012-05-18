@@ -13,8 +13,12 @@
 
 module ae.sys.file;
 
-import std.file, std.path, std.string, std.utf;
 import std.array;
+import std.file;
+import std.path;
+import std.stdio : File;
+import std.string;
+import std.utf;
 
 // ************************************************************************
 
@@ -391,7 +395,7 @@ else
 
 ubyte[16] mdFile()(string fn)
 {
-	import std.md5, std.stdio;
+	import std.md5;
 
 	ubyte[16] digest;
 	MD5_CTX context;
@@ -410,4 +414,19 @@ ubyte[16] mdFile()(string fn)
 
 	context.finish(digest);
 	return digest;
+}
+
+/// Read a File (which might be a stream) into an array
+void[] readFile(File f)
+{
+	ubyte[] result;
+	static ubyte[64 * 1024] buffer;
+	while (true)
+	{
+		auto readBuffer = f.rawRead(buffer);
+		if (!readBuffer.length)
+			break;
+		result ~= readBuffer;
+	}
+	return result;
 }
