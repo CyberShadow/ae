@@ -150,6 +150,14 @@ DirEntry[] fileList(string pattern)
 		return null;
 }
 
+DirEntry[] fileList(string pattern0, string[] patterns...)
+{
+	DirEntry[] result;
+	foreach (pattern; [pattern0] ~ patterns)
+		result ~= fileList(pattern);
+	return result;
+}
+
 // ************************************************************************
 
 import std.datetime;
