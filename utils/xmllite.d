@@ -253,6 +253,8 @@ class XmlNode
 		return children[index];
 	}
 
+	final @property size_t length() { return children.length; }
+
 	int opApply(int delegate(ref XmlNode) dg)
 	{
 		int result = 0;
@@ -263,6 +265,16 @@ class XmlNode
 			if (result)
 				break;
 		}
+		return result;
+	}
+
+	final @property XmlNode dup()
+	{
+		auto result = new XmlNode(type, tag);
+		result.attributes = attributes.dup;
+		result.children.length = children.length;
+		foreach (i, child; children)
+			result.children[i] = child.dup;
 		return result;
 	}
 
