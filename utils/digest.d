@@ -44,14 +44,98 @@ uint[256] crc32Table = [
 	0xbdbdf21c,0xcabac28a,0x53b39330,0x24b4a3a6,0xbad03605,0xcdd70693,0x54de5729,0x23d967bf,0xb3667a2e,0xc4614ab8,0x5d681b02,0x2a6f2b94,0xb40bbe37,0xc30c8ea1,0x5a05df1b,0x2d02ef8d,
 ];
 
-uint fastCRC(in void[] data) // the standard Phobos crc32 function relies on inlining for usable performance
+// the standard Phobos crc32 function relies on inlining for usable performance
+uint fastCRC(in void[] data, uint start = cast(uint)-1)
 {
-	uint crc = cast(uint)-1;
+	uint crc = start;
 	foreach (val; cast(ubyte[])data)
 		crc = crc32Table[cast(ubyte) crc ^ val] ^ (crc >> 8);
 	return crc;
 }
 
+// Struct (for streaming)
+struct MurmurHash2A
+{
+	private static string mmix(string h, string k) { return "{ "~k~" *= m; "~k~" ^= "~k~" >> r; "~k~" *= m; "~h~" *= m; "~h~" ^= "~k~"; }"; }
+
+public:
+	void Begin ( uint seed = 0 )
+	{
+		m_hash  = seed;
+		m_tail  = 0;
+		m_count = 0;
+		m_size  = 0;
+	}
+
+	void Add ( const(void) * vdata, sizediff_t len )
+	{
+		ubyte * data = cast(ubyte*)vdata;
+		m_size += len;
+
+		MixTail(data,len);
+
+		while(len >= 4)
+		{
+			uint k = *cast(uint*)data;
+
+			mixin(mmix("m_hash","k"));
+
+			data += 4;
+			len -= 4;
+		}
+
+		MixTail(data,len);
+	}
+
+	uint End ( )
+	{
+		mixin(mmix("m_hash","m_tail"));
+		mixin(mmix("m_hash","m_size"));
+
+		m_hash ^= m_hash >> 13;
+		m_hash *= m;
+		m_hash ^= m_hash >> 15;
+
+		return m_hash;
+	}
+
+	// D-specific
+	void Add(ref ubyte v) { Add(&v, v.sizeof); }
+	void Add(ref int v) { Add(&v, v.sizeof); }
+	void Add(ref uint v) { Add(&v, v.sizeof); }
+	void Add(string s) { Add(s.ptr, cast(uint)s.length); }
+	void Add(ubyte[] s) { Add(s.ptr, cast(uint)s.length); }
+
+private:
+
+	static const uint m = 0x5bd1e995;
+	static const int r = 24;
+
+	void MixTail ( ref ubyte * data, ref int len )
+	{
+		while( len && ((len<4) || m_count) )
+		{
+			m_tail |= (*data++) << (m_count * 8);
+
+			m_count++;
+			len--;
+
+			if(m_count == 4)
+			{
+				mixin(mmix("m_hash","m_tail"));
+				m_tail = 0;
+				m_count = 0;
+			}
+		}
+	}
+
+	uint m_hash;
+	uint m_tail;
+	uint m_count;
+	uint m_size;
+}
+
+// Function
 uint murmurHash2(in void[] data, uint seed=0)
 {
 	enum { m = 0x5bd1e995, r = 24 }
