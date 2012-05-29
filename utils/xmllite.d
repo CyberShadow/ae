@@ -240,7 +240,7 @@ class XmlNode
 		return node;
 	}
 
-	final XmlNode opIndex(string tag, int index)
+	final XmlNode opIndex(string tag, size_t index)
 	{
 		auto nodes = findChildren(tag);
 		if (index >= nodes.length)
@@ -248,7 +248,7 @@ class XmlNode
 		return nodes[index];
 	}
 
-	final XmlNode opIndex(int index)
+	final XmlNode opIndex(size_t index)
 	{
 		return children[index];
 	}
