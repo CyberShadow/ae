@@ -818,7 +818,10 @@ private:
 	final void onReadData(ClientSocket sender, Data data)
 	{
 		import std.string;
-		inBuffer ~= data;
+		if (inBuffer.length)
+			inBuffer ~= data;
+		else
+			inBuffer = data;
 
 		sizediff_t index;
 		bool gotLines;
