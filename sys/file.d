@@ -24,15 +24,18 @@ import std.utf;
 
 version(Windows)
 {
-	string[] fastListDir(bool recursive = false, bool symlinks=false)(string pathname)
+	string[] fastListDir(bool recursive = false, bool symlinks=false)(string pathname, string pattern = null)
 	{
 		import std.c.windows.windows;
+
+		static if (recursive)
+			enforce(!pattern, "TODO: recursive fastListDir with pattern");
 
 		string[] result;
 		string c;
 		HANDLE h;
 
-		c = buildPath(pathname, "*.*");
+		c = buildPath(pathname, pattern ? pattern : "*.*");
 		WIN32_FIND_DATAW fileinfo;
 
 		h = FindFirstFileW(toUTF16z(c), &fileinfo);
@@ -150,11 +153,48 @@ DirEntry[] fileList(string pattern)
 		return null;
 }
 
+/// ditto
 DirEntry[] fileList(string pattern0, string[] patterns...)
 {
 	DirEntry[] result;
 	foreach (pattern; [pattern0] ~ patterns)
 		result ~= fileList(pattern);
+	return result;
+}
+
+/// ditto
+string[] fastFileList(string pattern)
+{
+	auto components = cast(string[])array(pathSplitter(pattern));
+	foreach (i, component; components[0..$-1])
+		if (component.contains("?") || component.contains("*")) // TODO: escape?
+		{
+			string[] expansions; // TODO: filter range instead?
+			auto dir = buildPath2(components[0..i]);
+			if (component == "**")
+				expansions = fastListDir!true(dir);
+			else
+				expansions = fastListDir(dir, component);
+
+			string[] result;
+			foreach (expansion; expansions)
+				if (expansion.isDir())
+					result ~= fastFileList(buildPath(expansion ~ components[i+1..$]));
+			return result;
+		}
+
+	auto dir = buildPath2(components[0..$-1]);
+	if (!dir || exists(dir))
+		return fastListDir(dir, components[$-1]);
+	else
+		return null;
+}
+
+string[] fastFileList(string pattern0, string[] patterns...)
+{
+	string[] result;
+	foreach (pattern; [pattern0] ~ patterns)
+		result ~= fastFileList(pattern);
 	return result;
 }
 
