@@ -215,7 +215,7 @@ protected:
 
 protected:
 	/// Retrieve the socket class this class wraps.
-	final Socket socket()
+	@property final Socket socket()
 	{
 		return conn;
 	}
@@ -753,7 +753,7 @@ public:
 				conn.listen(8);
 
 				if (addressInfo.family == AddressFamily.INET)
-					port = to!ushort(conn.localAddress.toPortString);
+					port = to!ushort(conn.localAddress().toPortString());
 
 				listeners ~= new Listener(conn);
 			}

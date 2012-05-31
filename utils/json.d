@@ -361,7 +361,7 @@ private struct JsonParser
 			skipWhitespace();
 			expect(':');
 
-			v[jsonField] = read!(typeof(v.values[0]));
+			v[jsonField] = read!(typeof(v.values[0]))();
 
 			skipWhitespace();
 			if (peek()=='}')
@@ -380,7 +380,7 @@ private struct JsonParser
 	}
 }
 
-T jsonParse(T)(string s) { return JsonParser(s).read!(T); }
+T jsonParse(T)(string s) { return JsonParser(s).read!T(); }
 
 unittest
 {

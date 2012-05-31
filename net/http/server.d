@@ -237,7 +237,7 @@ public:
 			response.optimizeData(currentRequest.headers["Accept-Encoding"]);
 		response.headers["Content-Length"] = response ? to!string(response.data.bytes.length) : "0";
 		response.headers["X-Powered-By"] = "ae.net.http.server (+https://github.com/CyberShadow/ae)";
-		response.headers["Date"] = httpTime(Clock.currTime);
+		response.headers["Date"] = httpTime(Clock.currTime());
 		if (persistent && currentRequest.protocolVersion=="1.0")
 			response.headers["Connection"] = "Keep-Alive";
 

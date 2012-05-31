@@ -38,6 +38,7 @@ Data joinData(Data[] data)
 }
 
 /// Join an array of Data to a memory block on the managed heap.
+@property
 void[] joinToHeap(Data[] data)
 {
 	size_t size = 0;

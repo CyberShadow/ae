@@ -133,7 +133,7 @@ protected:
 
 		currentRequest = null;
 		currentResponse = null;
-		inBuffer.clear;
+		inBuffer.clear();
 		expect = -1;
 		conn.handleReadData = null;
 	}

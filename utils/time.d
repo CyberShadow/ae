@@ -58,7 +58,7 @@ string formatTime(string fmt, SysTime t = Clock.currTime())
 }
 
 /// ditto
-void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime)
+void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime())
 //	if (IsStringSink!S)
 {
 	auto dt = cast(DateTime)t;
@@ -259,7 +259,7 @@ void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime)
 				sink.put(formatTime(TimeFormats.RFC2822, t));
 				break;
 			case 'U':
-				sink.put(text(t.toUnixTime));
+				sink.put(text(t.toUnixTime()));
 				break;
 
 			// Escape next character

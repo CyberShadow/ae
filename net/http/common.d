@@ -162,7 +162,7 @@ public:
 	}
 
 	/// AA of query string parameters
-	string[string] urlParameters()
+	@property string[string] urlParameters()
 	{
 		return decodeUrlParameters(queryString);
 	}
