@@ -240,7 +240,7 @@ void touch(string fn)
 {
 	if (exists(fn))
 	{
-		auto now = Clock.currTime;
+		auto now = Clock.currTime();
 		setTimes(fn, now, now);
 	}
 	else
@@ -296,11 +296,13 @@ void forceDelete(string fn)
 			enforce(DeleteFileW(toUTF16z(lfn)), "DeleteFileW: " ~ fn);
 		return;
 	}
-
-	if (isDir(fn))
-		rmdir(fn);
 	else
-		remove(fn);
+	{
+		if (isDir(fn))
+			rmdir(fn);
+		else
+			remove(fn);
+	}
 }
 
 bool isHidden(string fn)
