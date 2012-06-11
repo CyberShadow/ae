@@ -133,7 +133,7 @@ private:
 			currentRequest.parseRequestLine(reqLine);
 			currentRequest.headers = headers;
 
-			auto connection = toLower(aaGet(currentRequest.headers, "Connection", null));
+			auto connection = toLower(currentRequest.headers.get("Connection", null));
 			switch (currentRequest.protocolVersion)
 			{
 				case "1.0":
@@ -212,10 +212,10 @@ private:
 			format("%9.2f ms", request.age.usecs / 1000f),
 			request.method,
 			formatAddress(localAddress, request.host) ~ request.resource,
-			response ? aaGet(response.headers, "Content-Type", "-") : "-",
+			response ? response.headers.get("Content-Type", "-") : "-",
 		] ~ (DEBUG ? [] : [
-			aaGet(request.headers, "Referer", "-"),
-			aaGet(request.headers, "User-Agent", "-"),
+			request.headers.get("Referer", "-"),
+			request.headers.get("User-Agent", "-"),
 		])).join("\t"));
 	}
 

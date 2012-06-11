@@ -75,6 +75,17 @@ struct Headers
 			headers[name] ~= value;
 	}
 
+	string get(string key, string def)
+	{
+		return getLazy(key, def);
+	}
+
+	string getLazy(string key, lazy string def)
+	{
+		auto pvalue = key in this;
+		return pvalue ? *pvalue : def;
+	}
+
 	string[string] opCast(T)()
 		if (is(T == string[string]))
 	{
@@ -83,21 +94,6 @@ struct Headers
 			result[key] = value;
 		return result;
 	}
-}
-
-/// Overload for aaGet from ae.utils.array.
-string aaGet(Headers headers, string key, string def)
-{
-	return aaGetLazy(headers, key, def);
-}
-
-string aaGetLazy(Headers headers, string key, lazy string def)
-{
-	auto pvalue = key in headers;
-	if (pvalue)
-		return *pvalue;
-	else
-		return def;
 }
 
 /// Normalize capitalization

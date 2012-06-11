@@ -115,16 +115,6 @@ V aaGet(K, V)(V[K] aa, K key)
 			throw new Exception("Absent value");
 }
 
-/// Get a value from an AA, with a fallback default value
-V aaGet(K, V)(V[K] aa, K key, V def)
-{
-	auto p = key in aa;
-	if (p)
-		return *p;
-	else
-		return def;
-}
-
 struct KeyValuePair(K, V) { K key; V value; }
 
 /// Get key/value pairs from AA, sorted by keys

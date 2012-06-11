@@ -214,7 +214,7 @@ public:
 		if (data.length is 0)
 			return null;
 
-		string contentType = aaGet(headers, "Content-Type", "");
+		string contentType = headers.get("Content-Type", "");
 
 		switch (contentType)
 		{
@@ -234,8 +234,8 @@ public:
 	string[] remoteHosts(string remoteHost = null)
 	{
 		return
-			(aaGet(headers, "X-Forwarded-For", null).split(",").amap!strip() ~
-			 aaGet(headers, "X-Forwarded-Host", null) ~
+			(headers.get("X-Forwarded-For", null).split(",").amap!strip() ~
+			 headers.get("X-Forwarded-Host", null) ~
 			 remoteHost)
 			.afilter!`a`()
 			.auniq();
@@ -420,7 +420,7 @@ public:
 	{
 		if ("Content-Encoding" in headers)
 			return; // data is already encoded
-		auto contentType = aaGet(headers, "Content-Type", null);
+		auto contentType = headers.get("Content-Type", null);
 		if (contentType.startsWith("text/") || contentType=="application/json")
 		{
 			auto supported = parseItemList(acceptEncoding) ~ ["*"];
