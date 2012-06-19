@@ -135,6 +135,13 @@ V[] sortedValues(K, V)(V[K] aa)
 	return result;
 }
 
+V[K] merge(K, V)(V[K] a, V[K] b)
+{
+	foreach (k, v; b)
+		a[k] = v;
+	return a;
+}
+
 // ***************************************************************************
 
 void stackPush(T)(ref T[] arr, T val)
