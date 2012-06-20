@@ -414,7 +414,7 @@ version (Windows)
 
 		void openExisting(string fn)
 		{
-			h = CreateFileW(pathW(fn), GENERIC_READ, 0, null, OPEN_EXISTING, 0, HANDLE.init);
+			h = CreateFileW(pathW(fn), GENERIC_READ, FILE_SHARE_READ, null, OPEN_EXISTING, 0, HANDLE.init);
 			enforce(h!=INVALID_HANDLE_VALUE, new FileException(fn));
 		}
 
