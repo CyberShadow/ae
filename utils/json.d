@@ -13,107 +13,159 @@
 
 module ae.utils.json;
 
-import std.string;
 import std.exception;
+import std.string;
+import std.traits;
 
 import ae.utils.meta;
+import ae.utils.textout;
 
-string jsonEscape(bool UNICODE = true)(string str)
+// ************************************************************************
+
+struct CustomJsonWriter(WRITER)
 {
-	static if (UNICODE)
+	/// You can set this to something to e.g. write to another buffer.
+	WRITER output;
+
+	void putString(string s)
 	{
-		bool hasUnicode;
-		foreach (char c; str)
-			if (c >= 0x80)
-			{
-				hasUnicode = true;
-				break;
-			}
-		if (!hasUnicode)
-			return jsonEscape!(false)(str);
+		// TODO: escape Unicode characters?
+
+		output.put('"');
+		auto start = s.ptr, p = start, end = start+s.length;
+
+		while (p < end)
+		{
+			auto c = *p++;
+			if (Escapes.escaped[c])
+				output.put(start[0..p-start-1], Escapes.chars[c]),
+				start = p;
+		}
+
+		output.put(start[0..p-start], '"');
 	}
 
-	static if (UNICODE)
-		alias dchar CHAR_TYPE;
-	else
-		alias char CHAR_TYPE;
-
-	string result;
-	foreach (CHAR_TYPE c ;str)
-		if (c=='\\')
-			result ~= `\\`;
+	void put(T)(T v)
+	{
+		static if (is(T == enum))
+			put(to!string(v));
 		else
-		if (c=='\"')
-			result ~= `\"`;
+		static if (is(T : string))
+			putString(v);
 		else
-		if (c=='\b')
-			result ~= `\b`;
+		static if (is(T : long))
+			return .put(output, v);
 		else
-		if (c=='\f')
-			result ~= `\f`;
+		static if (is(T U : U[]))
+		{
+			output.put('[');
+			if (v.length)
+			{
+				put(v[0]);
+				foreach (i; v[1..$])
+				{
+					output.put(",");
+					put(i);
+				}
+			}
+			output.put(']');
+		}
 		else
-		if (c=='\n')
-			result ~= `\n`;
+		static if (is(T==struct))
+		{
+			output.put('{');
+			bool first = true;
+			foreach (i, field; v.tupleof)
+			{
+				static if (!doSkipSerialize!(T, v.tupleof[i].stringof[2..$]))
+				{
+					if (!first)
+						output.put(',');
+					else
+						first = false;
+					put(v.tupleof[i].stringof[2..$]);
+					output.put(':');
+					put(field);
+				}
+			}
+			output.put('}');
+		}
 		else
-		if (c=='\r')
-			result ~= `\r`;
+		static if (isAssociativeArray!T)
+		{
+			output.put('{');
+			bool first = true;
+			foreach (key, value; v)
+			{
+				if (!first)
+					output.put(',');
+				else
+					first = false;
+				put(key);
+				output.put(':');
+				put(value);
+			}
+			output.put('}');
+		}
 		else
-		if (c=='\t')
-			result ~= `\t`;
+		static if (is(typeof(*v)))
+			put(*v);
 		else
-		if (c<'\x20' || c >= '\x7F' || c=='<' || c=='>' || c=='&')
-			result ~= format(`\u%04x`, c);
-		else
-			result ~= [cast(char)c];
-	return result;
+			static assert(0, "Can't serialize " ~ T.stringof ~ " to JSON");
+	}
 }
+
+alias CustomJsonWriter!StringBuilder JsonWriter;
+
+private:
+
+private struct Escapes
+{
+	static __gshared string[256] chars;
+	static __gshared bool[256] escaped;
+
+	shared static this()
+	{
+		import std.string;
+
+		escaped[] = true;
+		foreach (c; 0..256)
+			if (c=='\\')
+				chars[c] = `\\`;
+			else
+			if (c=='\"')
+				chars[c] = `\"`;
+			else
+			if (c=='\b')
+				chars[c] = `\b`;
+			else
+			if (c=='\f')
+				chars[c] = `\f`;
+			else
+			if (c=='\n')
+				chars[c] = `\n`;
+			else
+			if (c=='\r')
+				chars[c] = `\r`;
+			else
+			if (c=='\t')
+				chars[c] = `\t`;
+			else
+			if (c<'\x20' || c == '\x7F' || c=='<' || c=='>' || c=='&')
+				chars[c] = format(`\u%04x`, c);
+			else
+				chars[c] = [cast(char)c],
+				escaped[c] = false;
+	}
+}
+
+// ************************************************************************
 
 string toJson(T)(T v)
 {
-	static if (is(T == enum))
-		return "\"" ~ jsonEscape(to!string(v)) ~ "\"";
-	else
-	static if (is(T : string))
-		return "\"" ~ jsonEscape(v) ~ "\"";
-	else
-	static if (is(T : long))
-		return to!string(v);
-	else
-	static if (is(T U : U[]))
-	{
-		string[] items;
-		foreach (item; v)
-			items ~= toJson(item);
-		return "[" ~ join(items, ",") ~ "]";
-	}
-	else
-	static if (is(T==struct))
-	{
-		string json;
-		foreach (i, field; v.tupleof)
-		{
-			static if (!doSkipSerialize!(T, v.tupleof[i].stringof[2..$]))
-				json ~= toJson(v.tupleof[i].stringof[2..$]) ~ ":" ~ toJson(field) ~ ",";
-		}        
-		if(json.length>0)
-			json=json[0..$-1];
-		return "{" ~ json ~ "}";
-	}
-	else
-	static if (is(typeof(T.keys)) && is(typeof(T.values)))
-	{
-		string json;
-		foreach(key,value;v)
-			json ~= toJson(key) ~ ":" ~ toJson(value) ~ ",";
-		if(json.length>0)
-			json=json[0..$-1];
-		return "{" ~ json ~ "}";
-	}
-	else
-	static if (is(typeof(*v)))
-		return toJson(*v);
-	else
-		static assert(0, "Can't encode " ~ T.stringof ~ " to JSON");
+	JsonWriter writer;
+	writer.put(v);
+	return writer.output.get();
 }
 
 unittest
