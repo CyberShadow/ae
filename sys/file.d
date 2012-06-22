@@ -76,16 +76,13 @@ version(Windows)
 	}
 }
 else
-version (linux)
+version (Posix)
 {
-	// TODO: fixme
-	private import std.c.stdlib : getErrno;
-	private import std.c.linux.linux : DIR, dirent, opendir, readdir, closedir;
+	private import core.stdc.errno;
+	private import core.sys.posix.dirent;
 
-	string[] fastListDir(bool recursive=false)(string pathname)
+	string[] fastListDir(bool recursive=false, bool symlinks=false)(string pathname, string pattern = null)
 	{
-		static assert(recursive==false, "TODO");
-
 		string[] result;
 		DIR* h;
 		dirent* fdata;
@@ -102,8 +99,28 @@ version (linux)
 						!std.c.string.strcmp(fdata.d_name.ptr, ".."))
 							continue;
 
+					static if (!symlinks)
+					{
+						if (fdata.d_type & DT_LNK)
+							continue;
+					}
+
 					size_t len = std.c.string.strlen(fdata.d_name.ptr);
-					result ~= fdata.d_name[0 .. len].dup;
+					string name = fdata.d_name[0 .. len].idup;
+					if (pattern && !globMatch(name, pattern))
+						continue;
+					string path = buildPath(pathname, name);
+
+					static if (recursive)
+					{
+						if (fdata.d_type & DT_DIR)
+						{
+							result ~= fastListDir!(recursive, symlinks)(path);
+							continue;
+						}
+					}
+
+					result ~= path;
 				}
 			}
 			finally
@@ -230,8 +247,8 @@ SysTime getMTime(string name)
 	}
 	else
 	{
-		d_time ftc, fta, ftm;
-		std.file.getTimes(name, ftc, fta, ftm);
+		SysTime fta, ftm;
+		std.file.getTimes(name, fta, ftm);
 		return ftm;
 	}
 }
