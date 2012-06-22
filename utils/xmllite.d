@@ -19,6 +19,23 @@ import std.string;
 import std.ascii;
 import std.exception;
 
+// ************************************************************************
+
+/// Stream-like type with bonus speed
+struct StringStream
+{
+	string s;
+	size_t position;
+
+	this(string s) { this.s = s; }
+
+	void read(out char c) { c = s[position++]; }
+	void seekCur(sizediff_t offset) { position += offset; }
+	@property size_t size() { return s.length; }
+}
+
+// ************************************************************************
+
 enum XmlNodeType
 {
 	Root,
@@ -37,7 +54,10 @@ class XmlNode
 	XmlNodeType type;
 	ulong startPos, endPos;
 
-	this(Stream s)
+	this(Stream        s) { parse(s); }
+	this(StringStream* s) { parse(s); }
+
+	private final void parse(S)(S s)
 	{
 		startPos = s.position;
 		char c;
@@ -90,7 +110,7 @@ class XmlNode
 			if (c=='?')
 			{
 				type = XmlNodeType.Meta;
-				tag=readWord(s);
+				tag = readWord(s);
 				if (tag.length==0) throw new Exception("Invalid tag");
 				while (true)
 				{
@@ -279,7 +299,7 @@ class XmlNode
 	}
 
 private:
-	final void readAttribute(Stream s)
+	final void readAttribute(S)(S s)
 	{
 		string name = readWord(s);
 		if (name.length==0) throw new Exception("Invalid attribute");
@@ -310,9 +330,11 @@ class XmlDocument : XmlNode
 		tag = "<Root>";
 	}
 
-	this(Stream s)
+	this(Stream        s) { this(); parse(s); }
+	this(StringStream* s) { this(); parse(s); }
+
+	final void parse(S)(S s)
 	{
-		this();
 		skipWhitespace(s);
 		while (s.position < s.size)
 			try
@@ -327,7 +349,7 @@ class XmlDocument : XmlNode
 
 private:
 
-char peek(Stream s, int n=1)
+char peek(S)(S s, int n=1)
 {
 	char c;
 	for (int i=0; i<n; i++)
@@ -336,7 +358,7 @@ char peek(Stream s, int n=1)
 	return c;
 }
 
-void skipWhitespace(Stream s)
+void skipWhitespace(S)(S s)
 {
 	char c;
 	do
@@ -354,7 +376,7 @@ bool isWord(char c)
 	return c=='-' || c=='_' || c==':' || isAlphaNum(c);
 }
 
-string readWord(Stream s)
+string readWord(S)(S s)
 {
 	char c;
 	string result;
@@ -369,12 +391,26 @@ string readWord(Stream s)
 	return result;
 }
 
-void expect(Stream s, char c)
+void expect(S)(S s, char c)
 {
 	char c2;
 	s.read(c2);
-	if (c!=c2)
-		throw new Exception("Expected " ~ c ~ ", got " ~ c2);
+	enforce(c==c2, "Expected " ~ c ~ ", got " ~ c2);
+}
+
+unittest
+{
+	enum xmlText =
+		`<?xml version="1.0" encoding="UTF-8"?>`
+		`<quotes>`
+			`<quote author="Alan Perlis">`
+				`When someone says, &quot;I want a programming language in which I need only say what I want done,&quot; give him a lollipop.`
+			`</quote>`
+		`</quotes>`;
+	auto doc = new XmlDocument(new MemoryStream(xmlText.dup));
+	assert(doc.toString() == xmlText);
+	doc = new XmlDocument(new StringStream(xmlText));
+	assert(doc.toString() == xmlText);
 }
 
 const dchar[string] entities;
