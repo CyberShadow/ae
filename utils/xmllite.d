@@ -533,7 +533,7 @@ import std.conv;
 public string decodeEntities(string str)
 {
 	auto fragments = str.fastSplit('&');
-	if (fragments.length < 1)
+	if (fragments.length <= 1)
 		return str;
 
 	auto interleaved = new string[fragments.length*2 - 1];
