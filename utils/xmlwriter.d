@@ -81,11 +81,36 @@ struct CustomXmlWriter(WRITER, bool PRETTY)
 		output.put(start[0..p-start]);
 	}
 
+	// Common
+
+	private enum mixStartWithAttributesGeneric =
+	q{
+		debug assert(!inAttributes, "Tag attributes not ended");
+		static if (PRETTY) startLine();
+
+		static if (STATIC)
+			output.put(OPEN ~ name);
+		else
+			output.put(OPEN, name);
+
+		debug inAttributes = true;
+		debug pushTag(name);
+	};
+
+	private enum mixEndAttributesAndTagGeneric =
+	q{
+		debug assert(inAttributes, "Tag attributes not started");
+		output.put(CLOSE);
+		static if (PRETTY) newLine();
+		debug inAttributes = false;
+		debug popTag();
+	};
+
 	// startTag
 
 	private enum mixStartTag =
 	q{
-		debug assert(!inAttributes, "no endAttributes");
+		debug assert(!inAttributes, "Tag attributes not ended");
 		static if (PRETTY) startLine();
 
 		static if (STATIC)
@@ -102,28 +127,14 @@ struct CustomXmlWriter(WRITER, bool PRETTY)
 
 	// startTagWithAttributes
 
-	private enum mixStartTagWithAttributes =
-	q{
-		debug assert(!inAttributes, "no endAttributes");
-		static if (PRETTY) startLine();
-
-		static if (STATIC)
-			output.put('<' ~ name);
-		else
-			output.put('<', name);
-
-		debug inAttributes = true;
-		debug pushTag(name);
-	};
-
-	void startTagWithAttributes(string name)() { enum STATIC = true;  mixin(mixStartTagWithAttributes); }
-	void startTagWithAttributes()(string name) { enum STATIC = false; mixin(mixStartTagWithAttributes); }
+	void startTagWithAttributes(string name)() { enum STATIC = true;  enum OPEN = '<'; mixin(mixStartWithAttributesGeneric); }
+	void startTagWithAttributes()(string name) { enum STATIC = false; enum OPEN = '<'; mixin(mixStartWithAttributesGeneric); }
 
 	// addAttribute
 
 	private enum mixAddAttribute =
 	q{
-		debug assert(inAttributes, "addAttribute without startTagWithAttributes");
+		debug assert(inAttributes, "Tag attributes not started");
 
 		static if (STATIC)
 			output.put(' ' ~ name ~ `="`);
@@ -141,26 +152,19 @@ struct CustomXmlWriter(WRITER, bool PRETTY)
 
 	void endAttributes()
 	{
-		debug assert(inAttributes, "endAttributes without startTagWithAttributes");
+		debug assert(inAttributes, "Tag attributes not started");
 		output.put('>');
 		static if (PRETTY) { newLine(); indent(); }
 		debug inAttributes = false;
 	}
 
-	void endAttributesAndTag()
-	{
-		debug assert(inAttributes, "endAttributes without startTagWithAttributes");
-		output.put(" />");
-		static if (PRETTY) newLine();
-		debug inAttributes = false;
-		debug popTag();
-	}
+	void endAttributesAndTag() { enum CLOSE = " />"; mixin(mixEndAttributesAndTagGeneric); }
 
 	// endTag
 
 	private enum mixEndTag =
 	q{
-		debug assert(!inAttributes, "no endAttributes");
+		debug assert(!inAttributes, "Tag attributes not ended");
 		static if (PRETTY) { outdent(); startLine(); }
 
 		static if (STATIC)
@@ -174,6 +178,21 @@ struct CustomXmlWriter(WRITER, bool PRETTY)
 
 	void endTag(string name)() { enum STATIC = true;  mixin(mixEndTag); }
 	void endTag()(string name) { enum STATIC = false; mixin(mixEndTag); }
+
+	// Processing instructions
+
+	void startPI(string name)() { enum STATIC = true;  enum OPEN = "<?"; mixin(mixStartWithAttributesGeneric); }
+	void startPI()(string name) { enum STATIC = false; enum OPEN = "<?"; mixin(mixStartWithAttributesGeneric); }
+	void endPI() { enum CLOSE = "?>"; mixin(mixEndAttributesAndTagGeneric); }
+
+	// Doctypes
+
+	void putDoctype(string text)
+	{
+		debug assert(!inAttributes, "Tag attributes not ended");
+		output.put("<!", text, ">");
+		static if (PRETTY) newLine();
+	}
 }
 
 alias CustomXmlWriter!(StringBuilder, false) XmlWriter;
