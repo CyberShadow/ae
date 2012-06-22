@@ -14,6 +14,8 @@
 
 module ae.utils.xmllite;
 
+// TODO: better/safer handling of malformed XML
+
 import std.stream;
 import std.string;
 import std.ascii;
@@ -22,12 +24,16 @@ import std.exception;
 // ************************************************************************
 
 /// Stream-like type with bonus speed
-struct StringStream
+private struct StringStream
 {
 	string s;
 	size_t position;
 
-	this(string s) { this.s = s; }
+	this(string s)
+	{
+		enum ditch = "\">\0\0\0\0\0"; // Dirty precaution
+		this.s = (s ~ ditch)[0..$-ditch.length];
+	}
 
 	void read(out char c) { c = s[position++]; }
 	void seekCur(sizediff_t offset) { position += offset; }
@@ -56,6 +62,7 @@ class XmlNode
 
 	this(Stream        s) { parse(s); }
 	this(StringStream* s) { parse(s); }
+	this(string s) { this(new StringStream(s)); }
 
 	private final void parse(S)(S s)
 	{
@@ -63,7 +70,7 @@ class XmlNode
 		char c;
 		do
 			s.read(c);
-		while (isWhite(c));
+		while (isWhiteChar[c]);
 
 		if (c!='<')  // text node
 		{
@@ -310,14 +317,7 @@ private:
 		s.read(delim);
 		if (delim != '\'' && delim != '"')
 			throw new Exception("Expected ' or \'");
-		string value;
-		while (true)
-		{
-			char c;
-			s.read(c);
-			if (c==delim) break;
-			value ~= c;
-		}
+		string value = readUntil(s, delim);
 		attributes[name] = decodeEntities(value);
 	}
 }
@@ -332,6 +332,7 @@ class XmlDocument : XmlNode
 
 	this(Stream        s) { this(); parse(s); }
 	this(StringStream* s) { this(); parse(s); }
+	this(string s) { this(new StringStream(s)); }
 
 	final void parse(S)(S s)
 	{
@@ -349,7 +350,7 @@ class XmlDocument : XmlNode
 
 private:
 
-char peek(S)(S s, int n=1)
+char peek(Stream s, int n=1)
 {
 	char c;
 	for (int i=0; i<n; i++)
@@ -358,7 +359,12 @@ char peek(S)(S s, int n=1)
 	return c;
 }
 
-void skipWhitespace(S)(S s)
+char peek(StringStream* s, int n=1)
+{
+	return s.s[s.position + n - 1];
+}
+
+void skipWhitespace(Stream s)
 {
 	char c;
 	do
@@ -367,23 +373,35 @@ void skipWhitespace(S)(S s)
 			return;
 		s.read(c);
 	}
-	while (isWhite(c));
+	while (isWhiteChar[c]);
 	s.seekCur(-1);
 }
 
-bool isWord(char c)
+void skipWhitespace(StringStream* s)
 {
-	return c=='-' || c=='_' || c==':' || isAlphaNum(c);
+	while (isWhiteChar[s.s.ptr[s.position]])
+		s.position++;
 }
 
-string readWord(S)(S s)
+__gshared bool[256] isWhiteChar, isWordChar;
+
+shared static this()
+{
+	foreach (c; 0..256)
+	{
+		isWhiteChar[c] = isWhite(c);
+		isWordChar[c] = c=='-' || c=='_' || c==':' || isAlphaNum(c);
+	}
+}
+
+string readWord(Stream s)
 {
 	char c;
 	string result;
 	while (true)
 	{
 		s.read(c);
-		if (!isWord(c))
+		if (!isWordChar[c])
 			break;
 		result ~= c;
 	}
@@ -391,11 +409,46 @@ string readWord(S)(S s)
 	return result;
 }
 
+string readWord(StringStream* stream)
+{
+	auto start = stream.s.ptr + stream.position;
+	auto end = stream.s.ptr + stream.s.length;
+	auto p = start;
+	while (p < end && isWordChar[*p])
+		p++;
+	auto len = p-start;
+	stream.position += len;
+	return start[0..len];
+}
+
 void expect(S)(S s, char c)
 {
 	char c2;
 	s.read(c2);
 	enforce(c==c2, "Expected " ~ c ~ ", got " ~ c2);
+}
+
+string readUntil(Stream s, char until)
+{
+	string value;
+	while (true)
+	{
+		char c;
+		s.read(c);
+		if (c==until)
+			return value;
+		value ~= c;
+	}
+}
+
+string readUntil(StringStream* s, char until)
+{
+	auto start = s.s.ptr + s.position;
+	auto p = start;
+	while (*p != until) p++;
+	auto len = p-start;
+	s.position += len + 1;
+	return start[0..len];
 }
 
 unittest
@@ -409,7 +462,7 @@ unittest
 		`</quotes>`;
 	auto doc = new XmlDocument(new MemoryStream(xmlText.dup));
 	assert(doc.toString() == xmlText);
-	doc = new XmlDocument(new StringStream(xmlText));
+	doc = new XmlDocument(xmlText);
 	assert(doc.toString() == xmlText);
 }
 
