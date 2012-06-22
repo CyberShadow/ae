@@ -117,8 +117,6 @@ struct CustomJsonWriter(WRITER)
 
 alias CustomJsonWriter!StringBuilder JsonWriter;
 
-private:
-
 private struct Escapes
 {
 	static __gshared string[256] chars;
