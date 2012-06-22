@@ -61,5 +61,41 @@ unittest
 	assert(sb.get() == "Я");
 }
 
+import std.traits;
+
+void put(S, N)(ref S sink, N n)
+	if (IsStringSink!S && is(N : long) && !isSomeChar!N)
+{
+	char[21] buf = void;
+	char* p = buf.ptr+buf.length;
+
+	static if (isSigned!N)
+	{
+		bool negative;
+		if (n<0)
+			negative = true, n = -n;
+	}
+	do
+	{
+		*--p = '0' + n%10;
+		n = n/10;
+	} while (n);
+	static if (isSigned!N)
+		if (negative)
+			*--p = '-';
+
+	sink.put(p[0 .. buf.ptr + buf.length - p]);
+}
+
+unittest
+{
+	import std.conv;
+	void test(N)(N n) { StringBuilder sb; put(sb, n); assert(sb.get() == text(n), sb.get() ~ "!=" ~ text(n)); }
+	test(0);
+	test(1);
+	test(-1);
+	test(0xFFFFFFFFFFFFFFFFLU);
+}
+
 // **************************************************************************
 
