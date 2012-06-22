@@ -21,6 +21,8 @@ import std.string;
 import std.ascii;
 import std.exception;
 
+import ae.utils.xmlwriter;
+
 // ************************************************************************
 
 /// Stream-like type with bonus speed
@@ -31,7 +33,7 @@ private struct StringStream
 
 	this(string s)
 	{
-		enum ditch = "\">\0\0\0\0\0"; // Dirty precaution
+		enum ditch = "'\">\0\0\0\0\0"; // Dirty precaution
 		this.s = (s ~ ditch)[0..$-ditch.length];
 	}
 
@@ -190,38 +192,52 @@ class XmlNode
 
 	override string toString()
 	{
-		string childrenText()
+		XmlWriter writer;
+		writeTo(writer);
+		return writer.output.get();
+	}
+
+	final void writeTo(XmlWriter)(ref XmlWriter output)
+	{
+		void writeChildren()
 		{
-			string result;
 			foreach (child; children)
-				result ~= child.toString();
-			return result;
+				child.writeTo(output);
 		}
 
-		string attrText()
+		void writeAttributes()
 		{
-			string result;
 			foreach (key, value; attributes)
-				result ~= ' ' ~ key ~ `="` ~ encodeEntities(value) ~ '"';
-			return result;
+				output.addAttribute(key, value);
 		}
 
 		switch(type)
 		{
 			case XmlNodeType.Root:
-				return childrenText();
+				writeChildren();
+				return;
 			case XmlNodeType.Node:
-				return '<' ~ tag ~ attrText() ~ '>' ~ childrenText() ~ "</" ~ tag ~ '>';
+				output.startTagWithAttributes(tag);
+				writeAttributes();
+				output.endAttributes();
+				writeChildren();
+				output.endTag(tag);
+				return;
 			case XmlNodeType.Meta:
 				assert(children.length == 0);
-				return "<?" ~ tag ~ attrText() ~ "?>";
+				output.startPI(tag);
+				writeAttributes();
+				output.endPI();
+				return;
 			case XmlNodeType.DocType:
 				assert(children.length == 0);
-				return "<!" ~ tag ~ attrText() ~ ">";
+				output.putDoctype(tag);
+				return;
 			case XmlNodeType.Text:
-				return encodeEntities(tag);
+				output.putText(tag);
+				return;
 			default:
-				return null;
+				return;
 		}
 	}
 
