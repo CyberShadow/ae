@@ -81,33 +81,63 @@ struct CustomXmlWriter(WRITER, bool PRETTY)
 		output.put(start[0..p-start]);
 	}
 
-	// TODO: Dynamic tag and attribute names
+	// startTag
 
-	void startTag(string name)()
-	{
+	private enum mixStartTag =
+	q{
 		debug assert(!inAttributes, "no endAttributes");
 		static if (PRETTY) startLine();
-		output.put('<' ~ name ~ '>');
+
+		static if (STATIC)
+			output.put('<' ~ name ~ '>');
+		else
+			output.put('<', name, '>');
+
 		static if (PRETTY) { newLine(); indent(); }
 		debug pushTag(name);
-	}
+	};
 
-	void startTagWithAttributes(string name)()
-	{
+	void startTag(string name)() { enum STATIC = true;  mixin(mixStartTag); }
+	void startTag()(string name) { enum STATIC = false; mixin(mixStartTag); }
+
+	// startTagWithAttributes
+
+	private enum mixStartTagWithAttributes =
+	q{
 		debug assert(!inAttributes, "no endAttributes");
 		static if (PRETTY) startLine();
-		output.put('<' ~ name);
+
+		static if (STATIC)
+			output.put('<' ~ name);
+		else
+			output.put('<', name);
+
 		debug inAttributes = true;
 		debug pushTag(name);
-	}
+	};
 
-	void addAttribute(string name)(string value)
-	{
+	void startTagWithAttributes(string name)() { enum STATIC = true;  mixin(mixStartTagWithAttributes); }
+	void startTagWithAttributes()(string name) { enum STATIC = false; mixin(mixStartTagWithAttributes); }
+
+	// addAttribute
+
+	private enum mixAddAttribute =
+	q{
 		debug assert(inAttributes, "addAttribute without startTagWithAttributes");
-		output.put(' ' ~ name ~ `="`);
+
+		static if (STATIC)
+			output.put(' ' ~ name ~ `="`);
+		else
+			output.put(' ', name, `="`);
+
 		putText(value);
 		output.put('"');
-	}
+	};
+
+	void addAttribute(string name)(string value)   { enum STATIC = true;  mixin(mixAddAttribute); }
+	void addAttribute()(string name, string value) { enum STATIC = false; mixin(mixAddAttribute); }
+
+	// endAttributes[AndTag]
 
 	void endAttributes()
 	{
@@ -126,14 +156,24 @@ struct CustomXmlWriter(WRITER, bool PRETTY)
 		debug popTag();
 	}
 
-	void endTag(string name)()
-	{
+	// endTag
+
+	private enum mixEndTag =
+	q{
 		debug assert(!inAttributes, "no endAttributes");
 		static if (PRETTY) { outdent(); startLine(); }
-		output.put("</" ~ name ~ ">");
+
+		static if (STATIC)
+			output.put("</" ~ name ~ ">");
+		else
+			output.put("</", name, ">");
+
 		static if (PRETTY) newLine();
 		debug popTag(name);
-	}
+	};
+
+	void endTag(string name)() { enum STATIC = true;  mixin(mixEndTag); }
+	void endTag()(string name) { enum STATIC = false; mixin(mixEndTag); }
 }
 
 alias CustomXmlWriter!(StringBuilder, false) XmlWriter;
