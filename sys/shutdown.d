@@ -60,21 +60,33 @@ void register()
 	{
 		static shared bool closing = false;
 
+		static void win32write(string msg) nothrow
+		{
+			DWORD written;
+			WriteConsoleA(GetStdHandle(STD_ERROR_HANDLE), msg.ptr, msg.length, &written, null);
+		}
+
 		extern(Windows)
-		static BOOL handlerRoutine(DWORD dwCtrlType)
+		static BOOL handlerRoutine(DWORD dwCtrlType) nothrow
 		{
 			if (!closing)
 			{
 				closing = true;
-				auto msg = "Shutdown event received, shutting down.\r\n";
-				DWORD written;
-				WriteConsoleA(GetStdHandle(STD_ERROR_HANDLE), msg.ptr, msg.length, &written, null);
+				win32write("Shutdown event received, shutting down.\r\n");
 
-				thread_attachThis();
-				syncShutdown();
-				thread_detachThis();
+				try
+				{
+					thread_attachThis();
+					syncShutdown();
+					thread_detachThis();
 
-				return TRUE;
+					return TRUE;
+				}
+				catch (Throwable e)
+				{
+					win32write("Unhandled error while shutting down:\r\n");
+					win32write(e.msg);
+				}
 			}
 			return FALSE;
 		}
