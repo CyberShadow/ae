@@ -765,8 +765,8 @@ public:
 			}
 			catch (SocketException e)
 			{
-				debug writefln("Unable to listen node \"%s\" service \"%s\"", addressInfo.address.toAddrString(), addressInfo.address.toPortString());
-				debug writeln(e.msg);
+				debug(ASOCKETS) writefln("Unable to listen node \"%s\" service \"%s\"", addressInfo.address.toAddrString(), addressInfo.address.toPortString());
+				debug(ASOCKETS) writeln(e.msg);
 			}
 		}
 
