@@ -5,6 +5,7 @@
  * that are done as part of the shutdown process.
  *
  * Note: thread safety of this module is questionable.
+ * Use ae.net.shutdown for networked applications.
  * TODO: transition to thread-safe centralized event loop.
  *
  * License:
@@ -19,6 +20,7 @@
 
 module ae.sys.shutdown;
 
+/// Warning: the delegate may be called in an arbitrary thread.
 void addShutdownHandler(void delegate() fn)
 {
 	if (handlers.length == 0)
