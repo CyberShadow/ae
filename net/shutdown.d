@@ -36,7 +36,7 @@ void shutdown()
 private:
 
 static import ae.sys.shutdown;
-import std.socket;
+import std.socket : socketPair;
 import ae.net.asockets;
 import ae.sys.data;
 
