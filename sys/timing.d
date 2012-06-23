@@ -224,6 +224,12 @@ public:
 			assert(count == n);
 		}
 	}
+
+	void removeAll()
+	{
+		head = tail = null;
+		count = 0;
+	}
 }
 
 final class TimerTask
