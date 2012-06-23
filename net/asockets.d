@@ -22,7 +22,7 @@ public import ae.sys.data;
 import std.socket;
 public import std.socket : Address, Socket;
 
-debug import std.stdio;
+debug(ASOCKETS) import std.stdio;
 private import std.conv : to;
 
 version(Windows)
@@ -148,7 +148,13 @@ public:
 			}
 			else
 			if (mainTimer.isWaiting())
-				events = Socket.select(readset, writeset, errorset, mainTimer.getRemainingTime().to!("usecs", int)());
+			{
+				auto duration = mainTimer.getRemainingTime().to!("usecs", long)();
+				if (duration > int.max)
+					duration = int.max;
+				debug (ASOCKETS) writeln("Wait duration: ", duration, " usecs");
+				events = Socket.select(readset, writeset, errorset, duration);
+			}
 			else
 				events = Socket.select(readset, writeset, errorset);
 
