@@ -59,6 +59,7 @@ final class ShutdownSocket : ClientSocket
 	{
 		ubyte[] data = [42];
 		pinger.send(data);
+		pinger.close();
 	}
 
 	void onReadData(ClientSocket socket, Data data)
