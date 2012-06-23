@@ -207,6 +207,7 @@ string[] fastFileList(string pattern)
 		return null;
 }
 
+/// ditto
 string[] fastFileList(string pattern0, string[] patterns...)
 {
 	string[] result;
@@ -262,6 +263,14 @@ void touch(string fn)
 	}
 	else
 		std.file.write(fn, "");
+}
+
+void safeWrite(string fn, in void[] data)
+{
+	auto tmp = fn ~ ".tmp";
+	write(tmp, data);
+	if (fn.exists) fn.remove();
+	tmp.rename(fn);
 }
 
 /// Make sure that the path exists (and create directories as necessary).
