@@ -21,9 +21,9 @@ module ae.net.shutdown;
 
 void addShutdownHandler(void delegate() fn)
 {
-	if (handlers.length == 0)
-		register();
 	handlers ~= fn;
+	if (handlers.length == 1) // first
+		register();
 }
 
 /// Calls all registered handlers.
@@ -53,12 +53,17 @@ final class ShutdownSocket : ClientSocket
 		super(pair[0]);
 		pinger = pair[1];
 		this.handleReadData = &onReadData;
+		addShutdownHandler(&onShutdown); // for manual shutdown calls
 	}
 
 	void ping()
 	{
 		ubyte[] data = [42];
 		pinger.send(data);
+	}
+
+	void onShutdown()
+	{
 		pinger.close();
 	}
 
