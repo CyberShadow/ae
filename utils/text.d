@@ -267,6 +267,30 @@ unittest
 	assert(normalizeWhitespace(" Mary  had\ta\nlittle\r\n\tlamb") == "Mary had a little lamb");
 }
 
+// ************************************************************************
+
+private __gshared char[256] asciiLower, asciiUpper;
+
+shared static this()
+{
+	foreach (c; 0..256)
+	{
+		asciiLower[c] = cast(char)std.ascii.toLower(c);
+		asciiUpper[c] = cast(char)std.ascii.toUpper(c);
+	}
+}
+
+void xlat(alias TABLE, T)(T[] buf)
+{
+	foreach (ref c; buf)
+		c = TABLE[c];
+}
+
+alias xlat!(asciiLower, char) asciiToLower;
+alias xlat!(asciiUpper, char) asciiToUpper;
+
+// ************************************************************************
+
 import std.utf;
 
 /// Convert any data to a valid UTF-8 bytestream, so D's string functions can
