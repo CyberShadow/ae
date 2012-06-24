@@ -95,11 +95,11 @@ public:
 	ClientSocket conn;
 	HttpRequest currentRequest;
 	Address localAddress, remoteAddress;
+	bool persistent;
 
 private:
 	Data[] inBuffer;
 	sizediff_t expect;
-	bool persistent;
 	bool requestProcessing; // user code is asynchronously processing current request
 
 	this(HttpServer server, ClientSocket conn)
@@ -240,6 +240,9 @@ public:
 		response.headers["Date"] = httpTime(Clock.currTime());
 		if (persistent && currentRequest.protocolVersion=="1.0")
 			response.headers["Connection"] = "Keep-Alive";
+		else
+		if (!persistent && currentRequest.protocolVersion=="1.1")
+			response.headers["Connection"] = "close";
 
 		respMessage.put(to!string(response.status), " ", response.statusMessage, "\r\n");
 		foreach (string header, string value; response.headers)
