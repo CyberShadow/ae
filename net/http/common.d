@@ -477,7 +477,7 @@ import std.algorithm : sort;
 /// an array of items sorted by "q" (["a", "b", "d", "c"])
 string[] parseItemList(string s)
 {
-	struct Item
+	static struct Item
 	{
 		float q = 1.0;
 		string str;

@@ -336,7 +336,7 @@ string forceValidUTF8(string s)
 		validate(s);
 		return s;
 	}
-	catch (UtfException)
+	catch (UTFException)
 		return rawToUTF8(s);
 }
 

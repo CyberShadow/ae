@@ -190,14 +190,14 @@ class XmlNode
 		return this;
 	}
 
-	override string toString()
+	override string toString() const
 	{
 		XmlWriter writer;
 		writeTo(writer);
 		return writer.output.get();
 	}
 
-	final void writeTo(XmlWriter)(ref XmlWriter output)
+	final void writeTo(XmlWriter)(ref XmlWriter output) const
 	{
 		void writeChildren()
 		{
