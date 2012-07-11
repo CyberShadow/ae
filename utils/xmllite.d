@@ -241,7 +241,7 @@ class XmlNode
 		}
 	}
 
-	string text()
+	@property string text()
 	{
 		switch(type)
 		{

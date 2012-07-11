@@ -77,7 +77,7 @@ final class SQLite
 			break;
 	}
 
-	long lastInsertRowID()
+	@property long lastInsertRowID()
 	{
 		return sqlite3_last_insert_rowid(db);
 	}

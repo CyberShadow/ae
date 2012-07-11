@@ -208,7 +208,7 @@ protected:
 
 	override void newRequest()
 	{
-		auto now = Clock.currTime;
+		auto now = Clock.currTime();
 		if ((now - lastChecked) > STAT_TIMEOUT)
 		{
 			lastChecked = now;
