@@ -60,10 +60,11 @@ struct GDICanvas(COLOR)
 		pixels = cast(COLOR*)pvBits;
 	}
 
+	// TODO: make this struct refcounted / copiable
 	~this()
 	{
-		DeleteDC(hdc);
-		DeleteObject(hbm);
+		DeleteDC(hdc);     hdc = null;
+		DeleteObject(hbm); hbm = null;
 	}
 
 	auto opDispatch(string F, A...)(A args)
