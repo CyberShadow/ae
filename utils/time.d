@@ -487,3 +487,10 @@ SysTime parseTime(string fmt, string t)
 
 	return result;
 }
+
+// ***************************************************************************
+
+@property bool empty(Duration d)
+{
+	return !d.total!"hnsecs"();
+}
