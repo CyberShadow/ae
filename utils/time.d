@@ -313,7 +313,7 @@ SysTime parseTime(string fmt, string t)
 
 	int year=0, month=1, day=1, hour=0, minute=0, second=0, usecs=0;
 	int hour12 = 0; bool pm;
-	TimeZone tz = null;
+	immutable(TimeZone)* tz = null;
 	int dow = -1;
 
 	size_t idx = 0;
@@ -424,7 +424,7 @@ SysTime parseTime(string fmt, string t)
 				auto tzStr = take(5);
 				enforce(tzStr[0]=='-' || tzStr[0]=='+', "-/+ expected");
 				auto minutes = (to!int(tzStr[1..3]) * 60 + to!int(tzStr[3..5])) * (tzStr[0]=='-' ? -1 : 1);
-				tz = new SimpleTimeZone(minutes);
+				tz = [new SimpleTimeZone(minutes)].ptr; // work around lack of class tailconst
 				break;
 			}
 			case 'P':
@@ -433,18 +433,18 @@ SysTime parseTime(string fmt, string t)
 				enforce(tzStr[0]=='-' || tzStr[0]=='+', "-/+ expected");
 				enforce(tzStr[3]==':', ": expected");
 				auto minutes = (to!int(tzStr[1..3]) * 60 + to!int(tzStr[4..6])) * (tzStr[0]=='-' ? -1 : 1);
-				tz = new SimpleTimeZone(minutes);
+				tz = [new SimpleTimeZone(minutes)].ptr; // work around lack of class tailconst
 				break;
 			}
 			case 'T':
-				tz = cast(TimeZone)TimeZone.getTimeZone(take(t.length)); // $!#%!$# constness
+				tz = [TimeZone.getTimeZone(take(t.length))].ptr; // work around lack of class tailconst
 				break;
 			case 'Z':
 			{
 				// TODO: is this correct?
 				auto seconds = takeNumber(1, 6);
 				enforce(seconds % 60 == 0, "Timezone granularity lower than minutes not supported");
-				tz = new SimpleTimeZone(seconds / 60);
+				tz = [new SimpleTimeZone(seconds / 60)].ptr; // work around lack of class tailconst
 				break;
 			}
 
@@ -480,7 +480,7 @@ SysTime parseTime(string fmt, string t)
 	auto result = SysTime(
 		DateTime(year, month, day, hour, minute, second),
 		FracSec.from!"usecs"(usecs),
-		cast(immutable(TimeZone))tz);
+		tz ? *tz : null);
 
 	if (dow >= 0)
 		enforce(result.dayOfWeek == dow, "Mismatching weekday");
