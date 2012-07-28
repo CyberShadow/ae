@@ -178,8 +178,8 @@ class ConsoleLogger : Logger
 	override Logger log(string str)
 	{
 		string output = name ~ ": " ~ str ~ "\n";
-		stdout.rawWrite(output);
-		stdout.flush();
+		stderr.rawWrite(output);
+		stderr.flush();
 		return this;
 	}
 }
