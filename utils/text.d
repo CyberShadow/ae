@@ -222,6 +222,22 @@ unittest
 	assert(splitAsciiLines(string.init) == splitLines(string.init));
 }
 
+string asciiStrip(string s)
+{
+	while (s.length && isWhite(s[0]))
+		s = s[1..$];
+	while (s.length && isWhite(s[$-1]))
+		s = s[0..$-1];
+	return s;
+}
+
+unittest
+{
+	string s = "Hello, world!";
+	assert(asciiStrip(s) is s);
+	assert(asciiStrip("\r\n\tHello ") == "Hello");
+}
+
 /// Covering slice-list of s with interleaved whitespace.
 string[] segmentByWhitespace(string s)
 {
