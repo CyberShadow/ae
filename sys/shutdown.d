@@ -39,11 +39,18 @@ private:
 
 import core.thread;
 
-void syncShutdown()
+void syncShutdown() nothrow @system
 {
-	thread_suspendAll();
-	shutdown();
-	thread_resumeAll();
+	try
+	{
+		thread_suspendAll();
+		scope(exit) thread_resumeAll();
+		shutdown();
+	}
+	catch
+	{
+		// Welp, I tried
+	}
 }
 
 // http://d.puremagic.com/issues/show_bug.cgi?id=7016

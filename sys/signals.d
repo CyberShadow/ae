@@ -15,7 +15,9 @@ module ae.sys.signals;
 
 public import core.sys.posix.signal;
 
-void addSignalHandler(int signum, void delegate() fn)
+alias void delegate() nothrow @system SignalHandler;
+
+void addSignalHandler(int signum, SignalHandler fn)
 {
 	if (handlers[signum].length == 0)
 	{
@@ -25,7 +27,7 @@ void addSignalHandler(int signum, void delegate() fn)
 	handlers[signum] ~= fn;
 }
 
-void removeSignalHandler(int signum, void delegate() fn)
+void removeSignalHandler(int signum, SignalHandler fn)
 {
 	foreach (i, lfn; handlers[signum])
 		if (lfn is fn)
@@ -41,9 +43,9 @@ void removeSignalHandler(int signum, void delegate() fn)
 private:
 
 enum SIGMAX = 100;
-shared void delegate()[][SIGMAX] handlers;
+shared SignalHandler[][SIGMAX] handlers;
 
-extern(C) void sighandle(int signum)
+extern(C) void sighandle(int signum) nothrow @system
 {
 	if (signum >= 0 && signum < handlers.length)
 		foreach (fn; handlers[signum])

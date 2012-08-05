@@ -130,7 +130,7 @@ version (Posix)
 		}
 		else
 		{
-			throw new std.file.FileException(pathname, getErrno());
+			throw new std.file.FileException(pathname, errno);
 		}
 		return result;
 	}
