@@ -17,6 +17,7 @@
 module ae.net.asockets;
 
 import ae.sys.timing;
+import ae.utils.math;
 public import ae.sys.data;
 
 import std.socket;
@@ -24,6 +25,12 @@ public import std.socket : Address, Socket;
 
 debug(ASOCKETS) import std.stdio;
 private import std.conv : to;
+
+version(LIBEV)
+{
+	import deimos.ev;
+	pragma(lib, "ev");
+}
 
 version(Windows)
 {
@@ -46,7 +53,7 @@ private struct PollFlags
 
 int eventCounter;
 
-struct SocketManager
+struct SelectSocketManager
 {
 private:
 	enum FD_SETSIZE = 1024;
@@ -204,6 +211,126 @@ public:
 		}
 	}
 }
+
+version(LIBEV)
+struct LibevSocketManager
+{
+	// TODO: honor flags
+private:
+	static struct Watcher
+	{
+		// TODO: one watcher for read and write events?
+		ev_io evWatcher;
+		GenericSocket socket;
+	}
+
+	Watcher*[] watchers;
+
+	extern(C)
+	static void ioCallback(ev_loop_t* l, ev_io* w, int revents)
+	{
+		eventCounter++;
+		auto watcher = cast(Watcher*)w;
+		auto socket = watcher.socket;
+		debug (ASOCKETS) writefln("ioCallback(%s, 0x%X)", cast(void*)socket, revents);
+
+		if (revents & EV_READ)
+			socket.onReadable();
+		if (!socket.conn) return;
+
+		if (revents & EV_WRITE)
+			socket.onWritable();
+	}
+
+	ev_timer evTimer;
+	TickDuration lastNextEvent = Timer.NEVER;
+
+	extern(C)
+	static void timerCallback(ev_loop_t* l, ev_timer* w, int revents)
+	{
+		eventCounter++;
+		mainTimer.prod();
+		auto pthis = cast(typeof(this)*) w.data;
+		pthis.updateTimer();
+	}
+
+	void updateTimer()
+	{
+		auto nextEvent = mainTimer.getNextEvent();
+		if (lastNextEvent != nextEvent)
+		{
+			if (nextEvent == Timer.NEVER) // Stopping
+			{
+				ev_timer_stop(ev_default_loop(0), &evTimer);
+			}
+			else
+			{
+				ev_tstamp tstamp = mainTimer.getRemainingTime().to!("seconds", ev_tstamp)();
+				if (lastNextEvent == Timer.NEVER) // Starting
+				{
+					evTimer.data = &this;
+					ev_timer_init(&evTimer, &timerCallback, 0., tstamp);
+					ev_timer_start(ev_default_loop(0), &evTimer);
+				}
+				else // Adjusting
+				{
+					evTimer.repeat = tstamp;
+					ev_timer_again(ev_default_loop(0), &evTimer);
+				}
+			}
+			lastNextEvent = nextEvent;
+		}
+	}
+
+	/// Register a socket with the manager.
+	void register(GenericSocket socket)
+	{
+		debug (ASOCKETS) writefln("Registering %s", cast(void*)socket);
+		auto fd = socket.conn.handle;
+		assert(fd, "Must have fd before socket registration");
+		if (watchers.length <= fd)
+			watchers.length = nextPowerOfTwo(cast(size_t)fd);
+		Watcher* watcher = watchers[fd];
+		if (!watcher)
+			watcher = watchers[fd] = new Watcher;
+		debug assert(watcher.socket is null);
+		watcher.socket = socket;
+		ev_io_init(&watcher.evWatcher, &ioCallback, fd, EV_READ | EV_WRITE);
+		ev_io_start(ev_default_loop(0), &watcher.evWatcher);
+	}
+
+	/// Unregister a socket with the manager.
+	void unregister(GenericSocket socket)
+	{
+		debug (ASOCKETS) writefln("Unregistering %s", cast(void*)socket);
+		auto fd = socket.conn.handle;
+		auto watcher = watchers[fd];
+		ev_io_stop(ev_default_loop(0), &watcher.evWatcher);
+		debug watcher.socket = null;
+	}
+
+public:
+	size_t size()
+	{
+		return watchers.length;
+	}
+
+	/// Loop continuously until no sockets are left.
+	void loop()
+	{
+		auto evLoop = ev_default_loop(0);
+		enforce(evLoop, "libev initialization failure");
+
+		updateTimer();
+		debug (ASOCKETS) writeln("ev_run");
+		ev_run(ev_default_loop(0), 0);
+	}
+}
+
+version(LIBEV)
+	alias LibevSocketManager SocketManager;
+else
+	alias SelectSocketManager SocketManager;
 
 enum DisconnectType
 {
@@ -885,3 +1012,19 @@ public:
 /// The default socket manager.
 // __gshared for ae.sys.shutdown
 __gshared SocketManager socketManager;
+
+// ***************************************************************************
+
+unittest
+{
+	void testTimer()
+	{
+		bool fired;
+		setTimeout({fired = true;}, TickDuration.from!"msecs"(10));
+		socketManager.loop();
+		assert(fired);
+	}
+
+	testTimer();
+}
+
