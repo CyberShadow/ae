@@ -185,6 +185,12 @@ public:
 
 	enum NEVER = TickDuration(long.max);
 
+	/// Return the TickDuration of the next scheduled task, or NEVER if no tasks are scheduled.
+	TickDuration getNextEvent()
+	{
+		return head is null ? NEVER : head.when;
+	}
+
 	/// Return the time until the first scheduled task, or NEVER if no tasks are scheduled.
 	TickDuration getRemainingTime()
 	{
