@@ -48,6 +48,7 @@ import core.exception;
 debug(DATA) import std.stdio;
 debug(DATA) import std.string;
 public import ae.sys.dataset;
+import ae.utils.math;
 
 // ideas/todo:
 // * templatize (and forbid using aliased types)?
@@ -545,21 +546,6 @@ final class DataWrapper
 		else
 			std.c.free(size);
 	}
-}
-
-// Source: http://bits.stephan-brumme.com/roundUpToNextPowerOfTwo.html
-size_t nextPowerOfTwo(size_t x)
-{
-	x |= x >> 1;  // handle  2 bit numbers
-	x |= x >> 2;  // handle  4 bit numbers
-	x |= x >> 4;  // handle  8 bit numbers
-	x |= x >> 8;  // handle 16 bit numbers
-	x |= x >> 16; // handle 32 bit numbers
-	static if (size_t.sizeof==8)
-		x |= x >> 32; // handle 64 bit numbers
-	x++;
-
-	return x;
 }
 
 // Source: Win32 bindings project
