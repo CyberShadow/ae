@@ -117,6 +117,15 @@ V aaGet(K, V)(V[K] aa, K key)
 
 struct KeyValuePair(K, V) { K key; V value; }
 
+/// Get key/value pairs from AA
+KeyValuePair!(K, V)[] pairs(K, V)(V[K] aa)
+{
+	KeyValuePair!(K, V)[] result;
+	foreach (key, value; aa)
+		result ~= KeyValuePair!(K, V)(key, value);
+	return result;
+}
+
 /// Get key/value pairs from AA, sorted by keys
 KeyValuePair!(K, V)[] sortedPairs(K, V)(V[K] aa)
 {
