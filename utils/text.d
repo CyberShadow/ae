@@ -28,6 +28,7 @@ bool contains(in char[] str, in char[] what)
 
 string fastReplace(string what, string from, string to)
 {
+//	debug scope(failure) std.stdio.writeln("fastReplace crashed: ", [what, from, to]);
 	enum RAM = cast(char*)null;
 
 	if (from.length==1)
@@ -75,7 +76,7 @@ string fastReplace(string what, string from, string to)
 	auto tail = from[1..$];
 
 	auto p = cast(char*)what.ptr;
-	auto end = p + what.length;
+	auto end = p + what.length - tail.length;
 	p = cast(char*)memchr(p, head, end-p);
 	while (p)
 	{
@@ -161,6 +162,8 @@ unittest
 	test("Mary had a little lamb", "a", "aaa");
 	test("Mary had a little lamb", "Mary", "Lucy");
 	test("Mary had a little lamb", "Mary", "Jimmy");
+	test("Mary had a little lamb", "lamb", "goat");
+	test("Mary had a little lamb", "lamb", "sheep");
 	test("Mary had a little lamb", " l", " x");
 	test("Mary had a little lamb", " l", " xx");
 
