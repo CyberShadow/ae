@@ -511,20 +511,48 @@ string escapeRE(string s)
 	return result;
 }
 
-/// Apply regex transformation (in the form of "s/FROM/TO/FLAGS") to a string.
-string applyRE()(string str, string transformation)
+// We only need to make sure that there are no unescaped forward slashes
+// in the regex, which would mean the end of the search pattern part of the
+// regex transform. All escaped forward slashes will be unescaped during
+// parsing of the regex transform (which won't affect the regex, as forward
+// slashes have no special meaning, escaped or unescaped).
+private string escapeUnescapedSlashes(string s)
 {
-	import std.regex;
-	auto params = splitRETransformation(transformation);
-	enforce(params[0] == "s", "Unsupported regex transformation");
-	enforce(params.length == 4, "Wrong number of regex transformation parameters");
-	auto r = regex(params[1], params[3]);
-	return replace(str, r, params[2]);
+	bool escaped = false;
+	string result;
+	foreach (c; s)
+	{
+		if (escaped)
+			escaped = false;
+		else
+		if (c == '\\')
+			escaped = true;
+		else
+		if (c == '/')
+			result ~= '\\';
+
+		result ~= c;
+	}
+	assert(!escaped, "Regex ends with an escape");
+	return result;
 }
 
-unittest
+// For the replacement part, we just need to escape all forward and backslashes.
+private string escapeSlashes(string s)
 {
-	assert("12000 + 42100 = 54100".applyRE(`s/(?<=\d)(?=(\d\d\d)+\b)/,/g`) == "12,000 + 42,100 = 54,100");
+	return s.fastReplace(`\`, `\\`).fastReplace(`/`, `\/`);
+}
+
+// Reverse of the above
+private string unescapeSlashes(string s)
+{
+	return s.fastReplace(`\/`, `/`).fastReplace(`\\`, `\`);
+}
+
+/// Build a RE search-and-replace transform (as used by applyRE).
+string buildReplaceTransformation(string search, string replacement, string flags)
+{
+	return "s/" ~ escapeUnescapedSlashes(search) ~ "/" ~ escapeSlashes(replacement) ~ "/" ~ flags;
 }
 
 private string[] splitRETransformation(string t)
@@ -554,6 +582,34 @@ private string[] splitRETransformation(string t)
 unittest
 {
 	assert(splitRETransformation("s/from/to/") == ["s", "from", "to", ""]);
+}
+
+/// Apply regex transformation (in the form of "s/FROM/TO/FLAGS") to a string.
+string applyRE()(string str, string transformation)
+{
+	import std.regex;
+	auto params = splitRETransformation(transformation);
+	enforce(params[0] == "s", "Unsupported regex transformation");
+	enforce(params.length == 4, "Wrong number of regex transformation parameters");
+	auto r = regex(params[1], params[3]);
+	return replace(str, r, unescapeSlashes(params[2]));
+}
+
+unittest
+{
+	auto transformation = buildReplaceTransformation(`(?<=\d)(?=(\d\d\d)+\b)`, `,`, "g");
+	assert("12000 + 42100 = 54100".applyRE(transformation) == "12,000 + 42,100 = 54,100");
+
+	void testSlashes(string s)
+	{
+		assert(s.applyRE(buildReplaceTransformation(`\/`, `\`, "g")) == s.fastReplace(`/`, `\`));
+		assert(s.applyRE(buildReplaceTransformation(`\\`, `/`, "g")) == s.fastReplace(`\`, `/`));
+	}
+	testSlashes(`a/b\c`);
+	testSlashes(`a//b\\c`);
+	testSlashes(`a/\b\/c`);
+	testSlashes(`a/\\b\//c`);
+	testSlashes(`a//\b\\/c`);
 }
 
 // ************************************************************************
