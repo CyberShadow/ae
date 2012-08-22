@@ -31,6 +31,9 @@ string fastReplace(string what, string from, string to)
 //	debug scope(failure) std.stdio.writeln("fastReplace crashed: ", [what, from, to]);
 	enum RAM = cast(char*)null;
 
+	if (what.length < from.length || from.length==0)
+		return what;
+
 	if (from.length==1)
 	{
 		auto fromc = from[0];
@@ -173,6 +176,8 @@ unittest
 	test("Mary had a little lamb", "XX", "YY");
 	test("Mary had a little lamb", "aX", "Y" );
 	test("Mary had a little lamb", "aX", "YY");
+
+	test("foo", "foobar", "bar");
 }
 
 string[] fastSplit(string s, char d)
