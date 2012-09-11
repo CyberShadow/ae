@@ -13,11 +13,15 @@
 
 module ae.utils.text;
 
+import std.ascii;
 import std.exception;
 import std.string;
-import std.ascii;
-import ae.utils.textout;
+import std.typetuple;
+
 import core.stdc.string;
+
+import ae.utils.meta;
+import ae.utils.textout;
 
 // ************************************************************************
 
@@ -430,7 +434,7 @@ ubyte[] arrayFromHex(string hex, ubyte[] buf = null)
 	return buf;
 }
 
-string toHex(ubyte[] data, char[] buf = null)
+string toHex()(ubyte[] data, char[] buf = null)
 {
 	if (buf is null)
 		buf = new char[data.length*2];
@@ -442,6 +446,22 @@ string toHex(ubyte[] data, char[] buf = null)
 		buf[i*2+1] = hexDigits[b&15];
 	}
 	return assumeUnique(buf);
+}
+
+void toHex(T : ulong, size_t U = T.sizeof*2)(T n, ref char[U] buf)
+{
+	foreach (i; Reverse!(RangeTuple!(T.sizeof*2)))
+	{
+		buf[i] = hexDigits[n & 0xF];
+		n >>= 4;
+	}
+}
+
+unittest
+{
+	char[8] buf;
+	toHex(0x01234567, buf);
+	assert(buf == "01234567");
 }
 
 /// Get shortest string representation of a double that still converts to exactly the same number.
