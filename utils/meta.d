@@ -28,6 +28,21 @@ template ValueTuple(T...)
 	alias T ValueTuple;
 }
 
+template RangeTupleImpl(size_t N, R...)
+{
+	static if (N==R.length)
+		alias R RangeTupleImpl;
+	else
+		alias RangeTupleImpl!(N, ValueTuple!(R, R.length)) RangeTupleImpl;
+}
+
+/// Generate a tuple containing integers from 0 to N-1.
+/// Useful for static loop unrolling.
+template RangeTuple(size_t N)
+{
+	alias RangeTupleImpl!(N, ValueTuple!()) RangeTuple;
+}
+
 /// Like std.typecons.Tuple, but a template mixin.
 /// Unlike std.typecons.Tuple, names may not be omitted - but repeating types may be.
 /// Example: FieldList!(ubyte, "r", "g", "b", ushort, "a");
