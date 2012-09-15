@@ -171,7 +171,7 @@ private string escapePosixArgument(in char[] arg)
 	return assumeUnique(buf);
 }
 
-pure @safe nothrow
+@safe nothrow
 private char[] escapePosixArgumentImpl(alias allocator)(in char[] arg)
 	if (is(typeof(allocator(size_t.init)[0] = char.init)))
 {
