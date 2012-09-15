@@ -570,7 +570,11 @@ public string decodeEntities(string str)
 				c = to!uint(fragment[1..p]);
 		}
 		else
-			c = entities[fragment[0..p]];
+		{
+			auto pentity = fragment[0..p] in entities;
+			enforce(pentity, "Unknown entity: " ~ fragment[0..p]);
+			c = *pentity;
+		}
 
 		interleaved[1+n*2] = cast(string) buffers[n][0..std.utf.encode(buffers[n], c)];
 		interleaved[2+n*2] = fragment[p+1..$];
