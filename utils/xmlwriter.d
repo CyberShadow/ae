@@ -207,6 +207,8 @@ private struct Escapes
 
 	shared static this()
 	{
+		import std.string;
+
 		escaped[] = true;
 		foreach (c; 0..256)
 			if (c=='<')
@@ -220,6 +222,9 @@ private struct Escapes
 			else
 			if (c=='"')
 				chars[c] = "&quot;";
+			else
+			if (c < 0x20 && c != 0x0D && c != 0x0A)
+				chars[c] = format("&#x%02X;", c);
 			else
 				chars[c] = [cast(char)c],
 				escaped[c] = false;
