@@ -513,6 +513,7 @@ static this()
 		"rsaquo": '\&rsaquo;',
 		"euro"  : '\&euro;'  ,
 		"copy"  : '\&copy;'  ,
+		"reg"   : '\&reg;'   ,
 		"apos"  : '\''
 	];
 	foreach (name, c; entities)
