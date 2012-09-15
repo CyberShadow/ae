@@ -111,7 +111,7 @@ private:
 	static const uint m = 0x5bd1e995;
 	static const int r = 24;
 
-	void MixTail ( ref ubyte * data, ref int len )
+	void MixTail ( ref ubyte * data, ref sizediff_t len )
 	{
 		while( len && ((len<4) || m_count) )
 		{
@@ -183,7 +183,7 @@ import ae.utils.digest_murmurhash3;
 uint murmurHash3_32(in void[] data, uint seed=0)
 {
 	uint result;
-	MurmurHash3_x86_32(data.ptr, data.length, seed, &result);
+	MurmurHash3_x86_32(data.ptr, cast(uint)data.length, seed, &result);
 	return result;
 }
 
@@ -192,14 +192,14 @@ alias uint[4] MH3Digest128;
 MH3Digest128 murmurHash3_x86_128(in void[] data, uint seed=0)
 {
 	MH3Digest128 result;
-	MurmurHash3_x86_128(data.ptr, data.length, seed, &result);
+	MurmurHash3_x86_128(data.ptr, cast(uint)data.length, seed, &result);
 	return result;
 }
 
 MH3Digest128 murmurHash3_x64_128(in void[] data, uint seed=0)
 {
 	MH3Digest128 result;
-	MurmurHash3_x64_128(data.ptr, data.length, seed, &result);
+	MurmurHash3_x64_128(data.ptr, cast(uint)data.length, seed, &result);
 	return result;
 }
 
