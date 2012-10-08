@@ -129,9 +129,14 @@ private:
 	}
 
 public:
+	/// Pretend there are no tasks scheduled.
+	bool disabled;
+
 	/// Run scheduled tasks.
 	void prod()
 	{
+		if (disabled) return;
+
 		auto now = TickDuration.currSystemTick();
 
 		if (head !is null)
@@ -180,7 +185,7 @@ public:
 	/// Return true if there are pending tasks scheduled.
 	bool isWaiting()
 	{
-		return head !is null;
+		return !disabled && head !is null;
 	}
 
 	enum NEVER = TickDuration(long.max);
@@ -188,13 +193,13 @@ public:
 	/// Return the TickDuration of the next scheduled task, or NEVER if no tasks are scheduled.
 	TickDuration getNextEvent()
 	{
-		return head is null ? NEVER : head.when;
+		return disabled || head is null ? NEVER : head.when;
 	}
 
 	/// Return the time until the first scheduled task, or NEVER if no tasks are scheduled.
 	TickDuration getRemainingTime()
 	{
-		if (head is null)
+		if (disabled || head is null)
 			return NEVER;
 
 		auto now = TickDuration.currSystemTick();
@@ -229,12 +234,6 @@ public:
 			assert(t is tail);
 			assert(count == n);
 		}
-	}
-
-	void removeAll()
-	{
-		head = tail = null;
-		count = 0;
 	}
 }
 
