@@ -509,6 +509,8 @@ static this()
 		"dagger": '\&dagger;',
 		"Dagger": '\&Dagger;',
 		"permil": '\&permil;',
+		"laquo" : '\&laquo;' ,
+		"raquo" : '\&raquo;' ,
 		"lsaquo": '\&lsaquo;',
 		"rsaquo": '\&rsaquo;',
 		"euro"  : '\&euro;'  ,
