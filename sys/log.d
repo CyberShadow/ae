@@ -14,10 +14,22 @@
 
 module ae.sys.log;
 
-import std.stdio;
 import std.datetime;
-import std.string;
 import std.file;
+import std.path;
+import std.stdio;
+import std.string;
+
+import ae.sys.file;
+
+string logDir;
+
+static this()
+{
+	import core.runtime;
+
+	logDir = Runtime.args[0].absolutePath().dirName().buildPath("logs");
+}
 
 private string formatTime(SysTime time)
 {
@@ -99,20 +111,15 @@ protected:
 
 	override void open()
 	{
-		string path = "logs/" ~ name;
-		auto p = path.lastIndexOf('/');
-		string baseName = path[p+1..$];
-		path = path[0..p];
-		string[] segments = path.split("/");
-		foreach (i, segment; segments)
-		{
-			string subpath = segments[0..i+1].join("/");
-			if (!exists(subpath))
-				mkdir(subpath);
-		}
+		// name may contain directory separators
+		string path = buildPath(logDir, name);
+		auto base = path.baseName();
+		auto dir = path.dirName();
+
 		auto t = getLogTime();
 		string timestamp = timestampedFilenames ? format(" %02d-%02d-%02d", t.hour, t.minute, t.second) : null;
-		fileName = format("%s/%04d-%02d-%02d%s - %s.log", path, t.year, t.month, t.day, timestamp, baseName);
+		fileName = buildPath(dir, format("%04d-%02d-%02d%s - %s.log", t.year, t.month, t.day, timestamp, base));
+		ensurePathExists(fileName);
 		f = File(fileName, "at");
 	}
 
