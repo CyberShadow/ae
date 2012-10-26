@@ -15,14 +15,19 @@ module ae.sys.cmd;
 
 string getTempFileName(string extension)
 {
-	// TODO: use proper OS directories
 	import std.random;
-	import std.conv;
+	import std.string;
+	import std.file;
+	import std.path : buildPath;
+	import core.thread;
 
 	static int counter;
-	if (!std.file.exists("data"    )) std.file.mkdir("data");
-	if (!std.file.exists("data/tmp")) std.file.mkdir("data/tmp");
-	return "data/tmp/run-" ~ to!string(uniform!uint()) ~ "-" ~ to!string(counter++) ~ "." ~ extension;
+	return buildPath(tempDir(), format("run-%d-%d-%d.%s",
+		getpid(),
+		uniform!uint(),
+		counter++,
+		extension
+	));
 }
 
 // ************************************************************************
