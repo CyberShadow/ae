@@ -16,6 +16,7 @@ module ae.utils.text;
 import std.ascii;
 import std.exception;
 import std.string;
+import std.traits;
 import std.typetuple;
 
 import core.stdc.string;
@@ -25,15 +26,20 @@ import ae.utils.textout;
 
 // ************************************************************************
 
-bool contains(in char[] str, in char[] what)
+bool contains(T, U)(T[] str, U[] what)
+	if (is(Unqual!T == Unqual!U))
 {
 	return str.indexOf(what)>=0;
 }
 
-string fastReplace(string what, string from, string to)
+// Uses memchr (not Boyer-Moore), best for short strings.
+T[] fastReplace(T)(T[] what, T[] from, T[] to)
+	if (T.sizeof == 1) // TODO (uses memchr)
 {
+	alias Unqual!T U;
+
 //	debug scope(failure) std.stdio.writeln("fastReplace crashed: ", [what, from, to]);
-	enum RAM = cast(char*)null;
+	enum RAM = cast(U*)null;
 
 	if (what.length < from.length || from.length==0)
 		return what;
@@ -43,7 +49,7 @@ string fastReplace(string what, string from, string to)
 		auto fromc = from[0];
 		if (to.length==1)
 		{
-			auto p = cast(char*)memchr(what.ptr, fromc, what.length);
+			auto p = cast(T*)memchr(what.ptr, fromc, what.length);
 			if (!p)
 				return what;
 
@@ -53,15 +59,15 @@ string fastReplace(string what, string from, string to)
 			auto end = what.ptr + what.length;
 			do
 			{
-				p[delta] = toChar; // zomg hax lol
+				(cast(U*)p)[delta] = toChar; // zomg hax lol
 				p++;
-				p = cast(char*)memchr(p, fromc, end - p);
+				p = cast(T*)memchr(p, fromc, end - p);
 			} while (p);
 			return assumeUnique(result);
 		}
 		else
 		{
-			auto p = cast(immutable(char)*)memchr(what.ptr, fromc, what.length);
+			auto p = cast(immutable(T)*)memchr(what.ptr, fromc, what.length);
 			if (!p)
 				return what;
 
@@ -70,7 +76,7 @@ string fastReplace(string what, string from, string to)
 			{
 				sb.put(what[0..p-what.ptr], to);
 				what = what[p-what.ptr+1..$];
-				p = cast(immutable(char)*)memchr(what.ptr, fromc, what.length);
+				p = cast(immutable(T)*)memchr(what.ptr, fromc, what.length);
 			}
 			while (p);
 
@@ -82,9 +88,9 @@ string fastReplace(string what, string from, string to)
 	auto head = from[0];
 	auto tail = from[1..$];
 
-	auto p = cast(char*)what.ptr;
+	auto p = cast(T*)what.ptr;
 	auto end = p + what.length - tail.length;
-	p = cast(char*)memchr(p, head, end-p);
+	p = cast(T*)memchr(p, head, end-p);
 	while (p)
 	{
 		p++;
@@ -104,9 +110,9 @@ string fastReplace(string what, string from, string to)
 					if (p[0..tail.length] == tail)
 					{
 					replaceA:
-						(p+deltaMinusOne)[0..to.length] = to;
+						(cast(U*)p+deltaMinusOne)[0..to.length] = to;
 					}
-					p = cast(char*)memchr(p, head, end-p);
+					p = cast(T*)memchr(p, head, end-p);
 				}
 				while (p);
 
@@ -114,7 +120,7 @@ string fastReplace(string what, string from, string to)
 			}
 			else
 			{
-				auto start = cast(char*)what.ptr;
+				auto start = cast(T*)what.ptr;
 				auto sb = StringBuilder(what.length);
 				goto replaceB;
 			dummyB: // compiler complains
@@ -133,7 +139,7 @@ string fastReplace(string what, string from, string to)
 					{
 						what = what[p-what.ptr..$];
 					}
-					p = cast(char*)memchr(what.ptr, head, what.length);
+					p = cast(T*)memchr(what.ptr, head, what.length);
 				}
 				while (p);
 
@@ -144,7 +150,7 @@ string fastReplace(string what, string from, string to)
 
 			assert(0);
 		}
-		p = cast(char*)memchr(p, head, end-p);
+		p = cast(T*)memchr(p, head, end-p);
 	}
 
 	return what;
@@ -184,12 +190,13 @@ unittest
 	test("foo", "foobar", "bar");
 }
 
-string[] fastSplit(string s, char d)
+T[][] fastSplit(T, U)(T[] s, U d)
+	if (is(Unqual!T == Unqual!U))
 {
 	if (!s.length)
 		return null;
 
-	auto p = cast(immutable(char)*) memchr(s.ptr, d, s.length);
+	auto p = cast(T*)memchr(s.ptr, d, s.length);
 	if (!p)
 		return [s];
 
@@ -199,19 +206,19 @@ string[] fastSplit(string s, char d)
 	{
 		n++;
 		p++;
-		p = cast(immutable(char)*) memchr(p, d, end-p);
+		p = cast(T*) memchr(p, d, end-p);
 	}
 	while (p);
 
 	auto result = new string[n+1];
 	n = 0;
 	auto start = s.ptr;
-	p = cast(immutable(char)*) memchr(start, d, s.length);
+	p = cast(T*) memchr(start, d, s.length);
 	do
 	{
 		result[n++] = start[0..p-start];
 		start = ++p;
-		p = cast(immutable(char)*) memchr(p, d, end-p);
+		p = cast(T*) memchr(p, d, end-p);
 	}
 	while (p);
 	result[n] = start[0..end-start];
@@ -219,7 +226,8 @@ string[] fastSplit(string s, char d)
 	return result;
 }
 
-string[] splitAsciiLines(string text)
+T[][] splitAsciiLines(T)(T[] text)
+	if (is(Unqual!T == char))
 {
 	auto lines = text.fastSplit('\n');
 	foreach (ref line; lines)
@@ -234,7 +242,8 @@ unittest
 	assert(splitAsciiLines(string.init) == splitLines(string.init));
 }
 
-string asciiStrip(string s)
+T[] asciiStrip(T)(T[] s)
+	if (is(Unqual!T == char))
 {
 	while (s.length && isWhite(s[0]))
 		s = s[1..$];
@@ -247,16 +256,17 @@ unittest
 {
 	string s = "Hello, world!";
 	assert(asciiStrip(s) is s);
-	assert(asciiStrip("\r\n\tHello ") == "Hello");
+	assert(asciiStrip("\r\n\tHello ".dup) == "Hello");
 }
 
 /// Covering slice-list of s with interleaved whitespace.
-string[] segmentByWhitespace(string s)
+T[][] segmentByWhitespace(T)(T[] s)
+	if (is(Unqual!T == char))
 {
 	if (!s.length)
 		return null;
 
-	string[] segments;
+	T[][] segments;
 	bool wasWhite = isWhite(s[0]);
 	size_t start = 0;
 	foreach (p, char c; s)
@@ -272,7 +282,8 @@ string[] segmentByWhitespace(string s)
 	return segments;
 }
 
-string newlinesToSpaces(string s)
+T[] newlinesToSpaces(T)(T[] s)
+	if (is(Unqual!T == char))
 {
 	auto slices = segmentByWhitespace(s);
 	foreach (ref slice; slices)
@@ -420,7 +431,7 @@ T fromHex(T : ulong = uint)(const(char)[] s)
 
 const hexDigits = "0123456789abcdef";
 
-ubyte[] arrayFromHex(string hex, ubyte[] buf = null)
+ubyte[] arrayFromHex(in char[] hex, ubyte[] buf = null)
 {
 	if (buf is null)
 		buf = new ubyte[hex.length/2];
@@ -434,7 +445,7 @@ ubyte[] arrayFromHex(string hex, ubyte[] buf = null)
 	return buf;
 }
 
-string toHex()(ubyte[] data, char[] buf = null)
+string toHex()(in ubyte[] data, char[] buf = null)
 {
 	if (buf is null)
 		buf = new char[data.length*2];
@@ -448,7 +459,7 @@ string toHex()(ubyte[] data, char[] buf = null)
 	return assumeUnique(buf);
 }
 
-void toHex(T : ulong, size_t U = T.sizeof*2)(T n, ref char[U] buf)
+void toHex(T : ulong, size_t U = T.sizeof*2)(T n, ref in char[U] buf)
 {
 	foreach (i; Reverse!(RangeTuple!(T.sizeof*2)))
 	{
