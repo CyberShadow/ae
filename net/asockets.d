@@ -26,6 +26,8 @@ public import std.socket : Address, Socket;
 debug(ASOCKETS) import std.stdio;
 private import std.conv : to;
 
+import std.random : randomShuffle;
+
 version(LIBEV)
 {
 	import deimos.ev;
@@ -629,6 +631,8 @@ public:
 		{
 			addressQueue = getAddress(host, port);
 			enforce(addressQueue.length, "No addresses found");
+			if (addressQueue.length > 1)
+				randomShuffle(addressQueue);
 		}
 		catch (SocketException e)
 			return onError("Lookup error: " ~ e.msg);
