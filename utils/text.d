@@ -459,7 +459,7 @@ string toHex()(in ubyte[] data, char[] buf = null)
 	return assumeUnique(buf);
 }
 
-void toHex(T : ulong, size_t U = T.sizeof*2)(T n, ref in char[U] buf)
+void toHex(T : ulong, size_t U = T.sizeof*2)(T n, ref char[U] buf)
 {
 	foreach (i; Reverse!(RangeTuple!(T.sizeof*2)))
 	{
