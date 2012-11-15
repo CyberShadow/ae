@@ -483,7 +483,7 @@ protected:
 			return disconnect("Connection closed", DisconnectType.Graceful);
 
 		if (received == Socket.ERROR)
-			onError(lastSocketError);
+			onError("recv() error: " ~ lastSocketError);
 		else
 			if (!disconnecting && handleReadData)
 			{
@@ -537,7 +537,7 @@ protected:
 					if (wouldHaveBlocked())
 						return;
 					else
-						return onError(lastSocketError);
+						return onError("send() error: " ~ lastSocketError);
 				}
 				else
 				if (sent == 0)
