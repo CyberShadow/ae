@@ -221,37 +221,11 @@ string[] fastFileList(string pattern0, string[] patterns...)
 import std.datetime;
 import std.exception;
 
-// Will be made redundant by:
-// https://github.com/D-Programming-Language/phobos/pull/513
-// https://github.com/D-Programming-Language/phobos/pull/518
-SysTime getMTime(string name)
+deprecated SysTime getMTime(string name)
 {
-	version(Windows)
-	{
-/*
-		import std.c.windows.windows;
-
-		auto h = CreateFileW(toUTF16z(name), FILE_READ_ATTRIBUTES, 0, null, OPEN_EXISTING, 0, HANDLE.init);
-		enforce(h!=INVALID_HANDLE_VALUE, "CreateFile");
-		scope(exit) CloseHandle(h);
-		FILETIME ft;
-		enforce(GetFileTime(h, null, null, &ft), "GetFileTime");
-		return FILETIMEToSysTime(&ft);
-*/
-		import stdwin = std.c.windows.windows;
-		import win32.winnt;
-		import win32.winbase;
-
-		WIN32_FILE_ATTRIBUTE_DATA fad;
-		enforce(GetFileAttributesExW(toUTF16z(name), GET_FILEEX_INFO_LEVELS .GetFileExInfoStandard, &fad), new FileException(name));
-		return FILETIMEToSysTime(cast(stdwin.FILETIME*)&fad.ftLastWriteTime);
-	}
-	else
-	{
-		SysTime fta, ftm;
-		std.file.getTimes(name, fta, ftm);
-		return ftm;
-	}
+	SysTime fta, ftm;
+	std.file.getTimes(name, fta, ftm);
+	return ftm;
 }
 
 void touch(string fn)
@@ -370,35 +344,7 @@ version (Windows)
 	// TODO: return inode number on *nix
 }
 
-version(Windows)
-{
-	/// Find*File and CreateFile may fail in certain situations
-	// Will be made redundant by https://github.com/D-Programming-Language/phobos/pull/513
-	ulong getSize2(string name)
-	{
-		import win32.winnt;
-		import win32.winbase;
-/*
-		auto h = CreateFileW(toUTF16z(name), FILE_READ_ATTRIBUTES, 0, null, OPEN_EXISTING, 0, HANDLE.init);
-		enforce(h!=INVALID_HANDLE_VALUE, new FileException(name));
-		scope(exit) CloseHandle(h);
-		LARGE_INTEGER li;
-		enforce(GetFileSizeEx(h, &li), new FileException(name));
-		return li.QuadPart;
-*/
-
-		WIN32_FILE_ATTRIBUTE_DATA fad;
-		enforce(GetFileAttributesExW(toUTF16z(name), GET_FILEEX_INFO_LEVELS .GetFileExInfoStandard, &fad), new FileException(name));
-		ULARGE_INTEGER li;
-		li.LowPart  = fad.nFileSizeLow;
-		li.HighPart = fad.nFileSizeHigh;
-		return li.QuadPart;
-	}
-}
-else
-{
-	alias std.file.getSize getSize2;
-}
+deprecated alias std.file.getSize getSize2;
 
 /// Using UNC paths bypasses path length limitation when using Windows wide APIs.
 string longPath(string s)
@@ -412,6 +358,7 @@ string longPath(string s)
 }
 
 version (Windows)
+static if (is(typeof(CreateHardLinkW))) // Compile with -version=WindowsXP
 {
 	void hardLink(string src, string dst)
 	{
