@@ -195,7 +195,10 @@ unittest
 
 // ***************************************************************************
 
-/// BulkAllocator adapter for HashTable
+/// BulkAllocator adapter for HashTable.
+/// HashTable needs an allocator template that simply accepts a type parameter,
+/// so this template declares a template which instantiates a given allocator
+/// template (ALLOCATOR) using the type passed by HashTable (T).
 template HashTableBulkAllocator(uint BLOCKSIZE, alias ALLOCATOR = HeapAllocator)
 {
 	template HashTableBulkAllocator(T)

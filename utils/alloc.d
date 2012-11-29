@@ -64,7 +64,7 @@ struct LinkedBulkAllocator(T, uint BLOCKSIZE=1024, alias ALLOCATOR = HeapAllocat
 
 	mixin template NodeContents()
 	{
-		Node* next;
+		Node* next; /// Next free node
 		V data;
 	}
 
@@ -81,7 +81,7 @@ struct LinkedBulkAllocator(T, uint BLOCKSIZE=1024, alias ALLOCATOR = HeapAllocat
 			static Node* fromRef(R r) { return cast(Node*)r; }
 		}
 
-	Node* head;
+	Node* head; /// First free node
 
 	struct Block { Node[BLOCKSIZE] nodes; }
 	ALLOCATOR!Block allocator;
