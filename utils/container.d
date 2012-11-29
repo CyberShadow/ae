@@ -283,6 +283,21 @@ struct HashTable(K, V, uint SIZE, alias ALLOCATOR, string HASHFUNC="k")
 		return result;
 	}
 
+	size_t getLength()
+	{
+		size_t count = 0;
+		for (uint h=0; h<SIZE; h++)
+		{
+			auto item = items[h];
+			while (item)
+			{
+				count++;
+				item = item.next;
+			}
+		}
+		return count;
+	}
+
 	void freeAll()
 	{
 		static if (is(typeof(allocator.freeAll())))
