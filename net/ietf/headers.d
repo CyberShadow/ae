@@ -27,7 +27,7 @@ struct Headers
 	string opIndex(string name)
 	{
 		auto values = headers[toUpper(name)];
-		assert(values.length == 1);
+		enforce(values.length == 1, "Reading single value of repeating header " ~ name);
 		return values[0];
 	}
 
@@ -86,12 +86,22 @@ struct Headers
 		return pvalue ? *pvalue : def;
 	}
 
+	/// Warning: discards repeating headers
 	string[string] opCast(T)()
 		if (is(T == string[string]))
 	{
 		string[string] result;
 		foreach (key, value; this)
 			result[key] = value;
+		return result;
+	}
+
+	string[][string] opCast(T)()
+		if (is(T == string[][string]))
+	{
+		string[][string] result;
+		foreach (k, v; this)
+			result[k] ~= v;
 		return result;
 	}
 }
