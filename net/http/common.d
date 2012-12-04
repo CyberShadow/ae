@@ -104,7 +104,7 @@ public:
 	/// The hostname, without the port number
 	@property string host()
 	{
-		string _host = headers["Host"];
+		string _host = headers.get("Host", null);
 		auto colon = _host.lastIndexOf(":");
 		return colon<0 ? _host : _host[0..colon];
 	}
