@@ -133,6 +133,7 @@ version(Windows) version(unittest)
 {
 	import core.sys.windows.windows;
 	import core.stdc.stddef;
+	import std.conv;
 
 	extern (Windows) wchar_t**  CommandLineToArgvW(wchar_t*, int*);
 	extern (C) size_t wcslen(in wchar *);
