@@ -223,9 +223,7 @@ import std.exception;
 
 deprecated SysTime getMTime(string name)
 {
-	SysTime fta, ftm;
-	std.file.getTimes(name, fta, ftm);
-	return ftm;
+	return timeLastModified(name);
 }
 
 void touch(string fn)

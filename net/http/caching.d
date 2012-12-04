@@ -180,7 +180,6 @@ class StaticResource : AbstractCachedResource
 {
 private:
 	import std.file;
-	import ae.sys.file;
 
 	string filename;
 	SysTime fileTime, lastChecked;
@@ -213,7 +212,7 @@ protected:
 		{
 			lastChecked = now;
 
-			auto newFileTime = getMTime(filename);
+			auto newFileTime = timeLastModified(filename);
 			if (newFileTime != fileTime)
 			{
 				fileTime = newFileTime;
