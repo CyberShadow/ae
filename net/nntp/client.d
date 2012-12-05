@@ -42,6 +42,8 @@ private:
 	TimerTask pollTimer;
 	bool[] expectingGroupList;
 	string[] postQueue;
+	bool connected;
+	bool polling;
 
 	void reconnect()
 	{
@@ -54,6 +56,7 @@ private:
 	void onDisconnect(ClientSocket sender, string reason, DisconnectType type)
 	{
 		log("* Disconnected (" ~ reason ~ ")");
+		connected = false;
 		if (handleDisconnect)
 			handleDisconnect(reason);
 		if (polling)
@@ -108,10 +111,16 @@ private:
 		switch (firstLine[0])
 		{
 			case "200": // greeting
+				connected = true;
 				if (handleConnect)
 					handleConnect();
 				if (polling)
-					send("DATE");
+				{
+					if (lastTime)
+						poll();
+					else
+						send("DATE");
+				}
 				break;
 			case "111": // DATE reply
 			{
@@ -120,7 +129,7 @@ private:
 					auto time = firstLine[1];
 					enforce(time.length == 14, "DATE format");
 					if (lastTime is null)
-						pollTimer = setTimeout(&poll, TickDuration.from!"seconds"(POLL_PERIOD));
+						schedulePoll();
 					lastTime = time;
 				}
 				break;
@@ -142,7 +151,7 @@ private:
 					}
 				oldMessages = messages;
 				if (queued==0)
-					pollTimer = setTimeout(&poll, TickDuration.from!"seconds"(POLL_PERIOD));
+					schedulePoll();
 				break;
 			}
 			case "220": // ARTICLE reply
@@ -156,7 +165,7 @@ private:
 				{
 					queued--;
 					if (queued==0)
-						pollTimer = setTimeout(&poll, TickDuration.from!"seconds"(POLL_PERIOD));
+						schedulePoll();
 				}
 				break;
 			}
@@ -218,6 +227,11 @@ private:
 		}
 	}
 
+	void schedulePoll()
+	{
+		pollTimer = setTimeout(&poll, TickDuration.from!"seconds"(POLL_PERIOD));
+	}
+
 	void poll()
 	{
 		pollTimer = null;
@@ -226,8 +240,6 @@ private:
 	}
 
 public:
-	bool polling;
-
 	this(Logger log)
 	{
 		this.log = log;
@@ -241,6 +253,16 @@ public:
 		conn.handleDisconnect = &onDisconnect;
 		conn.handleReadLine = &onReadLine;
 		reconnect();
+	}
+
+	/// TODO: Separate this behavior from the protocol implementation.
+	void startPolling(string lastTime = null)
+	{
+		assert(!polling, "Already polling");
+		polling = true;
+		this.lastTime = lastTime;
+		if (connected)
+			poll();
 	}
 
 	void disconnect()
