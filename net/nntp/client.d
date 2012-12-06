@@ -124,14 +124,17 @@ private:
 				break;
 			case "111": // DATE reply
 			{
+				auto time = firstLine[1];
+				enforce(time.length == 14, "DATE format");
 				if (polling)
 				{
-					auto time = firstLine[1];
-					enforce(time.length == 14, "DATE format");
 					if (lastTime is null)
 						schedulePoll();
 					lastTime = time;
 				}
+				else
+				if (handleDate)
+					handleDate(time);
 				break;
 			}
 			case "230": // NEWNEWS reply
@@ -301,6 +304,12 @@ public:
 		send("ARTICLE " ~ numOrID);
 	}
 
+	void getDate()
+	{
+		assert(!polling);
+		send("DATE");
+	}
+
 	void postMessage(string[] lines)
 	{
 		postQueue = lines;
@@ -314,4 +323,5 @@ public:
 	void delegate(string[] messages) handleListGroup;
 	void delegate(string[] lines, string num, string id) handleMessage;
 	void delegate() handlePosted;
+	void delegate(string date) handleDate;
 }
