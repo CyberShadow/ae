@@ -50,7 +50,13 @@ private:
 		queued = 0;
 		lastTime = null;
 		reply = null;
+		log("* Connecting to " ~ server ~ "...");
 		conn.connect(server, 119);
+	}
+
+	void onConnect(ClientSocket sender)
+	{
+		log("* Connected, waiting for greeting...");
 	}
 
 	void onDisconnect(ClientSocket sender, string reason, DisconnectType type)
@@ -253,6 +259,7 @@ public:
 		this.server = server;
 
 		conn = new LineBufferedSocket(TickDuration.from!"seconds"(POLL_PERIOD*10));
+		conn.handleConnect = &onConnect;
 		conn.handleDisconnect = &onDisconnect;
 		conn.handleReadLine = &onReadLine;
 		reconnect();
