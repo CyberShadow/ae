@@ -24,12 +24,16 @@ import ae.sys.file;
 
 string logDir;
 
-static this()
+private void init()
 {
 	import core.runtime;
 
-	logDir = Runtime.args[0].absolutePath().dirName().buildPath("logs");
+	if (!logDir)
+		logDir = Runtime.args[0].absolutePath().dirName().buildPath("logs");
 }
+
+shared static this() { init(); }
+static this() { init(); }
 
 private string formatTime(SysTime time)
 {
