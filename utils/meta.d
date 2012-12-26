@@ -77,6 +77,44 @@ unittest
 	static assert(is(typeof(s.a) == ushort));
 }
 
+template isValueOfTypeInTuple(X, T...)
+{
+	static if (T.length==0)
+		enum bool isValueOfTypeInTuple = false;
+	else
+	static if (T.length==1)
+		enum bool isValueOfTypeInTuple = is(typeof(T[0]) : X);
+	else
+		enum bool isValueOfTypeInTuple = isValueOfTypeInTuple!(X, T[0..$/2]) || isValueOfTypeInTuple!(X, T[$/2..$]);
+}
+
+unittest
+{
+	static assert( isValueOfTypeInTuple!(int, ValueTuple!("a", 42)));
+	static assert(!isValueOfTypeInTuple!(int, ValueTuple!("a", 42.42)));
+	static assert(!isValueOfTypeInTuple!(int, ValueTuple!()));
+
+	static assert(!isValueOfTypeInTuple!(int, "a", int, Object));
+	static assert( isValueOfTypeInTuple!(int, "a", int, Object, 42));
+}
+
+template findValueOfTypeInTuple(X, T...)
+{
+	static if (T.length==0)
+		static assert(false, "Can't find value of type " ~ X.stringof ~ " in specified tuple");
+	else
+	static if (is(typeof(T[0]) : X))
+		enum findValueOfTypeInTuple = T[0];
+	else
+		enum findValueOfTypeInTuple = findValueOfTypeInTuple!(X, T[1..$]);
+}
+
+unittest
+{
+	static assert(findValueOfTypeInTuple!(int, ValueTuple!("a", 42))==42);
+	static assert(findValueOfTypeInTuple!(int, "a", int, Object, 42)==42);
+}
+
 public import ae.utils.meta_x;
 
 // ************************************************************************
@@ -88,4 +126,34 @@ string[] toArray(Args...)()
 	foreach (i, _ ; typeof(Args))
 		args ~= Args[i].stringof;
 	return args;
+}
+
+// ************************************************************************
+
+// Using a compiler with UDA support?
+enum HAVE_UDA = __traits(compiles, __traits(getAttributes, Object));
+
+static if (HAVE_UDA)
+{
+	template hasAttribute(T, alias D)
+	{
+		enum bool hasAttribute = isValueOfTypeInTuple!(T, __traits(getAttributes, D));
+	}
+
+	template getAttribute(T, alias D)
+	{
+		enum T getAttribute = findValueOfTypeInTuple!(T, __traits(getAttributes, D));
+	}
+}
+else
+{
+	template hasAttribute(T, alias D)
+	{
+		enum bool hasAttribute = false;
+	}
+
+	template getAttribute(T, alias D)
+	{
+		static assert(false, "This D compiler has no UDA support.");
+	}
 }

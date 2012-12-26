@@ -83,7 +83,7 @@ struct CustomJsonWriter(WRITER)
 						output.put(',');
 					else
 						first = false;
-					put(v.tupleof[i].stringof[2..$]);
+					put(getJsonName!(T, v.tupleof[i].stringof[2..$]));
 					output.put(':');
 					put(field);
 				}
@@ -251,32 +251,41 @@ private struct JsonParser
 	string readString()
 	{
 		skipWhitespace();
-		expect('"');
-		string result;
-		while (true)
+		if (peek() == '"')
 		{
-			auto c = next();
-			if (c=='"')
-				break;
-			else
-			if (c=='\\')
-				switch (next())
-				{
-					case '"':  result ~= '"'; break;
-					case '/':  result ~= '/'; break;
-					case '\\': result ~= '\\'; break;
-					case 'b':  result ~= '\b'; break;
-					case 'f':  result ~= '\f'; break;
-					case 'n':  result ~= '\n'; break;
-					case 'r':  result ~= '\r'; break;
-					case 't':  result ~= '\t'; break;
-					case 'u':  result ~= toUTF8([cast(wchar)fromHex!ushort(readN(4))]); break;
-					default: enforce(false, "Unknown escape");
-				}
-			else
-				result ~= c;
+			next(); // '"'
+			string result;
+			while (true)
+			{
+				auto c = next();
+				if (c=='"')
+					break;
+				else
+				if (c=='\\')
+					switch (next())
+					{
+						case '"':  result ~= '"'; break;
+						case '/':  result ~= '/'; break;
+						case '\\': result ~= '\\'; break;
+						case 'b':  result ~= '\b'; break;
+						case 'f':  result ~= '\f'; break;
+						case 'n':  result ~= '\n'; break;
+						case 'r':  result ~= '\r'; break;
+						case 't':  result ~= '\t'; break;
+						case 'u':  result ~= toUTF8([cast(wchar)fromHex!ushort(readN(4))]); break;
+						default: enforce(false, "Unknown escape");
+					}
+				else
+					result ~= c;
+			}
+			return result;
 		}
-		return result;
+		else
+		{
+			foreach (c; "null")
+				expect(c);
+			return null;
+		}
 	}
 
 	bool readBool()
@@ -374,12 +383,16 @@ private struct JsonParser
 
 			bool found;
 			foreach (i, field; v.tupleof)
-				if (v.tupleof[i].stringof[2..$] == jsonField)
+			{
+				enum name = getJsonName!(T, v.tupleof[i].stringof[2..$]);
+				if (name == jsonField)
 				{
+					scope(failure) std.stdio.writeln("Error with field " ~ name ~ ":");
 					v.tupleof[i] = read!(typeof(v.tupleof[i]))();
 					found = true;
 					break;
 				}
+			}
 			enforce(found, "Unknown field " ~ jsonField);
 
 			skipWhitespace();
@@ -443,6 +456,8 @@ unittest
 
 // ************************************************************************
 
+// TODO: migrate to UDAs
+
 /**
  * A template that designates fields which should not be serialized to Json.
  *
@@ -483,4 +498,18 @@ unittest
 	S s = S(42, 5, [S(1), S(2)], [S(3), S(4)], ["apple":"fruit", "pizza":"vegetable"], En.two);
 	auto s2 = jsonParse!S(toJson(s));
 	assert(s.i1 == s2.i1 && s2.i2 is int.init && s.arr1 == s2.arr1 && s2.arr2 is null && s.dic == s2.dic && s.en == En.two);
+}
+
+// ************************************************************************
+
+/// User-defined attribute - specify name for JSON object field.
+/// Useful when a JSON object may contain fields, the name of which are not valid D identifiers.
+struct JSONName { string name; }
+
+private template getJsonName(S, string FIELD)
+{
+	static if (hasAttribute!(JSONName, mixin("S."~FIELD)))
+		enum getJsonName = getAttribute!(JSONName, mixin("S."~FIELD)).name;
+	else
+		enum getJsonName = FIELD;
 }
