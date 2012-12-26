@@ -421,10 +421,18 @@ SysTime parseTime(string fmt, string t)
 				break;
 			case 'O':
 			{
-				auto tzStr = take(5);
-				enforce(tzStr[0]=='-' || tzStr[0]=='+', "-/+ expected");
-				auto minutes = (to!int(tzStr[1..3]) * 60 + to!int(tzStr[3..5])) * (tzStr[0]=='-' ? -1 : 1);
-				tz = [new SimpleTimeZone(minutes)].ptr; // work around lack of class tailconst
+				if (t.length && *t.ptr == 'Z')
+				{
+					t = t[1..$];
+					tz = [UTC()].ptr;
+				}
+				else
+				{
+					auto tzStr = take(5);
+					enforce(tzStr[0]=='-' || tzStr[0]=='+', "-/+ expected");
+					auto minutes = (to!int(tzStr[1..3]) * 60 + to!int(tzStr[3..5])) * (tzStr[0]=='-' ? -1 : 1);
+					tz = [new SimpleTimeZone(minutes)].ptr; // work around lack of class tailconst
+				}
 				break;
 			}
 			case 'P':
