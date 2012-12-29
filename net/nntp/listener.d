@@ -39,7 +39,7 @@ private:
 	{
 		assert(!connected);
 		lastDate = null;
-		client.connect(server);
+		client.connect(server, &onConnect);
 	}
 
 	void schedulePoll()
@@ -119,7 +119,7 @@ public:
 	void onNewNews(string[] reply)
 	{
 		bool[string] messages;
-		foreach (message; reply)
+		foreach (message; reply[1..$])
 			messages[message] = true;
 
 		assert(queued == 0);
