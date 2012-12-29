@@ -170,6 +170,8 @@ T stackPop(T)(ref T[] arr)
 
 T queuePeek(T)(T[] arr) { return arr[0]; }
 
+T queuePeekLast(T)(T[] arr) { return arr[$-1]; }
+
 T queuePop(T)(ref T[] arr)
 {
 	auto ret = arr[0];

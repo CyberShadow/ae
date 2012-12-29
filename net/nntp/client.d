@@ -13,46 +13,68 @@
 
 module ae.net.nntp.client;
 
-import std.datetime;
+import std.conv;
 import std.string;
 import std.exception;
 
 import ae.net.asockets;
-import ae.sys.timing;
 import ae.sys.log;
 import ae.utils.array;
 
 alias core.time.TickDuration TickDuration;
 
-const POLL_PERIOD = 2;
+public import ae.net.asockets : DisconnectType;
 
 struct GroupInfo { string name; int high, low; char mode; }
 
 class NntpClient
 {
 private:
+	/// Socket connection.
 	LineBufferedSocket conn;
-	SysTime last;
-	string[] reply;
-	string server;
-	int queued;
-	string lastTime;
-	Logger log;
-	bool[string] oldMessages;
-	TimerTask pollTimer;
-	bool[] expectingGroupList;
-	string[] postQueue;
-	bool connected;
-	bool polling;
 
-	void reconnect()
+	/// Protocol log.
+	Logger log;
+
+	/// One possible reply to an NNTP command
+	static struct Reply
 	{
-		queued = 0;
-		lastTime = null;
-		reply = null;
-		log("* Connecting to " ~ server ~ "...");
-		conn.connect(server, 119);
+		bool multiLine;
+		void delegate(string[] lines) handleReply;
+
+		this(void delegate(string[] lines) handler)
+		{
+			multiLine = true;
+			handleReply = handler;
+		}
+
+		this(void delegate(string line) handler)
+		{
+			multiLine = false;
+			handleReply = (string[] lines) { assert(lines.length==1); handler(lines[0]); };
+		}
+
+		this(void delegate() handler)
+		{
+			multiLine = false;
+			handleReply = (string[] lines) { assert(lines.length==1); handler(); };
+		}
 	}
+
+	/// One pipelined command
+	static struct Command
+	{
+		string[] lines;
+		bool pipelineable;
+		Reply[int] replies;
+		void delegate(string error) handleError;
+	}
+
+	/// Commands queued to be sent to the NNTP server.
+	Command[] queuedCommands;
+
+	/// Commands that have been sent to the NNTP server, and are expecting a reply.
+	Command[] sentCommands;
 
 	void onConnect(ClientSocket sender)
 	{
@@ -62,125 +84,149 @@ private:
 	void onDisconnect(ClientSocket sender, string reason, DisconnectType type)
 	{
 		log("* Disconnected (" ~ reason ~ ")");
-		connected = false;
+		foreach (command; queuedCommands ~ sentCommands)
+			command.handleError("Disconnected from server (" ~ reason ~ ")");
+
+		queuedCommands = sentCommands = null;
+		replyLines = null;
+		currentReply = null;
+
 		if (handleDisconnect)
-			handleDisconnect(reason);
-		if (polling)
-		{
-			if (pollTimer && pollTimer.isWaiting())
-				pollTimer.cancel();
-			if (type != DisconnectType.Requested)
-				setTimeout(&reconnect, TickDuration.from!"seconds"(10));
-		}
-		expectingGroupList = null;
+			handleDisconnect(reason, type);
 	}
 
-	void onReadLine(LineBufferedSocket s, string line)
-	{
-		log("> " ~ line);
-
-		if (line == ".")
-		{
-			onReply(reply);
-			reply = null;
-			return;
-		}
-
-		if (line.length && line[0] == '.')
-			line = line[1..$];
-
-		if (reply.length==0 && isSingleLineReply(line))
-			onReply([line]);
-		else
-			reply ~= line;
-	}
-
-	bool isSingleLineReply(string line)
-	{
-		return line.startsWith("200")
-			|| line.startsWith("111")
-			||(line.startsWith("211") && !expectingGroupList.queuePeek())
-			|| line.startsWith("240")
-			|| line.startsWith("3")
-			|| line.startsWith("4");
-	}
-
-	void send(string line)
+	void sendLine(string line)
 	{
 		log("< " ~ line);
 		conn.send(line);
 	}
 
-	void onReply(string[] reply)
+	/// Reply line buffer.
+	string[] replyLines;
+
+	/// Reply currently being received/processed.
+	Reply* currentReply;
+
+	void onReadLine(LineBufferedSocket s, string line)
 	{
-		auto firstLine = split(reply[0]);
-		switch (firstLine[0])
+		try
 		{
-			case "200": // greeting
-				connected = true;
+			log("> " ~ line);
+
+			bool replyDone;
+			if (replyLines.length==0)
+			{
+				enforce(sentCommands.length, "No command was queued when the server sent line: " ~ line);
+				auto command = sentCommands.queuePeek();
+
+				int code = line.split()[0].to!int();
+				currentReply = code in command.replies;
+
+				// Assume that unknown replies are single-line error messages.
+				replyDone = currentReply ? !currentReply.multiLine : true;
+				replyLines = [line];
+			}
+			else
+			{
+				if (line == ".")
+					replyDone = true;
+				else
+				{
+					if (line.length && line[0] == '.')
+						line = line[1..$];
+					replyLines ~= line;
+				}
+			}
+
+			if (replyDone)
+			{
+				auto command = sentCommands.queuePop();
+				void handleReply()
+				{
+					enforce(currentReply, `Unexpected reply "` ~ replyLines[0] ~ `" to command "` ~ command.lines[0] ~ `"`);
+					currentReply.handleReply(replyLines);
+				}
+
+				if (command.handleError)
+					try
+						handleReply();
+					catch (Exception e)
+						command.handleError(e.msg);
+				else
+					handleReply(); // In the absence of an error handler, treat command handling exceptions like fatal protocol errors
+
+				replyLines = null;
+				currentReply = null;
+
+				updateQueue();
+			}
+		}
+		catch (Exception e)
+			conn.disconnect("Unhandled " ~ e.classinfo.name ~ ": " ~ e.msg);
+	}
+
+	enum PIPELINE_LIMIT = 64;
+
+	void updateQueue()
+	{
+		if (!sentCommands.length && !queuedCommands.length && handleIdle)
+			handleIdle();
+		else
+		while (
+			queuedCommands.length                                                   // Got something to send?
+		 && (sentCommands.length == 0 || sentCommands.queuePeekLast().pipelineable) // Can pipeline?
+		 && sentCommands.length < PIPELINE_LIMIT)                                   // Not pipelining too much?
+			send(queuedCommands.queuePop());
+	}
+
+	void queue(Command command)
+	{
+		queuedCommands.queuePush(command);
+		updateQueue();
+	}
+
+	void send(Command command)
+	{
+		foreach (line; command.lines)
+			sendLine(line);
+		sentCommands.queuePush(command);
+	}
+
+public:
+	this(Logger log)
+	{
+		this.log = log;
+	}
+
+	void connect(string server, void delegate() handleConnect=null)
+	{
+		conn = new LineBufferedSocket(TickDuration.from!"seconds"(30));
+		conn.handleConnect = &onConnect;
+		conn.handleDisconnect = &onDisconnect;
+		conn.handleReadLine = &onReadLine;
+
+		// Manually place a fake command in the queue
+		// (server automatically sends a greeting when a client connects).
+		sentCommands ~= Command(null, false, [
+			200:Reply({
 				if (handleConnect)
 					handleConnect();
-				if (polling)
-				{
-					if (lastTime)
-						poll();
-					else
-						send("DATE");
-				}
-				break;
-			case "111": // DATE reply
-			{
-				auto time = firstLine[1];
-				enforce(time.length == 14, "DATE format");
-				if (polling)
-				{
-					if (lastTime is null)
-						schedulePoll();
-					lastTime = time;
-				}
-				else
-				if (handleDate)
-					handleDate(time);
-				break;
-			}
-			case "230": // NEWNEWS reply
-			{
-				assert(polling);
+			}),
+		]);
 
-				bool[string] messages;
-				foreach (message; reply[1..$])
-					messages[message] = true;
+		log("* Connecting to " ~ server ~ "...");
+		conn.connect(server, 119);
+	}
 
-				assert(queued == 0);
-				foreach (message, b; messages)
-					if (!(message in oldMessages))
-					{
-						send("ARTICLE " ~ message);
-						queued++;
-					}
-				oldMessages = messages;
-				if (queued==0)
-					schedulePoll();
-				break;
-			}
-			case "220": // ARTICLE reply
-			{
-				//enforce(firstLine.length==3);
-				auto message = reply[1..$];
-				if (handleMessage)
-					handleMessage(message, firstLine[1], firstLine[2]);
+	void disconnect()
+	{
+		conn.disconnect();
+	}
 
-				if (polling)
-				{
-					queued--;
-					if (queued==0)
-						schedulePoll();
-				}
-				break;
-			}
-			case "215": // LIST reply
-			{
-				// assume the command was LIST [ACTIVE]
+	void listGroups(void delegate(GroupInfo[] groups) handleGroups, void delegate(string) handleError=null)
+	{
+		queue(Command(["LIST"], true, [
+			215:Reply((string[] reply) {
 				GroupInfo[] groups = new GroupInfo[reply.length-1];
 				foreach (i, line; reply[1..$])
 				{
@@ -190,145 +236,108 @@ private:
 				}
 				if (handleGroups)
 					handleGroups(groups);
-				break;
-			}
-			case "211": // GROUP / LISTGROUP reply
-			{
-				if (expectingGroupList.queuePop())
-					if (handleListGroup)
-						handleListGroup(reply[1..$]);
-				break;
-			}
-			case "224": // LISTGROUP reply
-			{
-				auto messages = new string[reply.length-1];
-				foreach (i, line; reply[1..$])
-					messages[i] = line.split("\t")[0];
+			}),
+		], handleError));
+	}
+
+	void selectGroup(string name, void delegate() handleSuccess=null, void delegate(string) handleError=null)
+	{
+		queue(Command(["GROUP " ~ name], false, [
+			211:Reply({
+				if (handleSuccess)
+					handleSuccess();
+			}),
+		], handleError));
+	}
+
+	void listGroup(string name, int from/* = 1*/, void delegate(string[] messages) handleListGroup, void delegate(string) handleError=null)
+	{
+		string line = from > 1 ? format("LISTGROUP %s %d-", name, from) : format("LISTGROUP %s", name);
+
+		queue(Command([line], true, [
+			211:Reply((string[] reply) {
 				if (handleListGroup)
-					handleListGroup(messages);
-				break;
-			}
-			case "340": // POST reply
-			{
-				assert(postQueue.length);
+					handleListGroup(reply[1..$]);
+			}),
+		], handleError));
+	}
 
-				foreach (line; postQueue)
+	void listGroup(string name, void delegate(string[] messages) handleListGroup, void delegate(string) handleError=null) { listGroup(name, 1, handleListGroup, handleError); }
+
+	void listGroupXover(string name, int from/* = 1*/, void delegate(string[] messages) handleListGroup, void delegate(string) handleError=null)
+	{
+		selectGroup(name, {
+			// Wait for GROUP reply before sending XOVER, in case GROUP fails
+			send(Command([format("XOVER %d-", from)], true, [
+				224:Reply((string[] reply) {
+					auto messages = new string[reply.length-1];
+					foreach (i, line; reply[1..$])
+						messages[i] = line.split("\t")[0];
+					if (handleListGroup)
+						handleListGroup(messages);
+				}),
+			], handleError));
+		}, handleError);
+	}
+
+	void listGroupXover(string name, void delegate(string[] messages) handleListGroup, void delegate(string) handleError=null) { listGroupXover(name, 1, handleListGroup, handleError); }
+
+	void getMessage(string numOrID, void delegate(string[] lines, string num, string id) handleMessage, void delegate(string) handleError=null)
+	{
+		queue(Command(["ARTICLE " ~ numOrID], true, [
+			220:Reply((string[] reply) {
+				auto message = reply[1..$];
+				auto firstLine = reply[0].split();
+				if (handleMessage)
+					handleMessage(message, firstLine[1], firstLine[2]);
+			}),
+		], handleError));
+	}
+
+	void getDate(void delegate(string date) handleDate, void delegate(string) handleError=null)
+	{
+		queue(Command(["DATE"], true, [
+			111:Reply((string reply) {
+				auto date = reply.split()[1];
+				enforce(date.length == 14, "Invalid DATE format");
+				if (handleDate)
+					handleDate(date);
+			}),
+		], handleError));
+	}
+
+	void getNewNews(string wildmat, string dateTime, void delegate(string[] messages) handleNewNews, void delegate(string) handleError=null)
+	{
+		queue(Command(["NEWNEWS " ~ wildmat ~ " " ~ dateTime], true, [
+			230:Reply((string[] reply) {
+				if (handleNewNews)
+					handleNewNews(reply);
+			}),
+		], handleError));
+	}
+
+	void postMessage(string[] lines, void delegate() handlePosted=null, void delegate(string) handleError=null)
+	{
+		queue(Command(["POST"], false, [
+			340:Reply({
+				string[] postLines;
+				foreach (line; lines)
 					if (line.startsWith("."))
-						send("." ~ line);
+						postLines ~= "." ~ line;
 					else
-						send(line);
-				send(".");
-				postQueue = null;
-				break;
-			}
-			case "240": // Successful post reply
-			{
-				if (handlePosted)
-					handlePosted();
-				break;
-			}
-			default:
-				if (handleError)
-					handleError(reply[0]);
-				else
-					conn.disconnect("Unknown reply: " ~ reply[0], DisconnectType.Error);
-				break;
-		}
+						postLines ~= line;
+				postLines ~= ".";
+
+				send(Command(postLines, true, [
+					240:Reply({
+						if (handlePosted)
+							handlePosted();
+					}),
+				], handleError));
+			}),
+		], handleError));
 	}
 
-	void schedulePoll()
-	{
-		pollTimer = setTimeout(&poll, TickDuration.from!"seconds"(POLL_PERIOD));
-	}
-
-	void poll()
-	{
-		pollTimer = null;
-		send("DATE");
-		send("NEWNEWS * "~ lastTime[0..8] ~ " " ~ lastTime[8..14] ~ " GMT");
-	}
-
-public:
-	this(Logger log)
-	{
-		this.log = log;
-	}
-
-	void connect(string server)
-	{
-		this.server = server;
-
-		conn = new LineBufferedSocket(TickDuration.from!"seconds"(POLL_PERIOD*10));
-		conn.handleConnect = &onConnect;
-		conn.handleDisconnect = &onDisconnect;
-		conn.handleReadLine = &onReadLine;
-		reconnect();
-	}
-
-	/// TODO: Separate this behavior from the protocol implementation.
-	void startPolling(string lastTime = null)
-	{
-		assert(!polling, "Already polling");
-		polling = true;
-		this.lastTime = lastTime;
-		if (connected)
-			poll();
-	}
-
-	void disconnect()
-	{
-		conn.disconnect();
-	}
-
-	void listGroups()
-	{
-		send("LIST");
-	}
-
-	void selectGroup(string name)
-	{
-		expectingGroupList.queuePush(false);
-		send("GROUP " ~ name);
-	}
-
-	void listGroup(string name, int from = 1)
-	{
-		expectingGroupList.queuePush(true);
-		if (from > 1)
-			send(format("LISTGROUP %s %d-", name, from));
-		else
-			send(format("LISTGROUP %s", name));
-	}
-
-	void listGroupXover(string name, int from = 1)
-	{
-		selectGroup(name);
-		send(format("XOVER %d-", from));
-	}
-
-	void getMessage(string numOrID)
-	{
-		send("ARTICLE " ~ numOrID);
-	}
-
-	void getDate()
-	{
-		assert(!polling);
-		send("DATE");
-	}
-
-	void postMessage(string[] lines)
-	{
-		postQueue = lines;
-		send("POST");
-	}
-
-	void delegate() handleConnect;
-	void delegate(string reason) handleDisconnect;
-	void delegate(string error) handleError;
-	void delegate(GroupInfo[] groups) handleGroups;
-	void delegate(string[] messages) handleListGroup;
-	void delegate(string[] lines, string num, string id) handleMessage;
-	void delegate() handlePosted;
-	void delegate(string date) handleDate;
+	void delegate(string reason, DisconnectType type) handleDisconnect;
+	void delegate() handleIdle;
 }
