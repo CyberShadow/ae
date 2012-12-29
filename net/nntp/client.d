@@ -242,7 +242,7 @@ public:
 
 	void selectGroup(string name, void delegate() handleSuccess=null, void delegate(string) handleError=null)
 	{
-		queue(Command(["GROUP " ~ name], false, [
+		queue(Command(["GROUP " ~ name], true, [
 			211:Reply({
 				if (handleSuccess)
 					handleSuccess();
@@ -266,18 +266,17 @@ public:
 
 	void listGroupXover(string name, int from/* = 1*/, void delegate(string[] messages) handleListGroup, void delegate(string) handleError=null)
 	{
-		selectGroup(name, {
-			// Wait for GROUP reply before sending XOVER, in case GROUP fails
-			send(Command([format("XOVER %d-", from)], true, [
-				224:Reply((string[] reply) {
-					auto messages = new string[reply.length-1];
-					foreach (i, line; reply[1..$])
-						messages[i] = line.split("\t")[0];
-					if (handleListGroup)
-						handleListGroup(messages);
-				}),
-			], handleError));
-		}, handleError);
+		// TODO: handle GROUP command failure
+		selectGroup(name);
+		queue(Command([format("XOVER %d-", from)], true, [
+			224:Reply((string[] reply) {
+				auto messages = new string[reply.length-1];
+				foreach (i, line; reply[1..$])
+					messages[i] = line.split("\t")[0];
+				if (handleListGroup)
+					handleListGroup(messages);
+			}),
+		], handleError));
 	}
 
 	void listGroupXover(string name, void delegate(string[] messages) handleListGroup, void delegate(string) handleError=null) { listGroupXover(name, 1, handleListGroup, handleError); }
