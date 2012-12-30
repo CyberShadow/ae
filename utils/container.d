@@ -52,6 +52,67 @@ unittest
 
 // ***************************************************************************
 
+/// Helper/wrapper for void[0][T]
+struct HashSet(T)
+{
+	void[0][T] data;
+
+	alias data this;
+
+	void add(T k)
+	{
+		void[0] v;
+		data[k] = v;
+	}
+
+	void remove(T k)
+	{
+		data.remove(k);
+	}
+
+	@property HashSet!T dup() const
+	{
+		// Can't use .dup with void[0] value
+		HashSet!T result;
+		foreach (k, v; data)
+			result.add(k);
+		return result;
+	}
+
+	int opApply(scope int delegate(ref T) dg)
+	{
+		int result;
+		foreach (k, v; data)
+			if ((result = dg(k)) != 0)
+				break;
+		return result;
+	}
+}
+
+unittest
+{
+	HashSet!int s;
+	assert(s.length == 0);
+	assert(!(1 in s));
+	assert(1 !in s);
+	s.add(1);
+	assert(1 in s);
+	assert(s.length == 1);
+	foreach (k; s)
+		assert(k == 1);
+	s.remove(1);
+	assert(s.length == 0);
+
+	s.add(1);
+	auto t = s.dup;
+	s.add(2);
+	assert(t.length==1);
+	t.remove(1);
+	assert(t.length==0);
+}
+
+// ***************************************************************************
+
 import ae.utils.alloc;
 
 mixin template DListCommon(NODEREF)
