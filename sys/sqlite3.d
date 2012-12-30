@@ -215,6 +215,22 @@ final class SQLite
 				args[i] = column!(typeof(arg))(i);
 		}
 
+		T[] getArray(T=string)()
+		{
+			T[] result = new T[dataCount()];
+			foreach (i, ref value; result)
+				value = column!T(i);
+			return result;
+		}
+
+		T[string] getAssoc(T=string)()
+		{
+			T[string] result;
+			foreach (i; 0..dataCount())
+				result[columnName(i)] = column!T(i);
+			return result;
+		}
+
 		int columnCount()
 		{
 			return sqlite3_column_count(stmt);
@@ -223,6 +239,11 @@ final class SQLite
 		int dataCount()
 		{
 			return sqlite3_data_count(stmt);
+		}
+
+		string columnName(int idx)
+		{
+			return to!string(sqlite3_column_name(stmt, idx));
 		}
 
 		~this()
