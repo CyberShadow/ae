@@ -38,7 +38,6 @@ private:
 	void reconnect()
 	{
 		assert(!connected);
-		lastDate = null;
 		client.connect(server, &onConnect);
 	}
 
