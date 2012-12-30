@@ -403,7 +403,7 @@ public:
 
 	final void setKeepAlive(bool enabled=true, int time=10, int interval=5)
 	{
-		assert(conn);
+		assert(conn, "Attempting to set keep-alive on an uninitialized socket");
 		if (enabled)
 			conn.setKeepAlive(time, interval);
 		else
@@ -649,10 +649,10 @@ public:
 		{
 			if (type==DisconnectType.Requested)
 			{
-				assert(conn);
+				assert(conn, "Attempting to disconnect on an uninitialized socket");
 				// queue disconnect after all data is sent
 				//debug writefln("[%s] Queueing disconnect: ", remoteAddress, reason);
-				assert(!disconnecting, "Already disconnecting");
+				assert(!disconnecting, "Attempting to disconnect on a disconnecting socket");
 				disconnecting = true;
 				setIdleTimeout(TickDuration.from!"seconds"(30));
 				return;
@@ -683,14 +683,16 @@ public:
 	/// Append data to the send buffer.
 	final void send(Data data, int priority = DEFAULT_PRIORITY)
 	{
-		assert(connected && !disconnecting);
+		assert(connected, "Attempting to send on a disconnected socket");
+		assert(!disconnecting, "Attempting to send on a disconnecting socket");
 		outQueue[priority] ~= data;
 	}
 
 	/// ditto
 	final void send(Data[] data, int priority = DEFAULT_PRIORITY)
 	{
-		assert(connected && !disconnecting);
+		assert(connected, "Attempting to send on a disconnected socket");
+		assert(!disconnecting, "Attempting to send on a disconnecting socket");
 		outQueue[priority] ~= data;
 	}
 
@@ -869,7 +871,7 @@ public:
 	ushort listen(ushort port, string addr = null)
 	{
 		//debug writefln("Listening on %s:%d", addr, port);
-		assert(!listening);
+		assert(!listening, "Attempting to listen on a listening socket");
 
 		auto addressInfos = getAddressInfo(addr, to!string(port), AddressInfoFlags.PASSIVE, SocketType.STREAM, ProtocolType.TCP);
 
