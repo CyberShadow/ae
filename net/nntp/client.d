@@ -85,7 +85,8 @@ private:
 	{
 		log("* Disconnected (" ~ reason ~ ")");
 		foreach (command; queuedCommands ~ sentCommands)
-			command.handleError("Disconnected from server (" ~ reason ~ ")");
+			if (command.handleError)
+				command.handleError("Disconnected from server (" ~ reason ~ ")");
 
 		queuedCommands = sentCommands = null;
 		replyLines = null;
