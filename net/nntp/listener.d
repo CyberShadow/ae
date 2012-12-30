@@ -53,33 +53,6 @@ private:
 		client.getNewNews("*", lastDate[0..8] ~ " " ~ lastDate[8..14] ~ " GMT", &onNewNews);
 	}
 
-public:
-	this(Logger log)
-	{
-		client = new NntpClient(log);
-		client.handleDisconnect = &onDisconnect;
-	}
-
-	void connect(string server)
-	{
-		this.server = server;
-		reconnect();
-	}
-
-	void disconnect()
-	{
-		client.disconnect();
-	}
-
-	void startPolling(string lastDate = null)
-	{
-		assert(!polling, "Already polling");
-		polling = true;
-		this.lastDate = lastDate;
-		if (connected)
-			poll();
-	}
-
 	void onConnect()
 	{
 		connected = true;
@@ -144,6 +117,33 @@ public:
 			if (queued==0)
 				schedulePoll();
 		}
+	}
+
+public:
+	this(Logger log)
+	{
+		client = new NntpClient(log);
+		client.handleDisconnect = &onDisconnect;
+	}
+
+	void connect(string server)
+	{
+		this.server = server;
+		reconnect();
+	}
+
+	void disconnect()
+	{
+		client.disconnect();
+	}
+
+	void startPolling(string lastDate = null)
+	{
+		assert(!polling, "Already polling");
+		polling = true;
+		this.lastDate = lastDate;
+		if (connected)
+			poll();
 	}
 
 	void delegate(string[] lines, string num, string id) handleMessage;
