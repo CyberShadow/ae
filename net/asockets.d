@@ -43,296 +43,334 @@ else
 	enum USE_SLEEP = false;
 
 /// Flags that determine socket wake-up events.
-private struct PollFlags
-{
-	/// Wake up when socket is readable.
-	bool read;
-	/// Wake up when socket is writable.
-	bool write;
-	/// Wake up when an error occurs on the socket.
-	bool error;
-}
-
 int eventCounter;
 
-struct SelectSocketManager
+version(LIBEV)
 {
-private:
-	enum FD_SETSIZE = 1024;
+	// Watchers are a GenericSocket field (as declared in SocketMixin).
+	// Use one watcher per read and write event.
+	// Start/stop those as higher-level code declares interest in those events.
+	// Use the "data" ev_io field to store the parent GenericSocket address.
+	// Also use the "data" field as a flag to indicate whether the watcher is active
+	// (data is null when the watcher is stopped).
 
-	/// List of all sockets to poll.
-	GenericSocket[] sockets;
-
-	/// Register a socket with the manager.
-	void register(GenericSocket conn)
+	struct SocketManager
 	{
-		sockets ~= conn;
-	}
-
-	/// Unregister a socket with the manager.
-	void unregister(GenericSocket conn)
-	{
-		foreach (size_t i, GenericSocket j; sockets)
-			if (j is conn)
-			{
-				sockets = sockets[0 .. i] ~ sockets[i + 1 .. sockets.length];
-				return;
-			}
-		assert(false, "Socket not registered");
-	}
-
-public:
-	size_t size()
-	{
-		return sockets.length;
-	}
-
-	/// Loop continuously until no sockets are left.
-	void loop()
-	{
-		SocketSet readset, writeset, errorset;
-		size_t sockcount;
-		readset  = new SocketSet(FD_SETSIZE);
-		writeset = new SocketSet(FD_SETSIZE);
-		errorset = new SocketSet(FD_SETSIZE);
-		while (true)
+	private:
+		extern(C)
+		static void ioCallback(ev_loop_t* l, ev_io* w, int revents)
 		{
-			// SocketSet.add() doesn't have an overflow check, so we need to do it manually
-			// this is just a debug check, the actual check is done when registering sockets
-			// TODO: this is inaccurate on POSIX, "max" means maximum fd value
-			if (sockets.length > readset.max || sockets.length > writeset.max || sockets.length > errorset.max)
-			{
-				readset  = new SocketSet(to!uint(sockets.length*2));
-				writeset = new SocketSet(to!uint(sockets.length*2));
-				errorset = new SocketSet(to!uint(sockets.length*2));
-			}
+			eventCounter++;
+			auto socket = cast(GenericSocket)w.data;
+			assert(socket, "libev event fired on stopped watcher");
+			debug (ASOCKETS) writefln("ioCallback(%s, 0x%X)", cast(void*)socket, revents);
+
+			if (revents & EV_READ)
+				socket.onReadable();
 			else
-			{
-				readset.reset();
-				writeset.reset();
-				errorset.reset();
-			}
+			if (revents & EV_WRITE)
+				socket.onWritable();
+			else
+				assert(false, "Unknown event fired from libev");
+		}
 
-			sockcount = 0;
-			debug (ASOCKETS) writeln("Populating sets");
-			foreach (GenericSocket conn; sockets)
-			{
-				if (!conn.socket)
-					continue;
-				sockcount++;
+		ev_timer evTimer;
+		TickDuration lastNextEvent = Timer.NEVER;
 
-				debug (ASOCKETS) writef("\t%s:", cast(void*)conn);
-				PollFlags flags = conn.pollFlags();
-				if (flags.read)
-				{
-					readset.add(conn.socket);
-					debug (ASOCKETS) write(" READ");
-				}
-				if (flags.write)
-				{
-					writeset.add(conn.socket);
-					debug (ASOCKETS) write(" WRITE");
-				}
-				if (flags.error)
-				{
-					errorset.add(conn.socket);
-					debug (ASOCKETS) write(" ERROR");
-				}
-				debug (ASOCKETS) writeln();
-			}
-			debug (ASOCKETS) writeln("Waiting...");
-			if (sockcount == 0 && !mainTimer.isWaiting())
-				break;
+		extern(C)
+		static void timerCallback(ev_loop_t* l, ev_timer* w, int revents)
+		{
+			eventCounter++;
+			mainTimer.prod();
+			auto pthis = cast(typeof(this)*) w.data;
+			pthis.updateTimer();
+		}
 
-			int events;
-			if (USE_SLEEP && sockcount==0)
+		void updateTimer()
+		{
+			auto nextEvent = mainTimer.getNextEvent();
+			if (lastNextEvent != nextEvent)
 			{
-				version(Windows)
+				if (nextEvent == Timer.NEVER) // Stopping
 				{
-					Sleep(mainTimer.getRemainingTime().to!("msecs", int)());
-					events = 0;
+					ev_timer_stop(ev_default_loop(0), &evTimer);
 				}
 				else
-					assert(0);
+				{
+					ev_tstamp tstamp = mainTimer.getRemainingTime().to!("seconds", ev_tstamp)();
+					if (lastNextEvent == Timer.NEVER) // Starting
+					{
+						evTimer.data = &this;
+						ev_timer_init(&evTimer, &timerCallback, 0., tstamp);
+						ev_timer_start(ev_default_loop(0), &evTimer);
+					}
+					else // Adjusting
+					{
+						evTimer.repeat = tstamp;
+						ev_timer_again(ev_default_loop(0), &evTimer);
+					}
+				}
+				lastNextEvent = nextEvent;
+			}
+		}
+
+		/// Register a socket with the manager.
+		void register(GenericSocket socket)
+		{
+			debug (ASOCKETS) writefln("Registering %s", cast(void*)socket);
+			debug assert(socket.evRead.data is null && socket.evWrite.data is null, "Re-registering a started socket");
+			auto fd = socket.conn.handle;
+			assert(fd, "Must have fd before socket registration");
+			ev_io_init(&socket.evRead , &ioCallback, fd, EV_READ );
+			ev_io_init(&socket.evWrite, &ioCallback, fd, EV_WRITE);
+		}
+
+		/// Unregister a socket with the manager.
+		void unregister(GenericSocket socket)
+		{
+			debug (ASOCKETS) writefln("Unregistering %s", cast(void*)socket);
+			socket.notifyRead  = false;
+			socket.notifyWrite = false;
+		}
+
+		Watcher* getWatcher(GenericSocket socket)
+		{
+			auto fd = socket.conn.handle;
+			return watchers[fd];
+		}
+
+	public:
+		size_t size()
+		{
+			return watchers.length;
+		}
+
+		/// Loop continuously until no sockets are left.
+		void loop()
+		{
+			auto evLoop = ev_default_loop(0);
+			enforce(evLoop, "libev initialization failure");
+
+			updateTimer();
+			debug (ASOCKETS) writeln("ev_run");
+			ev_run(ev_default_loop(0), 0);
+		}
+	}
+
+	private mixin template SocketMixin()
+	{
+		private ev_io evRead, evWrite;
+
+		private void setWatcherState(ref ev_io ev, bool newValue, int event)
+		{
+			if (conn)
+			{
+				// Can happen when setting delegates before connecting.
+				return;
+			}
+
+			if (newValue && !ev.data)
+			{
+				// Start
+				ev.data = this;
+				ev_io_start(ev_default_loop(0), ev);
 			}
 			else
-			if (mainTimer.isWaiting())
+			if (!newValue && ev.data)
 			{
-				auto duration = mainTimer.getRemainingTime().to!("usecs", long)();
-				if (duration > int.max)
-					duration = int.max;
-				debug (ASOCKETS) writeln("Wait duration: ", duration, " usecs");
-				events = Socket.select(readset, writeset, errorset, duration);
+				// Stop
+				assert(ev.data is this);
+				ev.data = null;
+				ev_io_stop(ev_default_loop(0), ev);
 			}
-			else
-				events = Socket.select(readset, writeset, errorset);
+		}
 
-			debug (ASOCKETS) writefln("%d events fired.", events);
-			mainTimer.prod();
+		/// Interested in read notifications (onReadable)?
+		@property final void notifyRead (bool value) { setWatcherState(evRead , value, EV_READ ); }
+		/// Interested in write notifications (onWritable)?
+		@property final void notifyWrite(bool value) { setWatcherState(evWrite, value, EV_WRITE); }
 
-			if (events > 0)
+		debug ~this()
+		{
+			// The LIBEV SocketManager holds no references to registered sockets.
+			// TODO: Add a doubly-linked list?
+			assert(evRead.data is null && evWrite.data is null, "Destroying a registered socket");
+		}
+	}
+}
+else // Use select
+{
+	struct SocketManager
+	{
+	private:
+		enum FD_SETSIZE = 1024;
+
+		/// List of all sockets to poll.
+		GenericSocket[] sockets;
+
+		/// Register a socket with the manager.
+		void register(GenericSocket conn)
+		{
+			sockets ~= conn;
+		}
+
+		/// Unregister a socket with the manager.
+		void unregister(GenericSocket conn)
+		{
+			foreach (size_t i, GenericSocket j; sockets)
+				if (j is conn)
+				{
+					sockets = sockets[0 .. i] ~ sockets[i + 1 .. sockets.length];
+					return;
+				}
+			assert(false, "Socket not registered");
+		}
+
+	public:
+		size_t size()
+		{
+			return sockets.length;
+		}
+
+		/// Loop continuously until no sockets are left.
+		void loop()
+		{
+			debug (ASOCKETS) writeln("Starting event loop.");
+
+			SocketSet readset, writeset, errorset;
+			size_t sockcount;
+			readset  = new SocketSet(FD_SETSIZE);
+			writeset = new SocketSet(FD_SETSIZE);
+			errorset = new SocketSet(FD_SETSIZE);
+			while (true)
 			{
+				// SocketSet.add() doesn't have an overflow check, so we need to do it manually
+				// this is just a debug check, the actual check is done when registering sockets
+				// TODO: this is inaccurate on POSIX, "max" means maximum fd value
+				if (sockets.length > readset.max || sockets.length > writeset.max || sockets.length > errorset.max)
+				{
+					readset  = new SocketSet(to!uint(sockets.length*2));
+					writeset = new SocketSet(to!uint(sockets.length*2));
+					errorset = new SocketSet(to!uint(sockets.length*2));
+				}
+				else
+				{
+					readset.reset();
+					writeset.reset();
+					errorset.reset();
+				}
+
+				sockcount = 0;
+				debug (ASOCKETS) writeln("Populating sets");
 				foreach (GenericSocket conn; sockets)
 				{
 					if (!conn.socket)
-					{
-						debug (ASOCKETS) writefln("\t%s is unset", cast(void*)conn);
 						continue;
-					}
-					if (readset.isSet(conn.socket))
-					{
-						debug (ASOCKETS) writefln("\t%s is readable", cast(void*)conn);
-						conn.onReadable();
-					}
+					sockcount++;
 
-					if (!conn.socket)
+					debug (ASOCKETS) writef("\t%s:", cast(void*)conn);
+					if (conn.notifyRead)
 					{
-						debug (ASOCKETS) writefln("\t%s is unset", cast(void*)conn);
-						continue;
+						readset.add(conn.socket);
+						debug (ASOCKETS) write(" READ");
 					}
-					if (writeset.isSet(conn.socket))
+					if (conn.notifyWrite)
 					{
-						debug (ASOCKETS) writefln("\t%s is writable", cast(void*)conn);
-						conn.onWritable();
+						writeset.add(conn.socket);
+						debug (ASOCKETS) write(" WRITE");
 					}
-
-					if (!conn.socket)
-					{
-						debug (ASOCKETS) writefln("\t%s is unset", cast(void*)conn);
-						continue;
-					}
-					if (errorset.isSet(conn.socket))
-					{
-						debug (ASOCKETS) writefln("\t%s is errored", cast(void*)conn);
-						conn.onError("select() error: " ~ conn.socket.getErrorText());
-					}
+					errorset.add(conn.socket);
+					debug (ASOCKETS) writeln();
 				}
-			}
-
-			eventCounter++;
-		}
-	}
-}
-
-version(LIBEV)
-struct LibevSocketManager
-{
-	// TODO: honor flags
-private:
-	static struct Watcher
-	{
-		// TODO: one watcher for read and write events?
-		ev_io evWatcher;
-		GenericSocket socket;
-	}
-
-	Watcher*[] watchers;
-
-	extern(C)
-	static void ioCallback(ev_loop_t* l, ev_io* w, int revents)
-	{
-		eventCounter++;
-		auto watcher = cast(Watcher*)w;
-		auto socket = watcher.socket;
-		debug (ASOCKETS) writefln("ioCallback(%s, 0x%X)", cast(void*)socket, revents);
-
-		if (revents & EV_READ)
-			socket.onReadable();
-		if (!socket.conn) return;
-
-		if (revents & EV_WRITE)
-			socket.onWritable();
-	}
-
-	ev_timer evTimer;
-	TickDuration lastNextEvent = Timer.NEVER;
-
-	extern(C)
-	static void timerCallback(ev_loop_t* l, ev_timer* w, int revents)
-	{
-		eventCounter++;
-		mainTimer.prod();
-		auto pthis = cast(typeof(this)*) w.data;
-		pthis.updateTimer();
-	}
-
-	void updateTimer()
-	{
-		auto nextEvent = mainTimer.getNextEvent();
-		if (lastNextEvent != nextEvent)
-		{
-			if (nextEvent == Timer.NEVER) // Stopping
-			{
-				ev_timer_stop(ev_default_loop(0), &evTimer);
-			}
-			else
-			{
-				ev_tstamp tstamp = mainTimer.getRemainingTime().to!("seconds", ev_tstamp)();
-				if (lastNextEvent == Timer.NEVER) // Starting
+				debug (ASOCKETS) writefln("Waiting (%d sockets, %s timer events)...", sockcount, mainTimer.isWaiting() ? "with" : "no");
+				if (sockcount == 0 && !mainTimer.isWaiting())
 				{
-					evTimer.data = &this;
-					ev_timer_init(&evTimer, &timerCallback, 0., tstamp);
-					ev_timer_start(ev_default_loop(0), &evTimer);
+					debug (ASOCKETS) writeln("No more sockets or timer events, exiting loop.");
+					break;
 				}
-				else // Adjusting
+
+				int events;
+				if (USE_SLEEP && sockcount==0)
 				{
-					evTimer.repeat = tstamp;
-					ev_timer_again(ev_default_loop(0), &evTimer);
+					version(Windows)
+					{
+						auto duration = mainTimer.getRemainingTime().to!("msecs", int)();
+						debug (ASOCKETS) writeln("Wait duration: ", duration, " msecs");
+						if (duration == 0)
+							duration = 1; // Avoid busywait
+						Sleep(duration);
+						events = 0;
+					}
+					else
+						assert(0);
 				}
+				else
+				if (mainTimer.isWaiting())
+				{
+					auto duration = mainTimer.getRemainingTime().to!("usecs", long)();
+					if (duration > int.max)
+						duration = int.max;
+					debug (ASOCKETS) writeln("Wait duration: ", duration, " usecs");
+					events = Socket.select(readset, writeset, errorset, duration);
+				}
+				else
+					events = Socket.select(readset, writeset, errorset);
+
+				debug (ASOCKETS) writefln("%d events fired.", events);
+				mainTimer.prod();
+
+				if (events > 0)
+				{
+					foreach (GenericSocket conn; sockets)
+					{
+						if (!conn.socket)
+						{
+							debug (ASOCKETS) writefln("\t%s is unset", cast(void*)conn);
+							continue;
+						}
+						if (readset.isSet(conn.socket))
+						{
+							debug (ASOCKETS) writefln("\t%s is readable", cast(void*)conn);
+							conn.onReadable();
+						}
+
+						if (!conn.socket)
+						{
+							debug (ASOCKETS) writefln("\t%s is unset", cast(void*)conn);
+							continue;
+						}
+						if (writeset.isSet(conn.socket))
+						{
+							debug (ASOCKETS) writefln("\t%s is writable", cast(void*)conn);
+							conn.onWritable();
+						}
+
+						if (!conn.socket)
+						{
+							debug (ASOCKETS) writefln("\t%s is unset", cast(void*)conn);
+							continue;
+						}
+						if (errorset.isSet(conn.socket))
+						{
+							debug (ASOCKETS) writefln("\t%s is errored", cast(void*)conn);
+							conn.onError("select() error: " ~ conn.socket.getErrorText());
+						}
+					}
+				}
+
+				eventCounter++;
 			}
-			lastNextEvent = nextEvent;
 		}
 	}
 
-	/// Register a socket with the manager.
-	void register(GenericSocket socket)
+	private mixin template SocketMixin()
 	{
-		debug (ASOCKETS) writefln("Registering %s", cast(void*)socket);
-		auto fd = socket.conn.handle;
-		assert(fd, "Must have fd before socket registration");
-		if (watchers.length <= fd)
-			watchers.length = nextPowerOfTwo(cast(size_t)fd);
-		Watcher* watcher = watchers[fd];
-		if (!watcher)
-			watcher = watchers[fd] = new Watcher;
-		debug assert(watcher.socket is null);
-		watcher.socket = socket;
-		ev_io_init(&watcher.evWatcher, &ioCallback, fd, EV_READ | EV_WRITE);
-		ev_io_start(ev_default_loop(0), &watcher.evWatcher);
-	}
-
-	/// Unregister a socket with the manager.
-	void unregister(GenericSocket socket)
-	{
-		debug (ASOCKETS) writefln("Unregistering %s", cast(void*)socket);
-		auto fd = socket.conn.handle;
-		auto watcher = watchers[fd];
-		ev_io_stop(ev_default_loop(0), &watcher.evWatcher);
-		debug watcher.socket = null;
-	}
-
-public:
-	size_t size()
-	{
-		return watchers.length;
-	}
-
-	/// Loop continuously until no sockets are left.
-	void loop()
-	{
-		auto evLoop = ev_default_loop(0);
-		enforce(evLoop, "libev initialization failure");
-
-		updateTimer();
-		debug (ASOCKETS) writeln("ev_run");
-		ev_run(ev_default_loop(0), 0);
+		/// Interested in read notifications (onReadable)?
+		bool notifyRead;
+		/// Interested in write notifications (onWritable)?
+		bool notifyWrite;
 	}
 }
-
-version(LIBEV)
-	alias LibevSocketManager SocketManager;
-else
-	alias SelectSocketManager SocketManager;
 
 enum DisconnectType
 {
@@ -344,6 +382,9 @@ enum DisconnectType
 /// General methods for an asynchronous socket
 private abstract class GenericSocket
 {
+	/// Declares notifyRead and notifyWrite.
+	mixin SocketMixin;
+
 protected:
 	/// The socket this class wraps.
 	Socket conn;
@@ -353,14 +394,6 @@ protected:
 	@property final Socket socket()
 	{
 		return conn;
-	}
-
-	/// Retrieve the poll flags for this socket.
-	PollFlags pollFlags()
-	{
-		PollFlags flags;
-		flags.read = flags.write = flags.error = false;
-		return flags;
 	}
 
 	void onReadable()
@@ -452,24 +485,17 @@ protected:
 		connected = !(conn is null);
 		if (connected)
 			socketManager.register(this);
+		updateFlags();
 	}
 
-	/// Retrieve the poll flags for this socket.
-	override PollFlags pollFlags()
+	final void updateFlags()
 	{
-		PollFlags flags;
-
-		flags.error = true;
-
 		if (!connected)
-			flags.write = true;
+			notifyWrite = true;
 		else
-			flags.write = writePending;
+			notifyWrite = writePending;
 
-		if (connected && handleReadData)
-			flags.read = true;
-
-		return flags;
+		notifyRead = connected && handleReadData;
 	}
 
 	/// Called when a socket is readable.
@@ -496,12 +522,12 @@ protected:
 				if (received < UNMANAGED_THRESHOLD)
 				{
 					// Copy to the managed heap
-					handleReadData(this, Data(inBuffer[0 .. received].dup));
+					_handleReadData(this, Data(inBuffer[0 .. received].dup));
 				}
 				else
 				{
 					// Copy to unmanaged memory
-					handleReadData(this, Data(inBuffer[0 .. received], true));
+					_handleReadData(this, Data(inBuffer[0 .. received], true));
 				}
 			}
 	}
@@ -509,6 +535,8 @@ protected:
 	/// Called when a socket is writable.
 	override void onWritable()
 	{
+		scope(success) updateFlags();
+
 		if (!connected)
 		{
 			connected = true;
@@ -608,6 +636,7 @@ protected:
 			conn.blocking = false;
 
 			socketManager.register(this);
+			updateFlags();
 			conn.connect(address);
 		}
 		catch (SocketException e)
@@ -645,6 +674,8 @@ public:
 	/// Close a connection. If there is queued data waiting to be sent, wait until it is sent before disconnecting.
 	void disconnect(string reason = DefaultDisconnectReason, DisconnectType type = DisconnectType.Requested)
 	{
+		scope(success) updateFlags();
+
 		if (writePending)
 		{
 			if (type==DisconnectType.Requested)
@@ -686,6 +717,7 @@ public:
 		assert(connected, "Attempting to send on a disconnected socket");
 		assert(!disconnecting, "Attempting to send on a disconnecting socket");
 		outQueue[priority] ~= data;
+		notifyWrite = true; // Fast updateFlags()
 	}
 
 	/// ditto
@@ -694,6 +726,7 @@ public:
 		assert(connected, "Attempting to send on a disconnected socket");
 		assert(!disconnecting, "Attempting to send on a disconnecting socket");
 		outQueue[priority] ~= data;
+		notifyWrite = true; // Fast updateFlags()
 	}
 
 	final void clearQueue(int priority)
@@ -705,6 +738,7 @@ public:
 		}
 		else
 			outQueue[priority] = null;
+		updateFlags();
 	}
 
 	/// Clears all queues, even partially sent content.
@@ -715,6 +749,7 @@ public:
 			outQueue[priority] = null;
 			partiallySent[priority] = false;
 		}
+		updateFlags();
 	}
 
 	@property
@@ -789,10 +824,15 @@ public:
 	void delegate(ClientSocket sender, string reason, DisconnectType type) handleDisconnect;
 	/// Callback for when a connection has stopped responding.
 	void delegate(ClientSocket sender) handleIdleTimeout;
-	/// Callback for incoming data.
-	void delegate(ClientSocket sender, Data data) handleReadData;
 	/// Callback for when the send buffer has been flushed.
 	void delegate(ClientSocket sender) handleBufferFlushed;
+
+	private void delegate(ClientSocket sender, Data data) _handleReadData;
+	/// Callback for incoming data.
+	/// Data will not be received unless this handler is set.
+	@property final void delegate(ClientSocket sender, Data data) handleReadData() { return _handleReadData; }
+	/// ditto
+	@property final void handleReadData(void delegate(ClientSocket sender, Data data) value) { _handleReadData = value; updateFlags(); }
 }
 
 /// An asynchronous server socket.
@@ -809,17 +849,6 @@ private:
 			socketManager.register(this);
 		}
 
-		/// Retrieve the poll flags for this socket.
-		override PollFlags pollFlags()
-		{
-			PollFlags flags;
-
-			flags.error = true;
-			flags.read = handleAccept !is null;
-
-			return flags;
-		}
-
 		/// Called when a socket is readable.
 		override void onReadable()
 		{
@@ -831,7 +860,7 @@ private:
 				connection.setKeepAlive();
 				//assert(connection.connected);
 				//connection.connected = true;
-				handleAccept(connection);
+				_handleAccept(connection);
 			}
 			else
 				acceptSocket.close();
@@ -861,6 +890,12 @@ private:
 	bool listening;
 	/// Listener instances
 	Listener[] listeners;
+
+	final void updateFlags()
+	{
+		foreach (listener; listeners)
+			listener.notifyRead = handleAccept !is null;
+	}
 
 public:
 	/// Debugging aids
@@ -909,6 +944,8 @@ public:
 		this.port = port;
 		this.addr = addr;
 
+		updateFlags();
+
 		return port;
 	}
 
@@ -934,8 +971,13 @@ public:
 public:
 	/// Callback for when the socket was closed.
 	void delegate() handleClose;
+
+	private void delegate(T incoming) _handleAccept;
 	/// Callback for an incoming connection.
-	void delegate(T incoming) handleAccept;
+	/// Connections will not be accepted unless this handler is set.
+	@property final void delegate(T incoming) handleAccept() { return _handleAccept; }
+	/// ditto
+	@property final void handleAccept(void delegate(T incoming) value) { _handleAccept = value; updateFlags(); }
 }
 
 /// Server socket type for ordinary sockets.
@@ -1033,4 +1075,3 @@ unittest
 
 	testTimer();
 }
-
