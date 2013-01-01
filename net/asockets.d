@@ -57,6 +57,8 @@ version(LIBEV)
 	struct SocketManager
 	{
 	private:
+		size_t count;
+
 		extern(C)
 		static void ioCallback(ev_loop_t* l, ev_io* w, int revents)
 		{
@@ -123,6 +125,7 @@ version(LIBEV)
 			assert(fd, "Must have fd before socket registration");
 			ev_io_init(&socket.evRead , &ioCallback, fd, EV_READ );
 			ev_io_init(&socket.evWrite, &ioCallback, fd, EV_WRITE);
+			count++;
 		}
 
 		/// Unregister a socket with the manager.
@@ -131,18 +134,13 @@ version(LIBEV)
 			debug (ASOCKETS) writefln("Unregistering %s", cast(void*)socket);
 			socket.notifyRead  = false;
 			socket.notifyWrite = false;
-		}
-
-		Watcher* getWatcher(GenericSocket socket)
-		{
-			auto fd = socket.conn.handle;
-			return watchers[fd];
+			count--;
 		}
 
 	public:
 		size_t size()
 		{
-			return watchers.length;
+			return count;
 		}
 
 		/// Loop continuously until no sockets are left.
@@ -163,7 +161,7 @@ version(LIBEV)
 
 		private void setWatcherState(ref ev_io ev, bool newValue, int event)
 		{
-			if (conn)
+			if (!conn)
 			{
 				// Can happen when setting delegates before connecting.
 				return;
@@ -172,16 +170,16 @@ version(LIBEV)
 			if (newValue && !ev.data)
 			{
 				// Start
-				ev.data = this;
-				ev_io_start(ev_default_loop(0), ev);
+				ev.data = cast(void*)this;
+				ev_io_start(ev_default_loop(0), &ev);
 			}
 			else
 			if (!newValue && ev.data)
 			{
 				// Stop
-				assert(ev.data is this);
+				assert(ev.data is cast(void*)this);
 				ev.data = null;
-				ev_io_stop(ev_default_loop(0), ev);
+				ev_io_stop(ev_default_loop(0), &ev);
 			}
 		}
 
