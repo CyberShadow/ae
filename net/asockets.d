@@ -74,6 +74,9 @@ version(LIBEV)
 				socket.onWritable();
 			else
 				assert(false, "Unknown event fired from libev");
+
+			// TODO? Need to get proper SocketManager instance to call updateTimer on
+			socketManager.updateTimer(false);
 		}
 
 		ev_timer evTimer;
@@ -83,26 +86,37 @@ version(LIBEV)
 		static void timerCallback(ev_loop_t* l, ev_timer* w, int revents)
 		{
 			eventCounter++;
+			debug (ASOCKETS) writefln("Timer callback called.");
 			mainTimer.prod();
-			auto pthis = cast(typeof(this)*) w.data;
-			pthis.updateTimer();
+
+			socketManager.updateTimer(true);
+			debug (ASOCKETS) writefln("Timer callback exiting.");
 		}
 
-		void updateTimer()
+		void updateTimer(bool force)
 		{
 			auto nextEvent = mainTimer.getNextEvent();
-			if (lastNextEvent != nextEvent)
+			if (force || lastNextEvent != nextEvent)
 			{
+				debug (ASOCKETS) writefln("Rescheduling timer. Was at %s, now at %s", lastNextEvent, nextEvent);
 				if (nextEvent == Timer.NEVER) // Stopping
 				{
-					ev_timer_stop(ev_default_loop(0), &evTimer);
+					if (lastNextEvent != Timer.NEVER)
+						ev_timer_stop(ev_default_loop(0), &evTimer);
 				}
 				else
 				{
-					ev_tstamp tstamp = mainTimer.getRemainingTime().to!("seconds", ev_tstamp)();
+					auto remaining = mainTimer.getRemainingTime();
+					while (remaining.length <= 0)
+					{
+						debug (ASOCKETS) writefln("remaining=%s, prodding timer.", remaining);
+						mainTimer.prod();
+						remaining = mainTimer.getRemainingTime();
+					}
+					ev_tstamp tstamp = remaining.to!("seconds", ev_tstamp)();
+					debug (ASOCKETS) writefln("remaining=%s, ev_tstamp=%s", remaining, tstamp);
 					if (lastNextEvent == Timer.NEVER) // Starting
 					{
-						evTimer.data = &this;
 						ev_timer_init(&evTimer, &timerCallback, 0., tstamp);
 						ev_timer_start(ev_default_loop(0), &evTimer);
 					}
@@ -149,7 +163,7 @@ version(LIBEV)
 			auto evLoop = ev_default_loop(0);
 			enforce(evLoop, "libev initialization failure");
 
-			updateTimer();
+			updateTimer(true);
 			debug (ASOCKETS) writeln("ev_run");
 			ev_run(ev_default_loop(0), 0);
 		}
