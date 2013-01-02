@@ -63,7 +63,10 @@ version(Windows)
 void register()
 {
 	version(Posix)
+	{
 		addSignalHandler(SIGTERM, { syncShutdown(); });
+		addSignalHandler(SIGINT , { syncShutdown(); });
+	}
 	else
 	version(Windows)
 	{
