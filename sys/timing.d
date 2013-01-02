@@ -21,6 +21,8 @@ import core.time;
 
 public import core.time : TickDuration;
 
+debug(TIMER) import std.stdio;
+
 static this()
 {
 	// Bug 6631
@@ -88,7 +90,7 @@ private:
 	/// Unschedule a task.
 	void remove(TimerTask task)
 	{
-		debug (TIMER_VERBOSE) writefln("Removing a task which waits for %d tick%s.", task.delay, task.delay==1?"":"s");
+		debug (TIMER_VERBOSE) writefln("Removing a task which waits for %d ticks.", task.delay);
 		assert(task.owner is this);
 		if (task is head)
 		{
@@ -96,7 +98,7 @@ private:
 			{
 				head = head.next;
 				head.prev = null;
-				debug (TIMER_VERBOSE) writefln("Removed current task, next task is waiting for %d tick%s, %d remaining.", head.delay, head.delay==1?"":"s", head.remaining);
+				debug (TIMER_VERBOSE) writefln("Removed current task, next task is waiting for %d ticks (next at %d).", head.delay, head.when);
 			}
 			else
 			{
@@ -145,19 +147,19 @@ public:
 			{
 				TimerTask task = head;
 				remove(head);
-				debug (TIMER) writefln("%d: Firing a task that waited for %d of %d tick%s.", now, head.delay + (now - head.when), task.delay, task.delay.length==1?"":"s");
+				debug (TIMER) writefln("%d: Firing a task that waited for %d of %d ticks.", now, task.delay + (now - task.when), task.delay);
 				if (task.handleTask)
 					task.handleTask(this, task);
 			}
 
-			debug (TIMER_VERBOSE) if (head !is null) writefln("Current task is waiting for %d tick%s, %d remaining.", head.delay, head.delay==1?"":"s", head.when - now);
+			debug (TIMER_VERBOSE) if (head !is null) writefln("Current task is waiting for %d ticks, %d remaining.", head.delay, head.when - now);
 		}
 	}
 
 	/// Add a new task to the timer.
 	void add(TimerTask task)
 	{
-		debug (TIMER_VERBOSE) writefln("Adding a task which waits for %d tick%s.", task.delay, task.delay==1?"":"s");
+		debug (TIMER_VERBOSE) writefln("Adding a task which waits for %d ticks.", task.delay);
 		assert(task.owner is null);
 		add(task, null);
 		assert(task.owner is this);
@@ -170,7 +172,7 @@ public:
 		TimerTask tmp;
 
 		assert(task.owner is this);
-		debug (TIMER_VERBOSE) writefln("Restarting a task which waits for %d tick%s.", task.delay, task.delay==1?"":"s");
+		debug (TIMER_VERBOSE) writefln("Restarting a task which waits for %d ticks.", task.delay);
 
 		// Store current position, as the new position must be after it
 		tmp = task.next !is null ? task.next : task.prev;
@@ -203,7 +205,7 @@ public:
 			return NEVER;
 
 		auto now = TickDuration.currSystemTick();
-		if (now < head.when)
+		if (now < head.when) // "when" is in the future
 			return head.when - now;
 		else
 			return TickDuration(0);
