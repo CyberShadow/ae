@@ -22,7 +22,7 @@ public import ae.utils.math;
 
 // TODO: rewrite everything to use stride in bytes, not pixels
 
-struct Coord { int x, y; string toString() { return format([this.tupleof]); } }
+struct Coord { int x, y; string toString() { return format("%s", [this.tupleof]); } }
 
 template IsCanvas(T)
 {

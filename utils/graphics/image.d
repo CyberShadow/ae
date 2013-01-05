@@ -232,6 +232,7 @@ struct Image(COLOR)
 
 		enum PNGFilterAdaptive : ubyte { NONE, SUB, UP, AVERAGE, PAETH }
 
+		align(1)
 		struct PNGHeader
 		{
 		align(1):
@@ -312,6 +313,7 @@ struct Image(COLOR)
 	align(1)
 	struct BitmapHeader
 	{
+	align(1):
 		// BITMAPFILEHEADER
 		char[2] bfType = "BM";
 		uint    bfSize;

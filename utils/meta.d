@@ -51,7 +51,7 @@ mixin template FieldList(Fields...)
 	mixin(GenFieldList!(void, Fields));
 }
 
-private template GenFieldList(T, Fields...)
+template GenFieldList(T, Fields...)
 {
 	static if (Fields.length == 0)
 		enum GenFieldList = "";
