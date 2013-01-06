@@ -30,6 +30,7 @@ struct CustomJsonWriter(WRITER)
 	void putString(string s)
 	{
 		// TODO: escape Unicode characters?
+		// TODO: Handle U+2028 and U+2029 ( http://timelessrepo.com/json-isnt-a-javascript-subset )
 
 		output.put('"');
 		auto start = s.ptr, p = start, end = start+s.length;
