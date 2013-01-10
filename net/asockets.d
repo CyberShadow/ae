@@ -711,7 +711,7 @@ public:
 			conn.close();
 			conn = null;
 			outQueue[] = null;
-			connected = false;
+			connected = disconnecting = false;
 		}
 		else
 		{
