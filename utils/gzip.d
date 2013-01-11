@@ -90,6 +90,7 @@ Data[] gzipToRawDeflate(Data[] data)
 
 Data[] uncompress(Data[] data)
 {
+	enforce(data.length && data[$-1].length >= 4, "No data to decompress");
 	ZlibOptions options; options.mode = ZlibMode.raw;
 	Data[] uncompressed = zlib.uncompress(gzipToRawDeflate(data), options);
 	enforce(uncompressed.bytes.length == *cast(uint*)(&data[$-1].contents[$-4]), "Decompressed data length mismatch");
