@@ -448,10 +448,12 @@ string run(string command, string input = null)
 		std.file.write(tempfn2, input);
 		command ~= " < " ~ tempfn2;
 	}
+	int ret;
 	version(Windows)
-		system(command ~ ` 2>&1 > ` ~ tempfn);
+		ret = system(command ~ ` 2>&1 > ` ~ tempfn);
 	else
-		system(command ~ ` &> ` ~ tempfn);
+		ret = system(command ~ ` &> ` ~ tempfn);
+	enforce(ret == 0, format("Command %s failed with exit status %d", command, ret));
 	string result = cast(string)std.file.read(tempfn);
 	std.file.remove(tempfn);
 	if (tempfn2) std.file.remove(tempfn2);
