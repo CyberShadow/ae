@@ -332,7 +332,7 @@ private:
 		char delim;
 		s.read(delim);
 		if (delim != '\'' && delim != '"')
-			throw new Exception("Expected ' or \'");
+			throw new Exception("Expected ' or \"");
 		string value = readUntil(s, delim);
 		attributes[name] = decodeEntities(value);
 	}
