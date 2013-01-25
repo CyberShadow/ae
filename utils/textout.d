@@ -62,29 +62,14 @@ unittest
 }
 
 import std.traits;
+import ae.utils.text : toDec, DecimalSize;
 
+// Decimal
 void put(S, N)(ref S sink, N n)
 	if (IsStringSink!S && is(N : long) && !isSomeChar!N)
 {
-	char[21] buf = void;
-	char* p = buf.ptr+buf.length;
-
-	static if (isSigned!N)
-	{
-		bool negative;
-		if (n<0)
-			negative = true, n = -n;
-	}
-	do
-	{
-		*--p = '0' + n%10;
-		n = n/10;
-	} while (n);
-	static if (isSigned!N)
-		if (negative)
-			*--p = '-';
-
-	sink.put(p[0 .. buf.ptr + buf.length - p]);
+	char[DecimalSize!N] buf = void;
+	sink.put(toDec(n, buf));
 }
 
 unittest
