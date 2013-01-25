@@ -1011,25 +1011,51 @@ private:
 	final void onReadData(ClientSocket sender, Data data)
 	{
 		import std.string;
-		if (inBuffer.length)
+		auto oldBufferLength = inBuffer.length;
+		if (oldBufferLength)
 			inBuffer ~= data;
 		else
 			inBuffer = data;
 
-		sizediff_t index;
 		bool gotLines;
-		while ((index=indexOf(cast(string)inBuffer.contents, delimiter)) >= 0)
-		{
-			gotLines = true;
-			string line = cast(string)inBuffer.contents[0..index];
-			inBuffer = inBuffer[index+delimiter.length..inBuffer.length];
 
-			if (handleReadLine)
-				handleReadLine(this, line.idup);
+		if (delimiter.length == 1)
+		{
+			import std.c.string; // memchr
+
+			char c = delimiter[0];
+			auto p = memchr(inBuffer.ptr + oldBufferLength, c, data.length);
+			while (p)
+			{
+				sizediff_t index = p - inBuffer.ptr;
+				processLine(index);
+				gotLines = true;
+
+				p = memchr(inBuffer.ptr, c, inBuffer.length);
+			}
+		}
+		else
+		{
+			sizediff_t index;
+			// TODO: we can start the search at oldBufferLength-delimiter.length+1
+			while ((index=indexOf(cast(string)inBuffer.contents, delimiter)) >= 0)
+			{
+				processLine(index);
+				gotLines = true;
+			}
 		}
 
 		if (gotLines)
 			markNonIdle();
+	}
+
+	final void processLine(size_t index)
+	{
+		string line = cast(string)inBuffer.contents[0..index];
+		inBuffer = inBuffer[index+delimiter.length..inBuffer.length];
+
+		if (handleReadLine)
+			handleReadLine(this, line.idup);
 	}
 
 public:
