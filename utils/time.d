@@ -17,7 +17,6 @@ import std.algorithm;
 import std.datetime;
 import std.string;
 import std.conv : text;
-import std.utf : decode, stride;
 import std.math : abs;
 import ae.utils.textout;
 
@@ -111,167 +110,169 @@ void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime())
 			return formatTime(fallbackFormat, t);
 	}
 
-	size_t idx = 0;
-	dchar c;
-	while (idx < fmt.length)
-		switch (c = decode(fmt, idx))
-		{
-			// Day
-			case 'd':
-				sink.put(twoDigits(dt.day));
-				break;
-			case 'D':
-				sink.put(WeekdayShortNames[dt.dayOfWeek]);
-				break;
-			case 'j':
-				sink.put(oneOrTwoDigits(dt.day));
-				break;
-			case 'l':
-				sink.put(WeekdayLongNames[dt.dayOfWeek]);
-				break;
-			case 'N':
-				sink.put(oneDigit((dt.dayOfWeek+6)%7 + 1));
-				break;
-			case 'S':
-				switch (dt.day)
+	bool escaping = false;
+	foreach (char c; fmt)
+		if (escaping)
+			sink.put(c), escaping = false;
+		else
+			switch (c)
+			{
+				// Day
+				case 'd':
+					sink.put(twoDigits(dt.day));
+					break;
+				case 'D':
+					sink.put(WeekdayShortNames[dt.dayOfWeek]);
+					break;
+				case 'j':
+					sink.put(oneOrTwoDigits(dt.day));
+					break;
+				case 'l':
+					sink.put(WeekdayLongNames[dt.dayOfWeek]);
+					break;
+				case 'N':
+					sink.put(oneDigit((dt.dayOfWeek+6)%7 + 1));
+					break;
+				case 'S':
+					switch (dt.day)
+					{
+						case 1:
+						case 21:
+						case 31:
+							sink.put("st");
+							break;
+						case 2:
+						case 22:
+							sink.put("nd");
+							break;
+						case 3:
+						case 23:
+							sink.put("rd");
+							break;
+						default:
+							sink.put("th");
+					}
+					break;
+				case 'w':
+					sink.put(oneDigit(cast(int)dt.dayOfWeek));
+					break;
+				case 'z':
+					sink.put(text(dt.dayOfYear-1));
+					break;
+
+				// Week
+				case 'W':
+					sink.put(twoDigits(dt.isoWeek));
+					break;
+
+				// Month
+				case 'F':
+					sink.put(MonthLongNames[dt.month-1]);
+					break;
+				case 'm':
+					sink.put(twoDigits(dt.month));
+					break;
+				case 'M':
+					sink.put(MonthShortNames[dt.month-1]);
+					break;
+				case 'n':
+					sink.put(oneOrTwoDigits(dt.month));
+					break;
+				case 't':
+					sink.put(oneOrTwoDigits(dt.daysInMonth));
+					break;
+
+				// Year
+				case 'L':
+					sink.put(dt.isLeapYear ? '1' : '0');
+					break;
+				// case 'o': TODO (ISO 8601 year number)
+				case 'Y':
+					sink.put(fourDigits(dt.year));
+					break;
+				case 'y':
+					sink.put(twoDigits(dt.year % 100));
+					break;
+
+				// Time
+				case 'a':
+					sink.put(dt.hour < 12 ? "am" : "pm");
+					break;
+				case 'A':
+					sink.put(dt.hour < 12 ? "AM" : "PM");
+					break;
+				// case 'B': TODO (Swatch Internet time)
+				case 'g':
+					sink.put(oneOrTwoDigits((dt.hour+11)%12 + 1));
+					break;
+				case 'G':
+					sink.put(oneOrTwoDigits(dt.hour));
+					break;
+				case 'h':
+					sink.put(twoDigits((dt.hour+11)%12 + 1));
+					break;
+				case 'H':
+					sink.put(twoDigits(dt.hour));
+					break;
+				case 'i':
+					sink.put(twoDigits(dt.minute));
+					break;
+				case 's':
+					sink.put(twoDigits(dt.second));
+					break;
+				case 'u':
+					sink.put(format("%06d", t.fracSec.usecs));
+					break;
+				case 'E': // not standard
+					sink.put(format("%03d", t.fracSec.msecs));
+					break;
+
+				// Timezone
+				case 'e':
+					sink.put(timezoneFallback(t.timezone.name, "P"));
+					break;
+				case 'I':
+					sink.put(t.dstInEffect ? '1': '0');
+					break;
+				case 'O':
 				{
-					case 1:
-					case 21:
-					case 31:
-						sink.put("st");
-						break;
-					case 2:
-					case 22:
-						sink.put("nd");
-						break;
-					case 3:
-					case 23:
-						sink.put("rd");
-						break;
-					default:
-						sink.put("th");
+					auto minutes = (t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000 / 60;
+					sink.put(format("%+03d%02d", minutes/60, abs(minutes%60)));
+					break;
 				}
-				break;
-			case 'w':
-				sink.put(oneDigit(cast(int)dt.dayOfWeek));
-				break;
-			case 'z':
-				sink.put(text(dt.dayOfYear-1));
-				break;
+				case 'P':
+				{
+					auto minutes = (t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000 / 60;
+					sink.put(format("%+03d:%02d", minutes/60, abs(minutes%60)));
+					break;
+				}
+				case 'T':
+					sink.put(timezoneFallback(t.timezone.stdName, "P"));
+					break;
+				case 'Z':
+					sink.put(text((t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000));
+					break;
 
-			// Week
-			case 'W':
-				sink.put(twoDigits(dt.isoWeek));
-				break;
+				// Full date/time
+				case 'c':
+					sink.put(dt.toISOExtString());
+					break;
+				case 'r':
+					sink.put(formatTime(TimeFormats.RFC2822, t));
+					break;
+				case 'U':
+					sink.put(text(t.toUnixTime()));
+					break;
 
-			// Month
-			case 'F':
-				sink.put(MonthLongNames[dt.month-1]);
-				break;
-			case 'm':
-				sink.put(twoDigits(dt.month));
-				break;
-			case 'M':
-				sink.put(MonthShortNames[dt.month-1]);
-				break;
-			case 'n':
-				sink.put(oneOrTwoDigits(dt.month));
-				break;
-			case 't':
-				sink.put(oneOrTwoDigits(dt.daysInMonth));
-				break;
+				// Escape next character
+				case '\\':
+					escaping = true;
+					break;
 
-			// Year
-			case 'L':
-				sink.put(dt.isLeapYear ? '1' : '0');
-				break;
-			// case 'o': TODO (ISO 8601 year number)
-			case 'Y':
-				sink.put(fourDigits(dt.year));
-				break;
-			case 'y':
-				sink.put(twoDigits(dt.year % 100));
-				break;
-
-			// Time
-			case 'a':
-				sink.put(dt.hour < 12 ? "am" : "pm");
-				break;
-			case 'A':
-				sink.put(dt.hour < 12 ? "AM" : "PM");
-				break;
-			// case 'B': TODO (Swatch Internet time)
-			case 'g':
-				sink.put(oneOrTwoDigits((dt.hour+11)%12 + 1));
-				break;
-			case 'G':
-				sink.put(oneOrTwoDigits(dt.hour));
-				break;
-			case 'h':
-				sink.put(twoDigits((dt.hour+11)%12 + 1));
-				break;
-			case 'H':
-				sink.put(twoDigits(dt.hour));
-				break;
-			case 'i':
-				sink.put(twoDigits(dt.minute));
-				break;
-			case 's':
-				sink.put(twoDigits(dt.second));
-				break;
-			case 'u':
-				sink.put(format("%06d", t.fracSec.usecs));
-				break;
-			case 'E': // not standard
-				sink.put(format("%03d", t.fracSec.msecs));
-				break;
-
-			// Timezone
-			case 'e':
-				sink.put(timezoneFallback(t.timezone.name, "P"));
-				break;
-			case 'I':
-				sink.put(t.dstInEffect ? '1': '0');
-				break;
-			case 'O':
-			{
-				auto minutes = (t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000 / 60;
-				sink.put(format("%+03d%02d", minutes/60, abs(minutes%60)));
-				break;
+				// Other characters (whitespace, delimiters)
+				default:
+					put(sink, c);
 			}
-			case 'P':
-			{
-				auto minutes = (t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000 / 60;
-				sink.put(format("%+03d:%02d", minutes/60, abs(minutes%60)));
-				break;
-			}
-			case 'T':
-				sink.put(timezoneFallback(t.timezone.stdName, "P"));
-				break;
-			case 'Z':
-				sink.put(text((t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000));
-				break;
-
-			// Full date/time
-			case 'c':
-				sink.put(dt.toISOExtString());
-				break;
-			case 'r':
-				sink.put(formatTime(TimeFormats.RFC2822, t));
-				break;
-			case 'U':
-				sink.put(text(t.toUnixTime()));
-				break;
-
-			// Escape next character
-			case '\\':
-				put(sink, decode(fmt, idx));
-				break;
-
-			// Other characters (whitespace, delimiters)
-			default:
-				put(sink, c);
-		}
 }
 
 /// Calculate the maximum amount of characters needed to store a time in this format.
@@ -284,7 +285,7 @@ size_t timeFormatSize(string fmt)
 
 	size_t size = 0;
 	bool escaping = false;
-	foreach (c; fmt)
+	foreach (char c; fmt)
 		if (escaping)
 			size++, escaping = false;
 		else
@@ -420,9 +421,9 @@ SysTime parseTime(string fmt, string t)
 	int dow = -1;
 
 	size_t idx = 0;
-	dchar c;
+	char c;
 	while (idx < fmt.length)
-		switch (c = decode(fmt, idx))
+		switch (c = fmt[idx++])
 		{
 			// Day
 			case 'd':
@@ -567,21 +568,17 @@ SysTime parseTime(string fmt, string t)
 			// Escape next character
 			case '\\':
 			{
-				// Ugh
-				string next = fmt[idx..idx+stride(fmt, idx)];
-				idx += next.length;
-				enforce(t.length, next ~ " expected");
-				enforce(take(stride(t, 0)) == next, next ~ " expected");
+				char next = fmt[idx++];
+				enforce(t.length && t[0]==next, next ~ " expected");
+				t = t[1..$];
 				break;
 			}
 
 			// Other characters (whitespace, delimiters)
 			default:
 			{
-				enforce(t.length, to!string([c]) ~ " expected or unsupported format character");
-				size_t stride = 0;
-				enforce(decode(t, stride) == c, to!string([c]) ~ " expected or unsupported format character");
-				t = t[stride..$];
+				enforce(t.length && t[0]==c, c~ " expected or unsupported format character");
+				t = t[1..$];
 			}
 		}
 
@@ -597,6 +594,14 @@ SysTime parseTime(string fmt, string t)
 		enforce(result.dayOfWeek == dow, "Mismatching weekday");
 
 	return result;
+}
+
+unittest
+{
+	auto s0 = "Tue Jun 07 13:23:19 GMT+0100 2011";
+	auto t = parseTime(TimeFormats.STD_DATE, s0);
+	auto s1 = formatTime(TimeFormats.STD_DATE, t);
+	assert(s0 == s1);
 }
 
 // ***************************************************************************
