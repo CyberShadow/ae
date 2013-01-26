@@ -38,6 +38,41 @@ unittest
 
 // **************************************************************************
 
+/// Sink which simply copies data to a pointer and advances it.
+/// No reallocation, no bounds check - unsafe.
+struct BlindWriter(T)
+{
+	T* ptr;
+
+	void put(T v)
+	{
+		*ptr++ = v;
+	}
+
+	void put(in T[] v)
+	{
+		import core.stdc.string;
+		memcpy(ptr, v.ptr, v.length*T.sizeof);
+		ptr += v.length;
+	}
+}
+
+unittest
+{
+	import ae.utils.time;
+	import std.datetime;
+
+	char[64] buf;
+	auto writer = BlindWriter!char(buf.ptr);
+
+	auto time = SysTime(DateTime(2010, 7, 4, 7, 6, 12), UTC());
+	putTime(writer, TimeFormats.ISO8601, time);
+	auto timeStr = buf[0..writer.ptr-buf.ptr];
+	assert(timeStr == "2010-07-04T07:06:12+0000", timeStr.idup);
+}
+
+// **************************************************************************
+
 template IsStringSink(T)
 {
 	enum IsStringSink = is(typeof(T.init.put("Test")));
