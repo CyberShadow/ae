@@ -57,9 +57,10 @@ struct BlindWriter(T)
 	}
 }
 
+version(unittest) import ae.utils.time;
+
 unittest
 {
-	import ae.utils.time;
 	import std.datetime;
 
 	char[64] buf;
