@@ -22,6 +22,9 @@ import std.string;
 
 import ae.sys.file;
 
+import ae.utils.textout;
+import ae.utils.time;
+
 string logDir;
 
 private void init()
@@ -35,18 +38,7 @@ private void init()
 shared static this() { init(); }
 static this() { init(); }
 
-private string formatTime(SysTime time)
-{
-	return format("%04d.%02d.%02d %02d:%02d:%02d.%03d",
-		time.year,
-		time.month,
-		time.day,
-		time.hour,
-		time.minute,
-		time.second,
-		time.fracSec.msecs
-	);
-}
+enum TIME_FORMAT = "Y.m.d H:i:s.E";
 
 private SysTime getLogTime()
 {
@@ -92,8 +84,9 @@ class RawFileLogger : Logger
 		super(name);
 	}
 
-	override Logger log(string str)
+	private final void logStartLine()
 	{
+	/+
 		if (!f.isOpen) // hack
 		{
 			if (fileName is null)
@@ -103,9 +96,25 @@ class RawFileLogger : Logger
 			close();
 			return this;
 		}
+	+/
+	}
+
+	private final void logFragment(in char[] str)
+	{
 		f.rawWrite(str);
+	}
+
+	private final void logEndLine()
+	{
 		f.writeln();
 		f.flush();
+	}
+
+	override Logger log(string str)
+	{
+		logStartLine();
+		logFragment(str);
+		logEndLine();
 		return this;
 	}
 
@@ -150,7 +159,19 @@ class FileLogger : RawFileLogger
 			open();
 			f.writeln("---- (continued from previous day's log) ----\n");
 		}
-		super.log("[" ~ formatTime(ut) ~ "] " ~ str);
+
+		enum TIMEBUFSIZE = 1 + timeFormatSize(TIME_FORMAT) + 2;
+		static char[TIMEBUFSIZE] buf = "[";
+		auto writer = BlindWriter!char(buf.ptr+1);
+		putTime(writer, TIME_FORMAT, ut);
+		writer.put(']');
+		writer.put(' ');
+
+		super.logStartLine();
+		super.logFragment(buf[0..writer.ptr-buf.ptr]);
+		super.logFragment(str);
+		super.logEndLine();
+
 		return this;
 	}
 
@@ -169,13 +190,13 @@ protected:
 	{
 		super.open();
 		currentDay = getLogTime().day;
-		f.writef("\n\n--------------- %s ---------------\n\n\n", formatTime(getLogTime()));
+		f.writef("\n\n--------------- %s ---------------\n\n\n", formatTime(TIME_FORMAT, getLogTime()));
 	}
 
 	final override void reopen()
 	{
 		super.reopen();
-		f.writef("\n\n--------------- %s ---------------\n\n\n", formatTime(getLogTime()));
+		f.writef("\n\n--------------- %s ---------------\n\n\n", formatTime(TIME_FORMAT, getLogTime()));
 	}
 }
 
