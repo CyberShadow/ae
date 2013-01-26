@@ -548,6 +548,33 @@ unittest
 	assert(toDec(42) == "42");
 }
 
+/// Print an unsigned integer as a zero-padded, right-aligned decimal number into a buffer
+void toDecFixed(N : ulong, size_t U)(N n, ref char[U] buf)
+	if (!isSigned!N)
+{
+	assert(n < 10^^U, "Number too large");
+
+	foreach (i; Reverse!(RangeTuple!U))
+	{
+		buf[i] = cast(char)('0' + (n % 10));
+		n /= 10;
+	}
+}
+
+/// ditto
+char[U] toDecFixed(size_t U, N : ulong)(N n)
+	if (!isSigned!N)
+{
+	char[U] buf;
+	toDecFixed(n, buf);
+	return buf;
+}
+
+unittest
+{
+	assert(toDecFixed!6(12345u) == "012345");
+}
+
 // ************************************************************************
 
 /// Take a string, and return a regular expression that matches that string
