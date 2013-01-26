@@ -18,6 +18,8 @@ import std.datetime;
 import std.string;
 import std.conv : text;
 import std.math : abs;
+
+import ae.utils.text;
 import ae.utils.textout;
 
 struct TimeFormats
@@ -70,33 +72,13 @@ void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime())
 		return cast(char)('0' + i);
 	}
 
-	static char[2] twoDigits(uint i)
-	{
-		debug assert(i < 100);
-		char[2] result;
-		result[0] = cast(char)('0' + i / 10);
-		result[1] = cast(char)('0' + i % 10);
-		return result;
-	}
-
 	static string oneOrTwoDigits(uint i)
 	{
 		debug assert(i < 100);
 		if (i < 10)
 			return [cast(char)('0' + i)];
 		else
-			return twoDigits(i).idup;
-	}
-
-	static char[4] fourDigits(uint i)
-	{
-		debug assert(i < 10000);
-		char[4] result;
-		result[0] = cast(char)('0' + i / 1000     );
-		result[1] = cast(char)('0' + i / 100  % 10);
-		result[2] = cast(char)('0' + i / 10   % 10);
-		result[3] = cast(char)('0' + i        % 10);
-		return result;
+			return toDecFixed!2(i).idup;
 	}
 
 	string timezoneFallback(string tzStr, string fallbackFormat)
@@ -119,7 +101,7 @@ void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime())
 			{
 				// Day
 				case 'd':
-					sink.put(twoDigits(dt.day));
+					sink.put(toDecFixed!2(dt.day));
 					break;
 				case 'D':
 					sink.put(WeekdayShortNames[dt.dayOfWeek]);
@@ -162,7 +144,7 @@ void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime())
 
 				// Week
 				case 'W':
-					sink.put(twoDigits(dt.isoWeek));
+					sink.put(toDecFixed!2(dt.isoWeek));
 					break;
 
 				// Month
@@ -170,7 +152,7 @@ void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime())
 					sink.put(MonthLongNames[dt.month-1]);
 					break;
 				case 'm':
-					sink.put(twoDigits(dt.month));
+					sink.put(toDecFixed!2(dt.month));
 					break;
 				case 'M':
 					sink.put(MonthShortNames[dt.month-1]);
@@ -188,10 +170,10 @@ void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime())
 					break;
 				// case 'o': TODO (ISO 8601 year number)
 				case 'Y':
-					sink.put(fourDigits(dt.year));
+					sink.put(toDecFixed!4(cast(uint)dt.year)); // Hack? Assumes years are in 1000-9999 AD range
 					break;
 				case 'y':
-					sink.put(twoDigits(dt.year % 100));
+					sink.put(toDecFixed!2(cast(uint)dt.year % 100));
 					break;
 
 				// Time
@@ -209,22 +191,22 @@ void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime())
 					sink.put(oneOrTwoDigits(dt.hour));
 					break;
 				case 'h':
-					sink.put(twoDigits((dt.hour+11)%12 + 1));
+					sink.put(toDecFixed!2(cast(uint)(dt.hour+11)%12 + 1));
 					break;
 				case 'H':
-					sink.put(twoDigits(dt.hour));
+					sink.put(toDecFixed!2(dt.hour));
 					break;
 				case 'i':
-					sink.put(twoDigits(dt.minute));
+					sink.put(toDecFixed!2(dt.minute));
 					break;
 				case 's':
-					sink.put(twoDigits(dt.second));
+					sink.put(toDecFixed!2(dt.second));
 					break;
 				case 'u':
-					sink.put(format("%06d", t.fracSec.usecs));
+					sink.put(toDecFixed!6(cast(uint)t.fracSec.usecs));
 					break;
 				case 'E': // not standard
-					sink.put(format("%03d", t.fracSec.msecs));
+					sink.put(toDecFixed!3(cast(uint)t.fracSec.msecs));
 					break;
 
 				// Timezone
