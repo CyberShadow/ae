@@ -13,6 +13,7 @@
 
 module ae.utils.time;
 
+import std.algorithm;
 import std.datetime;
 import std.string;
 import std.conv : text;
@@ -272,6 +273,108 @@ void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime())
 				put(sink, c);
 		}
 }
+
+/// Calculate the maximum amount of characters needed to store a time in this format.
+/// Hint: this function can run at compile-time when the format string is a constant.
+/// Returns size_t.max if it contains variable-length strings that depend on other
+/// components (e.g. timezone names, which are provided by the operating system).
+size_t timeFormatSize(string fmt)
+{
+	static size_t maxLength(in string[] names) { return reduce!max(map!`a.length`(WeekdayShortNames)); }
+
+	size_t size = 0;
+	bool escaping = false;
+	foreach (c; fmt)
+		if (escaping)
+			size++, escaping = false;
+		else
+			switch (c)
+			{
+				case 'N':
+				case 'w':
+				case 'L':
+				case 'I':
+					size++;
+					break;
+				case 'd':
+				case 'j':
+				case 'S':
+				case 'W':
+				case 'm':
+				case 'n':
+				case 't':
+				case 'y':
+				case 'a':
+				case 'A':
+				case 'g':
+				case 'G':
+				case 'h':
+				case 'H':
+				case 'i':
+				case 's':
+					size += 2;
+					break;
+				case 'z':
+				case 'E': // not standard
+					size += 3;
+					break;
+				case 'Y':
+					size += 4;
+					break;
+				case 'Z': // Timezone offset in seconds
+				case 'O':
+					size += 5;
+					break;
+				case 'u':
+				case 'P':
+					size += 6;
+					break;
+				case 'T':
+					size += 32;
+					break;
+
+				case 'D':
+					size += maxLength(WeekdayShortNames);
+					break;
+				case 'l':
+					size += maxLength(WeekdayLongNames);
+					break;
+				case 'F':
+					size += maxLength(MonthLongNames);
+					break;
+				case 'M':
+					size += maxLength(MonthShortNames);
+					break;
+
+				case 'e': // Timezone name
+					return size_t.max;
+
+				// Full date/time
+				case 'c':
+					enum ISOExtLength = "-0004-01-05T00:00:02.052092+10:00".length;
+					size += ISOExtLength;
+					break;
+				case 'r':
+					size += timeFormatSize(TimeFormats.RFC2822);
+					break;
+				case 'U':
+					size += DecimalSize!int;
+					break;
+
+				// Escape next character
+				case '\\':
+					escaping = true;
+					break;
+
+				// Other characters (whitespace, delimiters)
+				default:
+					size++;
+			}
+
+	return size;
+}
+
+static assert(timeFormatSize(TimeFormats.STD_DATE) == "Tue Jun 07 13:23:19 GMT+0100 2011".length);
 
 import std.exception : enforce;
 import std.conv : to;
