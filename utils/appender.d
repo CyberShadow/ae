@@ -177,16 +177,17 @@ public:
 		return cursor-start;
 	}
 
-	/// Does not resize. Use preallocate for that.
-	@property void length(size_t value)
-	{
-		cursor = start + value;
-		assert(cursor <= end);
-	}
-
 	static if (is(I == T)) // mutable types only
 	{
-		/// Effectively empties the data, but preserves the storage for reuse
+		/// Does not resize. Use preallocate for that.
+		@property void length(size_t value)
+		{
+			cursor = start + value;
+			assert(cursor <= end);
+		}
+
+		/// Effectively empties the data, but preserves the storage for reuse.
+		/// Same as setting length to 0.
 		void clear()
 		{
 			cursor = start;
