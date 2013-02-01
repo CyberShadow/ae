@@ -59,7 +59,7 @@ void sendCopyData(HWND hWnd, DWORD n, in void[] buf)
 {
 	COPYDATASTRUCT cds;
 	cds.dwData = n;
-	cds.cbData = buf.length;
+	cds.cbData = cast(uint)buf.length;
 	cds.lpData = cast(PVOID)buf.ptr;
 	SendMessage(hWnd, WM_COPYDATA, 0, cast(LPARAM)&cds);
 }

@@ -75,7 +75,7 @@ void register()
 		static void win32write(string msg) nothrow
 		{
 			DWORD written;
-			WriteConsoleA(GetStdHandle(STD_ERROR_HANDLE), msg.ptr, msg.length, &written, null);
+			WriteConsoleA(GetStdHandle(STD_ERROR_HANDLE), msg.ptr, cast(uint)msg.length, &written, null);
 		}
 
 		extern(Windows)
