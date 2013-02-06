@@ -101,7 +101,7 @@ class RawFileLogger : Logger
 
 	private final void logFragment(in char[] str)
 	{
-		f.rawWrite(str);
+		f.write(str);
 	}
 
 	private final void logEndLine()
@@ -133,12 +133,12 @@ protected:
 		string timestamp = timestampedFilenames ? format(" %02d-%02d-%02d", t.hour, t.minute, t.second) : null;
 		fileName = buildPath(dir, format("%04d-%02d-%02d%s - %s.log", t.year, t.month, t.day, timestamp, base));
 		ensurePathExists(fileName);
-		f = File(fileName, "at");
+		f = File(fileName, "ab");
 	}
 
 	override void reopen()
 	{
-		f = File(fileName, "at");
+		f = File(fileName, "ab");
 	}
 }
 
@@ -210,7 +210,7 @@ class ConsoleLogger : Logger
 	override Logger log(string str)
 	{
 		string output = name ~ ": " ~ str ~ "\n";
-		stderr.rawWrite(output);
+		stderr.write(output);
 		stderr.flush();
 		return this;
 	}
