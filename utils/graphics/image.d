@@ -247,7 +247,7 @@ struct Image(COLOR)
 
 		alias ChannelType!COLOR CHANNEL_TYPE;
 
-		static if (!is(COLOR == struct))
+		static if (structFields!COLOR()==["g"])
 			enum COLOUR_TYPE = PNGColourType.G;
 		else
 		static if (structFields!COLOR()==["r","g","b"])
