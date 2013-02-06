@@ -14,6 +14,7 @@
 module ae.sys.file;
 
 import std.array;
+import std.conv;
 import std.file;
 import std.path;
 import std.stdio : File;
@@ -406,7 +407,7 @@ version (Windows)
 		void[] rawRead(void[] buffer)
 		{
 			DWORD bytesRead;
-			enforce(ReadFile(h, buffer.ptr, buffer.length, &bytesRead, null), new FileException("ReadFile"));
+			enforce(ReadFile(h, buffer.ptr, to!uint(buffer.length), &bytesRead, null), new FileException("ReadFile"));
 			return buffer[0..bytesRead];
 		}
 	}
