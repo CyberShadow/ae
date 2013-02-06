@@ -51,10 +51,10 @@ mixin template Canvas()
 		return pixels[y*stride+x];
 	}
 
-	void opIndexAssign(COLOR value, int x, int y)
+	COLOR opIndexAssign(COLOR value, int x, int y)
 	{
 		assert(x>=0 && y>=0 && x<w && y<h);
-		pixels[y*stride+x] = value;
+		return pixels[y*stride+x] = value;
 	}
 
 	COLOR safeGet(int x, int y, COLOR def)
