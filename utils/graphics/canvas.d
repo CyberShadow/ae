@@ -946,6 +946,16 @@ struct Color(FieldTuple...)
 			}
 		return r;
 	}
+
+	/// Sum of all channels
+	UnsignedBitsType!(BaseTypeBits + ilog2(nextPowerOfTwo(Components))) sum()
+	{
+		typeof(return) result;
+		foreach (i, f; this.tupleof)
+			static if (this.tupleof[i].stringof != "this.x") // skip padding
+				result += this.tupleof[i];
+		return result;
+	}
 }
 
 // The "x" has the special meaning of "padding" and is ignored in some circumstances
