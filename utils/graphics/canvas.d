@@ -143,6 +143,7 @@ mixin template Canvas()
 	/// Copy another canvas while applying a pixel transformation.
 	/// Context of pred:
 	///   c            = source color
+	///   s            = destination color
 	///   src          = source canvas
 	///   extraArgs[n] = any extra arguments passed to transformDraw
 	typeof(this) transformDraw(string pred, SRCCANVAS, T...)(int x, int y, ref SRCCANVAS src, T extraArgs)
@@ -158,6 +159,7 @@ mixin template Canvas()
 			foreach (i; 0..src.w)
 			{
 				auto c = *srcPtr++;
+				auto s = *dstPtr;
 				*dstPtr++ = mixin(pred);
 			}
 			srcPtr += srcSlack;
