@@ -76,3 +76,21 @@ T nextPowerOfTwo(T)(T x)
 		x |= x >> 32;
 	return x + 1;
 }
+
+/// Integer log2
+ubyte ilog2(T)(T n)
+{
+	ubyte result = 0;
+	while (n >>= 1)
+		result++;
+	return result;
+}
+
+unittest
+{
+	assert(ilog2(0) == 0);
+	assert(ilog2(1) == 0);
+	assert(ilog2(2) == 1);
+	assert(ilog2(3) == 1);
+	assert(ilog2(4) == 2);
+}
