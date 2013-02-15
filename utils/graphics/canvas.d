@@ -100,14 +100,15 @@ mixin template Canvas()
 			pixels[0..h*stride] = c;
 	}
 
-	void draw(bool CHECKED=true, SRCCANVAS)(int x, int y, SRCCANVAS src)
+	/// Draws an image. Returns this.
+	typeof(this) draw(bool CHECKED=true, SRCCANVAS)(int x, int y, SRCCANVAS src)
 		if (IsCanvas!SRCCANVAS && is(COLOR == SRCCANVAS.COLOR))
 	{
 		static if (CHECKED)
 		{
 			if (src.w == 0 || src.h == 0 ||
 				x+src.w <= 0 || y+src.h <= 0 || x >= w || y >= h)
-				return;
+				return this;
 
 			auto r = src.window(0, 0, src.w, src.h);
 			if (x < 0)
@@ -135,6 +136,8 @@ mixin template Canvas()
 				dstStart += stride,
 				srcStart += src.stride;
 		}
+
+		return this;
 	}
 
 	/// Copy another canvas while applying a pixel transformation.
@@ -142,7 +145,7 @@ mixin template Canvas()
 	///   c            = source color
 	///   src          = source canvas
 	///   extraArgs[n] = any extra arguments passed to transformDraw
-	void transformDraw(string pred, SRCCANVAS, T...)(int x, int y, ref SRCCANVAS src, T extraArgs)
+	typeof(this) transformDraw(string pred, SRCCANVAS, T...)(int x, int y, ref SRCCANVAS src, T extraArgs)
 		if (IsCanvas!SRCCANVAS)
 	{
 		assert(x+src.w <= w && y+src.h <= h);
@@ -160,6 +163,7 @@ mixin template Canvas()
 			srcPtr += srcSlack;
 			dstPtr += dstSlack;
 		}
+		return this;
 	}
 
 	void warp(string pred, SRCCANVAS, T...)(ref SRCCANVAS src, T extraArgs)
