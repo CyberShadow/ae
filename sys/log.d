@@ -191,12 +191,14 @@ protected:
 		super.open();
 		currentDay = getLogTime().day;
 		f.writef("\n\n--------------- %s ---------------\n\n\n", formatTime(TIME_FORMAT, getLogTime()));
+		f.flush();
 	}
 
 	final override void reopen()
 	{
 		super.reopen();
 		f.writef("\n\n--------------- %s ---------------\n\n\n", formatTime(TIME_FORMAT, getLogTime()));
+		f.flush();
 	}
 }
 
