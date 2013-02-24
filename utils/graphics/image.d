@@ -73,7 +73,7 @@ struct Image(COLOR)
 	{
 		auto newImage = Image!COLOR(w, h);
 		foreach (y; 0..h)
-			foreach (x, c; pixels[y*stride..y*stride+w])
+			foreach (uint x, c; pixels[y*stride..y*stride+w])
 				newImage[w-x-1, y] = c;
 		return newImage;
 	}
@@ -348,7 +348,7 @@ struct Image(COLOR)
 
 	@property int bitmapPixelStride()
 	{
-		int pixelStride = w * COLOR.sizeof;
+		int pixelStride = w * cast(uint)COLOR.sizeof;
 		pixelStride = (pixelStride+3) & ~3;
 		return pixelStride;
 	}

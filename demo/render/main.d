@@ -71,7 +71,7 @@ final class MyApplication : Application
 		s. line(300, 25, 350,  75, BGRX(0, 255, 0));
 		s.hline(300,     350,  25, BGRX(0, 0, 255));
 
-		foreach (i, img; imgs)
+		foreach (uint i, img; imgs)
 		{
 			s.draw(i*128, 300, img, 0, 0, img.image.w, img.image.h);
 			s.draw(

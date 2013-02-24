@@ -31,7 +31,7 @@ version (Windows)
 	string getExecutableName()
 	{
 		auto path = new char[MAX_PATH];
-		path.length = enforce(GetModuleFileNameA(null, path.ptr, path.length));
+		path.length = enforce(GetModuleFileNameA(null, path.ptr, cast(uint)path.length));
 		return baseName(assumeUnique(path));
 	}
 

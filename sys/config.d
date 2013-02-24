@@ -112,14 +112,14 @@ version (Windows)
 		void readRaw(string name, void[] dest)
 		{
 			enforce(getSize(name) == dest.length, "Invalid registry value length for " ~ name);
-			DWORD size = dest.length;
+			DWORD size = cast(DWORD)dest.length;
 			enforce(RegQueryValueExW(key, toUTFz!LPCWSTR(name), null, null, cast(ubyte*)dest.ptr, &size) == ERROR_SUCCESS, "RegQueryValueEx failed");
 			enforce(size == dest.length, "Not enough data read");
 		}
 
 		void writeRaw(string name, const(void)[] dest, DWORD type)
 		{
-			enforce(RegSetValueExW(key, toUTFz!LPCWSTR(name), 0, type, cast(ubyte*)dest.ptr, dest.length) == ERROR_SUCCESS, "RegSetValueEx failed");
+			enforce(RegSetValueExW(key, toUTFz!LPCWSTR(name), 0, type, cast(ubyte*)dest.ptr, cast(uint)dest.length) == ERROR_SUCCESS, "RegSetValueEx failed");
 		}
 
 		uint getSize(string name)

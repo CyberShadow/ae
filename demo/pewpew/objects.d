@@ -687,7 +687,7 @@ class Thingy : ThingyPart
 				s.y = y + sd*sin(sa);
 			}
 			level++;
-			lastLevelCount = satellites.length;
+			lastLevelCount = cast(uint)satellites.length;
 		}
 
 		if (satellites.length <= 8)

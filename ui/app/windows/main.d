@@ -69,18 +69,18 @@ string[] getArgs()
 	int       wargc = 0;
 	wchar_t** wargs = CommandLineToArgvW(wcbuf, &wargc);
 
-	size_t    cargl = WideCharToMultiByte(CP_UTF8, 0, wcbuf, wclen, null, 0, null, null);
+	size_t    cargl = WideCharToMultiByte(CP_UTF8, 0, wcbuf, cast(uint)wclen, null, 0, null, null);
 
 	char*     cargp = cast(char*) malloc(cargl);
 	char[][]  args  = ((cast(char[]*) malloc(wargc * (char[]).sizeof)))[0 .. wargc];
 
 	for (size_t i = 0, p = 0; i < wargc; i++)
 	{
-		int wlen = wcslen(wargs[i]);
-		int clen = WideCharToMultiByte(CP_UTF8, 0, &wargs[i][0], wlen, null, 0, null, null);
+		size_t wlen = wcslen(wargs[i]);
+		size_t clen = WideCharToMultiByte(CP_UTF8, 0, &wargs[i][0], cast(uint)wlen, null, 0, null, null);
 		args[i]  = cargp[p .. p+clen];
 		p += clen; assert(p <= cargl);
-		WideCharToMultiByte(CP_UTF8, 0, &wargs[i][0], wlen, &args[i][0], clen, null, null);
+		WideCharToMultiByte(CP_UTF8, 0, &wargs[i][0], cast(uint)wlen, &args[i][0], cast(uint)clen, null, null);
 	}
 	LocalFree(cast(HLOCAL)wargs);
 	wargs = null;

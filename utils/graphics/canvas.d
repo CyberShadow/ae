@@ -173,7 +173,7 @@ mixin template Canvas()
 	{
 		assert(src.w == w && src.h == h);
 		foreach (y; 0..h)
-			foreach (x, ref c; pixels[y*stride..y*stride+w])
+			foreach (uint x, ref c; pixels[y*stride..y*stride+w])
 			{
 				mixin(pred);
 			}
