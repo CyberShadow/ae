@@ -38,15 +38,19 @@ version (Windows)
 	private string getShellPath(int csidl)
 	{
 		LPITEMIDLIST pidl;
-		IMalloc aMalloc;
+		SHGetSpecialFolderLocation(null, csidl, &pidl);
+		scope(exit)
+		{
+			IMalloc aMalloc;
+			SHGetMalloc(&aMalloc);
+			aMalloc.Free(pidl);
+		}
 
 		auto path = new wchar[MAX_PATH];
-		SHGetSpecialFolderLocation(null, csidl, &pidl);
-		if(!SHGetPathFromIDListW(pidl, path.ptr))
-			path = null;
+		if (!SHGetPathFromIDListW(pidl, path.ptr))
+			return null;
 		path.length = wcslen(path.ptr);
-		SHGetMalloc(&aMalloc);
-		aMalloc.Free(pidl);
+
 		return toUTF8(path);
 	}
 
