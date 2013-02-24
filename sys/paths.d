@@ -17,9 +17,11 @@ import std.path;
 
 version (Windows)
 {
-	import std.c.string;
-	import std.file;
+	import core.stdc.wctype;
+
 	import std.exception;
+	import std.file;
+	import std.utf;
 
 	import win32.shlobj;
 	import win32.objidl;
@@ -38,14 +40,14 @@ version (Windows)
 		LPITEMIDLIST pidl;
 		IMalloc aMalloc;
 
-		auto path = new char[MAX_PATH];
+		auto path = new wchar[MAX_PATH];
 		SHGetSpecialFolderLocation(null, csidl, &pidl);
-		if(!SHGetPathFromIDList(pidl, path.ptr))
+		if(!SHGetPathFromIDListW(pidl, path.ptr))
 			path = null;
-		path.length = strlen(path.ptr);
+		path.length = wcslen(path.ptr);
 		SHGetMalloc(&aMalloc);
 		aMalloc.Free(pidl);
-		return assumeUnique(path);
+		return toUTF8(path);
 	}
 
 	private string getAppDir(string appName, int csidl)
