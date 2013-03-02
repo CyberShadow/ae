@@ -252,13 +252,14 @@ private struct JsonParser
 	string readString()
 	{
 		skipWhitespace();
-		if (peek() == '"')
+		auto c = peek();
+		if (c == '"')
 		{
 			next(); // '"'
 			string result;
 			while (true)
 			{
-				auto c = next();
+				c = next();
 				if (c=='"')
 					break;
 				else
@@ -282,9 +283,36 @@ private struct JsonParser
 			return result;
 		}
 		else
+		if (isDigit(c) || c=='-') // For languages that don't distinguish numeric strings from numbers
 		{
-			foreach (c; "null")
-				expect(c);
+			static immutable bool[256] numeric =
+			[
+				'0':true,
+				'1':true,
+				'2':true,
+				'3':true,
+				'4':true,
+				'5':true,
+				'6':true,
+				'7':true,
+				'8':true,
+				'9':true,
+				'.':true,
+				'-':true,
+				'+':true,
+				'e':true,
+				'E':true,
+			];
+
+			string s;
+			while (c=peek(), numeric[c])
+				s ~= c, p++;
+			return s;
+		}
+		else
+		{
+			foreach (n; "null")
+				expect(n);
 			return null;
 		}
 	}
