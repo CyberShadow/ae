@@ -23,3 +23,32 @@ string formatException(Throwable e)
 		e = e.next;
 	return descriptions.join("\n===================================\n");
 }
+
+import ae.utils.meta;
+
+import std.conv;
+
+/// Returns string mixin for adding a chained exception
+string exceptionContext(string messageExpr, string name = text(__LINE__))
+{
+	name = "exceptionContext_" ~ name;
+	return mixin(X!q{
+		bool @(name);
+		scope(exit) if (@(name)) throw new Exception(@(messageExpr));
+		scope(failure) @(name) = true;
+	});
+}
+
+unittest
+{
+	try
+	{
+		mixin(exceptionContext(q{"Second"}));
+		throw new Exception("First");
+	}
+	catch (Exception e)
+	{
+		assert(e.msg == "First");
+		assert(e.next.msg == "Second");
+	}
+}
