@@ -352,9 +352,12 @@ private struct JsonParser
 		skipWhitespace();
 		T v;
 		string s;
-		char c;
-		while (c=peek(), c=='-' || (c>='0' && c<='9'))
-			s ~= c, p++;
+		char c = peek();
+		if (c == '"')
+			s = readString();
+		else
+			while (c=='-' || (c>='0' && c<='9'))
+				s ~= c, p++, c=peek();
 		static if (is(T==byte))
 			return to!byte(s);
 		else
