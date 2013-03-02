@@ -275,7 +275,20 @@ private struct JsonParser
 						case 'n':  result ~= '\n'; break;
 						case 'r':  result ~= '\r'; break;
 						case 't':  result ~= '\t'; break;
-						case 'u':  result ~= toUTF8([cast(wchar)fromHex!ushort(readN(4))]); break;
+						case 'u':
+						{
+							wstring buf;
+							goto Unicode_start;
+
+							while (s[p..$].startsWith(`\u`))
+							{
+								p+=2;
+							Unicode_start:
+								buf ~= cast(wchar)fromHex!ushort(readN(4));
+							}
+							result ~= toUTF8(buf);
+							break;
+						}
 						default: enforce(false, "Unknown escape");
 					}
 				else
