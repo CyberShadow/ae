@@ -17,6 +17,7 @@ import std.exception;
 import std.string;
 import std.traits;
 
+import ae.utils.exception;
 import ae.utils.meta;
 import ae.utils.textout;
 
@@ -421,7 +422,7 @@ private struct JsonParser
 		while (true)
 		{
 			string jsonField = readString();
-			scope(failure) std.stdio.writeln("Error with field " ~ jsonField ~ ":");
+			mixin(exceptionContext(q{"Error with field " ~ jsonField}));
 			skipWhitespace();
 			expect(':');
 
@@ -486,7 +487,12 @@ private struct JsonParser
 	}
 }
 
-T jsonParse(T)(string s) { return JsonParser(s).read!T(); }
+T jsonParse(T)(string s)
+{
+	auto parser = JsonParser(s);
+	mixin(exceptionContext(q{format("Error at position %d", parser.p)}));
+	return parser.read!T();
+}
 
 unittest
 {
