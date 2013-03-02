@@ -217,7 +217,8 @@ private struct JsonParser
 
 	void expect(char c)
 	{
-		enforce(next()==c, c ~ " expected");
+		auto n = next();
+		enforce(n==c, "Expected " ~ c ~ ", got " ~ n);
 	}
 
 	T read(T)()
@@ -407,6 +408,7 @@ private struct JsonParser
 		while (true)
 		{
 			string jsonField = readString();
+			scope(failure) std.stdio.writeln("Error with field " ~ jsonField ~ ":");
 			skipWhitespace();
 			expect(':');
 
@@ -416,7 +418,6 @@ private struct JsonParser
 				enum name = getJsonName!(T, v.tupleof[i].stringof[2..$]);
 				if (name == jsonField)
 				{
-					scope(failure) std.stdio.writeln("Error with field " ~ name ~ ":");
 					v.tupleof[i] = read!(typeof(v.tupleof[i]))();
 					found = true;
 					break;
