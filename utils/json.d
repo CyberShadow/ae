@@ -341,9 +341,16 @@ private struct JsonParser
 			return true;
 		}
 		else
+		if (peek()=='f')
 		{
 			enforce(readN(5) == "false", "Bad boolean");
 			return false;
+		}
+		else
+		{
+			ubyte i = readInt!ubyte();
+			enforce(i < 2);
+			return !!i;
 		}
 	}
 
