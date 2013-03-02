@@ -64,7 +64,8 @@ final class MyApplication : Application
 		final switch (shape)
 		{
 			case Shape.pixel:
-				return canvas[randX(), randY()] = randColor();
+				canvas[randX(), randY()] = randColor();
+				return;
 
 			case Shape.hline:
 				return canvas.hline(randX(), randX(), randY(), randColor());
