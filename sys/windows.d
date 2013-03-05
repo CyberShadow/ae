@@ -133,16 +133,16 @@ WindowIterator windowIterator(string szClassName, string szWindowName, HWND hPar
 	return iterator;
 }
 
-private static wchar[0x10000] textBuf;
+private static wchar[0xFFFF] textBuf;
 
 string getClassName(HWND h)
 {
-	return textBuf[0..GetClassName(h, textBuf.ptr, textBuf.length)].toUTF8();
+	return textBuf[0..wenforce(GetClassNameW(h, textBuf.ptr, textBuf.length), "GetClassNameW")].toUTF8();
 }
 
 string getWindowText(HWND h)
 {
-	return textBuf[0..GetWindowText(h, textBuf.ptr, textBuf.length)].toUTF8();
+	return textBuf[0..wenforce(GetWindowTextW(h, textBuf.ptr, textBuf.length), "GetWindowTextW")].toUTF8();
 }
 
 /// Create an utility hidden window.
