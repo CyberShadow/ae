@@ -15,7 +15,7 @@
 * a minimum root window size (640x480), to avoid ridiculous layout issues
   * we could let content of all windows dictate minimum size, but added controls could no longer fit
 * shrink resizes might fail?
-  * divide and conquer search for minimum acceptable size?
+  * binary search for minimum acceptable size?
 
 * resize events:
   * inbound (container resize, e.g. due to resolution change)
@@ -49,15 +49,35 @@ methods:
    * calculate recommended sizes
    * for each child:
      * call child.fit(recommendedSize)
-     * take into account real child size
+       * a recommended size of 0 (on an axis) means to use minimum space
+     * query and use real child size
    * iterate, as needed
    * set own size
- * rearrange()                   <- upwards
+ * rearrange() [final]           <- upwards
    * arrange()
    * if size changed, call parent.rearrange()
  * fit(recommendedSize)          <- downwards
-   * set size to recommended
+   * set size to recommended or whatever
    * arrange()
+
+controls:
+ * fixed: fixed size, fill or ??? inner
+ * centered: fill outer, fill or center inner
+
+ SizeW/H: pass given W/H instead of recommendedSize to child
+ ShrinkW/H: pass 0 instead of recommendedSize to child
+ CenterW/H: if child is sized smaller than our size, center it
+ PaddingW/H: self-explanatory
+
+ Table:
+  - Take a 2D dyn array of controls
+  - Use dummy SpanAbove and SpanLeft types to indicate spans
+  - Arranging:
+    - First, probe using 0x0 recommendedSize, to query the cells' minimal size
+    - Stretch any extra remaining space among cells proportionally to their minimal size
+    - If a cell does not use the newly-allocated space, redistribute remaining space among remaining rows/columns
+      This allows creating fixed-size rows-columns while stretching others.
+  Row / Column: 1D table
 
 alternative:
  * arrange method
@@ -70,3 +90,14 @@ alternative:
 self resize:
  * parent.rearrange()
  * parent will call .fit(allocatedSize)
+
+--------------------------------------------------
+
+Qt:
+ * size hint, minimum size hint
+ * size policy:
+   - horizontal and vertical, with a flag that controls if it's proportional
+   - one direction's policy:
+     - can it shrink?
+     - can it grow?
+     - should it grow?
