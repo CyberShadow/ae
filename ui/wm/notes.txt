@@ -68,6 +68,7 @@ controls:
  ShrinkW/H: pass 0 instead of recommendedSize to child
  CenterW/H: if child is sized smaller than our size, center it
  PaddingW/H: self-explanatory
+ RatioW/H: pass a ratio of recommendedSize to child
 
  Table:
   - Take a 2D dyn array of controls

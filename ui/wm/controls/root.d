@@ -13,7 +13,7 @@
 
 module ae.ui.wm.controls.root;
 
-import ae.ui.wm.controls.container;
+import ae.ui.wm.controls.control;
 import ae.ui.video.renderer;
 
 /// Container for all top-level windows.

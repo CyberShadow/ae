@@ -33,7 +33,7 @@ final class MyApplication : WMApplication
 	{
 		shell = new SDLShell(this);
 		shell.video = new SDLVideo();
-		root.children ~= new MyControl(shell);
+		root.addChild(new MyControl(shell));
 		shell.run();
 		shell.video.shutdown();
 		return 0;
