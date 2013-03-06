@@ -56,6 +56,8 @@ private:
 	ContainerControl _parent;
 }
 
+// ***************************************************************************
+
 /// An abstract base class for a control with children.
 class ContainerControl : Control
 {
@@ -146,6 +148,8 @@ class StaticFitContainerControl : ContainerControl
 	}
 }
 
+// ***************************************************************************
+
 /// Allow specifying a size as a combination of parent size % and pixels.
 /// Sizes are summed together.
 struct RelativeSize
@@ -155,13 +159,34 @@ struct RelativeSize
 	// TODO: Add "em", when we have variable font sizes?
 
 	int toPixels(int parentSize) pure const { return px + cast(int)(parentSize*ratio); }
+
+	RelativeSize opBinary(string op)(RelativeSize other)
+		if (op == "+" || op == "-")
+	{
+		return mixin("RelativeSize(this.px"~op~"other.px, this.ratio"~op~"other.ratio)");
+	}
 }
 
 /// Usage: 50.px
 @property RelativeSize px(int px) { return RelativeSize(px); }
 /// Usage: 25.percent
 @property RelativeSize percent(float percent) { return RelativeSize(0, percent/100f); }
+
 // ***************************************************************************
+
+/// No-op wrapper
+class Wrapper : ContainerControl
+{
+	override void arrange(int rw, int rh)
+	{
+		assert(children.length == 1, "Wrapper does not have exactly one child");
+		auto child = children[0];
+		child.arrange(rw, rh);
+		this.w = child.w;
+		this.h = child.h;
+	}
+}
+
 
 /// Provides default implementations for wrapper behavior methods
 mixin template ComplementWrapperBehavior(alias WrapperBehavior, Params...)
@@ -190,7 +215,7 @@ mixin template OneDirectionCustomWrapper(alias WrapperBehavior, Params...)
 	mixin ComplementWrapperBehavior!(WrapperBehavior, Params);
 }
 
-class WCustomWrapper(alias WrapperBehavior, Params...) : ContainerControl
+class WCustomWrapper(alias WrapperBehavior, Params...) : Wrapper
 {
 	override void arrange(int rw, int rh)
 	{
@@ -205,7 +230,7 @@ class WCustomWrapper(alias WrapperBehavior, Params...) : ContainerControl
 	mixin OneDirectionCustomWrapper!(WrapperBehavior, Params);
 }
 
-class HCustomWrapper(alias WrapperBehavior, Params...) : ContainerControl
+class HCustomWrapper(alias WrapperBehavior, Params...) : Wrapper
 {
 	override void arrange(int rw, int rh)
 	{
@@ -220,7 +245,7 @@ class HCustomWrapper(alias WrapperBehavior, Params...) : ContainerControl
 	mixin OneDirectionCustomWrapper!(WrapperBehavior, Params);
 }
 
-class CustomWrapper(alias WrapperBehavior, Params...) : ContainerControl
+class CustomWrapper(alias WrapperBehavior, Params...) : Wrapper
 {
 	override void arrange(int rw, int rh)
 	{
@@ -311,3 +336,78 @@ private mixin template PadBehavior()
 }
 /// Add some padding on both sides of the content.
 mixin DeclareWrapper!("Pad", PadBehavior, RelativeSize);
+
+// ***************************************************************************
+
+class Table : ContainerControl
+{
+	this(int rows, int cols)
+	{
+		this.rows = rows;
+		this.cols = cols;
+	}
+
+	override void arrange(int rw, int rh)
+	{
+		assert(children.length == rows*cols, "Wrong number of table children");
+
+		static struct Size { int w, h; }
+		Size[][] minSizes = new Size[][](cols, rows);
+		int[] minColSizes = new int[cols];
+		int[] minRowSizes = new int[rows];
+
+		foreach (i, child; children)
+		{
+			child.arrange(0, 0);
+			auto col = i % cols;
+			auto row = i / cols;
+			minSizes[row][col] = Size(child.w, child.h);
+			minColSizes[col] = max(minColSizes[col], child.w);
+			minRowSizes[row] = max(minRowSizes[row], child.h);
+		}
+
+		import std.algorithm;
+		int minW = reduce!"a + b"(0, minColSizes);
+		int minH = reduce!"a + b"(0, minRowSizes);
+
+		// TODO: fixed-size rows / columns
+		// Maybe associate RelativeSize values with rows/columns?
+
+		this.w = max(minW, rw);
+		this.h = max(minH, rh);
+
+		int[] colSizes = new int[cols];
+		int[] colOffsets = new int[cols];
+		int p = 0;
+		foreach (col; 0..cols)
+		{
+			colOffsets[col] = p;
+			auto size = minColSizes[col] * this.w / minW;
+			colSizes[col] = size;
+			p += size;
+		}
+
+		int[] rowSizes = new int[rows];
+		int[] rowOffsets = new int[rows];
+		p = 0;
+		foreach (row; 0..rows)
+		{
+			rowOffsets[row] = p;
+			auto size = minRowSizes[row] * this.h / minH;
+			rowSizes[row] = size;
+			p += size;
+		}
+
+		foreach (i, child; children)
+		{
+			auto col = i % cols;
+			auto row = i / cols;
+			child.x = colOffsets[col];
+			child.y = rowOffsets[row];
+			child.arrange(colSizes[col], rowSizes[col]);
+		}
+	}
+
+private:
+	int rows, cols;
+}

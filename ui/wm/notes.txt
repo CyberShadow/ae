@@ -77,7 +77,7 @@ controls:
     - First, probe using 0x0 recommendedSize, to query the cells' minimal size
     - Stretch any extra remaining space among cells proportionally to their minimal size
     - If a cell does not use the newly-allocated space, redistribute remaining space among remaining rows/columns
-      This allows creating fixed-size rows-columns while stretching others.
+      This allows creating fixed-size rows/columns while stretching others.
   Row / Column: 1D table
 
 alternative:
