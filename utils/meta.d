@@ -13,6 +13,8 @@
 
 module ae.utils.meta;
 
+import std.traits;
+
 /**
  * Same as TypeTuple, but meant to be used with values.
  *
@@ -156,4 +158,58 @@ else
 	{
 		static assert(false, "This D compiler has no UDA support.");
 	}
+}
+
+// ************************************************************************
+
+import std.conv;
+import std.string;
+
+private string mixGenerateContructorProxies(T)()
+{
+	string s;
+	foreach (ctor; __traits(getOverloads, T, "__ctor"))
+	{
+		string[] declarationList, usageList;
+		foreach (i, param; ParameterTypeTuple!(typeof(&ctor)))
+		{
+			auto varName = "v" ~ text(i);
+			declarationList ~= param.stringof ~ " " ~ varName;
+			usageList ~= varName;
+		}
+		s ~= "this(" ~ declarationList.join(", ") ~ ") { super(" ~ usageList.join(", ") ~ "); }\n";
+	}
+	return s;
+}
+
+/// Generate constructors that simply call the parent class constructors.
+/// Based on http://forum.dlang.org/post/i3hpj0$2vc6$1@digitalmars.com
+mixin template GenerateContructorProxies()
+{
+	mixin(mixGenerateContructorProxies!(typeof(super))());
+}
+
+unittest
+{
+	class A
+	{
+		int i, j;
+		this() { }
+		this(int i) { this.i = i; }
+		this(int i, int j ) { this.i = i; this.j = j; }
+	}
+
+	class B : A
+	{
+		mixin GenerateContructorProxies;
+	}
+
+	A a;
+
+	a = new B();
+	assert(a.i == 0);
+	a = new B(17);
+	assert(a.i == 17);
+	a = new B(17, 42);
+	assert(a.j == 42);
 }
