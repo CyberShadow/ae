@@ -64,11 +64,11 @@ controls:
  * fixed: fixed size, fill or ??? inner
  * centered: fill outer, fill or center inner
 
- SizeW/H: pass given W/H instead of recommendedSize to child
- ShrinkW/H: pass 0 instead of recommendedSize to child
- CenterW/H: if child is sized smaller than our size, center it
- PaddingW/H: self-explanatory
- RatioW/H: pass a ratio of recommendedSize to child
+ Null: pass recommendedSize to child; use child dimensions
+ SizeW/H: pass given W/H instead of recommendedSize to child, use child dimensions
+ ShrinkW/H: pass 0 instead of recommendedSize to child, use child dimensions
+ CenterW/H: pass recommendedSize to child; if child is sized smaller than our size, center it; use recommendedSize if it is > child's size
+ PaddingW/H: pass recommendedSize - 2*given size to child; use child dimensions + 2*padding
 
  Table:
   - Take a 2D dyn array of controls
