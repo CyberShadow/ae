@@ -87,6 +87,10 @@ final class SDLShell : Shell
 			// start renderer
 			video.start(application);
 
+			// The main purpose of this call is to allow the application
+			// to react to window size changes.
+			application.handleInit();
+
 			// pump events
 			while (!reinitPending && !quitting)
 			{

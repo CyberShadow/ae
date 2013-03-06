@@ -91,6 +91,11 @@ class Application
 	//void handleMinimize() {}
 	//void handleRestore() {}
 
+	/// Called after video initialization.
+	/// Video initialization currently also happens when the window is resized.
+	/// The window size can be accessed via shell.video.getScreenSize.
+	void handleInit() {}
+
 	void handleKeyDown(Key key/*, modifiers? */, dchar character) {}
 	void handleKeyUp(Key key/*, modifiers? */) {}
 

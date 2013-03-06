@@ -16,7 +16,7 @@ module ae.ui.wm.application;
 import ae.ui.app.application;
 import ae.ui.shell.shell;
 import ae.ui.shell.events;
-import ae.ui.wm.controls.root;
+import ae.ui.wm.controls.control;
 import ae.ui.video.renderer;
 
 /// Specialization of Application class which automatically handles framework messages.
@@ -50,6 +50,14 @@ class WMApplication : Application
 	override void handleQuit()
 	{
 		shell.quit();
+	}
+
+	override void handleInit()
+	{
+		uint w, h;
+		shell.video.getScreenSize(w, h);
+		root.w = w; root.h = h;
+		root.sizeChanged();
 	}
 
 	// ********************************* Rendering *********************************

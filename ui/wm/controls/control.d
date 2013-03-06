@@ -44,6 +44,7 @@ class Control
 	/// but there is no obligation to follow them.
 	protected void arrange(int rw, int rh) { }
 
+	/// Called when a child's dimensions change, to allow the size change to bubble up to parents.
 	final void rearrange()
 	{
 		auto oldW = w, oldH = h;
@@ -90,9 +91,9 @@ class ContainerControl : Control
 			child.handleMouseMove(x-child.x, y-child.y, buttons);
 	}
 
-	abstract override void render(Renderer s, int x, int y)
+	override void render(Renderer s, int x, int y)
 	{
-		// background should be rendered upstream
+		// background should be rendered by a subclass or parent
 		foreach (child; children)
 			child.render(s, x+child.x, y+child.y);
 	}
@@ -341,7 +342,9 @@ mixin DeclareWrapper!("Pad", PadBehavior, RelativeSize);
 
 class Table : ContainerControl
 {
-	this(int rows, int cols)
+	uint rows, cols;
+
+	this(uint rows, uint cols)
 	{
 		this.rows = rows;
 		this.cols = cols;
@@ -370,6 +373,10 @@ class Table : ContainerControl
 		int minW = reduce!"a + b"(0, minColSizes);
 		int minH = reduce!"a + b"(0, minRowSizes);
 
+		// If all controls can take up no space, spread them out equivalently
+		if (minW == 0) { minW = cols; minColSizes[] = 1; }
+		if (minH == 0) { minH = rows; minRowSizes[] = 1; }
+
 		// TODO: fixed-size rows / columns
 		// Maybe associate RelativeSize values with rows/columns?
 
@@ -382,7 +389,7 @@ class Table : ContainerControl
 		foreach (col; 0..cols)
 		{
 			colOffsets[col] = p;
-			auto size = minColSizes[col] * this.w / minW;
+			auto size = minW ? minColSizes[col] * this.w / minW : 0;
 			colSizes[col] = size;
 			p += size;
 		}
@@ -393,7 +400,7 @@ class Table : ContainerControl
 		foreach (row; 0..rows)
 		{
 			rowOffsets[row] = p;
-			auto size = minRowSizes[row] * this.h / minH;
+			auto size = minH ? minRowSizes[row] * this.h / minH : 0;
 			rowSizes[row] = size;
 			p += size;
 		}
@@ -407,7 +414,53 @@ class Table : ContainerControl
 			child.arrange(colSizes[col], rowSizes[col]);
 		}
 	}
+}
 
-private:
-	int rows, cols;
+class Row : Table
+{
+	this() { super(0, 0); }
+
+	override void arrange(int rw, int rh)
+	{
+		rows = 1;
+		cols = children.length;
+		super.arrange(rw, rh);
+	}
+}
+
+class Column : Table
+{
+	this() { super(0, 0); }
+
+	override void arrange(int rw, int rh)
+	{
+		rows = children.length;
+		cols = 1;
+		super.arrange(rw, rh);
+	}
+}
+
+// ***************************************************************************
+
+/// Container for all top-level windows.
+/// The root control's children are, semantically, layers.
+final class RootControl : ContainerControl
+{
+	override void render(Renderer r, int x, int y)
+	{
+		// TODO: fill background
+		super.render(r, x, y);
+	}
+
+	override void arrange(int rw, int rh)
+	{
+		foreach (child; children)
+			child.arrange(w, h);
+	}
+
+	// Expose "arrange", which is "protected", to WMApplication
+	final void sizeChanged()
+	{
+		arrange(w, h);
+	}
 }

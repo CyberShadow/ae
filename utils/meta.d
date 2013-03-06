@@ -165,7 +165,7 @@ else
 import std.conv;
 import std.string;
 
-private string mixGenerateContructorProxies(T)()
+string mixGenerateContructorProxies(T)()
 {
 	string s;
 	foreach (ctor; __traits(getOverloads, T, "__ctor"))

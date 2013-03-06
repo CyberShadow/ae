@@ -73,6 +73,12 @@ class SDLCommonVideo : Video
 		stopping = true;
 	}
 
+	override void getScreenSize(out uint width, out uint height)
+	{
+		width = screenWidth;
+		height = screenHeight;
+	}
+
 protected:
 	abstract uint getSDLFlags();
 	abstract Renderer getRenderer();

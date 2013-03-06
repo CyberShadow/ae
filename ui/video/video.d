@@ -30,6 +30,9 @@ public:
 	/// Shutdown (de-initialize) video driver. Blocks.
 	abstract void shutdown();
 
+	/// Query the window size that's currently running.
+	abstract void getScreenSize(out uint width, out uint height);
+
 	/// Shell hooks.
 	AppCallback errorCallback;
 }
