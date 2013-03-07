@@ -43,10 +43,10 @@ final class MyApplication : WMApplication
 	Control createView()
 	{
 		return (new Table(2, 2))
-			.addChild(new SetBGColor!(PaintControl, 0x002222))
-			.addChild(new SetBGColor!(PaintControl, 0x220022))
-			.addChild(new SetBGColor!(PaintControl, 0x222200))
-			.addChild(new SetBGColor!(PaintControl, 0x002200))
+			.addChild((new Pad(10.px, 5.percent)).addChild(new SetBGColor!(PaintControl, 0x002222)))
+			.addChild((new Pad(10.px, 5.percent)).addChild(new SetBGColor!(PaintControl, 0x220022)))
+			.addChild((new Pad(10.px, 5.percent)).addChild(new SetBGColor!(PaintControl, 0x222200)))
+			.addChild((new Pad(10.px, 5.percent)).addChild(new SetBGColor!(PaintControl, 0x002200)))
 		;
 	}
 }

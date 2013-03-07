@@ -169,7 +169,7 @@ struct RelativeSize
 }
 
 /// Usage: 50.px
-@property RelativeSize px(int px) { return RelativeSize(px); }
+@property RelativeSize px(int px) { return RelativeSize(px, 0); }
 /// Usage: 25.percent
 @property RelativeSize percent(float percent) { return RelativeSize(0, percent/100f); }
 
@@ -194,6 +194,8 @@ mixin template ComplementWrapperBehavior(alias WrapperBehavior, Params...)
 {
 final:
 	mixin WrapperBehavior;
+
+	void moreMagic() {}
 
 	static if (!is(typeof(adjustHint)))
 		int adjustHint(int hint, Params params) { return hint; }
@@ -313,7 +315,7 @@ private mixin template CenterBehavior()
 	}
 }
 /// If content is smaller than parent hint, center the content and use parent hint for own size.
-mixin DeclareWrapper!("Center", ShrinkBehavior);
+mixin DeclareWrapper!("Center", CenterBehavior);
 
 private mixin template PadBehavior()
 {
