@@ -78,10 +78,6 @@ class SetBGColor(BASE : Control, uint C) : BASE
 
 class PaintControl : Control
 {
-	this()
-	{
-	}
-
 	override void arrange(int rw, int rh) { w = rw; h = rh; }
 
 	struct Coord { uint x, y; BGRX c; void* dummy; }

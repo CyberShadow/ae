@@ -168,17 +168,18 @@ import std.string;
 string mixGenerateContructorProxies(T)()
 {
 	string s;
-	foreach (ctor; __traits(getOverloads, T, "__ctor"))
-	{
-		string[] declarationList, usageList;
-		foreach (i, param; ParameterTypeTuple!(typeof(&ctor)))
+	static if (__traits(hasMember, T, "__ctor"))
+		foreach (ctor; __traits(getOverloads, T, "__ctor"))
 		{
-			auto varName = "v" ~ text(i);
-			declarationList ~= param.stringof ~ " " ~ varName;
-			usageList ~= varName;
+			string[] declarationList, usageList;
+			foreach (i, param; ParameterTypeTuple!(typeof(&ctor)))
+			{
+				auto varName = "v" ~ text(i);
+				declarationList ~= param.stringof ~ " " ~ varName;
+				usageList ~= varName;
+			}
+			s ~= "this(" ~ declarationList.join(", ") ~ ") { super(" ~ usageList.join(", ") ~ "); }\n";
 		}
-		s ~= "this(" ~ declarationList.join(", ") ~ ") { super(" ~ usageList.join(", ") ~ "); }\n";
-	}
 	return s;
 }
 
