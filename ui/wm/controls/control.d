@@ -340,6 +340,7 @@ mixin DeclareWrapper!("Pad", PadBehavior, RelativeSize);
 
 // ***************************************************************************
 
+/// Space out controls in a 2D grid, according to their dimensions and resizability.
 class Table : ContainerControl
 {
 	uint rows, cols;
@@ -416,6 +417,7 @@ class Table : ContainerControl
 	}
 }
 
+/// 1D table for a row of controls.
 class Row : Table
 {
 	this() { super(0, 0); }
@@ -428,6 +430,7 @@ class Row : Table
 	}
 }
 
+/// 1D table for a column of controls.
 class Column : Table
 {
 	this() { super(0, 0); }
@@ -442,16 +445,35 @@ class Column : Table
 
 // ***************************************************************************
 
+/// All children occupy the entire area of the control.
+/// The control grows as necessary to accommodate all layers.
+class Layers : ContainerControl
+{
+	override void arrange(int rw, int rh)
+	{
+		w = rw; h = rh;
+		bool changed;
+		do
+		{
+			changed = false;
+			foreach (child; children)
+			{
+				child.arrange(w, h);
+				if (child.w > w)
+					w = child.w, changed = true;
+				if (child.h > h)
+					h = child.h, changed = true;
+			}
+		} while (changed);
+	}
+}
+
+// ***************************************************************************
+
 /// Container for all top-level windows.
 /// The root control's children are, semantically, layers.
 final class RootControl : ContainerControl
 {
-	override void render(Renderer r, int x, int y)
-	{
-		// TODO: fill background
-		super.render(r, x, y);
-	}
-
 	override void arrange(int rw, int rh)
 	{
 		foreach (child; children)
