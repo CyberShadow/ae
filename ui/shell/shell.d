@@ -56,7 +56,7 @@ struct ShellSettings
 	uint fullScreenY =  768;
 	uint windowSizeX =  800;
 	uint windowSizeY =  600;
-	int windowPosX   =   -1;
-	int windowPosY   =   -1;
+	int windowPosX   = int.min; // int.min means unset
+	int windowPosY   = int.min;
 	ScreenMode screenMode = ScreenMode.windowed;
 }
