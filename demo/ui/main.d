@@ -27,7 +27,7 @@ import ae.ui.wm.controls.control;
 
 final class MyApplication : WMApplication
 {
-	override string getName() { return "Demo/Test"; }
+	override string getName() { return "Demo/UI"; }
 	override string getCompanyName() { return "CyberShadow"; }
 
 	override int run(string[] args)
