@@ -18,6 +18,7 @@ import std.process : environment;
 
 import derelict.sdl.sdl;
 
+import ae.sys.desktop;
 import ae.ui.video.video;
 import ae.ui.app.application;
 import ae.ui.shell.shell;
@@ -100,18 +101,59 @@ private:
 	{
 		flags = getSDLFlags();
 
-		if (application.isFullScreen())
+		auto settings = application.getShellSettings();
+
+		string windowPos;
+		bool centered;
+
+		final switch (settings.screenMode)
 		{
-			application.getFullScreenResolution(screenWidth, screenHeight);
-			flags |= SDL_FULLSCREEN;
+			case ScreenMode.windowed:
+				screenWidth  = settings.windowSizeX;
+				screenHeight = settings.windowSizeY;
+				// Since SDL 1.x does not provide a way to track window coordinates,
+				// just center the window
+				if (firstStart)
+				{
+					// Center the window only on start-up.
+					// We do not want to center the window if
+					// e.g. the user resized it.
+					centered = true;
+				}
+				break;
+			case ScreenMode.maximized:
+				// not supported - use windowed
+				goto case ScreenMode.windowed;
+			case ScreenMode.fullscreen:
+				screenWidth  = settings.fullScreenX;
+				screenHeight = settings.fullScreenY;
+				flags |= SDL_FULLSCREEN;
+				break;
+			case ScreenMode.windowedFullscreen:
+				// TODO: use SDL_GetVideoInfo
+				static if (is(typeof(getDesktopResolution)))
+				{
+					getDesktopResolution(screenWidth, screenHeight);
+					flags |= SDL_NOFRAME;
+					windowPos = "0,0";
+				}
+				else
+				{
+					// not supported - use fullscreen
+					goto case ScreenMode.fullscreen;
+				}
+				break;
 		}
-		else
-			application.getWindowSize(screenWidth, screenHeight);
 
 		if (application.isResizable())
 			flags |= SDL_RESIZABLE;
 
-		if (firstStart)
+		if (windowPos)
+			environment["SDL_VIDEO_WINDOW_POS"] = windowPos;
+		else
+			environment.remove("SDL_VIDEO_WINDOW_POS");
+
+		if (centered)
 			environment["SDL_VIDEO_CENTERED"] = "1";
 		else
 			environment.remove("SDL_VIDEO_CENTERED");

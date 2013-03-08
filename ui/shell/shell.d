@@ -39,3 +39,24 @@ class Shell
 protected:
 	bool quitting;
 }
+
+/// Specifies the window / screen mode.
+enum ScreenMode
+{
+	windowed,
+	maximized,
+	fullscreen,
+	windowedFullscreen
+}
+
+/// The default / remembered screen settings.
+struct ShellSettings
+{
+	uint fullScreenX = 1024;
+	uint fullScreenY =  768;
+	uint windowSizeX =  800;
+	uint windowSizeY =  600;
+	int windowPosX   =   -1;
+	int windowPosY   =   -1;
+	ScreenMode screenMode = ScreenMode.windowed;
+}

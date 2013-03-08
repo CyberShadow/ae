@@ -15,6 +15,7 @@ module ae.ui.app.application;
 
 import ae.sys.desktop;
 import ae.sys.config;
+import ae.ui.shell.shell;
 import ae.ui.shell.events;
 import ae.ui.video.renderer;
 
@@ -46,39 +47,18 @@ class Application
 
 	// ************************** Default screen settings **************************
 
-	void getDefaultFullScreenResolution(out uint x, out uint y)
+	ShellSettings getDefaultShellSettings()
 	{
+		ShellSettings settings;
 		static if (is(typeof(getDesktopResolution)))
-			getDesktopResolution(x, y);
-		else
-			x = 1024, y = 768;
+			getDesktopResolution(settings.fullScreenX, settings.fullScreenY);
+		return settings;
 	}
-	void getDefaultWindowSize(out uint x, out uint y) { x = 800; y = 600; }
-	bool isFullScreenByDefault() { return false; }
+
+	ShellSettings getShellSettings() { return config.read("ShellSettings", getDefaultShellSettings()); }
+	void setShellSettings(ShellSettings settings) { config.write("ShellSettings", settings); }
+
 	bool isResizable() { return true; }
-
-	bool setFullScreen() { config.write("FullScreen", !isFullScreen()); return true; }
-	bool setWindowSize(uint x, uint y) { config.write("WindowX", x); config.write("WindowY", y); return true; }
-
-	void getFullScreenResolution(out uint x, out uint y)
-	{
-		getDefaultFullScreenResolution(x, y);
-		x = config.read("FullScreenX", x);
-		y = config.read("FullScreenY", y);
-	}
-
-	void getWindowSize(out uint x, out uint y)
-	{
-		getDefaultWindowSize(x, y);
-		x = config.read("WindowX", x);
-		y = config.read("WindowY", y);
-	}
-
-	bool isFullScreen()
-	{
-		return config.read("FullScreen", isFullScreenByDefault());
-	}
-
 	bool needSound() { return false; }
 	bool needJoystick() { return false; }
 

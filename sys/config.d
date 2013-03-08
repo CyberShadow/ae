@@ -13,20 +13,22 @@
 
 module ae.sys.config;
 
+import std.ascii;
+
 import ae.sys.paths;
 
-version (Windows)
+class Config
 {
-	import std.exception;
-	import std.utf;
-	import std.array;
-
-	import win32.windef;
-	import win32.winreg;
-
-	// On Windows, just keep the registry key open and read/write values directly.
-	class Config
+	version (Windows)
 	{
+		import std.exception;
+		import std.utf;
+		import std.array;
+
+		import win32.windef;
+		import win32.winreg;
+
+		// On Windows, just keep the registry key open and read/write values directly.
 		this(string appName = null, string companyName = null)
 		{
 			if (!appName)
@@ -52,7 +54,7 @@ version (Windows)
 				RegCloseKey(key);
 		}
 
-		T read(T)(string name, T defaultValue = T.init)
+		T readImpl(T)(string name, T defaultValue)
 		{
 			try
 			{
@@ -82,11 +84,11 @@ version (Windows)
 				else
 					static assert(0, "Can't read values of type " ~ T.stringof);
 			}
-			catch (Throwable e)
+			catch (Throwable e) // FIXME
 				return defaultValue;
 		}
 
-		void write(T)(string name, T value)
+		void writeImpl(T)(string name, T value)
 		{
 			static if (is(T : const(char[]))) // strings
 			{
@@ -129,18 +131,15 @@ version (Windows)
 			return size;
 		}
 	}
-}
-else // POSIX
-{
-	import std.string;
-	import std.stdio;
-	import std.file;
-	import std.path;
-	import std.conv;
-
-	// Cache values from memory, and save them to disk when the program exits.
-	class Config
+	else // POSIX
 	{
+		import std.string;
+		import std.stdio;
+		import std.file;
+		import std.path;
+		import std.conv;
+
+		// Cache values from memory, and save them to disk when the program exits.
 		this(string appName = null, string companyName = null)
 		{
 			fileName = getRoamingAppProfile(appName) ~ "/config";
@@ -161,7 +160,7 @@ else // POSIX
 			assert(!dirty, "Dirty config destruction");
 		}
 
-		T read(T)(string name, T defaultValue = T.init)
+		T readImpl(T)(string name, T defaultValue = T.init)
 		{
 			auto pvalue = name in values;
 			if (pvalue)
@@ -170,7 +169,7 @@ else // POSIX
 				return defaultValue;
 		}
 
-		void write(T)(string name, T value)
+		void writeImpl(T)(string name, T value)
 			if (is(typeof(to!string(T.init))))
 		{
 			values[name] = to!string(value);
@@ -200,4 +199,50 @@ else // POSIX
 				instance.save();
 		}
 	}
+
+	T read(T)(string name, T defaultValue = T.init)
+	{
+		static if (is(typeof(readImpl(name, defaultValue))))
+			return readImpl(name, defaultValue);
+		else
+		static if (is(T==struct))
+		{
+			T v = defaultValue;
+			auto prefix = name ~ ".";
+			foreach (i, field; v.tupleof)
+				v.tupleof[i] = readImpl(prefix ~ Capitalize!(v.tupleof[i].stringof[2..$]), v.tupleof[i]);
+			return v;
+		}
+		else
+		static if (is(typeof(to!T(string.init))))
+		{
+			auto s = readImpl(name, string.init);
+			return s is string.init ? defaultValue : to!T(s);
+		}
+		else
+			static assert(0, "Can't read values of type " ~ T.stringof);
+	}
+
+	void write(T)(string name, T v)
+	{
+		static if (is(typeof(writeImpl(name, v))))
+			return writeImpl(name, v);
+		else
+		static if (is(T==struct))
+		{
+			auto prefix = name ~ ".";
+			foreach (i, field; v.tupleof)
+				writeImpl(prefix ~ Capitalize!(v.tupleof[i].stringof[2..$]), v.tupleof[i]);
+		}
+		else
+		static if (is(typeof(to!string(v))))
+			writeImpl(name, to!string(v));
+		else
+			static assert(0, "Can't write values of type " ~ T.stringof);
+	}
+}
+
+private template Capitalize(string s)
+{
+	enum Capitalize = s.length ? cast(char)toUpper(s[0]) ~ s[1..$] : s;
 }

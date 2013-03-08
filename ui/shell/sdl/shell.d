@@ -208,9 +208,14 @@ final class SDLShell : Shell
 			return application.handleJoyButtonUp  (event.jbutton.button);
 
 		case SDL_VIDEORESIZE:
-			application.setWindowSize(event.resize.w, event.resize.h);
+		{
+			auto settings = application.getShellSettings();
+			settings.windowSizeX = event.resize.w;
+			settings.windowSizeY = event.resize.h;
+			application.setShellSettings(settings);
 			reinitPending = true;
 			break;
+		}
 		case SDL_QUIT:
 			application.handleQuit();
 			break;
