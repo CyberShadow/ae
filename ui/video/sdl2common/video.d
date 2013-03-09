@@ -100,20 +100,16 @@ private:
 		SDL_PumpEvents();
 	}
 
-	uint flags;
-	int windowPosX, windowPosY;
-	string caption;
 	bool firstStart = true;
 
 	final void configure(Application application)
 	{
-		flags = SDL_WINDOW_SHOWN;
+		uint flags = SDL_WINDOW_SHOWN;
 		flags |= getSDLFlags();
 
 		auto settings = application.getShellSettings();
 		screenWidth = screenHeight = 0;
-		windowPosX = windowPosY = SDL_WINDOWPOS_UNDEFINED;
-		caption = application.getName();
+		uint windowPosX = SDL_WINDOWPOS_UNDEFINED, windowPosY = SDL_WINDOWPOS_UNDEFINED;
 
 		final switch (settings.screenMode)
 		{
@@ -149,13 +145,23 @@ private:
 
 		renderCallback.bind(&application.render);
 
+		// Window must always be created in the main (SDL event) thread,
+		// otherwise we get Win32 deadlocks due to messages being sent
+		// to the render thread.
+		// As a result, if the event thread does something that results
+		// in a Windows message, the message gets put on the render thread
+		// message queue. However, while waiting for the message to be
+		// processed, the event thread holds the application global lock,
+		// and the render thread is waiting on it - thus resulting in a
+		// deadlock.
+		window = sdlEnforce(SDL_CreateWindow(toStringz(application.getName()), windowPosX, windowPosY, screenWidth, screenHeight, flags), "Can't create window");
+
 		firstStart = false;
 	}
 
 	final void initialize()
 	{
 		prepare();
-		window = sdlEnforce(SDL_CreateWindow(toStringz(caption), windowPosX, windowPosY, screenWidth, screenHeight, flags), "Can't create window");
 		renderer = sdlEnforce(SDL_CreateRenderer(window, -1, getRendererFlags()), "Can't create renderer");
 	}
 
