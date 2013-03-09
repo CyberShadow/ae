@@ -50,10 +50,9 @@ class SDL2CommonVideo : Video
 
 	override void start(Application application)
 	{
-		configure(application);
-
+		initMain(application);
 		static if (!InitializeVideoInRenderThread)
-			initialize();
+			initVary();
 
 		started = stopping = false;
 		starting = true;
@@ -65,6 +64,10 @@ class SDL2CommonVideo : Video
 		stopped = false;
 		stopping = true;
 		while (!stopped) wait();
+
+		static if (!InitializeVideoInRenderThread)
+			doneVary();
+		doneMain();
 	}
 
 	override void stopAsync(AppCallback callback)
@@ -97,12 +100,13 @@ private:
 		if (error)
 			renderThread.join(); // collect exception
 		SDL_Delay(1);
-		SDL_PumpEvents();
+		//SDL_PumpEvents();
 	}
 
 	bool firstStart = true;
 
-	final void configure(Application application)
+	/// Main thread initialization.
+	final void initMain(Application application)
 	{
 		uint flags = SDL_WINDOW_SHOWN;
 		flags |= getSDLFlags();
@@ -159,10 +163,23 @@ private:
 		firstStart = false;
 	}
 
-	final void initialize()
+	/// Main/render thread initialization (depends on InitializeVideoInRenderThread).
+	final void initVary()
 	{
 		prepare();
 		renderer = sdlEnforce(SDL_CreateRenderer(window, -1, getRendererFlags()), "Can't create renderer");
+	}
+
+	/// Main/render thread finalization (depends on InitializeVideoInRenderThread).
+	final void doneVary()
+	{
+		SDL_DestroyRenderer(renderer); renderer = null;
+	}
+
+	/// Main thread finalization.
+	final void doneMain()
+	{
+		SDL_DestroyWindow(window); window = null;
 	}
 
 	Thread renderThread;
@@ -186,24 +203,28 @@ private:
 				if (quitting) return;
 				SDL_Delay(1);
 			}
-			started = true;
-			starting = false;
-
 			scope(failure) if (errorCallback) try { errorCallback.call(); } catch {}
 
 			static if (InitializeVideoInRenderThread)
-				initialize();
+				initVary();
 
-			auto aeRenderer = getRenderer();
+			auto renderer = getRenderer();
+
+			started = true;
+			starting = false;
+
 			while (!stopping)
 			{
 				// TODO: predict flip (vblank wait) duration and render at the last moment
-				renderCallback.call(aeRenderer);
-				aeRenderer.present();
+				renderCallback.call(renderer);
+				renderer.present();
 			}
-			aeRenderer.shutdown();
-			SDL_DestroyRenderer(renderer); renderer = null;
-			SDL_DestroyWindow(window); window = null;
+
+			renderer.shutdown();
+
+			static if (InitializeVideoInRenderThread)
+				doneVary();
+
 			if (stopCallback)
 				stopCallback.call();
 			stopped = true;
