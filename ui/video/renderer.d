@@ -82,6 +82,7 @@ enum Renderers
 {
 	SDLSoftware,
 	SDLOpenGL,
+	SDL2,
 	max
 }
 

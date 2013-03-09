@@ -20,11 +20,20 @@ import ae.ui.video.sdl2common.video;
 import ae.ui.video.renderer;
 import ae.ui.video.sdl2.renderer;
 
-class SDL2Video : SDL2CommonVideo
+class SDL2SoftwareVideo : SDL2CommonVideo
 {
 protected:
 	override Renderer getRenderer()
 	{
 		return new SDL2SoftwareRenderer(renderer, screenWidth, screenHeight);
+	}
+}
+
+class SDL2Video : SDL2CommonVideo
+{
+protected:
+	override Renderer getRenderer()
+	{
+		return new SDL2Renderer(renderer, screenWidth, screenHeight);
 	}
 }
