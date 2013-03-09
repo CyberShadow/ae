@@ -34,7 +34,8 @@ final class SDL2SoftwareRenderer : Renderer
 		this.w = w;
 		this.h = h;
 
-		t = sdlEnforce(SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBX8888, SDL_TEXTUREACCESS_STREAMING, w, h), "SDL_CreateTexture failed");
+		enum PF = SDL_DEFINE_PIXELFORMAT(SDL_PIXELTYPE_PACKED32, SDL_PACKEDORDER_XRGB, SDL_PACKEDLAYOUT_8888, 32, 4);
+		t = sdlEnforce(SDL_CreateTexture(renderer, PF, SDL_TEXTUREACCESS_STREAMING, w, h), "SDL_CreateTexture failed");
 	}
 
 	override Bitmap fastLock()
