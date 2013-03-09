@@ -31,6 +31,9 @@ public:
 	abstract void shutdown();
 
 	/// Query the window size that's currently running.
+	/// This is different from the information in ShellSettings
+	/// in that it returns the current client area regardless
+	/// of the screen mode.
 	abstract void getScreenSize(out uint width, out uint height);
 
 	/// Shell hooks.
