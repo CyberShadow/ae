@@ -31,6 +31,16 @@ class SDL2CommonVideo : ThreadedVideo
 		height = screenHeight;
 	}
 
+	override void shutdown()
+	{
+		super.shutdown();
+		if (window)
+		{
+			SDL_DestroyWindow(window);
+			window = null;
+		}
+	}
+
 	SDL_Window* window;
 	SDL_Renderer* renderer;
 
@@ -94,16 +104,67 @@ protected:
 		if (application.isResizable())
 			flags |= SDL_WINDOW_RESIZABLE;
 
-		// Window must always be created in the main (SDL event) thread,
-		// otherwise we get Win32 deadlocks due to messages being sent
-		// to the render thread.
-		// As a result, if the event thread does something that results
-		// in a Windows message, the message gets put on the render thread
-		// message queue. However, while waiting for the message to be
-		// processed, the event thread holds the application global lock,
-		// and the render thread is waiting on it - thus resulting in a
-		// deadlock.
-		window = sdlEnforce(SDL_CreateWindow(toStringz(application.getName()), windowPosX, windowPosY, screenWidth, screenHeight, flags), "Can't create window");
+		if (window)
+		{
+			// We need to recreate the window if renderer flags,
+			// such as SDL_WINDOW_OPENGL, have changed.
+			// Also recreate when switching fullscreen modes.
+			enum recreateMask =
+				SDL_WINDOW_OPENGL |
+				SDL_WINDOW_FULLSCREEN |
+				SDL_WINDOW_BORDERLESS |
+				SDL_WINDOW_RESIZABLE;
+			if ((currentFlags & recreateMask) != (flags & recreateMask)
+			 || (flags & SDL_WINDOW_FULLSCREEN))
+			{
+				SDL_DestroyWindow(window);
+				window = null;
+			}
+		}
+
+		if (window)
+		{
+			// Adjust parameters of existing window.
+
+			if (windowPosX != SDL_WINDOWPOS_UNDEFINED && windowPosY != SDL_WINDOWPOS_UNDEFINED)
+			{
+				int currentX, currentY;
+				SDL_GetWindowPosition(window, &currentX, &currentY);
+				if (currentX != windowPosX || currentY != windowPosY)
+					SDL_SetWindowPosition(window, windowPosX, windowPosY);
+			}
+			if (screenWidth && screenHeight)
+			{
+				int currentW, currentH;
+				SDL_GetWindowSize(window, &currentW, &currentH);
+				if (currentW != screenWidth || currentH != screenHeight)
+					SDL_SetWindowSize(window, screenWidth, screenHeight);
+			}
+		}
+		else
+		{
+			// Create a new window.
+
+			// Window must always be created in the main (SDL event) thread,
+			// otherwise we get Win32 deadlocks due to messages being sent
+			// to the render thread.
+			// As a result, if the event thread does something that results
+			// in a Windows message, the message gets put on the render thread
+			// message queue. However, while waiting for the message to be
+			// processed, the event thread holds the application global lock,
+			// and the render thread is waiting on it - thus resulting in a
+			// deadlock.
+
+			window = sdlEnforce(
+				SDL_CreateWindow(
+					toStringz(application.getName()),
+					windowPosX, windowPosY,
+					screenWidth, screenHeight,
+					flags),
+				"Can't create window");
+		}
+
+		currentFlags = flags;
 	}
 
 	/// Main/render thread initialization (depends on InitializeVideoInRenderThread).
@@ -120,8 +181,8 @@ protected:
 	}
 
 	/// Main thread finalization.
-	override void doneMain()
-	{
-		SDL_DestroyWindow(window); window = null;
-	}
+	override void doneMain() {}
+
+private:
+	uint currentFlags;
 }
