@@ -209,6 +209,12 @@ final class SDL2Shell : Shell
 		case SDL_WINDOWEVENT:
 			switch (event.window.event)
 			{
+				case SDL_WINDOWEVENT_MOVED:
+					auto settings = application.getShellSettings();
+					settings.windowPosX = event.window.data1;
+					settings.windowPosY = event.window.data2;
+					application.setShellSettings(settings);
+					break;
 				case SDL_WINDOWEVENT_SIZE_CHANGED:
 					auto settings = application.getShellSettings();
 					settings.windowSizeX = event.window.data1;
