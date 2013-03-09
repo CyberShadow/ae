@@ -194,14 +194,16 @@ private:
 			static if (InitializeVideoInRenderThread)
 				initialize();
 
-			auto renderer = getRenderer();
+			auto aeRenderer = getRenderer();
 			while (!stopping)
 			{
 				// TODO: predict flip (vblank wait) duration and render at the last moment
-				renderCallback.call(renderer);
-				renderer.present();
+				renderCallback.call(aeRenderer);
+				aeRenderer.present();
 			}
-			renderer.shutdown();
+			aeRenderer.shutdown();
+			SDL_DestroyRenderer(renderer); renderer = null;
+			SDL_DestroyWindow(window); window = null;
 			if (stopCallback)
 				stopCallback.call();
 			stopped = true;
