@@ -115,15 +115,15 @@ private:
 				if (quitting) return;
 				nop();
 			}
-			started = true;
-			starting = false;
-
 			scope(failure) if (errorCallback) try { errorCallback.call(); } catch {}
 
 			if (initializeVideoInRenderThread)
 				initVary();
 
 			auto renderer = getRenderer();
+
+			started = true; starting = false;
+
 			while (!stopping)
 			{
 				// TODO: predict flip (vblank wait) duration and render at the last moment
@@ -137,8 +137,8 @@ private:
 
 			if (stopCallback)
 				stopCallback.call();
-			stopped = true;
-			stopping = false;
+
+			stopped = true; stopping = false;
 		}
 	}
 }
