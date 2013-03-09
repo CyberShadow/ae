@@ -36,7 +36,6 @@ final class SDL2Shell : Shell
 	this(Application application)
 	{
 		this.application = application;
-		this.caption = application.getName();
 
 		//!!SharedLibLoader.disableAutoUnload(); // SDL MM timers may crash on exit
 		DerelictSDL2.load();
@@ -62,6 +61,10 @@ final class SDL2Shell : Shell
 	{
 		while (true)
 		{
+			synchronized(this)
+				if (mainThreadQueue.length)
+					return 1;
+
 			SDL_PumpEvents();
 			switch (SDL_PeepEvents(null, 1, SDL_GETEVENT, 0, uint.max))
 			{
@@ -101,6 +104,14 @@ final class SDL2Shell : Shell
 
 				synchronized(application)
 				{
+					if (mainThreadQueue.length)
+					{
+						foreach (fn; mainThreadQueue)
+							if (fn)
+								fn();
+						mainThreadQueue = null;
+					}
+
 					SDL_Event event = void;
 					while (SDL_PollEvent(&event))
 						handleEvent(&event);
@@ -117,35 +128,22 @@ final class SDL2Shell : Shell
 		SDL_Quit();
 	}
 
-	private enum CustomEvent : int
-	{
-		None,
-		UpdateCaption,
-	}
+	private void delegate()[] mainThreadQueue;
 
-	// Note: calling this too often seems to fill up SDL's event queue.
-	// This can result in this function throwing, and SDL skipping events like SDL_QUIT.
-	private void sendCustomEvent(CustomEvent code)
+	private void runInMainThread(void delegate() fn)
 	{
-		SDL_Event event;
-		event.type = SDL_USEREVENT;
-		event.user.code = code;
-		sdlEnforce(SDL_PushEvent(&event) == 1, "SDL_PushEvent");
+		synchronized(this)
+			mainThreadQueue ~= fn;
 	}
 
 	override void prod()
 	{
-		sendCustomEvent(CustomEvent.None);
+		runInMainThread(null);
 	}
-
-	private string caption;
 
 	override void setCaption(string caption)
 	{
-		// We can't pass the string in the message because the GC won't see it
-		this.caption = caption;
-		// Send a message to event thread to avoid SendMessage(WM_TEXTCHANGED) deadlock
-		sendCustomEvent(CustomEvent.UpdateCaption);
+		runInMainThread({ SDL_SetWindowTitle(sdlVideo.window, toStringz(caption)); });
 	}
 
 	MouseButton translateMouseButton(ubyte sdlButton)
@@ -228,17 +226,6 @@ final class SDL2Shell : Shell
 			break;
 		case SDL_QUIT:
 			application.handleQuit();
-			break;
-		case SDL_USEREVENT:
-			final switch (cast(CustomEvent)event.user.code)
-			{
-			case CustomEvent.None:
-				break;
-			case CustomEvent.UpdateCaption:
-				auto szCaption = toStringz(caption);
-				SDL_SetWindowTitle(sdlVideo.window, szCaption);
-				break;
-			}
 			break;
 		default:
 			break;
