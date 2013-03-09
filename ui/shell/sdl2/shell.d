@@ -178,7 +178,7 @@ final class SDL2Shell : Shell
 		switch (event.type)
 		{
 		case SDL_KEYDOWN:
-			/+if ( event.key.keysym.sym == SDL_SCANCODE_RETURN && (keypressed[SDL_SCANCODE_RALT] || keypressed[SDL_SCANCODE_LALT]))
+			/+if ( event.key.keysym.scancode == SDL_SCANCODE_RETURN && (keypressed[SDL_SCANCODE_RALT] || keypressed[SDL_SCANCODE_LALT]))
 			{
 				if (application.toggleFullScreen())
 				{
@@ -188,9 +188,9 @@ final class SDL2Shell : Shell
 					return false;
 				}
 			}+/
-			return application.handleKeyDown(sdlKeys[event.key.keysym.sym], event.key.keysym.unicode);
+			return application.handleKeyDown(sdlKeys[event.key.keysym.scancode], event.key.keysym.unicode);
 		case SDL_KEYUP:
-			return application.handleKeyUp(sdlKeys[event.key.keysym.sym]);
+			return application.handleKeyUp(sdlKeys[event.key.keysym.scancode]);
 
 		case SDL_MOUSEBUTTONDOWN:
 			return application.handleMouseDown(event.button.x, event.button.y, translateMouseButton(event.button.button));
