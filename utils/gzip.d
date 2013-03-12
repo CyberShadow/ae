@@ -25,7 +25,7 @@ import ae.sys.data;
 
 static import zlib = ae.utils.zlib;
 import ae.utils.zlib : ZlibOptions, ZlibMode;
-static import stdcrc32 = crc32;
+import std.digest.crc;
 
 private enum
 {
@@ -38,11 +38,16 @@ private enum
 
 uint crc32(Data[] data)
 {
-	uint crc = stdcrc32.init_crc32();
+	CRC32 crc;
 	foreach (ref d; data)
-		foreach (v; cast(ubyte[])d.contents)
-			crc = stdcrc32.update_crc32(v, crc);
-	return ~crc;
+		crc.put(cast(ubyte[])d.contents);
+	auto result = crc.finish();
+	return *cast(uint*)result.ptr;
+}
+
+unittest
+{
+	assert(crc32([Data("ab"), Data("c")]) == 0x352441C2);
 }
 
 Data[] deflate2gzip(Data[] compressed, uint dataCrc, size_t dataLength)
