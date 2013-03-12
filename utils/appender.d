@@ -93,7 +93,7 @@ public:
 			static if (is(typeof(cursor[0] = item)))
 				cursor[0] = item;
 			else
-				cursor[0..item.length] = item;
+				cursor[0..item.length] = item[];
 		}
 		else
 		{
@@ -103,7 +103,7 @@ public:
 				else
 				static if (is(typeof(cursor[0..1] = item[0..1])))
 				{
-					cursor[0..item.length] = item;
+					cursor[0..item.length] = item[];
 					cursor += item.length;
 				}
 		}

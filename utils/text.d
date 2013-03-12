@@ -111,7 +111,7 @@ T[] fastReplace(T)(T[] what, T[] from, T[] to)
 					if (p[0..tail.length] == tail)
 					{
 					replaceA:
-						(cast(U*)p+deltaMinusOne)[0..to.length] = to;
+						(cast(U*)p+deltaMinusOne)[0..to.length] = to[];
 					}
 					p = cast(T*)memchr(p, head, end-p);
 				}

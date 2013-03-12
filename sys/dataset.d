@@ -31,7 +31,7 @@ Data joinData(Data[] data)
 	size_t pos = 0;
 	foreach (ref d; data)
 	{
-		result.mcontents[pos..pos+d.length] = d.contents;
+		result.mcontents[pos..pos+d.length] = d.contents[];
 		pos += d.length;
 	}
 	return result;
@@ -48,7 +48,7 @@ void[] joinToHeap(Data[] data)
 	size_t pos = 0;
 	foreach (ref d; data)
 	{
-		result[pos..pos+d.length] = d.contents;
+		result[pos..pos+d.length] = d.contents[];
 		pos += d.length;
 	}
 	return result;

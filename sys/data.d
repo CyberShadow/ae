@@ -112,7 +112,7 @@ public:
 		{
 			// copy to unmanaged memory
 			wrapper = new DataWrapper(data.length, data.length);
-			wrapper.contents[] = data;
+			wrapper.contents[] = data[];
 			contents = wrapper.contents;
 			mutable = true;
 		}
@@ -235,7 +235,7 @@ public:
 	private void reallocate(size_t size, size_t capacity)
 	{
 		wrapper = new DataWrapper(size, capacity);
-		wrapper.contents[0..this.length] = contents;
+		wrapper.contents[0..this.length] = contents[];
 		//(cast(ubyte[])newWrapper.contents)[this.length..value] = 0;
 		contents = wrapper.contents;
 		mutable = true;
@@ -301,8 +301,8 @@ public:
 		if (data.length==0)
 			return this;
 		Data result = Data(length + data.length);
-		result.mcontents[0..this.length] = contents;
-		result.mcontents[this.length..$] = data;
+		result.mcontents[0..this.length] = contents[];
+		result.mcontents[this.length..$] = data[];
 		return result;
 	}
 
@@ -320,8 +320,8 @@ public:
 	Data prepend(const(void)[] data)
 	{
 		Data result = Data(data.length + length);
-		result.mcontents[0..data.length] = data;
-		result.mcontents[data.length..$] = contents;
+		result.mcontents[0..data.length] = data[];
+		result.mcontents[data.length..$] = contents[];
 		return result;
 	}
 
@@ -347,7 +347,7 @@ public:
 		size_t newLength = length + data.length;
 		expand(newLength, getPreallocSize(newLength));
 		auto newContents = cast(void[])_contents[oldLength..$];
-		newContents[] = cast(void[])data;
+		newContents[] = (cast(void[])data)[];
 		return this;
 	}
 
