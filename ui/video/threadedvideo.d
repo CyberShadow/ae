@@ -69,6 +69,12 @@ class ThreadedVideo : Video
 protected:
 	/// Allows varying the thread from which initVary gets called.
 	abstract @property bool initializeVideoInRenderThread();
+
+	/// When initializing video in the render thread, block main thread while video is initializing?
+	/// Some renderers may require the main thread to be responsive during graphics initialization,
+	/// to pump events - thus, initialization must be asynchronous.
+	@property bool initializeVideoSynchronously() { return true; }
+
 	abstract Renderer getRenderer();
 
 	/// Main thread initialization.
@@ -115,14 +121,17 @@ private:
 				if (quitting) return;
 				nop();
 			}
+
+			if (initializeVideoInRenderThread &&  initializeVideoSynchronously)
+				initVary();
+
+			started = true; starting = false;
 			scope(failure) if (errorCallback) try { errorCallback.call(); } catch {}
 
-			if (initializeVideoInRenderThread)
+			if (initializeVideoInRenderThread && !initializeVideoSynchronously)
 				initVary();
 
 			auto renderer = getRenderer();
-
-			started = true; starting = false;
 
 			while (!stopping)
 			{
