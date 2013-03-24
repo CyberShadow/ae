@@ -47,6 +47,12 @@ protected:
 			return false;
 	}
 
+	override @property bool initializeVideoSynchronously()
+	{
+		// SDL 1.x needs to pump events during video initialization.
+		return false;
+	}
+
 	/// Main thread initialization.
 	override void initMain(Application application)
 	{
