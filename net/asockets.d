@@ -681,7 +681,7 @@ public:
 		tryNextAddress();
 	}
 
-	const DefaultDisconnectReason = "Software closed the connection";
+	static const DefaultDisconnectReason = "Software closed the connection";
 
 	/// Close a connection. If there is queued data waiting to be sent, wait until it is sent before disconnecting.
 	void disconnect(string reason = DefaultDisconnectReason, DisconnectType type = DisconnectType.Requested)
