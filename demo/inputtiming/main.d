@@ -16,7 +16,7 @@ module ae.demo.inputtiming.main;
 import core.time;
 
 import ae.ui.app.application;
-import ae.ui.app.posix.main;
+import ae.ui.app.main;
 import ae.ui.shell.shell;
 import ae.ui.shell.sdl.shell;
 import ae.ui.video.sdlopengl.video;
