@@ -41,7 +41,7 @@ final class MyApplication : Application
 	enum HISTORY_TOP = 200;
 	enum HISTORY_HEIGHT = 50;
 
-	enum Device : int { keyboard, joypad, max }
+	enum Device : int { keyboard, joypad, mouse, max }
 	enum SampleType : int { precision, duration, max }
 
 	int[] history[Device.max][SampleType.max];
@@ -119,6 +119,16 @@ final class MyApplication : Application
 	override void handleJoyButtonUp  (int button)
 	{
 		keyUp  (Device.joypad);
+	}
+
+	override void handleMouseDown(uint x, uint y, MouseButton button)
+	{
+		keyDown(Device.mouse);
+	}
+
+	override void handleMouseUp(uint x, uint y, MouseButton button)
+	{
+		keyUp  (Device.mouse);
 	}
 
 	override void handleQuit()
