@@ -148,7 +148,7 @@ class Config
 			foreach (line; File(fileName, "rt").byLine())
 				if (line.length>0 && line[0]!='#')
 				{
-					int p = indexOf(line, '=');
+					auto p = indexOf(line, '=');
 					if (p>0)
 						values[line[0..p].idup] = line[p+1..$].idup;
 				}
