@@ -37,7 +37,7 @@ final class MyApplication : Application
 	enum BAND_INTERVAL = 100;
 	enum BAND_TOP = 50;
 	enum BAND_HEIGHT = 30;
-	enum BAND_HNSECS_PER_PIXEL = 100_000;
+	enum BAND_HNSECS_PER_PIXEL = 200_000;
 	enum HISTORY_TOP = 200;
 	enum HISTORY_HEIGHT = 50;
 
@@ -47,9 +47,12 @@ final class MyApplication : Application
 	int[] history[Device.max][SampleType.max];
 	enum SAMPLE_COLORS = [BGRX(0, 0, 255), BGRX(0, 255, 0)];
 
+	/// Some (precise) time value of the moment, in hnsecs.
+	@property long now() { return TickDuration.currSystemTick.to!("hnsecs", long); }
+
 	override void render(Renderer s)
 	{
-		auto x = TickDuration.currSystemTick.length / BAND_HNSECS_PER_PIXEL;
+		auto x = now / BAND_HNSECS_PER_PIXEL;
 
 		s.clear();
 		s.line(BAND_WIDTH/2, BAND_TOP, BAND_WIDTH/2, BAND_TOP + BAND_HEIGHT, BGRX(0, 0, 255));
@@ -79,12 +82,12 @@ final class MyApplication : Application
 		return 0;
 	}
 
-	TickDuration pressed;
+	long pressed;
 
 	void keyDown(Device device)
 	{
-		pressed = TickDuration.currSystemTick;
-		auto x = cast(int)(pressed.length / BAND_HNSECS_PER_PIXEL + BAND_WIDTH/2) % BAND_INTERVAL;
+		pressed = now;
+		auto x = cast(int)(pressed / BAND_HNSECS_PER_PIXEL + BAND_WIDTH/2) % BAND_INTERVAL;
 		if (x > BAND_INTERVAL/2)
 			x -= BAND_INTERVAL;
 		history[device][SampleType.precision] ~= abs(x);
@@ -92,8 +95,8 @@ final class MyApplication : Application
 
 	void keyUp(Device device)
 	{
-		auto duration = TickDuration.currSystemTick - pressed;
-		history[device][SampleType.duration] ~= cast(int)(duration.length / BAND_HNSECS_PER_PIXEL);
+		auto duration = now - pressed;
+		history[device][SampleType.duration] ~= cast(int)(duration / BAND_HNSECS_PER_PIXEL);
 	}
 
 	override void handleKeyDown(Key key, dchar character)
