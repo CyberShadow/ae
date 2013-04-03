@@ -236,8 +236,14 @@ private struct JsonParser
 		static if (is(T : long))
 			return readInt!(T)();
 		else
-		static if (is(T U : U[]))
-			return readArray!(U)();
+		static if (isDynamicArray!T)
+			return readArray!(typeof(T.init[0]))();
+		else
+		static if (isStaticArray!T)
+		{
+			T result = readArray!(typeof(T.init[0]))()[];
+			return result;
+		}
 		else
 		static if (is(T==struct))
 			return readObject!(T)();
