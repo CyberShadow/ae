@@ -14,3 +14,4 @@
 module ae.utils.xml;
 
 public import ae.utils.xmllite;
+public import ae.utils.xmlbuild;
