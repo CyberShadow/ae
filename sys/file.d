@@ -240,10 +240,26 @@ void touch(string fn)
 
 void safeWrite(string fn, in void[] data)
 {
-	auto tmp = fn ~ ".tmp";
+	auto tmp = fn ~ ".ae-tmp";
 	write(tmp, data);
 	if (fn.exists) fn.remove();
 	tmp.rename(fn);
+}
+
+/// Try to rename; copy/delete if rename fails
+void move(string src, string dst)
+{
+	try
+		src.rename(dst);
+	catch (Exception e)
+	{
+		auto tmp = dst ~ ".ae-tmp";
+		if (tmp.exists) tmp.remove();
+		scope(exit) if (tmp.exists) tmp.remove();
+		src.copy(tmp);
+		tmp.rename(dst);
+		src.remove();
+	}
 }
 
 /// Make sure that the path exists (and create directories as necessary).
