@@ -17,9 +17,16 @@ module ae.utils.iconv;
 import std.string;
 import std.array;
 import std.conv;
-import std.exception : assumeUnique;
+import std.exception;
 
-string toUtf8(immutable(ubyte)[] data, string cp, bool force)
+import ae.utils.text : ascii;
+
+/// Convert text in an arbitrary (known) encoding to UTF-8.
+/// Params:
+///   data  = text to convert
+///   cp    = the name of the source character encoding
+///   force = do not throw on errors; instead, do a best-effort translation
+string toUtf8(in ascii data, string cp, bool force)
 {
 	cp = toLower(cp).replace("-", "");
 
@@ -32,24 +39,31 @@ string toUtf8(immutable(ubyte)[] data, string cp, bool force)
 		case "utf8":
 		{
 			import std.utf;
-			auto s = cast(string)data;
-			validate(s);
-			return s;
+			validate(data);
+			return data;
 		}
 		case "usascii":
 		{
 			if (hasHighAsciiChars(data))
-				throw new Exception("Non-ASCII characters in US-ASCII text");
-			return cast(string)data;
+			{
+				if (force)
+					return stripNonAscii(data);
+				else
+					throw new Exception("Non-ASCII characters in US-ASCII text");
+			}
+
+			return data;
 		}
 		case "utf16":
+			enforce(data.length % 2 == 0, "Bad number of bytes for utf16");
 			return to!string(cast(wstring)data);
 		case "utf32":
+			enforce(data.length % 4 == 0, "Bad number of bytes for utf32");
 			return to!string(cast(dstring)data);
 		default:
 		{
 			if (!hasHighAsciiChars(data))
-				return cast(string)data;
+				return data;
 
 			if (cp in codepages)
 			{
@@ -61,30 +75,33 @@ string toUtf8(immutable(ubyte)[] data, string cp, bool force)
 			}
 			else
 			if (force)
-			{
-				wchar[] result = new wchar[data.length];
-				foreach (size_t i, ubyte b; data)
-					result[i] = b < 0x80 ? b : '\uFFFD';
-				return to!string(assumeUnique(result));
-			}
+				return stripNonAscii(data);
 			else
 				throw new Exception("Don't know how to decode " ~ cp);
 		}
 	}
 }
 
-bool hasHighAsciiChars(in ubyte[] bytes)
+bool hasHighAsciiChars(in ascii data)
 {
-	foreach (char b; bytes)
+	foreach (char b; data)
 		if (b >= 0x80)
 			return true;
 	return false;
 }
 
+string stripNonAscii(in ascii data)
+{
+	wchar[] result = new wchar[data.length];
+	foreach (size_t i, ubyte b; data)
+		result[i] = b < 0x80 ? b : '\uFFFD';
+	return to!string(assumeUnique(result));
+}
 
-wstring[string] codepages;
 
-static this()
+immutable shared wstring[string] codepages;
+
+shared static this()
 {
 	codepages["windows1250"] = "€‚„…†‡‰Š‹ŚŤŽŹ‘’“”•–—™š›śťžź ˇ˘Ł¤Ą¦§¨©Ş«¬­®Ż°±˛ł´µ¶·¸ąş»Ľ˝ľżŔÁÂĂÄĹĆÇČÉĘËĚÍÎĎĐŃŇÓÔŐÖ×ŘŮÚŰÜÝŢßŕáâăäĺćçčéęëěíîďđńňóôőö÷řůúűüýţ˙"w;
 	codepages["windows1251"] = "ЂЃ‚ѓ„…†‡€‰Љ‹ЊЌЋЏђ‘’“”•–—™љ›њќћџ ЎўЈ¤Ґ¦§Ё©Є«¬­®Ї°±Ііґµ¶·ё№є»јЅѕїАБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдежзийклмнопрстуфхцчшщъыьэюя"w;
@@ -109,3 +126,6 @@ static this()
 	codepages["iso885913"] =   " ”¢£¤„¦§Ø©Ŗ«¬­®Æ°±²³“µ¶·ø¹ŗ»¼½¾æĄĮĀĆÄÅĘĒČÉŹĖĢĶĪĻŠŃŅÓŌÕÖ×ŲŁŚŪÜŻŽßąįāćäåęēčéźėģķīļšńņóōõö÷ųłśūüżž’"w;
 	codepages["iso885915"] =   " ¡¢£€¥Š§š©ª«¬­®¯°±²³Žµ¶·ž¹º»ŒœŸ¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ"w;
 }
+
+deprecated string toUtf8(in ubyte[] data, string cp, bool force) { return toUtf8(cast(ascii)data, cp, force); }
+deprecated bool hasHighAsciiChars(in ubyte[] data) { return hasHighAsciiChars(cast(ascii)data); }
