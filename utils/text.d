@@ -27,6 +27,11 @@ import ae.utils.textout;
 
 // ************************************************************************
 
+/// Semantic alias for an array of immutable bytes containing some
+/// ASCII-based 8-bit character encoding. Might be UTF-8, but not
+/// necessarily - thus, is a semantic superset of the D "string" alias.
+alias string ascii;
+
 bool contains(T, U)(T[] str, U[] what)
 	if (is(Unqual!T == Unqual!U))
 {
@@ -211,7 +216,7 @@ T[][] fastSplit(T, U)(T[] s, U d)
 	}
 	while (p);
 
-	auto result = new string[n+1];
+	auto result = new T[][n+1];
 	n = 0;
 	auto start = s.ptr;
 	p = cast(T*) memchr(start, d, s.length);
@@ -293,7 +298,7 @@ T[] newlinesToSpaces(T)(T[] s)
 	return slices.join();
 }
 
-string normalizeWhitespace(string s)
+ascii normalizeWhitespace(ascii s)
 {
 	auto slices = segmentByWhitespace(strip(s));
 	foreach (i, ref slice; slices)
@@ -344,7 +349,7 @@ string rawToUTF8(in char[] s)
 }
 
 /// Undo rawToUTF8.
-string UTF8ToRaw(in char[] r)
+ascii UTF8ToRaw(in char[] r)
 {
 	auto s = new char[r.length];
 	size_t i = 0;
