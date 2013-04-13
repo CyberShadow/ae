@@ -17,12 +17,18 @@ import std.algorithm;
 import std.exception;
 import std.range;
 import std.string;
+import std.traits;
 
 alias std.string.indexOf indexOf;
 
+/// Represents the user-defined behavior for handling a node in a
+/// structured INI file's hierarchy.
 struct StructuredIniHandler
 {
+	/// User callback for parsing a value at this node.
 	void delegate(string name, string value) leafHandler;
+
+	/// User callback for obtaining a child node from this node.
 	StructuredIniHandler delegate(string name) nodeHandler;
 
 	private void handleLeaf(string name, string value)
@@ -38,6 +44,7 @@ struct StructuredIniHandler
 	}
 }
 
+/// Parse a structured INI from a range of lines, through the given handler.
 void parseStructuredIni(R)(R r, StructuredIniHandler rootHandler)
 	if (isInputRange!R && is(ElementType!R == string))
 {
@@ -115,6 +122,7 @@ unittest
 	assert(count==2);
 }
 
+/// Simple convenience formatter for writing INI files.
 struct IniWriter(O)
 {
 	O writer;
