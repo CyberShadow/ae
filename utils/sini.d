@@ -184,11 +184,21 @@ T parseStructuredIni(T, R)(R r)
 				}
 			);
 		else
-		static if (is(U E : E[]) && !isSomeString!U)
-		{
-			v.length++;
-			return makeHandler(v[$-1]);
-		}
+		static if (is(typeof(v[string.init])))
+			return StructuredIniTraversingHandler
+			(
+				null,
+				(string name)
+				{
+					auto pField = name in v;
+					if (!pField)
+					{
+						v[name] = typeof(v[name]).init;
+						pField = name in v;
+					}
+					return makeHandler(*pField);
+				}
+			);
 		else
 		static if (is(typeof(std.conv.to!U(string.init))))
 			return StructuredIniTraversingHandler
@@ -214,7 +224,7 @@ unittest
 		struct S
 		{
 			string n1, n2;
-			int[] a;
+			int[string] a;
 		}
 		S s;
 	}
@@ -223,17 +233,16 @@ unittest
 	(
 		q"<
 			s.n1=v1
-			s.a=1
+			s.a.foo=1
 			[s]
 			n2=v2
-			a=2
-			a=3
+			a.bar=2
 		>".splitLines()
 	);
 
 	assert(f.s.n1=="v1");
 	assert(f.s.n2=="v2");
-	assert(f.s.a==[1, 2, 3]);
+	assert(f.s.a==["foo":1, "bar":2]);
 }
 
 /// Simple convenience formatter for writing INI files.
