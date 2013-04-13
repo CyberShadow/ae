@@ -122,6 +122,120 @@ unittest
 	assert(count==2);
 }
 
+/// Alternative API for StructuredIniHandler, where each leaf is a node
+struct StructuredIniTraversingHandler
+{
+	/// User callback for parsing a value at this node.
+	void delegate(string value) leafHandler;
+
+	/// User callback for obtaining a child node from this node.
+	StructuredIniTraversingHandler delegate(string name) nodeHandler;
+
+	private void handleLeaf(string value)
+	{
+		enforce(leafHandler, "This group may not have a value.");
+		leafHandler(value);
+	}
+
+	private StructuredIniTraversingHandler handleNode(string name)
+	{
+		enforce(nodeHandler, "This group may not have any nodes.");
+		return nodeHandler(name);
+	}
+
+	private StructuredIniHandler conv()
+	{
+		// Don't reference "this" from a lambda,
+		// as it can be a temporary on the stack
+		StructuredIniTraversingHandler thisCopy = this;
+		return StructuredIniHandler
+		(
+			(string name, string value)
+			{
+				thisCopy.handleNode(name).handleLeaf(value);
+			},
+			(string name)
+			{
+				return thisCopy.handleNode(name).conv();
+			}
+		);
+	}
+}
+
+/// Parse a structured INI from a range of lines, into a user-defined struct.
+T parseStructuredIni(T, R)(R r)
+	if (isInputRange!R && is(ElementType!R == string))
+{
+	static StructuredIniTraversingHandler makeHandler(U)(ref U v)
+	{
+		import std.conv;
+
+		static if (is(U == struct))
+			return StructuredIniTraversingHandler
+			(
+				null,
+				(string name)
+				{
+					bool found;
+					foreach (i, field; v.tupleof)
+						if (name == v.tupleof[i].stringof[2..$])
+							return makeHandler(v.tupleof[i]);
+					throw new Exception("Unknown field " ~ name);
+				}
+			);
+		else
+		static if (is(U E : E[]) && !isSomeString!U)
+		{
+			v.length++;
+			return makeHandler(v[$-1]);
+		}
+		else
+		static if (is(typeof(std.conv.to!U(string.init))))
+			return StructuredIniTraversingHandler
+			(
+				(string value)
+				{
+					v = std.conv.to!U(value);
+				}
+			);
+		else
+			static assert(false, "Can't parse " ~ U.stringof);
+	}
+
+	T result;
+	parseStructuredIni(r, makeHandler(result).conv());
+	return result;
+}
+
+unittest
+{
+	static struct File
+	{
+		struct S
+		{
+			string n1, n2;
+			int[] a;
+		}
+		S s;
+	}
+
+	auto f = parseStructuredIni!File
+	(
+		q"<
+			s.n1=v1
+			s.a=1
+			[s]
+			n2=v2
+			a=2
+			a=3
+		>".splitLines()
+	);
+
+	assert(f.s.n1=="v1");
+	assert(f.s.n2=="v2");
+	assert(f.s.a==[1, 2, 3]);
+}
+
 /// Simple convenience formatter for writing INI files.
 struct IniWriter(O)
 {
