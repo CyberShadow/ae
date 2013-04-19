@@ -111,7 +111,12 @@ struct CustomJsonWriter(WRITER)
 		}
 		else
 		static if (is(typeof(*v)))
-			put(*v);
+		{
+			if (v)
+				put(*v);
+			else
+				output.put("null");
+		}
 		else
 			static assert(0, "Can't serialize " ~ T.stringof ~ " to JSON");
 	}
@@ -252,7 +257,7 @@ private struct JsonParser
 			return readAA!(T)();
 		else
 		static if (is(T U : U*))
-			return readPointer!(U)();
+			return readPointer!T();
 		else
 			static assert(0, "Can't decode " ~ T.stringof ~ " from JSON");
 	}
@@ -501,6 +506,20 @@ private struct JsonParser
 	{
 		return to!T(readString());
 	}
+
+	T readPointer(T)()
+	{
+		skipWhitespace();
+		if (peek()=='n')
+		{
+			enforce(readN(4) == "null", "Null expected");
+			return null;
+		}
+		alias typeof(*T.init) S;
+		T v = new S;
+		*v = read!S();
+		return v;
+	}
 }
 
 T jsonParse(T)(string s)
@@ -512,11 +531,11 @@ T jsonParse(T)(string s)
 
 unittest
 {
-	struct S { int i; S[] arr; }
-	S s = S(42, [S(1), S(2)]);
+	struct S { int i; S[] arr; S* p0, p1; }
+	S s = S(42, [S(1), S(2)], null, new S(15));
 	auto s2 = jsonParse!S(toJson(s));
 	//assert(s == s2); // Issue 3789
-	assert(s.i == s2.i && s.arr == s2.arr);
+	assert(s.i == s2.i && s.arr == s2.arr && s.p0 is s2.p0 && *s.p1 == *s2.p1);
 }
 
 // ************************************************************************
