@@ -517,7 +517,7 @@ SysTime parseTime(string fmt, string t)
 					auto tzStr = take(5);
 					enforce(tzStr[0]=='-' || tzStr[0]=='+', "-/+ expected");
 					auto minutes = (to!int(tzStr[1..3]) * 60 + to!int(tzStr[3..5])) * (tzStr[0]=='-' ? -1 : 1);
-					tz = [new SimpleTimeZone(minutes)].ptr; // work around lack of class tailconst
+					tz = [new immutable(SimpleTimeZone)(minutes)].ptr; // work around lack of class tailconst
 				}
 				break;
 			}
@@ -527,7 +527,7 @@ SysTime parseTime(string fmt, string t)
 				enforce(tzStr[0]=='-' || tzStr[0]=='+', "-/+ expected");
 				enforce(tzStr[3]==':', ": expected");
 				auto minutes = (to!int(tzStr[1..3]) * 60 + to!int(tzStr[4..6])) * (tzStr[0]=='-' ? -1 : 1);
-				tz = [new SimpleTimeZone(minutes)].ptr; // work around lack of class tailconst
+				tz = [new immutable(SimpleTimeZone)(minutes)].ptr; // work around lack of class tailconst
 				break;
 			}
 			case 'T':
@@ -538,7 +538,7 @@ SysTime parseTime(string fmt, string t)
 				// TODO: is this correct?
 				auto seconds = takeNumber(1, 6);
 				enforce(seconds % 60 == 0, "Timezone granularity lower than minutes not supported");
-				tz = [new SimpleTimeZone(seconds / 60)].ptr; // work around lack of class tailconst
+				tz = [new immutable(SimpleTimeZone)(seconds / 60)].ptr; // work around lack of class tailconst
 				break;
 			}
 
