@@ -14,10 +14,11 @@
 module ae.utils.time;
 
 import std.algorithm;
-import std.datetime;
-import std.string;
 import std.conv : text;
+import std.datetime;
 import std.math : abs;
+import std.string;
+import std.typecons;
 
 import ae.utils.text;
 import ae.utils.textout;
@@ -399,7 +400,7 @@ SysTime parseTime(string fmt, string t)
 
 	int year=0, month=1, day=1, hour=0, minute=0, second=0, usecs=0;
 	int hour12 = 0; bool pm;
-	immutable(TimeZone)* tz = null;
+	Rebindable!(immutable(TimeZone)) tz;
 	int dow = -1;
 
 	size_t idx = 0;
@@ -510,14 +511,14 @@ SysTime parseTime(string fmt, string t)
 				if (t.length && *t.ptr == 'Z')
 				{
 					t = t[1..$];
-					tz = [UTC()].ptr;
+					tz = UTC();
 				}
 				else
 				{
 					auto tzStr = take(5);
 					enforce(tzStr[0]=='-' || tzStr[0]=='+', "-/+ expected");
 					auto minutes = (to!int(tzStr[1..3]) * 60 + to!int(tzStr[3..5])) * (tzStr[0]=='-' ? -1 : 1);
-					tz = [new immutable(SimpleTimeZone)(minutes)].ptr; // work around lack of class tailconst
+					tz = new immutable(SimpleTimeZone)(minutes);
 				}
 				break;
 			}
@@ -527,18 +528,18 @@ SysTime parseTime(string fmt, string t)
 				enforce(tzStr[0]=='-' || tzStr[0]=='+', "-/+ expected");
 				enforce(tzStr[3]==':', ": expected");
 				auto minutes = (to!int(tzStr[1..3]) * 60 + to!int(tzStr[4..6])) * (tzStr[0]=='-' ? -1 : 1);
-				tz = [new immutable(SimpleTimeZone)(minutes)].ptr; // work around lack of class tailconst
+				tz = new immutable(SimpleTimeZone)(minutes);
 				break;
 			}
 			case 'T':
-				tz = [TimeZone.getTimeZone(take(t.length))].ptr; // work around lack of class tailconst
+				tz = TimeZone.getTimeZone(take(t.length));
 				break;
 			case 'Z':
 			{
 				// TODO: is this correct?
 				auto seconds = takeNumber(1, 6);
 				enforce(seconds % 60 == 0, "Timezone granularity lower than minutes not supported");
-				tz = [new immutable(SimpleTimeZone)(seconds / 60)].ptr; // work around lack of class tailconst
+				tz = new immutable(SimpleTimeZone)(seconds / 60);
 				break;
 			}
 
@@ -570,7 +571,7 @@ SysTime parseTime(string fmt, string t)
 	auto result = SysTime(
 		DateTime(year, month, day, hour, minute, second),
 		FracSec.from!"usecs"(usecs),
-		tz ? *tz : null);
+		tz);
 
 	if (dow >= 0)
 		enforce(result.dayOfWeek == dow, "Mismatching weekday");
