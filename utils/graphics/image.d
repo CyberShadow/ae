@@ -220,7 +220,7 @@ struct Image(COLOR)
 
 			this(string type, const(void)[] data)
 			{
-				this.type[] = type;
+				this.type[] = type[];
 				this.data = data;
 			}
 		}
@@ -300,8 +300,8 @@ struct Image(COLOR)
 			uint chunkLength = chunk.data.length;
 			pos += 12 + chunkLength;
 			*cast(uint*)&data[i] = swapBytes(chunkLength);
-			(cast(char[])data[i+4 .. i+8])[] = chunk.type;
-			data[i+8 .. i+8+chunk.data.length] = cast(ubyte[])chunk.data;
+			(cast(char[])data[i+4 .. i+8])[] = chunk.type[];
+			data[i+8 .. i+8+chunk.data.length] = (cast(ubyte[])chunk.data)[];
 			*cast(uint*)&data[i+8+chunk.data.length] = swapBytes(chunk.crc32());
 			assert(pos == i+12+chunk.data.length);
 		}
