@@ -356,10 +356,15 @@ struct Image(COLOR)
 	void loadBMP()(string filename)
 	{
 		ubyte[] data = cast(ubyte[])read(filename);
+		loadBMP(data);
+	}
+
+	void loadBMP()(ubyte[] data)
+	{
 		enforce(data.length > BitmapHeader.sizeof);
 		BitmapHeader* header = cast(BitmapHeader*) data.ptr;
 		enforce(header.bfType == "BM", "Invalid signature");
-		enforce(header.bfSize == data.length, "Incorrect file size");
+		enforce(header.bfSize == data.length, format("Incorrect file size (%d in header, %d in file)", header.bfSize, data.length));
 		enforce(header.bcSize >= BitmapHeader.sizeof - header.bcSize.offsetof);
 
 		w = stride = header.bcWidth;
