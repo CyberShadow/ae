@@ -433,10 +433,9 @@ else
 
 ubyte[16] mdFile()(string fn)
 {
-	import std.md5;
+	import std.digest.md;
 
-	ubyte[16] digest;
-	MD5_CTX context;
+	MD5 context;
 	context.start();
 
 	auto f = FileEx(fn);
@@ -446,11 +445,11 @@ ubyte[16] mdFile()(string fn)
 		auto readBuffer = f.rawRead(buffer);
 		if (!readBuffer.length)
 			break;
-		context.update(readBuffer);
+		context.put(cast(ubyte[])readBuffer);
 	}
 	f.close();
 
-	context.finish(digest);
+	ubyte[16] digest = context.finish();
 	return digest;
 }
 
