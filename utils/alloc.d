@@ -1,7 +1,7 @@
 /**
- * Bulk allocators
+ * Composable allocators
  *
- * This module uses a "proxy" system - allocators implementing various
+ * This module uses a composing system - allocators implementing various
  * strategies allocate memory in bulk from another backend allocator,
  * "chained" in as a template parameter.
  *
@@ -10,15 +10,15 @@
  * individual instances. Code should test the presence of primitives
  * (methods in allocator type instances) accordingly.
  *
- * Proxy allocators (and other allocator consumers) expect the
+ * Composing allocators (and other allocator consumers) expect the
  * underlying allocator alias parameter to be a template which is
  * instantiated with a single parameter (the base type to allocate, which
- * is intrinsic to the proxy allocator). Thus, to pass underlying
+ * is intrinsic to the composing allocator). Thus, to pass underlying
  * allocators that take more than one parameter, an adapter template must
  * be used. The AllocatorAdapter template will perform template currying
  * and create such adapter templates.
  *
- * To configure the underlying allocator of a proxy allocator, the
+ * To configure the underlying allocator of a composing allocator, the
  * "allocator" field is "public" for that purpose. Note that the
  * underlying allocator type might be a pointer, to allow using diverse
  * strategies using the same backend allocator pool.
@@ -59,6 +59,9 @@
  *
  * freeAll
  *   Free all memory allocated using the given allocator, at once.
+ *
+ * References:
+ *   http://accu.org/content/conf2008/Alexandrescu-memory-allocation.screen.pdf
  *
  * License:
  *   This Source Code Form is subject to the terms of
@@ -174,7 +177,7 @@ mixin template MultiAllocatorCommon()
 /// Homogenous linked list allocator.
 /// Supports O(1) deletion.
 /// Does not support bulk allocation.
-struct LinkedBulkAllocator(T, size_t BLOCKSIZE=1024, alias ALLOCATOR = HeapAllocator)
+struct FreeListAllocator(T, alias ALLOCATOR = HeapAllocator)
 {
 	mixin AllocatorCommon;
 
@@ -197,19 +200,16 @@ struct LinkedBulkAllocator(T, size_t BLOCKSIZE=1024, alias ALLOCATOR = HeapAlloc
 			static Node* fromRef(R r) { return cast(Node*)r; }
 		}
 
-	Node* head; /// First free node
+	Node* head = null; /// First free node
 
-	struct Block { Node[BLOCKSIZE] nodes; }
-	ALLOCATOR!Block allocator;
+	ALLOCATOR!Node allocator;
 
 	R allocate()
 	{
 		if (head is null)
 		{
-			head = allocator.allocate().nodes.ptr;
-			foreach (i; 0..BLOCKSIZE-1)
-				head[i].next = &head[i+1];
-			head[BLOCKSIZE-1].next = null;
+			auto node = allocator.allocate();
+			return cast(R)&node.data;
 		}
 		auto node = head;
 		head = head.next;
@@ -252,11 +252,11 @@ mixin template PointerBumpCommon()
 }
 
 /// Homogenous array bulk allocator.
-/// Proxy over another allocator to allocate values in bulk (minimum of BLOCKSIZE).
-/// No deletion, but is slightly faster that LinkedBulkAllocator
+/// Compose over another allocator to allocate values in bulk (minimum of BLOCKSIZE).
+/// No deletion, but is slightly faster that FreeListAllocator
 /// NEED_FREE controls whether freeAll support is needed.
 // TODO: support non-bulk allocators (without allocateMany support)
-struct ArrayBulkAllocator(T, size_t BLOCKSIZE=1024, alias ALLOCATOR = HeapAllocator, bool NEED_FREE=true)
+struct RegionAllocator(T, size_t BLOCKSIZE=1024, alias ALLOCATOR = HeapAllocator, bool NEED_FREE=true)
 {
 	mixin AllocatorCommon;
 
@@ -352,11 +352,11 @@ struct MultiAllocator(alias ALLOCATOR, BASE=void*)
 	}
 }
 
-/// Heterogenous array bulk allocator (combines ArrayBulkAllocator with MultiAllocator).
+/// Heterogenous array bulk allocator (combines RegionAllocator with MultiAllocator).
 /// Uses "bump-the-pointer" approach for bulk allocation of arbitrary types.
-template ArrayBulkMultiAllocator(size_t BLOCKSIZE=1024, alias ALLOCATOR = HeapAllocator, BASE=void*, bool NEED_FREE=true)
+template RegionMultiAllocator(size_t BLOCKSIZE=1024, alias ALLOCATOR = HeapAllocator, BASE=void*, bool NEED_FREE=true)
 {
-	alias MultiAllocator!(AllocatorAdapter!(ArrayBulkAllocator, BLOCKSIZE, ALLOCATOR, NEED_FREE), BASE) ArrayBulkMultiAllocator;
+	alias MultiAllocator!(AllocatorAdapter!(RegionAllocator, BLOCKSIZE, ALLOCATOR, NEED_FREE), BASE) RegionMultiAllocator;
 }
 
 /// Backend homogenous allocator using the managed GC heap.
@@ -564,12 +564,12 @@ unittest
 
 	testAllocator!HeapAllocator();
 	testAllocator!DataAllocator();
-	testAllocator!LinkedBulkAllocator();
-	testAllocator!ArrayBulkAllocator();
+	testAllocator!FreeListAllocator();
+	testAllocator!RegionAllocator();
 	testAllocator!(BufferAllocator, q{a.setBuffer(new a.V[1024]);})();
 	testAllocator!(AllocatorAdapter!(StaticBufferAllocator, 4096), q{a.initialize();})();
 	testAllocator!(AllocatorAdapter!(HybridBufferAllocator, 4096, HeapAllocator), q{a.initialize();})();
 
 	testMultiAllocator!HeapMultiAllocator();
-	testMultiAllocator!(ArrayBulkMultiAllocator!())();
+	testMultiAllocator!(RegionMultiAllocator!())();
 }
