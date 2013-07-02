@@ -169,7 +169,7 @@ struct DList(T, alias ALLOCATOR = LinkedBulkAllocator)
 		Node* prev, next;
 		T item;
 	}
-	
+
 	mixin DListCommon!(Node*) common;
 
 	ALLOCATOR!Node allocator;
@@ -256,22 +256,16 @@ unittest
 
 // ***************************************************************************
 
-/// BulkAllocator adapter for HashTable.
-/// HashTable needs an allocator template that simply accepts a type parameter,
-/// so this template declares a template which instantiates a given allocator
-/// template (ALLOCATOR) using the type passed by HashTable (T).
-template HashTableBulkAllocator(uint BLOCKSIZE, alias ALLOCATOR = HeapAllocator)
+/// A hash table with a static size.
+struct HashTable(K, V, uint SIZE, alias ALLOCATOR, alias HASHFUNC="k")
 {
-	template HashTableBulkAllocator(T)
-	{
-		alias ArrayBulkAllocator!(T, BLOCKSIZE, ALLOCATOR) HashTableBulkAllocator;
-	}
-}
+	import std.functional;
+	import std.exception;
 
-struct HashTable(K, V, uint SIZE, alias ALLOCATOR, string HASHFUNC="k")
-{
+	alias unaryFun!(HASHFUNC, false, "k") hashFunc;
+
 	// HASHFUNC returns a hash, get its type
-	alias typeof(((){ K k; return mixin(HASHFUNC); })()) H;
+	alias typeof(hashFunc(K.init)) H;
 	static assert(is(H : ulong), "Numeric hash type expected");
 
 	struct Item
@@ -282,9 +276,11 @@ struct HashTable(K, V, uint SIZE, alias ALLOCATOR, string HASHFUNC="k")
 	}
 	Item*[SIZE] items;
 
-	ALLOCATOR!(Item) allocator;
+	ALLOCATOR!Item allocator;
 
-	V* get(ref K k)
+	deprecated V* get(in K k) { return k in this; }
+
+	V* opIn_r(in K k)
 	{
 		auto h = mixin(HASHFUNC) % SIZE;
 		auto item = items[h];
@@ -297,7 +293,15 @@ struct HashTable(K, V, uint SIZE, alias ALLOCATOR, string HASHFUNC="k")
 		return null;
 	}
 
-	V* add(ref K k)
+	V get(in K k, V def)
+	{
+		auto pv = k in this;
+		return pv ? *pv : def;
+	}
+
+	/// Returns a pointer to the value storage space for a new value.
+	/// Assumes the key does not yet exist in the table.
+	V* add(in K k)
 	{
 		auto h = mixin(HASHFUNC) % SIZE;
 		auto newItem = allocator.allocate();
@@ -307,7 +311,9 @@ struct HashTable(K, V, uint SIZE, alias ALLOCATOR, string HASHFUNC="k")
 		return &newItem.v;
 	}
 
-	V* getOrAdd(ref K k)
+	/// Returns a pointer to the value storage space for a new
+	/// or existing value.
+	V* getOrAdd(in K k)
 	{
 		auto h = mixin(HASHFUNC) % SIZE;
 		auto item = items[h];
@@ -344,6 +350,19 @@ struct HashTable(K, V, uint SIZE, alias ALLOCATOR, string HASHFUNC="k")
 		return result;
 	}
 
+	ref V opIndex(in K k)
+	{
+		auto pv = k in this;
+		enforce(pv, "Key not in HashTable");
+		return *pv;
+	}
+
+	void opIndexAssign(in V v, in K k)
+	{
+		auto pv = getOrAdd(k);
+		*pv = v;
+	}
+
 	size_t getLength()
 	{
 		size_t count = 0;
@@ -364,4 +383,13 @@ struct HashTable(K, V, uint SIZE, alias ALLOCATOR, string HASHFUNC="k")
 		static if (is(typeof(allocator.freeAll())))
 			allocator.freeAll();
 	}
+}
+
+unittest
+{
+	HashTable!(int, string, 16, AllocatorAdapter!(ArrayBulkAllocator, 16, HeapAllocator)) ht;
+	assert(5 !in ht);
+	ht[5] = "five";
+	assert(5 in ht);
+	assert(ht[5] == "five");
 }
