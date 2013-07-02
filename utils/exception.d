@@ -24,7 +24,33 @@ string formatException(Throwable e)
 	return descriptions.join("\n===================================\n");
 }
 
+// --------------------------------------------------------------------------
+
 import ae.utils.meta;
+
+mixin template DeclareException(string NAME, BASE = Exception)
+{
+	mixin(mixin(X!q{
+		class @(NAME) : Exception
+		{
+			this(string s, string fn = __FILE__, size_t ln = __LINE__)
+			{
+				super(s, fn, ln);
+			}
+		}
+	}));
+}
+
+unittest
+{
+	mixin DeclareException!q{OutOfCheeseException};
+	try
+		throw new OutOfCheeseException("*** OUT OF CHEESE ***");
+	catch (Exception e)
+		assert(e.classinfo.name.indexOf("Cheese") > 0);
+}
+
+// --------------------------------------------------------------------------
 
 import std.conv;
 
