@@ -1,6 +1,65 @@
 /**
  * Bulk allocators
  *
+ * This module uses a "proxy" system - allocators implementing various
+ * strategies allocate memory in bulk from another backend allocator,
+ * "chained" in as a template parameter.
+ *
+ * Various allocation strategies allow for various capabilities - e.g.
+ * some strategies may not keep metadata required to free the memory of
+ * individual instances. Code should test the presence of primitives
+ * (methods in allocator type instances) accordingly.
+ *
+ * Proxy allocators (and other allocator consumers) expect the
+ * underlying allocator alias parameter to be a template which is
+ * instantiated with a single parameter (the base type to allocate, which
+ * is intrinsic to the proxy allocator). Thus, to pass underlying
+ * allocators that take more than one parameter, an adapter template must
+ * be used. The AllocatorAdapter template will perform template currying
+ * and create such adapter templates.
+ *
+ * To configure the underlying allocator of a proxy allocator, the
+ * "allocator" field is "public" for that purpose. Note that the
+ * underlying allocator type might be a pointer, to allow using diverse
+ * strategies using the same backend allocator pool.
+ *
+ * Allocator kinds:
+ *
+ * * Homogenous allocators, once instantiated, can only allocate values
+ *   only of the type specified in the template parameter.
+ *
+ * * Heterogenous allocators are not bound by one type. One instance can
+ *   allocate values of multiple types (the type is a template parameter
+ *   of the allocate method). By convention, heterogenous allocators have
+ *   "Multi" in their template name.
+ *
+ * Allocator primitives:
+ *
+ * allocate
+ *   Return a pointer to a new instance.
+ *   The only mandatory primitive.
+ *
+ * create
+ *   Allocate and initialize/construct a new instance of T, with the
+ *   supplied parameters.
+ *
+ * free
+ *   Free memory at the given pointer, assuming it was allocated by the
+ *   same allocator.
+ *
+ * destroy
+ *   Finalize and free the given pointer.
+ *
+ * allocateMany
+ *   Allocate an array of values, with the given size. Allocators which
+ *   support this primitive are referred to as "bulk allocators".
+ *
+ * freeMany
+ *   Free memory for the given array of values.
+ *
+ * freeAll
+ *   Free all memory allocated using the given allocator, at once.
+ *
  * License:
  *   This Source Code Form is subject to the terms of
  *   the Mozilla Public License, v. 2.0. If a copy of
@@ -15,7 +74,16 @@ module ae.utils.alloc;
 
 import std.conv : emplace;
 
-/// typeof(new T)
+// TODO:
+// - GROWFUN callable alias parameter instead of BLOCKSIZE?
+// - Add new primitive for bulk allocation which returns a range?
+//   (to allow non-contiguous bulk allocation, but avoid
+//   allocating an array of pointers to store the result)
+// - clear() primitive which allows reusing the allocated space?
+// - Perhaps, instead of the AllocatorAdapter craziness, make all
+//   homogenous allocators a template template?
+
+/// typeof(new T) - what we use to refer to an allocated instance
 template RefType(T)
 {
 	static if (is(T == class))
@@ -24,17 +92,44 @@ template RefType(T)
 		alias T* RefType;
 }
 
+/// Reverse of RefType
+template FromRefType(R)
+{
+	static if (is(T == class))
+		alias T FromRefType;
+	else
+	{
+		static assert(is(typeof(*(R.init))), R.stringof ~ " is not dereferenceable");
+		alias typeof(*(R.init)) FromRefType;
+	}
+}
+
+/// What we use to store an allocated instance
 template ValueType(T)
 {
 	static if (is(T == class))
 	{
-		static if (__traits(classInstanceSize, T) % size_t.sizeof == 0)
-			alias void*[__traits(classInstanceSize, T) / size_t.sizeof] ValueType;
-		else
-			static assert(0, "TODO"); // union with a pointer
+		//alias void*[(__traits(classInstanceSize, T) + size_t.sizeof-1) / size_t.sizeof] ValueType;
+		static assert(__traits(classInstanceSize, T) % size_t.sizeof == 0, "TODO"); // union with a pointer
+
+		// Use a struct to allow new-ing the type (you can't new a static array directly)
+		struct ValueType
+		{
+			void*[__traits(classInstanceSize, T) / size_t.sizeof] data;
+		}
 	}
 	else
 		alias T ValueType;
+}
+
+/// Curries an allocator template and creates a template
+/// that takes only one T parameter. (See module DDoc for details.)
+template AllocatorAdapter(alias ALLOCATOR, ARGS...)
+{
+	template AllocatorAdapter(T)
+	{
+		alias ALLOCATOR!(T, ARGS) AllocatorAdapter;
+	}
 }
 
 mixin template AllocatorCommon()
@@ -57,8 +152,29 @@ mixin template AllocatorCommon()
 	}
 }
 
-/// Linked list allocator. Supports O(1) deletion.
-struct LinkedBulkAllocator(T, uint BLOCKSIZE=1024, alias ALLOCATOR = HeapAllocator)
+mixin template MultiAllocatorCommon()
+{
+	RefType!T create(T, A...)(A args)
+	{
+		alias ValueType!T V;
+
+		auto r = allocate!T();
+		emplace!T(cast(void[])((cast(V*)r)[0..1]), args);
+		return r;
+	}
+
+	static if (is(typeof(&free)))
+	void destroy(R)(R r)
+	{
+		clear(r);
+		free(r);
+	}
+}
+
+/// Homogenous linked list allocator.
+/// Supports O(1) deletion.
+/// Does not support bulk allocation.
+struct LinkedBulkAllocator(T, size_t BLOCKSIZE=1024, alias ALLOCATOR = HeapAllocator)
 {
 	mixin AllocatorCommon;
 
@@ -108,32 +224,54 @@ struct LinkedBulkAllocator(T, uint BLOCKSIZE=1024, alias ALLOCATOR = HeapAllocat
 	}
 }
 
-/// No deletion, but is slightly faster that LinkedBulkAllocator
-struct ArrayBulkAllocator(T, uint BLOCKSIZE=1024, alias ALLOCATOR = HeapAllocator)
+mixin template PointerBumpCommon()
 {
-	mixin AllocatorCommon;
-
-	struct Block { V[BLOCKSIZE] data; }
-
-	V* lastBlock;
-	uint index = BLOCKSIZE;
-
-	V*[] blocks; // TODO: use linked list?
-
-	ALLOCATOR!Block allocator;
+	// Context:
+	//   ptr - pointer to next free element
+	//   end - pointer to end of buffer
+	//   bufferExhausted - method called when ptr==end
+	//     (takes new size to allocate as parameter)
+	//   BLOCKSIZE - default parameter to bufferExhausted
 
 	R allocate()
 	{
-		if (index==BLOCKSIZE)
-			newBlock();
-		return cast(R)(lastBlock + index++);
+		if (ptr==end)
+			bufferExhausted(BLOCKSIZE);
+		return cast(R)(ptr++);
 	}
 
-	void newBlock()
+	V[] allocateMany(size_t n)
 	{
-		lastBlock = (allocator.allocate()).data.ptr;
-		blocks ~= lastBlock;
-		index = 0;
+		if (n > (end-ptr))
+			bufferExhausted(n > BLOCKSIZE ? n : BLOCKSIZE);
+
+		auto result = ptr[0..n];
+		ptr += n;
+		return result;
+	}
+}
+
+/// Homogenous array bulk allocator.
+/// Proxy over another allocator to allocate values in bulk (minimum of BLOCKSIZE).
+/// No deletion, but is slightly faster that LinkedBulkAllocator
+/// NEED_FREE controls whether freeAll support is needed.
+// TODO: support non-bulk allocators (without allocateMany support)
+struct ArrayBulkAllocator(T, size_t BLOCKSIZE=1024, alias ALLOCATOR = HeapAllocator, bool NEED_FREE=true)
+{
+	mixin AllocatorCommon;
+
+	V* ptr=null, end=null;
+
+	static if (NEED_FREE) V[][] blocks; // TODO: use linked list?
+
+	ALLOCATOR!V allocator;
+
+	private void newBlock(size_t size)
+	{
+		auto arr = allocator.allocateMany(size);
+		ptr = arr.ptr;
+		end = ptr + arr.length;
+		static if (NEED_FREE) blocks ~= arr;
 	}
 
 	static if (is(typeof(&allocator.freeAll)))
@@ -144,16 +282,84 @@ struct ArrayBulkAllocator(T, uint BLOCKSIZE=1024, alias ALLOCATOR = HeapAllocato
 		}
 	}
 	else
-	static if (is(typeof(&allocator.free)))
+	static if (NEED_FREE && is(typeof(&allocator.freeMany)))
 	{
 		void freeAll()
 		{
 			foreach (block; blocks)
-				allocator.free(cast(Block*)block);
+				allocator.freeMany(block);
+		}
+	}
+
+	alias newBlock bufferExhausted;
+	mixin PointerBumpCommon;
+}
+
+/// Heterogenous allocator adapter over a homogenous bulk allocator.
+/// The BASE type (the type passed to the underlying allocator)
+/// controls the alignment and whether the data will contain pointers.
+struct MultiAllocator(alias ALLOCATOR, BASE=void*)
+{
+	mixin MultiAllocatorCommon;
+
+	ALLOCATOR!BASE allocator;
+
+	RefType!T allocate(T)()
+	{
+		alias RefType!T R;
+		alias ValueType!T V;
+		enum ALLOC_SIZE = (V.sizeof + BASE.sizeof-1) / BASE.sizeof;
+
+		//return cast(RefType!T)(allocateMany!T(1).ptr);
+		return cast(R)(allocator.allocateMany(ALLOC_SIZE).ptr);
+	}
+
+	ValueType!T[] allocateMany(T)(size_t n)
+	{
+		alias RefType!T R;
+		alias ValueType!T V;
+		enum ALLOC_SIZE = (V.sizeof + BASE.sizeof-1) / BASE.sizeof;
+
+		static assert(V.sizeof % BASE.sizeof == 0, "Aligned/contiguous allocation impossible");
+
+		auto s = n * ALLOC_SIZE; // how many of BASE do we need?
+		return cast(V[])allocator.allocateMany(s);
+	}
+
+	static if (is(typeof(&allocator.freeAll)))
+	{
+		void freeAll()
+		{
+			allocator.freeAll();
+		}
+	}
+
+	static if (is(typeof(&allocator.freeMany)))
+	{
+		void free(R)(R r)
+		{
+			alias FromRefType!R T;
+			alias ValueType!T V;
+			enum ALLOC_SIZE = (V.sizeof + BASE.sizeof-1) / BASE.sizeof;
+
+			allocator.freeMany((cast(BASE*)r)[0..ALLOC_SIZE]);
+		}
+
+		void freeMany(V)(V[] v)
+		{
+			allocator.freeMany(cast(BASE[])v);
 		}
 	}
 }
 
+/// Heterogenous array bulk allocator (combines ArrayBulkAllocator with MultiAllocator).
+/// Uses "bump-the-pointer" approach for bulk allocation of arbitrary types.
+template ArrayBulkMultiAllocator(size_t BLOCKSIZE=1024, alias ALLOCATOR = HeapAllocator, BASE=void*, bool NEED_FREE=true)
+{
+	alias MultiAllocator!(AllocatorAdapter!(ArrayBulkAllocator, BLOCKSIZE, ALLOCATOR, NEED_FREE), BASE) ArrayBulkMultiAllocator;
+}
+
+/// Backend homogenous allocator using the managed GC heap.
 struct HeapAllocator(T)
 {
 	alias RefType!T R;
@@ -162,6 +368,11 @@ struct HeapAllocator(T)
 	R allocate()
 	{
 		return new T;
+	}
+
+	V[] allocateMany(size_t n)
+	{
+		return new V[n];
 	}
 
 	R create(A...)(A args)
@@ -174,21 +385,63 @@ struct HeapAllocator(T)
 		delete v;
 	}
 	alias free destroy;
+
+	void freeMany(V[] v)
+	{
+		delete v;
+	}
 }
 
+/// A substitute heterogenous allocator which uses the managed GC heap directly.
+struct HeapMultiAllocator
+{
+	RefType!T allocate(T)()
+	{
+		return new T;
+	}
+
+	ValueType!T[] allocateMany(T)(size_t n)
+	{
+		return new ValueType!T[n];
+	}
+
+	RefType!T create(T, A...)(A args)
+	{
+		return new T(args);
+	}
+
+	void free(R)(R r)
+	{
+		delete r;
+	}
+	alias free destroy;
+
+	void freeMany(V)(V[] v)
+	{
+		delete v;
+	}
+}
+
+/// Backend allocator using the Data type from ae.sys.data.
 struct DataAllocator(T)
 {
 	mixin AllocatorCommon;
 
 	import ae.sys.data;
 
+	// Needed to make data referenced in Data instances reachable by the GC
 	Data[] datas;
+
+	V[] allocateMany(size_t n)
+	{
+		auto data = Data(V.sizeof * n);
+		datas ~= data;
+		return cast(V[])data.mcontents;
+	}
 
 	R allocate()
 	{
-		auto data = Data(V.sizeof);
-		datas ~= data;
-		return cast(R)data.ptr;
+		return cast(R)(allocateMany(1).ptr);
 	}
 
 	void freeAll()
@@ -198,21 +451,125 @@ struct DataAllocator(T)
 	}
 }
 
+/// Thrown when the buffer of an allocator is exhausted.
+class BufferExhaustedException : Exception { this() { super("Allocator buffer exhausted"); } }
+
+/// Homogenous allocator which uses a given buffer.
+/// Throws BufferExhaustedException if the buffer is exhausted.
+struct BufferAllocator(T)
+{
+	mixin AllocatorCommon;
+
+	void setBuffer(V[] buf)
+	{
+		ptr = buf.ptr;
+		end = ptr + buf.length;
+	}
+
+	this(V[] buf) { setBuffer(buf); }
+
+	V* ptr, end;
+
+	static void bufferExhausted(size_t n)
+	{
+		throw new BufferExhaustedException();
+	}
+
+	enum BLOCKSIZE=0;
+	mixin PointerBumpCommon;
+}
+
+/// Homogenous allocator which uses a static buffer of a given size.
+/// Throws BufferExhaustedException if the buffer is exhausted.
+/// Needs to be manually initialized before use.
+struct StaticBufferAllocator(T, size_t SIZE)
+{
+	mixin AllocatorCommon;
+
+	V[SIZE] buffer;
+	V* ptr;
+	@property V* end() { return buffer.ptr + buffer.length; }
+
+	void initialize()
+	{
+		ptr = buffer.ptr;
+	}
+
+	void bufferExhausted(size_t n)
+	{
+		throw new BufferExhaustedException();
+	}
+
+	enum BLOCKSIZE=0;
+	mixin PointerBumpCommon;
+}
+
+/// A bulk allocator which behaves like a StaticBufferAllocator initially,
+/// but once the static buffer is exhausted, it switches to a fallback
+/// bulk allocator.
+/// Needs to be manually initialized before use.
+struct HybridBufferAllocator(T, size_t SIZE, alias FALLBACK_ALLOCATOR)
+{
+	mixin AllocatorCommon;
+
+	FALLBACK_ALLOCATOR!V fallbackAllocator;
+
+	V[SIZE] buffer;
+	V* ptr, end;
+
+	void initialize()
+	{
+		ptr = buffer.ptr;
+		end = buffer.ptr + buffer.length;
+	}
+
+	void bufferExhausted(size_t n)
+	{
+		auto arr = fallbackAllocator.allocateMany(n);
+		ptr = arr.ptr;
+		end = ptr + arr.length;
+	}
+
+	enum BLOCKSIZE = SIZE;
+	mixin PointerBumpCommon;
+}
+
+version(unittest) import ae.sys.data;
+
 unittest
 {
-    void test(alias A)()
-    {
+	void testAllocator(alias A, string INIT="")()
+	{
 		static class C { int x=2; this() {} this(int p) { x = p; } }
-		A!C bc;
-		auto c1 = bc.create();
+		A!C a;
+		mixin(INIT);
+		auto c1 = a.create();
 		assert(c1.x == 2);
 
-		auto c2 = bc.create(5);
+		auto c2 = a.create(5);
 		assert(c2.x == 5);
-    }
-	
-	test!HeapAllocator();	
-//	test!DataAllocator();
-	test!LinkedBulkAllocator();
-	test!ArrayBulkAllocator();
+	}
+
+	void testMultiAllocator(A, string INIT="")()
+	{
+		static class C { int x=2; this() {} this(int p) { x = p; } }
+		A a;
+		mixin(INIT);
+		auto c1 = a.create!C();
+		assert(c1.x == 2);
+
+		auto c2 = a.create!C(5);
+		assert(c2.x == 5);
+	}
+
+	testAllocator!HeapAllocator();
+	testAllocator!DataAllocator();
+	testAllocator!LinkedBulkAllocator();
+	testAllocator!ArrayBulkAllocator();
+	testAllocator!(BufferAllocator, q{a.setBuffer(new a.V[1024]);})();
+	testAllocator!(AllocatorAdapter!(StaticBufferAllocator, 4096), q{a.initialize();})();
+	testAllocator!(AllocatorAdapter!(HybridBufferAllocator, 4096, HeapAllocator), q{a.initialize();})();
+
+	testMultiAllocator!HeapMultiAllocator();
+	testMultiAllocator!(ArrayBulkMultiAllocator!())();
 }
