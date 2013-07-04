@@ -64,7 +64,9 @@ struct CustomXmlWriter(WRITER, bool PRETTY)
 		debug assert(tagStack.length==0);
 	}
 
-	void putText(string s)
+	deprecated alias text putText;
+
+	void text(string s)
 	{
 		// https://gist.github.com/2192846
 
@@ -141,7 +143,7 @@ struct CustomXmlWriter(WRITER, bool PRETTY)
 		else
 			output.put(' ', name, `="`);
 
-		putText(value);
+		text(value);
 		output.put('"');
 	};
 
@@ -187,7 +189,9 @@ struct CustomXmlWriter(WRITER, bool PRETTY)
 
 	// Doctypes
 
-	void putDoctype(string text)
+	deprecated alias doctype putDoctype;
+
+	void doctype(string text)
 	{
 		debug assert(!inAttributes, "Tag attributes not ended");
 		output.put("<!", text, ">");
@@ -244,7 +248,7 @@ unittest
 		xml.startTagWithAttributes!"quote"();
 		xml.addAttribute!"author"(author);
 		xml.endAttributes();
-		xml.putText(text);
+		xml.text(text);
 		xml.endTag!"quote"();
 	}
 	xml.endTag!"quotes"();

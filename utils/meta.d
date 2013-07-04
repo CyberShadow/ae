@@ -214,3 +214,46 @@ unittest
 	a = new B(17, 42);
 	assert(a.j == 42);
 }
+
+// ************************************************************************
+
+/// Were we built with -debug?
+debug
+	enum IsDebug = true;
+else
+	enum IsDebug = false;
+
+// ************************************************************************
+
+/// Is T a reference type (a pointer or a class)?
+template isReference(T)
+{
+	enum isReference = isPointer!T || is(T==class);
+}
+
+/// Allow passing a constructed object by reference,
+/// without redundant indirection
+T* reference(T)(ref T v)
+	if (!isReference!T)
+{
+	return &v;
+}
+
+/// ditto
+T reference(T)(T v)
+	if (isReference!T)
+{
+	return v;
+}
+
+unittest
+{
+	Object o = new Object;
+	assert(reference(o) is o);
+
+	static struct S {}
+	S s;
+	auto p = reference(s);
+	assert(p is &s);
+	assert(reference(p) is p);
+}

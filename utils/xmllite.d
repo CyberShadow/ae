@@ -1,5 +1,7 @@
 ﻿/**
  * Light read-only XML library
+ * Soon to be deprecated.
+ * See other XML modules for better implementations.
  *
  * License:
  *   This Source Code Form is subject to the terms of
@@ -231,10 +233,10 @@ class XmlNode
 				return;
 			case XmlNodeType.DocType:
 				assert(children.length == 0);
-				output.putDoctype(tag);
+				output.doctype(tag);
 				return;
 			case XmlNodeType.Text:
-				output.putText(tag);
+				output.text(tag);
 				return;
 			default:
 				return;

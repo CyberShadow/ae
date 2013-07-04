@@ -162,7 +162,7 @@ mixin template DListCommon(NODEREF)
 
 /// Organizes a bunch of objects in a doubly-linked list.
 /// Not very efficient for reference types, since it results in two allocations per object.
-struct DList(T, alias ALLOCATOR = LinkedBulkAllocator)
+struct DList(T, alias ALLOCATOR = RegionAllocator)
 {
 	struct Node
 	{
@@ -257,14 +257,17 @@ unittest
 // ***************************************************************************
 
 /// A hash table with a static size.
-struct HashTable(K, V, uint SIZE, alias ALLOCATOR, alias HASHFUNC="k")
+struct HashTable(K, V, uint SIZE, alias ALLOCATOR=RegionAllocator, alias HASHFUNC="k")
 {
+	alias K KEY;
+	alias V VALUE;
+
 	import std.functional;
 	import std.exception;
 
 	alias unaryFun!(HASHFUNC, false, "k") hashFunc;
 
-	// HASHFUNC returns a hash, get its type
+	// hashFunc returns a hash, get its type
 	alias typeof(hashFunc(K.init)) H;
 	static assert(is(H : ulong), "Numeric hash type expected");
 
@@ -282,7 +285,7 @@ struct HashTable(K, V, uint SIZE, alias ALLOCATOR, alias HASHFUNC="k")
 
 	V* opIn_r(in K k)
 	{
-		auto h = mixin(HASHFUNC) % SIZE;
+		auto h = hashFunc(k) % SIZE;
 		auto item = items[h];
 		while (item)
 		{
@@ -303,7 +306,7 @@ struct HashTable(K, V, uint SIZE, alias ALLOCATOR, alias HASHFUNC="k")
 	/// Assumes the key does not yet exist in the table.
 	V* add(in K k)
 	{
-		auto h = mixin(HASHFUNC) % SIZE;
+		auto h = hashFunc(k) % SIZE;
 		auto newItem = allocator.allocate();
 		newItem.k = k;
 		newItem.next = items[h];
@@ -315,7 +318,7 @@ struct HashTable(K, V, uint SIZE, alias ALLOCATOR, alias HASHFUNC="k")
 	/// or existing value.
 	V* getOrAdd(in K k)
 	{
-		auto h = mixin(HASHFUNC) % SIZE;
+		auto h = hashFunc(k) % SIZE;
 		auto item = items[h];
 		while (item)
 		{
@@ -330,6 +333,8 @@ struct HashTable(K, V, uint SIZE, alias ALLOCATOR, alias HASHFUNC="k")
 		items[h] = newItem;
 		return &newItem.v;
 	}
+
+	void set(in K k, ref V v) { *getOrAdd(k) = v; }
 
 	int opApply(int delegate(ref K, ref V) dg)
 	{
@@ -357,11 +362,7 @@ struct HashTable(K, V, uint SIZE, alias ALLOCATOR, alias HASHFUNC="k")
 		return *pv;
 	}
 
-	void opIndexAssign(in V v, in K k)
-	{
-		auto pv = getOrAdd(k);
-		*pv = v;
-	}
+	void opIndexAssign(ref V v, in K k) { set(k, v); }
 
 	size_t getLength()
 	{
@@ -378,6 +379,11 @@ struct HashTable(K, V, uint SIZE, alias ALLOCATOR, alias HASHFUNC="k")
 		return count;
 	}
 
+	void clear()
+	{
+		items[] = null;
+	}
+
 	void freeAll()
 	{
 		static if (is(typeof(allocator.freeAll())))
@@ -387,9 +393,10 @@ struct HashTable(K, V, uint SIZE, alias ALLOCATOR, alias HASHFUNC="k")
 
 unittest
 {
-	HashTable!(int, string, 16, AllocatorAdapter!(ArrayBulkAllocator, 16, HeapAllocator)) ht;
+	HashTable!(int, string, 16, AllocatorAdapter!(RegionAllocator, 16)) ht;
 	assert(5 !in ht);
-	ht[5] = "five";
+	auto s = "five";
+	ht[5] = s;
 	assert(5 in ht);
 	assert(ht[5] == "five");
 }

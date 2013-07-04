@@ -57,8 +57,16 @@
  * freeMany
  *   Free memory for the given array of values.
  *
+ * resize
+ *   Resize an array of values. Reallocate if needed.
+ *
  * freeAll
  *   Free all memory allocated using the given allocator, at once.
+ *   Deallocates storage from underlying allocator, if applicable.
+ *
+ * clear
+ *   Mark all memory allocated by the top-layer allocator as free.
+ *   Does not deallocate memory from underlying allocator.
  *
  * References:
  *   http://accu.org/content/conf2008/Alexandrescu-memory-allocation.screen.pdf
@@ -79,10 +87,10 @@ import std.conv : emplace;
 
 // TODO:
 // - GROWFUN callable alias parameter instead of BLOCKSIZE?
+// - Consolidate RegionAllocator and GrowingBufferAllocator
 // - Add new primitive for bulk allocation which returns a range?
 //   (to allow non-contiguous bulk allocation, but avoid
 //   allocating an array of pointers to store the result)
-// - clear() primitive which allows reusing the allocated space?
 // - Perhaps, instead of the AllocatorAdapter craziness, make all
 //   homogenous allocators a template template?
 
@@ -134,6 +142,16 @@ template AllocatorAdapter(alias ALLOCATOR, ARGS...)
 		alias ALLOCATOR!(T, ARGS) AllocatorAdapter;
 	}
 }
+
+/// As above, but result resolves to a pointer to the allocator.
+template AllocatorPointer(alias ALLOCATOR, ARGS...)
+{
+	template AllocatorPointer(T)
+	{
+		alias ALLOCATOR!(T, ARGS)* AllocatorPointer;
+	}
+}
+
 
 mixin template AllocatorCommon()
 {
@@ -359,6 +377,61 @@ template RegionMultiAllocator(size_t BLOCKSIZE=1024, alias ALLOCATOR = HeapAlloc
 	alias MultiAllocator!(AllocatorAdapter!(RegionAllocator, BLOCKSIZE, ALLOCATOR, NEED_FREE), BASE) RegionMultiAllocator;
 }
 
+/// Reuse a multi-allocator with a typed allocator.
+/// Reverse of MultiAllocator.
+struct TypedAllocator(T, alias ALLOCATOR)
+{
+	ALLOCATOR allocator;
+
+	mixin AllocatorCommon;
+
+	R allocate() { return allocator.allocate!T(); }
+
+	static if (is(typeof(&allocator.free!R)))
+		void free(R r) { allocator.free(r); }
+
+	static if (is(typeof(&allocator.allocateMany!T)))
+		V[] allocateMany(size_t n) { return allocator.allocateMany!T(n); }
+
+	static if (is(typeof(&allocator.freeMany!V)))
+		void freeMany(V[] v) { allocator.freeMany(v); }
+
+	static if (is(typeof(&allocator.resize!V)))
+		V[] resize(V[] v, size_t n) { return allocator.resize(v, n); }
+}
+
+/// Growing buffer bulk allocator.
+/// Allows reusing the same buffer, which is grown and retained as needed.
+/// Requires .resize support from underlying allocator.
+/// Smaller buffers are discarded (neither freed nor reused).
+struct GrowingBufferAllocator(T, alias ALLOCATOR = HeapAllocator)
+{
+	mixin AllocatorCommon;
+
+	ALLOCATOR!V allocator;
+
+	V* buf, ptr, end;
+
+	void bufferExhausted(size_t n)
+	{
+		import std.algorithm;
+		auto newSize = max(4096 / V.sizeof, (end-buf)*2, n);
+		auto pos = ptr - buf;
+		auto arr = allocator.resize(buf[0..end-buf], newSize);
+		buf = arr.ptr;
+		end = buf + arr.length;
+		ptr = buf + pos;
+	}
+
+	void clear()
+	{
+		ptr = buf;
+	}
+
+	enum BLOCKSIZE=0;
+	mixin PointerBumpCommon;
+}
+
 /// Backend homogenous allocator using the managed GC heap.
 struct HeapAllocator(T)
 {
@@ -373,6 +446,12 @@ struct HeapAllocator(T)
 	V[] allocateMany(size_t n)
 	{
 		return new V[n];
+	}
+
+	V[] resize(V[] v, size_t n)
+	{
+		v.length = n;
+		return v;
 	}
 
 	R create(A...)(A args)
@@ -408,6 +487,12 @@ struct HeapMultiAllocator
 	RefType!T create(T, A...)(A args)
 	{
 		return new T(args);
+	}
+
+	V[] resize(V)(V[] v, size_t n)
+	{
+		v.length = n;
+		return v;
 	}
 
 	void free(R)(R r)
@@ -502,6 +587,8 @@ struct StaticBufferAllocator(T, size_t SIZE)
 
 	enum BLOCKSIZE=0;
 	mixin PointerBumpCommon;
+
+	alias initialize clear;
 }
 
 /// A bulk allocator which behaves like a StaticBufferAllocator initially,
@@ -532,6 +619,17 @@ struct HybridBufferAllocator(T, size_t SIZE, alias FALLBACK_ALLOCATOR)
 
 	enum BLOCKSIZE = SIZE;
 	mixin PointerBumpCommon;
+
+	static if (is(typeof(&fallbackAllocator.clear)))
+	{
+		void clear()
+		{
+			if (end == buffer.ptr + buffer.length)
+				ptr = buffer.ptr;
+			else
+				fallbackAllocator.clear();
+		}
+	}
 }
 
 version(unittest) import ae.sys.data;
@@ -566,9 +664,11 @@ unittest
 	testAllocator!DataAllocator();
 	testAllocator!FreeListAllocator();
 	testAllocator!RegionAllocator();
+	testAllocator!GrowingBufferAllocator();
 	testAllocator!(BufferAllocator, q{a.setBuffer(new a.V[1024]);})();
 	testAllocator!(AllocatorAdapter!(StaticBufferAllocator, 4096), q{a.initialize();})();
 	testAllocator!(AllocatorAdapter!(HybridBufferAllocator, 4096, HeapAllocator), q{a.initialize();})();
+	testAllocator!(AllocatorAdapter!(TypedAllocator, HeapMultiAllocator))();
 
 	testMultiAllocator!HeapMultiAllocator();
 	testMultiAllocator!(RegionMultiAllocator!())();

@@ -81,7 +81,7 @@ final class XmlBuildNode
 
 			foreach (child; children)
 				child.writeTo(output);
-			output.putText(text);
+			output.text(text);
 
 			output.endTag(tag);
 		}
