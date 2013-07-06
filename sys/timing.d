@@ -135,11 +135,14 @@ public:
 	bool disabled;
 
 	/// Run scheduled tasks.
-	void prod()
+	/// Returns true if any tasks ran.
+	bool prod()
 	{
-		if (disabled) return;
+		if (disabled) return false;
 
 		auto now = TickDuration.currSystemTick();
+
+		bool ran;
 
 		if (head !is null)
 		{
@@ -150,10 +153,13 @@ public:
 				debug (TIMER) writefln("%d: Firing a task that waited for %d of %d ticks.", now, task.delay + (now - task.when), task.delay);
 				if (task.handleTask)
 					task.handleTask(this, task);
+				ran = true;
 			}
 
 			debug (TIMER_VERBOSE) if (head !is null) writefln("Current task is waiting for %d ticks, %d remaining.", head.delay, head.when - now);
 		}
+
+		return ran;
 	}
 
 	/// Add a new task to the timer.
