@@ -329,7 +329,6 @@ else // Use select
 					events = Socket.select(readset, writeset, errorset);
 
 				debug (ASOCKETS) writefln("%d events fired.", events);
-				mainTimer.prod();
 
 				if (events > 0)
 				{
@@ -369,6 +368,9 @@ else // Use select
 						}
 					}
 				}
+
+				// Timers may invalidate our select results, so fire them after processing the latter
+				mainTimer.prod();
 
 				eventCounter++;
 			}
