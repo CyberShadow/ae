@@ -303,3 +303,35 @@ uint getLastInputInfo()
 	wenforce(GetLastInputInfo(&lii), "GetLastInputInfo");
 	return lii.dwTime;
 }
+
+// ---------------------------------------
+
+import std.traits;
+
+/// Given a static function declaration, generate a loader with the same name in the current scope
+/// that loads the function dynamically from the given DLL.
+mixin template DynamicLoad(alias F, string DLL, string NAME=__traits(identifier, F))
+{
+	static ReturnType!F loader(ARGS...)(ARGS args)
+	{
+		import win32.windef;
+
+		alias typeof(&F) FP;
+		static FP fp = null;
+		if (!fp)
+		{
+			HMODULE dll = wenforce(LoadLibrary(DLL), "LoadLibrary");
+			fp = cast(FP)wenforce(GetProcAddress(dll, NAME), "GetProcAddress");
+		}
+		return fp(args);
+	}
+
+	mixin(`alias loader!(ParameterTypeTuple!F) ` ~ NAME ~ `;`);
+}
+
+///
+unittest
+{
+	mixin DynamicLoad!(GetVersion, "kernel32.dll");
+	GetVersion(); // called via GetProcAddress
+}
