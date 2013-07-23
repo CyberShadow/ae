@@ -160,23 +160,23 @@ mixin template DListCommon(NODEREF)
 	}
 }
 
+struct DListNode(T)
+{
+	DListNode* prev, next;
+	T item;
+}
+
+
 /// Organizes a bunch of objects in a doubly-linked list.
 /// Not very efficient for reference types, since it results in two allocations per object.
-struct DList(T, alias ALLOCATOR = RegionAllocator)
+struct DList(T, alias allocator=heapAllocator)
 {
-	struct Node
-	{
-		Node* prev, next;
-		T item;
-	}
-
+	alias DListNode!T Node;
 	mixin DListCommon!(Node*) common;
-
-	ALLOCATOR!Node allocator;
 
 	Node* add(T item)
 	{
-		auto node = allocator.allocate();
+		auto node = allocator.allocate!Node();
 		node.item = item;
 		common.add(node);
 		return node;
@@ -256,8 +256,15 @@ unittest
 
 // ***************************************************************************
 
+struct HashTableItem(K, V)
+{
+	K k;
+	HashTableItem* next;
+	V v;
+}
+
 /// A hash table with a static size.
-struct HashTable(K, V, uint SIZE, alias ALLOCATOR=RegionAllocator, alias HASHFUNC="k")
+mixin template HashTable(K, V, uint SIZE, string ALLOCATOR, alias HASHFUNC="k")
 {
 	alias K KEY;
 	alias V VALUE;
@@ -271,15 +278,8 @@ struct HashTable(K, V, uint SIZE, alias ALLOCATOR=RegionAllocator, alias HASHFUN
 	alias typeof(hashFunc(K.init)) H;
 	static assert(is(H : ulong), "Numeric hash type expected");
 
-	struct Item
-	{
-		K k;
-		Item* next;
-		V v;
-	}
+	alias HashTableItem!(K, V) Item;
 	Item*[SIZE] items;
-
-	ALLOCATOR!Item allocator;
 
 	deprecated V* get(in K k) { return k in this; }
 
@@ -307,7 +307,7 @@ struct HashTable(K, V, uint SIZE, alias ALLOCATOR=RegionAllocator, alias HASHFUN
 	V* add(in K k)
 	{
 		auto h = hashFunc(k) % SIZE;
-		auto newItem = allocator.allocate();
+		auto newItem = mixin(ALLOCATOR).allocate!Item();
 		newItem.k = k;
 		newItem.next = items[h];
 		items[h] = newItem;
@@ -327,7 +327,7 @@ struct HashTable(K, V, uint SIZE, alias ALLOCATOR=RegionAllocator, alias HASHFUN
 			item = item.next;
 		}
 
-		auto newItem = allocator.allocate();
+		auto newItem = mixin(ALLOCATOR).allocate!Item();
 		newItem.k = k;
 		newItem.next = items[h];
 		items[h] = newItem;
@@ -386,14 +386,18 @@ struct HashTable(K, V, uint SIZE, alias ALLOCATOR=RegionAllocator, alias HASHFUN
 
 	void freeAll()
 	{
-		static if (is(typeof(allocator.freeAll())))
-			allocator.freeAll();
+		static if (is(typeof(mixin(ALLOCATOR).freeAll())))
+			mixin(ALLOCATOR).freeAll();
 	}
 }
 
 unittest
 {
-	HashTable!(int, string, 16, AllocatorAdapter!(RegionAllocator, 16)) ht;
+	mixin AddWrapMixin;
+
+	static WrapMixin!RegionAllocator allocator;
+	WrapMixin!(HashTable, int, string, 16, fullyQualifiedName!allocator) ht;
+
 	assert(5 !in ht);
 	auto s = "five";
 	ht[5] = s;

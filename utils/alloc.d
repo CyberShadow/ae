@@ -3,40 +3,41 @@
  *
  * This module uses a composing system - allocators implementing various
  * strategies allocate memory in bulk from another backend allocator,
- * "chained" in as a template parameter.
+ * "chained" in as a template alias or string parameter.
  *
  * Various allocation strategies allow for various capabilities - e.g.
  * some strategies may not keep metadata required to free the memory of
  * individual instances. Code should test the presence of primitives
- * (methods in allocator type instances) accordingly.
+ * (methods in allocator mixin instances) accordingly.
  *
- * Composing allocators (and other allocator consumers) expect the
- * underlying allocator alias parameter to be a template which is
- * instantiated with a single parameter (the base type to allocate, which
- * is intrinsic to the composing allocator). Thus, to pass underlying
- * allocators that take more than one parameter, an adapter template must
- * be used. The AllocatorAdapter template will perform template currying
- * and create such adapter templates.
+ * Allocators are mixin templates. This allows for multiple composed
+ * allocators, as well as data structures using them, to have the same
+ * "this" pointer, which would avoid additional indirections.
  *
- * To configure the underlying allocator of a composing allocator, the
- * "allocator" field is "public" for that purpose. Note that the
- * underlying allocator type might be a pointer, to allow using diverse
- * strategies using the same backend allocator pool.
+ * The underlying allocator can be passed in as an alias template
+ * parameter. This means that it has to be a symbol, the address of which
+ * is known in the scope of the allocator - thus, a mixin in the same
+ * class/struct, or a global variable.
+ *
+ * The underlying allocator can also be passed in as a string template
+ * parameter. A string can be used instead of an alias parameter to allow
+ * using complex expressions - for example, using a named mixin inside a
+ * struct pointer.
  *
  * Allocator kinds:
  *
  * * Homogenous allocators, once instantiated, can only allocate values
- *   only of the type specified in the template parameter.
+ *   only of the type specified in the template parameter. Attempting to
+ *   allocate a different type will result in a compile-time error.
  *
  * * Heterogenous allocators are not bound by one type. One instance can
- *   allocate values of multiple types (the type is a template parameter
- *   of the allocate method). By convention, heterogenous allocators have
- *   "Multi" in their template name.
+ *   allocate values of multiple types.
  *
  * Allocator primitives:
  *
  * allocate
  *   Return a pointer to a new instance.
+ *   The returned object is not initialized.
  *   The only mandatory primitive.
  *
  * create
@@ -84,6 +85,7 @@
 module ae.utils.alloc;
 
 import std.conv : emplace;
+import std.traits : fullyQualifiedName;
 
 // TODO:
 // - GROWFUN callable alias parameter instead of BLOCKSIZE?
@@ -91,8 +93,9 @@ import std.conv : emplace;
 // - Add new primitive for bulk allocation which returns a range?
 //   (to allow non-contiguous bulk allocation, but avoid
 //   allocating an array of pointers to store the result)
-// - Perhaps, instead of the AllocatorAdapter craziness, make all
-//   homogenous allocators a template template?
+// - Forbid allocating types with indirections when the base type
+//   is not a pointer?
+// - More thorough testing
 
 /// typeof(new T) - what we use to refer to an allocated instance
 template RefType(T)
@@ -133,48 +136,36 @@ template ValueType(T)
 		alias T ValueType;
 }
 
-/// Curries an allocator template and creates a template
-/// that takes only one T parameter. (See module DDoc for details.)
-template AllocatorAdapter(alias ALLOCATOR, ARGS...)
+/// This declares a WrapMixin template in the current scope, which will
+/// create a struct containing an instance of the mixin template M,
+/// instantiated with the given ARGS.
+/// WrapMixin is not reusable across scopes. Each scope should have an
+/// instance of WrapMixin, as the context of M's instantiation will be
+/// the scope declaring WrapMixin, not the scope declaring M.
+mixin template AddWrapMixin()
 {
-	template AllocatorAdapter(T)
-	{
-		alias ALLOCATOR!(T, ARGS) AllocatorAdapter;
-	}
+	private struct WrapMixin(alias M, ARGS...) { mixin M!ARGS; }
 }
 
-/// As above, but result resolves to a pointer to the allocator.
-template AllocatorPointer(alias ALLOCATOR, ARGS...)
+mixin AddWrapMixin;
+
+/// Generates code to create forwarding aliases to the given mixin member.
+/// Used as a replacement for "alias M this", which doesn't seem to work with mixins.
+string mixAliasForward(alias M)()
 {
-	template AllocatorPointer(T)
-	{
-		alias ALLOCATOR!(T, ARGS)* AllocatorPointer;
-	}
+	import std.string;
+	enum mixinName = __traits(identifier, M);
+	string result;
+	foreach (fieldName; __traits(allMembers, M))
+		result ~= "alias " ~ mixinName ~ "." ~ fieldName ~ " " ~ fieldName ~ ";\n";
+	return result;
 }
 
-
+/// Common declarations for an allocator mixin
 mixin template AllocatorCommon()
 {
-	alias RefType!T R;
-	alias ValueType!T V;
+	alias ae.utils.alloc.ValueType ValueType;
 
-	R create(A...)(A args)
-	{
-		auto r = allocate();
-		emplace!T(cast(void[])((cast(V*)r)[0..1]), args);
-		return r;
-	}
-
-	static if (is(typeof(&free)))
-	void destroy(R r)
-	{
-		clear(r);
-		free(r);
-	}
-}
-
-mixin template MultiAllocatorCommon()
-{
 	RefType!T create(T, A...)(A args)
 	{
 		alias ValueType!T V;
@@ -190,43 +181,119 @@ mixin template MultiAllocatorCommon()
 		clear(r);
 		free(r);
 	}
+
+	static if (is(ALLOCATOR_TYPE))
+		alias ValueType!ALLOCATOR_TYPE VALUE_TYPE;
+
+	static if (is(BASE_TYPE))
+		alias ValueType!BASE_TYPE BASE_VALUE_TYPE;
+
+	static if (is(typeof(ALLOCATOR_PARAM)))
+	{
+		static if (is(typeof(ALLOCATOR_PARAM) == string))
+			enum allocator = ALLOCATOR_PARAM;
+		else
+			enum allocator = q{ALLOCATOR_PARAM};
+	}
 }
 
-/// Homogenous linked list allocator.
-/// Supports O(1) deletion.
-/// Does not support bulk allocation.
-struct FreeListAllocator(T, alias ALLOCATOR = HeapAllocator)
+/// Creates T/R/V aliases from context, and checks ALLOCATOR_TYPE if appropriate.
+mixin template AllocTypes()
+{
+	static if (is(R) && !is(T)) alias FromRefType!R T;
+	static if (is(T) && !is(R)) alias RefType!T R;
+	static if (is(T) && !is(V)) alias ValueType!T V;
+	static if (is(ALLOCATOR_TYPE)) static assert(is(ALLOCATOR_TYPE==T), "This allocator can only allocate instances of " ~ ALLOCATOR_TYPE.stringof ~ ", not " ~ T.stringof);
+	static if (is(BASE_TYPE) && is(V))
+	{
+		enum ALLOC_SIZE = (V.sizeof + BASE_TYPE.sizeof-1) / BASE_TYPE.sizeof;
+	}
+}
+
+/// Allocator proxy which injects custom code after object creation.
+/// Context of INIT_CODE:
+///   p - newly-allocated value.
+mixin template InitializingAllocator(string INIT_CODE, alias ALLOCATOR_PARAM = heapAllocator)
 {
 	mixin AllocatorCommon;
 
+	RefType!T allocate(T)()
+	{
+		auto p = mixin(allocator).allocate!T();
+		mixin(INIT_CODE);
+		return p;
+	}
+
+	// TODO: Proxy other methods
+}
+
+/// Allocator proxy which keeps track how many allocations were made.
+mixin template StatAllocator(alias ALLOCATOR_PARAM = heapAllocator)
+{
+    mixin AllocatorCommon;
+
+	size_t allocated;
+
+	RefType!T allocate(T)()
+	{
+		allocated += ValueType!T.sizeof;
+		return mixin(allocator).allocate!T();
+	}
+
+	ValueType!T[] allocateMany(T)(size_t n)
+	{
+		allocated += n * ValueType!T.sizeof;
+		return mixin(allocator).allocateMany!T(n);
+	}
+
+	// TODO: Proxy other methods
+}
+
+/// The internal unit allocation type of FreeListAllocator.
+/// (Exposed to allow specializing underlying allocators on it.)
+template FreeListNode(T)
+{
+	mixin AllocTypes;
+
 	mixin template NodeContents()
 	{
-		Node* next; /// Next free node
+		FreeListNode* next; /// Next free node
 		V data;
 	}
 
 	debug
-		struct Node
+		struct FreeListNode
 		{
 			mixin NodeContents;
-			static Node* fromRef(R r) { return cast(Node*)( (cast(ubyte*)r) - (size_t.sizeof) ); }
+			static FreeListNode* fromRef(R r) { return cast(FreeListNode*)( (cast(ubyte*)r) - (data.offsetof) ); }
 		}
 	else
-		union Node
+		union FreeListNode
 		{
 			mixin NodeContents;
-			static Node* fromRef(R r) { return cast(Node*)r; }
+			static FreeListNode* fromRef(R r) { return cast(FreeListNode*)r; }
 		}
+}
+
+
+/// Homogenous linked list allocator.
+/// Supports O(1) deletion.
+/// Does not support bulk allocation.
+mixin template FreeListAllocator(ALLOCATOR_TYPE, alias ALLOCATOR_PARAM = heapAllocator)
+{
+	mixin AllocatorCommon;
+
+	alias FreeListNode!ALLOCATOR_TYPE Node;
 
 	Node* head = null; /// First free node
 
-	ALLOCATOR!Node allocator;
-
-	R allocate()
+	RefType!T allocate(T)()
 	{
+		mixin AllocTypes;
+
 		if (head is null)
 		{
-			auto node = allocator.allocate();
+			auto node = mixin(allocator).allocate!Node();
 			return cast(R)&node.data;
 		}
 		auto node = head;
@@ -234,7 +301,7 @@ struct FreeListAllocator(T, alias ALLOCATOR = HeapAllocator)
 		return cast(R)&node.data;
 	}
 
-	void free(R r)
+	void free(R)(R r)
 	{
 		auto node = Node.fromRef(r);
 		node.next = head;
@@ -242,237 +309,8 @@ struct FreeListAllocator(T, alias ALLOCATOR = HeapAllocator)
 	}
 }
 
-mixin template PointerBumpCommon()
-{
-	// Context:
-	//   ptr - pointer to next free element
-	//   end - pointer to end of buffer
-	//   bufferExhausted - method called when ptr==end
-	//     (takes new size to allocate as parameter)
-	//   BLOCKSIZE - default parameter to bufferExhausted
-
-	R allocate()
-	{
-		if (ptr==end)
-			bufferExhausted(BLOCKSIZE);
-		return cast(R)(ptr++);
-	}
-
-	V[] allocateMany(size_t n)
-	{
-		if (n > (end-ptr))
-			bufferExhausted(n > BLOCKSIZE ? n : BLOCKSIZE);
-
-		auto result = ptr[0..n];
-		ptr += n;
-		return result;
-	}
-}
-
-/// Homogenous array bulk allocator.
-/// Compose over another allocator to allocate values in bulk (minimum of BLOCKSIZE).
-/// No deletion, but is slightly faster that FreeListAllocator
-/// NEED_FREE controls whether freeAll support is needed.
-// TODO: support non-bulk allocators (without allocateMany support)
-struct RegionAllocator(T, size_t BLOCKSIZE=1024, alias ALLOCATOR = HeapAllocator, bool NEED_FREE=true)
-{
-	mixin AllocatorCommon;
-
-	V* ptr=null, end=null;
-
-	static if (NEED_FREE) V[][] blocks; // TODO: use linked list?
-
-	ALLOCATOR!V allocator;
-
-	private void newBlock(size_t size)
-	{
-		auto arr = allocator.allocateMany(size);
-		ptr = arr.ptr;
-		end = ptr + arr.length;
-		static if (NEED_FREE) blocks ~= arr;
-	}
-
-	static if (is(typeof(&allocator.freeAll)))
-	{
-		void freeAll()
-		{
-			allocator.freeAll();
-		}
-	}
-	else
-	static if (NEED_FREE && is(typeof(&allocator.freeMany)))
-	{
-		void freeAll()
-		{
-			foreach (block; blocks)
-				allocator.freeMany(block);
-		}
-	}
-
-	alias newBlock bufferExhausted;
-	mixin PointerBumpCommon;
-}
-
-/// Heterogenous allocator adapter over a homogenous bulk allocator.
-/// The BASE type (the type passed to the underlying allocator)
-/// controls the alignment and whether the data will contain pointers.
-struct MultiAllocator(alias ALLOCATOR, BASE=void*)
-{
-	mixin MultiAllocatorCommon;
-
-	ALLOCATOR!BASE allocator;
-
-	RefType!T allocate(T)()
-	{
-		alias RefType!T R;
-		alias ValueType!T V;
-		enum ALLOC_SIZE = (V.sizeof + BASE.sizeof-1) / BASE.sizeof;
-
-		//return cast(RefType!T)(allocateMany!T(1).ptr);
-		return cast(R)(allocator.allocateMany(ALLOC_SIZE).ptr);
-	}
-
-	ValueType!T[] allocateMany(T)(size_t n)
-	{
-		alias RefType!T R;
-		alias ValueType!T V;
-		enum ALLOC_SIZE = (V.sizeof + BASE.sizeof-1) / BASE.sizeof;
-
-		static assert(V.sizeof % BASE.sizeof == 0, "Aligned/contiguous allocation impossible");
-
-		auto s = n * ALLOC_SIZE; // how many of BASE do we need?
-		return cast(V[])allocator.allocateMany(s);
-	}
-
-	static if (is(typeof(&allocator.freeAll)))
-	{
-		void freeAll()
-		{
-			allocator.freeAll();
-		}
-	}
-
-	static if (is(typeof(&allocator.freeMany)))
-	{
-		void free(R)(R r)
-		{
-			alias FromRefType!R T;
-			alias ValueType!T V;
-			enum ALLOC_SIZE = (V.sizeof + BASE.sizeof-1) / BASE.sizeof;
-
-			allocator.freeMany((cast(BASE*)r)[0..ALLOC_SIZE]);
-		}
-
-		void freeMany(V)(V[] v)
-		{
-			allocator.freeMany(cast(BASE[])v);
-		}
-	}
-}
-
-/// Heterogenous array bulk allocator (combines RegionAllocator with MultiAllocator).
-/// Uses "bump-the-pointer" approach for bulk allocation of arbitrary types.
-template RegionMultiAllocator(size_t BLOCKSIZE=1024, alias ALLOCATOR = HeapAllocator, BASE=void*, bool NEED_FREE=true)
-{
-	alias MultiAllocator!(AllocatorAdapter!(RegionAllocator, BLOCKSIZE, ALLOCATOR, NEED_FREE), BASE) RegionMultiAllocator;
-}
-
-/// Reuse a multi-allocator with a typed allocator.
-/// Reverse of MultiAllocator.
-struct TypedAllocator(T, alias ALLOCATOR)
-{
-	ALLOCATOR allocator;
-
-	mixin AllocatorCommon;
-
-	R allocate() { return allocator.allocate!T(); }
-
-	static if (is(typeof(&allocator.free!R)))
-		void free(R r) { allocator.free(r); }
-
-	static if (is(typeof(&allocator.allocateMany!T)))
-		V[] allocateMany(size_t n) { return allocator.allocateMany!T(n); }
-
-	static if (is(typeof(&allocator.freeMany!V)))
-		void freeMany(V[] v) { allocator.freeMany(v); }
-
-	static if (is(typeof(&allocator.resize!V)))
-		V[] resize(V[] v, size_t n) { return allocator.resize(v, n); }
-}
-
-/// Growing buffer bulk allocator.
-/// Allows reusing the same buffer, which is grown and retained as needed.
-/// Requires .resize support from underlying allocator.
-/// Smaller buffers are discarded (neither freed nor reused).
-struct GrowingBufferAllocator(T, alias ALLOCATOR = HeapAllocator)
-{
-	mixin AllocatorCommon;
-
-	ALLOCATOR!V allocator;
-
-	V* buf, ptr, end;
-
-	void bufferExhausted(size_t n)
-	{
-		import std.algorithm;
-		auto newSize = max(4096 / V.sizeof, (end-buf)*2, n);
-		auto pos = ptr - buf;
-		auto arr = allocator.resize(buf[0..end-buf], newSize);
-		buf = arr.ptr;
-		end = buf + arr.length;
-		ptr = buf + pos;
-	}
-
-	void clear()
-	{
-		ptr = buf;
-	}
-
-	enum BLOCKSIZE=0;
-	mixin PointerBumpCommon;
-}
-
-/// Backend homogenous allocator using the managed GC heap.
-struct HeapAllocator(T)
-{
-	alias RefType!T R;
-	alias ValueType!T V;
-
-	R allocate()
-	{
-		return new T;
-	}
-
-	V[] allocateMany(size_t n)
-	{
-		return new V[n];
-	}
-
-	V[] resize(V[] v, size_t n)
-	{
-		v.length = n;
-		return v;
-	}
-
-	R create(A...)(A args)
-	{
-		return new T(args);
-	}
-
-	void free(R v)
-	{
-		delete v;
-	}
-	alias free destroy;
-
-	void freeMany(V[] v)
-	{
-		delete v;
-	}
-}
-
-/// A substitute heterogenous allocator which uses the managed GC heap directly.
-struct HeapMultiAllocator
+/// Backend allocator Allocates from D's managed heap directly.
+mixin template HeapAllocator()
 {
 	RefType!T allocate(T)()
 	{
@@ -507,33 +345,240 @@ struct HeapMultiAllocator
 	}
 }
 
+WrapMixin!HeapAllocator heapAllocator;
+
+mixin template AllocateOneViaMany()
+{
+	RefType!T allocate(T)()
+	{
+		mixin AllocTypes;
+
+		return cast(R)(allocateMany(1).ptr);
+	}
+}
+
+mixin template FreeOneViaMany()
+{
+	void free(R)(R r)
+	{
+		mixin AllocTypes;
+
+		freeMany((cast(V*)r)[0..1]);
+	}
+}
+
 /// Backend allocator using the Data type from ae.sys.data.
-struct DataAllocator(T)
+mixin template DataAllocator()
 {
 	mixin AllocatorCommon;
 
 	import ae.sys.data;
 
 	// Needed to make data referenced in Data instances reachable by the GC
-	Data[] datas;
+	Data[] datas; // TODO: use linked list or something
 
-	V[] allocateMany(size_t n)
+	ValueType!T[] allocateMany(T)(size_t n)
 	{
+		mixin AllocTypes;
+
 		auto data = Data(V.sizeof * n);
 		datas ~= data;
 		return cast(V[])data.mcontents;
 	}
 
-	R allocate()
-	{
-		return cast(R)(allocateMany(1).ptr);
-	}
+	mixin AllocateOneViaMany;
 
 	void freeAll()
 	{
 		foreach (data; datas)
 			data.deleteContents();
+		datas = null;
 	}
+}
+
+/// Backend for direct OS page allocation.
+mixin template PageAllocator()
+{
+	version(Windows)
+		import std.c.windows.windows;
+	else
+	version(Posix)
+		import core.sys.posix.sys.mman;
+
+	ValueType!T[] allocateMany(T)(size_t n)
+	{
+		mixin AllocTypes;
+
+		auto size = V.sizeof * n;
+
+		version(Windows)
+		{
+			auto p = VirtualAlloc(null, size, MEM_COMMIT, PAGE_READWRITE);
+		}
+		else
+		version(Posix)
+		{
+			auto p = mmap(null, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+			p = (p == MAP_FAILED) ? null : p;
+		}
+
+		return (cast(V*)p)[0..n];
+	}
+
+	mixin AllocateOneViaMany;
+
+	void freeMany(V)(V[] v)
+	{
+		mixin AllocTypes;
+
+		version(Windows)
+			VirtualFree(v.ptr, 0, MEM_RELEASE);
+		else
+		version(Posix)
+			munmap(v.ptr, v.length * V.sizeof);
+	}
+
+	mixin FreeOneViaMany;
+}
+
+/// Common code for pointer-bumping allocators.
+///
+/// Context:
+///   ptr - pointer to next free element
+///   end - pointer to end of buffer
+///   bufferExhausted - method called when ptr==end
+///     (takes new size to allocate as parameter)
+///   BLOCKSIZE - default parameter to bufferExhausted
+mixin template PointerBumpCommon()
+{
+	/// Shared code for allocate / allocateMany.
+	/// Context:
+	///   Size - number of BASE_TYPE items to allocate
+	///     (can be a constant or variable).
+	private enum mixAllocateN =
+	q{
+		if (ptr + Size > end)
+			bufferExhausted(Size > BLOCKSIZE ? Size : BLOCKSIZE);
+
+		auto result = ptr[0..Size];
+		ptr += Size;
+	};
+
+	RefType!T allocate(T)()
+	{
+		mixin AllocTypes;
+
+		static if (ALLOC_SIZE == 1)
+		{
+			if (ptr==end)
+				bufferExhausted(BLOCKSIZE);
+			return cast(R)(ptr++);
+		}
+		else
+		{
+			enum Size = ALLOC_SIZE;
+			mixin(mixAllocateN);
+			return cast(R)result.ptr;
+		}
+	}
+
+	ValueType!T[] allocateMany(T)(size_t n)
+	{
+		mixin AllocTypes;
+		static assert(V.sizeof % BASE.sizeof == 0, "Aligned/contiguous allocation impossible");
+		auto Size = ALLOC_SIZE * n;
+		mixin(mixAllocateN);
+		return cast(V[])result;
+	}
+}
+
+/// Classic region.
+/// Compose over another allocator to allocate values in bulk (minimum of BLOCKSIZE).
+/// No deletion, but is slightly faster that FreeListAllocator.
+/// BASE_TYPE indicates the type used for upstream allocations.
+/// It is not possible to bulk-allocate types smaller than BASE_TYPE,
+/// or those the size of which is not divisible by BASE_TYPE's size.
+/// (This restriction allows for allocations of single BASE_TYPE-sized items to be
+/// a little faster.)
+// TODO: support non-bulk allocators (without allocateMany support)?
+mixin template RegionAllocator(BASE_TYPE=void*, size_t BLOCKSIZE=1024, alias ALLOCATOR_PARAM = heapAllocator)
+{
+	mixin AllocatorCommon;
+
+	BASE_VALUE_TYPE* ptr=null, end=null;
+
+	private void newBlock(size_t size) // size counts BASE_VALUE_TYPE
+	{
+		BASE_VALUE_TYPE[] arr = mixin(allocator).allocateMany!BASE_TYPE(size);
+		ptr = arr.ptr;
+		end = ptr + arr.length;
+	}
+
+	alias newBlock bufferExhausted;
+	mixin PointerBumpCommon;
+}
+
+/// Allocator proxy which keeps track of all allocations,
+/// and implements freeAll by discarding them all at once
+/// via the underlying allocator's freeMany.
+mixin template TrackingAllocator(ALLOCATOR_TYPE, alias ALLOCATOR_PARAM = heapAllocator)
+{
+	mixin AllocatorCommon;
+
+	VALUE_TYPE[][] blocks; // TODO: use linked list or something
+
+	VALUE_TYPE[] allocateMany(T)(size_t n)
+	{
+		mixin AllocTypes;
+
+		VALUE_TYPE[] arr = mixin(allocator).allocateMany!ALLOCATOR_TYPE(n);
+		blocks ~= arr;
+		return arr;
+	}
+
+	RefType!T allocate(T)()
+	{
+		mixin AllocTypes;
+
+		return cast(R)(allocateMany!T(1).ptr);
+	}
+
+	void freeAll()
+	{
+		foreach (block; blocks)
+			mixin(allocator).freeMany(block);
+		blocks = null;
+	}
+}
+
+/// Growing buffer bulk allocator.
+/// Allows reusing the same buffer, which is grown and retained as needed.
+/// Requires .resize support from underlying allocator.
+/// Smaller buffers are discarded (neither freed nor reused).
+mixin template GrowingBufferAllocator(BASE_TYPE=void*, alias ALLOCATOR_PARAM = heapAllocator)
+{
+	mixin AllocatorCommon;
+
+	BASE_VALUE_TYPE* buf, ptr, end;
+
+	void bufferExhausted(size_t n)
+	{
+		import std.algorithm;
+		auto newSize = max(4096 / BASE_VALUE_TYPE.sizeof, (end-buf)*2, n);
+		auto pos = ptr - buf;
+		auto arr = mixin(allocator).resize(buf[0..end-buf], newSize);
+		buf = arr.ptr;
+		end = buf + arr.length;
+		ptr = buf + pos;
+	}
+
+	void clear()
+	{
+		ptr = buf;
+	}
+
+	enum BLOCKSIZE=0;
+	mixin PointerBumpCommon;
 }
 
 /// Thrown when the buffer of an allocator is exhausted.
@@ -541,19 +586,19 @@ class BufferExhaustedException : Exception { this() { super("Allocator buffer ex
 
 /// Homogenous allocator which uses a given buffer.
 /// Throws BufferExhaustedException if the buffer is exhausted.
-struct BufferAllocator(T)
+mixin template BufferAllocator(BASE_TYPE=ubyte)
 {
 	mixin AllocatorCommon;
 
-	void setBuffer(V[] buf)
+	void setBuffer(BASE_VALUE_TYPE[] buf)
 	{
 		ptr = buf.ptr;
 		end = ptr + buf.length;
 	}
 
-	this(V[] buf) { setBuffer(buf); }
+	this(BASE_VALUE_TYPE[] buf) { setBuffer(buf); }
 
-	V* ptr, end;
+	BASE_VALUE_TYPE* ptr=null, end=null;
 
 	static void bufferExhausted(size_t n)
 	{
@@ -567,7 +612,7 @@ struct BufferAllocator(T)
 /// Homogenous allocator which uses a static buffer of a given size.
 /// Throws BufferExhaustedException if the buffer is exhausted.
 /// Needs to be manually initialized before use.
-struct StaticBufferAllocator(T, size_t SIZE)
+mixin template StaticBufferAllocator(size_t SIZE, BASE_TYPE=ubyte)
 {
 	mixin AllocatorCommon;
 
@@ -595,14 +640,13 @@ struct StaticBufferAllocator(T, size_t SIZE)
 /// but once the static buffer is exhausted, it switches to a fallback
 /// bulk allocator.
 /// Needs to be manually initialized before use.
-struct HybridBufferAllocator(T, size_t SIZE, alias FALLBACK_ALLOCATOR)
+/// ALLOCATOR_PARAM is the fallback allocator.
+mixin template HybridBufferAllocator(size_t SIZE, BASE_TYPE=ubyte, alias ALLOCATOR_PARAM=heapAllocator)
 {
 	mixin AllocatorCommon;
 
-	FALLBACK_ALLOCATOR!V fallbackAllocator;
-
-	V[SIZE] buffer;
-	V* ptr, end;
+	BASE_VALUE_TYPE[SIZE] buffer;
+	BASE_VALUE_TYPE* ptr, end;
 
 	void initialize()
 	{
@@ -612,7 +656,7 @@ struct HybridBufferAllocator(T, size_t SIZE, alias FALLBACK_ALLOCATOR)
 
 	void bufferExhausted(size_t n)
 	{
-		auto arr = fallbackAllocator.allocateMany(n);
+		auto arr = mixin(allocator).allocateMany!BASE_TYPE(n);
 		ptr = arr.ptr;
 		end = ptr + arr.length;
 	}
@@ -620,37 +664,24 @@ struct HybridBufferAllocator(T, size_t SIZE, alias FALLBACK_ALLOCATOR)
 	enum BLOCKSIZE = SIZE;
 	mixin PointerBumpCommon;
 
-	static if (is(typeof(&fallbackAllocator.clear)))
+	static if (is(typeof(&mixin(allocator).clear)))
 	{
 		void clear()
 		{
 			if (end == buffer.ptr + buffer.length)
 				ptr = buffer.ptr;
 			else
-				fallbackAllocator.clear();
+				mixin(allocator).clear();
 		}
 	}
 }
 
-version(unittest) import ae.sys.data;
-
 unittest
 {
-	void testAllocator(alias A, string INIT="")()
-	{
-		static class C { int x=2; this() {} this(int p) { x = p; } }
-		A!C a;
-		mixin(INIT);
-		auto c1 = a.create();
-		assert(c1.x == 2);
+	static class C { int x=2; this() {} this(int p) { x = p; } }
 
-		auto c2 = a.create(5);
-		assert(c2.x == 5);
-	}
-
-	void testMultiAllocator(A, string INIT="")()
+	void testAllocator(A, string INIT="")()
 	{
-		static class C { int x=2; this() {} this(int p) { x = p; } }
 		A a;
 		mixin(INIT);
 		auto c1 = a.create!C();
@@ -660,16 +691,8 @@ unittest
 		assert(c2.x == 5);
 	}
 
-	testAllocator!HeapAllocator();
-	testAllocator!DataAllocator();
-	testAllocator!FreeListAllocator();
-	testAllocator!RegionAllocator();
-	testAllocator!GrowingBufferAllocator();
-	testAllocator!(BufferAllocator, q{a.setBuffer(new a.V[1024]);})();
-	testAllocator!(AllocatorAdapter!(StaticBufferAllocator, 4096), q{a.initialize();})();
-	testAllocator!(AllocatorAdapter!(HybridBufferAllocator, 4096, HeapAllocator), q{a.initialize();})();
-	testAllocator!(AllocatorAdapter!(TypedAllocator, HeapMultiAllocator))();
-
-	testMultiAllocator!HeapMultiAllocator();
-	testMultiAllocator!(RegionMultiAllocator!())();
+	testAllocator!(WrapMixin!(HeapAllocator))();
+	testAllocator!(WrapMixin!(FreeListAllocator, C))();
+	testAllocator!(WrapMixin!(GrowingBufferAllocator))();
+	testAllocator!(WrapMixin!(HybridBufferAllocator, 1024))();
 }

@@ -103,7 +103,7 @@ struct XmlDom(STRING=string, XML_STRING=XmlString!STRING)
 	}
 }
 
-struct XmlDomWriter(DOM_, alias ALLOCATOR=HeapAllocator)
+mixin template XmlDomWriter(DOM_, alias allocator=heapAllocator)
 {
 	alias DOM_ DOM;
 
@@ -111,11 +111,9 @@ struct XmlDomWriter(DOM_, alias ALLOCATOR=HeapAllocator)
 
 	alias DOM.Node Node;
 
-	ALLOCATOR!Node allocator;
-
 	private Node* newNode()
 	{
-		auto n = allocator.allocate();
+		auto n = allocator.allocate!Node();
 		n.nextSibling = null;
 		return n;
 	}
@@ -229,11 +227,13 @@ struct NoopStringFilter
 	auto handleXmlString(S)(S s) { return s; }
 }
 
+private struct WrapMixin(alias M, ARGS...) { mixin M!ARGS; }
+
 unittest
 {
 	// Test instantiation
 	alias XmlDom!string DOM;
-	alias XmlDomWriter!DOM WRITER;
+	alias WrapMixin!(XmlDomWriter, DOM) WRITER;
 	alias XmlDomParser!WRITER OUTPUT;
 	alias XmlParser!(string, OUTPUT) PARSER;
 	PARSER p;
