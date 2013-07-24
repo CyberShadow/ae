@@ -396,6 +396,31 @@ mixin template DataAllocator()
 	}
 }
 
+mixin template GCRootAllocatorProxy(alias ALLOCATOR_PARAM)
+{
+	mixin AllocatorCommon;
+
+	import core.memory;
+
+	ValueType!T[] allocateMany(T)(size_t n)
+	{
+		auto result = mixin(allocator).allocateMany!T(n);
+		auto bytes = cast(ubyte[])result;
+		GC.addRange(bytes.ptr, bytes.length);
+		return result;
+	}
+
+	mixin AllocateOneViaMany;
+
+	void freeMany(V)(V[] v)
+	{
+		GC.removeRange(v.ptr);
+		mixin(allocator).freeMany(v);
+	}
+
+	mixin FreeOneViaMany;
+}
+
 /// Backend for direct OS page allocation.
 mixin template PageAllocator()
 {
