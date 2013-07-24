@@ -213,7 +213,7 @@ mixin template AllocTypes()
 /// Allocator proxy which injects custom code after object creation.
 /// Context of INIT_CODE:
 ///   p - newly-allocated value.
-mixin template InitializingAllocator(string INIT_CODE, alias ALLOCATOR_PARAM = heapAllocator)
+mixin template InitializingAllocatorProxy(string INIT_CODE, alias ALLOCATOR_PARAM = heapAllocator)
 {
 	mixin AllocatorCommon;
 
@@ -228,7 +228,7 @@ mixin template InitializingAllocator(string INIT_CODE, alias ALLOCATOR_PARAM = h
 }
 
 /// Allocator proxy which keeps track how many allocations were made.
-mixin template StatAllocator(alias ALLOCATOR_PARAM = heapAllocator)
+mixin template StatAllocatorProxy(alias ALLOCATOR_PARAM = heapAllocator)
 {
     mixin AllocatorCommon;
 
@@ -521,7 +521,7 @@ mixin template RegionAllocator(BASE_TYPE=void*, size_t BLOCKSIZE=1024, alias ALL
 /// Allocator proxy which keeps track of all allocations,
 /// and implements freeAll by discarding them all at once
 /// via the underlying allocator's freeMany.
-mixin template TrackingAllocator(ALLOCATOR_TYPE, alias ALLOCATOR_PARAM = heapAllocator)
+mixin template TrackingAllocatorProxy(ALLOCATOR_TYPE, alias ALLOCATOR_PARAM = heapAllocator)
 {
 	mixin AllocatorCommon;
 
