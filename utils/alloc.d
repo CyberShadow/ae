@@ -161,6 +161,19 @@ string mixAliasForward(alias M)()
 	return result;
 }
 
+/// Declares ALLOCATOR_EXPR, a string mixin which, when mixin()'d,
+/// resolves to the ALLOCATOR string mixin (if it's a string) or
+/// alias (otherwise).
+/// Facilitates allocator users to accept allocators as both aliases
+/// or expressions specified as string mixins.
+mixin template AllocatorExpr()
+{
+	static if (is(typeof(ALLOCATOR) == string))
+		enum ALLOCATOR_EXPR = ALLOCATOR;
+	else
+		enum ALLOCATOR_EXPR = q{ALLOCATOR};
+}
+
 /// Common declarations for an allocator mixin
 mixin template AllocatorCommon()
 {
@@ -188,13 +201,8 @@ mixin template AllocatorCommon()
 	static if (is(BASE_TYPE))
 		alias ValueType!BASE_TYPE BASE_VALUE_TYPE;
 
-	static if (is(typeof(ALLOCATOR_PARAM)))
-	{
-		static if (is(typeof(ALLOCATOR_PARAM) == string))
-			enum allocator = ALLOCATOR_PARAM;
-		else
-			enum allocator = q{ALLOCATOR_PARAM};
-	}
+	static if (is(typeof(ALLOCATOR)))
+		mixin AllocatorExpr;
 }
 
 /// Creates T/R/V aliases from context, and checks ALLOCATOR_TYPE if appropriate.
@@ -213,13 +221,13 @@ mixin template AllocTypes()
 /// Allocator proxy which injects custom code after object creation.
 /// Context of INIT_CODE:
 ///   p - newly-allocated value.
-mixin template InitializingAllocatorProxy(string INIT_CODE, alias ALLOCATOR_PARAM = heapAllocator)
+mixin template InitializingAllocatorProxy(string INIT_CODE, alias ALLOCATOR = heapAllocator)
 {
 	mixin AllocatorCommon;
 
 	RefType!T allocate(T)()
 	{
-		auto p = mixin(allocator).allocate!T();
+		auto p = mixin(ALLOCATOR_EXPR).allocate!T();
 		mixin(INIT_CODE);
 		return p;
 	}
@@ -228,7 +236,7 @@ mixin template InitializingAllocatorProxy(string INIT_CODE, alias ALLOCATOR_PARA
 }
 
 /// Allocator proxy which keeps track how many allocations were made.
-mixin template StatAllocatorProxy(alias ALLOCATOR_PARAM = heapAllocator)
+mixin template StatAllocatorProxy(alias ALLOCATOR = heapAllocator)
 {
     mixin AllocatorCommon;
 
@@ -237,13 +245,13 @@ mixin template StatAllocatorProxy(alias ALLOCATOR_PARAM = heapAllocator)
 	RefType!T allocate(T)()
 	{
 		allocated += ValueType!T.sizeof;
-		return mixin(allocator).allocate!T();
+		return mixin(ALLOCATOR_EXPR).allocate!T();
 	}
 
 	ValueType!T[] allocateMany(T)(size_t n)
 	{
 		allocated += n * ValueType!T.sizeof;
-		return mixin(allocator).allocateMany!T(n);
+		return mixin(ALLOCATOR_EXPR).allocateMany!T(n);
 	}
 
 	// TODO: Proxy other methods
@@ -279,7 +287,7 @@ template FreeListNode(T)
 /// Homogenous linked list allocator.
 /// Supports O(1) deletion.
 /// Does not support bulk allocation.
-mixin template FreeListAllocator(ALLOCATOR_TYPE, alias ALLOCATOR_PARAM = heapAllocator)
+mixin template FreeListAllocator(ALLOCATOR_TYPE, alias ALLOCATOR = heapAllocator)
 {
 	mixin AllocatorCommon;
 
@@ -293,7 +301,7 @@ mixin template FreeListAllocator(ALLOCATOR_TYPE, alias ALLOCATOR_PARAM = heapAll
 
 		if (head is null)
 		{
-			auto node = mixin(allocator).allocate!Node();
+			auto node = mixin(ALLOCATOR_EXPR).allocate!Node();
 			return cast(R)&node.data;
 		}
 		auto node = head;
@@ -396,7 +404,7 @@ mixin template DataAllocator()
 	}
 }
 
-mixin template GCRootAllocatorProxy(alias ALLOCATOR_PARAM)
+mixin template GCRootAllocatorProxy(alias ALLOCATOR)
 {
 	mixin AllocatorCommon;
 
@@ -404,7 +412,7 @@ mixin template GCRootAllocatorProxy(alias ALLOCATOR_PARAM)
 
 	ValueType!T[] allocateMany(T)(size_t n)
 	{
-		auto result = mixin(allocator).allocateMany!T(n);
+		auto result = mixin(ALLOCATOR_EXPR).allocateMany!T(n);
 		auto bytes = cast(ubyte[])result;
 		GC.addRange(bytes.ptr, bytes.length);
 		return result;
@@ -415,7 +423,7 @@ mixin template GCRootAllocatorProxy(alias ALLOCATOR_PARAM)
 	void freeMany(V)(V[] v)
 	{
 		GC.removeRange(v.ptr);
-		mixin(allocator).freeMany(v);
+		mixin(ALLOCATOR_EXPR).freeMany(v);
 	}
 
 	mixin FreeOneViaMany;
@@ -526,7 +534,7 @@ mixin template PointerBumpCommon()
 /// (This restriction allows for allocations of single BASE_TYPE-sized items to be
 /// a little faster.)
 // TODO: support non-bulk allocators (without allocateMany support)?
-mixin template RegionAllocator(BASE_TYPE=void*, size_t BLOCKSIZE=1024, alias ALLOCATOR_PARAM = heapAllocator)
+mixin template RegionAllocator(BASE_TYPE=void*, size_t BLOCKSIZE=1024, alias ALLOCATOR = heapAllocator)
 {
 	mixin AllocatorCommon;
 
@@ -534,7 +542,7 @@ mixin template RegionAllocator(BASE_TYPE=void*, size_t BLOCKSIZE=1024, alias ALL
 
 	private void newBlock(size_t size) // size counts BASE_VALUE_TYPE
 	{
-		BASE_VALUE_TYPE[] arr = mixin(allocator).allocateMany!BASE_TYPE(size);
+		BASE_VALUE_TYPE[] arr = mixin(ALLOCATOR_EXPR).allocateMany!BASE_TYPE(size);
 		ptr = arr.ptr;
 		end = ptr + arr.length;
 	}
@@ -546,7 +554,7 @@ mixin template RegionAllocator(BASE_TYPE=void*, size_t BLOCKSIZE=1024, alias ALL
 /// Allocator proxy which keeps track of all allocations,
 /// and implements freeAll by discarding them all at once
 /// via the underlying allocator's freeMany.
-mixin template TrackingAllocatorProxy(ALLOCATOR_TYPE, alias ALLOCATOR_PARAM = heapAllocator)
+mixin template TrackingAllocatorProxy(ALLOCATOR_TYPE, alias ALLOCATOR = heapAllocator)
 {
 	mixin AllocatorCommon;
 
@@ -556,7 +564,7 @@ mixin template TrackingAllocatorProxy(ALLOCATOR_TYPE, alias ALLOCATOR_PARAM = he
 	{
 		mixin AllocTypes;
 
-		VALUE_TYPE[] arr = mixin(allocator).allocateMany!ALLOCATOR_TYPE(n);
+		VALUE_TYPE[] arr = mixin(ALLOCATOR_EXPR).allocateMany!ALLOCATOR_TYPE(n);
 		blocks ~= arr;
 		return arr;
 	}
@@ -571,7 +579,7 @@ mixin template TrackingAllocatorProxy(ALLOCATOR_TYPE, alias ALLOCATOR_PARAM = he
 	void freeAll()
 	{
 		foreach (block; blocks)
-			mixin(allocator).freeMany(block);
+			mixin(ALLOCATOR_EXPR).freeMany(block);
 		blocks = null;
 	}
 }
@@ -580,7 +588,7 @@ mixin template TrackingAllocatorProxy(ALLOCATOR_TYPE, alias ALLOCATOR_PARAM = he
 /// Allows reusing the same buffer, which is grown and retained as needed.
 /// Requires .resize support from underlying allocator.
 /// Smaller buffers are discarded (neither freed nor reused).
-mixin template GrowingBufferAllocator(BASE_TYPE=void*, alias ALLOCATOR_PARAM = heapAllocator)
+mixin template GrowingBufferAllocator(BASE_TYPE=void*, alias ALLOCATOR = heapAllocator)
 {
 	mixin AllocatorCommon;
 
@@ -591,7 +599,7 @@ mixin template GrowingBufferAllocator(BASE_TYPE=void*, alias ALLOCATOR_PARAM = h
 		import std.algorithm;
 		auto newSize = max(4096 / BASE_VALUE_TYPE.sizeof, (end-buf)*2, n);
 		auto pos = ptr - buf;
-		auto arr = mixin(allocator).resize(buf[0..end-buf], newSize);
+		auto arr = mixin(ALLOCATOR_EXPR).resize(buf[0..end-buf], newSize);
 		buf = arr.ptr;
 		end = buf + arr.length;
 		ptr = buf + pos;
@@ -665,8 +673,8 @@ mixin template StaticBufferAllocator(size_t SIZE, BASE_TYPE=ubyte)
 /// but once the static buffer is exhausted, it switches to a fallback
 /// bulk allocator.
 /// Needs to be manually initialized before use.
-/// ALLOCATOR_PARAM is the fallback allocator.
-mixin template HybridBufferAllocator(size_t SIZE, BASE_TYPE=ubyte, alias ALLOCATOR_PARAM=heapAllocator)
+/// ALLOCATOR is the fallback allocator.
+mixin template HybridBufferAllocator(size_t SIZE, BASE_TYPE=ubyte, alias ALLOCATOR=heapAllocator)
 {
 	mixin AllocatorCommon;
 
@@ -681,7 +689,7 @@ mixin template HybridBufferAllocator(size_t SIZE, BASE_TYPE=ubyte, alias ALLOCAT
 
 	void bufferExhausted(size_t n)
 	{
-		auto arr = mixin(allocator).allocateMany!BASE_TYPE(n);
+		auto arr = mixin(ALLOCATOR_EXPR).allocateMany!BASE_TYPE(n);
 		ptr = arr.ptr;
 		end = ptr + arr.length;
 	}
@@ -689,14 +697,14 @@ mixin template HybridBufferAllocator(size_t SIZE, BASE_TYPE=ubyte, alias ALLOCAT
 	enum BLOCKSIZE = SIZE;
 	mixin PointerBumpCommon;
 
-	static if (is(typeof(&mixin(allocator).clear)))
+	static if (is(typeof(&mixin(ALLOCATOR_EXPR).clear)))
 	{
 		void clear()
 		{
 			if (end == buffer.ptr + buffer.length)
 				ptr = buffer.ptr;
 			else
-				mixin(allocator).clear();
+				mixin(ALLOCATOR_EXPR).clear();
 		}
 	}
 }

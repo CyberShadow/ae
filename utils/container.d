@@ -264,8 +264,10 @@ struct HashTableItem(K, V)
 }
 
 /// A hash table with a static size.
-mixin template HashTable(K, V, uint SIZE, string ALLOCATOR, alias HASHFUNC="k")
+mixin template HashTable(K, V, uint SIZE, alias ALLOCATOR, alias HASHFUNC="k")
 {
+	mixin AllocatorExpr;
+
 	alias K KEY;
 	alias V VALUE;
 
@@ -307,7 +309,7 @@ mixin template HashTable(K, V, uint SIZE, string ALLOCATOR, alias HASHFUNC="k")
 	V* add(in K k)
 	{
 		auto h = hashFunc(k) % SIZE;
-		auto newItem = mixin(ALLOCATOR).allocate!Item();
+		auto newItem = mixin(ALLOCATOR_EXPR).allocate!Item();
 		newItem.k = k;
 		newItem.next = items[h];
 		items[h] = newItem;
@@ -327,7 +329,7 @@ mixin template HashTable(K, V, uint SIZE, string ALLOCATOR, alias HASHFUNC="k")
 			item = item.next;
 		}
 
-		auto newItem = mixin(ALLOCATOR).allocate!Item();
+		auto newItem = mixin(ALLOCATOR_EXPR).allocate!Item();
 		newItem.k = k;
 		newItem.next = items[h];
 		items[h] = newItem;
@@ -386,8 +388,8 @@ mixin template HashTable(K, V, uint SIZE, string ALLOCATOR, alias HASHFUNC="k")
 
 	void freeAll()
 	{
-		static if (is(typeof(mixin(ALLOCATOR).freeAll())))
-			mixin(ALLOCATOR).freeAll();
+		static if (is(typeof(mixin(ALLOCATOR_EXPR).freeAll())))
+			mixin(ALLOCATOR_EXPR).freeAll();
 	}
 }
 
@@ -396,7 +398,7 @@ unittest
 	mixin AddWrapMixin;
 
 	static WrapMixin!RegionAllocator allocator;
-	WrapMixin!(HashTable, int, string, 16, fullyQualifiedName!allocator) ht;
+	WrapMixin!(HashTable, int, string, 16, allocator) ht;
 
 	assert(5 !in ht);
 	auto s = "five";
