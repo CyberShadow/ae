@@ -225,6 +225,48 @@ else
 
 // ************************************************************************
 
+/// typeof(new T) - what we use to refer to an allocated instance
+template RefType(T)
+{
+	static if (is(T == class))
+		alias T RefType;
+	else
+		alias T* RefType;
+}
+
+/// Reverse of RefType
+template FromRefType(R)
+{
+	static if (is(T == class))
+		alias T FromRefType;
+	else
+	{
+		static assert(is(typeof(*(R.init))), R.stringof ~ " is not dereferenceable");
+		alias typeof(*(R.init)) FromRefType;
+	}
+}
+
+/// A type that can be used to store instances of T.
+/// A struct with T's instance size if T is a class, T itself otherwise.
+template StorageType(T)
+{
+	static if (is(T == class))
+	{
+		//alias void*[(__traits(classInstanceSize, T) + size_t.sizeof-1) / size_t.sizeof] StorageType;
+		static assert(__traits(classInstanceSize, T) % size_t.sizeof == 0, "TODO"); // union with a pointer
+
+		// Use a struct to allow new-ing the type (you can't new a static array directly)
+		struct StorageType
+		{
+			void*[__traits(classInstanceSize, T) / size_t.sizeof] data;
+		}
+	}
+	else
+		alias T StorageType;
+}
+
+// ************************************************************************
+
 /// Is T a reference type (a pointer or a class)?
 template isReference(T)
 {

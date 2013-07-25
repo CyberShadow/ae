@@ -87,6 +87,8 @@ module ae.utils.alloc;
 import std.conv : emplace;
 import std.traits : fullyQualifiedName;
 
+import ae.utils.meta : RefType, FromRefType, StorageType;
+
 // TODO:
 // - GROWFUN callable alias parameter instead of BLOCKSIZE?
 // - Consolidate RegionAllocator and GrowingBufferAllocator
@@ -96,45 +98,6 @@ import std.traits : fullyQualifiedName;
 // - Forbid allocating types with indirections when the base type
 //   is not a pointer?
 // - More thorough testing
-
-/// typeof(new T) - what we use to refer to an allocated instance
-template RefType(T)
-{
-	static if (is(T == class))
-		alias T RefType;
-	else
-		alias T* RefType;
-}
-
-/// Reverse of RefType
-template FromRefType(R)
-{
-	static if (is(T == class))
-		alias T FromRefType;
-	else
-	{
-		static assert(is(typeof(*(R.init))), R.stringof ~ " is not dereferenceable");
-		alias typeof(*(R.init)) FromRefType;
-	}
-}
-
-/// What we use to store an allocated instance
-template ValueType(T)
-{
-	static if (is(T == class))
-	{
-		//alias void*[(__traits(classInstanceSize, T) + size_t.sizeof-1) / size_t.sizeof] ValueType;
-		static assert(__traits(classInstanceSize, T) % size_t.sizeof == 0, "TODO"); // union with a pointer
-
-		// Use a struct to allow new-ing the type (you can't new a static array directly)
-		struct ValueType
-		{
-			void*[__traits(classInstanceSize, T) / size_t.sizeof] data;
-		}
-	}
-	else
-		alias T ValueType;
-}
 
 /// This declares a WrapMixin template in the current scope, which will
 /// create a struct containing an instance of the mixin template M,
@@ -177,11 +140,11 @@ mixin template AllocatorExpr()
 /// Common declarations for an allocator mixin
 mixin template AllocatorCommon()
 {
-	alias ae.utils.alloc.ValueType ValueType;
+	alias ae.utils.alloc.StorageType StorageType;
 
 	RefType!T create(T, A...)(A args)
 	{
-		alias ValueType!T V;
+		alias StorageType!T V;
 
 		auto r = allocate!T();
 		emplace!T(cast(void[])((cast(V*)r)[0..1]), args);
@@ -196,10 +159,10 @@ mixin template AllocatorCommon()
 	}
 
 	static if (is(ALLOCATOR_TYPE))
-		alias ValueType!ALLOCATOR_TYPE VALUE_TYPE;
+		alias StorageType!ALLOCATOR_TYPE VALUE_TYPE;
 
 	static if (is(BASE_TYPE))
-		alias ValueType!BASE_TYPE BASE_VALUE_TYPE;
+		alias StorageType!BASE_TYPE BASE_VALUE_TYPE;
 
 	static if (is(typeof(ALLOCATOR)))
 		mixin AllocatorExpr;
@@ -210,7 +173,7 @@ mixin template AllocTypes()
 {
 	static if (is(R) && !is(T)) alias FromRefType!R T;
 	static if (is(T) && !is(R)) alias RefType!T R;
-	static if (is(T) && !is(V)) alias ValueType!T V;
+	static if (is(T) && !is(V)) alias StorageType!T V;
 	static if (is(ALLOCATOR_TYPE)) static assert(is(ALLOCATOR_TYPE==T), "This allocator can only allocate instances of " ~ ALLOCATOR_TYPE.stringof ~ ", not " ~ T.stringof);
 	static if (is(BASE_TYPE) && is(V))
 	{
@@ -244,13 +207,13 @@ mixin template StatAllocatorProxy(alias ALLOCATOR = heapAllocator)
 
 	RefType!T allocate(T)()
 	{
-		allocated += ValueType!T.sizeof;
+		allocated += StorageType!T.sizeof;
 		return mixin(ALLOCATOR_EXPR).allocate!T();
 	}
 
-	ValueType!T[] allocateMany(T)(size_t n)
+	StorageType!T[] allocateMany(T)(size_t n)
 	{
-		allocated += n * ValueType!T.sizeof;
+		allocated += n * StorageType!T.sizeof;
 		return mixin(ALLOCATOR_EXPR).allocateMany!T(n);
 	}
 
@@ -325,9 +288,9 @@ mixin template HeapAllocator()
 		return new T;
 	}
 
-	ValueType!T[] allocateMany(T)(size_t n)
+	StorageType!T[] allocateMany(T)(size_t n)
 	{
-		return new ValueType!T[n];
+		return new StorageType!T[n];
 	}
 
 	RefType!T create(T, A...)(A args)
@@ -385,7 +348,7 @@ mixin template DataAllocator()
 	// Needed to make data referenced in Data instances reachable by the GC
 	Data[] datas; // TODO: use linked list or something
 
-	ValueType!T[] allocateMany(T)(size_t n)
+	StorageType!T[] allocateMany(T)(size_t n)
 	{
 		mixin AllocTypes;
 
@@ -410,7 +373,7 @@ mixin template GCRootAllocatorProxy(alias ALLOCATOR)
 
 	import core.memory;
 
-	ValueType!T[] allocateMany(T)(size_t n)
+	StorageType!T[] allocateMany(T)(size_t n)
 	{
 		auto result = mixin(ALLOCATOR_EXPR).allocateMany!T(n);
 		auto bytes = cast(ubyte[])result;
@@ -438,7 +401,7 @@ mixin template PageAllocator()
 	version(Posix)
 		import core.sys.posix.sys.mman;
 
-	ValueType!T[] allocateMany(T)(size_t n)
+	StorageType!T[] allocateMany(T)(size_t n)
 	{
 		mixin AllocTypes;
 
@@ -515,7 +478,7 @@ mixin template PointerBumpCommon()
 		}
 	}
 
-	ValueType!T[] allocateMany(T)(size_t n)
+	StorageType!T[] allocateMany(T)(size_t n)
 	{
 		mixin AllocTypes;
 		static assert(V.sizeof % BASE.sizeof == 0, "Aligned/contiguous allocation impossible");
