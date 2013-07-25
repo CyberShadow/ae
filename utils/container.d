@@ -115,33 +115,95 @@ unittest
 
 import ae.utils.alloc;
 
-mixin template DListCommon(NODEREF)
+mixin template ListCommon(NODEREF, bool HASPREV, bool HASTAIL)
 {
-	NODEREF head, tail;
+	NODEREF head;
+	static if (HASTAIL) NODEREF tail;
 
-	void add(NODEREF node)
+	invariant()
+	{
+		static if (HASPREV) if (head) assert(!head.prev);
+		static if (HASTAIL) if (tail) assert(!tail.next);
+	}
+
+	void pushFront(NODEREF node)
+	{
+		static if (HASPREV) node.prev = null;
+		node.next = head;
+		static if (HASPREV)
+			if (head)
+				head.prev = node;
+		head = node;
+		static if (HASTAIL)
+			if (!tail)
+				tail = node;
+	}
+
+	static if (HASTAIL)
+	void pushBack(NODEREF node)
 	{
 		node.next = null;
-		node.prev = tail;
-		if (tail !is null)
+		static if (HASPREV) node.prev = tail;
+		if (tail)
 			tail.next = node;
 		tail = node;
 		if (head is null)
 			head = node;
 	}
 
-	void remove(NODEREF node)
+	static if (HASTAIL)
+	deprecated alias pushBack add;
+
+	NODEREF popFront()
 	{
-		if (node.prev is null)
-			head = node.next;
+		assert(head);
+		auto result = head;
+
+		auto next = head.next;
+		if (next)
+		{
+			static if (HASPREV) next.prev = null;
+		}
 		else
-			node.prev.next = node.next;
-		if (node.next is null)
-			tail = node.prev;
-		else
-			node.next.prev = node.prev;
+		{
+			static if (HASTAIL) tail = null;
+		}
+		head = next;
+		result.next = null;
+		return result;
 	}
 
+	static if (HASTAIL && HASPREV)
+	NODEREF popBack()
+	{
+		assert(tail);
+		auto result = tail;
+
+		auto prev = tail.prev;
+		if (prev)
+			prev.next = null;
+		else
+			head = null;
+		tail = prev;
+		result.prev = null;
+		return result;
+	}
+
+	static if (HASPREV)
+	void remove(NODEREF node)
+	{
+		if (node.prev)
+			node.prev.next = node.next;
+		else
+			head = node.next;
+		if (node.next)
+			node.next.prev = node.prev;
+		else
+			static if (HASTAIL) tail = node.prev;
+		node.next = node.prev = null;
+	}
+
+	// TODO: use ranges
 	int iterate(T, string EXPR)(int delegate(ref T) dg)
 	{
 		int res = 0;
@@ -160,47 +222,100 @@ mixin template DListCommon(NODEREF)
 	}
 }
 
-struct DListNode(T)
+/// Mixin containing the linked-list fields.
+/// When using *ListContainer, inject it into your custom type.
+mixin template ListLink(bool HASPREV)
 {
-	DListNode* prev, next;
-	T item;
+	import ae.utils.meta : RefType;
+	alias RefType!(typeof(this)) NODEREF;
+	NODEREF next;
+	static if (HASPREV) NODEREF prev;
 }
 
+mixin template SListLink() { mixin ListLink!false; }
+mixin template DListLink() { mixin ListLink!true ; }
 
-/// Organizes a bunch of objects in a doubly-linked list.
-/// Not very efficient for reference types, since it results in two allocations per object.
-struct DList(T, alias allocator=heapAllocator)
+struct ListNode(T, bool HASPREV)
 {
-	alias DListNode!T Node;
-	mixin DListCommon!(Node*) common;
+	mixin ListLink!(HASPREV);
+	T value;
+	deprecated alias value item;
+}
 
-	Node* add(T item)
+/// Organizes a bunch of objects in a linked list.
+/// Not very efficient for reference types, since it results in two allocations per object.
+struct List(T, bool HASPREV, bool HASTAIL, alias ALLOCATOR=heapAllocator)
+{
+	mixin AllocatorExpr;
+
+	alias ListNode!(T, HASPREV) Node;
+	mixin ListCommon!(Node*, HASPREV, HASTAIL) common;
+
+	Node* pushFront(T v)
 	{
-		auto node = allocator.allocate!Node();
-		node.item = item;
-		common.add(node);
+		auto node = mixin(ALLOCATOR_EXPR).allocate!Node();
+		node.value = v;
+		common.pushFront(node);
 		return node;
 	}
 
-	static if (is(typeof(&allocator.free)))
+	static if (HASTAIL)
+	Node* pushBack(T v)
+	{
+		auto node = mixin(ALLOCATOR_EXPR).allocate!Node();
+		node.value = v;
+		common.pushBack(node);
+		return node;
+	}
+
+	static if (HASTAIL)
+	deprecated alias pushBack add;
+
+	static if (HASPREV)
 	void remove(Node* node)
 	{
 		common.remove(node);
-		allocator.free(node);
+		static if (is(typeof(&mixin(ALLOCATOR_EXPR).free)))
+			mixin(ALLOCATOR_EXPR).free(node);
 	}
 
 	int opApply(int delegate(ref T) dg)
 	{
-		return iterate!(T, "node.item")(dg);
+		return iterate!(T, q{node.value})(dg);
 	}
+}
+
+/// Singly-ended singly-linked list. Usable as a stack.
+template SList(T)
+{
+	alias List!(T, false, false) SList;
+}
+
+/// Double-ended singly-linked list. Usable as a stack or queue.
+template DESList(T)
+{
+	alias List!(T, false, true) DESList;
+}
+
+/// Doubly-linked list. Usable as a stack, queue or deque.
+template DList(T)
+{
+	alias List!(T, true, true) DList;
+}
+
+/// Doubly-linked but single-ended list.
+/// Can't be used as a queue or deque, but supports arbitrary removal.
+template SEDList(T)
+{
+	alias List!(T, true, false) SEDList;
 }
 
 unittest
 {
 	DList!int l;
-	auto i1 = l.add(1);
-	auto i2 = l.add(2);
-	auto i3 = l.add(3);
+	auto i1 = l.pushBack(1);
+	auto i2 = l.pushBack(2);
+	auto i3 = l.pushBack(3);
 	l.remove(i2);
 	int[] a;
 	foreach (i; l)
@@ -208,31 +323,48 @@ unittest
 	assert(a == [1, 3]);
 }
 
-/// Container for user-specified doubly-linked-list nodes.
-/// Use together with DListItem.
-struct DListContainer(Node)
+/// Container for user-specified list nodes.
+/// Use together with *ListLink.
+struct ListContainer(Node, bool HASPREV, bool HASTAIL)
 {
-	mixin DListCommon!(RefType!Node) common;
+	mixin ListCommon!(RefType!Node, HASPREV, HASTAIL) common;
 
 	int opApply(int delegate(ref Node) dg)
 	{
-		return iterate!(Node, "node")(dg);
+		return iterate!(Node, q{node})(dg);
 	}
 }
 
-/// Mixin containing doubly-linked-list fields.
-/// Use together with DListContainer.
-mixin template DListItem()
+
+/// *List variations for containers of user linked types.
+template SListContainer(T)
 {
-	import ae.utils.alloc : RefType;
-	RefType!(typeof(this)) prev, next;
+	alias ListContainer!(T, false, false) SListContainer;
+}
+
+/// ditto
+template DESListContainer(T)
+{
+	alias ListContainer!(T, false, true) DESListContainer;
+}
+
+/// ditto
+template DListContainer(T)
+{
+	alias ListContainer!(T, true, true) DListContainer;
+}
+
+/// ditto
+template SEDListContainer(T)
+{
+	alias ListContainer!(T, true, false) SEDListContainer;
 }
 
 unittest
 {
 	class C
 	{
-		mixin DListItem;
+		mixin DListLink;
 		int x;
 		this(int p) { x = p; }
 	}
@@ -240,11 +372,11 @@ unittest
 	DListContainer!C l;
 
 	auto c1 = new C(1);
-	l.add(c1);
+	l.pushBack(c1);
 	auto c2 = new C(2);
-	l.add(c2);
+	l.pushBack(c2);
 	auto c3 = new C(3);
-	l.add(c3);
+	l.pushBack(c3);
 
 	l.remove(c2);
 
