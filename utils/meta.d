@@ -273,8 +273,8 @@ template isReference(T)
 	enum isReference = isPointer!T || is(T==class);
 }
 
-/// Allow passing a constructed object by reference,
-/// without redundant indirection
+/// Allow passing a constructed (non-null class, or non-class)
+/// object by reference, without redundant indirection.
 T* reference(T)(ref T v)
 	if (!isReference!T)
 {
@@ -288,10 +288,25 @@ T reference(T)(T v)
 	return v;
 }
 
+/// Reverse of "reference".
+ref typeof(*T.init) dereference(T)(T v)
+	if (!isReference!T)
+{
+	return *v;
+}
+
+/// ditto
+T dereference(T)(T v)
+	if (isReference!T)
+{
+	return v;
+}
+
 unittest
 {
 	Object o = new Object;
 	assert(reference(o) is o);
+	assert(dereference(o) is o);
 
 	static struct S {}
 	S s;
