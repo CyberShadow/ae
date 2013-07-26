@@ -113,6 +113,7 @@ unittest
 
 // ***************************************************************************
 
+import std.range : isInputRange;
 import ae.utils.alloc;
 
 mixin template ListCommon(NODEREF, bool HASPREV, bool HASTAIL)
@@ -203,13 +204,44 @@ mixin template ListCommon(NODEREF, bool HASPREV, bool HASTAIL)
 		node.next = node.prev = null;
 	}
 
-	// TODO: use ranges
-	int iterate(T, string EXPR)(int delegate(ref T) dg)
+	static struct Iterator(bool FORWARD)
+	{
+		NODEREF cursor;
+
+		@property bool empty() { return !cursor; }
+		@property auto ref front() { return mixin(q{cursor} ~ ITEM_EXPR); }
+		void popFront()
+		{
+			static if (FORWARD)
+				cursor = cursor.next;
+			else
+				cursor = cursor.prev;
+		}
+	}
+
+	alias Iterator!true ForwardIterator;
+	static assert(isInputRange!ForwardIterator);
+
+	static if (HASPREV)
+		alias Iterator!false ReverseIterator;
+
+	@property auto iterator() { return ForwardIterator(head); }
+	static if (HASPREV && HASTAIL)
+	@property auto reverseIterator() { return ReverseIterator(tail); }
+
+	static if (HASPREV)
+	void remove(I)(I iterator)
+		if (is(I==ForwardIterator) || is(I==ReverseIterator))
+	{
+		return remove(iterator.cursor);
+	}
+
+	int opApply(int delegate(ref typeof(mixin(q{NODEREF.init} ~ ITEM_EXPR))) dg)
 	{
 		int res = 0;
 		for (auto node = head; node; node = node.next)
 		{
-			res = dg(mixin(EXPR));
+			res = dg(mixin(q{node} ~ ITEM_EXPR));
 			if (res)
 				break;
 		}
@@ -249,6 +281,7 @@ struct List(T, bool HASPREV, bool HASTAIL, alias ALLOCATOR=heapAllocator)
 	mixin AllocatorExpr;
 
 	alias ListNode!(T, HASPREV) Node;
+	enum ITEM_EXPR = q{.value};
 	mixin ListCommon!(Node*, HASPREV, HASTAIL) common;
 
 	Node* pushFront(T v)
@@ -277,11 +310,6 @@ struct List(T, bool HASPREV, bool HASTAIL, alias ALLOCATOR=heapAllocator)
 		common.remove(node);
 		static if (is(typeof(&mixin(ALLOCATOR_EXPR).free)))
 			mixin(ALLOCATOR_EXPR).free(node);
-	}
-
-	int opApply(int delegate(ref T) dg)
-	{
-		return iterate!(T, q{node.value})(dg);
 	}
 }
 
@@ -317,22 +345,22 @@ unittest
 	auto i2 = l.pushBack(2);
 	auto i3 = l.pushBack(3);
 	l.remove(i2);
+
 	int[] a;
 	foreach (i; l)
 		a ~= i;
 	assert(a == [1, 3]);
+
+	import std.algorithm;
+	assert(equal(l.iterator, [1, 3]));
 }
 
 /// Container for user-specified list nodes.
 /// Use together with *ListLink.
 struct ListContainer(Node, bool HASPREV, bool HASTAIL)
 {
+	enum ITEM_EXPR = q{};
 	mixin ListCommon!(RefType!Node, HASPREV, HASTAIL) common;
-
-	int opApply(int delegate(ref Node) dg)
-	{
-		return iterate!(Node, q{node})(dg);
-	}
 }
 
 
@@ -384,6 +412,9 @@ unittest
 	foreach (c; l)
 		a ~= c.x;
 	assert(a == [1, 3]);
+
+	import std.algorithm;
+	assert(equal(l.iterator.map!(c => c.x)(), [1, 3]));
 }
 
 // ***************************************************************************
