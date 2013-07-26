@@ -266,6 +266,7 @@ mixin template ListLink(bool HASPREV)
 
 mixin template SListLink() { mixin ListLink!false; }
 mixin template DListLink() { mixin ListLink!true ; }
+deprecated alias DListLink DListItem;
 
 struct ListNode(T, bool HASPREV)
 {
