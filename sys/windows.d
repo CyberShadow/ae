@@ -179,6 +179,8 @@ HWND createHiddenWindow(string name, WNDPROC proc)
 
 // Processes
 
+static if (_WIN32_WINNT >= 0x500) {
+
 struct CreatedProcessImpl
 {
 	PROCESS_INFORMATION pi;
@@ -291,6 +293,7 @@ CreatedProcess createDesktopUserProcess(string applicationName, string commandLi
 	return result;
 }
 
+} // _WIN32_WINNT >= 0x500
 
 int messageBox(string message, string title, int style=0)
 {
