@@ -99,7 +99,7 @@ import ae.utils.meta : RefType, FromRefType, StorageType;
 //   is not a pointer?
 // - More thorough testing
 
-/// This declares a WrapMixin template in the current scope, which will
+/// Declares a WrapMixin template in the current scope, which will
 /// create a struct containing an instance of the mixin template M,
 /// instantiated with the given ARGS.
 /// WrapMixin is not reusable across scopes. Each scope should have an
@@ -111,6 +111,24 @@ mixin template AddWrapMixin()
 }
 
 mixin AddWrapMixin;
+
+/// Declares a MixinWrapper template in the current scope, which will
+/// create a struct template containing an instance of the mixin template
+/// M, instantiated with the arguments passed to the struct template.
+/// Similar to WrapMixin, MixinWrapper is not reusable across scopes.
+/// Each scope should have an instance of MixinWrapper, as the context of
+/// M's instantiation will be the scope declaring MixinWrapper, not the
+/// scope declaring M.
+mixin template AddMixinWrapper()
+{
+	private template MixinWrapper(alias M)
+	{
+		struct MixinWrapper(ARGS...)
+		{
+			mixin M!ARGS;
+		}
+	}
+}
 
 /// Generates code to create forwarding aliases to the given mixin member.
 /// Used as a replacement for "alias M this", which doesn't seem to work with mixins.
