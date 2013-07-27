@@ -99,11 +99,6 @@ public:
 	 *     the contents will be reallocated always.
 	 */
 	this(const(void)[] data, bool forceReallocation = false)
-	out
-	{
-		assert(this.length == data.length);
-	}
-	body
 	{
 		if (data.length == 0)
 			contents = null;
@@ -122,6 +117,8 @@ public:
 			contents = data;
 			mutable = false;
 		}
+
+		assert(this.length == data.length);
 	}
 
 	/// ditto
@@ -137,10 +134,6 @@ public:
 	in
 	{
 		assert(capacity == 0 || size <= capacity);
-	}
-	out
-	{
-		assert(this.length == size);
 	}
 	body
 	{
@@ -158,6 +151,8 @@ public:
 			wrapper = null;
 			contents = null;
 		}
+
+		assert(this.length == size);
 	}
 
 /*
