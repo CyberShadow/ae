@@ -127,6 +127,10 @@ mixin template ListCommon(NODEREF, bool HASPREV, bool HASTAIL)
 		static if (HASTAIL) if (tail) assert(!tail.next);
 	}
 
+	// non-copyable because head/tail can go out of sync
+	// commented-out until AAs can support non-copyable values
+	//@disable this(this) {}
+
 	void pushFront(NODEREF node)
 	{
 		static if (HASPREV) node.prev = null;
