@@ -277,7 +277,7 @@ struct ListNode(T, bool HASPREV)
 
 /// Organizes a bunch of objects in a linked list.
 /// Not very efficient for reference types, since it results in two allocations per object.
-struct List(T, bool HASPREV, bool HASTAIL, alias ALLOCATOR=heapAllocator)
+mixin template ListMixin(T, bool HASPREV, bool HASTAIL, alias ALLOCATOR=heapAllocator)
 {
 	mixin AllocatorExpr;
 
@@ -313,6 +313,9 @@ struct List(T, bool HASPREV, bool HASTAIL, alias ALLOCATOR=heapAllocator)
 			mixin(ALLOCATOR_EXPR).free(node);
 	}
 }
+
+mixin AddMixinWrapper;
+alias MixinWrapper!ListMixin List;
 
 /// Singly-ended singly-linked list. Usable as a stack.
 template SList(T)
