@@ -53,10 +53,9 @@ struct FastArrayRange(T, bool CHECKED=IsDebug)
 
 	T opIndex(size_t index)
 	{
-		auto p = ptr + index;
 		static if (CHECKED)
-			assert(p < end);
-		return *p;
+			assert(index < end-ptr);
+		return ptr[index];
 	}
 
 	T[] opSlice()
