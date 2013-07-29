@@ -25,7 +25,7 @@ void[] read(string path) { return getVFS(path).read(path); }
 void write(string path, const(void)[] data) { return getVFS(path).write(path, data); }
 
 /// Check if file/directory exists at location.
-bool exists(string path) { return getVFS(path).exists(path); }
+@property bool exists(string path) { return getVFS(path).exists(path); }
 
 /// Delete file at location.
 void remove(string path) { return getVFS(path).remove(path); }
