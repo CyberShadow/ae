@@ -40,6 +40,16 @@ LPCWSTR toWStringz(string s)
 	return s is null ? null : toUTF16z(s);
 }
 
+ulong makeUlong(DWORD dwLow, DWORD dwHigh)
+{
+	ULARGE_INTEGER li;
+	li.LowPart  = dwLow;
+	li.HighPart = dwHigh;
+	return li.QuadPart;
+}
+
+// --------------------------------------------------------------------------
+
 class WindowsException : Exception
 {
 	DWORD code;
