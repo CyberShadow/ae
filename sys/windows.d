@@ -311,6 +311,101 @@ CreatedProcess createDesktopUserProcess(string applicationName, string commandLi
 	return result;
 }
 
+// --------------------------------------------------------------------------
+
+import win32.tlhelp32;
+
+struct ToolhelpSnapshotImpl
+{
+	HANDLE hSnapshot;
+
+	~this()
+	{
+		CloseHandle(hSnapshot);
+	}
+}
+
+alias RefCounted!ToolhelpSnapshotImpl ToolhelpSnapshot;
+
+ToolhelpSnapshot createToolhelpSnapshot(DWORD dwFlags, DWORD th32ProcessID=0)
+{
+	ToolhelpSnapshot result;
+	auto hSnapshot = CreateToolhelp32Snapshot(dwFlags, th32ProcessID);
+	wenforce(hSnapshot != INVALID_HANDLE_VALUE, "CreateToolhelp32Snapshot");
+	result.hSnapshot = hSnapshot;
+	return result;
+}
+
+struct ToolhelpIterator(STRUCT, alias FirstFunc, alias NextFunc)
+{
+private:
+	ToolhelpSnapshot snapshot;
+	STRUCT s;
+	BOOL bSuccess;
+
+	this(ToolhelpSnapshot snapshot)
+	{
+		this.snapshot = snapshot;
+		s.dwSize = STRUCT.sizeof;
+		bSuccess = FirstFunc(snapshot.hSnapshot, &s);
+	}
+
+public:
+	@property
+	bool empty() const { return bSuccess == 0; }
+
+	@property
+	ref STRUCT front() { return s; }
+
+	void popFront()
+	{
+		bSuccess = NextFunc(snapshot.hSnapshot, &s);
+	}
+}
+
+alias ToolhelpIterator!(PROCESSENTRY32, Process32First, Process32Next) ProcessIterator;
+@property ProcessIterator processes(ToolhelpSnapshot snapshot) { return ProcessIterator(snapshot); }
+
+alias ToolhelpIterator!(THREADENTRY32, Thread32First, Thread32Next) ThreadIterator;
+@property ThreadIterator threads(ToolhelpSnapshot snapshot) { return ThreadIterator(snapshot); }
+
+alias ToolhelpIterator!(MODULEENTRY32, Module32First, Module32Next) ModuleIterator;
+@property ModuleIterator modules(ToolhelpSnapshot snapshot) { return ModuleIterator(snapshot); }
+
+alias ToolhelpIterator!(HEAPLIST32, Heap32ListFirst, Heap32ListNext) HeapIterator;
+@property HeapIterator heaps(ToolhelpSnapshot snapshot) { return HeapIterator(snapshot); }
+
+// --------------------------------------------------------------------------
+
+struct ProcessWatcher
+{
+	PROCESSENTRY32[DWORD] oldProcesses;
+
+	void update(void delegate(ref PROCESSENTRY32) oldHandler, void delegate(ref PROCESSENTRY32) newHandler)
+	{
+		PROCESSENTRY32[DWORD] newProcesses;
+		foreach (ref process; createToolhelpSnapshot(TH32CS_SNAPPROCESS).processes)
+			newProcesses[process.th32ProcessID] = process;
+
+		if (oldProcesses) // Skip calling delegates on first run
+		{
+			if (oldHandler)
+				foreach (pid, ref process; oldProcesses)
+					if (pid !in newProcesses)
+						oldHandler(process);
+
+			if (newHandler)
+				foreach (pid, ref process; newProcesses)
+					if (pid !in oldProcesses)
+						newHandler(process);
+		}
+
+		oldProcesses = newProcesses;
+	}
+}
+
+// --------------------------------------------------------------------------
+
 } // _WIN32_WINNT >= 0x500
 
 int messageBox(string message, string title, int style=0)
