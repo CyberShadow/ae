@@ -20,6 +20,21 @@ import std.utf;
 
 import win32.windows;
 
+string fromWString(in wchar[] buf)
+{
+	foreach (i, c; buf)
+		if (!c)
+			return toUTF8(buf[0..i]);
+	return toUTF8(buf);
+}
+
+string fromWString(in wchar* buf)
+{
+	const(wchar)* p = buf;
+	for (; *p; p++) {}
+	return toUTF8(buf[0..p-buf]);
+}
+
 LPCWSTR toWStringz(string s)
 {
 	return s is null ? null : toUTF16z(s);
@@ -43,7 +58,7 @@ class WindowsException : Exception
 			0,
 			null);
 
-		auto message = toUTF8(lpMsgBuf[0..wcslen(lpMsgBuf)]);
+		auto message = lpMsgBuf.fromWString();
 		if (lpMsgBuf)
 			LocalFree(lpMsgBuf);
 
