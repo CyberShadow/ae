@@ -25,34 +25,43 @@ LPCWSTR toWStringz(string s)
 	return s is null ? null : toUTF16z(s);
 }
 
-class WindowsException : Exception { private this(string msg) { super(msg); } }
+class WindowsException : Exception
+{
+	DWORD code;
+
+	this(DWORD code, string str=null)
+	{
+		this.code = code;
+
+		wchar *lpMsgBuf = null;
+		FormatMessageW(
+			FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+			null,
+			code,
+			MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+			cast(LPWSTR)&lpMsgBuf,
+			0,
+			null);
+
+		auto message = toUTF8(lpMsgBuf[0..wcslen(lpMsgBuf)]);
+		if (lpMsgBuf)
+			LocalFree(lpMsgBuf);
+
+		message = strip(message);
+		message ~= format(" (error %d)", code);
+		if (str)
+			message = str ~ ": " ~ message;
+
+		super(message);
+	}
+}
 
 T wenforce(T)(T cond, string str=null)
 {
 	if (cond)
 		return cond;
 
-	auto code = GetLastError();
-
-	wchar *lpMsgBuf = null;
-	FormatMessageW(
-		FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-		null,
-		code,
-		MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-		cast(LPWSTR)&lpMsgBuf,
-		0,
-		null);
-
-	auto message = toUTF8(lpMsgBuf[0..wcslen(lpMsgBuf)]);
-	if (lpMsgBuf)
-		LocalFree(lpMsgBuf);
-
-	message = strip(message);
-	message ~= format(" (error %d)", code);
-	if (str)
-		message = str ~ ": " ~ message;
-	throw new WindowsException(message);
+	throw new WindowsException(GetLastError(), str);
 }
 
 void sendCopyData(HWND hWnd, DWORD n, in void[] buf)
