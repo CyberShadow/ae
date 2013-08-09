@@ -144,15 +144,24 @@ WindowIterator windowIterator(string szClassName, string szWindowName, HWND hPar
 
 private static wchar[0xFFFF] textBuf;
 
-string getClassName(HWND h)
+string windowStringQuery(alias FUNC)(HWND h)
 {
-	return textBuf[0..wenforce(GetClassNameW(h, textBuf.ptr, textBuf.length), "GetClassNameW")].toUTF8();
+	SetLastError(0);
+	auto result = FUNC(h, textBuf.ptr, textBuf.length);
+	if (result)
+		return textBuf[0..result].toUTF8();
+	else
+	{
+		auto code = GetLastError();
+		if (code)
+			throw new WindowsException(code, __traits(identifier, FUNC));
+		else
+			return null;
+	}
 }
 
-string getWindowText(HWND h)
-{
-	return textBuf[0..wenforce(GetWindowTextW(h, textBuf.ptr, textBuf.length), "GetWindowTextW")].toUTF8();
-}
+alias windowStringQuery!GetClassNameW  getClassName;
+alias windowStringQuery!GetWindowTextW getWindowText;
 
 /// Create an utility hidden window.
 HWND createHiddenWindow(string name, WNDPROC proc)
