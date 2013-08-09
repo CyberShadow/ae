@@ -406,13 +406,13 @@ struct ProcessWatcher
 {
 	PROCESSENTRY32[DWORD] oldProcesses;
 
-	void update(void delegate(ref PROCESSENTRY32) oldHandler, void delegate(ref PROCESSENTRY32) newHandler)
+	void update(void delegate(ref PROCESSENTRY32) oldHandler, void delegate(ref PROCESSENTRY32) newHandler, bool handleExisting = false)
 	{
 		PROCESSENTRY32[DWORD] newProcesses;
 		foreach (ref process; createToolhelpSnapshot(TH32CS_SNAPPROCESS).processes)
 			newProcesses[process.th32ProcessID] = process;
 
-		if (oldProcesses) // Skip calling delegates on first run
+		if (oldProcesses || handleExisting) // Skip calling delegates on first run
 		{
 			if (oldHandler)
 				foreach (pid, ref process; oldProcesses)
