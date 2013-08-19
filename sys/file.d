@@ -373,7 +373,7 @@ string longPath(string s)
 }
 
 version (Windows)
-static if (is(typeof(CreateHardLinkW))) // Compile with -version=WindowsXP
+static if (is(typeof({ import win32.winbase; auto x = &CreateHardLinkW; }))) // Compile with -version=WindowsXP
 {
 	void hardLink(string src, string dst)
 	{
