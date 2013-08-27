@@ -848,6 +848,187 @@ mixin template Canvas()
 			for (auto y=y1; sign(y1-y2)!=sign(y2-y); y += sign(y2-y1))
 				aaPutPixel!CHECKED(itpl(x1, x2, y, y1, y2), y, color, alpha);
 	}
+
+	// ************************************************************************************************************************************
+
+	align(1)
+	struct BitmapHeader
+	{
+	align(1):
+		// BITMAPFILEHEADER
+		char[2] bfType = "BM";
+		uint    bfSize;
+		ushort  bfReserved1;
+		ushort  bfReserved2;
+		uint    bfOffBits;
+
+		// BITMAPCOREINFO
+		uint   bcSize = this.sizeof - bcSize.offsetof;
+		int    bcWidth;
+		int    bcHeight;
+		ushort bcPlanes;
+		ushort bcBitCount;
+		uint   biCompression;
+		uint   biSizeImage;
+		uint   biXPelsPerMeter;
+		uint   biYPelsPerMeter;
+		uint   biClrUsed;
+		uint   biClrImportant;
+	}
+
+	static if (is(COLOR == BGR))
+		enum BitmapBitCount = 24;
+	else
+	static if (is(COLOR == BGRX) || is(COLOR == BGRA))
+		enum BitmapBitCount = 32;
+	else
+	static if (is(COLOR == G8))
+		enum BitmapBitCount = 8;
+	else
+		enum BitmapBitCount = 0;
+
+	@property int bitmapPixelStride()
+	{
+		int pixelStride = w * cast(uint)COLOR.sizeof;
+		pixelStride = (pixelStride+3) & ~3;
+		return pixelStride;
+	}
+
+	void saveBMP()(string filename)
+	{
+		ubyte[] data = new ubyte[BitmapHeader.sizeof + h*bitmapPixelStride];
+		auto header = cast(BitmapHeader*)data.ptr;
+		*header = BitmapHeader.init;
+		header.bfSize = data.length;
+		header.bfOffBits = BitmapHeader.sizeof;
+		header.bcWidth = w;
+		header.bcHeight = -h;
+		header.bcPlanes = 1;
+		static assert(BitmapBitCount, "Unsupported BMP color type: " ~ COLOR.stringof);
+		header.bcBitCount = BitmapBitCount;
+
+		auto pixelData = data[header.bfOffBits..$];
+		auto pixelStride = bitmapPixelStride;
+		auto ptr = pixelData.ptr;
+		size_t pos = 0;
+
+		foreach (y; 0..h)
+		{
+			(cast(COLOR*)ptr)[0..w] = pixels[y*stride..y*stride+w];
+			ptr += pixelStride;
+		}
+
+		std.file.write(filename, data);
+	}
+
+	// ***********************************************************************
+
+	void savePNG()(string filename)
+	{
+		enum : ulong { SIGNATURE = 0x0a1a0a0d474e5089 }
+
+		struct PNGChunk
+		{
+			char[4] type;
+			const(void)[] data;
+
+			uint crc32()
+			{
+				uint crc = strcrc32(type);
+				foreach (v; cast(ubyte[])data)
+					crc = update_crc32(v, crc);
+				return ~crc;
+			}
+
+			this(string type, const(void)[] data)
+			{
+				this.type[] = type[];
+				this.data = data;
+			}
+		}
+
+		enum PNGColourType : ubyte { G, RGB=2, PLTE, GA, RGBA=6 }
+		enum PNGCompressionMethod : ubyte { DEFLATE }
+		enum PNGFilterMethod : ubyte { ADAPTIVE }
+		enum PNGInterlaceMethod : ubyte { NONE, ADAM7 }
+
+		enum PNGFilterAdaptive : ubyte { NONE, SUB, UP, AVERAGE, PAETH }
+
+		align(1)
+		struct PNGHeader
+		{
+		align(1):
+			uint width, height;
+			ubyte colourDepth;
+			PNGColourType colourType;
+			PNGCompressionMethod compressionMethod;
+			PNGFilterMethod filterMethod;
+			PNGInterlaceMethod interlaceMethod;
+			static assert(PNGHeader.sizeof == 13);
+		}
+
+		alias ChannelType!COLOR CHANNEL_TYPE;
+
+		static if (structFields!COLOR()==["g"])
+			enum COLOUR_TYPE = PNGColourType.G;
+		else
+		static if (structFields!COLOR()==["r","g","b"])
+			enum COLOUR_TYPE = PNGColourType.RGB;
+		else
+		static if (structFields!COLOR()==["g","a"])
+			enum COLOUR_TYPE = PNGColourType.GA;
+		else
+		static if (structFields!COLOR()==["r","g","b","a"])
+			enum COLOUR_TYPE = PNGColourType.RGBA;
+		else
+			static assert(0, "Unsupported PNG color type: " ~ COLOR.stringof);
+
+		PNGChunk[] chunks;
+		PNGHeader header = {
+			width : swapBytes(w),
+			height : swapBytes(h),
+			colourDepth : CHANNEL_TYPE.sizeof * 8,
+			colourType : COLOUR_TYPE,
+			compressionMethod : PNGCompressionMethod.DEFLATE,
+			filterMethod : PNGFilterMethod.ADAPTIVE,
+			interlaceMethod : PNGInterlaceMethod.NONE,
+		};
+		chunks ~= PNGChunk("IHDR", cast(void[])[header]);
+		uint idatStride = w*COLOR.sizeof+1;
+		ubyte[] idatData = new ubyte[h*idatStride];
+		for (uint y=0; y<h; y++)
+		{
+			idatData[y*idatStride] = PNGFilterAdaptive.NONE;
+			auto rowPixels = cast(COLOR[])idatData[y*idatStride+1..(y+1)*idatStride];
+			rowPixels[] = pixels[y*stride..(y+1)*stride];
+
+			static if (CHANNEL_TYPE.sizeof > 1)
+				foreach (ref p; cast(CHANNEL_TYPE[])rowPixels)
+					p = swapBytes(p);
+		}
+		chunks ~= PNGChunk("IDAT", compress(idatData, 5));
+		chunks ~= PNGChunk("IEND", null);
+
+		uint totalSize = 8;
+		foreach (chunk; chunks)
+			totalSize += 8 + chunk.data.length + 4;
+		ubyte[] data = new ubyte[totalSize];
+
+		*cast(ulong*)data.ptr = SIGNATURE;
+		uint pos = 8;
+		foreach(chunk;chunks)
+		{
+			uint i = pos;
+			uint chunkLength = chunk.data.length;
+			pos += 12 + chunkLength;
+			*cast(uint*)&data[i] = swapBytes(chunkLength);
+			(cast(char[])data[i+4 .. i+8])[] = chunk.type[];
+			data[i+8 .. i+8+chunk.data.length] = (cast(ubyte[])chunk.data)[];
+			*cast(uint*)&data[i+8+chunk.data.length] = swapBytes(chunk.crc32());
+			assert(pos == i+12+chunk.data.length);
+		}
+		std.file.write(filename, data);
+	}
 }
 
 private bool isSameType(T)()
