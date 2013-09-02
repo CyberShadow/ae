@@ -521,6 +521,9 @@ mixin template RegionAllocator(BASE_TYPE=void*, size_t BLOCKSIZE=1024, alias ALL
 
 	BASE_VALUE_TYPE* ptr=null, end=null;
 
+	/// Forget we ever allocated anything
+	void reset() { ptr=end=null; }
+
 	private void newBlock(size_t size) // size counts BASE_VALUE_TYPE
 	{
 		BASE_VALUE_TYPE[] arr = mixin(ALLOCATOR_EXPR).allocateMany!BASE_TYPE(size);
