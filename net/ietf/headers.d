@@ -109,6 +109,9 @@ struct Headers
 /// Normalize capitalization
 string normalizeHeaderName(string header)
 {
+	alias std.ascii.toUpper toUpper;
+	alias std.ascii.toLower toLower;
+
 	auto s = header.dup;
 	auto segments = s.split("-");
 	foreach (segment; segments)
