@@ -59,7 +59,7 @@ bool contains(T, V)(T[] arr, V val)
 	return false;
 }
 
-bool isIn(T)(T val, T[] arr)
+bool isIn(T)(T val, in T[] arr)
 {
 	return arr.contains(val);
 }
