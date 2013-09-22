@@ -46,8 +46,66 @@ version (Windows)
 		]);
 	}
 
+	string getClipboardText()
+	{
+		static immutable DWORD[] textFormat = [CF_UNICODETEXT];
+		auto format = getClipboard(textFormat)[0];
+		wchar[] ws = (cast(wchar[])format.data)[0..$-1];
+		return ws.toUTF8();
+	}
+
 	// Windows-specific
-	struct ClipboardFormat { DWORD format; const (void)[] data; }
+
+	/// One format entry in the Windows clipboard.
+	struct ClipboardFormat
+	{
+		DWORD format;
+		const (void)[] data;
+
+		string getName()
+		{
+			wchar[256] sbuf;
+			wchar[] buf = sbuf[];
+			int ret;
+			do
+			{
+				ret = wenforce(GetClipboardFormatNameW(format, buf.ptr, buf.length), "GetClipboardFormatNameW");
+			} while (ret == buf.length ? (buf.length *=2, true) : false);
+			return buf[0..ret].toUTF8();
+		}
+	}
+
+	/// Get clipboard data for the specified (default: all) formats.
+	ClipboardFormat[] getClipboard(in DWORD[] desiredFormatsP = null)
+	{
+		const(DWORD)[] desiredFormats = desiredFormatsP;
+
+		wenforce(OpenClipboard(null), "OpenClipboard");
+		scope(exit) wenforce(CloseClipboard(), "CloseClipboard");
+
+		if (desiredFormats is null)
+		{
+			auto allFormats = new DWORD[CountClipboardFormats()];
+			DWORD previous = 0;
+			foreach (ref f; allFormats)
+				f = previous = EnumClipboardFormats(previous);
+			desiredFormats = allFormats;
+		}
+
+		auto result = new ClipboardFormat[desiredFormats.length];
+		foreach (n, ref r; result)
+		{
+			r.format = desiredFormats[n];
+			auto hBuf = wenforce(GetClipboardData(r.format), "GetClipboardData");
+			auto size = GlobalSize(hBuf);
+			LPVOID buf = wenforce(GlobalLock(hBuf), "GlobalLock");
+			r.data = buf[0..size].dup;
+			wenforce(GlobalUnlock(hBuf) || GetLastError()==NO_ERROR, "GlobalUnlock");
+		}
+
+		return result;
+	}
+
 	void setClipboard(in ClipboardFormat[] formats)
 	{
 		wenforce(OpenClipboard(null), "OpenClipboard");
@@ -63,5 +121,4 @@ version (Windows)
 			wenforce(SetClipboardData(format.format, hBuf), "SetClipboardData");
 		}
 	}
-
 }
