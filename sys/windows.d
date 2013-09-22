@@ -99,19 +99,26 @@ void sendCopyData(HWND hWnd, DWORD n, in void[] buf)
 }
 
 enum MAPVK_VK_TO_VSC = 0;
+
+void keyDown(ubyte c) { keybd_event(c, cast(ubyte)MapVirtualKey(c, MAPVK_VK_TO_VSC), 0              , 0); }
+void keyUp  (ubyte c) { keybd_event(c, cast(ubyte)MapVirtualKey(c, MAPVK_VK_TO_VSC), KEYEVENTF_KEYUP, 0); }
+
 void press(ubyte c, uint delay=0)
 {
-	if (c) keybd_event(c, cast(ubyte)MapVirtualKey(c, MAPVK_VK_TO_VSC), 0, 0);
+	if (c) keyDown(c);
 	Sleep(delay);
-	if (c) keybd_event(c, cast(ubyte)MapVirtualKey(c, MAPVK_VK_TO_VSC), KEYEVENTF_KEYUP, 0);
+	if (c) keyUp(c);
 	Sleep(delay);
 }
 
+void keyDownOn(HWND h, ubyte c) { PostMessage(h, WM_KEYDOWN, c, MapVirtualKey(c, MAPVK_VK_TO_VSC) << 16); }
+void keyUpOn  (HWND h, ubyte c) { PostMessage(h, WM_KEYUP  , c, MapVirtualKey(c, MAPVK_VK_TO_VSC) << 16); }
+
 void pressOn(HWND h, ubyte c, uint delay=0)
 {
-	if (c) PostMessage(h, WM_KEYDOWN, c, MapVirtualKey(c, MAPVK_VK_TO_VSC) << 16);
+	if (c) keyDownOn(h, c);
 	Sleep(delay);
-	if (c) PostMessage(h, WM_KEYUP  , c, MapVirtualKey(c, MAPVK_VK_TO_VSC) << 16);
+	if (c) keyUpOn(h, c);
 	Sleep(delay);
 }
 
