@@ -177,8 +177,6 @@ bool isVFSPath(string path)
 	return path.contains("://");
 }
 
-private:
-
 string getVFSName(string path)
 {
 	import std.string;
@@ -193,6 +191,8 @@ VFS getVFS(string path)
 	assert(pvfs, "Unknown VFS: " ~ vfsName);
 	return *pvfs;
 }
+
+private:
 
 static import std.file, ae.sys.file;
 
