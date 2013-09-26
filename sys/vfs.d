@@ -42,6 +42,9 @@ void rename(string from, string to)
 		throw new Exception("Cannot rename across VFS");
 }
 
+/// Get MD5 digest of file at location.
+ubyte[16] mdFile(string path) { return getVFS(path).mdFile(path); }
+
 /// std.file shims
 S readText(S = string)(string name)
 {
@@ -73,18 +76,6 @@ void move(string src, string dst)
 		src.copy(tmp);
 		tmp.rename(dst);
 		src.remove();
-	}
-}
-
-/// ditto
-ubyte[16] mdFile()(string path)
-{
-	if (!getVFSName(path))
-		return ae.sys.file.mdFile(path);
-	else
-	{
-		import std.digest.md;
-		return md5Of(read(path));
 	}
 }
 
@@ -141,6 +132,9 @@ class VFS
 
 	/// Create directory (and parents as necessary) at location, if it does not exist.
 	abstract void mkdirRecurse(string path);
+
+	/// Get MD5 digest of file at location.
+	ubyte[16] mdFile(string path) { import std.digest.md; return md5Of(read(path)); }
 }
 
 VFS[string] registry;
@@ -214,6 +208,7 @@ class FS : VFS
 	override void copy(string from, string to) { std.file.copy(from, to); }
 	override void rename(string from, string to) { std.file.rename(from, to); }
 	override void mkdirRecurse(string path) { std.file.mkdirRecurse(path); }
+	override ubyte[16] mdFile(string path) { return ae.sys.file.mdFile(path); }
 
 	static this()
 	{
