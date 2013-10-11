@@ -485,7 +485,7 @@ string[] parseItemList(string s)
 		this(string s)
 		{
 			auto params = s.split(";");
-			str = params[0];
+			str = params.length ? params[0] : null;
 			foreach (param; params[1..$])
 				if (param.startsWith("q="))
 					q = to!float(param[2..$]);
