@@ -129,7 +129,7 @@ struct Image(COLOR)
 
 	void loadPNM()(string filename)
 	{
-		static assert(__traits(allMembers, COLOR.Fields).stringof == `tuple("r","g","b")`, "PNM only supports RGB, not " ~ __traits(allMembers, COLOR.Fields).stringof);
+		static assert(__traits(allMembers, COLOR.Fields).stringof == `tuple("r", "g", "b")`, "PNM only supports RGB, not " ~ __traits(allMembers, COLOR.Fields).stringof);
 		ubyte[] data = cast(ubyte[])read(filename);
 		string[] fields = readPNMHeader(data);
 		enforce(fields[0]=="P6", "Invalid signature");
@@ -146,7 +146,7 @@ struct Image(COLOR)
 	void savePNM()(string filename) // RGB only
 	{
 		import std.string;
-		static assert(__traits(allMembers, COLOR.Fields).stringof == `tuple("r","g","b")`, "PNM only supports RGB");
+		static assert(__traits(allMembers, COLOR.Fields).stringof == `tuple("r", "g", "b")`, "PNM only supports RGB");
 		alias ChannelType!COLOR CHANNEL_TYPE;
 		enforce(w*h == pixels.length, "Dimension mismatch");
 		ubyte[] header = cast(ubyte[])format("P6\n%d %d %d\n", w, h, CHANNEL_TYPE.max);
@@ -192,7 +192,7 @@ struct Image(COLOR)
 
 	void loadRGBA()(string filename, uint w, uint h)
 	{
-		static assert(__traits(allMembers, COLOR).stringof == `tuple("r","g","b","a")`, "COLOR is not RGBA");
+		static assert(__traits(allMembers, COLOR).stringof == `tuple("r", "g", "b", "a")`, "COLOR is not RGBA");
 		pixels = cast(COLOR[])read(filename);
 		enforce(pixels.length == w*h, "Dimension / filesize mismatch");
 		this.w = w;
