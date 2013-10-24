@@ -218,6 +218,12 @@ class ConsoleLogger : Logger
 	}
 }
 
+class NullLogger : Logger
+{
+	this() { super(null); }
+	override Logger log(string str) { return this; }
+}
+
 class MultiLogger : Logger
 {
 	this(Logger[] loggers ...)
