@@ -1067,6 +1067,18 @@ struct Color(FieldTuple...)
 		return r;
 	}
 
+	/// Interpolate between two colors.
+	static typeof(this) itpl(P)(typeof(this) c0, typeof(this) c1, P p, P p0, P p1)
+	{
+		alias UnsignedBitsType!(BaseTypeBits + P.sizeof*8) U;
+		alias Signed!U S;
+		typeof(this) r;
+		foreach (i, f; r.tupleof)
+			static if (r.tupleof[i].stringof != "r.x") // skip padding
+				r.tupleof[i] = cast(BaseType).itpl(cast(U)c0.tupleof[i], cast(U)c1.tupleof[i], cast(S)p, cast(S)p0, cast(S)p1);
+		return r;
+	}
+
 	/// Warning: overloaded operators preserve types and may cause overflows
 	typeof(this) opUnary(string op)()
 		if (op=="~" || op=="-")
