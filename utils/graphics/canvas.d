@@ -851,9 +851,16 @@ mixin template Canvas()
 
 	// ************************************************************************************************************************************
 
+	alias int FXPT2DOT30;
+	struct CIEXYZ { FXPT2DOT30 ciexyzX, ciexyzY, ciexyzZ; }
+	struct CIEXYZTRIPLE { CIEXYZ ciexyzRed, ciexyzGreen, ciexyzBlue; }
+	enum { BI_BITFIELDS = 3 }
+
 	align(1)
-	struct BitmapHeader
+	struct BitmapHeader(uint V)
 	{
+		enum VERSION = V;
+
 	align(1):
 		// BITMAPFILEHEADER
 		char[2] bfType = "BM";
@@ -874,6 +881,29 @@ mixin template Canvas()
 		uint   biYPelsPerMeter;
 		uint   biClrUsed;
 		uint   biClrImportant;
+
+		// BITMAPV4HEADER
+		static if (V>=4)
+		{
+			uint         bV4RedMask;
+			uint         bV4GreenMask;
+			uint         bV4BlueMask;
+			uint         bV4AlphaMask;
+			uint         bV4CSType;
+			CIEXYZTRIPLE bV4Endpoints;
+			uint         bV4GammaRed;
+			uint         bV4GammaGreen;
+			uint         bV4GammaBlue;
+		}
+
+		// BITMAPV5HEADER
+		static if (V>=5)
+		{
+			uint        bV5Intent;
+			uint        bV5ProfileData;
+			uint        bV5ProfileSize;
+			uint        bV5Reserved;
+		}
 	}
 
 	static if (is(COLOR == BGR))
@@ -896,16 +926,46 @@ mixin template Canvas()
 
 	void saveBMP()(string filename)
 	{
-		ubyte[] data = new ubyte[BitmapHeader.sizeof + h*bitmapPixelStride];
-		auto header = cast(BitmapHeader*)data.ptr;
-		*header = BitmapHeader.init;
+		static if (COLOR.sizeof > 3)
+			alias BitmapHeader!4 Header;
+		else
+			alias BitmapHeader!3 Header;
+
+		auto bitmapDataSize = h*bitmapPixelStride;
+		ubyte[] data = new ubyte[Header.sizeof + bitmapDataSize];
+		auto header = cast(Header*)data.ptr;
+		*header = Header.init;
 		header.bfSize = data.length;
-		header.bfOffBits = BitmapHeader.sizeof;
+		header.bfOffBits = Header.sizeof;
 		header.bcWidth = w;
 		header.bcHeight = -h;
 		header.bcPlanes = 1;
+		header.biSizeImage = bitmapDataSize;
 		static assert(BitmapBitCount, "Unsupported BMP color type: " ~ COLOR.stringof);
 		header.bcBitCount = BitmapBitCount;
+
+		static if (header.VERSION >= 4)
+		{
+			header.biCompression = BI_BITFIELDS;
+
+			COLOR c;
+			foreach (i, f; c.tupleof)
+			{
+				enum CHAN = c.tupleof[i].stringof[2..$];
+				enum MASK = (cast(uint)typeof(c.tupleof[i]).max) << (c.tupleof[i].offsetof*8);
+				static if (CHAN=="r")
+					header.bV4RedMask   |= MASK;
+				else
+				static if (CHAN=="g")
+					header.bV4GreenMask |= MASK;
+				else
+				static if (CHAN=="b")
+					header.bV4BlueMask  |= MASK;
+				else
+				static if (CHAN=="a")
+					header.bV4AlphaMask |= MASK;
+			}
+		}
 
 		auto pixelData = data[header.bfOffBits..$];
 		auto pixelStride = bitmapPixelStride;

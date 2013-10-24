@@ -209,18 +209,19 @@ struct Image(COLOR)
 
 	void loadBMP()(ubyte[] data)
 	{
-		enforce(data.length > BitmapHeader.sizeof);
-		BitmapHeader* header = cast(BitmapHeader*) data.ptr;
+		alias BitmapHeader!3 Header;
+		enforce(data.length > Header.sizeof);
+		Header* header = cast(Header*) data.ptr;
 		enforce(header.bfType == "BM", "Invalid signature");
 		enforce(header.bfSize == data.length, format("Incorrect file size (%d in header, %d in file)", header.bfSize, data.length));
-		enforce(header.bcSize >= BitmapHeader.sizeof - header.bcSize.offsetof);
+		enforce(header.bcSize >= Header.sizeof - header.bcSize.offsetof);
 
 		w = stride = header.bcWidth;
 		h = header.bcHeight;
 		enforce(header.bcPlanes==1, "Multiplane BMPs not supported");
 
 		static assert(BitmapBitCount, "Unsupported BMP color type: " ~ COLOR.stringof);
-		enforce(header.bcBitCount == BitmapBitCount, "Mismatching BMP bcBitCount");
+		enforce(header.bcBitCount == BitmapBitCount, format("Mismatching BMP bcBitCount - trying to load a %d-bit .BMP file to a %d-bit Image", header.bcBitCount, BitmapBitCount));
 
 		auto pixelData = data[header.bfOffBits..$];
 		auto pixelStride = bitmapPixelStride;
