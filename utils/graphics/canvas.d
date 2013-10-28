@@ -1032,16 +1032,16 @@ mixin template Canvas()
 
 		alias ChannelType!COLOR CHANNEL_TYPE;
 
-		static if (structFields!COLOR()==["g"])
+		static if (StructFields!COLOR == ["g"])
 			enum COLOUR_TYPE = PNGColourType.G;
 		else
-		static if (structFields!COLOR()==["r","g","b"])
+		static if (StructFields!COLOR == ["r","g","b"])
 			enum COLOUR_TYPE = PNGColourType.RGB;
 		else
-		static if (structFields!COLOR()==["g","a"])
+		static if (StructFields!COLOR == ["g","a"])
 			enum COLOUR_TYPE = PNGColourType.GA;
 		else
-		static if (structFields!COLOR()==["r","g","b","a"])
+		static if (StructFields!COLOR == ["r","g","b","a"])
 			enum COLOUR_TYPE = PNGColourType.RGBA;
 		else
 			static assert(0, "Unsupported PNG color type: " ~ COLOR.stringof);
@@ -1278,7 +1278,7 @@ template ExpandType(T, uint BYTES)
 			static string mixFields()
 			{
 				string s;
-				string[] fields = structFields!T;
+				enum fields = StructFields!T;
 
 				foreach (field; fields)
 					s ~= "ExpandType!(typeof(T.init." ~ field ~ "), "~BYTES.stringof~") " ~ field ~ ";\n";
@@ -1320,7 +1320,7 @@ template ReplaceType(T, FROM, TO)
 			static string mixFields()
 			{
 				string s;
-				foreach (field; structFields!T)
+				foreach (field; StructFields!T)
 					s ~= "ReplaceType!(typeof(T.init." ~ field ~ "), FROM, TO) " ~ field ~ ";\n";
 				return s;
 			}
@@ -1337,17 +1337,23 @@ template ReplaceType(T, FROM, TO)
 // TODO: type expansion?
 T blend(T)(T f, T b, T a) { return cast(T) ( ((f*a) + (b*~a)) / T.max ); }
 
-string[] structFields(T)()
+/// Evaluates to array of strings with name for each field.
+template StructFields(T)
 {
-	string[] fields;
-	foreach (i, f; T.init.tupleof)
+	string[] structFields()
 	{
-		string field = T.tupleof[i].stringof;
-		field = field.split(".")[$-1];
-		if (field != "x") // HACK
-			fields ~= field;
+		string[] fields;
+		foreach (i, f; T.init.tupleof)
+		{
+			string field = T.tupleof[i].stringof;
+			field = field.split(".")[$-1];
+			if (field != "x") // HACK
+				fields ~= field;
+		}
+		return fields;
 	}
-	return fields;
+
+	enum StructFields = structFields();
 }
 
 // *****************************************************************************
