@@ -1343,9 +1343,7 @@ string[] structFields(T)()
 	foreach (i, f; T.init.tupleof)
 	{
 		string field = T.tupleof[i].stringof;
-		while (field[0] != '.')
-			field = field[1..$];
-		field = field[1..$];
+		field = field.split(".")[$-1];
 		if (field != "x") // HACK
 			fields ~= field;
 	}
