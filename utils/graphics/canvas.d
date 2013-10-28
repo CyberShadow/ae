@@ -985,6 +985,8 @@ mixin template Canvas()
 
 	void savePNG()(string filename)
 	{
+		import std.digest.crc;
+
 		enum : ulong { SIGNATURE = 0x0a1a0a0d474e5089 }
 
 		struct PNGChunk
@@ -994,10 +996,11 @@ mixin template Canvas()
 
 			uint crc32()
 			{
-				uint crc = strcrc32(type);
-				foreach (v; cast(ubyte[])data)
-					crc = update_crc32(v, crc);
-				return ~crc;
+				CRC32 crc;
+				crc.put(cast(ubyte[])(type[]));
+				crc.put(cast(ubyte[])data);
+				ubyte[4] hash = crc.finish();
+				return *cast(uint*)hash.ptr;
 			}
 
 			this(string type, const(void)[] data)

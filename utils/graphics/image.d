@@ -106,7 +106,6 @@ struct Image(COLOR)
 	import std.exception;
 	import std.file : read, write;
 	import std.conv : to;
-	import crc32;
 	import std.zlib;
 	import ae.utils.math : swapBytes;
 
