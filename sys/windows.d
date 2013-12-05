@@ -483,3 +483,42 @@ unittest
 	mixin DynamicLoad!(GetVersion, "kernel32.dll");
 	GetVersion(); // called via GetProcAddress
 }
+
+// ---------------------------------------
+
+struct RemoteProcessVarImpl(T)
+{
+	T local;
+	@property T* localPtr() { return &local; }
+	T* remotePtr;
+	HANDLE hProcess;
+
+	this(HANDLE hProcess)
+	{
+		this.hProcess = hProcess;
+		remotePtr = cast(T*)wenforce(VirtualAllocEx(hProcess, null, T.sizeof, MEM_COMMIT, PAGE_READWRITE));
+	}
+
+	void read()
+	{
+		wenforce(ReadProcessMemory (hProcess, remotePtr, localPtr, T.sizeof, null));
+	}
+
+	void write()
+	{
+		wenforce(WriteProcessMemory(hProcess, remotePtr, localPtr, T.sizeof, null));
+	}
+
+	~this()
+	{
+		VirtualFreeEx(hProcess, remotePtr, 0, MEM_RELEASE);
+	}
+}
+
+/// Binding to a variable located in another process.
+/// Automatically allocates and deallocates remote memory.
+/// Use .read() and .write() to update local/remote data.
+template RemoteProcessVar(T)
+{
+	alias RefCounted!(RemoteProcessVarImpl!T) RemoteProcessVar;
+}
