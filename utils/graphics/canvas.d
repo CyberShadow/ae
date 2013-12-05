@@ -13,9 +13,11 @@
 
 module ae.utils.graphics.canvas;
 
+import std.exception;
 import std.string;
 import std.math;
 import std.traits;
+import std.conv : to; // safe numeric conversions
 
 import ae.utils.meta;
 public import ae.utils.math;
@@ -935,7 +937,7 @@ mixin template Canvas()
 		ubyte[] data = new ubyte[Header.sizeof + bitmapDataSize];
 		auto header = cast(Header*)data.ptr;
 		*header = Header.init;
-		header.bfSize = data.length;
+		header.bfSize = to!uint(data.length);
 		header.bfOffBits = Header.sizeof;
 		header.bcWidth = w;
 		header.bcHeight = -h;
@@ -1142,6 +1144,18 @@ struct Color(FieldTuple...)
 		return r;
 	}
 
+	/// Construct an RGB color from a typical hex string.
+	static if (is(typeof(this.r) == ubyte) && is(typeof(this.g) == ubyte) && is(typeof(this.b) == ubyte))
+	static typeof(this) fromHex(in char[] s)
+	{
+		enforce(s.length == 6, "Invalid color string");
+		typeof(this) c;
+		c.r = s[0..2].to!ubyte(16);
+		c.g = s[2..4].to!ubyte(16);
+		c.b = s[4..6].to!ubyte(16);
+		return c;
+	}
+
 	/// Warning: overloaded operators preserve types and may cause overflows
 	typeof(this) opUnary(string op)()
 		if (op=="~" || op=="-")
@@ -1239,6 +1253,12 @@ private
 	static assert(RGB.sizeof == 3);
 	RGB[2] test;
 	static assert(test.sizeof == 6);
+}
+
+unittest
+{
+	RGB a = RGB.fromHex("123456");
+	assert(a.r == 0x12 && a.g == 0x34 && a.b == 0x56);
 }
 
 // *****************************************************************************
