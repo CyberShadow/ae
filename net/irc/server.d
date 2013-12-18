@@ -36,7 +36,7 @@ class IrcServer
 
 	/// Server configuration
 	string hostname, password, network;
-	string nicknameValidationPattern = "^[a-zA-Z][a-zA-Z0-9_\\-`\\|]{0,14}$";
+	string nicknameValidationPattern = "^[a-zA-Z][a-zA-Z0-9\\-`\\|]{0,14}$";
 	string serverVersion = "ae.net.irc.server";
 	string[] motd;
 	string chanTypes = "#&";
@@ -44,6 +44,8 @@ class IrcServer
 
 	/// Channels can't be created by users, and don't disappear when they're empty
 	bool staticChannels;
+	/// If set, masks all IPs to the given mask
+	string addressMask;
 
 	Logger log;
 
@@ -54,7 +56,7 @@ class IrcServer
 		string nickname, password;
 		string username, hostname, servername, realname;
 		bool identified;
-		string userspec; /// Full nick!user@host
+		string prefix, publicPrefix; /// Full nick!user@host
 
 		bool registered;
 		bool[char.max] modeFlags;
@@ -68,6 +70,9 @@ class IrcServer
 			return result;
 		}
 
+		string realHostname() { return conn.remoteAddress.toAddrString; }
+		string publicHostname() { return server.addressMask ? server.addressMask : realHostname; }
+
 	private:
 		IrcServer server;
 		IrcSocket conn;
@@ -79,6 +84,8 @@ class IrcServer
 			conn = incoming;
 			conn.handleReadLine = &onReadLine;
 			// TODO: handleInactivity
+
+			server.log("New IRC connection from " ~ incoming.remoteAddress.toString);
 		}
 
 		void onReadLine(LineBufferedSocket sender, string line)
@@ -91,8 +98,7 @@ class IrcServer
 				if (!parameters.length)
 					return;
 
-				auto command = parameters[0].toUpper();
-				parameters = parameters[1..$];
+				auto command = parameters.unshift.toUpper();
 
 				switch (command)
 				{
@@ -102,11 +108,10 @@ class IrcServer
 						if (parameters.length != 1)
 							return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
 						password = parameters[0];
-						checkRegistration();
 						break;
 					case "NICK":
 						if (registered)
-							return sendServerNotice("Nick change not allowed."); // TODO. NB: update nicknames and Channel.members keys
+							return sendServerNotice("Nick change not allowed."); // TODO. NB: update prefix, nicknames and Channel.members keys
 						if (parameters.length != 1)
 							return sendReply(Reply.ERR_NONICKNAMEGIVEN, "No nickname given");
 						nickname = parameters[0];
@@ -151,13 +156,13 @@ class IrcServer
 								if (server.staticChannels)
 									{ sendReply(Reply.ERR_NOSUCHCHANNEL, channame, "No such channel"); continue; }
 								else
-									channel = server.channels[normchan] = server.new Channel(channame);
+									channel = server.createChannel(channame);
 							}
 							if (nickname.normalized in channel.members)
 								continue; // already on channel
 							if (channel.modeStrings['k'] && channel.modeStrings['k'] != key)
 								{ sendReply(Reply.ERR_BADCHANNELKEY, channame, "Cannot join channel (+k)"); continue; }
-							if (channel.modeMasks['b'].any!(mask => userspec.maskMatch(mask)))
+							if (channel.modeMasks['b'].any!(mask => prefix.maskMatch(mask)))
 								{ sendReply(Reply.ERR_BANNEDFROMCHAN, channame, "Cannot join channel (+b)"); continue; }
 							join(channel);
 						}
@@ -183,7 +188,7 @@ class IrcServer
 							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
 						if (parameters.length < 1)
 							return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
-						auto target = parameters[0];
+						auto target = parameters.unshift;
 						if (server.isChannelName(target))
 						{
 							auto pchannel = target.normalized in server.channels;
@@ -193,17 +198,84 @@ class IrcServer
 							auto pmember = nickname.normalized in channel.members;
 							if (!pmember)
 								return sendReply(Reply.ERR_NOTONCHANNEL, target, "You're not on that channel");
-							if (parameters.length == 1)
+							if (!parameters.length)
 								return sendChannelModes(channel);
 							if ((pmember.modes & Channel.Member.Modes.op) == 0)
 								return sendReply(Reply.ERR_CHANOPRIVSNEEDED, target, "You're not channel operator");
-							return setChannelModes(channel, parameters[1], parameters[2..$]);
+							return setChannelModes(channel, parameters);
 						}
 						else
 						{
-							// TODO: user modes
+							auto pclient = target.normalized in server.nicknames;
+							if (!pclient)
+								return sendReply(Reply.ERR_NOSUCHNICK, target, "No such nick/channel");
+							auto client = *pclient;
+							if (parameters.length)
+							{
+								if (client !is this)
+									return sendReply(Reply.ERR_USERSDONTMATCH, "Cannot change mode for other users");
+								return setUserModes(parameters);
+							}
+							else
+							{
+								string modeString = "+";
+								foreach (c, on; modeFlags)
+									if (on)
+										modeString ~= c;
+								return sendReply(Reply.RPL_UMODEIS, modeString, null);
+							}
 						}
+					case "LIST":
+						foreach (channel; server.channels)
+							if (!(channel.modeFlags['p'] || channel.modeFlags['s']) || nickname.normalized in channel.members)
+								return sendReply(Reply.RPL_LIST, channel.name, channel.members.length.text, channel.topic ? channel.topic : "");
+						sendReply(Reply.RPL_LISTEND, "End of LIST");
 						break;
+					case "WHO":
+					{
+						if (!registered)
+							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
+						auto mask = parameters.length ? parameters[0] != "*" && parameters[0] != "0" ? parameters[0] : null : null;
+						string[string] result;
+						foreach (channel; server.channels)
+						{
+							auto inChannel = nickname.normalized in channel.members;
+							if (!inChannel && channel.modeFlags['s'])
+								continue;
+							foreach (member; channel.members)
+								if (inChannel || !member.client.modeFlags['i'])
+									if (!mask || member.client.publicPrefix.maskMatch(mask))
+									{
+										auto phit = member.client.nickname in result;
+										if (phit)
+											*phit = "*";
+										else
+											result[member.client.nickname] = channel.name;
+									}
+						}
+
+						foreach (client; server.nicknames)
+							if (!client.modeFlags['i'])
+								if (!mask || client.publicPrefix.maskMatch(mask))
+									if (client.nickname !in result)
+										result[client.nickname] = "*";
+
+						foreach (nickname, channel; result)
+						{
+							auto client = server.nicknames[nickname.normalized];
+							sendReply(Reply.RPL_WHOREPLY,
+								channel,
+								client.username,
+								this is client ? client.realHostname : client.publicHostname,
+								server.hostname,
+								nickname,
+								"H",
+								"0 " ~ client.realname,
+							);
+						}
+						sendReply(Reply.RPL_ENDOFWHO, mask ? mask : "*", "End of WHO list");
+						break;
+					}
 					case "PRIVMSG":
 					case "NOTICE":
 						if (!registered)
@@ -243,7 +315,8 @@ class IrcServer
 						break;
 
 					default:
-						return sendReply(Reply.ERR_UNKNOWNCOMMAND, command, "Unknown command");
+						if (registered)
+							return sendReply(Reply.ERR_UNKNOWNCOMMAND, command, "Unknown command");
 				}
 			}
 			catch (Exception e)
@@ -254,7 +327,9 @@ class IrcServer
 
 		void disconnect(string why)
 		{
-			sendLine("ERROR :Closing Link: %s[%s@%s] (%s)".format(nickname, username, conn.remoteAddress.toAddrString, why));
+			if (registered)
+				unregister(why);
+			sendLine("ERROR :Closing Link: %s[%s@%s] (%s)".format(nickname, username, realHostname, why));
 			conn.disconnect(why);
 		}
 
@@ -262,6 +337,7 @@ class IrcServer
 		{
 			if (registered)
 				unregister(reason);
+			server.log("IRC: %s disconnecting: %s".format(conn.remoteAddress, reason));
 		}
 
 		void checkRegistration()
@@ -295,7 +371,10 @@ class IrcServer
 
 		void register()
 		{
-			userspec = "%s!%s%s@%s".format(nickname, identified ? "" : "~", username, conn.remoteAddress.toAddrString);
+			if (!identified)
+				username = "~" ~ username;
+			prefix       = "%s!%s@%s".format(nickname, username, realHostname  );
+			publicPrefix = "%s!%s@%s".format(nickname, username, publicHostname);
 
 			registered = true;
 			server.nicknames[nickname.normalized] = this;
@@ -306,7 +385,7 @@ class IrcServer
 			sendReply(Reply.RPL_YOURHOST     , "Your host is %s, running %s".format(server.hostname, server.serverVersion));
 			sendReply(Reply.RPL_CREATED      , "This server was created %s".format(server.creationTime));
 			sendReply(Reply.RPL_MYINFO       , server.hostname, server.serverVersion, UserModes.supported, ChannelModes.supported, null);
-			sendReply(cast(Reply)         005, server.capabilities);
+			sendReply(cast(Reply)         005, server.capabilities ~ ["are supported by this server"]);
 			sendReply(Reply.RPL_LUSERCLIENT  , "There are %d users and %d invisible on %d servers".format(userCount, 0, 1));
 			sendReply(Reply.RPL_LUSEROP      , 0.text, "IRC Operators online"); // TODO: OPER
 			sendReply(Reply.RPL_LUSERCHANNELS, server.channels.length.text, "channels formed");
@@ -389,7 +468,9 @@ class IrcServer
 				{
 					case ChannelModes.Type.none:
 					case ChannelModes.Type.member:
+						break;
 					case ChannelModes.Type.mask:
+						// sent after RPL_CHANNELMODEIS
 						break;
 					case ChannelModes.Type.flag:
 						if (channel.modeFlags[c])
@@ -411,17 +492,175 @@ class IrcServer
 						break;
 				}
 			sendReply(Reply.RPL_CHANNELMODEIS, channel.name, ([modes] ~ modeParams).join(" "), null);
+			sendChannelMaskList(channel, channel.modeMasks['b'], Reply.RPL_BANLIST, Reply.RPL_ENDOFBANLIST, "End of channel ban list");
 		}
 
-		void setChannelModes(Channel channel, string modes, string[] modeParams)
+		void sendChannelMaskList(Channel channel, string[] masks, Reply lineReply, Reply endReply, string endText)
 		{
-			//foreach (c; modes)
-			// TODO
+			foreach (mask; masks)
+				sendReply(lineReply, channel.name, mask, null);
+			sendReply(endReply, channel.name, endText);
+		}
+
+		void setChannelModes(Channel channel, string[] modes)
+		{
+			string[bool] effectedChars;
+			string[][bool] effectedParams;
+
+			scope(exit) // Broadcast effected options
+			{
+				string[] parameters;
+				foreach (adding; [false, true])
+					if (effectedChars[adding].length)
+						parameters ~= [(adding ? "+" : "-") ~ effectedChars[adding]] ~ effectedParams[adding];
+				if (parameters.length)
+				{
+					parameters = ["MODE", channel.name] ~ parameters;
+					foreach (ref member; channel.members)
+						member.client.sendCommand(this, parameters);
+				}
+			}
+
+			while (modes.length)
+			{
+				auto chars = modes.unshift;
+
+				bool adding = true;
+				foreach (c; chars)
+					if (c == '+')
+						adding = true;
+					else
+					if (c == '-')
+						adding = false;
+					else
+					final switch (ChannelModes.modeTypes[c])
+					{
+						case ChannelModes.Type.none:
+							sendReply(Reply.ERR_UNKNOWNMODE, [c], "is unknown mode char to me for %s".format(channel.name));
+							break;
+						case ChannelModes.Type.flag:
+							if (adding != channel.modeFlags[c])
+							{
+								channel.modeFlags[c] = adding;
+								effectedChars[adding] ~= c;
+							}
+							break;
+						case ChannelModes.Type.member:
+						{
+							if (!modes.length)
+								{ sendReply(Reply.ERR_NEEDMOREPARAMS, "MODE", "Not enough parameters"); continue; }
+							auto memberName = modes.unshift;
+							auto pmember = memberName.normalized in channel.members;
+							if (!pmember)
+								{ sendReply(Reply.ERR_USERNOTINCHANNEL, memberName, channel.name, "They aren't on that channel"); continue; }
+							auto mode = ChannelModes.memberModes[c];
+							auto modeMask = 1 << mode;
+							auto isSet = (pmember.modes & modeMask) != 0;
+							if (isSet != adding)
+							{
+								if (adding)
+									pmember.modes |= modeMask;
+								else
+									pmember.modes &= ~modeMask;
+								effectedChars[adding] ~= c;
+								effectedParams[adding] ~= memberName;
+							}
+							break;
+						}
+						case ChannelModes.Type.mask:
+						{
+							if (!modes.length)
+								{ sendReply(Reply.ERR_NEEDMOREPARAMS, "MODE", "Not enough parameters"); continue; }
+							auto mask = modes.unshift;
+							if (adding)
+							{
+								if (channel.modeMasks[c].canFind(mask))
+									continue;
+								channel.modeMasks[c] ~= mask;
+							}
+							else
+							{
+								auto index = channel.modeMasks[c].countUntil(mask);
+								if (index < 0)
+									continue;
+								channel.modeMasks[c] = channel.modeMasks[c][0..index] ~ channel.modeMasks[c][index+1..$];
+							}
+							effectedChars[adding] ~= c;
+							effectedParams[adding] ~= mask;
+							break;
+						}
+						case ChannelModes.Type.str:
+							if (adding)
+							{
+								if (!modes.length)
+									{ sendReply(Reply.ERR_NEEDMOREPARAMS, "MODE", "Not enough parameters"); continue; }
+								auto str = modes.unshift;
+								if (channel.modeStrings[c] == str)
+									continue;
+								effectedChars[adding] ~= c;
+								effectedParams[adding] ~= str;
+							}
+							else
+							{
+								if (!channel.modeStrings[c])
+									continue;
+								channel.modeStrings[c] = null;
+								effectedChars[adding] ~= c;
+							}
+							break;
+						case ChannelModes.Type.number:
+							if (adding)
+							{
+								if (!modes.length)
+									{ sendReply(Reply.ERR_NEEDMOREPARAMS, "MODE", "Not enough parameters"); continue; }
+								auto numText = modes.unshift;
+								auto num = numText.to!long;
+								if (channel.modeNumbers[c] == num)
+									continue;
+								effectedChars[adding] ~= c;
+								effectedParams[adding] ~= numText;
+							}
+							else
+							{
+								if (!channel.modeNumbers[c])
+									continue;
+								channel.modeNumbers[c] = 0;
+								effectedChars[adding] ~= c;
+							}
+							break;
+					}
+			}
+		}
+
+		void setUserModes(string[] modes)
+		{
+			while (modes.length)
+			{
+				auto chars = modes.unshift;
+
+				bool adding = true;
+				foreach (c; chars)
+					if (c == '+')
+						adding = true;
+					else
+					if (c == '-')
+						adding = false;
+					else
+					final switch (UserModes.modeTypes[c])
+					{
+						case UserModes.Type.none:
+							sendReply(Reply.ERR_UMODEUNKNOWNFLAG, "Unknown MODE flag");
+							break;
+						case UserModes.Type.flag:
+							modeFlags[c] = adding;
+							break;
+					}
+			}
 		}
 
 		void sendCommand(Client from, string[] parameters...)
 		{
-			return sendCommand(from.userspec, parameters);
+			return sendCommand(this is from ? prefix : publicPrefix, parameters);
 		}
 
 		void sendCommand(string from, string[] parameters...)
@@ -431,18 +670,18 @@ class IrcServer
 				parameters = parameters[0..$-1];
 			else
 				parameters = parameters[0..$-1] ~ [":" ~ parameters[$-1]];
-			auto line = ":%s %(%s %)".format(from, parameters);
+			auto line = ":%s %-(%s %)".format(from, parameters);
 			sendLine(line);
 		}
 
 		void sendReply(Reply reply, string[] parameters...)
 		{
-			return sendReply("%3d".format(reply), parameters);
+			return sendReply("%03d".format(reply), parameters);
 		}
 
 		void sendReply(string command, string[] parameters...)
 		{
-			return sendReply(server.hostname, [command, nickname] ~ parameters);
+			return sendCommand(server.hostname, [command, nickname] ~ parameters);
 		}
 
 		void sendServerNotice(string text)
@@ -541,6 +780,11 @@ class IrcServer
 		return port;
 	}
 
+	Channel createChannel(string name)
+	{
+		return channels[name.normalized] = new Channel(name);
+	}
+
 private:
 	void onAccept(IrcSocket incoming)
 	{
@@ -575,11 +819,12 @@ private:
 		string[] result;
 		result ~= "PREFIX=(%s)%s".format(ChannelModes.memberModeChars, ChannelModes.memberModePrefixes);
 		result ~= "CHANTYPES=" ~ chanTypes;
-		result ~= "CHANMODES=%(%s,%)".format(
+		result ~= "CHANMODES=%-(%s,%)".format(
 			[ChannelModes.Type.mask, ChannelModes.Type.str, ChannelModes.Type.number, ChannelModes.Type.flag].map!(type => ChannelModes.byType(type))
 		);
 		if (network)
 			result ~= "NETWORK=" ~ network;
+		result ~= "CASEMAPPING=rfc1459";
 		return result;
 	}
 }
@@ -620,7 +865,7 @@ static:
 
 	static this()
 	{
-		foreach (c; "nt")
+		foreach (c; "ntps")
 			modeTypes[c] = Type.flag;
 		foreach (c; "ov")
 			modeTypes[c] = Type.member;
@@ -643,10 +888,15 @@ static:
 	enum Type { none, flag }
 	mixin CommonModes;
 	Type[char.max] modeTypes;
+	bool[char.max] isSettable;
 
 	static this()
 	{
 		foreach (c; "i")
 			modeTypes[c] = Type.flag;
+		foreach (c; "i")
+			isSettable[c] = true;
 	}
 }
+
+T unshift(T)(ref T[] arr) { T result = arr[0]; arr = arr[1..$]; return result; }
