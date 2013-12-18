@@ -380,7 +380,7 @@ class IrcServer
 
 			if (nickname.length && username.length)
 			{
-				if (password && password != server.password)
+				if (server.password && password != server.password)
 				{
 					password = null;
 					return sendReply(Reply.ERR_PASSWDMISMATCH, "Password incorrect");
