@@ -57,6 +57,7 @@ class IrcServer
 		string username, hostname, servername, realname;
 		bool identified;
 		string prefix, publicPrefix; /// Full nick!user@host
+		string away;
 
 		bool registered;
 		bool[char.max] modeFlags;
@@ -129,6 +130,9 @@ class IrcServer
 						checkRegistration();
 						break;
 
+					case "PING":
+						sendReply("PONG", parameters);
+						break;
 					case "QUIT":
 						if (parameters.length)
 							disconnect("Quit: " ~ parameters[0]);
@@ -274,6 +278,26 @@ class IrcServer
 							);
 						}
 						sendReply(Reply.RPL_ENDOFWHO, mask ? mask : "*", "End of WHO list");
+						break;
+					}
+					case "USERHOST":
+					{
+						string[] replies;
+						foreach (nick; parameters)
+						{
+							auto pclient = nick.normalized in server.nicknames;
+							if (!pclient)
+								continue;
+							auto client = *pclient;
+							replies ~= "%s%s=%s%s@%s".format(
+								nick,
+								client.modeFlags['o'] ? "*" : "",
+								client.away ? "+" : "-",
+								client.username,
+								this is client ? client.realHostname : client.publicHostname,
+							);
+						}
+						sendReply(Reply.RPL_USERHOST, replies.join(" "));
 						break;
 					}
 					case "PRIVMSG":
