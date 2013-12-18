@@ -1,0 +1,652 @@
+﻿/**
+ * A simple IRC server.
+ *
+ * License:
+ *   This Source Code Form is subject to the terms of
+ *   the Mozilla Public License, v. 2.0. If a copy of
+ *   the MPL was not distributed with this file, You
+ *   can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * Authors:
+ *   Vladimir Panteleev <vladimir@thecybershadow.net>
+ */
+
+module ae.net.irc.server;
+
+import std.algorithm;
+import std.conv;
+import std.datetime;
+import std.range;
+import std.regex;
+import std.socket;
+import std.string;
+
+import ae.net.asockets;
+import ae.sys.log;
+
+import ae.net.irc.common;
+
+alias std.string.indexOf indexOf;
+
+class IrcServer
+{
+	// This class is currently intentionally written for readability, not performance.
+	// Performance and scalability could be greatly improved by using numeric indices for users and channels
+	// instead of associative arrays.
+
+	/// Server configuration
+	string hostname, password, network;
+	string nicknameValidationPattern = "^[a-zA-Z][a-zA-Z0-9_\\-`\\|]{0,14}$";
+	string serverVersion = "ae.net.irc.server";
+	string[] motd;
+	string chanTypes = "#&";
+	SysTime creationTime;
+
+	/// Channels can't be created by users, and don't disappear when they're empty
+	bool staticChannels;
+
+	Logger log;
+
+	/// Client connection and information
+	final static class Client
+	{
+		/// Registration details
+		string nickname, password;
+		string username, hostname, servername, realname;
+		bool identified;
+		string userspec; /// Full nick!user@host
+
+		bool registered;
+		bool[char.max] modeFlags;
+
+		Channel[] joinedChannels()
+		{
+			Channel[] result;
+			foreach (channel; server.channels)
+				if (nickname.normalized in channel.members)
+					result ~= channel;
+			return result;
+		}
+
+	private:
+		IrcServer server;
+		IrcSocket conn;
+
+		this(IrcServer server, IrcSocket incoming)
+		{
+			this.server = server;
+
+			conn = incoming;
+			conn.handleReadLine = &onReadLine;
+			// TODO: handleInactivity
+		}
+
+		void onReadLine(LineBufferedSocket sender, string line)
+		{
+			try
+			{
+				enforce(line.indexOf('\0')<0 && line.indexOf('\r')<0 && line.indexOf('\n')<0, "Forbidden character");
+
+				auto parameters = line.strip.ircSplit();
+				if (!parameters.length)
+					return;
+
+				auto command = parameters[0].toUpper();
+				parameters = parameters[1..$];
+
+				switch (command)
+				{
+					case "PASS":
+						if (registered)
+							return sendReply(Reply.ERR_ALREADYREGISTRED, "You may not reregister");
+						if (parameters.length != 1)
+							return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
+						password = parameters[0];
+						checkRegistration();
+						break;
+					case "NICK":
+						if (registered)
+							return sendServerNotice("Nick change not allowed."); // TODO. NB: update nicknames and Channel.members keys
+						if (parameters.length != 1)
+							return sendReply(Reply.ERR_NONICKNAMEGIVEN, "No nickname given");
+						nickname = parameters[0];
+						checkRegistration();
+						break;
+					case "USER":
+						if (registered)
+							return sendReply(Reply.ERR_ALREADYREGISTRED, "You may not reregister");
+						if (parameters.length != 4)
+							return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
+						username   = parameters[0];
+						hostname   = parameters[1];
+						servername = parameters[2];
+						realname   = parameters[3];
+						checkRegistration();
+						break;
+
+					case "QUIT":
+						if (parameters.length)
+							disconnect("Quit: " ~ parameters[0]);
+						else
+							disconnect("Quit");
+						break;
+					case "JOIN":
+						if (!registered)
+							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
+						if (parameters.length < 1)
+							return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
+						string[] keys = parameters.length > 1 ? parameters[1].split(",") : null;
+						foreach (i, channame; parameters[0].split(","))
+						{
+							auto key = i < keys.length ? keys[i] : null;
+							if (!server.isChannelName(channame))
+								{ sendReply(Reply.ERR_NOSUCHCHANNEL, channame, "No such channel"); continue; }
+							auto normchan = channame.normalized;
+							auto pchannel = normchan in server.channels;
+							Channel channel;
+							if (pchannel)
+								channel = *pchannel;
+							else
+							{
+								if (server.staticChannels)
+									{ sendReply(Reply.ERR_NOSUCHCHANNEL, channame, "No such channel"); continue; }
+								else
+									channel = server.channels[normchan] = server.new Channel(channame);
+							}
+							if (nickname.normalized in channel.members)
+								continue; // already on channel
+							if (channel.modeStrings['k'] && channel.modeStrings['k'] != key)
+								{ sendReply(Reply.ERR_BADCHANNELKEY, channame, "Cannot join channel (+k)"); continue; }
+							if (channel.modeMasks['b'].any!(mask => userspec.maskMatch(mask)))
+								{ sendReply(Reply.ERR_BANNEDFROMCHAN, channame, "Cannot join channel (+b)"); continue; }
+							join(channel);
+						}
+						break;
+					case "PART":
+						if (!registered)
+							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
+						if (parameters.length < 1) // TODO: part reason
+							return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
+						foreach (channame; parameters[0].split(","))
+						{
+							auto pchan = channame.normalized in server.channels;
+							if (!pchan)
+								{ sendReply(Reply.ERR_NOSUCHCHANNEL, channame, "No such channel"); continue; }
+							auto chan = *pchan;
+							if (nickname.normalized !in chan.members)
+								{ sendReply(Reply.ERR_NOTONCHANNEL, channame, "You're not on that channel"); continue; }
+							part(chan);
+						}
+						break;
+					case "MODE":
+						if (!registered)
+							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
+						if (parameters.length < 1)
+							return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
+						auto target = parameters[0];
+						if (server.isChannelName(target))
+						{
+							auto pchannel = target.normalized in server.channels;
+							if (!pchannel)
+								return sendReply(Reply.ERR_NOSUCHNICK, target, "No such nick/channel");
+							auto channel = *pchannel;
+							auto pmember = nickname.normalized in channel.members;
+							if (!pmember)
+								return sendReply(Reply.ERR_NOTONCHANNEL, target, "You're not on that channel");
+							if (parameters.length == 1)
+								return sendChannelModes(channel);
+							if ((pmember.modes & Channel.Member.Modes.op) == 0)
+								return sendReply(Reply.ERR_CHANOPRIVSNEEDED, target, "You're not channel operator");
+							return setChannelModes(channel, parameters[1], parameters[2..$]);
+						}
+						else
+						{
+							// TODO: user modes
+						}
+						break;
+					case "PRIVMSG":
+					case "NOTICE":
+						if (!registered)
+							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
+						if (parameters.length < 2)
+							return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
+						auto message = parameters[1];
+						foreach (target; parameters[0].split(","))
+						{
+							if (server.isChannelName(target))
+							{
+								auto pchannel = target.normalized in server.channels;
+								if (!pchannel)
+									{ sendReply(Reply.ERR_NOSUCHNICK, target, "No such nick/channel"); continue; }
+								auto channel = *pchannel;
+								auto pmember = nickname.normalized in channel.members;
+								if (pmember) // On channel?
+								{
+									if (channel.modeFlags['m'] && (pmember.modes & Channel.Member.Modes.bypassM) == 0)
+										{ sendReply(Reply.ERR_CANNOTSENDTOCHAN, target, "Cannot send to channel"); continue; }
+								}
+								else
+								{
+									if (channel.modeFlags['n']) // No external messages
+										{ sendReply(Reply.ERR_NOTONCHANNEL, target, "You're not on that channel"); continue; }
+								}
+								sendToChannel(channel, command, message);
+							}
+							else
+							{
+								auto pclient = target.normalized in server.nicknames;
+								if (!pclient)
+									{ sendReply(Reply.ERR_NOSUCHNICK, target, "No such nick/channel"); continue; }
+								sendToClient(*pclient, command, message);
+							}
+						}
+						break;
+
+					default:
+						return sendReply(Reply.ERR_UNKNOWNCOMMAND, command, "Unknown command");
+				}
+			}
+			catch (Exception e)
+			{
+				disconnect(e.msg);
+			}
+		}
+
+		void disconnect(string why)
+		{
+			sendLine("ERROR :Closing Link: %s[%s@%s] (%s)".format(nickname, username, conn.remoteAddress.toAddrString, why));
+			conn.disconnect(why);
+		}
+
+		void onDisconnect(ClientSocket sender, string reason, DisconnectType type)
+		{
+			if (registered)
+				unregister(reason);
+		}
+
+		void checkRegistration()
+		{
+			assert(!registered);
+
+			if (nickname.length && username.length)
+			{
+				if (password && password != server.password)
+				{
+					password = null;
+					return sendReply(Reply.ERR_PASSWDMISMATCH, "Password incorrect");
+				}
+				if (nickname.normalized in server.nicknames)
+				{
+					scope(exit) nickname = null;
+					return sendReply(Reply.ERR_NICKNAMEINUSE, nickname, "Nickname is already in use");
+				}
+				if (!nickname.match(server.nicknameValidationPattern))
+				{
+					scope(exit) nickname = null;
+					return sendReply(Reply.ERR_ERRONEUSNICKNAME, nickname, "Erroneus nickname");
+				}
+				if (!username.match(`[a-zA-Z]+`))
+					return disconnect("Invalid username");
+
+				// All OK
+				register();
+			}
+		}
+
+		void register()
+		{
+			userspec = "%s!%s%s@%s".format(nickname, identified ? "" : "~", username, conn.remoteAddress.toAddrString);
+
+			registered = true;
+			server.nicknames[nickname.normalized] = this;
+			auto userCount = server.nicknames.length;
+			if (server.maxUsers < userCount)
+				server.maxUsers = userCount;
+			sendReply(Reply.RPL_WELCOME      , "Welcome, %s!".format(nickname));
+			sendReply(Reply.RPL_YOURHOST     , "Your host is %s, running %s".format(server.hostname, server.serverVersion));
+			sendReply(Reply.RPL_CREATED      , "This server was created %s".format(server.creationTime));
+			sendReply(Reply.RPL_MYINFO       , server.hostname, server.serverVersion, UserModes.supported, ChannelModes.supported, null);
+			sendReply(cast(Reply)         005, server.capabilities);
+			sendReply(Reply.RPL_LUSERCLIENT  , "There are %d users and %d invisible on %d servers".format(userCount, 0, 1));
+			sendReply(Reply.RPL_LUSEROP      , 0.text, "IRC Operators online"); // TODO: OPER
+			sendReply(Reply.RPL_LUSERCHANNELS, server.channels.length.text, "channels formed");
+			sendReply(Reply.RPL_LUSERME      , "I have %d clients and %d servers".format(userCount, 0));
+			sendReply(cast(Reply)         265, "Current local  users: %d  Max: %d".format(userCount, server.maxUsers));
+			sendReply(cast(Reply)         266, "Current global users: %d  Max: %d".format(userCount, server.maxUsers));
+			sendReply(cast(Reply)         250, "Highest connection count: %d (%d clients) (%d since server was (re)started)".format(server.maxUsers, server.maxUsers, server.totalConnections));
+			sendMotd();
+		}
+
+		void unregister(string why)
+		{
+			assert(registered);
+			auto channels = joinedChannels;
+			foreach (client; server.allClientsInChannels(joinedChannels))
+				client.sendCommand(this, "QUIT", why);
+			foreach (channel; channels)
+				channel.remove(this);
+			server.nicknames.remove(nickname.normalized);
+			registered = false;
+		}
+
+		void sendMotd()
+		{
+			sendReply(Reply.RPL_MOTDSTART    , "- %s Message of the Day - ".format(server.hostname));
+			foreach (line; server.motd)
+				sendReply(Reply.RPL_MOTD, "- %s".format(line));
+			sendReply(Reply.RPL_ENDOFMOTD    , "End of /MOTD command.");
+		}
+
+		void join(Channel channel)
+		{
+			channel.add(this);
+			foreach (member; channel.members)
+				member.client.sendCommand(this, "JOIN", channel.name);
+			sendTopic(channel);
+			sendNames(channel);
+		}
+
+		void part(Channel channel)
+		{
+			foreach (member; channel.members)
+				member.client.sendCommand(this, "PART", channel.name);
+			channel.remove(this);
+		}
+
+		void sendToChannel(Channel channel, string command, string message)
+		{
+			foreach (member; channel.members)
+				if (member.client !is this)
+					member.client.sendCommand(this, command, channel.name, message);
+		}
+
+		void sendToClient(Client client, string command, string message)
+		{
+			client.sendCommand(this, command, client.nickname, message);
+		}
+
+		void sendTopic(Channel channel)
+		{
+			if (channel.topic)
+				sendReply(Reply.RPL_TOPIC, channel.name, channel.topic);
+			else
+				sendReply(Reply.RPL_NOTOPIC, channel.name, "No topic is set");
+		}
+
+		void sendNames(Channel channel)
+		{
+			foreach (chunk; channel.members.values.chunks(10)) // can't use byValue - http://j.mp/IUhhGC (Issue 11761)
+				sendReply(Reply.RPL_NAMREPLY, channel.name, chunk.map!q{a.displayName}.join(" "));
+			sendReply(Reply.RPL_ENDOFNAMES, channel.name, "End of /NAMES list");
+		}
+
+		void sendChannelModes(Channel channel)
+		{
+			string modes = "+";
+			string[] modeParams;
+			foreach (c; 0..char.max)
+				final switch (ChannelModes.modeTypes[c])
+				{
+					case ChannelModes.Type.none:
+					case ChannelModes.Type.member:
+					case ChannelModes.Type.mask:
+						break;
+					case ChannelModes.Type.flag:
+						if (channel.modeFlags[c])
+							modes ~= c;
+						break;
+					case ChannelModes.Type.str:
+						if (channel.modeStrings[c])
+						{
+							modes ~= c;
+							modeParams ~= channel.modeStrings[c];
+						}
+						break;
+					case ChannelModes.Type.number:
+						if (channel.modeNumbers[c])
+						{
+							modes ~= c;
+							modeParams ~= channel.modeNumbers[c].text;
+						}
+						break;
+				}
+			sendReply(Reply.RPL_CHANNELMODEIS, channel.name, ([modes] ~ modeParams).join(" "), null);
+		}
+
+		void setChannelModes(Channel channel, string modes, string[] modeParams)
+		{
+			//foreach (c; modes)
+			// TODO
+		}
+
+		void sendCommand(Client from, string[] parameters...)
+		{
+			return sendCommand(from.userspec, parameters);
+		}
+
+		void sendCommand(string from, string[] parameters...)
+		{
+			assert(parameters.length, "At least one parameter expected");
+			if (parameters[$-1] is null)
+				parameters = parameters[0..$-1];
+			else
+				parameters = parameters[0..$-1] ~ [":" ~ parameters[$-1]];
+			auto line = ":%s %(%s %)".format(from, parameters);
+			sendLine(line);
+		}
+
+		void sendReply(Reply reply, string[] parameters...)
+		{
+			return sendReply("%3d".format(reply), parameters);
+		}
+
+		void sendReply(string command, string[] parameters...)
+		{
+			return sendReply(server.hostname, [command, nickname] ~ parameters);
+		}
+
+		void sendServerNotice(string text)
+		{
+			sendReply("NOTICE", "*** Notice -- " ~ text);
+		}
+
+		void sendLine(string line)
+		{
+			conn.send(line);
+		}
+	}
+
+	Client[string] nicknames;
+
+	/// Statistics
+	ulong maxUsers, totalConnections;
+
+	final class Channel
+	{
+		string name;
+		string topic;
+
+		bool[char.max] modeFlags;
+		string[char.max] modeStrings;
+		long[char.max] modeNumbers;
+		string[][char.max] modeMasks;
+
+		struct Member
+		{
+			enum Mode
+			{
+				op,
+				voice,
+				max
+			}
+
+			enum Modes
+			{
+				op    = 1 << Mode.op,
+				voice = 1 << Mode.voice,
+
+				bypassM = op | voice, // which modes bypass +m
+			}
+
+			Client client;
+			Modes modes;
+
+			string modeChar()
+			{
+				foreach (mode; Mode.init..Mode.max)
+					if ((1 << mode) & modes)
+						return [ChannelModes.memberModePrefixes[mode]];
+				return "";
+			}
+			string displayName() { return modeChar ~ client.nickname; }
+		}
+
+		Member[string] members;
+
+		this(string name)
+		{
+			this.name = name;
+			modeFlags['t'] = modeFlags['n'] = true;
+		}
+
+		void add(Client client)
+		{
+			members[client.nickname.normalized] = Member(client);
+		}
+
+		void remove(Client client)
+		{
+			members.remove(client.nickname.normalized);
+			if (!staticChannels && !members.length)
+				channels.remove(name.normalized);
+		}
+	}
+
+	Channel[string] channels;
+
+	IrcServerSocket conn;
+
+	this()
+	{
+		conn = new IrcServerSocket;
+		conn.handleAccept = &onAccept;
+
+		hostname = Socket.hostName;
+		creationTime = Clock.currTime;
+	}
+
+	ushort listen(ushort port=6667, string addr = null)
+	{
+		port = conn.listen(port, addr);
+		return port;
+	}
+
+private:
+	void onAccept(IrcSocket incoming)
+	{
+		new Client(this, incoming);
+		totalConnections++;
+	}
+
+	Client[] allClientsInChannels(Channel[] channels)
+	{
+		Client[string] result;
+		foreach (channel; channels)
+			foreach (ref member; channel.members)
+				result[member.client.nickname.normalized] = member.client;
+		return result.values;
+	}
+
+	Client[] inSameChannelAs(Client client)
+	{
+		return allClientsInChannels(client.joinedChannels);
+	}
+
+	bool isChannelName(string target)
+	{
+		foreach (prefix; chanTypes)
+			if (target.startsWith(prefix))
+				return true;
+		return false;
+	}
+
+	string[] capabilities()
+	{
+		string[] result;
+		result ~= "PREFIX=(%s)%s".format(ChannelModes.memberModeChars, ChannelModes.memberModePrefixes);
+		result ~= "CHANTYPES=" ~ chanTypes;
+		result ~= "CHANMODES=%(%s,%)".format(
+			[ChannelModes.Type.mask, ChannelModes.Type.str, ChannelModes.Type.number, ChannelModes.Type.flag].map!(type => ChannelModes.byType(type))
+		);
+		if (network)
+			result ~= "NETWORK=" ~ network;
+		return result;
+	}
+}
+
+private:
+
+bool maskMatch(string subject, string mask)
+{
+	import std.path;
+	return globMatch!(CaseSensitive.no)(subject, mask);
+}
+
+alias rfc1459toUpper normalized;
+
+string[] ircSplit(string line)
+{
+	auto colon = line.indexOf(":");
+	if (colon < 0)
+		return line.split;
+	else
+		return line[0..colon].strip.split ~ [line[colon+1..$]];
+}
+
+mixin template CommonModes()
+{
+	Type[char.max] modeTypes;
+	string supported()       { return modeTypes.length.iota.filter!(m => modeTypes[m]        ).map!(m => cast(char)m).array.assumeUnique; }
+	string byType(Type type) { return modeTypes.length.iota.filter!(m => modeTypes[m] == type).map!(m => cast(char)m).array.assumeUnique; }
+}
+
+struct ChannelModes
+{
+static:
+	enum Type { none, flag, member, mask, str, number }
+	mixin CommonModes;
+	IrcServer.Channel.Member.Mode[char.max] memberModes;
+	char[IrcServer.Channel.Member.Mode.max] memberModeChars, memberModePrefixes;
+
+	static this()
+	{
+		foreach (c; "nt")
+			modeTypes[c] = Type.flag;
+		foreach (c; "ov")
+			modeTypes[c] = Type.member;
+		foreach (c; "b")
+			modeTypes[c] = Type.mask;
+		foreach (c; "k")
+			modeTypes[c] = Type.str;
+
+		memberModes['o'] = IrcServer.Channel.Member.Mode.op;
+		memberModes['v'] = IrcServer.Channel.Member.Mode.voice;
+
+		memberModeChars    = "ov";
+		memberModePrefixes = "@+";
+	}
+}
+
+struct UserModes
+{
+static:
+	enum Type { none, flag }
+	mixin CommonModes;
+	Type[char.max] modeTypes;
+
+	static this()
+	{
+		foreach (c; "i")
+			modeTypes[c] = Type.flag;
+	}
+}
