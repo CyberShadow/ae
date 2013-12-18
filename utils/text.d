@@ -392,12 +392,13 @@ string forceValidUTF8(string s)
 string hexDump(const(void)[] b)
 {
 	auto data = cast(const(ubyte)[]) b;
-	int i=0;
+	assert(data.length);
+	size_t i=0;
 	string s;
 	while (i<data.length)
 	{
 		s ~= format("%08X:  ", i);
-		for (int x=0;x<16;x++)
+		foreach (x; 0..16)
 		{
 			if (i+x<data.length)
 				s ~= format("%02X ", data[i+x]);
@@ -407,7 +408,7 @@ string hexDump(const(void)[] b)
 				s ~= "| ";
 		}
 		s ~= "  ";
-		for (int x=0;x<16;x++)
+		foreach (x; 0..16)
 		{
 			if (i+x<data.length)
 				if (data[i+x]==0)
