@@ -84,7 +84,7 @@ class IrcServer
 
 			conn = incoming;
 			conn.handleReadLine = &onReadLine;
-			// TODO: handleInactivity
+			conn.handleInactivity = &onInactivity;
 
 			server.log("New IRC connection from " ~ incoming.remoteAddress.toString);
 		}
@@ -132,6 +132,8 @@ class IrcServer
 
 					case "PING":
 						sendReply("PONG", parameters);
+						break;
+					case "PONG":
 						break;
 					case "QUIT":
 						if (parameters.length)
@@ -280,6 +282,9 @@ class IrcServer
 						sendReply(Reply.RPL_ENDOFWHO, mask ? mask : "*", "End of WHO list");
 						break;
 					}
+					case "ISON":
+						sendReply(Reply.RPL_ISON, parameters.filter!(nick => nick.normalized in server.nicknames).join(" "));
+						break;
 					case "USERHOST":
 					{
 						string[] replies;
@@ -347,6 +352,11 @@ class IrcServer
 			{
 				disconnect(e.msg);
 			}
+		}
+
+		void onInactivity(IrcSocket sender)
+		{
+			sendReply("PING", Clock.currTime.stdTime.text);
 		}
 
 		void disconnect(string why)
