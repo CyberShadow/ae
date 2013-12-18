@@ -58,14 +58,22 @@ class IrcSocket : LineBufferedSocket
 	this()
 	{
 		super(TickDuration.from!"seconds"(90));
-		handleIdleTimeout = &onIdleTimeout;
+		init();
 	}
 
 	this(Socket conn)
 	{
 		super.setIdleTimeout(TickDuration.from!"seconds"(60));
 		super(conn);
+		init();
+	}
+
+	void init()
+	{
 		handleIdleTimeout = &onIdleTimeout;
+
+		super.delimiter = "\n";
+		super.handleReadLine = &onReadLine;
 	}
 
 	override void markNonIdle()
@@ -75,11 +83,25 @@ class IrcSocket : LineBufferedSocket
 		super.markNonIdle();
 	}
 
+	override final void send(string line)
+	{
+		// Send with \r\n, but support receiving with \n
+		import ae.sys.data;
+		ClientSocket.send(Data(line ~ "\r\n"));
+	}
+
 	void delegate (IrcSocket sender) handleInactivity;
 	void delegate (IrcSocket sender) handleTimeout;
+	void delegate(LineBufferedSocket sender, string line) handleReadLine; // redefine
 
 private:
-	void onIdleTimeout(ClientSocket sender)
+	final void onReadLine(LineBufferedSocket sender, string line)
+	{
+		if (handleReadLine)
+			handleReadLine(sender, line.chomp("\r"));
+	}
+
+	final void onIdleTimeout(ClientSocket sender)
 	{
 		if (pingSent || handleInactivity is null)
 		{
