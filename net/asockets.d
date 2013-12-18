@@ -24,6 +24,7 @@ import std.socket;
 public import std.socket : Address, Socket;
 
 debug(ASOCKETS) import std.stdio;
+debug(PRINTDATA) import ae.utils.text : hexDump;
 private import std.conv : to;
 
 import std.random : randomShuffle;
@@ -525,6 +526,14 @@ protected:
 		if (received == Socket.ERROR)
 			onError("recv() error: " ~ lastSocketError);
 		else
+		{
+			debug (PRINTDATA)
+			{
+				std.stdio.writefln("== %s <- %s ==", localAddress, remoteAddress);
+				std.stdio.write(hexDump(inBuffer[0 .. received]));
+				std.stdio.stdout.flush();
+			}
+
 			if (!disconnecting && handleReadData)
 			{
 				// Currently, unlike the D1 version of this module,
@@ -544,6 +553,7 @@ protected:
 					_handleReadData(this, Data(inBuffer[0 .. received], true));
 				}
 			}
+		}
 	}
 
 	/// Called when a socket is writable.
@@ -732,6 +742,13 @@ public:
 		assert(!disconnecting, "Attempting to send on a disconnecting socket");
 		outQueue[priority] ~= data;
 		notifyWrite = true; // Fast updateFlags()
+
+		debug (PRINTDATA)
+		{
+			std.stdio.writefln("== %s -> %s ==", localAddress, remoteAddress);
+			std.stdio.write(hexDump(data.contents));
+			std.stdio.stdout.flush();
+		}
 	}
 
 	/// ditto
@@ -1087,7 +1104,7 @@ public:
 	}
 
 	/// Append a line to the send buffer.
-	final void send(string line)
+	void send(string line)
 	{
 		super.send(Data(line ~ delimiter));
 	}
