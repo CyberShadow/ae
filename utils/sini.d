@@ -26,18 +26,18 @@ alias std.string.indexOf indexOf;
 struct StructuredIniHandler
 {
 	/// User callback for parsing a value at this node.
-	void delegate(string name, string value) leafHandler;
+	void delegate(in char[] name, in char[] value) leafHandler;
 
 	/// User callback for obtaining a child node from this node.
-	StructuredIniHandler delegate(string name) nodeHandler;
+	StructuredIniHandler delegate(in char[] name) nodeHandler;
 
-	private void handleLeaf(string name, string value)
+	private void handleLeaf(in char[] name, in char[] value)
 	{
 		enforce(leafHandler, "This group may not have any values.");
 		leafHandler(name, value);
 	}
 
-	private StructuredIniHandler handleNode(string name)
+	private StructuredIniHandler handleNode(in char[] name)
 	{
 		enforce(nodeHandler, "This group may not have any nodes.");
 		return nodeHandler(name);
@@ -46,7 +46,7 @@ struct StructuredIniHandler
 
 /// Parse a structured INI from a range of lines, through the given handler.
 void parseStructuredIni(R)(R r, StructuredIniHandler rootHandler)
-	if (isInputRange!R && is(ElementType!R == string))
+	if (isInputRange!R && is(ElementType!R : const(char)[]))
 {
 	auto currentHandler = rootHandler;
 
@@ -102,12 +102,12 @@ unittest
 		StructuredIniHandler
 		(
 			null,
-			(string name)
+			(in char[] name)
 			{
 				assert(name == "s");
 				return StructuredIniHandler
 				(
-					(string name, string value)
+					(in char[] name, in char[] value)
 					{
 						assert(name .length==2 && name [0] == 'n'
 						    && value.length==2 && value[0] == 'v'
@@ -126,18 +126,18 @@ unittest
 struct StructuredIniTraversingHandler
 {
 	/// User callback for parsing a value at this node.
-	void delegate(string value) leafHandler;
+	void delegate(in char[] value) leafHandler;
 
 	/// User callback for obtaining a child node from this node.
-	StructuredIniTraversingHandler delegate(string name) nodeHandler;
+	StructuredIniTraversingHandler delegate(in char[] name) nodeHandler;
 
-	private void handleLeaf(string value)
+	private void handleLeaf(in char[] value)
 	{
 		enforce(leafHandler, "This group may not have a value.");
 		leafHandler(value);
 	}
 
-	private StructuredIniTraversingHandler handleNode(string name)
+	private StructuredIniTraversingHandler handleNode(in char[] name)
 	{
 		enforce(nodeHandler, "This group may not have any nodes.");
 		return nodeHandler(name);
@@ -150,11 +150,11 @@ struct StructuredIniTraversingHandler
 		StructuredIniTraversingHandler thisCopy = this;
 		return StructuredIniHandler
 		(
-			(string name, string value)
+			(in char[] name, in char[] value)
 			{
 				thisCopy.handleNode(name).handleLeaf(value);
 			},
-			(string name)
+			(in char[] name)
 			{
 				return thisCopy.handleNode(name).conv();
 			}
@@ -164,7 +164,7 @@ struct StructuredIniTraversingHandler
 
 /// Parse a structured INI from a range of lines, into a user-defined struct.
 T parseStructuredIni(T, R)(R r)
-	if (isInputRange!R && is(ElementType!R == string))
+	if (isInputRange!R && is(ElementType!R : const(char)[]))
 {
 	static StructuredIniTraversingHandler makeHandler(U)(ref U v)
 	{
@@ -174,13 +174,13 @@ T parseStructuredIni(T, R)(R r)
 			return StructuredIniTraversingHandler
 			(
 				null,
-				(string name)
+				(in char[] name)
 				{
 					bool found;
 					foreach (i, field; v.tupleof)
 						if (name == v.tupleof[i].stringof[2..$])
 							return makeHandler(v.tupleof[i]);
-					throw new Exception("Unknown field " ~ name);
+					throw new Exception("Unknown field " ~ name.assumeUnique);
 				}
 			);
 		else
@@ -188,7 +188,7 @@ T parseStructuredIni(T, R)(R r)
 			return StructuredIniTraversingHandler
 			(
 				null,
-				(string name)
+				(in char[] name)
 				{
 					auto pField = name in v;
 					if (!pField)
@@ -203,7 +203,7 @@ T parseStructuredIni(T, R)(R r)
 		static if (is(typeof(std.conv.to!U(string.init))))
 			return StructuredIniTraversingHandler
 			(
-				(string value)
+				(in char[] value)
 				{
 					v = std.conv.to!U(value);
 				}
