@@ -56,7 +56,7 @@ void parseStructuredIni(R)(R r, StructuredIniHandler rootHandler)
 		lineNumber++;
 
 		auto line = r.front.chomp().stripLeft();
-		r.popFront();
+		scope(success) r.popFront();
 		if (line.empty)
 			continue;
 		if (line[0] == '#' || line[0] == ';')
