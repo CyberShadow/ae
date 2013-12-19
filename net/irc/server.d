@@ -234,7 +234,7 @@ class IrcServer
 					case "LIST":
 						foreach (channel; server.channels)
 							if (!(channel.modeFlags['p'] || channel.modeFlags['s']) || nickname.normalized in channel.members)
-								return sendReply(Reply.RPL_LIST, channel.name, channel.members.length.text, channel.topic ? channel.topic : "");
+								sendReply(Reply.RPL_LIST, channel.name, channel.members.length.text, channel.topic ? channel.topic : "");
 						sendReply(Reply.RPL_LISTEND, "End of LIST");
 						break;
 					case "WHO":
