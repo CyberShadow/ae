@@ -758,6 +758,14 @@ public:
 		assert(!disconnecting, "Attempting to send on a disconnecting socket");
 		outQueue[priority] ~= data;
 		notifyWrite = true; // Fast updateFlags()
+
+		debug (PRINTDATA)
+		{
+			std.stdio.writefln("== %s -> %s ==", localAddress, remoteAddress);
+			foreach (datum; data)
+				std.stdio.write(hexDump(datum.contents));
+			std.stdio.stdout.flush();
+		}
 	}
 
 	final void clearQueue(int priority)
