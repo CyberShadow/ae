@@ -541,7 +541,7 @@ class IrcServer
 		void sendNames(Channel channel)
 		{
 			foreach (chunk; channel.members.values.chunks(10)) // can't use byValue - http://j.mp/IUhhGC (Issue 11761)
-				sendReply(Reply.RPL_NAMREPLY, channel.name, chunk.map!q{a.displayName}.join(" "));
+				sendReply(Reply.RPL_NAMREPLY, channel.modeFlags['s'] ? "@" : channel.modeFlags['p'] ? "*" : "=", channel.name, chunk.map!q{a.displayName}.join(" "));
 			sendReply(Reply.RPL_ENDOFNAMES, channel.name, "End of /NAMES list");
 		}
 
