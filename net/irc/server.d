@@ -22,6 +22,7 @@ import std.socket;
 import std.string;
 
 import ae.net.asockets;
+import ae.utils.array;
 import ae.sys.log;
 
 import ae.net.irc.common;
@@ -1010,5 +1011,3 @@ static:
 			isSettable[c] = true;
 	}
 }
-
-T shift(T)(ref T[] arr) { T result = arr[0]; arr = arr[1..$]; return result; }

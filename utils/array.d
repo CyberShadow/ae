@@ -180,6 +180,9 @@ T queuePop(T)(ref T[] arr)
 	return ret;
 }
 
+T shift(T)(ref T[] arr) { T result = arr[0]; arr = arr[1..$]; return result; }
+void unshift(T)(ref T[] arr, T value) { arr.insertInPlace(0, value); }
+
 // ***************************************************************************
 
 import std.algorithm;
