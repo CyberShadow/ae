@@ -76,14 +76,13 @@ void parseStructuredIni(R)(R r, StructuredIniHandler rootHandler)
 		{
 			auto pos = line.indexOf('=');
 			enforce(pos > 0, "Malformed value line (no '=')");
-			// Should we strip whitespace from value?
-			auto name = line[0..pos];
+			auto name = line[0..pos].strip;
 			auto handler = currentHandler;
 			auto segments = name.split(".");
 			enforce(segments.length, "Malformed value line (empty name)");
 			foreach (segment; segments[0..$-1])
 				handler = handler.handleNode(segment);
-			handler.handleLeaf(segments[$-1], line[pos+1..$]);
+			handler.handleLeaf(segments[$-1], line[pos+1..$].strip);
 		}
 	}
 }
