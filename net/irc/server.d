@@ -752,7 +752,7 @@ class IrcServer
 		void sendUserModes(Client client)
 		{
 			string modeString = "+";
-			foreach (c, on; modeFlags)
+			foreach (char c, on; modeFlags)
 				if (on)
 					modeString ~= c;
 			return sendReply(Reply.RPL_UMODEIS, modeString, null);
