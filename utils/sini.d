@@ -192,7 +192,7 @@ T parseStructuredIni(T, R)(R r)
 					auto pField = name in v;
 					if (!pField)
 					{
-						v[name] = typeof(v[name]).init;
+						v[name.idup] = typeof(v[name]).init;
 						pField = name in v;
 					}
 					return makeHandler(*pField);
