@@ -760,7 +760,7 @@ class IrcServer
 
 		void sendCommand(Client from, string[] parameters...)
 		{
-			return sendCommand(this is from ? prefix : publicPrefix, parameters);
+			return sendCommand(this is from ? prefix : from.publicPrefix, parameters);
 		}
 
 		void sendCommand(string from, string[] parameters...)
