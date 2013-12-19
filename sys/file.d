@@ -273,7 +273,7 @@ void ensurePathExists(string fn)
 import ae.utils.text;
 
 /// Forcibly remove a file or empty directory.
-void forceDelete(string fn)
+void forceDelete()(string fn)
 {
 	version(Windows)
 	{
@@ -320,7 +320,7 @@ void forceDelete(string fn)
 	}
 }
 
-bool isHidden(string fn)
+bool isHidden()(string fn)
 {
 	if (baseName(fn).startsWith("."))
 		return true;
@@ -336,7 +336,7 @@ bool isHidden(string fn)
 version (Windows)
 {
 	/// Return a file's unique ID.
-	ulong getFileID(string fn)
+	ulong getFileID()(string fn)
 	{
 		import win32.winnt;
 		import win32.winbase;
@@ -373,10 +373,13 @@ string longPath(string s)
 }
 
 version (Windows)
-static if (is(typeof({ import win32.winbase; auto x = &CreateHardLinkW; }))) // Compile with -version=WindowsXP
 {
-	void hardLink(string src, string dst)
+	void hardLink()(string src, string dst)
 	{
+		import win32.w32api;
+
+		static assert(_WIN32_WINNT >= 0x501, "CreateHardLinkW not available for target Windows platform. Specify -version=WindowsXP");
+
 		import win32.winnt;
 		import win32.winbase;
 
@@ -388,7 +391,7 @@ version (Windows)
 {
 	// avoid Unicode limitations of DigitalMars C runtime
 
-	struct FileEx
+	struct FileExImpl()
 	{
 		import win32.winnt;
 		import win32.winbase;
@@ -398,7 +401,7 @@ version (Windows)
 			return toUTF16z(longPath(fn));
 		}
 
-		HANDLE h;
+		void* h;
 
 		void openExisting(string fn)
 		{
@@ -427,6 +430,8 @@ version (Windows)
 			return buffer[0..bytesRead];
 		}
 	}
+
+	auto FileEx()(string fn) { return FileExImpl!()(fn); }
 }
 else
 	alias std.file.File FileEx; // only partial compatibility
