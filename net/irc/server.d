@@ -41,6 +41,7 @@ class IrcServer
 	string[] motd;
 	string chanTypes = "#&";
 	SysTime creationTime;
+	string operPassword;
 
 	/// Channels can't be created by users, and don't disappear when they're empty
 	bool staticChannels;
@@ -223,15 +224,11 @@ class IrcServer
 								return setUserModes(parameters);
 							}
 							else
-							{
-								string modeString = "+";
-								foreach (c, on; modeFlags)
-									if (on)
-										modeString ~= c;
-								return sendReply(Reply.RPL_UMODEIS, modeString, null);
-							}
+								return sendUserModes(client);
 						}
 					case "LIST":
+						if (!registered)
+							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
 						foreach (channel; server.channels)
 							if (!(channel.modeFlags['p'] || channel.modeFlags['s']) || nickname.normalized in channel.members)
 								sendReply(Reply.RPL_LIST, channel.name, channel.members.length.text, channel.topic ? channel.topic : "");
@@ -282,11 +279,35 @@ class IrcServer
 						sendReply(Reply.RPL_ENDOFWHO, mask ? mask : "*", "End of WHO list");
 						break;
 					}
+					case "TOPIC":
+					{
+						if (!registered)
+							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
+						if (parameters.length < 1)
+							return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
+						auto target = parameters.unshift;
+						auto pchannel = target.normalized in server.channels;
+						if (!pchannel)
+							return sendReply(Reply.ERR_NOSUCHNICK, target, "No such nick/channel");
+						auto channel = *pchannel;
+						auto pmember = nickname.normalized in channel.members;
+						if (!pmember)
+							return sendReply(Reply.ERR_NOTONCHANNEL, target, "You're not on that channel");
+						if (!parameters.length)
+							return sendTopic(channel);
+						if (channel.modeFlags['t'] && (pmember.modes & Channel.Member.Modes.op) == 0)
+							return sendReply(Reply.ERR_CHANOPRIVSNEEDED, target, "You're not channel operator");
+						return setChannelTopic(channel, parameters[0]);
+					}
 					case "ISON":
+						if (!registered)
+							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
 						sendReply(Reply.RPL_ISON, parameters.filter!(nick => nick.normalized in server.nicknames).join(" "));
 						break;
 					case "USERHOST":
 					{
+						if (!registered)
+							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
 						string[] replies;
 						foreach (nick; parameters)
 						{
@@ -341,6 +362,20 @@ class IrcServer
 								sendToClient(*pclient, command, message);
 							}
 						}
+						break;
+					case "OPER":
+						if (!registered)
+							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
+						if (parameters.length < 1)
+							return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
+						if (!server.operPassword || parameters[$-1] != server.operPassword)
+							return sendReply(Reply.ERR_PASSWDMISMATCH, "Password incorrect");
+						modeFlags['o'] = true;
+						sendReply(Reply.RPL_YOUREOPER, "You are now an IRC operator");
+						sendUserModes(this);
+						foreach (channel; server.channels)
+							if (nickname.normalized in channel.members)
+								setChannelMode(channel, nickname, Channel.Member.Mode.op, true);
 						break;
 
 					default:
@@ -457,6 +492,23 @@ class IrcServer
 				member.client.sendCommand(this, "JOIN", channel.name);
 			sendTopic(channel);
 			sendNames(channel);
+			auto pmember = nickname.normalized in channel.members;
+			// Sync OPER status with (initial) channel op status
+			if (server.staticChannels || modeFlags['o'])
+				setChannelMode(channel, nickname, Channel.Member.Mode.op, modeFlags['o']);
+		}
+
+		// For server-imposed mode changes.
+		void setChannelMode(Channel channel, string nickname, Channel.Member.Mode mode, bool value)
+		{
+			auto pmember = nickname.normalized in channel.members;
+			if (pmember.modeSet(mode) == value)
+				return;
+
+			pmember.setMode(Channel.Member.Mode.op, value);
+			auto c = ChannelModes.memberModeChars[mode];
+			foreach (member; channel.members)
+				member.client.sendCommand(server.hostname, "MODE", channel.name, [value ? '+' : '-', c], nickname, null);
 		}
 
 		void part(Channel channel)
@@ -536,20 +588,27 @@ class IrcServer
 			sendReply(endReply, channel.name, endText);
 		}
 
+		void setChannelTopic(Channel channel, string topic)
+		{
+			channel.topic = topic;
+			foreach (ref member; channel.members)
+				member.client.sendCommand(this, "TOPIC", channel.name, topic);
+		}
+
 		void setChannelModes(Channel channel, string[] modes)
 		{
-			string[bool] effectedChars;
-			string[][bool] effectedParams;
+			string[2] effectedChars;
+			string[][2] effectedParams;
 
 			scope(exit) // Broadcast effected options
 			{
 				string[] parameters;
-				foreach (adding; [false, true])
+				foreach (adding; 0..2)
 					if (effectedChars[adding].length)
 						parameters ~= [(adding ? "+" : "-") ~ effectedChars[adding]] ~ effectedParams[adding];
 				if (parameters.length)
 				{
-					parameters = ["MODE", channel.name] ~ parameters;
+					parameters = ["MODE", channel.name] ~ parameters ~ null;
 					foreach (ref member; channel.members)
 						member.client.sendCommand(this, parameters);
 				}
@@ -588,14 +647,9 @@ class IrcServer
 							if (!pmember)
 								{ sendReply(Reply.ERR_USERNOTINCHANNEL, memberName, channel.name, "They aren't on that channel"); continue; }
 							auto mode = ChannelModes.memberModes[c];
-							auto modeMask = 1 << mode;
-							auto isSet = (pmember.modes & modeMask) != 0;
-							if (isSet != adding)
+							if (pmember.modeSet(mode) != adding)
 							{
-								if (adding)
-									pmember.modes |= modeMask;
-								else
-									pmember.modes &= ~modeMask;
+								pmember.setMode(mode, adding);
 								effectedChars[adding] ~= c;
 								effectedParams[adding] ~= memberName;
 							}
@@ -631,6 +685,7 @@ class IrcServer
 								auto str = modes.unshift;
 								if (channel.modeStrings[c] == str)
 									continue;
+								channel.modeStrings[c] = str;
 								effectedChars[adding] ~= c;
 								effectedParams[adding] ~= str;
 							}
@@ -651,6 +706,7 @@ class IrcServer
 								auto num = numText.to!long;
 								if (channel.modeNumbers[c] == num)
 									continue;
+								channel.modeNumbers[c] = num;
 								effectedChars[adding] ~= c;
 								effectedParams[adding] ~= numText;
 							}
@@ -686,10 +742,20 @@ class IrcServer
 							sendReply(Reply.ERR_UMODEUNKNOWNFLAG, "Unknown MODE flag");
 							break;
 						case UserModes.Type.flag:
-							modeFlags[c] = adding;
+							if (UserModes.isSettable[c])
+								modeFlags[c] = adding;
 							break;
 					}
 			}
+		}
+
+		void sendUserModes(Client client)
+		{
+			string modeString = "+";
+			foreach (c, on; modeFlags)
+				if (on)
+					modeString ~= c;
+			return sendReply(Reply.RPL_UMODEIS, modeString, null);
 		}
 
 		void sendCommand(Client from, string[] parameters...)
@@ -755,6 +821,7 @@ class IrcServer
 
 			enum Modes
 			{
+				none  = 0,
 				op    = 1 << Mode.op,
 				voice = 1 << Mode.voice,
 
@@ -763,6 +830,16 @@ class IrcServer
 
 			Client client;
 			Modes modes;
+
+			bool modeSet(Mode mode) { return (modes & (1 << mode)) != 0; }
+			void setMode(Mode mode, bool value)
+			{
+				auto modeMask = 1 << mode;
+				if (value)
+					modes |= modeMask;
+				else
+					modes &= ~modeMask;
+			}
 
 			string modeChar()
 			{
@@ -784,7 +861,8 @@ class IrcServer
 
 		void add(Client client)
 		{
-			members[client.nickname.normalized] = Member(client);
+			auto modes = members.length ? Member.Modes.none : Member.Modes.op;
+			members[client.nickname.normalized] = Member(client, modes);
 		}
 
 		void remove(Client client)
@@ -926,7 +1004,7 @@ static:
 
 	static this()
 	{
-		foreach (c; "i")
+		foreach (c; "io")
 			modeTypes[c] = Type.flag;
 		foreach (c; "i")
 			isSettable[c] = true;
