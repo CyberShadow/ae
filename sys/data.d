@@ -520,7 +520,13 @@ final class DataWrapper
 		else
 		version(Posix)
 		{
-			auto p = mmap(null, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+			auto mapFlags = MAP_PRIVATE;
+			version(Linux)
+			{
+				import core.sys.linux.sys.mman;
+				mapFlags |= MAP_ANON;
+			}
+			auto p = mmap(null, size, PROT_READ | PROT_WRITE, mapFlags, -1, 0);
 			return (p == MAP_FAILED) ? null : p;
 		}
 		else
