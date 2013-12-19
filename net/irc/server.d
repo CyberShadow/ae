@@ -100,7 +100,7 @@ class IrcServer
 				if (!parameters.length)
 					return;
 
-				auto command = parameters.unshift.toUpper();
+				auto command = parameters.shift.toUpper();
 
 				switch (command)
 				{
@@ -195,7 +195,7 @@ class IrcServer
 							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
 						if (parameters.length < 1)
 							return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
-						auto target = parameters.unshift;
+						auto target = parameters.shift;
 						if (server.isChannelName(target))
 						{
 							auto pchannel = target.normalized in server.channels;
@@ -285,7 +285,7 @@ class IrcServer
 							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
 						if (parameters.length < 1)
 							return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
-						auto target = parameters.unshift;
+						auto target = parameters.shift;
 						auto pchannel = target.normalized in server.channels;
 						if (!pchannel)
 							return sendReply(Reply.ERR_NOSUCHNICK, target, "No such nick/channel");
@@ -616,7 +616,7 @@ class IrcServer
 
 			while (modes.length)
 			{
-				auto chars = modes.unshift;
+				auto chars = modes.shift;
 
 				bool adding = true;
 				foreach (c; chars)
@@ -642,7 +642,7 @@ class IrcServer
 						{
 							if (!modes.length)
 								{ sendReply(Reply.ERR_NEEDMOREPARAMS, "MODE", "Not enough parameters"); continue; }
-							auto memberName = modes.unshift;
+							auto memberName = modes.shift;
 							auto pmember = memberName.normalized in channel.members;
 							if (!pmember)
 								{ sendReply(Reply.ERR_USERNOTINCHANNEL, memberName, channel.name, "They aren't on that channel"); continue; }
@@ -659,7 +659,7 @@ class IrcServer
 						{
 							if (!modes.length)
 								{ sendReply(Reply.ERR_NEEDMOREPARAMS, "MODE", "Not enough parameters"); continue; }
-							auto mask = modes.unshift;
+							auto mask = modes.shift;
 							if (adding)
 							{
 								if (channel.modeMasks[c].canFind(mask))
@@ -682,7 +682,7 @@ class IrcServer
 							{
 								if (!modes.length)
 									{ sendReply(Reply.ERR_NEEDMOREPARAMS, "MODE", "Not enough parameters"); continue; }
-								auto str = modes.unshift;
+								auto str = modes.shift;
 								if (channel.modeStrings[c] == str)
 									continue;
 								channel.modeStrings[c] = str;
@@ -702,7 +702,7 @@ class IrcServer
 							{
 								if (!modes.length)
 									{ sendReply(Reply.ERR_NEEDMOREPARAMS, "MODE", "Not enough parameters"); continue; }
-								auto numText = modes.unshift;
+								auto numText = modes.shift;
 								auto num = numText.to!long;
 								if (channel.modeNumbers[c] == num)
 									continue;
@@ -726,7 +726,7 @@ class IrcServer
 		{
 			while (modes.length)
 			{
-				auto chars = modes.unshift;
+				auto chars = modes.shift;
 
 				bool adding = true;
 				foreach (c; chars)
@@ -1011,4 +1011,4 @@ static:
 	}
 }
 
-T unshift(T)(ref T[] arr) { T result = arr[0]; arr = arr[1..$]; return result; }
+T shift(T)(ref T[] arr) { T result = arr[0]; arr = arr[1..$]; return result; }
