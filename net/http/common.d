@@ -79,7 +79,7 @@ public:
 		_resource = value;
 
 		// applies to both Client/Server as some clients put a full URL in the GET line instead of using a "Host" header
-		if (_resource.length>7 && _resource[0 .. 7] == "http://")
+		if (_resource.length>7 && icmp(_resource[0 .. 7], "http://")==0)
 		{
 			auto pathstart = _resource[7 .. $].indexOf('/');
 			if (pathstart == -1)
