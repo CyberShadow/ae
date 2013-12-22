@@ -486,27 +486,60 @@ unittest
 
 // ---------------------------------------
 
+alias ubyte* RemoteAddress;
+
+void readProcessMemory(HANDLE h, RemoteAddress addr, void[] data)
+{
+	size_t c;
+	wenforce(ReadProcessMemory(h, addr, data.ptr, data.length, &c), "ReadProcessMemory");
+	enforce(c==data.length, "Not all data read");
+}
+
+void writeProcessMemory(HANDLE h, RemoteAddress addr, const(void)[] data)
+{
+	size_t c;
+	wenforce(WriteProcessMemory(h, addr, data.ptr, data.length, &c), "WriteProcessMemory");
+	enforce(c==data.length, "Not all data written");
+}
+
+void readProcessVar(T)(HANDLE h, RemoteAddress addr, T* v)
+{
+	h.readProcessMemory(addr, v[0..1]);
+}
+
+T readProcessVar(T)(HANDLE h, RemoteAddress addr)
+{
+	T v;
+	h.readProcessVar(addr, &v);
+	return v;
+}
+
+void writeProcessVar(T)(HANDLE h, RemoteAddress addr, auto ref T v)
+{
+	h.writeProcessMemory(addr, (&v)[0..1]);
+}
+
 struct RemoteProcessVarImpl(T)
 {
 	T local;
 	@property T* localPtr() { return &local; }
-	T* remotePtr;
+	RemoteAddress remotePtr;
 	HANDLE hProcess;
 
 	this(HANDLE hProcess)
 	{
 		this.hProcess = hProcess;
-		remotePtr = cast(T*)wenforce(VirtualAllocEx(hProcess, null, T.sizeof, MEM_COMMIT, PAGE_READWRITE));
+		remotePtr = cast(RemoteAddress)wenforce(VirtualAllocEx(hProcess, null, T.sizeof, MEM_COMMIT, PAGE_READWRITE));
 	}
 
 	void read()
 	{
-		wenforce(ReadProcessMemory (hProcess, remotePtr, localPtr, T.sizeof, null));
+		readProcessMemory (hProcess, remotePtr, localPtr[0..1]);
 	}
 
 	void write()
 	{
-		wenforce(WriteProcessMemory(hProcess, remotePtr, localPtr, T.sizeof, null));
+		writeProcessMemory(hProcess, remotePtr, localPtr[0..1]);
 	}
 
 	~this()
