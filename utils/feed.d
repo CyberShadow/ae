@@ -26,7 +26,7 @@ struct AtomFeedWriter
 	private void putTag(string name)(string content)
 	{
 		xml.startTag!name();
-		xml.putText(content);
+		xml.text(content);
 		xml.endTag!name();
 	}
 
@@ -79,7 +79,7 @@ struct AtomFeedWriter
 		xml.startTagWithAttributes!"content"();
 		xml.addAttribute!"type"("html");
 		xml.endAttributes();
-		xml.putText(contentHtml);
+		xml.text(contentHtml);
 		xml.endTag!"content"();
 
 		xml.endTag!"entry"();
