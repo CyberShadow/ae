@@ -521,7 +521,7 @@ final class DataWrapper
 		version(Posix)
 		{
 			auto mapFlags = MAP_PRIVATE;
-			version(Linux)
+			version(linux)
 			{
 				import core.sys.linux.sys.mman;
 				mapFlags |= MAP_ANON;
