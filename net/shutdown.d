@@ -54,6 +54,7 @@ final class ShutdownSocket : ClientSocket
 		pinger = pair[1];
 		this.handleReadData = &onReadData;
 		addShutdownHandler(&onShutdown); // for manual shutdown calls
+		this.daemon = true;
 	}
 
 	void ping()

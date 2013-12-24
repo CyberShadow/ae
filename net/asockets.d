@@ -274,12 +274,15 @@ else // Use select
 				}
 
 				sockcount = 0;
+				bool haveActive;
 				debug (ASOCKETS) writeln("Populating sets");
 				foreach (GenericSocket conn; sockets)
 				{
 					if (!conn.socket)
 						continue;
 					sockcount++;
+					if (!conn.daemon)
+						haveActive = true;
 
 					debug (ASOCKETS) writef("\t%s:", cast(void*)conn);
 					if (conn.notifyRead)
@@ -296,7 +299,7 @@ else // Use select
 					debug (ASOCKETS) writeln();
 				}
 				debug (ASOCKETS) writefln("Waiting (%d sockets, %s timer events)...", sockcount, mainTimer.isWaiting() ? "with" : "no");
-				if (sockcount == 0 && !mainTimer.isWaiting())
+				if (!haveActive && !mainTimer.isWaiting())
 				{
 					debug (ASOCKETS) writeln("No more sockets or timer events, exiting loop.");
 					break;
@@ -426,6 +429,10 @@ protected:
 public:
 	/// allow getting the address of connections that are already disconnected
 	private Address cachedLocalAddress, cachedRemoteAddress;
+
+	/// Don't block the process from exiting.
+	/// TODO: Not implemented with libev
+	bool daemon;
 
 	final @property Address localAddress()
 	{
