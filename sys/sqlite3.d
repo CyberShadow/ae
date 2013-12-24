@@ -169,9 +169,19 @@ final class SQLite
 				int res = 0;
 				while (stmt.step())
 				{
-					U columns;
-					stmt.columns(columns);
-					res = dg(columns);
+					static if (U.length == 1 && is(U[0] V : V[string]))
+					{
+						U[0] result;
+						foreach (c; 0..stmt.columnCount())
+							result[stmt.columnName(c)] = stmt.column!V(c);
+						res = dg(result);
+					}
+					else
+					{
+						U columns;
+						stmt.columns(columns);
+						res = dg(columns);
+					}
 					if (res)
 					{
 						stmt.reset();
