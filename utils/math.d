@@ -13,7 +13,7 @@
 
 module ae.utils.math;
 
-public import std.algorithm : min, max, abs, swap;
+public import std.algorithm : min, max, swap;
 public import std.math;
 import std.traits : Signed, Unsigned;
 import core.bitop : bswap;
