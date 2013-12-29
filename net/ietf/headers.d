@@ -24,11 +24,11 @@ struct Headers
 	// All keys are internally upper-case.
 	private string[][string] headers;
 
+	/// If multiple headers with this name are present,
+	/// only the first one is returned.
 	string opIndex(string name)
 	{
-		auto values = headers[toUpper(name)];
-		enforce(values.length == 1, "Reading single value of repeating header " ~ name);
-		return values[0];
+		return headers[toUpper(name)][0];
 	}
 
 	string opIndexAssign(string value, string name)
@@ -84,6 +84,11 @@ struct Headers
 	{
 		auto pvalue = key in this;
 		return pvalue ? *pvalue : def;
+	}
+
+	string[] getAll(string key)
+	{
+		return headers[toUpper(key)];
 	}
 
 	/// Warning: discards repeating headers
