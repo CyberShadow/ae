@@ -322,13 +322,7 @@ else // Use select
 				}
 				else
 				if (mainTimer.isWaiting())
-				{
-					auto duration = mainTimer.getRemainingTime().to!("usecs", long)();
-					if (duration > int.max)
-						duration = int.max;
-					debug (ASOCKETS) writeln("Wait duration: ", duration, " usecs");
-					events = Socket.select(readset, writeset, errorset, duration);
-				}
+					events = Socket.select(readset, writeset, errorset, to!Duration(mainTimer.getRemainingTime()));
 				else
 					events = Socket.select(readset, writeset, errorset);
 
