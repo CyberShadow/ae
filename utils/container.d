@@ -454,7 +454,7 @@ mixin template HashTable(K, V, uint SIZE, alias ALLOCATOR, alias HASHFUNC="k")
 	alias HashTableItem!(K, V) Item;
 	Item*[SIZE] items;
 
-	deprecated V* get(in K k) { return k in this; }
+	V* get(in K k) { return k in this; } // Issue 11842
 
 	V* opIn_r(in K k)
 	{
