@@ -183,6 +183,33 @@ T queuePop(T)(ref T[] arr)
 T shift(T)(ref T[] arr) { T result = arr[0]; arr = arr[1..$]; return result; }
 void unshift(T)(ref T[] arr, T value) { arr.insertInPlace(0, value); }
 
+/// If arr starts with prefix, slice it off and return true.
+/// Otherwise leave arr unchaned and return false.
+bool eat(T)(ref T[] arr, T[] prefix)
+{
+	if (arr.startsWith(prefix))
+	{
+		arr = arr[prefix.length..$];
+		return true;
+	}
+	return false;
+}
+
+/// Return arr until the first instance of separator (excluding it),
+/// and set arr to the remaining part (again, excluding the separator).
+/// Throws if the separator is not found.
+T[] eatUntil(T)(ref T[] arr, T[] separator)
+{
+	import std.exception;
+	import std.string;
+
+	auto p = arr.countUntil(separator);
+	enforce(p >= 0, "%s not found in %s".format(separator, arr));
+	auto result = arr[0..p];
+	arr = arr[p+separator.length..$];
+	return result;
+}
+
 // ***************************************************************************
 
 import std.algorithm;
