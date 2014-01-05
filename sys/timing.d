@@ -302,16 +302,16 @@ static this()
 	mainTimer = new Timer();
 }
 
-TimerTask setTimeout(void delegate() handler, TickDuration delay)
+TimerTask setTimeout(Args...)(void delegate(Args) handler, TickDuration delay, Args args)
 {
-	auto task = new TimerTask(delay, (Timer timer, TimerTask task) { handler(); });
+	auto task = new TimerTask(delay, (Timer timer, TimerTask task) { handler(args); });
 	mainTimer.add(task);
 	return task;
 }
 
-TimerTask setInterval(void delegate() handler, TickDuration delay)
+TimerTask setInterval(Args...)(void delegate() handler, TickDuration delay, Args args)
 {
-	auto task = new TimerTask(delay, (Timer timer, TimerTask task) { mainTimer.add(task); handler(); });
+	auto task = new TimerTask(delay, (Timer timer, TimerTask task) { mainTimer.add(task); handler(args); });
 	mainTimer.add(task);
 	return task;
 }
