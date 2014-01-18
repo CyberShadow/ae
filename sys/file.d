@@ -386,6 +386,14 @@ version (Windows)
 		enforce(CreateHardLinkW(toUTF16z(dst), toUTF16z(src), null), new FileException(dst));
 	}
 }
+version (Posix)
+{
+	void hardLink(string src, string dst)
+	{
+		import core.sys.posix.unistd;
+		enforce(link(toUTFz!(const char*)(src), toUTFz!(const char*)(dst)) == 0, "link() failed: " ~ dst);
+	}
+}
 
 version (Windows)
 {
