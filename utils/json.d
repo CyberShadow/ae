@@ -569,12 +569,14 @@ private template doSkipSerialize(T, string member)
 	enum bool doSkipSerialize = __traits(hasMember, T, member ~ "_nonSerialized");
 }
 
+version(none) // https://d.puremagic.com/issues/show_bug.cgi?id=11946
 unittest
 {
 	struct Point { int x, y, z; mixin NonSerialized!(x, z); }
 	assert(jsonParse!Point(toJson(Point(1, 2, 3))) == Point(0, 2, 0));
 }
 
+version(none) // https://d.puremagic.com/issues/show_bug.cgi?id=11946
 unittest
 {
 	enum En { one, two }
