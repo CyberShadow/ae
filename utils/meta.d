@@ -39,7 +39,7 @@ template RangeTupleImpl(size_t N, R...)
 }
 
 /// Generate a tuple containing integers from 0 to N-1.
-/// Useful for static loop unrolling.
+/// Useful for static loop unrolling. (staticIota)
 template RangeTuple(size_t N)
 {
 	alias RangeTupleImpl!(N, ValueTuple!()) RangeTuple;
@@ -128,6 +128,16 @@ string[] toArray(Args...)()
 	foreach (i, _ ; typeof(Args))
 		args ~= Args[i].stringof;
 	return args;
+}
+
+/// Returns the index of fun's parameter called "name",
+/// or asserts if the parameter is not found.
+size_t findParameter(alias fun, string name)()
+{
+	foreach (i, param; ParameterIdentifierTuple!fun)
+		if (param == name)
+			return i;
+	assert(false, "Function " ~ __traits(identifier, fun) ~ " doesn't have a parameter called " ~ name);
 }
 
 // ************************************************************************
