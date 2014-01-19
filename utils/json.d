@@ -16,6 +16,7 @@ module ae.utils.json;
 import std.exception;
 import std.string;
 import std.traits;
+import std.typecons;
 
 import ae.utils.exception;
 import ae.utils.meta;
@@ -28,7 +29,7 @@ struct CustomJsonWriter(WRITER)
 	/// You can set this to something to e.g. write to another buffer.
 	WRITER output;
 
-	void putString(string s)
+	void putString(in char[] s)
 	{
 		// TODO: escape Unicode characters?
 		// TODO: Handle U+2028 and U+2029 ( http://timelessrepo.com/json-isnt-a-javascript-subset )
@@ -52,7 +53,7 @@ struct CustomJsonWriter(WRITER)
 		static if (is(T == enum))
 			put(to!string(v));
 		else
-		static if (is(T : string))
+		static if (is(T : const(char)[]))
 			putString(v);
 		else
 		static if (is(T : long))
@@ -66,11 +67,33 @@ struct CustomJsonWriter(WRITER)
 				put(v[0]);
 				foreach (i; v[1..$])
 				{
-					output.put(",");
+					output.put(',');
 					put(i);
 				}
 			}
 			output.put(']');
+		}
+		else
+		static if (isTuple!T)
+		{
+			// TODO: serialize as object if tuple has names
+			enum N = T.expand.length;
+			static if (N == 0)
+				return;
+			else
+			static if (N == 1)
+				put(v.expand[0]);
+			else
+			{
+				output.put('[');
+				foreach (n; RangeTuple!N)
+				{
+					static if (n)
+						output.put(',');
+					put(v.expand[n]);
+				}
+				output.put(']');
+			}
 		}
 		else
 		static if (is(T==struct))
@@ -180,6 +203,10 @@ unittest
 	assert(toJson(x) == `{"a":17,"b":"aoeu"}`);
 	int[] arr = [1,5,7];
 	assert(toJson(arr) == `[1,5,7]`);
+
+	assert(toJson(tuple()) == ``);
+	assert(toJson(tuple(42)) == `42`);
+	assert(toJson(tuple(42, "banana")) == `[42,"banana"]`);
 }
 
 // ************************************************************************
@@ -214,6 +241,8 @@ private struct JsonParser
 		enforce(p < s.length);
 		return s[p];
 	}
+
+	@property bool eof() { return p == s.length; }
 
 	void skipWhitespace()
 	{
@@ -250,6 +279,9 @@ private struct JsonParser
 			return result;
 		}
 		else
+		static if (isTuple!T)
+			return readTuple!T();
+		else
 		static if (is(T==struct))
 			return readObject!(T)();
 		else
@@ -260,6 +292,30 @@ private struct JsonParser
 			return readPointer!T();
 		else
 			static assert(0, "Can't decode " ~ T.stringof ~ " from JSON");
+	}
+
+	auto readTuple(T)()
+	{
+		// TODO: serialize as object if tuple has names
+		enum N = T.expand.length;
+		static if (N == 0)
+			return T();
+		else
+		static if (N == 1)
+			return T(read!(typeof(T.expand[0])));
+		else
+		{
+			T v;
+			expect('[');
+			foreach (n, ref f; v.expand)
+			{
+				static if (n)
+					expect(',');
+				f = read!(typeof(f));
+			}
+			expect(']');
+			return v;
+		}
 	}
 
 	string readString()
@@ -375,7 +431,11 @@ private struct JsonParser
 			s = readString();
 		else
 			while (c=='-' || (c>='0' && c<='9'))
-				s ~= c, p++, c=peek();
+			{
+				s ~= c, p++;
+				if (eof) break;
+				c=peek();
+			}
 		static if (is(T==byte))
 			return to!byte(s);
 		else
@@ -536,6 +596,10 @@ unittest
 	auto s2 = jsonParse!S(toJson(s));
 	//assert(s == s2); // Issue 3789
 	assert(s.i == s2.i && s.arr == s2.arr && s.p0 is s2.p0 && *s.p1 == *s2.p1);
+
+	assert(jsonParse!(Tuple!())(``) == tuple());
+	assert(jsonParse!(Tuple!int)(`42`) == tuple(42));
+	assert(jsonParse!(Tuple!(int, string))(`[42, "banana"]`) == tuple(42, "banana"));
 }
 
 // ************************************************************************
@@ -594,8 +658,8 @@ struct JSONName { string name; }
 
 private template getJsonName(S, string FIELD)
 {
-	static if (hasAttribute!(JSONName, mixin("S."~FIELD)))
-		enum getJsonName = getAttribute!(JSONName, mixin("S."~FIELD)).name;
+	static if (hasAttribute!(JSONName, __traits(getMember, S, FIELD)))
+		enum getJsonName = getAttribute!(JSONName, __traits(getMember, S, FIELD)).name;
 	else
 		enum getJsonName = FIELD;
 }
