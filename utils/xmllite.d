@@ -366,6 +366,8 @@ class XmlDocument : XmlNode
 	}
 }
 
+XmlDocument xmlParse(T)(T source) { return new XmlDocument(source); }
+
 private:
 
 char peek(Stream s, int n=1)
