@@ -77,7 +77,7 @@ struct CustomJsonWriter(WRITER)
 		static if (isTuple!T)
 		{
 			// TODO: serialize as object if tuple has names
-			enum N = T.expand.length;
+			enum N = v.expand.length;
 			static if (N == 0)
 				return;
 			else
