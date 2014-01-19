@@ -32,3 +32,26 @@ struct Persistent(T, string filename)
 		std.file.write(filename, toJson(value));
 	}
 }
+
+/// std.functional.memoize variant with automatic persistence
+template persistentMemoize(alias fun, string filename)
+{
+	import std.traits;
+	import std.typecons;
+	import ae.utils.json;
+
+	ReturnType!fun persistentMemoize(ParameterTypeTuple!fun args)
+	{
+		alias ReturnType!fun[string] AA;
+		static Persistent!(AA, filename) memo;
+		string key;
+		static if (args.length==1 && is(typeof(args[0]) : string))
+			key = args[0];
+		else
+			key = toJson(tuple(args));
+		auto p = key in memo;
+		if (p) return *p;
+		auto r = fun(args);
+		return memo[key] = r;
+	}
+}
