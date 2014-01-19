@@ -388,7 +388,7 @@ version (Windows)
 }
 version (Posix)
 {
-	void hardLink(string src, string dst)
+	void hardLink()(string src, string dst)
 	{
 		import core.sys.posix.unistd;
 		enforce(link(toUTFz!(const char*)(src), toUTFz!(const char*)(dst)) == 0, "link() failed: " ~ dst);
@@ -479,4 +479,38 @@ void[] readFile(File f)
 		result ~= readBuffer;
 	}
 	return result;
+}
+
+// ****************************************************************************
+
+import std.process : thisProcessID;
+import std.traits;
+import ae.utils.meta;
+
+/// Wrap an operation which creates a file or directory,
+/// so that it is created safely and, for files, atomically
+/// (by performing the underlying operation to a temporary
+/// location, then renaming the completed file/directory to
+/// the actual target location). targetName specifies the name
+/// of the parameter containing the target file/directory.
+auto safeUpdate(alias impl, string targetName = "target")(ParameterTypeTuple!impl args)
+{
+	enum targetIndex = findParameter!(impl, targetName);
+	auto target = args[targetIndex];
+	auto temp = "%s.%s.temp".format(target, thisProcessID);
+	if (temp.exists) temp.remove();
+	scope(failure) if (temp.exists) temp.remove();
+	scope(success) rename(temp, target);
+	args[targetIndex] = temp;
+	return impl(args);
+}
+
+/// Wrap an operation so that it is skipped entirely
+/// if the target already exists. Implies safeUpdate.
+void obtainUsing(alias impl, string targetName = "target")(ParameterTypeTuple!impl args)
+{
+	auto target = args[findParameter!(impl, targetName)];
+	if (target.exists)
+		return;
+	safeUpdate!(impl, targetName)(args);
 }
