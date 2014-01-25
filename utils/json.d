@@ -217,10 +217,10 @@ import std.conv;
 
 import ae.utils.text;
 
-private struct JsonParser
+private struct JsonParser(C)
 {
-	string s;
-	int p;
+	C[] s;
+	size_t p;
 
 	char next()
 	{
@@ -582,9 +582,9 @@ private struct JsonParser
 	}
 }
 
-T jsonParse(T)(string s)
+T jsonParse(T, C)(C[] s)
 {
-	auto parser = JsonParser(s);
+	auto parser = JsonParser!C(s);
 	mixin(exceptionContext(q{format("Error at position %d", parser.p)}));
 	return parser.read!T();
 }
@@ -596,6 +596,7 @@ unittest
 	auto s2 = jsonParse!S(toJson(s));
 	//assert(s == s2); // Issue 3789
 	assert(s.i == s2.i && s.arr == s2.arr && s.p0 is s2.p0 && *s.p1 == *s2.p1);
+	jsonParse!S(toJson(s).dup);
 
 	assert(jsonParse!(Tuple!())(``) == tuple());
 	assert(jsonParse!(Tuple!int)(`42`) == tuple(42));
