@@ -13,9 +13,12 @@
 
 module ae.sys.osrng;
 
+import std.conv : to;
+
 version (Windows)
 {
 	import win32.wincrypt;
+	import win32.windef;
 	import ae.sys.windows;
 
 	void genRandom(ubyte[] buf)
@@ -23,7 +26,7 @@ version (Windows)
 		HCRYPTPROV hCryptProv;
 		wenforce(CryptAcquireContext(&hCryptProv, null, null, PROV_RSA_FULL, 0), "CryptAcquireContext");
 		scope(exit) wenforce(CryptReleaseContext(hCryptProv, 0), "CryptReleaseContext");
-		wenforce(CryptGenRandom(hCryptProv, buf.length, buf.ptr), "CryptGenRandom");
+		wenforce(CryptGenRandom(hCryptProv, buf.length.to!DWORD, buf.ptr), "CryptGenRandom");
 	}
 }
 else
