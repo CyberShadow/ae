@@ -264,7 +264,7 @@ bool[256] genTable(string COND)()
 {
 	import std.ascii;
 	bool[256] table;
-	foreach (c, ref b; table) b = mixin(COND);
+	foreach (uint c, ref b; table) b = mixin(COND);
 	return table;
 }
 
