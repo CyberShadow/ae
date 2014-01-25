@@ -29,11 +29,11 @@ version (Windows)
 
 		char[] as;
 		int readLen;
-		as.length = WideCharToMultiByte(0, 0, ws.ptr, ws.length, null, 0, null, null);
+		as.length = WideCharToMultiByte(0, 0, ws.ptr, ws.length.to!DWORD, null, 0, null, null);
 
 		if (as.length)
 		{
-			readLen = WideCharToMultiByte(0, 0, ws.ptr, ws.length, as.ptr, to!int(as.length), null, null);
+			readLen = WideCharToMultiByte(0, 0, ws.ptr, ws.length.to!DWORD, as.ptr, to!int(as.length), null, null);
 			wenforce(readLen == as.length, "WideCharToMultiByte");
 		}
 
@@ -69,7 +69,7 @@ version (Windows)
 			int ret;
 			do
 			{
-				ret = wenforce(GetClipboardFormatNameW(format, buf.ptr, buf.length), "GetClipboardFormatNameW");
+				ret = wenforce(GetClipboardFormatNameW(format, buf.ptr, buf.length.to!DWORD), "GetClipboardFormatNameW");
 			} while (ret == buf.length ? (buf.length *=2, true) : false);
 			return buf[0..ret].toUTF8();
 		}
@@ -113,7 +113,7 @@ version (Windows)
 		EmptyClipboard();
 		foreach (ref format; formats)
 		{
-			HGLOBAL hBuf = wenforce(GlobalAlloc(GMEM_MOVEABLE, format.data.length), "GlobalAlloc");
+			HGLOBAL hBuf = wenforce(GlobalAlloc(GMEM_MOVEABLE, format.data.length.to!DWORD), "GlobalAlloc");
 			scope(failure) wenforce(!GlobalFree(hBuf), "GlobalFree");
 			LPVOID buf = wenforce(GlobalLock(hBuf), "GlobalLock");
 			buf[0..format.data.length] = format.data[];
