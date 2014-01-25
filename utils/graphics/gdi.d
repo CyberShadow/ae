@@ -86,7 +86,7 @@ unittest
 	b.SelectObject(f);
 	b.SetBkColor(0xFFFFFF);
 	b.SetTextColor(0x0000FF);
-	b.TextOut(10, 10, str.ptr, str.length);
+	b.TextOutA(10, 10, str.ptr, str.length);
 
 	b.SetPixel(5, 5, 0xFF0000);
 	GdiFlush();
