@@ -206,6 +206,12 @@ public:
 		return contents is null;
 	}
 
+	bool opCast(T)()
+		if (is(T == bool))
+	{
+		return !empty;
+	}
+
 	@property size_t capacity() const
 	{
 		if (wrapper is null)
