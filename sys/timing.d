@@ -22,29 +22,34 @@ import std.exception;
 /// See https://github.com/D-Programming-Language/druntime/pull/711
 struct MonoTime
 {
-	enum max = MonoTime(TickDuration(ulong.max));
+	enum max = MonoTime(ulong.max);
 
 	static MonoTime currTime()
 	{
-		return MonoTime(TickDuration.currSystemTick());
+		return MonoTime(TickDuration.currSystemTick().hnsecs);
 	}
 
 	MonoTime opBinary(string op)(Duration d) const
 		if (op == "+")
 	{
-		return MonoTime(td + cast(TickDuration)d);
+		return MonoTime(hnsecs + d.total!"hnsecs");
 	}
 
 	Duration opBinary(string op)(MonoTime o) const
 		if (op == "-")
 	{
-		return cast(Duration)(td - o.td);
+		return dur!"hnsecs"(cast(long)(hnsecs - o.hnsecs));
 	}
 
-	int opCmp(MonoTime o) const { return td.opCmp(o.td); }
+	int opCmp(MonoTime o) const { return hnsecs == o.hnsecs ? 0 : hnsecs > o.hnsecs ? 1 : -1; }
 
 private:
-	TickDuration td;
+	ulong hnsecs;
+}
+
+unittest
+{
+	assert(MonoTime.init < MonoTime.max);
 }
 
 // TODO: allow customization of timing mechanism (alternatives to TickDuration)?
