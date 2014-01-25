@@ -34,7 +34,7 @@ private:
 	/// The socket this class wraps.
 	IrcSocket conn;
 	/// Whether the socket is connected
-	bool connected;
+	bool _connected;
 	/// The password used when logging in.
 	string password;
 
@@ -82,7 +82,7 @@ private:
 		if (log) log(format("* Disconnected (%s)", reason));
 		nickname = realname = null;
 		password = null;
-		connected = false;
+		_connected = false;
 		if (handleDisconnect)
 			handleDisconnect(this, reason, type);
 		channels = null;
@@ -151,7 +151,7 @@ private:
 		{
 		case "001":     // login successful
 			// VP 2006.12.13: changing 376 to 001, since 376 doesn't appear on all servers and it's safe to send commands after 001 anyway
-			connected = true;
+			_connected = true;
 			onEnter(nickname, username, hostname, realname); // add ourselves
 
 			if (handleConnect)
@@ -588,6 +588,11 @@ public:
 		conn.handleInactivity = &onSocketInactivity;
 		conn.handleTimeout = &onSocketTimeout;
 	}
+
+	/// Returns true if the connection was successfully established,
+	/// and we have authorized ourselves to the server
+	/// (and can thus join channels, send private messages, etc.)
+	@property bool connected() { return _connected; }
 
 	/// Start establishing a connection to the IRC network.
 	void connect(string nickname, string realname, string host, ushort port = 6667, string password = null)
