@@ -59,6 +59,12 @@ struct HashSet(T)
 
 	alias data this;
 
+	this(R)(R r)
+	{
+		foreach (k; r)
+			add(k);
+	}
+
 	void add(T k)
 	{
 		void[0] v;
