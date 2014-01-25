@@ -56,7 +56,7 @@ public:
 		open();
 	}
 
-	abstract Logger log(string str);
+	abstract void log(string str);
 
 	void rename(string name)
 	{
@@ -94,7 +94,6 @@ class RawFileLogger : Logger
 			reopen();
 			RawFileLogger.log(str);
 			close();
-			return this;
 		}
 	+/
 	}
@@ -110,12 +109,11 @@ class RawFileLogger : Logger
 		f.flush();
 	}
 
-	override Logger log(string str)
+	override void log(string str)
 	{
 		logStartLine();
 		logFragment(str);
 		logEndLine();
-		return this;
 	}
 
 protected:
@@ -149,7 +147,7 @@ class FileLogger : RawFileLogger
 		super(name, timestampedFilenames);
 	}
 
-	override Logger log(string str)
+	override void log(string str)
 	{
 		auto ut = getLogTime();
 		if (ut.day != currentDay)
@@ -171,8 +169,6 @@ class FileLogger : RawFileLogger
 		super.logFragment(buf[0..writer.ptr-buf.ptr]);
 		super.logFragment(str);
 		super.logEndLine();
-
-		return this;
 	}
 
 	override void close()
@@ -209,19 +205,18 @@ class ConsoleLogger : Logger
 		super(name);
 	}
 
-	override Logger log(string str)
+	override void log(string str)
 	{
 		string output = name ~ ": " ~ str ~ "\n";
 		stderr.write(output);
 		stderr.flush();
-		return this;
 	}
 }
 
 class NullLogger : Logger
 {
 	this() { super(null); }
-	override Logger log(string str) { return this; }
+	override void log(string str) {}
 }
 
 class MultiLogger : Logger
@@ -232,11 +227,10 @@ class MultiLogger : Logger
 		super(null);
 	}
 
-	override Logger log(string str)
+	override void log(string str)
 	{
 		foreach (logger; loggers)
 			logger.log(str);
-		return this;
 	}
 
 	override void rename(string name)
