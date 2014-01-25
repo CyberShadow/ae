@@ -40,7 +40,7 @@ public:
 
 private:
 	ServerSocket conn;
-	TickDuration timeout;
+	Duration timeout;
 
 private:
 	void onClose()
@@ -56,9 +56,9 @@ private:
 	}
 
 public:
-	this(TickDuration timeout = TickDuration.from!"seconds"(30))
+	this(Duration timeout = 30.seconds)
 	{
-		assert(timeout.length > 0);
+		assert(timeout > Duration.zero);
 		this.timeout = timeout;
 
 		conn = new ServerSocket();
@@ -209,7 +209,7 @@ private:
 			"", // align IP to tab
 			request.remoteHosts(remoteAddress.toAddrString())[0],
 			response ? text(response.status) : "-",
-			format("%9.2f ms", request.age.usecs / 1000f),
+			format("%9.2f ms", request.age.total!"usecs" / 1000f),
 			request.method,
 			formatAddress(localAddress, request.host) ~ request.resource,
 			response ? response.headers.get("Content-Type", "-") : "-",

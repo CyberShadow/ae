@@ -14,17 +14,18 @@
 module ae.utils.bench;
 
 import std.datetime;
+import ae.sys.timing;
 
-TickDuration lastTime;
+MonoTime lastTime;
 
 static this()
 {
-	lastTime = TickDuration.currSystemTick();
+	lastTime = MonoTime.currTime();
 }
 
-TickDuration elapsedTime()
+Duration elapsedTime()
 {
-	auto c = TickDuration.currSystemTick();
+	auto c = MonoTime.currTime();
 	auto d = c - lastTime;
 	lastTime = c;
 	return d;
@@ -33,9 +34,7 @@ TickDuration elapsedTime()
 struct TimedAction
 {
 	string name;
-	TickDuration duration;
-
-	@property long ticks() { return duration.length; }
+	Duration duration;
 }
 
 TimedAction[] timedActions;
@@ -80,7 +79,7 @@ void clearTimes()
 {
 	timedActions = null;
 	timeNameIndices = null;
-	lastTime = TickDuration.currSystemTick();
+	lastTime = MonoTime.currTime();
 }
 
 /// Retrieves current times and clears them.
@@ -92,13 +91,13 @@ string getTimes()()
 	string[] lines;
 	int maxLength;
 	foreach (action; timedActions)
-		if (action.ticks)
+		if (!action.duration.empty)
 			if (maxLength < action.name.length)
 				maxLength = action.name.length;
 	string fmt = format("%%%ds : %%10d (%%s)", maxLength);
 	foreach (action; timedActions)
-		if (action.ticks)
-			lines ~= format(fmt, action.name, action.ticks, dur!"hnsecs"(action.ticks));
+		if (!action.duration.empty)
+			lines ~= format(fmt, action.name, action.duration.total!"hnsecs", action.duration);
 	clearTimes();
 	return join(lines, "\n");
 }

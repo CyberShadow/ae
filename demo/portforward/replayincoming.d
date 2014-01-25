@@ -107,8 +107,7 @@ private:
 		void at(SysTime recordTime, void delegate() fn)
 		{
 			SysTime playTime = playStart + (recordTime - recordStart);
-			Duration remainingTime = playTime - Clock.currTime();
-			setTimeout(fn, TickDuration.from!"hnsecs"(remainingTime.total!"hnsecs"));
+			setTimeout(fn, playTime - Clock.currTime());
 		}
 	}
 }

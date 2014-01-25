@@ -144,9 +144,9 @@ public:
 	string[] cookies;
 
 public:
-	this(TickDuration timeout = TickDuration.from!"seconds"(30))
+	this(Duration timeout = 30.seconds)
 	{
-		assert(timeout.length > 0);
+		assert(timeout > Duration.zero);
 		conn = new ClientSocket();
 		conn.setIdleTimeout(timeout);
 		conn.handleConnect = &onConnect;

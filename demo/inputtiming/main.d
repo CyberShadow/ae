@@ -48,7 +48,7 @@ final class MyApplication : Application
 	enum SAMPLE_COLORS = [BGRX(0, 0, 255), BGRX(0, 255, 0)];
 
 	/// Some (precise) time value of the moment, in hnsecs.
-	@property long now() { return TickDuration.currSystemTick.to!("hnsecs", long); }
+	@property long now() { return MonoTime.currTime.to!("hnsecs", long); }
 
 	override void render(Renderer s)
 	{

@@ -57,13 +57,13 @@ class IrcSocket : LineBufferedSocket
 {
 	this()
 	{
-		super(TickDuration.from!"seconds"(90));
+		super(90.seconds);
 		init();
 	}
 
 	this(Socket conn)
 	{
-		super.setIdleTimeout(TickDuration.from!"seconds"(60));
+		super.setIdleTimeout(60.seconds);
 		super(conn);
 		init();
 	}

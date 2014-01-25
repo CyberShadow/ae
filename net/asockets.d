@@ -81,7 +81,7 @@ version(LIBEV)
 		}
 
 		ev_timer evTimer;
-		TickDuration lastNextEvent = Timer.NEVER;
+		MonoTime lastNextEvent = MonoTime.max;
 
 		extern(C)
 		static void timerCallback(ev_loop_t* l, ev_timer* w, int revents)
@@ -100,9 +100,9 @@ version(LIBEV)
 			if (force || lastNextEvent != nextEvent)
 			{
 				debug (ASOCKETS) writefln("Rescheduling timer. Was at %s, now at %s", lastNextEvent, nextEvent);
-				if (nextEvent == Timer.NEVER) // Stopping
+				if (nextEvent == MonoTime.max) // Stopping
 				{
-					if (lastNextEvent != Timer.NEVER)
+					if (lastNextEvent != MonoTime.max)
 						ev_timer_stop(ev_default_loop(0), &evTimer);
 				}
 				else
@@ -116,7 +116,7 @@ version(LIBEV)
 					}
 					ev_tstamp tstamp = remaining.to!("seconds", ev_tstamp)();
 					debug (ASOCKETS) writefln("remaining=%s, ev_tstamp=%s", remaining, tstamp);
-					if (lastNextEvent == Timer.NEVER) // Starting
+					if (lastNextEvent == MonoTime.max) // Starting
 					{
 						ev_timer_init(&evTimer, &timerCallback, 0., tstamp);
 						ev_timer_start(ev_default_loop(0), &evTimer);
@@ -310,11 +310,14 @@ else // Use select
 				{
 					version(Windows)
 					{
-						auto duration = mainTimer.getRemainingTime().to!("msecs", int)();
+						auto duration = mainTimer.getRemainingTime().total!"msecs"();
 						debug (ASOCKETS) writeln("Wait duration: ", duration, " msecs");
-						if (duration == 0)
+						if (duration <= 0)
 							duration = 1; // Avoid busywait
-						Sleep(duration);
+						else
+						if (duration > int.max)
+							duration = int.max;
+						Sleep(cast(int)duration);
 						events = 0;
 					}
 					else
@@ -710,7 +713,7 @@ public:
 				//debug writefln("[%s] Queueing disconnect: ", remoteAddress, reason);
 				assert(!disconnecting, "Attempting to disconnect on a disconnecting socket");
 				disconnecting = true;
-				setIdleTimeout(TickDuration.from!"seconds"(30));
+				setIdleTimeout(30.seconds);
 				return;
 			}
 			else
@@ -827,9 +830,9 @@ public:
 		mainTimer.add(idleTask);
 	}
 
-	final void setIdleTimeout(TickDuration duration)
+	final void setIdleTimeout(Duration duration)
 	{
-		assert(duration.length > 0);
+		assert(duration > Duration.zero);
 		if (idleTask is null)
 		{
 			idleTask = new TimerTask(duration);
@@ -1092,7 +1095,7 @@ public:
 	//override void setIdleTimeout(d_time duration) { assert(false); }
 	//override void markNonIdle() { assert(false); }
 
-	this(TickDuration idleTimeout)
+	this(Duration idleTimeout)
 	{
 		handleReadData = &onReadData;
 		super.setIdleTimeout(idleTimeout);
@@ -1101,7 +1104,7 @@ public:
 	this(Socket conn)
 	{
 		handleReadData = &onReadData;
-		super.setIdleTimeout(TickDuration.from!"seconds"(60));
+		super.setIdleTimeout(60.seconds);
 		super(conn);
 	}
 
@@ -1134,7 +1137,7 @@ unittest
 	void testTimer()
 	{
 		bool fired;
-		setTimeout({fired = true;}, TickDuration.from!"msecs"(10));
+		setTimeout({fired = true;}, 10.msecs);
 		socketManager.loop();
 		assert(fired);
 	}

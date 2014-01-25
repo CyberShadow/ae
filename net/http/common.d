@@ -38,16 +38,16 @@ public:
 	string protocolVersion = "1.0";
 	Headers headers;
 	Data[] data;
-	TickDuration creationTime;
+	SysTime creationTime;
 
 	this()
 	{
-		creationTime = TickDuration.currSystemTick();
+		creationTime = Clock.currTime();
 	}
 
-	@property TickDuration age()
+	@property Duration age()
 	{
-		return TickDuration.currSystemTick() - creationTime;
+		return Clock.currTime() - creationTime;
 	}
 }
 

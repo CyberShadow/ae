@@ -21,7 +21,7 @@ import ae.net.asockets;
 import ae.sys.log;
 import ae.utils.array;
 
-alias core.time.TickDuration TickDuration;
+import core.time;
 
 public import ae.net.asockets : DisconnectType;
 
@@ -201,7 +201,7 @@ public:
 
 	void connect(string server, void delegate() handleConnect=null)
 	{
-		conn = new LineBufferedSocket(TickDuration.from!"seconds"(30));
+		conn = new LineBufferedSocket(30.seconds);
 		conn.handleConnect = &onConnect;
 		conn.handleDisconnect = &onDisconnect;
 		conn.handleReadLine = &onReadLine;

@@ -20,9 +20,7 @@ import std.datetime;
 import ae.sys.timing;
 import ae.sys.log;
 
-alias core.time.TickDuration TickDuration;
-
-const POLL_PERIOD = 2;
+const POLL_PERIOD = 2.seconds;
 
 class NntpListener
 {
@@ -43,7 +41,7 @@ private:
 
 	void schedulePoll()
 	{
-		pollTimer = setTimeout(&poll, TickDuration.from!"seconds"(POLL_PERIOD));
+		pollTimer = setTimeout(&poll, POLL_PERIOD);
 	}
 
 	void poll()
@@ -74,7 +72,7 @@ private:
 			if (pollTimer && pollTimer.isWaiting())
 				pollTimer.cancel();
 			if (type != DisconnectType.Requested)
-				setTimeout(&reconnect, TickDuration.from!"seconds"(10));
+				setTimeout(&reconnect, 10.seconds);
 		}
 	}
 

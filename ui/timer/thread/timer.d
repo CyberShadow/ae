@@ -22,7 +22,6 @@ import ae.sys.timing;
 
 alias ae.sys.timing.Timer SysTimer;
 alias ae.ui.timer.timer.Timer Timer;
-alias core.time.TickDuration TickDuration; // bug 314
 
 final class ThreadTimer : Timer
 {
@@ -47,7 +46,7 @@ private:
 	{
 		while (true)
 		{
-			TickDuration remainingTime;
+			Duration remainingTime;
 
 			synchronized(sysTimer)
 			{
@@ -57,10 +56,10 @@ private:
 				remainingTime = sysTimer.getRemainingTime();
 			}
 
-			if (remainingTime == SysTimer.NEVER)
+			if (remainingTime == Duration.max)
 				semaphore.wait();
 			else
-				semaphore.wait(cast(Duration)remainingTime);
+				semaphore.wait(remainingTime);
 		}
 	}
 
@@ -74,7 +73,7 @@ private:
 		{
 			this.fn = fn;
 			this.recurring = recurring;
-			this.task = new TimerTask(TickDuration.from!"msecs"(ms), &taskCallback);
+			this.task = new TimerTask(ms.msecs, &taskCallback);
 			synchronized(sysTimer)
 				sysTimer.add(task);
 		}

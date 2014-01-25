@@ -14,12 +14,40 @@
 
 module ae.sys.timing;
 
+public import core.time;
+
 import std.exception;
-import core.time;
+
+/// Prototype for core.time.MonoTime (TickDuration replacement).
+/// See https://github.com/D-Programming-Language/druntime/pull/711
+struct MonoTime
+{
+	enum max = MonoTime(TickDuration(ulong.max));
+
+	static MonoTime currTime()
+	{
+		return MonoTime(TickDuration.currSystemTick());
+	}
+
+	MonoTime opBinary(string op)(Duration d) const
+		if (op == "+")
+	{
+		return MonoTime(td + cast(TickDuration)d);
+	}
+
+	Duration opBinary(string op)(MonoTime o) const
+		if (op == "-")
+	{
+		return cast(Duration)(td - o.td);
+	}
+
+	int opCmp(MonoTime o) const { return td.opCmp(o.td); }
+
+private:
+	TickDuration td;
+}
 
 // TODO: allow customization of timing mechanism (alternatives to TickDuration)?
-
-public import core.time : TickDuration;
 
 debug(TIMER) import std.stdio;
 
@@ -38,7 +66,7 @@ private:
 
 	void add(TimerTask task, TimerTask start)
 	{
-		auto now = TickDuration.currSystemTick();
+		auto now = MonoTime.currTime();
 
 		if (start !is null)
 			assert(start.owner is this);
@@ -140,7 +168,7 @@ public:
 	{
 		if (disabled) return false;
 
-		auto now = TickDuration.currSystemTick();
+		auto now = MonoTime.currTime();
 
 		bool ran;
 
@@ -196,25 +224,23 @@ public:
 		return !disabled && head !is null;
 	}
 
-	enum NEVER = TickDuration(long.max);
-
-	/// Return the TickDuration of the next scheduled task, or NEVER if no tasks are scheduled.
-	TickDuration getNextEvent()
+	/// Return the MonoTime of the next scheduled task, or MonoTime.max if no tasks are scheduled.
+	MonoTime getNextEvent()
 	{
-		return disabled || head is null ? NEVER : head.when;
+		return disabled || head is null ? MonoTime.max : head.when;
 	}
 
-	/// Return the time until the first scheduled task, or NEVER if no tasks are scheduled.
-	TickDuration getRemainingTime()
+	/// Return the time until the first scheduled task, or Duration.max if no tasks are scheduled.
+	Duration getRemainingTime()
 	{
 		if (disabled || head is null)
-			return NEVER;
+			return Duration.max;
 
-		auto now = TickDuration.currSystemTick();
+		auto now = MonoTime.currTime();
 		if (now < head.when) // "when" is in the future
 			return head.when - now;
 		else
-			return TickDuration(0);
+			return Duration.zero;
 	}
 
 	debug invariant()
@@ -252,15 +278,15 @@ private:
 	TimerTask prev;
 	TimerTask next;
 
-	TickDuration when;
-	TickDuration _delay;
+	MonoTime when;
+	Duration _delay;
 
 	alias void delegate(Timer timer, TimerTask task) Handler;
 
 public:
-	this(TickDuration delay, Handler handler = null)
+	this(Duration delay, Handler handler = null)
 	{
-		assert(delay.length >= 0);
+		assert(delay >= Duration.zero);
 		_delay = delay;
 		handleTask = handler;
 	}
@@ -278,14 +304,14 @@ public:
 		assert(!isWaiting());
 	}
 
-	@property TickDuration delay()
+	@property Duration delay()
 	{
 		return _delay;
 	}
 
-	@property void delay(TickDuration delay)
+	@property void delay(Duration delay)
 	{
-		assert(delay.length >= 0);
+		assert(delay >= Duration.zero);
 		assert(owner is null);
 		_delay = delay;
 	}
@@ -302,14 +328,14 @@ static this()
 	mainTimer = new Timer();
 }
 
-TimerTask setTimeout(Args...)(void delegate(Args) handler, TickDuration delay, Args args)
+TimerTask setTimeout(Args...)(void delegate(Args) handler, Duration delay, Args args)
 {
 	auto task = new TimerTask(delay, (Timer timer, TimerTask task) { handler(args); });
 	mainTimer.add(task);
 	return task;
 }
 
-TimerTask setInterval(Args...)(void delegate() handler, TickDuration delay, Args args)
+TimerTask setInterval(Args...)(void delegate() handler, Duration delay, Args args)
 {
 	auto task = new TimerTask(delay, (Timer timer, TimerTask task) { mainTimer.add(task); handler(args); });
 	mainTimer.add(task);

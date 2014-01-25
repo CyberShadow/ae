@@ -42,7 +42,7 @@ final class MyApplication : Application
 	MyGamma gamma;
 	FPSCounter fps;
 
-	static uint currentTick() { return TickDuration.currSystemTick().to!("msecs", uint)(); }
+	static uint currentTick() { return MonoTime.currTime().to!("msecs", uint)(); }
 
 	enum InputSource { keyboard, joystick, max }
 	enum GameKey { up, down, left, right, fire, none }
