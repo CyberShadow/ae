@@ -366,9 +366,9 @@ import std.ascii : isDigit, isWhite;
 
 /// Attempt to parse a time string using a PHP date() format string.
 /// Supports only a small subset of format characters.
-SysTime parseTime(string fmt, string t)
+SysTime parseTime(const(char)[] fmt, const(char)[] t)
 {
-	string take(size_t n)
+	auto take(size_t n)
 	{
 		enforce(t.length >= n, "Not enough characters in date string");
 		auto result = t[0..n];
@@ -532,7 +532,7 @@ SysTime parseTime(string fmt, string t)
 				break;
 			}
 			case 'T':
-				tz = TimeZone.getTimeZone(take(t.length));
+				tz = TimeZone.getTimeZone(take(t.length).idup);
 				break;
 			case 'Z':
 			{
