@@ -30,15 +30,12 @@ class CurlVFS : VFS
 		auto proto = path.split("://")[0];
 		if (proto == "http" || proto == "https")
 		{
-			auto http = HTTP();
+			auto http = HTTP(path);
 			http.method = HTTP.Method.head;
-			try
-			{
-				get(path, http);
-				return true;
-			}
-			catch (Exception e)
-				return false;
+			bool ok = false;
+			http.onReceiveStatusLine = (statusLine) { ok = statusLine.code < 400; };
+			http.perform();
+			return ok;
 		}
 		else
 		{
