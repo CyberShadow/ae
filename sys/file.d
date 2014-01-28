@@ -395,63 +395,68 @@ version (Posix)
 	}
 }
 
-version (Windows)
+/// Uses UNC paths to open a file.
+/// Requires https://github.com/D-Programming-Language/phobos/pull/1888
+File openFile(string fn, string mode)
 {
-	// avoid Unicode limitations of DigitalMars C runtime
-
-	struct FileExImpl()
+	File f;
+	static if (is(typeof(&f.windowsHandleOpen)))
 	{
 		import win32.winnt;
 		import win32.winbase;
+		import ae.sys.windows;
 
-		static const(wchar)* pathW(string fn)
+		string winMode;
+		foreach (c; mode)
+			switch (c)
+			{
+				case 'r':
+				case 'w':
+				case 'a':
+				case '+':
+					winMode ~= c;
+					break;
+				case 'b':
+				case 't':
+					break;
+				default:
+					assert(false, "Unknown character in mode");
+			}
+		DWORD access, creation;
+		bool append;
+		switch (winMode)
 		{
-			return toUTF16z(longPath(fn));
+			case "r" : access = GENERIC_READ                ; creation = OPEN_EXISTING; break;
+			case "r+": access = GENERIC_READ | GENERIC_WRITE; creation = OPEN_EXISTING; break;
+			case "w" : access =                GENERIC_WRITE; creation = OPEN_ALWAYS  ; break;
+			case "w+": access = GENERIC_READ | GENERIC_WRITE; creation = OPEN_ALWAYS  ; break;
+			case "a" : access =                GENERIC_WRITE; creation = OPEN_ALWAYS  ; append = true; break;
+			case "a+": assert(false, "Not implemented"); // requires two file pointers
+			default: assert(false, "Bad file mode: " ~ mode);
 		}
 
-		void* h;
+		auto pathW = toUTF16z(longPath(fn));
+		auto h = CreateFileW(pathW, GENERIC_READ, FILE_SHARE_READ, null, OPEN_EXISTING, 0, HANDLE.init);
+		wenforce(h != INVALID_HANDLE_VALUE);
 
-		void openExisting(string fn)
-		{
-			h = CreateFileW(pathW(fn), GENERIC_READ, FILE_SHARE_READ, null, OPEN_EXISTING, 0, HANDLE.init);
-			enforce(h!=INVALID_HANDLE_VALUE, new FileException(fn));
-		}
+		if (append)
+			h.SetFilePointerEx(largeInteger(0), null, FILE_END);
 
-		this(string fn) { openExisting(fn); }
-
-		void close()
-		{
-			assert(h);
-			CloseHandle(h);
-		}
-
-		~this()
-		{
-			if (h)
-				close();
-		}
-
-		void[] rawRead(void[] buffer)
-		{
-			DWORD bytesRead;
-			enforce(ReadFile(h, buffer.ptr, to!uint(buffer.length), &bytesRead, null), new FileException("ReadFile"));
-			return buffer[0..bytesRead];
-		}
+		f.windowsHandleOpen(h, mode);
 	}
-
-	auto FileEx()(string fn) { return FileExImpl!()(fn); }
+	else
+		f.open(fn, mode);
+	return f;
 }
-else
-	alias std.file.File FileEx; // only partial compatibility
 
-ubyte[16] mdFile()(string fn)
+ubyte[16] mdFile(string fn)
 {
 	import std.digest.md;
 
 	MD5 context;
 	context.start();
 
-	auto f = FileEx(fn);
+	auto f = openFile(fn, "rb");
 	static ubyte[64 * 1024] buffer;
 	while (true)
 	{
