@@ -87,6 +87,7 @@ class IrcServer
 			conn = incoming;
 			conn.handleReadLine = &onReadLine;
 			conn.handleInactivity = &onInactivity;
+			conn.handleDisconnect = &onDisconnect;
 
 			server.log("New IRC connection from " ~ incoming.remoteAddress.toString);
 		}
