@@ -56,7 +56,7 @@ public:
 		open();
 	}
 
-	abstract void log(string str);
+	abstract void log(in char[] str);
 
 	void rename(string name)
 	{
@@ -109,7 +109,7 @@ class RawFileLogger : Logger
 		f.flush();
 	}
 
-	override void log(string str)
+	override void log(in char[] str)
 	{
 		logStartLine();
 		logFragment(str);
@@ -147,7 +147,7 @@ class FileLogger : RawFileLogger
 		super(name, timestampedFilenames);
 	}
 
-	override void log(string str)
+	override void log(in char[] str)
 	{
 		auto ut = getLogTime();
 		if (ut.day != currentDay)
@@ -205,9 +205,9 @@ class ConsoleLogger : Logger
 		super(name);
 	}
 
-	override void log(string str)
+	override void log(in char[] str)
 	{
-		string output = name ~ ": " ~ str ~ "\n";
+		auto output = name ~ ": " ~ str ~ "\n";
 		stderr.write(output);
 		stderr.flush();
 	}
@@ -216,7 +216,7 @@ class ConsoleLogger : Logger
 class NullLogger : Logger
 {
 	this() { super(null); }
-	override void log(string str) {}
+	override void log(in char[] str) {}
 }
 
 class MultiLogger : Logger
@@ -227,7 +227,7 @@ class MultiLogger : Logger
 		super(null);
 	}
 
-	override void log(string str)
+	override void log(in char[] str)
 	{
 		foreach (logger; loggers)
 			logger.log(str);
