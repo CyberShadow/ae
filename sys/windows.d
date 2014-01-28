@@ -40,6 +40,16 @@ LPCWSTR toWStringz(string s)
 	return s is null ? null : toUTF16z(s);
 }
 
+LARGE_INTEGER largeInteger(long n)
+{
+	LARGE_INTEGER li; li.QuadPart = n; return li;
+}
+
+ULARGE_INTEGER ulargeInteger(ulong n)
+{
+	ULARGE_INTEGER li; li.QuadPart = n; return li;
+}
+
 ulong makeUlong(DWORD dwLow, DWORD dwHigh)
 {
 	ULARGE_INTEGER li;
