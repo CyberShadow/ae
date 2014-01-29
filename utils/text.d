@@ -438,8 +438,6 @@ T fromHex(T : ulong = uint)(const(char)[] s)
 	return result;
 }
 
-const hexDigits = "0123456789abcdef";
-
 ubyte[] arrayFromHex(in char[] hex, ubyte[] buf = null)
 {
 	if (buf is null)
