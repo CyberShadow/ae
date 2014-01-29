@@ -427,7 +427,7 @@ class Row : Table
 	override void arrange(int rw, int rh)
 	{
 		rows = 1;
-		cols = children.length;
+		cols = cast(uint)children.length;
 		super.arrange(rw, rh);
 	}
 }
@@ -439,7 +439,7 @@ class Column : Table
 
 	override void arrange(int rw, int rh)
 	{
-		rows = children.length;
+		rows = cast(uint)children.length;
 		cols = 1;
 		super.arrange(rw, rh);
 	}

@@ -263,12 +263,12 @@ template StorageType(T)
 	static if (is(T == class))
 	{
 		//alias void*[(__traits(classInstanceSize, T) + size_t.sizeof-1) / size_t.sizeof] StorageType;
-		static assert(__traits(classInstanceSize, T) % size_t.sizeof == 0, "TODO"); // union with a pointer
+		//static assert(__traits(classInstanceSize, T) % size_t.sizeof == 0, "TODO"); // union with a pointer
 
 		// Use a struct to allow new-ing the type (you can't new a static array directly)
 		struct StorageType
 		{
-			void*[__traits(classInstanceSize, T) / size_t.sizeof] data;
+			void*[(__traits(classInstanceSize, T) + size_t.sizeof-1) / size_t.sizeof] data;
 		}
 	}
 	else
