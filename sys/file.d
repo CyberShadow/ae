@@ -238,30 +238,6 @@ void touch(string fn)
 		std.file.write(fn, "");
 }
 
-void safeWrite(string fn, in void[] data)
-{
-	auto tmp = fn ~ ".ae-tmp";
-	write(tmp, data);
-	if (fn.exists) fn.remove();
-	tmp.rename(fn);
-}
-
-/// Try to rename; copy/delete if rename fails
-void move(string src, string dst)
-{
-	try
-		src.rename(dst);
-	catch (Exception e)
-	{
-		auto tmp = dst ~ ".ae-tmp";
-		if (tmp.exists) tmp.remove();
-		scope(exit) if (tmp.exists) tmp.remove();
-		src.copy(tmp);
-		tmp.rename(dst);
-		src.remove();
-	}
-}
-
 /// Make sure that the path exists (and create directories as necessary).
 void ensurePathExists(string fn)
 {
@@ -490,6 +466,7 @@ void[] readFile(File f)
 
 import std.process : thisProcessID;
 import std.traits;
+import std.typetuple;
 import ae.utils.meta;
 
 /// Wrap an operation which creates a file or directory,
@@ -498,7 +475,7 @@ import ae.utils.meta;
 /// location, then renaming the completed file/directory to
 /// the actual target location). targetName specifies the name
 /// of the parameter containing the target file/directory.
-auto safeUpdate(alias impl, string targetName = "target")(ParameterTypeTuple!impl args)
+auto safeUpdate(alias impl, string targetName = "target")(staticMap!(Unqual, ParameterTypeTuple!impl) args)
 {
 	enum targetIndex = findParameter!(impl, targetName);
 	auto target = args[targetIndex];
@@ -518,4 +495,25 @@ void obtainUsing(alias impl, string targetName = "target")(ParameterTypeTuple!im
 	if (target.exists)
 		return;
 	safeUpdate!(impl, targetName)(args);
+}
+
+/// Create a file, or replace an existing file's contents
+/// atomically.
+alias safeUpdate!(std.file.write, "name") atomicWrite;
+deprecated alias safeWrite = atomicWrite;
+
+/// Copy a file, or replace an existing file's contents
+/// with another file's, atomically.
+alias safeUpdate!(std.file.copy, "to") atomicCopy;
+
+/// Try to rename; copy/delete if rename fails
+void move(string src, string dst)
+{
+	try
+		src.rename(dst);
+	catch (Exception e)
+	{
+		atomicCopy(src, dst);
+		src.remove();
+	}
 }
