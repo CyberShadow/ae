@@ -1,5 +1,5 @@
 /**
- * A simple wrapper to automatically load and save a value.
+ * Wrappers for automatically loading/saving data.
  *
  * License:
  *   This Source Code Form is subject to the terms of
@@ -13,37 +13,272 @@
 
 module ae.sys.persistence;
 
-struct Persistent(T, string filename)
+import std.traits;
+
+enum FlushPolicy
 {
-	static T value;
-	alias value this;
+	none,
+	manual,
+	atScopeExit,
+	atThreadExit,
+	// TODO: immediate flushing. Could work only with values without mutable indirections.
+	// TODO: this can actually be a bitmask
+}
 
-	import ae.utils.json;
-	import std.file;
+bool delayed(FlushPolicy policy) { return policy > FlushPolicy.manual; }
 
-	shared static this()
+struct None {}
+
+/// Cache values in-memory, and automatically load/save them as needed via the specified functions.
+/// Actual loading/saving is done via alias functions.
+/// KeyGetter may return .init (of its return type) if the resource does not yet exist,
+/// but once it returns non-.init it may not return .init again.
+/// A bool key can be used to load a resource from disk only once (lazily),
+/// as is currently done with LoadPolicy.once.
+/// Delayed flush policies require a bool key, to avoid mid-air collisions.
+mixin template CacheCore(alias DataGetter, alias KeyGetter, alias DataPutter = None, FlushPolicy flushPolicy = FlushPolicy.none)
+{
+	import std.traits;
+	import ae.sys.memory;
+
+	alias _CacheCore_Data = ReturnType!DataGetter;
+	alias _CacheCore_Key  = ReturnType!KeyGetter;
+
+	enum _CacheCore_readOnly = flushPolicy == FlushPolicy.none;
+
+	_CacheCore_Data cachedData;
+	_CacheCore_Key cachedDataKey;
+
+	void _CacheCore_update()
 	{
-		if (filename.exists)
-			value = jsonParse!T(filename.readText());
+		auto newKey = KeyGetter();
+
+		// No going back to Key.init after returning non-.init
+		assert(cachedDataKey == _CacheCore_Key.init || newKey != _CacheCore_Key.init);
+
+		if (newKey != cachedDataKey)
+		{
+			static if (flushPolicy == FlushPolicy.atThreadExit)
+			{
+				if (cachedDataKey == _CacheCore_Key.init) // first load
+					_CacheCore_registerFlush();
+			}
+			cachedData = DataGetter();
+			cachedDataKey = newKey;
+		}
 	}
 
-	shared static ~this()
+	static if (_CacheCore_readOnly)
+		@property     auto _CacheCore_data() { _CacheCore_update(); return cast(immutable)cachedData; }
+	else
+		@property ref auto _CacheCore_data() { _CacheCore_update(); return                cachedData; }
+
+	static if (!_CacheCore_readOnly)
 	{
-		std.file.write(filename, toJson(value));
+		void save(bool exiting=false)()
+		{
+			if (cachedDataKey != _CacheCore_Key.init || cachedData != _CacheCore_Data.init)
+			{
+				DataPutter(cachedData);
+				static if (!exiting)
+					cachedDataKey = KeyGetter();
+			}
+		}
+
+		static if (flushPolicy.delayed())
+		{
+			// A bool key implies that data will be loaded only once (lazy loading).
+			static assert(is(_CacheCore_Key==bool), "Delayed flush with automatic reload allows mid-air collisions");
+		}
+
+		static if (flushPolicy == FlushPolicy.atScopeExit)
+		{
+			~this()
+			{
+				save!true();
+			}
+		}
+
+		static if (flushPolicy == FlushPolicy.atThreadExit)
+		{
+			void _CacheCore_registerFlush()
+			{
+				// https://d.puremagic.com/issues/show_bug.cgi?id=12038
+				assert(!onStack(cast(void*)&this));
+				_CacheCore_pending ~= &this;
+			}
+
+			static typeof(this)*[] _CacheCore_pending;
+
+			static ~this()
+			{
+				foreach (p; _CacheCore_pending)
+					p.save!true();
+			}
+		}
 	}
 }
 
+/// FileCache policy for when to (re)load data from disk.
+enum LoadPolicy
+{
+	automatic, /// "onModification" for FlushPolicy.none/manual, "once" for delayed
+	once,
+	onModification,
+}
+
+struct FileCache(alias DataGetter, alias DataPutter = None, FlushPolicy flushPolicy = FlushPolicy.none, LoadPolicy loadPolicy = LoadPolicy.automatic)
+{
+	import std.file;
+
+	string fileName;
+
+	static if (loadPolicy == LoadPolicy.automatic)
+		enum _FileCache_loadPolicy = flushPolicy.delayed() ? LoadPolicy.once : LoadPolicy.onModification;
+	else
+		enum _FileCache_loadPolicy = loadPolicy;
+
+	ReturnType!DataGetter _FileCache_dataGetter()
+	{
+		assert(fileName, "Filename not set");
+		static if (flushPolicy == FlushPolicy.none)
+			return DataGetter(fileName); // no existence checks if we are never saving it ourselves
+		else
+		if (fileName.exists)
+			return DataGetter(fileName);
+		else
+			return ReturnType!DataGetter.init;
+	}
+
+	static if (is(DataPutter == None))
+		alias _FileCache_dataPutter = None;
+	else
+		void _FileCache_dataPutter(T)(T t)
+		{
+			assert(fileName, "Filename not set");
+			DataPutter(fileName, t);
+		}
+
+	static if (_FileCache_loadPolicy == LoadPolicy.onModification)
+	{
+		import std.datetime : SysTime;
+		SysTime _FileCache_keyGetter()
+		{
+			SysTime result;
+			if (fileName.exists)
+				result = fileName.timeLastModified();
+			return result;
+		}
+	}
+	else
+	{
+		bool _FileCache_keyGetter() { return true; }
+	}
+
+	mixin CacheCore!(_FileCache_dataGetter, _FileCache_keyGetter, _FileCache_dataPutter, flushPolicy);
+
+	alias _CacheCore_data this;
+}
+
+// Sleep between writes to make sure timestamps differ
+version(unittest) import core.thread;
+
+unittest
+{
+	enum FN = "test.txt";
+	auto cachedData = FileCache!read(FN);
+
+	std.file.write(FN, "One");
+	scope(exit) remove(FN);
+	assert(cachedData == "One");
+
+	Thread.sleep(10.msecs);
+	std.file.write(FN, "Two");
+	assert(cachedData == "Two");
+	auto mtime = FN.timeLastModified();
+
+	Thread.sleep(10.msecs);
+	std.file.write(FN, "Three");
+	FN.setTimes(mtime, mtime);
+	assert(cachedData == "Two");
+}
+
+// ****************************************************************************
+
+template JsonFileCache(T, FlushPolicy flushPolicy = FlushPolicy.none)
+{
+	import std.file;
+	import ae.utils.json;
+
+	static T getJson(T)(string fileName)
+	{
+		return fileName.readText.jsonParse!T;
+	}
+
+	static void putJson(T)(string fileName, in T t)
+	{
+		std.file.write(fileName, t.toJson());
+	}
+
+	alias JsonFileCache = FileCache!(getJson!T, putJson!T, flushPolicy);
+}
+
+version(unittest) import std.file;
+
+unittest
+{
+	enum FN = "test1.json";
+	std.file.write(FN, "{}");
+	scope(exit) remove(FN);
+
+	auto cache = JsonFileCache!(string[string])(FN);
+	assert(cache.length == 0);
+}
+
+unittest
+{
+	enum FN = "test2.json";
+	scope(exit) if (FN.exists) remove(FN);
+
+	auto cache = JsonFileCache!(string[string], FlushPolicy.manual)(FN);
+	assert(cache.length == 0);
+	cache["foo"] = "bar";
+	cache.save();
+
+	auto cache2 = JsonFileCache!(string[string])(FN);
+	assert(cache2["foo"] == "bar");
+}
+
+unittest
+{
+	enum FN = "test3.json";
+	scope(exit) if (FN.exists) remove(FN);
+
+	{
+		auto cache = JsonFileCache!(string[string], FlushPolicy.atScopeExit)(FN);
+		cache["foo"] = "bar";
+	}
+
+	auto cache2 = JsonFileCache!(string[string])(FN);
+	assert(cache2["foo"] == "bar");
+}
+
+// ****************************************************************************
+
 /// std.functional.memoize variant with automatic persistence
-template persistentMemoize(alias fun, string filename)
+struct PersistentMemoized(alias fun, FlushPolicy flushPolicy = FlushPolicy.atThreadExit)
 {
 	import std.traits;
 	import std.typecons;
 	import ae.utils.json;
 
-	ReturnType!fun persistentMemoize(ParameterTypeTuple!fun args)
+	alias ReturnType!fun[string] AA;
+	private JsonFileCache!(AA, flushPolicy) memo;
+
+	this(string fileName) { memo.fileName = fileName; }
+
+	ReturnType!fun opCall(ParameterTypeTuple!fun args)
 	{
-		alias ReturnType!fun[string] AA;
-		static Persistent!(AA, filename) memo;
 		string key;
 		static if (args.length==1 && is(typeof(args[0]) : string))
 			key = args[0];
@@ -53,5 +288,31 @@ template persistentMemoize(alias fun, string filename)
 		if (p) return *p;
 		auto r = fun(args);
 		return memo[key] = r;
+	}
+}
+
+unittest
+{
+	static int value = 42;
+	int getValue(int x) { return value; }
+
+	enum FN = "test4.json";
+	scope(exit) if (FN.exists) remove(FN);
+
+	{
+		auto getValueMemoized = PersistentMemoized!(getValue, FlushPolicy.atScopeExit)(FN);
+
+		assert(getValueMemoized(1) == 42);
+		value = 24;
+		assert(getValueMemoized(1) == 42);
+		assert(getValueMemoized(2) == 24);
+	}
+
+	value = 0;
+
+	{
+		auto getValueMemoized = PersistentMemoized!(getValue, FlushPolicy.atScopeExit)(FN);
+		assert(getValueMemoized(1) == 42);
+		assert(getValueMemoized(2) == 24);
 	}
 }
