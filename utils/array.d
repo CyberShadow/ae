@@ -101,7 +101,7 @@ T[] countSort(alias value = "a", T)(T[] arr)
 // ***************************************************************************
 
 /// Get a value from an AA, and throw an exception (not an error) if not found
-V aaGet(K, V)(V[K] aa, K key)
+ref V aaGet(K, V)(V[K] aa, K key)
 {
 	import std.conv;
 
