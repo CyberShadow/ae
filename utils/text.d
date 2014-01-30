@@ -518,11 +518,14 @@ static assert(DecimalSize!int == 11);
 static assert(DecimalSize!ulong == 20);
 static assert(DecimalSize!long == 20);
 
+import std.typecons;
+
 /// Writes n as decimal number to buf (right-aligned), returns slice of buf containing result.
-char[] toDec(N : ulong, size_t U)(N n, ref char[U] buf)
+char[] toDec(N : ulong, size_t U)(N o, ref char[U] buf)
 {
 	static assert(U >= DecimalSize!N, "Buffer too small to fit any " ~ N.stringof ~ " value");
 
+	Unqual!N n = o;
 	char* p = buf.ptr+buf.length;
 
 	static if (isSigned!N)
