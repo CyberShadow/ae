@@ -115,6 +115,27 @@ ref V aaGet(K, V)(V[K] aa, K key)
 			throw new Exception("Absent value");
 }
 
+/// If key is not in aa, add it with defaultValue.
+/// Returns a reference to the value corresponding to key.
+ref V getOrAdd(K, V)(ref V[K] aa, K key, V defaultValue = V.init)
+{
+	auto p = key in aa;
+	if (!p)
+	{
+		aa[key] = defaultValue;
+		p = key in aa;
+	}
+	return *p;
+}
+
+unittest
+{
+	int[int] aa;
+	aa.getOrAdd(1, 2) = 3;
+	assert(aa[1] == 3);
+	assert(aa.getOrAdd(1, 4) == 3);
+}
+
 struct KeyValuePair(K, V) { K key; V value; }
 
 /// Get key/value pairs from AA
