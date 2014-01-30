@@ -333,6 +333,8 @@ static this()
 	mainTimer = new Timer();
 }
 
+// ********************************************************************************************************************
+
 TimerTask setTimeout(Args...)(void delegate(Args) handler, Duration delay, Args args)
 {
 	auto task = new TimerTask(delay, (Timer timer, TimerTask task) { handler(args); });
@@ -350,4 +352,35 @@ TimerTask setInterval(Args...)(void delegate() handler, Duration delay, Args arg
 void clearTimeout(TimerTask task)
 {
 	task.cancel();
+}
+
+// ********************************************************************************************************************
+
+/// Used to throttle actions to happen no more often than a certain period.
+/// If last was less that span ago, return false.
+/// Otherwise, update last to the current time and return true.
+bool throttle(ref MonoTime last, Duration span)
+{
+	MonoTime now = MonoTime.currTime();
+	auto elapsed = now - last;
+	if (elapsed < span)
+		return false;
+	else
+	{
+		last = now;
+		return true;
+	}
+}
+
+unittest
+{
+	import ae.utils.array;
+	import core.thread;
+
+	MonoTime[string] lastNag;
+	assert( lastNag.getOrAdd("cheese").throttle(10.msecs));
+	assert(!lastNag.getOrAdd("cheese").throttle(10.msecs));
+	Thread.sleep(20.msecs);
+	assert( lastNag.getOrAdd("cheese").throttle(10.msecs));
+	assert(!lastNag.getOrAdd("cheese").throttle(10.msecs));
 }
