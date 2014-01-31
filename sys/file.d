@@ -348,6 +348,64 @@ string longPath(string s)
 	return s;
 }
 
+/// Link a directory.
+/// Uses symlinks on POSIX, and directory junctions on Windows.
+version (Windows)
+{
+	void dirLink()(in char[] original, in char[] link)
+	{
+		mkdir(link);
+		scope(failure) rmdir(link);
+
+		import win32.winbase;
+		import win32.windef;
+		import win32.winioctl;
+
+		import ae.sys.windows;
+
+		HANDLE hDir = CreateFileW(link.toUTF16z(), GENERIC_WRITE, 0, null, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, null);
+		wenforce(hDir && hDir != INVALID_HANDLE_VALUE, "CreateFileW");
+		scope(exit) CloseHandle(hDir);
+
+		auto target = `\??\` ~ original.idup.absolutePath();
+		if (target[$-1] != '\\')
+			target ~= '\\';
+		auto targetW = target.toUTF16();
+
+		enum pathOffset =
+			REPARSE_DATA_BUFFER.MountPointReparseBuffer            .offsetof +
+			REPARSE_DATA_BUFFER.MountPointReparseBuffer._PathBuffer.offsetof;
+		static assert(pathOffset == 16);
+
+		// Despite MSDN, two NUL-terminating characters are needed, one for each string.
+
+		auto buf = new ubyte[pathOffset + (targetW.length + 2) * WCHAR.sizeof];
+		auto r = cast(REPARSE_DATA_BUFFER*)buf.ptr;
+
+		r.ReparseTag = IO_REPARSE_TAG_MOUNT_POINT;
+		r.ReparseDataLength = to!WORD(buf.length - r.MountPointReparseBuffer.offsetof);
+		//r.MountPointReparseBuffer.SubstituteNameOffset = 0;
+		r.MountPointReparseBuffer.SubstituteNameLength = to!WORD(targetW.length * WCHAR.sizeof);
+		r.MountPointReparseBuffer.PrintNameOffset = to!WORD(r.MountPointReparseBuffer.SubstituteNameLength+2);
+		r.MountPointReparseBuffer.PrintNameLength = 0;
+		r.MountPointReparseBuffer.PathBuffer[0..targetW.length] = targetW;
+
+		DWORD dwRet; // Needed despite MSDN
+		DeviceIoControl(hDir, FSCTL_SET_REPARSE_POINT, buf.ptr, buf.length.to!DWORD(), null, 0, &dwRet, null).wenforce("DeviceIoControl");
+	}
+}
+else
+	alias std.file.symlink dirLink;
+
+unittest
+{
+	mkdir("a"); scope(exit) rmdir("a");
+	touch("a/f"); scope(exit) remove("a/f");
+	dirLink("a", "b"); scope(exit) rmdir("b");
+	assert("b".isSymlink());
+	assert("b/f".exists());
+}
+
 version (Windows)
 {
 	void hardLink()(string src, string dst)
