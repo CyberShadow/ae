@@ -325,7 +325,7 @@ else // Use select
 				}
 				else
 				if (mainTimer.isWaiting())
-					events = Socket.select(readset, writeset, errorset, to!Duration(mainTimer.getRemainingTime()));
+					events = Socket.select(readset, writeset, errorset, mainTimer.getRemainingTime());
 				else
 					events = Socket.select(readset, writeset, errorset);
 
