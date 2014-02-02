@@ -553,7 +553,7 @@ string decodeUrlParameter(string encoded)
 {
 	string s;
 	for (auto i=0; i<encoded.length; i++)
-		if (encoded[i] == '%')
+		if (encoded[i] == '%' && i+3 <= encoded.length)
 		{
 			s ~= cast(char)fromHex!ubyte(encoded[i+1..i+3]);
 			i += 2;
