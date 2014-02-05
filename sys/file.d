@@ -248,13 +248,19 @@ void ensurePathExists(string fn)
 
 import ae.utils.text;
 
-/// Forcibly remove a file or empty directory.
-void forceDelete()(string fn)
+/// Forcibly remove a file or directory.
+/// If recursive is true, the entire directory is deleted "atomically"
+/// (it is first moved/renamed to another location).
+void forceDelete()(string fn, bool recursive=false)
 {
 	version(Windows)
 	{
+		import std.process : environment;
 		import win32.winnt;
 		import win32.winbase;
+
+		auto name = fn.baseName();
+		fn = fn.absolutePath().longPath();
 
 		auto fnW = toUTF16z(fn);
 		auto attr = GetFileAttributesW(fnW);
@@ -262,38 +268,69 @@ void forceDelete()(string fn)
 		if (attr & FILE_ATTRIBUTE_READONLY)
 			SetFileAttributesW(fnW, attr & ~FILE_ATTRIBUTE_READONLY);
 
-		// avoid zombifying locked directories
-		// TODO: better way of finding a temporary directory on the same volume
-		auto lfn = longPath(fn);
-		if (exists(lfn[0..7]~"Temp"))
+		// To avoid zombifying locked directories,
+		// try renaming it first. Attempting to delete a locked directory
+		// will make it inaccessible.
+
+		bool tryMoveTo(string target)
 		{
+			target = target.longPath();
+			if (target.endsWith(`\`))
+				target = target[0..$-1];
+			if (target.length && !target.exists)
+				return false;
+
 			string newfn;
 			do
-				newfn = lfn[0..7] ~ `Temp\` ~ randomString();
-			while (exists(newfn));
-			if (MoveFileW(toUTF16z(lfn), toUTF16z(newfn)))
+				newfn = format("%s\\deleted-%s.%s.%s", target, name, thisProcessID, randomString());
+			while (newfn.exists);
+			auto newfnW = toUTF16z(newfn);
+			if (MoveFileW(fnW, newfnW))
 			{
 				if (attr & FILE_ATTRIBUTE_DIRECTORY)
-					RemoveDirectoryW(toUTF16z(newfn));
+				{
+					foreach (de; newfn.dirEntries(SpanMode.shallow))
+						forceDelete(de.name);
+					RemoveDirectoryW(newfnW);
+				}
 				else
-					DeleteFileW(toUTF16z(newfn));
-				return;
+					DeleteFileW(newfnW);
+				return true;
 			}
+			return false;
 		}
 
-		if (attr & FILE_ATTRIBUTE_DIRECTORY)
-			enforce(RemoveDirectoryW(toUTF16z(lfn)), "RemoveDirectoryW: " ~ fn);
-		else
-			enforce(DeleteFileW(toUTF16z(lfn)), "DeleteFileW: " ~ fn);
+		auto tmp = environment.get("TEMP");
+		if (tmp)
+			if (tryMoveTo(tmp))
+				return;
+		if (tryMoveTo(fn[0..7]~"Temp"))
+			return;
+		if (tryMoveTo(fn.dirName()))
+			return;
+
 		return;
 	}
 	else
 	{
-		if (isDir(fn))
-			rmdir(fn);
+		if (recursive)
+			fn.removeRecurse();
 		else
-			remove(fn);
+			if (fn.isDir)
+				fn.rmdir();
+			else
+				fn.remove();
 	}
+}
+
+/// If fn is a directory, delete it recursively.
+/// Otherwise, delete the file fn.
+void removeRecurse(string fn)
+{
+	if (fn.isDir)
+		fn.rmdirRecurse();
+	else
+		fn.remove();
 }
 
 bool isHidden()(string fn)
@@ -538,8 +575,8 @@ auto safeUpdate(alias impl, string targetName = "target")(staticMap!(Unqual, Par
 	enum targetIndex = findParameter!(impl, targetName);
 	auto target = args[targetIndex];
 	auto temp = "%s.%s.temp".format(target, thisProcessID);
-	if (temp.exists) temp.remove();
-	scope(failure) if (temp.exists) temp.remove();
+	if (temp.exists) temp.removeRecurse();
+	scope(failure) if (temp.exists) temp.removeRecurse();
 	scope(success) rename(temp, target);
 	args[targetIndex] = temp;
 	return impl(args);
