@@ -67,7 +67,7 @@ float frands2() { return ssqr(frands()); }
 
 class GameEntity
 {
-	mixin DListItem;
+	mixin DListLink;
 	Plane plane;
 
 	abstract void step(uint deltaTicks);
