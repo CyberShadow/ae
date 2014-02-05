@@ -468,7 +468,7 @@ version (Posix)
 
 /// Uses UNC paths to open a file.
 /// Requires https://github.com/D-Programming-Language/phobos/pull/1888
-File openFile(string fn, string mode)
+File openFile()(string fn, string mode)
 {
 	File f;
 	static if (is(typeof(&f.windowsHandleOpen)))
@@ -520,7 +520,7 @@ File openFile(string fn, string mode)
 	return f;
 }
 
-ubyte[16] mdFile(string fn)
+ubyte[16] mdFile()(string fn)
 {
 	import std.digest.md;
 
