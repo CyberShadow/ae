@@ -496,7 +496,7 @@ unittest
 {
 	mkdir("a"); scope(exit) rmdir("a");
 	touch("a/f"); scope(exit) remove("a/f");
-	dirLink("a", "b"); scope(exit) rmdir("b");
+	dirLink("a", "b"); scope(exit) version(Windows) rmdir("b"); else remove("b");
 	//symlink("a/f", "c"); scope(exit) remove("c");
 	assert("b".isSymlink());
 	//assert("c".isSymlink());
