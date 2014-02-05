@@ -348,10 +348,10 @@ bool isHidden()(string fn)
 	return false;
 }
 
-version (Windows)
+/// Return a file's unique ID.
+ulong getFileID()(string fn)
 {
-	/// Return a file's unique ID.
-	ulong getFileID()(string fn)
+	version (Windows)
 	{
 		import win32.winnt;
 		import win32.winbase;
@@ -370,8 +370,22 @@ version (Windows)
 		enforce(result, "Null file ID");
 		return result;
 	}
+	else
+	{
+		return DirEntry(fn).statBuf.st_ino;
+	}
+}
 
-	// TODO: return inode number on *nix
+unittest
+{
+	touch("a");
+	scope(exit) remove("a");
+	hardLink("a", "b");
+	scope(exit) remove("b");
+	touch("c");
+	scope(exit) remove("c");
+	assert(getFileID("a") == getFileID("b"));
+	assert(getFileID("a") != getFileID("c"));
 }
 
 deprecated alias std.file.getSize getSize2;
