@@ -490,7 +490,7 @@ version (Windows)
 else
 	alias std.file.symlink dirLink;
 
-version (unittest) static import ae.sys.windows;
+version (unittest) version(Windows) static import ae.sys.windows;
 
 unittest
 {
