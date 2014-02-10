@@ -13,6 +13,8 @@
 
 module ae.sys.file;
 
+import core.thread;
+
 import std.array;
 import std.conv;
 import std.file;
@@ -557,6 +559,63 @@ void[] readFile(File f)
 		result ~= readBuffer;
 	}
 	return result;
+}
+
+/// Start a thread which writes data to f asynchronously.
+Thread writeFileAsync(ref File target, in void[] data)
+{
+	auto t = new Thread
+	({
+		target.rawWrite(data);
+		target.close();
+	});
+	t.start();
+	return t;
+}
+
+// ****************************************************************************
+
+/// Change the current directory to the given directory. Does nothing if dir is null.
+/// Return a scope guard which, upon destruction, restores the previous directory.
+/// Asserts that only one thread has changed the process's current directory at any time.
+auto pushd(string dir)
+{
+	import core.atomic;
+
+	static int threadCount = 0;
+	static shared int processCount = 0;
+
+	static struct Popd
+	{
+		string oldPath;
+		this(string cwd) { oldPath = cwd; }
+		~this() { if (oldPath) pop(); }
+		@disable this();
+		@disable this(this);
+
+		void pop()
+		{
+			assert(oldPath);
+			scope(exit) oldPath = null;
+			chdir(oldPath);
+
+			auto newThreadCount = --threadCount;
+			auto newProcessCount = atomicOp!"-="(processCount, 1);
+			assert(newThreadCount == newProcessCount); // Shouldn't happen
+		}
+	}
+
+	string cwd;
+	if (dir)
+	{
+		auto newThreadCount = ++threadCount;
+		auto newProcessCount = atomicOp!"+="(processCount, 1);
+		assert(newThreadCount == newProcessCount, "Another thread already has an active pushd");
+
+		cwd = getcwd();
+		chdir(dir);
+	}
+	return Popd(cwd);
 }
 
 // ****************************************************************************
