@@ -434,6 +434,8 @@ version (Windows)
 else
 	alias std.file.symlink dirLink;
 
+version (unittest) static import ae.sys.windows;
+
 unittest
 {
 	mkdir("a"); scope(exit) rmdir("a");
