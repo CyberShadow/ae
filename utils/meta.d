@@ -45,6 +45,40 @@ template RangeTuple(size_t N)
 	alias RangeTupleImpl!(N, ValueTuple!()) RangeTuple;
 }
 
+template ArrayToTuple(alias arr, Elements...)
+{
+	static if (arr.length)
+		alias ArrayToTuple = ArrayToTuple!(arr[1..$], ValueTuple!(Elements, arr[0]));
+	else
+		alias ArrayToTuple = Elements;
+}
+
+unittest
+{
+	alias X = ArrayToTuple!"abc";
+	static assert(X[0] == 'a' && X[2] == 'c');
+	static assert([X] == "abc");
+}
+
+/// Return something to foreach over optimally.
+/// If A is known at compile-time, return a tuple,
+/// so the foreach is unrolled at compile-time.
+/// Otherwise, return A for a regular runtime foreach.
+template CTIterate(alias A)
+{
+	static if (is(typeof(ArrayToTuple!A)))
+		enum CTIterate = ArrayToTuple!A;
+	else
+		alias CTIterate = A;
+}
+
+unittest
+{
+	foreach (c; CTIterate!"abc") {}
+	string s;
+	foreach (c; CTIterate!s) {}
+}
+
 /// Like std.typecons.Tuple, but a template mixin.
 /// Unlike std.typecons.Tuple, names may not be omitted - but repeating types may be.
 /// Example: FieldList!(ubyte, "r", "g", "b", ushort, "a");
