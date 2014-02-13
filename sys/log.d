@@ -161,7 +161,7 @@ class FileLogger : RawFileLogger
 		enum TIMEBUFSIZE = 1 + timeFormatSize(TIME_FORMAT) + 2;
 		static char[TIMEBUFSIZE] buf = "[";
 		auto writer = BlindWriter!char(buf.ptr+1);
-		putTime(writer, TIME_FORMAT, ut);
+		putTime!TIME_FORMAT(writer, ut);
 		writer.put(']');
 		writer.put(' ');
 
@@ -186,14 +186,14 @@ protected:
 	{
 		super.open();
 		currentDay = getLogTime().day;
-		f.writef("\n\n--------------- %s ---------------\n\n\n", formatTime(TIME_FORMAT, getLogTime()));
+		f.writef("\n\n--------------- %s ---------------\n\n\n", getLogTime().format!(TIME_FORMAT)());
 		f.flush();
 	}
 
 	final override void reopen()
 	{
 		super.reopen();
-		f.writef("\n\n--------------- %s ---------------\n\n\n", formatTime(TIME_FORMAT, getLogTime()));
+		f.writef("\n\n--------------- %s ---------------\n\n\n", getLogTime().format!(TIME_FORMAT)());
 		f.flush();
 	}
 }

@@ -67,7 +67,7 @@ unittest
 	auto writer = BlindWriter!char(buf.ptr);
 
 	auto time = SysTime(DateTime(2010, 7, 4, 7, 6, 12), UTC());
-	putTime(writer, TimeFormats.ISO8601, time);
+	putTime(writer, time, TimeFormats.ISO8601);
 	auto timeStr = buf[0..writer.ptr-buf.ptr];
 	assert(timeStr == "2010-07-04T07:06:12+0000", timeStr.idup);
 }

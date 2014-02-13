@@ -33,7 +33,7 @@ struct AtomFeedWriter
 	private void putTimeTag(string name)(SysTime time)
 	{
 		xml.startTag!name();
-		.putTime(xml.output, TimeFormats.ATOM, time);
+		.putTime!(TimeFormats.ATOM)(xml.output, time);
 		xml.endTag!name();
 	}
 
