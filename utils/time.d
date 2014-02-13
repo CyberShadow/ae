@@ -44,28 +44,16 @@ static:
 	const STD_DATE = `D M d H:i:s \G\M\TO Y`;
 }
 
-private const WeekdayShortNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-private const WeekdayLongNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-private const MonthShortNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-private const MonthLongNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const WeekdayShortNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const WeekdayLongNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MonthShortNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MonthLongNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-// TODO: format time should be parsed at compile-time;
-// then, we can preallocate StringBuilder space and use uncheckedPut
-
-/// Format a SysTime using a PHP date() format string.
-string formatTime(string fmt, SysTime t = Clock.currTime())
+private struct FormatContext(Char)
 {
-	auto result = StringBuilder(48);
-	putTime(result, fmt, t);
-	return result.get();
-}
-
-/// ditto
-void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime())
-//	if (IsStringSink!S)
-{
-	auto dt = cast(DateTime)t;
-	auto date = dt.date;
+	SysTime t;
+	DateTime dt;
+	bool escaping;
 
 	static char oneDigit(uint i)
 	{
@@ -73,7 +61,7 @@ void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime())
 		return cast(char)('0' + i);
 	}
 
-	static string oneOrTwoDigits(uint i)
+	static string oneOrTwoDigits(uint i) // TODO: don't allocate
 	{
 		debug assert(i < 100);
 		if (i < 10)
@@ -90,11 +78,14 @@ void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime())
 		if (t.timezone.utcToTZ(t.stdTime) == t.stdTime)
 			return "UTC";
 		else
-			return formatTime(fallbackFormat, t);
+			return t.format(fallbackFormat);
 	}
+}
 
-	bool escaping = false;
-	foreach (char c; fmt)
+private void putToken(alias c, alias context, alias sink)()
+{
+	with (context)
+	{
 		if (escaping)
 			sink.put(c), escaping = false;
 		else
@@ -212,7 +203,7 @@ void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime())
 
 				// Timezone
 				case 'e':
-					sink.put(timezoneFallback(t.timezone.name, "P"));
+					sink.put(timezoneFallback(t.timezone.name, "P")); // TODO: don't allocate
 					break;
 				case 'I':
 					sink.put(t.dstInEffect ? '1': '0');
@@ -220,20 +211,20 @@ void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime())
 				case 'O':
 				{
 					auto minutes = (t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000 / 60;
-					sink.put(format("%+03d%02d", minutes/60, abs(minutes%60)));
+					sink.put(std.string.format("%+03d%02d", minutes/60, abs(minutes%60))); // TODO: formattedWrite
 					break;
 				}
 				case 'P':
 				{
 					auto minutes = (t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000 / 60;
-					sink.put(format("%+03d:%02d", minutes/60, abs(minutes%60)));
+					sink.put(std.string.format("%+03d:%02d", minutes/60, abs(minutes%60))); // TODO: formattedWrite
 					break;
 				}
 				case 'T':
-					sink.put(timezoneFallback(t.timezone.stdName, "P"));
+					sink.put(timezoneFallback(t.timezone.stdName, "P")); // TODO: don't allocate
 					break;
 				case 'Z':
-					sink.put(text((t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000));
+					sink.put(text((t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000)); // TODO: don't allocate
 					break;
 
 				// Full date/time
@@ -241,10 +232,10 @@ void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime())
 					sink.put(dt.toISOExtString());
 					break;
 				case 'r':
-					sink.put(formatTime(TimeFormats.RFC2822, t));
+					putTime(sink, t, TimeFormats.RFC2822);
 					break;
 				case 'U':
-					sink.put(text(t.toUnixTime()));
+					sink.put(text(t.toUnixTime())); // TODO: don't allocate
 					break;
 
 				// Escape next character
@@ -256,12 +247,72 @@ void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime())
 				default:
 					put(sink, c);
 			}
+	}
 }
 
+/// Format a SysTime using the format spec fmt.
+/// This version generates specialized code for the given fmt.
+string format(string fmt)(SysTime t)
+{
+	enum maxSize = timeFormatSize(fmt);
+	auto result = StringBuilder(maxSize); // TODO: use a static array
+	putTime!fmt(result, t);
+	return result.get();
+}
+
+/// ditto
+void putTime(string fmt, S)(ref S sink, SysTime t)
+	if (IsStringSink!S)
+{
+	putTimeImpl!fmt(sink, t);
+}
+
+/// Format a SysTime using the format spec fmt.
+/// This version parses fmt at runtime.
+string format(SysTime t, string fmt)
+{
+	auto result = StringBuilder(timeFormatSize(fmt));
+	putTime(result, t, fmt);
+	return result.get();
+}
+
+/// ditto
+deprecated string formatTime(string fmt, SysTime t = Clock.currTime())
+{
+	auto result = StringBuilder(48);
+	putTime(result, fmt, t);
+	return result.get();
+}
+
+/// ditto
+void putTime(S)(ref S sink, SysTime t, string fmt)
+	if (IsStringSink!S)
+{
+	putTimeImpl!fmt(sink, t);
+}
+
+/// ditto
+deprecated void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime())
+	if (IsStringSink!S)
+{
+	putTimeImpl!fmt(sink, t);
+}
+
+void putTimeImpl(alias fmt, S)(ref S sink, SysTime t)
+{
+	FormatContext!(char) context;
+	context.t = t;
+	context.dt = cast(DateTime)t;
+	foreach (c; CTIterate!fmt)
+		putToken!(c, context, sink)();
+}
+
+/// We assume that no timezone will have a name longer than this.
+/// If one does, it is truncated to this length.
+enum MaxTimezoneNameLength = 256;
+
 /// Calculate the maximum amount of characters needed to store a time in this format.
-/// Hint: this function can run at compile-time when the format string is a constant.
-/// Returns size_t.max if it contains variable-length strings that depend on other
-/// components (e.g. timezone names, which are provided by the operating system).
+/// Can be evaluated at compile-time.
 size_t timeFormatSize(string fmt)
 {
 	static size_t maxLength(in string[] names) { return reduce!max(map!`a.length`(WeekdayShortNames)); }
@@ -331,7 +382,7 @@ size_t timeFormatSize(string fmt)
 					break;
 
 				case 'e': // Timezone name
-					return size_t.max;
+					return MaxTimezoneNameLength;
 
 				// Full date/time
 				case 'c':
@@ -364,71 +415,117 @@ import std.exception : enforce;
 import std.conv : to;
 import std.ascii : isDigit, isWhite;
 
-/// Attempt to parse a time string using a PHP date() format string.
-/// Supports only a small subset of format characters.
-SysTime parseTime(const(char)[] fmt, const(char)[] t)
+private struct ParseContext(Char, bool checked)
 {
-	auto take(size_t n)
+	int year=0, month=1, day=1, hour=0, minute=0, second=0, usecs=0;
+	int hour12 = 0; bool pm;
+	Rebindable!(immutable(TimeZone)) tz;
+	int dow = -1;
+	Char[] t;
+	bool escaping;
+
+	void need(size_t n)()
 	{
-		enforce(t.length >= n, "Not enough characters in date string");
+		static if (checked)
+			enforce(t.length >= n, "Not enough characters in date string");
+	}
+
+	auto take(size_t n)()
+	{
+		need!n();
 		auto result = t[0..n];
 		t = t[n..$];
 		return result;
 	}
 
-	int takeNumber(size_t n, sizediff_t max = -1)
+	char takeOne()
 	{
-		if (max==-1) max=n;
-		enforce(t.length >= n, "Not enough characters in date string");
+		need!1();
+		auto result = t[0];
+		t = t[1..$];
+		return result;
+	}
+
+	R takeNumber(size_t n, sizediff_t maxP = -1, R = int)()
+	{
+		enum max = maxP == -1 ? n : maxP;
+		need!n();
 		foreach (i, c; t[0..n])
 			enforce((i==0 && c=='-') || isDigit(c) || isWhite(c), "Number expected");
-		while (n < max && t.length > n && isDigit(t[n]))
-			n++;
-		return to!int(strip(take(n)));
+		static if (n == max)
+			enum i = n;
+		else
+		{
+			auto i = n;
+			while (i < max && (checked ? i < t.length : true) && isDigit(t[i]))
+				i++;
+		}
+		auto s = t[0..i];
+		t = t[i..$];
+		return s.strip().to!R();
 	}
 
 	int takeWord(in string[] words, string name)
 	{
 		foreach (idx, string word; words)
-			if (t.startsWith(word))
+		{
+			static if (checked)
+				bool b = t.startsWith(word);
+			else
+				bool b = t[0..word.length] == word;
+			if (b)
 			{
 				t = t[word.length..$];
 				return cast(int)idx;
 			}
+		}
 		throw new Exception(name ~ " expected");
 	}
 
-	int year=0, month=1, day=1, hour=0, minute=0, second=0, usecs=0;
-	int hour12 = 0; bool pm;
-	Rebindable!(immutable(TimeZone)) tz;
-	int dow = -1;
+	char peek()
+	{
+		need!1();
+		return *t.ptr;
+	}
+}
 
-	size_t idx = 0;
-	char c;
-	while (idx < fmt.length)
-		switch (c = fmt[idx++])
+private void parseToken(alias c, alias context)()
+{
+	with (context)
+	{
+		// TODO: check if the compiler optimizes this check away
+		// in the compile-time version. If not, "escaping" needs to
+		// be moved into an alias parameter.
+		if (escaping)
+		{
+			enforce(takeOne() == c, c ~ " expected");
+			escaping = false;
+			return;
+		}
+
+		switch (c)
 		{
 			// Day
 			case 'd':
-				day = takeNumber(2);
+				day = takeNumber!(2)();
 				break;
 			case 'D':
 				dow = takeWord(WeekdayShortNames, "Weekday");
 				break;
 			case 'j':
-				day = takeNumber(1, 2);
+				day = takeNumber!(1, 2);
 				break;
 			case 'l':
 				dow = takeWord(WeekdayLongNames, "Weekday");
 				break;
 			case 'N':
-				dow = takeNumber(1) % 7;
+				dow = takeNumber!1 % 7;
 				break;
 			case 'S': // ordinal suffix
-				take(2);
+				take!2;
 				break;
 			case 'w':
-				dow = takeNumber(1);
+				dow = takeNumber!1;
 				break;
 			//case 'z': TODO
 
@@ -440,28 +537,28 @@ SysTime parseTime(const(char)[] fmt, const(char)[] t)
 				month = takeWord(MonthLongNames, "Month") + 1;
 				break;
 			case 'm':
-				month = takeNumber(2);
+				month = takeNumber!2;
 				break;
 			case 'M':
 				month = takeWord(MonthShortNames, "Month") + 1;
 				break;
 			case 'n':
-				month = takeNumber(1, 2);
+				month = takeNumber!(1, 2);
 				break;
 			case 't':
-				takeNumber(1, 2); // TODO: validate DIM?
+				takeNumber!(1, 2); // TODO: validate DIM?
 				break;
 
 			// Year
 			case 'L':
-				takeNumber(1); // TODO: validate leapness?
+				takeNumber!1; // TODO: validate leapness?
 				break;
 			// case 'o': TODO (ISO 8601 year number)
 			case 'Y':
-				year = takeNumber(4);
+				year = takeNumber!4;
 				break;
 			case 'y':
-				year = takeNumber(2);
+				year = takeNumber!2;
 				if (year > 50) // TODO: find correct logic for this
 					year += 1900;
 				else
@@ -477,45 +574,45 @@ SysTime parseTime(const(char)[] fmt, const(char)[] t)
 				break;
 			// case 'B': TODO (Swatch Internet time)
 			case 'g':
-				hour12 = takeNumber(1, 2);
+				hour12 = takeNumber!(1, 2);
 				break;
 			case 'G':
-				hour = takeNumber(1, 2);
+				hour = takeNumber!(1, 2);
 				break;
 			case 'h':
-				hour12 = takeNumber(2);
+				hour12 = takeNumber!2;
 				break;
 			case 'H':
-				hour = takeNumber(2);
+				hour = takeNumber!2;
 				break;
 			case 'i':
-				minute = takeNumber(2);
+				minute = takeNumber!2;
 				break;
 			case 's':
-				second = takeNumber(2);
+				second = takeNumber!2;
 				break;
 			case 'u':
-				usecs = takeNumber(6);
+				usecs = takeNumber!6;
 				break;
 			case 'E': // not standard
-				usecs = 1000 * takeNumber(3);
+				usecs = 1000 * takeNumber!3;
 				break;
 
 			// Timezone
 			// case 'e': ???
 			case 'I':
-				takeNumber(1);
+				takeNumber!1;
 				break;
 			case 'O':
 			{
-				if (t.length && *t.ptr == 'Z')
+				if (peek() == 'Z')
 				{
 					t = t[1..$];
 					tz = UTC();
 				}
 				else
 				{
-					auto tzStr = take(5);
+					auto tzStr = take!5();
 					enforce(tzStr[0]=='-' || tzStr[0]=='+', "-/+ expected");
 					auto minutes = (to!int(tzStr[1..3]) * 60 + to!int(tzStr[3..5])) * (tzStr[0]=='-' ? -1 : 1);
 					tz = new immutable(SimpleTimeZone)(minutes);
@@ -524,7 +621,7 @@ SysTime parseTime(const(char)[] fmt, const(char)[] t)
 			}
 			case 'P':
 			{
-				auto tzStr = take(6);
+				auto tzStr = take!6();
 				enforce(tzStr[0]=='-' || tzStr[0]=='+', "-/+ expected");
 				enforce(tzStr[3]==':', ": expected");
 				auto minutes = (to!int(tzStr[1..3]) * 60 + to!int(tzStr[4..6])) * (tzStr[0]=='-' ? -1 : 1);
@@ -532,12 +629,13 @@ SysTime parseTime(const(char)[] fmt, const(char)[] t)
 				break;
 			}
 			case 'T':
-				tz = TimeZone.getTimeZone(take(t.length).idup);
+				tz = TimeZone.getTimeZone(t.idup);
+				t = null;
 				break;
 			case 'Z':
 			{
 				// TODO: is this correct?
-				auto seconds = takeNumber(1, 6);
+				auto seconds = takeNumber!(1, 6);
 				enforce(seconds % 60 == 0, "Timezone granularity lower than minutes not supported");
 				tz = new immutable(SimpleTimeZone)(seconds / 60);
 				break;
@@ -550,12 +648,8 @@ SysTime parseTime(const(char)[] fmt, const(char)[] t)
 
 			// Escape next character
 			case '\\':
-			{
-				char next = fmt[idx++];
-				enforce(t.length && t[0]==next, next ~ " expected");
-				t = t[1..$];
+				escaping = true;
 				break;
-			}
 
 			// Other characters (whitespace, delimiters)
 			default:
@@ -564,27 +658,73 @@ SysTime parseTime(const(char)[] fmt, const(char)[] t)
 				t = t[1..$];
 			}
 		}
+	}
+}
 
-	if (hour12)
-		hour = hour12%12 + (pm ? 12 : 0);
+import ae.utils.meta;
 
-	auto result = SysTime(
-		DateTime(year, month, day, hour, minute, second),
-		FracSec.from!"usecs"(usecs),
-		tz);
+private SysTime parseTimeImpl(alias fmt, bool checked, C)(C[] t)
+{
+	ParseContext!(C, checked) context;
+	context.t = t;
 
-	if (dow >= 0)
-		enforce(result.dayOfWeek == dow, "Mismatching weekday");
+	foreach (c; CTIterate!fmt)
+		parseToken!(c, context)();
+
+	enforce(context.t.length == 0, "Left-over characters: " ~ context.t);
+
+	SysTime result;
+
+	with (context)
+	{
+		if (hour12)
+			hour = hour12%12 + (pm ? 12 : 0);
+
+		result = SysTime(
+			DateTime(year, month, day, hour, minute, second),
+			FracSec.from!"usecs"(usecs),
+			tz);
+
+		if (dow >= 0)
+			enforce(result.dayOfWeek == dow, "Mismatching weekday");
+	}
 
 	return result;
 }
 
+/// Parse the given string into a SysTime, using the format spec fmt.
+/// This version generates specialized code for the given fmt.
+SysTime parseTime(string fmt, C)(C[] t)
+{
+	// Omit length checks if we know the input string is long enough
+	enum maxLength = timeFormatSize(fmt);
+	if (t.length < maxLength)
+		return parseTimeImpl!(fmt, true )(t);
+	else
+		return parseTimeImpl!(fmt, false)(t);
+}
+
+/// Parse the given string into a SysTime, using the format spec fmt.
+/// This version parses fmt at runtime.
+SysTime parseTimeUsing(C)(C[] t, in char[] fmt)
+{
+	return parseTimeImpl!(fmt, true)(t);
+}
+
+deprecated SysTime parseTime(C)(const(char)[] fmt, C[] t)
+{
+	return t.parseTimeUsing(fmt);
+}
+
 unittest
 {
-	auto s0 = "Tue Jun 07 13:23:19 GMT+0100 2011";
-	auto t = parseTime(TimeFormats.STD_DATE, s0);
-	auto s1 = formatTime(TimeFormats.STD_DATE, t);
+	const s0 = "Tue Jun 07 13:23:19 GMT+0100 2011";
+	//enum t = s0.parseTime!(TimeFormats.STD_DATE); // https://d.puremagic.com/issues/show_bug.cgi?id=12042
+	auto t = s0.parseTime!(TimeFormats.STD_DATE);
+	auto s1 = t.format(TimeFormats.STD_DATE);
 	assert(s0 == s1);
+	auto t1 = s0.parseTimeUsing(TimeFormats.STD_DATE);
+	assert(t == t1);
 }
 
 // ***************************************************************************
