@@ -16,6 +16,7 @@ module ae.utils.regex;
 import std.conv;
 import std.exception;
 import std.regex;
+import std.string;
 
 import ae.utils.text;
 
@@ -41,6 +42,7 @@ bool matchInto(S, R, Args...)(S s, R r, ref Args args)
 	auto m = s.match(r);
 	if (m)
 	{
+		assert(args.length == m.captures.length-1, "matchInto called with %s arguments but %s capture groups".format(args.length, m.captures.length-1));
 		foreach (n, ref arg; args)
 			arg = to!(Args[n])(m.captures[n+1]);
 		return true;
