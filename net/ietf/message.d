@@ -79,9 +79,6 @@ class Rfc850Message
 	/// Whether this post is a reply.
 	bool reply;
 
-	/// Result of threadify()
-	Rfc850Message[] children;
-
 	/// This message's headers.
 	Headers headers;
 
@@ -304,24 +301,6 @@ class Rfc850Message
 
 		// Decode author
 
-		int bugzillaCommentNumber;
-		author = authorEmail = "From" in headers ? decodeRfc1522(headers["From"]) : null;
-		if ("X-Bugzilla-Who" in headers)
-		{
-			// Special case for Bugzilla emails
-			author = authorEmail = headers["X-Bugzilla-Who"];
-
-			foreach (line; content.split("\n"))
-				if (line.endsWith("> changed:"))
-					author = line[0..line.indexOf(" <")];
-				else
-				if (line.startsWith("--- Comment #") && line.indexOf(" from ")>0 && line.indexOf(" <")>0 && line.endsWith(" ---"))
-				{
-					author = line[line.indexOf(" from ")+6 .. line.indexOf(" <")];
-					bugzillaCommentNumber = to!int(line["--- Comment #".length .. line.indexOf(" from ")]);
-				}
-		}
-		else
 		if ((author.indexOf('@') < 0 && author.indexOf(" at ") >= 0)
 		 || (author.indexOf("<") < 0 && author.indexOf(">") < 0 && author.indexOf(" (") > 0 && author.endsWith(")")))
 		{
