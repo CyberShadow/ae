@@ -229,7 +229,7 @@ deprecated SysTime getMTime(string name)
 	return timeLastModified(name);
 }
 
-void touch(string fn)
+void touch(in char[] fn)
 {
 	if (exists(fn))
 	{
@@ -387,50 +387,104 @@ string longPath(string s)
 	return s;
 }
 
-/// Link a directory.
-/// Uses symlinks on POSIX, and directory junctions on Windows.
 version (Windows)
 {
-	void dirLink()(in char[] original, in char[] link)
+	void createReparsePoint(string reparseBufferName, string extraInitialization, string reparseTagName)(in char[] target, in char[] print, in char[] link)
 	{
-		mkdir(link);
-		scope(failure) rmdir(link);
-
 		import win32.winbase;
 		import win32.windef;
 		import win32.winioctl;
 
 		import ae.sys.windows;
 
-		HANDLE hDir = CreateFileW(link.toUTF16z(), GENERIC_WRITE, 0, null, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, null);
-		wenforce(hDir && hDir != INVALID_HANDLE_VALUE, "CreateFileW");
-		scope(exit) CloseHandle(hDir);
+		enum SYMLINK_FLAG_RELATIVE = 1;
+
+		HANDLE hLink = CreateFileW(link.toUTF16z(), GENERIC_READ | GENERIC_WRITE, 0, null, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, null);
+		wenforce(hLink && hLink != INVALID_HANDLE_VALUE, "CreateFileW");
+		scope(exit) CloseHandle(hLink);
+
+		enum pathOffset =
+			mixin(q{REPARSE_DATA_BUFFER.} ~ reparseBufferName)            .offsetof +
+			mixin(q{REPARSE_DATA_BUFFER.} ~ reparseBufferName)._PathBuffer.offsetof;
+
+		auto targetW = target.toUTF16();
+		auto printW  = print .toUTF16();
+
+		// Despite MSDN, two NUL-terminating characters are needed, one for each string.
+
+		auto pathBufferSize = targetW.length + 1 + printW.length + 1; // in chars
+		auto buf = new ubyte[pathOffset + pathBufferSize * WCHAR.sizeof];
+		auto r = cast(REPARSE_DATA_BUFFER*)buf.ptr;
+
+		r.ReparseTag = mixin(reparseTagName);
+		r.ReparseDataLength = to!WORD(buf.length - mixin(q{r.} ~ reparseBufferName).offsetof);
+
+		auto pathBuffer = mixin(q{r.} ~ reparseBufferName).PathBuffer;
+		auto p = pathBuffer;
+
+		mixin(q{r.} ~ reparseBufferName).SubstituteNameOffset = to!WORD((p-pathBuffer) * WCHAR.sizeof);
+		mixin(q{r.} ~ reparseBufferName).SubstituteNameLength = to!WORD(targetW.length * WCHAR.sizeof);
+		p[0..targetW.length] = targetW;
+		p += targetW.length;
+		*p++ = 0;
+
+		mixin(q{r.} ~ reparseBufferName).PrintNameOffset      = to!WORD((p-pathBuffer) * WCHAR.sizeof);
+		mixin(q{r.} ~ reparseBufferName).PrintNameLength      = to!WORD(printW .length * WCHAR.sizeof);
+		p[0..printW.length] = printW;
+		p += printW.length;
+		*p++ = 0;
+
+		assert(p-pathBuffer == pathBufferSize);
+
+		mixin(extraInitialization);
+
+		DWORD dwRet; // Needed despite MSDN
+		DeviceIoControl(hLink, FSCTL_SET_REPARSE_POINT, buf.ptr, buf.length.to!DWORD(), null, 0, &dwRet, null).wenforce("DeviceIoControl");
+	}
+
+	void acquirePrivilege(S)(S name)
+	{
+		import win32.winbase;
+		import win32.windef;
+
+		import ae.sys.windows;
+
+		HANDLE hToken = null;
+		wenforce(OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES, &hToken));
+		scope(exit) CloseHandle(hToken);
+
+		TOKEN_PRIVILEGES tp;
+		wenforce(LookupPrivilegeValue(null, name.toUTF16z(), &tp.Privileges[0].Luid), "LookupPrivilegeValue");
+
+		tp.PrivilegeCount = 1;
+		tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+		wenforce(AdjustTokenPrivileges(hToken, FALSE, &tp, cast(DWORD)TOKEN_PRIVILEGES.sizeof, null, null), "AdjustTokenPrivileges");
+	}
+
+	/// Link a directory.
+	/// Uses symlinks on POSIX, and directory junctions on Windows.
+	void dirLink()(in char[] original, in char[] link)
+	{
+		mkdir(link);
+		scope(failure) rmdir(link);
 
 		auto target = `\??\` ~ original.idup.absolutePath();
 		if (target[$-1] != '\\')
 			target ~= '\\';
-		auto targetW = target.toUTF16();
 
-		enum pathOffset =
-			REPARSE_DATA_BUFFER.MountPointReparseBuffer            .offsetof +
-			REPARSE_DATA_BUFFER.MountPointReparseBuffer._PathBuffer.offsetof;
-		static assert(pathOffset == 16);
+		createReparsePoint!(q{MountPointReparseBuffer}, q{}, q{IO_REPARSE_TAG_MOUNT_POINT})(target, null, link);
+	}
 
-		// Despite MSDN, two NUL-terminating characters are needed, one for each string.
+	void symlink()(in char[] original, in char[] link)
+	{
+		import win32.winnt;
 
-		auto buf = new ubyte[pathOffset + (targetW.length + 2) * WCHAR.sizeof];
-		auto r = cast(REPARSE_DATA_BUFFER*)buf.ptr;
+		acquirePrivilege(SE_CREATE_SYMBOLIC_LINK_NAME);
 
-		r.ReparseTag = IO_REPARSE_TAG_MOUNT_POINT;
-		r.ReparseDataLength = to!WORD(buf.length - r.MountPointReparseBuffer.offsetof);
-		//r.MountPointReparseBuffer.SubstituteNameOffset = 0;
-		r.MountPointReparseBuffer.SubstituteNameLength = to!WORD(targetW.length * WCHAR.sizeof);
-		r.MountPointReparseBuffer.PrintNameOffset = to!WORD(r.MountPointReparseBuffer.SubstituteNameLength+2);
-		r.MountPointReparseBuffer.PrintNameLength = 0;
-		r.MountPointReparseBuffer.PathBuffer[0..targetW.length] = targetW;
+		touch(link);
+		scope(failure) remove(link);
 
-		DWORD dwRet; // Needed despite MSDN
-		DeviceIoControl(hDir, FSCTL_SET_REPARSE_POINT, buf.ptr, buf.length.to!DWORD(), null, 0, &dwRet, null).wenforce("DeviceIoControl");
+		createReparsePoint!(q{SymbolicLinkReparseBuffer}, q{r.SymbolicLinkReparseBuffer.Flags = link.isAbsolute() ? 0 : SYMLINK_FLAG_RELATIVE;}, q{IO_REPARSE_TAG_SYMLINK})(original, original, link);
 	}
 }
 else
@@ -443,7 +497,9 @@ unittest
 	mkdir("a"); scope(exit) rmdir("a");
 	touch("a/f"); scope(exit) remove("a/f");
 	dirLink("a", "b"); scope(exit) rmdir("b");
+	symlink("a/f", "c"); scope(exit) remove("c");
 	assert("b".isSymlink());
+	assert("c".isSymlink());
 	assert("b/f".exists());
 }
 
