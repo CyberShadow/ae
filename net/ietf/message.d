@@ -301,6 +301,7 @@ class Rfc850Message
 
 		// Decode author
 
+		author = authorEmail = "From" in headers ? decodeRfc1522(headers["From"]) : null;
 		if ((author.indexOf('@') < 0 && author.indexOf(" at ") >= 0)
 		 || (author.indexOf("<") < 0 && author.indexOf(">") < 0 && author.indexOf(" (") > 0 && author.endsWith(")")))
 		{
@@ -357,25 +358,25 @@ class Rfc850Message
 		time = Clock.currTime; // default value
 
 		if ("NNTP-Posting-Date" in headers)
-			time = parseTime("D, j M Y H:i:s O", headers["NNTP-Posting-Date"]);
+			time = parseTime!`D, j M Y H:i:s O \(\U\T\C\)`(headers["NNTP-Posting-Date"]);
 		else
 		if ("Date" in headers)
 		{
 			auto str = headers["Date"];
 			try
-				time = parseTime(TimeFormats.RFC850, str);
+				time = parseTime!(TimeFormats.RFC850)(str);
 			catch (Exception e)
 			try
-				time = parseTime(`D, j M Y H:i:s O`, str);
+				time = parseTime!(`D, j M Y H:i:s O`)(str);
 			catch (Exception e)
 			try
-				time = parseTime(`D, j M Y H:i:s e`, str);
+				time = parseTime!(`D, j M Y H:i:s e`)(str);
 			catch (Exception e)
 			try
-				time = parseTime(`D, j M Y H:i O`, str);
+				time = parseTime!(`D, j M Y H:i O`)(str);
 			catch (Exception e)
 			try
-				time = parseTime(`D, j M Y H:i e`, str);
+				time = parseTime!(`D, j M Y H:i e`)(str);
 			catch (Exception e)
 			{
 				// fall-back to default (class creation time)
@@ -425,7 +426,7 @@ class Rfc850Message
 		auto replyTime = time;
 		replyTime.timezone = UTC();
 		post.content =
-			"On " ~ formatTime(`l, j F Y \a\t H:i:s e`, replyTime) ~ ", " ~ this.author ~ " wrote:\n" ~
+			"On " ~ replyTime.format!`l, j F Y \a\t H:i:s e`() ~ ", " ~ this.author ~ " wrote:\n" ~
 			wrapText(paragraphs) ~
 			"\n\n";
 		post.flowed = true;
@@ -459,7 +460,7 @@ class Rfc850Message
 			headers["References"] = references.join(" ");
 			headers["In-Reply-To"] = references[$-1];
 		}
-		headers["Date"] = formatTime(TimeFormats.RFC2822, time);
+		headers["Date"] = time.format!(TimeFormats.RFC2822);
 		headers["User-Agent"] = "ae.net.ietf.message";
 
 		string[] lines;
