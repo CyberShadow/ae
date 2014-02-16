@@ -199,7 +199,7 @@ public:
 	void add(TimerTask task)
 	{
 		debug (TIMER_VERBOSE) writefln("Adding a task which waits for %d ticks.", task.delay);
-		assert(task.owner is null);
+		assert(task.owner is null, "This TimerTask is already active");
 		add(task, null);
 		assert(task.owner is this);
 		assert(head !is null);
@@ -210,7 +210,8 @@ public:
 	{
 		TimerTask tmp;
 
-		assert(task.owner is this);
+		assert(task.owner !is null, "This TimerTask is not active");
+		assert(task.owner is this, "This TimerTask is not owned by this Timer");
 		debug (TIMER_VERBOSE) writefln("Restarting a task which waits for %d ticks.", task.delay);
 
 		// Store current position, as the new position must be after it
@@ -291,7 +292,7 @@ private:
 public:
 	this(Duration delay, Handler handler = null)
 	{
-		assert(delay >= Duration.zero);
+		assert(delay >= Duration.zero, "Creating TimerTask with a negative Duration");
 		_delay = delay;
 		handleTask = handler;
 	}
@@ -304,7 +305,7 @@ public:
 
 	void cancel()
 	{
-		assert(isWaiting());
+		assert(isWaiting(), "This TimerTask is not active");
 		owner.remove(this);
 		assert(!isWaiting());
 	}
@@ -316,8 +317,8 @@ public:
 
 	@property void delay(Duration delay)
 	{
-		assert(delay >= Duration.zero);
-		assert(owner is null);
+		assert(delay >= Duration.zero, "Setting TimerTask delay to a negative Duration");
+		assert(owner is null, "Changing duration of an active TimerTask");
 		_delay = delay;
 	}
 
