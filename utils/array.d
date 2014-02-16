@@ -174,6 +174,70 @@ V[K] merge(K, V)(V[K] a, V[K] b)
 
 // ***************************************************************************
 
+struct OrderedMap(K, V)
+{
+	K[] keys;
+	V[] values;
+	size_t[K] index;
+
+	ref V opIndex(ref K k)
+	{
+		return values[index[k]];
+	}
+
+	ref V opIndexAssign()(auto ref V v, auto ref K k)
+	{
+		auto pi = k in index;
+		if (pi)
+		{
+			auto pv = &values[*pi];
+			*pv = v;
+			return *pv;
+		}
+
+		index[k] = values.length;
+		keys ~= k;
+		values ~= v;
+		return values[$-1];
+	}
+
+	void remove()(auto ref K k)
+	{
+		auto i = index[k];
+		index.remove(k);
+		keys = keys.remove(i);
+		values = values.remove(i);
+	}
+
+	@property size_t length() { return values.length; }
+
+	int opApply(int delegate(ref K k, ref V v) dg)
+	{
+		int result = 0;
+
+		foreach (i, ref v; values)
+		{
+			result = dg(keys[i], v);
+			if (result)
+				break;
+		}
+		return result;
+	}
+}
+
+unittest
+{
+	OrderedMap!(string, int) m;
+	m["a"] = 1;
+	m["b"] = 2;
+	m["c"] = 3;
+	assert(m.length == 3);
+	m.remove("a");
+	assert(m.length == 2);
+}
+
+// ***************************************************************************
+
 void stackPush(T)(ref T[] arr, T val)
 {
 	arr ~= val;
