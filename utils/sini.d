@@ -161,58 +161,66 @@ struct StructuredIniTraversingHandler
 	}
 }
 
+StructuredIniTraversingHandler makeStructuredIniHandler(U)(ref U v)
+{
+	import std.conv;
+
+	static if (is(U == struct))
+		return StructuredIniTraversingHandler
+		(
+			null,
+			(in char[] name)
+			{
+				bool found;
+				foreach (i, field; v.tupleof)
+					if (name == v.tupleof[i].stringof[2..$])
+					{
+						static if (is(typeof(makeStructuredIniHandler(v.tupleof[i]))))
+							return makeStructuredIniHandler(v.tupleof[i]);
+						else
+							throw new Exception("Can't parse " ~ U.stringof ~ "." ~ cast(string)name ~ " of type " ~ typeof(v.tupleof[i]).stringof);
+					}
+				static if (is(typeof({ StructuredIniTraversingHandler h = v.parseSection(name); })))
+					return v.parseSection(name);
+				else
+					throw new Exception("Unknown field " ~ name.assumeUnique);
+			}
+		);
+	else
+	static if (is(typeof(v[string.init])))
+		return StructuredIniTraversingHandler
+		(
+			null,
+			(in char[] name)
+			{
+				auto pField = name in v;
+				if (!pField)
+				{
+					v[name.idup] = typeof(v[name]).init;
+					pField = name in v;
+				}
+				return makeStructuredIniHandler(*pField);
+			}
+		);
+	else
+	static if (is(typeof(std.conv.to!U(string.init))))
+		return StructuredIniTraversingHandler
+		(
+			(in char[] value)
+			{
+				v = std.conv.to!U(value);
+			}
+		);
+	else
+		static assert(false, "Can't parse " ~ U.stringof);
+}
+
 /// Parse a structured INI from a range of lines, into a user-defined struct.
 T parseStructuredIni(T, R)(R r)
 	if (isInputRange!R && is(ElementType!R : const(char)[]))
 {
-	static StructuredIniTraversingHandler makeHandler(U)(ref U v)
-	{
-		import std.conv;
-
-		static if (is(U == struct))
-			return StructuredIniTraversingHandler
-			(
-				null,
-				(in char[] name)
-				{
-					bool found;
-					foreach (i, field; v.tupleof)
-						if (name == v.tupleof[i].stringof[2..$])
-							return makeHandler(v.tupleof[i]);
-					throw new Exception("Unknown field " ~ name.assumeUnique);
-				}
-			);
-		else
-		static if (is(typeof(v[string.init])))
-			return StructuredIniTraversingHandler
-			(
-				null,
-				(in char[] name)
-				{
-					auto pField = name in v;
-					if (!pField)
-					{
-						v[name.idup] = typeof(v[name]).init;
-						pField = name in v;
-					}
-					return makeHandler(*pField);
-				}
-			);
-		else
-		static if (is(typeof(std.conv.to!U(string.init))))
-			return StructuredIniTraversingHandler
-			(
-				(in char[] value)
-				{
-					v = std.conv.to!U(value);
-				}
-			);
-		else
-			static assert(false, "Can't parse " ~ U.stringof);
-	}
-
 	T result;
-	parseStructuredIni(r, makeHandler(result).conv());
+	parseStructuredIni(r, makeStructuredIniHandler(result).conv());
 	return result;
 }
 
@@ -242,6 +250,39 @@ unittest
 	assert(f.s.n1=="v1");
 	assert(f.s.n2=="v2");
 	assert(f.s.a==["foo":1, "bar":2]);
+}
+
+unittest
+{
+	static struct Custom
+	{
+		struct Section
+		{
+			string name;
+			string[string] values;
+		}
+		Section[] sections;
+
+		StructuredIniTraversingHandler parseSection(in char[] name)
+		{
+			sections.length++;
+			auto p = &sections[$-1];
+			p.name = name.idup;
+			return makeStructuredIniHandler(p.values);
+		}
+	}
+
+	auto c = parseStructuredIni!Custom
+	(
+		q"<
+			[one]
+			a=a
+			[two]
+			b=b
+		>".splitLines()
+	);
+
+	assert(c == Custom([Custom.Section("one", ["a" : "a"]), Custom.Section("two", ["b" : "b"])]));
 }
 
 /// Simple convenience formatter for writing INI files.
