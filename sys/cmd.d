@@ -78,11 +78,18 @@ T[] pipe(T)(string[] args, in T[] input)
 
 // ************************************************************************
 
-ubyte[] iconv(in void[] data, string inputEncoding, string outputEncoding = "UTF-8")
+ubyte[] iconv(in void[] data, string inputEncoding, string outputEncoding)
 {
-	import std.utf;
 	auto result = pipe(["iconv", "-f", inputEncoding, "-t", outputEncoding], data);
 	return cast(ubyte[])result;
+}
+
+string iconv(in void[] data, string inputEncoding)
+{
+	import std.utf;
+	auto result = cast(string)iconv(data, inputEncoding, "UTF-8");
+	validate(result);
+	return result;
 }
 
 unittest
