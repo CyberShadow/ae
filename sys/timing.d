@@ -163,6 +163,24 @@ private:
 		count--;
 	}
 
+	void restart(TimerTask task)
+	{
+		TimerTask tmp;
+
+		assert(task.owner !is null, "This TimerTask is not active");
+		assert(task.owner is this, "This TimerTask is not owned by this Timer");
+		debug (TIMER_VERBOSE) writefln("Restarting a task which waits for %d ticks.", task.delay);
+
+		// Store current position, as the new position must be after it
+		tmp = task.next !is null ? task.next : task.prev;
+
+		remove(task);
+		assert(task.owner is null);
+
+		add(task, tmp);
+		assert(task.owner is this);
+	}
+
 public:
 	/// Pretend there are no tasks scheduled.
 	bool disabled;
@@ -203,25 +221,6 @@ public:
 		add(task, null);
 		assert(task.owner is this);
 		assert(head !is null);
-	}
-
-	/// Reschedule a task to run with the same delay from now.
-	void restart(TimerTask task)
-	{
-		TimerTask tmp;
-
-		assert(task.owner !is null, "This TimerTask is not active");
-		assert(task.owner is this, "This TimerTask is not owned by this Timer");
-		debug (TIMER_VERBOSE) writefln("Restarting a task which waits for %d ticks.", task.delay);
-
-		// Store current position, as the new position must be after it
-		tmp = task.next !is null ? task.next : task.prev;
-
-		remove(task);
-		assert(task.owner is null);
-
-		add(task, tmp);
-		assert(task.owner is this);
 	}
 
 	/// Return true if there are pending tasks scheduled.
@@ -308,6 +307,14 @@ public:
 		assert(isWaiting(), "This TimerTask is not active");
 		owner.remove(this);
 		assert(!isWaiting());
+	}
+
+	/// Reschedule the task to run with the same delay from now.
+	void restart()
+	{
+		assert(isWaiting(), "This TimerTask is not active");
+		owner.restart(this);
+		assert(isWaiting());
 	}
 
 	@property Duration delay()

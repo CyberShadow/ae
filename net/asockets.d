@@ -852,7 +852,7 @@ public:
 	{
 		assert(idleTask !is null);
 		if (idleTask.isWaiting())
-			mainTimer.restart(idleTask);
+			idleTask.restart();
 	}
 
 	final bool isConnected()
