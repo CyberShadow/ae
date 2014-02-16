@@ -326,8 +326,7 @@ public:
 }
 
 /// The default timer
-// __gshared for ae.sys.shutdown
-__gshared Timer mainTimer;
+Timer mainTimer;
 
 static this()
 {
