@@ -196,6 +196,7 @@ StructuredIniTraversingHandler makeStructuredIniHandler(U)(ref U v)
 				auto pField = name in v;
 				if (!pField)
 				{
+					enforce(name !in v, "Duplicate value: " ~ name);
 					v[name.idup] = typeof(v[name]).init;
 					pField = name in v;
 				}
