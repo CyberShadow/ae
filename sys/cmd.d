@@ -78,12 +78,16 @@ T[] pipe(T)(string[] args, in T[] input)
 
 // ************************************************************************
 
-string iconv(string data, string inputEncoding, string outputEncoding = "UTF-8")
+ubyte[] iconv(in void[] data, string inputEncoding, string outputEncoding = "UTF-8")
 {
 	import std.utf;
 	auto result = pipe(["iconv", "-f", inputEncoding, "-t", outputEncoding], data);
-	validate(result);
-	return assumeUnique(result);
+	return cast(ubyte[])result;
+}
+
+unittest
+{
+	//assert(iconv("Hello"w, "UTF-16LE") == "Hello");
 }
 
 string sha1sum(in void[] data)
