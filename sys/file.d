@@ -618,13 +618,27 @@ void[] readFile(File f)
 }
 
 /// Start a thread which writes data to f asynchronously.
-Thread writeFileAsync(ref File target, in void[] data)
+Thread writeFileAsync(File f, in void[] data)
 {
-	auto t = new Thread
-	({
-		target.rawWrite(data);
-		target.close();
-	});
+	static class Writer : Thread
+	{
+		File target;
+		const void[] data;
+
+		this(ref File f, in void[] data)
+		{
+			this.target = f;
+			this.data = data;
+			super(&run);
+		}
+		void run()
+		{
+			target.rawWrite(data);
+			target.close();
+		}
+	}
+
+	auto t = new Writer(f, data);
 	t.start();
 	return t;
 }
