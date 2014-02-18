@@ -286,6 +286,22 @@ unittest
 	assert(c == Custom([Custom.Section("one", ["a" : "a"]), Custom.Section("two", ["b" : "b"])]));
 }
 
+/// Convenience function to load a struct from an INI file.
+/// Returns .init if the file does not exist.
+S loadIni(S)(string fileName)
+{
+	S s;
+
+	import std.file;
+	if (fileName.exists)
+		s = fileName
+			.readText()
+			.splitLines()
+			.parseStructuredIni!S();
+
+	return s;
+}
+
 /// Simple convenience formatter for writing INI files.
 struct IniWriter(O)
 {
