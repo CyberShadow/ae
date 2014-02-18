@@ -30,18 +30,6 @@ struct IniHandler
 
 	/// User callback for obtaining a child node from this node.
 	IniHandler delegate(in char[] name) nodeHandler;
-
-	private void handleLeaf(in char[] name, in char[] value)
-	{
-		enforce(leafHandler, "This group may not have any values.");
-		leafHandler(name, value);
-	}
-
-	private IniHandler handleNode(in char[] name)
-	{
-		enforce(nodeHandler, "This group may not have any nodes.");
-		return nodeHandler(name);
-	}
 }
 
 /// Parse a structured INI from a range of lines, through the given handler.
@@ -70,7 +58,9 @@ void parseIni(R)(R r, IniHandler rootHandler)
 
 			currentHandler = rootHandler;
 			foreach (segment; section.split("."))
-				currentHandler = currentHandler.handleNode(segment);
+				currentHandler = currentHandler.nodeHandler
+					.enforce("This group may not have any nodes.")
+					(segment);
 		}
 		else
 		{
@@ -81,8 +71,12 @@ void parseIni(R)(R r, IniHandler rootHandler)
 			auto segments = name.split(".");
 			enforce(segments.length, "Malformed value line (empty name)");
 			foreach (segment; segments[0..$-1])
-				handler = handler.handleNode(segment);
-			handler.handleLeaf(segments[$-1], line[pos+1..$].strip);
+				handler = handler.nodeHandler
+					.enforce("This group may not have any nodes.")
+					(segment);
+			handler.leafHandler
+				.enforce("This group may not have any values.")
+				(segments[$-1], line[pos+1..$].strip);
 		}
 	}
 }
@@ -130,18 +124,6 @@ struct IniTraversingHandler
 	/// User callback for obtaining a child node from this node.
 	IniTraversingHandler delegate(in char[] name) nodeHandler;
 
-	private void handleLeaf(in char[] value)
-	{
-		enforce(leafHandler, "This group may not have a value.");
-		leafHandler(value);
-	}
-
-	private IniTraversingHandler handleNode(in char[] name)
-	{
-		enforce(nodeHandler, "This group may not have any nodes.");
-		return nodeHandler(name);
-	}
-
 	private IniHandler conv()
 	{
 		// Don't reference "this" from a lambda,
@@ -151,11 +133,21 @@ struct IniTraversingHandler
 		(
 			(in char[] name, in char[] value)
 			{
-				thisCopy.handleNode(name).handleLeaf(value);
+				thisCopy
+					.nodeHandler
+					.enforce("This group may not have any nodes.")
+					(name)
+					.leafHandler
+					.enforce("This group may not have a value.")
+					(value);
 			},
 			(in char[] name)
 			{
-				return thisCopy.handleNode(name).conv();
+				return thisCopy
+					.nodeHandler
+					.enforce("This group may not have any nodes.")
+					(name)
+					.conv();
 			}
 		);
 	}
