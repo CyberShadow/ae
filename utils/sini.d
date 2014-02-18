@@ -169,7 +169,7 @@ StructuredIniTraversingHandler makeStructuredIniHandler(U)(ref U v)
 		return StructuredIniTraversingHandler
 		(
 			null,
-			(in char[] name)
+			delegate StructuredIniTraversingHandler (in char[] name)
 			{
 				bool found;
 				foreach (i, field; v.tupleof)
