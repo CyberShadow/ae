@@ -23,13 +23,13 @@ alias std.string.indexOf indexOf;
 
 /// Represents the user-defined behavior for handling a node in a
 /// structured INI file's hierarchy.
-struct StructuredIniHandler
+struct IniHandler
 {
 	/// User callback for parsing a value at this node.
 	void delegate(in char[] name, in char[] value) leafHandler;
 
 	/// User callback for obtaining a child node from this node.
-	StructuredIniHandler delegate(in char[] name) nodeHandler;
+	IniHandler delegate(in char[] name) nodeHandler;
 
 	private void handleLeaf(in char[] name, in char[] value)
 	{
@@ -37,7 +37,7 @@ struct StructuredIniHandler
 		leafHandler(name, value);
 	}
 
-	private StructuredIniHandler handleNode(in char[] name)
+	private IniHandler handleNode(in char[] name)
 	{
 		enforce(nodeHandler, "This group may not have any nodes.");
 		return nodeHandler(name);
@@ -45,7 +45,7 @@ struct StructuredIniHandler
 }
 
 /// Parse a structured INI from a range of lines, through the given handler.
-void parseStructuredIni(R)(R r, StructuredIniHandler rootHandler)
+void parseIni(R)(R r, IniHandler rootHandler)
 	if (isInputRange!R && is(ElementType!R : const(char)[]))
 {
 	auto currentHandler = rootHandler;
@@ -91,20 +91,20 @@ unittest
 {
 	int count;
 
-	parseStructuredIni
+	parseIni
 	(
 		q"<
 			s.n1=v1
 			[s]
 			n2=v2
 		>".splitLines(),
-		StructuredIniHandler
+		IniHandler
 		(
 			null,
 			(in char[] name)
 			{
 				assert(name == "s");
-				return StructuredIniHandler
+				return IniHandler
 				(
 					(in char[] name, in char[] value)
 					{
@@ -121,14 +121,14 @@ unittest
 	assert(count==2);
 }
 
-/// Alternative API for StructuredIniHandler, where each leaf is a node
-struct StructuredIniTraversingHandler
+/// Alternative API for IniHandler, where each leaf is a node
+struct IniTraversingHandler
 {
 	/// User callback for parsing a value at this node.
 	void delegate(in char[] value) leafHandler;
 
 	/// User callback for obtaining a child node from this node.
-	StructuredIniTraversingHandler delegate(in char[] name) nodeHandler;
+	IniTraversingHandler delegate(in char[] name) nodeHandler;
 
 	private void handleLeaf(in char[] value)
 	{
@@ -136,18 +136,18 @@ struct StructuredIniTraversingHandler
 		leafHandler(value);
 	}
 
-	private StructuredIniTraversingHandler handleNode(in char[] name)
+	private IniTraversingHandler handleNode(in char[] name)
 	{
 		enforce(nodeHandler, "This group may not have any nodes.");
 		return nodeHandler(name);
 	}
 
-	private StructuredIniHandler conv()
+	private IniHandler conv()
 	{
 		// Don't reference "this" from a lambda,
 		// as it can be a temporary on the stack
-		StructuredIniTraversingHandler thisCopy = this;
-		return StructuredIniHandler
+		IniTraversingHandler thisCopy = this;
+		return IniHandler
 		(
 			(in char[] name, in char[] value)
 			{
@@ -161,26 +161,26 @@ struct StructuredIniTraversingHandler
 	}
 }
 
-StructuredIniTraversingHandler makeStructuredIniHandler(U)(ref U v)
+IniTraversingHandler makeIniHandler(U)(ref U v)
 {
 	import std.conv;
 
 	static if (is(U == struct))
-		return StructuredIniTraversingHandler
+		return IniTraversingHandler
 		(
 			null,
-			delegate StructuredIniTraversingHandler (in char[] name)
+			delegate IniTraversingHandler (in char[] name)
 			{
 				bool found;
 				foreach (i, field; v.tupleof)
 					if (name == v.tupleof[i].stringof[2..$])
 					{
-						static if (is(typeof(makeStructuredIniHandler(v.tupleof[i]))))
-							return makeStructuredIniHandler(v.tupleof[i]);
+						static if (is(typeof(makeIniHandler(v.tupleof[i]))))
+							return makeIniHandler(v.tupleof[i]);
 						else
 							throw new Exception("Can't parse " ~ U.stringof ~ "." ~ cast(string)name ~ " of type " ~ typeof(v.tupleof[i]).stringof);
 					}
-				static if (is(typeof({ StructuredIniTraversingHandler h = v.parseSection(name); })))
+				static if (is(typeof({ IniTraversingHandler h = v.parseSection(name); })))
 					return v.parseSection(name);
 				else
 					throw new Exception("Unknown field " ~ name.assumeUnique);
@@ -188,7 +188,7 @@ StructuredIniTraversingHandler makeStructuredIniHandler(U)(ref U v)
 		);
 	else
 	static if (is(typeof(v[string.init])))
-		return StructuredIniTraversingHandler
+		return IniTraversingHandler
 		(
 			null,
 			(in char[] name)
@@ -200,12 +200,12 @@ StructuredIniTraversingHandler makeStructuredIniHandler(U)(ref U v)
 					v[name.idup] = typeof(v[name]).init;
 					pField = name in v;
 				}
-				return makeStructuredIniHandler(*pField);
+				return makeIniHandler(*pField);
 			}
 		);
 	else
 	static if (is(typeof(std.conv.to!U(string.init))))
-		return StructuredIniTraversingHandler
+		return IniTraversingHandler
 		(
 			(in char[] value)
 			{
@@ -217,11 +217,11 @@ StructuredIniTraversingHandler makeStructuredIniHandler(U)(ref U v)
 }
 
 /// Parse a structured INI from a range of lines, into a user-defined struct.
-T parseStructuredIni(T, R)(R r)
+T parseIni(T, R)(R r)
 	if (isInputRange!R && is(ElementType!R : const(char)[]))
 {
 	T result;
-	parseStructuredIni(r, makeStructuredIniHandler(result).conv());
+	parseIni(r, makeIniHandler(result).conv());
 	return result;
 }
 
@@ -237,7 +237,7 @@ unittest
 		S s;
 	}
 
-	auto f = parseStructuredIni!File
+	auto f = parseIni!File
 	(
 		q"<
 			s.n1=v1
@@ -264,16 +264,16 @@ unittest
 		}
 		Section[] sections;
 
-		StructuredIniTraversingHandler parseSection(in char[] name)
+		IniTraversingHandler parseSection(in char[] name)
 		{
 			sections.length++;
 			auto p = &sections[$-1];
 			p.name = name.idup;
-			return makeStructuredIniHandler(p.values);
+			return makeIniHandler(p.values);
 		}
 	}
 
-	auto c = parseStructuredIni!Custom
+	auto c = parseIni!Custom
 	(
 		q"<
 			[one]
@@ -285,6 +285,15 @@ unittest
 
 	assert(c == Custom([Custom.Section("one", ["a" : "a"]), Custom.Section("two", ["b" : "b"])]));
 }
+
+// ***************************************************************************
+
+deprecated alias StructuredIniHandler = IniHandler;
+deprecated alias parseStructuredIni = parseIni;
+deprecated alias StructuredIniTraversingHandler = IniTraversingHandler;
+deprecated alias makeStructuredIniHandler = makeIniHandler;
+
+// ***************************************************************************
 
 /// Convenience function to load a struct from an INI file.
 /// Returns .init if the file does not exist.
@@ -301,6 +310,8 @@ S loadIni(S)(string fileName)
 
 	return s;
 }
+
+// ***************************************************************************
 
 /// Simple convenience formatter for writing INI files.
 struct IniWriter(O)
