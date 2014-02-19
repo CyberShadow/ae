@@ -14,6 +14,7 @@
 module ae.utils.sini;
 
 import std.algorithm;
+import std.conv;
 import std.exception;
 import std.range;
 import std.string;
@@ -161,8 +162,6 @@ struct IniTraversingHandler(S)
 
 IniTraversingHandler!S makeIniHandler(S = string, U)(ref U v)
 {
-	import std.conv;
-
 	static if (is(U == struct))
 		return IniTraversingHandler!S
 		(
@@ -181,39 +180,39 @@ IniTraversingHandler!S makeIniHandler(S = string, U)(ref U v)
 							throw new Exception("Can't parse " ~ U.stringof ~ "." ~ cast(string)name ~ " of type " ~ typeof(v.tupleof[i]).stringof);
 					}
 				}
-				static if (is(typeof({ IniTraversingHandler h = v.parseSection(name); })))
+				static if (is(ReturnType!(v.parseSection)))
 					return v.parseSection(name);
 				else
 					throw new Exception("Unknown field " ~ to!string(name));
 			}
 		);
 	else
-	static if (is(AssocArrayTypeOf!U))
+	static if (isAssociativeArray!U)
 		return IniTraversingHandler!S
 		(
 			null,
 			(S name)
 			{
 				alias K = typeof(v.keys[0]);
-				auto key = std.conv.to!K(name);
+				auto key = to!K(name);
 				auto pField = key in v;
 				if (!pField)
 				{
-					v[name.idup] = typeof(v[name]).init;
-					pField = name in v;
+					v[key] = typeof(v[key]).init;
+					pField = key in v;
 				}
 				else
-					throw new Exception("Duplicate value: " ~ name);
-				return makeIniHandler(*pField);
+					throw new Exception("Duplicate value: " ~ to!string(name));
+				return makeIniHandler!S(*pField);
 			}
 		);
 	else
-	static if (is(typeof(std.conv.to!U(string.init))))
+	static if (is(typeof(to!U(string.init))))
 		return IniTraversingHandler!S
 		(
 			(S value)
 			{
-				v = std.conv.to!U(value);
+				v = to!U(value);
 			}
 		);
 	else
@@ -272,8 +271,8 @@ unittest
 		{
 			sections.length++;
 			auto p = &sections[$-1];
-			p.name = std.conv.to!string(name);
-			return makeIniHandler(p.values);
+			p.name = to!string(name);
+			return makeIniHandler!wstring(p.values);
 		}
 	}
 
