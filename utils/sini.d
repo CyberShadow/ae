@@ -23,18 +23,18 @@ alias std.string.indexOf indexOf;
 
 /// Represents the user-defined behavior for handling a node in a
 /// structured INI file's hierarchy.
-struct IniHandler
+struct IniHandler(S)
 {
 	/// User callback for parsing a value at this node.
-	void delegate(in char[] name, in char[] value) leafHandler;
+	void delegate(S name, S value) leafHandler;
 
 	/// User callback for obtaining a child node from this node.
-	IniHandler delegate(in char[] name) nodeHandler;
+	IniHandler delegate(S name) nodeHandler;
 }
 
 /// Parse a structured INI from a range of lines, through the given handler.
-void parseIni(R)(R r, IniHandler rootHandler)
-	if (isInputRange!R && is(ElementType!R : const(char)[]))
+void parseIni(R, H)(R r, H rootHandler)
+	if (isInputRange!R && isSomeString!(ElementType!R))
 {
 	auto currentHandler = rootHandler;
 
@@ -81,6 +81,12 @@ void parseIni(R)(R r, IniHandler rootHandler)
 	}
 }
 
+/// Helper which creates an INI handler out of delegates.
+IniHandler!S iniHandler(S)(void delegate(S, S) leafHandler, IniHandler!S delegate(S) nodeHandler = null)
+{
+	return IniHandler!S(leafHandler, nodeHandler);
+}
+
 unittest
 {
 	int count;
@@ -92,13 +98,13 @@ unittest
 			[s]
 			n2=v2
 		>".splitLines(),
-		IniHandler
+		iniHandler
 		(
 			null,
 			(in char[] name)
 			{
 				assert(name == "s");
-				return IniHandler
+				return iniHandler
 				(
 					(in char[] name, in char[] value)
 					{
@@ -116,22 +122,22 @@ unittest
 }
 
 /// Alternative API for IniHandler, where each leaf is a node
-struct IniTraversingHandler
+struct IniTraversingHandler(S)
 {
 	/// User callback for parsing a value at this node.
-	void delegate(in char[] value) leafHandler;
+	void delegate(S value) leafHandler;
 
 	/// User callback for obtaining a child node from this node.
-	IniTraversingHandler delegate(in char[] name) nodeHandler;
+	IniTraversingHandler delegate(S name) nodeHandler;
 
-	private IniHandler conv()
+	private IniHandler!S conv()
 	{
 		// Don't reference "this" from a lambda,
 		// as it can be a temporary on the stack
 		IniTraversingHandler thisCopy = this;
-		return IniHandler
+		return IniHandler!S
 		(
-			(in char[] name, in char[] value)
+			(S name, S value)
 			{
 				thisCopy
 					.nodeHandler
@@ -141,7 +147,7 @@ struct IniTraversingHandler
 					.enforce("This group may not have a value.")
 					(value);
 			},
-			(in char[] name)
+			(S name)
 			{
 				return thisCopy
 					.nodeHandler
@@ -153,53 +159,59 @@ struct IniTraversingHandler
 	}
 }
 
-IniTraversingHandler makeIniHandler(U)(ref U v)
+IniTraversingHandler!S makeIniHandler(S = string, U)(ref U v)
 {
 	import std.conv;
 
 	static if (is(U == struct))
-		return IniTraversingHandler
+		return IniTraversingHandler!S
 		(
 			null,
-			delegate IniTraversingHandler (in char[] name)
+			delegate IniTraversingHandler!S (S name)
 			{
 				bool found;
 				foreach (i, field; v.tupleof)
-					if (name == v.tupleof[i].stringof[2..$])
+				{
+					enum fieldName = to!S(v.tupleof[i].stringof[2..$]);
+					if (name == fieldName)
 					{
 						static if (is(typeof(makeIniHandler(v.tupleof[i]))))
 							return makeIniHandler(v.tupleof[i]);
 						else
 							throw new Exception("Can't parse " ~ U.stringof ~ "." ~ cast(string)name ~ " of type " ~ typeof(v.tupleof[i]).stringof);
 					}
+				}
 				static if (is(typeof({ IniTraversingHandler h = v.parseSection(name); })))
 					return v.parseSection(name);
 				else
-					throw new Exception("Unknown field " ~ name.assumeUnique);
+					throw new Exception("Unknown field " ~ to!string(name));
 			}
 		);
 	else
-	static if (is(typeof(v[string.init])))
-		return IniTraversingHandler
+	static if (is(AssocArrayTypeOf!U))
+		return IniTraversingHandler!S
 		(
 			null,
-			(in char[] name)
+			(S name)
 			{
-				auto pField = name in v;
+				alias K = typeof(v.keys[0]);
+				auto key = std.conv.to!K(name);
+				auto pField = key in v;
 				if (!pField)
 				{
-					enforce(name !in v, "Duplicate value: " ~ name);
 					v[name.idup] = typeof(v[name]).init;
 					pField = name in v;
 				}
+				else
+					throw new Exception("Duplicate value: " ~ name);
 				return makeIniHandler(*pField);
 			}
 		);
 	else
 	static if (is(typeof(std.conv.to!U(string.init))))
-		return IniTraversingHandler
+		return IniTraversingHandler!S
 		(
-			(in char[] value)
+			(S value)
 			{
 				v = std.conv.to!U(value);
 			}
@@ -210,10 +222,10 @@ IniTraversingHandler makeIniHandler(U)(ref U v)
 
 /// Parse a structured INI from a range of lines, into a user-defined struct.
 T parseIni(T, R)(R r)
-	if (isInputRange!R && is(ElementType!R : const(char)[]))
+	if (isInputRange!R && isSomeString!(ElementType!R))
 {
 	T result;
-	parseIni(r, makeIniHandler(result).conv());
+	parseIni(r, makeIniHandler!(ElementType!R)(result).conv());
 	return result;
 }
 
@@ -256,11 +268,11 @@ unittest
 		}
 		Section[] sections;
 
-		IniTraversingHandler parseSection(in char[] name)
+		auto parseSection(wstring name)
 		{
 			sections.length++;
 			auto p = &sections[$-1];
-			p.name = name.idup;
+			p.name = std.conv.to!string(name);
 			return makeIniHandler(p.values);
 		}
 	}
@@ -272,7 +284,7 @@ unittest
 			a=a
 			[two]
 			b=b
-		>".splitLines()
+		>"w.splitLines()
 	);
 
 	assert(c == Custom([Custom.Section("one", ["a" : "a"]), Custom.Section("two", ["b" : "b"])]));
