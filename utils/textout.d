@@ -38,6 +38,17 @@ unittest
 
 // **************************************************************************
 
+/// Sink which simply counts how much data is written to it.
+struct CountingWriter(T)
+{
+	size_t count;
+
+	void put(T v) { count++; }
+	void put(in T[] v) { count += v.length; }
+}
+
+// **************************************************************************
+
 /// Sink which simply copies data to a pointer and advances it.
 /// No reallocation, no bounds check - unsafe.
 struct BlindWriter(T)
