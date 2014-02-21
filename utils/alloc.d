@@ -236,22 +236,15 @@ template FreeListNode(T)
 
 	mixin template NodeContents()
 	{
-		FreeListNode* next; /// Next free node
 		V data;
+		FreeListNode* next; /// Next free node
+		static FreeListNode* fromRef(R r) { return cast(FreeListNode*)r; }
 	}
 
 	debug
-		struct FreeListNode
-		{
-			mixin NodeContents;
-			static FreeListNode* fromRef(R r) { return cast(FreeListNode*)( (cast(ubyte*)r) - (data.offsetof) ); }
-		}
+		struct FreeListNode { mixin NodeContents; }
 	else
-		union FreeListNode
-		{
-			mixin NodeContents;
-			static FreeListNode* fromRef(R r) { return cast(FreeListNode*)r; }
-		}
+		union  FreeListNode { mixin NodeContents; }
 }
 
 
