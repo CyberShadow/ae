@@ -85,7 +85,8 @@ import std.traits : fullyQualifiedName;
 import ae.utils.meta : RefType, FromRefType, StorageType;
 
 /// Generates code to create forwarding aliases to the given mixin/template member.
-/// Used as a replacement for "alias M this", which doesn't seem to work with mixins and templates.
+/// Used as a replacement for "alias M this", which doesn't seem to work with mixins
+/// and templates.
 static template mixAliasForward(alias M, string name = __traits(identifier, M))
 {
 	static string mixAliasForward()
@@ -182,7 +183,8 @@ mixin template AllocTypes()
 	static if (is(R) && !is(T)) alias FromRefType!R T;
 	static if (is(T) && !is(R)) alias RefType!T R;
 	static if (is(T) && !is(V)) alias StorageType!T V;
-	static if (is(ALLOCATOR_TYPE)) static assert(is(ALLOCATOR_TYPE==T), "This allocator can only allocate instances of " ~ ALLOCATOR_TYPE.stringof ~ ", not " ~ T.stringof);
+	static if (is(ALLOCATOR_TYPE)) static assert(is(ALLOCATOR_TYPE==T), "This allocator can "
+		"only allocate instances of " ~ ALLOCATOR_TYPE.stringof ~ ", not " ~ T.stringof);
 	static if (is(BASE_TYPE) && is(V))
 	{
 		enum ALLOC_SIZE = (V.sizeof + BASE_TYPE.sizeof-1) / BASE_TYPE.sizeof;
