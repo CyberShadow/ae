@@ -10,19 +10,14 @@
  * individual instances. Code should test the presence of primitives
  * (methods in allocator mixin instances) accordingly.
  *
- * Allocators are mixin templates. This allows for multiple composed
- * allocators, as well as data structures using them, to have the same
- * "this" pointer, which would avoid additional indirections.
+ * Most allocators have two parts: data and implementation. The split is
+ * done to allow all implementation layers to share the same "this"
+ * pointer. Each "Impl" part takes its "data" part as an alias.
  *
- * The underlying allocator can be passed in as an alias template
- * parameter. This means that it has to be a symbol, the address of which
- * is known in the scope of the allocator - thus, a mixin in the same
- * class/struct, or a global variable.
- *
- * The underlying allocator can also be passed in as a string template
- * parameter. A string can be used instead of an alias parameter to allow
- * using complex expressions - for example, using a named mixin inside a
- * struct pointer.
+ * The underlying allocator (or its implementation instantiation) is
+ * passed in as an alias template parameter. This means that it has to be
+ * a symbol, the address of which is known in the scope of the allocator
+ * - thus, something scoped in the same class/struct, or a global variable.
  *
  * Allocator kinds:
  *
@@ -89,6 +84,57 @@ import std.traits : fullyQualifiedName;
 
 import ae.utils.meta : RefType, FromRefType, StorageType;
 
+/// Generates code to create forwarding aliases to the given mixin/template member.
+/// Used as a replacement for "alias M this", which doesn't seem to work with mixins and templates.
+static template mixAliasForward(alias M, string name = __traits(identifier, M))
+{
+	static string mixAliasForward()
+	{
+		import std.string, std.algorithm;
+		return [__traits(allMembers, M)]
+			.filter!(n => n.length)
+			.map!(n => "alias %s.%s %s;\n".format(name, n, n))
+			.join();
+	}
+}
+
+/// Instantiates a struct from a type containing a Data/Impl template pair.
+struct WrapParts(T)
+{
+	T.Data data;
+	alias impl = T.Impl!data;
+//	pragma(msg, __traits(identifier, impl));
+//	pragma(msg, mixAliasForward!(impl, q{impl}));
+
+	mixin({
+		import std.string, std.algorithm, std.range;
+		return
+			chain(
+				[__traits(allMembers, T.Impl!data)]
+				.filter!(n => n.length)
+				.map!(n => "alias %s.%s %s;\n".format("impl", n, n))
+			,
+				[__traits(allMembers, T)]
+				.filter!(n => n.length)
+				.filter!(n => n != "Impl")
+				.filter!(n => n != "Data")
+				.map!(n => "alias %s.%s %s;\n".format("T", n, n))
+			)
+			.join()
+		;}()
+	);
+}
+
+/// Creates a template which, when instantiated, forwards its arguments to T
+/// and uses WrapParts on the result.
+template PartsWrapper(alias T)
+{
+	template PartsWrapper(Args...)
+	{
+		alias PartsWrapper = WrapParts!(T!Args);
+	}
+}
+
 // TODO:
 // - GROWFUN callable alias parameter instead of BLOCKSIZE?
 // - Consolidate RegionAllocator and GrowingBufferAllocator
@@ -99,91 +145,35 @@ import ae.utils.meta : RefType, FromRefType, StorageType;
 //   is not a pointer?
 // - More thorough testing
 
-/// Declares a WrapMixin template in the current scope, which will
-/// create a struct containing an instance of the mixin template M,
-/// instantiated with the given ARGS.
-/// WrapMixin is not reusable across scopes. Each scope should have an
-/// instance of WrapMixin, as the context of M's instantiation will be
-/// the scope declaring WrapMixin, not the scope declaring M.
-mixin template AddWrapMixin()
-{
-	private struct WrapMixin(alias M, ARGS...) { mixin M!ARGS; }
-}
-
-mixin AddWrapMixin;
-
-/// Declares a MixinWrapper template in the current scope, which will
-/// create a struct template containing an instance of the mixin template
-/// M, instantiated with the arguments passed to the struct template.
-/// Similar to WrapMixin, MixinWrapper is not reusable across scopes.
-/// Each scope should have an instance of MixinWrapper, as the context of
-/// M's instantiation will be the scope declaring MixinWrapper, not the
-/// scope declaring M.
-mixin template AddMixinWrapper()
-{
-	private template MixinWrapper(alias M)
-	{
-		struct MixinWrapper(ARGS...)
-		{
-			mixin M!ARGS;
-		}
-	}
-}
-
-/// Generates code to create forwarding aliases to the given mixin member.
-/// Used as a replacement for "alias M this", which doesn't seem to work with mixins.
-string mixAliasForward(alias M)()
-{
-	import std.string;
-	enum mixinName = __traits(identifier, M);
-	string result;
-	foreach (fieldName; __traits(allMembers, M))
-		result ~= "alias " ~ mixinName ~ "." ~ fieldName ~ " " ~ fieldName ~ ";\n";
-	return result;
-}
-
-/// Declares ALLOCATOR_EXPR, a string mixin which, when mixin()'d,
-/// resolves to the ALLOCATOR string mixin (if it's a string) or
-/// alias (otherwise).
-/// Facilitates allocator users to accept allocators as both aliases
-/// or expressions specified as string mixins.
-mixin template AllocatorExpr()
-{
-	static if (is(typeof(ALLOCATOR) == string))
-		enum ALLOCATOR_EXPR = ALLOCATOR;
-	else
-		enum ALLOCATOR_EXPR = q{ALLOCATOR};
-}
-
 /// Common declarations for an allocator mixin
 mixin template AllocatorCommon()
 {
 	alias ae.utils.alloc.StorageType StorageType;
-
-	RefType!T create(T, A...)(A args)
-	{
-		alias StorageType!T V;
-
-		auto r = allocate!T();
-		emplace!T(cast(void[])((cast(V*)r)[0..1]), args);
-		return r;
-	}
-
-	static if (is(typeof(&free)))
-	void destroy(R)(R r)
-	{
-		clear(r);
-		free(r);
-	}
 
 	static if (is(ALLOCATOR_TYPE))
 		alias StorageType!ALLOCATOR_TYPE VALUE_TYPE;
 
 	static if (is(BASE_TYPE))
 		alias StorageType!BASE_TYPE BASE_VALUE_TYPE;
+}
 
-	static if (is(typeof(ALLOCATOR)))
-		mixin AllocatorExpr;
+/// Default "create" implementation.
+RefType!T create(T, A, Args...)(ref A a, Args args)
+	if (is(typeof(a.allocate!T())))
+{
+	alias StorageType!T V;
+
+	auto r = a.allocate!T();
+	emplace!T(cast(void[])((cast(V*)r)[0..1]), args);
+	return r;
+}
+
+void destroy(R, A)(ref A a, R r)
+//	TODO: contract
+{
+	clear(r);
+	static if (is(typeof(&a.free)))
+		a.free(r);
 }
 
 /// Creates T/R/V aliases from context, and checks ALLOCATOR_TYPE if appropriate.
@@ -202,13 +192,13 @@ mixin template AllocTypes()
 /// Allocator proxy which injects custom code after object creation.
 /// Context of INIT_CODE:
 ///   p - newly-allocated value.
-mixin template InitializingAllocatorProxy(string INIT_CODE, alias ALLOCATOR = heapAllocator)
+struct InitializingAllocatorProxy(string INIT_CODE, alias ALLOCATOR = heapAllocator)
 {
 	mixin AllocatorCommon;
 
 	RefType!T allocate(T)()
 	{
-		auto p = mixin(ALLOCATOR_EXPR).allocate!T();
+		auto p = ALLOCATOR.allocate!T();
 		mixin(INIT_CODE);
 		return p;
 	}
@@ -217,7 +207,7 @@ mixin template InitializingAllocatorProxy(string INIT_CODE, alias ALLOCATOR = he
 }
 
 /// Allocator proxy which keeps track how many allocations were made.
-mixin template StatAllocatorProxy(alias ALLOCATOR = heapAllocator)
+struct StatAllocatorProxy(alias ALLOCATOR = heapAllocator)
 {
     mixin AllocatorCommon;
 
@@ -226,13 +216,13 @@ mixin template StatAllocatorProxy(alias ALLOCATOR = heapAllocator)
 	RefType!T allocate(T)()
 	{
 		allocated += StorageType!T.sizeof;
-		return mixin(ALLOCATOR_EXPR).allocate!T();
+		return ALLOCATOR.allocate!T();
 	}
 
 	StorageType!T[] allocateMany(T)(size_t n)
 	{
 		allocated += n * StorageType!T.sizeof;
-		return mixin(ALLOCATOR_EXPR).allocateMany!T(n);
+		return ALLOCATOR.allocateMany!T(n);
 	}
 
 	// TODO: Proxy other methods
@@ -268,39 +258,47 @@ template FreeListNode(T)
 /// Homogenous linked list allocator.
 /// Supports O(1) deletion.
 /// Does not support bulk allocation.
-mixin template FreeListAllocator(ALLOCATOR_TYPE, alias ALLOCATOR = heapAllocator)
+struct FreeListAllocator(ALLOCATOR_TYPE, alias ALLOCATOR = heapAllocator)
 {
 	mixin AllocatorCommon;
 
 	alias FreeListNode!ALLOCATOR_TYPE Node;
 
-	Node* head = null; /// First free node
-
-	RefType!T allocate(T)()
+	struct Data
 	{
-		mixin AllocTypes;
-
-		if (head is null)
-		{
-			auto node = mixin(ALLOCATOR_EXPR).allocate!Node();
-			return cast(R)&node.data;
-		}
-		auto node = head;
-		head = head.next;
-		return cast(R)&node.data;
+		Node* head = null; /// First free node
 	}
 
-	void free(R)(R r)
+	static template Impl(alias data)
 	{
-		auto node = Node.fromRef(r);
-		node.next = head;
-		head = node;
+		RefType!T allocate(T)()
+		{
+			mixin AllocTypes;
+
+			if (data.head is null)
+			{
+				auto node = ALLOCATOR.allocate!Node();
+				return cast(R)&node.data;
+			}
+			auto node = data.head;
+			data.head = data.head.next;
+			return cast(R)&node.data;
+		}
+
+		void free(R)(R r)
+		{
+			auto node = Node.fromRef(r);
+			node.next = data.head;
+			data.head = node;
+		}
 	}
 }
 
 /// Backend allocator Allocates from D's managed heap directly.
-mixin template HeapAllocator()
+struct HeapAllocator
 {
+// static: // https://d.puremagic.com/issues/show_bug.cgi?id=12207
+const:
 	RefType!T allocate(T)()
 	{
 		return new T;
@@ -334,58 +332,54 @@ mixin template HeapAllocator()
 	}
 }
 
-WrapMixin!HeapAllocator heapAllocator;
+immutable HeapAllocator heapAllocator;
 
-mixin template AllocateOneViaMany()
+RefType!T allocate(T, A)(ref A a)
+	if (is(typeof(&a.allocateMany!T)))
 {
-	RefType!T allocate(T)()
-	{
-		mixin AllocTypes;
-
-		return cast(R)(allocateMany(1).ptr);
-	}
+	return cast(RefType!T)(a.allocateMany!T(1).ptr);
 }
 
-mixin template FreeOneViaMany()
+void free(A, R)(ref A a, R r)
+	if (is(typeof(&a.freeMany)))
 {
-	void free(R)(R r)
-	{
-		mixin AllocTypes;
-
-		freeMany((cast(V*)r)[0..1]);
-	}
+	a.freeMany((cast(V*)r)[0..1]);
 }
 
 /// Backend allocator using the Data type from ae.sys.data.
-mixin template DataAllocator()
+struct DataAllocator
 {
 	mixin AllocatorCommon;
 
-	import ae.sys.data;
+	import ae.sys.data : SysData = Data;
 
-	// Needed to make data referenced in Data instances reachable by the GC
-	Data[] datas; // TODO: use linked list or something
-
-	StorageType!T[] allocateMany(T)(size_t n)
+	struct Data
 	{
-		mixin AllocTypes;
-
-		auto data = Data(V.sizeof * n);
-		datas ~= data;
-		return cast(V[])data.mcontents;
+		// Needed to make data referenced in Data instances reachable by the GC
+		SysData[] datas; // TODO: use linked list or something
 	}
 
-	mixin AllocateOneViaMany;
-
-	void freeAll()
+	static template Impl(alias data)
 	{
-		foreach (data; datas)
-			data.deleteContents();
-		datas = null;
+		StorageType!T[] allocateMany(T)(size_t n)
+		{
+			mixin AllocTypes;
+
+			auto sysData = SysData(V.sizeof * n);
+			data.datas ~= sysData;
+			return cast(V[])sysData.mcontents;
+		}
+
+		void freeAll()
+		{
+			foreach (sysData; data.datas)
+				sysData.deleteContents();
+			data.datas = null;
+		}
 	}
 }
 
-mixin template GCRootAllocatorProxy(alias ALLOCATOR)
+struct GCRootAllocatorProxy(alias ALLOCATOR)
 {
 	mixin AllocatorCommon;
 
@@ -393,25 +387,21 @@ mixin template GCRootAllocatorProxy(alias ALLOCATOR)
 
 	StorageType!T[] allocateMany(T)(size_t n)
 	{
-		auto result = mixin(ALLOCATOR_EXPR).allocateMany!T(n);
+		auto result = ALLOCATOR.allocateMany!T(n);
 		auto bytes = cast(ubyte[])result;
 		GC.addRange(bytes.ptr, bytes.length);
 		return result;
 	}
 
-	mixin AllocateOneViaMany;
-
 	void freeMany(V)(V[] v)
 	{
 		GC.removeRange(v.ptr);
-		mixin(ALLOCATOR_EXPR).freeMany(v);
+		ALLOCATOR.freeMany(v);
 	}
-
-	mixin FreeOneViaMany;
 }
 
 /// Backend for direct OS page allocation.
-mixin template PageAllocator()
+struct PageAllocator
 {
 	version(Windows)
 		import std.c.windows.windows;
@@ -439,8 +429,6 @@ mixin template PageAllocator()
 		return (cast(V*)p)[0..n];
 	}
 
-	mixin AllocateOneViaMany;
-
 	void freeMany(V)(V[] v)
 	{
 		mixin AllocTypes;
@@ -451,11 +439,9 @@ mixin template PageAllocator()
 		version(Posix)
 			munmap(v.ptr, v.length * V.sizeof);
 	}
-
-	mixin FreeOneViaMany;
 }
 
-/// Common code for pointer-bumping allocators.
+/// Common code for pointer-bumping allocator implementations.
 ///
 /// Context:
 ///   ptr - pointer to next free element
@@ -467,15 +453,16 @@ mixin template PointerBumpCommon()
 {
 	/// Shared code for allocate / allocateMany.
 	/// Context:
+	///   data - alias to struct holding ptr and end
 	///   Size - number of BASE_TYPE items to allocate
 	///     (can be a constant or variable).
 	private enum mixAllocateN =
 	q{
-		if (ptr + Size > end)
+		if (data.ptr + Size > data.end)
 			bufferExhausted(Size > BLOCKSIZE ? Size : BLOCKSIZE);
 
-		auto result = ptr[0..Size];
-		ptr += Size;
+		auto result = data.ptr[0..Size];
+		data.ptr += Size;
 	};
 
 	RefType!T allocate(T)()
@@ -515,56 +502,68 @@ mixin template PointerBumpCommon()
 /// (This restriction allows for allocations of single BASE_TYPE-sized items to be
 /// a little faster.)
 // TODO: support non-bulk allocators (without allocateMany support)?
-mixin template RegionAllocator(BASE_TYPE=void*, size_t BLOCKSIZE=1024, alias ALLOCATOR = heapAllocator)
+struct RegionAllocator(BASE_TYPE=void*, size_t BLOCKSIZE=1024, alias ALLOCATOR = heapAllocator)
 {
 	mixin AllocatorCommon;
 
-	BASE_VALUE_TYPE* ptr=null, end=null;
-
-	/// Forget we ever allocated anything
-	void reset() { ptr=end=null; }
-
-	private void newBlock(size_t size) // size counts BASE_VALUE_TYPE
+	struct Data
 	{
-		BASE_VALUE_TYPE[] arr = mixin(ALLOCATOR_EXPR).allocateMany!BASE_TYPE(size);
-		ptr = arr.ptr;
-		end = ptr + arr.length;
+		BASE_VALUE_TYPE* ptr=null, end=null;
 	}
 
-	alias newBlock bufferExhausted;
-	mixin PointerBumpCommon;
+	static template Impl(alias data)
+	{
+		/// Forget we ever allocated anything
+		void reset() { data.ptr=data.end=null; }
+
+		private void newBlock(size_t size) // size counts BASE_VALUE_TYPE
+		{
+			BASE_VALUE_TYPE[] arr = ALLOCATOR.allocateMany!BASE_TYPE(size);
+			data.ptr = arr.ptr;
+			data.end = data.ptr + arr.length;
+		}
+
+		alias newBlock bufferExhausted;
+		mixin PointerBumpCommon;
+	}
 }
 
 /// Allocator proxy which keeps track of all allocations,
 /// and implements freeAll by discarding them all at once
 /// via the underlying allocator's freeMany.
-mixin template TrackingAllocatorProxy(ALLOCATOR_TYPE, alias ALLOCATOR = heapAllocator)
+struct TrackingAllocatorProxy(ALLOCATOR_TYPE, alias ALLOCATOR = heapAllocator)
 {
 	mixin AllocatorCommon;
 
-	VALUE_TYPE[][] blocks; // TODO: use linked list or something
-
-	VALUE_TYPE[] allocateMany(T)(size_t n)
+	struct Data
 	{
-		mixin AllocTypes;
-
-		VALUE_TYPE[] arr = mixin(ALLOCATOR_EXPR).allocateMany!ALLOCATOR_TYPE(n);
-		blocks ~= arr;
-		return arr;
+		VALUE_TYPE[][] blocks; // TODO: use linked list or something
 	}
 
-	RefType!T allocate(T)()
+	static template Impl(alias data)
 	{
-		mixin AllocTypes;
+		VALUE_TYPE[] allocateMany(T)(size_t n)
+		{
+			mixin AllocTypes;
 
-		return cast(R)(allocateMany!T(1).ptr);
-	}
+			VALUE_TYPE[] arr = ALLOCATOR.allocateMany!ALLOCATOR_TYPE(n);
+			data.blocks ~= arr;
+			return arr;
+		}
 
-	void freeAll()
-	{
-		foreach (block; blocks)
-			mixin(ALLOCATOR_EXPR).freeMany(block);
-		blocks = null;
+		RefType!T allocate(T)()
+		{
+			mixin AllocTypes;
+
+			return cast(R)(allocateMany!T(1).ptr);
+		}
+
+		void freeAll()
+		{
+			foreach (block; data.blocks)
+				ALLOCATOR.freeMany(block);
+			data.blocks = null;
+		}
 	}
 }
 
@@ -572,30 +571,36 @@ mixin template TrackingAllocatorProxy(ALLOCATOR_TYPE, alias ALLOCATOR = heapAllo
 /// Allows reusing the same buffer, which is grown and retained as needed.
 /// Requires .resize support from underlying allocator.
 /// Smaller buffers are discarded (neither freed nor reused).
-mixin template GrowingBufferAllocator(BASE_TYPE=void*, alias ALLOCATOR = heapAllocator)
+struct GrowingBufferAllocator(BASE_TYPE=void*, alias ALLOCATOR = heapAllocator)
 {
 	mixin AllocatorCommon;
 
-	BASE_VALUE_TYPE* buf, ptr, end;
-
-	void bufferExhausted(size_t n)
+	struct Data
 	{
-		import std.algorithm;
-		auto newSize = max(4096 / BASE_VALUE_TYPE.sizeof, (end-buf)*2, n);
-		auto pos = ptr - buf;
-		auto arr = mixin(ALLOCATOR_EXPR).resize(buf[0..end-buf], newSize);
-		buf = arr.ptr;
-		end = buf + arr.length;
-		ptr = buf + pos;
+		BASE_VALUE_TYPE* buf, ptr, end;
 	}
 
-	void clear()
+	static template Impl(alias data)
 	{
-		ptr = buf;
-	}
+		void bufferExhausted(size_t n)
+		{
+			import std.algorithm;
+			auto newSize = max(4096 / BASE_VALUE_TYPE.sizeof, (data.end-data.buf)*2, n);
+			auto pos = data.ptr - data.buf;
+			auto arr = ALLOCATOR.resize(data.buf[0..data.end-data.buf], newSize);
+			data.buf = arr.ptr;
+			data.end = data.buf + arr.length;
+			data.ptr = data.buf + pos;
+		}
 
-	enum BLOCKSIZE=0;
-	mixin PointerBumpCommon;
+		void clear()
+		{
+			data.ptr = data.buf;
+		}
+
+		enum BLOCKSIZE=0;
+		mixin PointerBumpCommon;
+	}
 }
 
 /// Thrown when the buffer of an allocator is exhausted.
@@ -603,54 +608,66 @@ class BufferExhaustedException : Exception { this() { super("Allocator buffer ex
 
 /// Homogenous allocator which uses a given buffer.
 /// Throws BufferExhaustedException if the buffer is exhausted.
-mixin template BufferAllocator(BASE_TYPE=ubyte)
+struct BufferAllocator(BASE_TYPE=ubyte)
 {
 	mixin AllocatorCommon;
 
-	void setBuffer(BASE_VALUE_TYPE[] buf)
+	struct Data
 	{
-		ptr = buf.ptr;
-		end = ptr + buf.length;
+		BASE_VALUE_TYPE* ptr=null, end=null;
 	}
 
-	this(BASE_VALUE_TYPE[] buf) { setBuffer(buf); }
-
-	BASE_VALUE_TYPE* ptr=null, end=null;
-
-	static void bufferExhausted(size_t n)
+	static template Impl(alias data)
 	{
-		throw new BufferExhaustedException();
-	}
+		void setBuffer(BASE_VALUE_TYPE[] buf)
+		{
+			data.ptr = buf.ptr;
+			data.end = data.ptr + buf.length;
+		}
 
-	enum BLOCKSIZE=0;
-	mixin PointerBumpCommon;
+		this(BASE_VALUE_TYPE[] buf) { setBuffer(buf); }
+
+		static void bufferExhausted(size_t n)
+		{
+			throw new BufferExhaustedException();
+		}
+
+		enum BLOCKSIZE=0;
+		mixin PointerBumpCommon;
+	}
 }
 
 /// Homogenous allocator which uses a static buffer of a given size.
 /// Throws BufferExhaustedException if the buffer is exhausted.
 /// Needs to be manually initialized before use.
-mixin template StaticBufferAllocator(size_t SIZE, BASE_TYPE=ubyte)
+struct StaticBufferAllocator(size_t SIZE, BASE_TYPE=ubyte)
 {
 	mixin AllocatorCommon;
 
-	V[SIZE] buffer;
-	V* ptr;
-	@property V* end() { return buffer.ptr + buffer.length; }
-
-	void initialize()
+	struct Data
 	{
-		ptr = buffer.ptr;
+		StorageType!BASE_TYPE[SIZE] buffer;
+		StorageType!BASE_TYPE* ptr;
+		@property StorageType!BASE_TYPE* end() { return buffer.ptr + buffer.length; }
 	}
 
-	void bufferExhausted(size_t n)
+	static template Impl(alias data)
 	{
-		throw new BufferExhaustedException();
+		void initialize()
+		{
+			data.ptr = data.buffer.ptr;
+		}
+
+		void bufferExhausted(size_t n)
+		{
+			throw new BufferExhaustedException();
+		}
+
+		enum BLOCKSIZE=0;
+		mixin PointerBumpCommon;
+
+		alias initialize clear;
 	}
-
-	enum BLOCKSIZE=0;
-	mixin PointerBumpCommon;
-
-	alias initialize clear;
 }
 
 /// A bulk allocator which behaves like a StaticBufferAllocator initially,
@@ -658,37 +675,43 @@ mixin template StaticBufferAllocator(size_t SIZE, BASE_TYPE=ubyte)
 /// bulk allocator.
 /// Needs to be manually initialized before use.
 /// ALLOCATOR is the fallback allocator.
-mixin template HybridBufferAllocator(size_t SIZE, BASE_TYPE=ubyte, alias ALLOCATOR=heapAllocator)
+struct HybridBufferAllocator(size_t SIZE, BASE_TYPE=ubyte, alias ALLOCATOR=heapAllocator)
 {
 	mixin AllocatorCommon;
 
-	BASE_VALUE_TYPE[SIZE] buffer;
-	BASE_VALUE_TYPE* ptr, end;
-
-	void initialize()
+	struct Data
 	{
-		ptr = buffer.ptr;
-		end = buffer.ptr + buffer.length;
+		BASE_VALUE_TYPE[SIZE] buffer;
+		BASE_VALUE_TYPE* ptr, end;
 	}
 
-	void bufferExhausted(size_t n)
+	static template Impl(alias data)
 	{
-		auto arr = mixin(ALLOCATOR_EXPR).allocateMany!BASE_TYPE(n);
-		ptr = arr.ptr;
-		end = ptr + arr.length;
-	}
-
-	enum BLOCKSIZE = SIZE;
-	mixin PointerBumpCommon;
-
-	static if (is(typeof(&mixin(ALLOCATOR_EXPR).clear)))
-	{
-		void clear()
+		void initialize()
 		{
-			if (end == buffer.ptr + buffer.length)
-				ptr = buffer.ptr;
-			else
-				mixin(ALLOCATOR_EXPR).clear();
+			data.ptr = data.buffer.ptr;
+			data.end = data.buffer.ptr + data.buffer.length;
+		}
+
+		void bufferExhausted(size_t n)
+		{
+			auto arr = ALLOCATOR.allocateMany!BASE_TYPE(n);
+			data.ptr = arr.ptr;
+			data.end = data.ptr + arr.length;
+		}
+
+		enum BLOCKSIZE = SIZE;
+		mixin PointerBumpCommon;
+
+		static if (is(typeof(&ALLOCATOR.clear)))
+		{
+			void clear()
+			{
+				if (data.end == data.buffer.ptr + data.buffer.length)
+					data.ptr = data.buffer.ptr;
+				else
+					ALLOCATOR.clear();
+			}
 		}
 	}
 }
@@ -708,8 +731,12 @@ unittest
 		assert(c2.x == 5);
 	}
 
-	testAllocator!(WrapMixin!(HeapAllocator))();
-	testAllocator!(WrapMixin!(FreeListAllocator, C))();
-	testAllocator!(WrapMixin!(GrowingBufferAllocator))();
-	testAllocator!(WrapMixin!(HybridBufferAllocator, 1024))();
+	testAllocator!(WrapParts!(FreeListAllocator!C))();
+	testAllocator!(           HeapAllocator)();
+	testAllocator!(WrapParts!(DataAllocator))();
+	testAllocator!(           PageAllocator)();
+	testAllocator!(WrapParts!(RegionAllocator!()))();
+	testAllocator!(WrapParts!(GrowingBufferAllocator!()))();
+	testAllocator!(WrapParts!(StaticBufferAllocator!1024), q{a.initialize();})();
+	testAllocator!(WrapParts!(HybridBufferAllocator!1024))();
 }

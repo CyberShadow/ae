@@ -103,12 +103,10 @@ struct XmlDom(STRING=string, XML_STRING=XmlString!STRING)
 	}
 }
 
-mixin template XmlDomWriter(DOM_, alias allocator=heapAllocator)
+static template XmlDomWriter(alias dom_, alias allocator=heapAllocator)
 {
-	alias DOM_ DOM;
-
-	DOM dom;
-
+	alias dom = dom_;
+	alias DOM = typeof(dom);
 	alias DOM.Node Node;
 
 	private Node* newNode()
@@ -140,9 +138,8 @@ mixin template XmlDomWriter(DOM_, alias allocator=heapAllocator)
 /// to obtain unique string pointers or IDs would also allow very
 /// quick tag/attribute name lookup, and avoid repeated entity
 /// decoding.
-struct XmlDomParser(WRITER, alias STRING_FILTER=NoopStringFilter, bool CHECKED=true)
+struct XmlDomParser(alias WRITER, alias STRING_FILTER=NoopStringFilter, bool CHECKED=true)
 {
-	WRITER writer;
 	WRITER.DOM.Cursor cursor;
 
 	STRING_FILTER stringFilter;
@@ -152,7 +149,7 @@ struct XmlDomParser(WRITER, alias STRING_FILTER=NoopStringFilter, bool CHECKED=t
 	private Node* addNode(XmlNodeType type)
 	{
 		assert(cursor.currentParent.type != XmlNodeType.attribute);
-		Node* n = writer.newNode();
+		Node* n = WRITER.newNode();
 		n.type = type;
 		cursor.appendNode(n);
 		return n;
@@ -160,7 +157,7 @@ struct XmlDomParser(WRITER, alias STRING_FILTER=NoopStringFilter, bool CHECKED=t
 
 	void startDocument()
 	{
-		cursor = writer.newDocument();
+		cursor = WRITER.newDocument();
 	}
 
 	void text(XML_STRING)(XML_STRING s)
@@ -217,7 +214,7 @@ struct XmlDomParser(WRITER, alias STRING_FILTER=NoopStringFilter, bool CHECKED=t
 	void endDocument()
 	{
 		cursor.ascend();
-		enforce(cursor.currentSibling is writer.dom.root, "Unexpected end of document");
+		enforce(cursor.currentSibling is WRITER.dom.root, "Unexpected end of document");
 	}
 }
 
@@ -227,13 +224,11 @@ struct NoopStringFilter
 	auto handleXmlString(S)(S s) { return s; }
 }
 
-private struct WrapMixin(alias M, ARGS...) { mixin M!ARGS; }
-
 unittest
 {
 	// Test instantiation
-	alias XmlDom!string DOM;
-	alias WrapMixin!(XmlDomWriter, DOM) WRITER;
+	XmlDom!string dom;
+	alias XmlDomWriter!dom WRITER;
 	alias XmlDomParser!WRITER OUTPUT;
 	alias XmlParser!(string, OUTPUT) PARSER;
 	PARSER p;
