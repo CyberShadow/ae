@@ -15,8 +15,21 @@ module ae.utils.textout;
 
 import ae.utils.appender;
 
+// **************************************************************************
+
+template isStringSink(T)
+{
+	enum isStringSink = is(typeof(T.init.put("Test")));
+}
+deprecated alias IsStringSink = isStringSink;
+
+// **************************************************************************
+
 alias FastAppender!(immutable(char)) StringBuilder;
 alias FastAppender!           char   StringBuffer;
+
+static assert(isStringSink!StringBuilder);
+static assert(isStringSink!StringBuffer);
 
 unittest
 {
@@ -68,6 +81,8 @@ struct BlindWriter(T)
 	}
 }
 
+static assert(isStringSink!(BlindWriter!char));
+
 version(unittest) import ae.utils.time;
 
 unittest
@@ -85,15 +100,9 @@ unittest
 
 // **************************************************************************
 
-template IsStringSink(T)
-{
-	enum IsStringSink = is(typeof(T.init.put("Test")));
-}
-
-// **************************************************************************
-
+/// Default implementation of put for dchars
 void put(S)(ref S sink, dchar c)
-	if (IsStringSink!S)
+	if (isStringSink!S)
 {
 	import std.utf;
 	char[4] buf;
@@ -111,9 +120,14 @@ unittest
 import std.traits;
 import ae.utils.text : toDec, DecimalSize;
 
-// Decimal
+/// Default implementation of put for numbers (uses decimal ASCII)
 void put(S, N)(ref S sink, N n)
-	if (IsStringSink!S && is(N : long) && !isSomeChar!N)
+	if (isStringSink!S && is(N : long) && !isSomeChar!N)
+{
+	sink.putDecimal(n);
+}
+
+void putDecimal(S, N)(ref S sink, N n)
 {
 	char[DecimalSize!N] buf = void;
 	sink.put(toDec(n, buf));
@@ -121,13 +135,16 @@ void put(S, N)(ref S sink, N n)
 
 unittest
 {
-	import std.conv;
-	void test(N)(N n) { StringBuilder sb; put(sb, n); assert(sb.get() == text(n), sb.get() ~ "!=" ~ text(n)); }
+	void test(N)(N n)
+	{
+		import std.conv;
+		StringBuilder sb;
+		put(sb, n);
+		assert(sb.get() == text(n), sb.get() ~ "!=" ~ text(n));
+	}
+
 	test(0);
 	test(1);
 	test(-1);
 	test(0xFFFFFFFFFFFFFFFFLU);
 }
-
-// **************************************************************************
-
