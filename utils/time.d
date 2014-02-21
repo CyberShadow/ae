@@ -16,12 +16,15 @@ module ae.utils.time;
 import std.algorithm;
 import std.conv : text;
 import std.datetime;
+import std.format : formattedWrite;
 import std.math : abs;
 import std.string;
 import std.typecons;
 
 import ae.utils.text;
 import ae.utils.textout;
+
+// ***************************************************************************
 
 struct TimeFormats
 {
@@ -49,43 +52,55 @@ const WeekdayLongNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"
 const MonthShortNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MonthLongNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
+// ***************************************************************************
+
+/// We assume that no timezone will have a name longer than this.
+/// If one does, it is truncated to this length.
+enum MaxTimezoneNameLength = 256;
+
 private struct FormatContext(Char)
 {
 	SysTime t;
 	DateTime dt;
 	bool escaping;
-
-	static char oneDigit(uint i)
-	{
-		debug assert(i < 10);
-		return cast(char)('0' + i);
-	}
-
-	static string oneOrTwoDigits(uint i) // TODO: don't allocate
-	{
-		debug assert(i < 100);
-		if (i < 10)
-			return [cast(char)('0' + i)];
-		else
-			return toDecFixed!2(i).idup;
-	}
-
-	string timezoneFallback(string tzStr, string fallbackFormat)
-	{
-		if (tzStr.length)
-			return tzStr;
-		else
-		if (t.timezone.utcToTZ(t.stdTime) == t.stdTime)
-			return "UTC";
-		else
-			return t.format(fallbackFormat);
-	}
 }
 
 private void putToken(alias c, alias context, alias sink)()
 {
 	with (context)
 	{
+		void putOneDigit(uint i)
+		{
+			debug assert(i < 10);
+			sink.put(cast(char)('0' + i));
+		}
+
+		void putOneOrTwoDigits(uint i)
+		{
+			debug assert(i < 100);
+			if (i >= 10)
+			{
+				sink.put(cast(char)('0' + (i / 10)));
+				sink.put(cast(char)('0' + (i % 10)));
+			}
+			else
+				sink.put(cast(char)('0' +  i      ));
+		}
+
+		void putTimezoneName(string tzStr)
+		{
+			if (tzStr.length)
+				sink.put(tzStr[0..min($, MaxTimezoneNameLength)]);
+			else
+		//	if (t.timezone.utcToTZ(t.stdTime) == t.stdTime)
+		//		sink.put("UTC");
+		//	else
+			{
+				enum fmt = 'C';
+				putToken!(fmt, context, sink)();
+			}
+		}
+
 		if (escaping)
 			sink.put(c), escaping = false;
 		else
@@ -99,13 +114,13 @@ private void putToken(alias c, alias context, alias sink)()
 					sink.put(WeekdayShortNames[dt.dayOfWeek]);
 					break;
 				case 'j':
-					sink.put(oneOrTwoDigits(dt.day));
+					putOneOrTwoDigits(dt.day);
 					break;
 				case 'l':
 					sink.put(WeekdayLongNames[dt.dayOfWeek]);
 					break;
 				case 'N':
-					sink.put(oneDigit((dt.dayOfWeek+6)%7 + 1));
+					putOneDigit((dt.dayOfWeek+6)%7 + 1);
 					break;
 				case 'S':
 					switch (dt.day)
@@ -128,7 +143,7 @@ private void putToken(alias c, alias context, alias sink)()
 					}
 					break;
 				case 'w':
-					sink.put(oneDigit(cast(int)dt.dayOfWeek));
+					putOneDigit(cast(int)dt.dayOfWeek);
 					break;
 				case 'z':
 					sink.put(text(dt.dayOfYear-1));
@@ -150,10 +165,10 @@ private void putToken(alias c, alias context, alias sink)()
 					sink.put(MonthShortNames[dt.month-1]);
 					break;
 				case 'n':
-					sink.put(oneOrTwoDigits(dt.month));
+					putOneOrTwoDigits(dt.month);
 					break;
 				case 't':
-					sink.put(oneOrTwoDigits(dt.daysInMonth));
+					putOneOrTwoDigits(dt.daysInMonth);
 					break;
 
 				// Year
@@ -177,10 +192,10 @@ private void putToken(alias c, alias context, alias sink)()
 					break;
 				// case 'B': TODO (Swatch Internet time)
 				case 'g':
-					sink.put(oneOrTwoDigits((dt.hour+11)%12 + 1));
+					putOneOrTwoDigits((dt.hour+11)%12 + 1);
 					break;
 				case 'G':
-					sink.put(oneOrTwoDigits(dt.hour));
+					putOneOrTwoDigits(dt.hour);
 					break;
 				case 'h':
 					sink.put(toDecFixed!2(cast(uint)(dt.hour+11)%12 + 1));
@@ -203,7 +218,7 @@ private void putToken(alias c, alias context, alias sink)()
 
 				// Timezone
 				case 'e':
-					sink.put(timezoneFallback(t.timezone.name, "P")); // TODO: don't allocate
+					putTimezoneName(t.timezone.name);
 					break;
 				case 'I':
 					sink.put(t.dstInEffect ? '1': '0');
@@ -211,20 +226,20 @@ private void putToken(alias c, alias context, alias sink)()
 				case 'O':
 				{
 					auto minutes = (t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000 / 60;
-					sink.put(std.string.format("%+03d%02d", minutes/60, abs(minutes%60))); // TODO: formattedWrite
+					reference(sink).formattedWrite("%+03d%02d", minutes/60, abs(minutes%60));
 					break;
 				}
 				case 'P':
 				{
 					auto minutes = (t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000 / 60;
-					sink.put(std.string.format("%+03d:%02d", minutes/60, abs(minutes%60))); // TODO: formattedWrite
+					reference(sink).formattedWrite("%+03d:%02d", minutes/60, abs(minutes%60));
 					break;
 				}
 				case 'T':
-					sink.put(timezoneFallback(t.timezone.stdName, "P")); // TODO: don't allocate
+					putTimezoneName(t.timezone.stdName);
 					break;
 				case 'Z':
-					sink.put(text((t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000)); // TODO: don't allocate
+					sink.putDecimal((t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000);
 					break;
 
 				// Full date/time
@@ -235,7 +250,7 @@ private void putToken(alias c, alias context, alias sink)()
 					putTime(sink, t, TimeFormats.RFC2822);
 					break;
 				case 'U':
-					sink.put(text(t.toUnixTime())); // TODO: don't allocate
+					sink.putDecimal(t.toUnixTime());
 					break;
 
 				// Escape next character
@@ -255,7 +270,7 @@ private void putToken(alias c, alias context, alias sink)()
 string format(string fmt)(SysTime t)
 {
 	enum maxSize = timeFormatSize(fmt);
-	auto result = StringBuilder(maxSize); // TODO: use a static array
+	auto result = StringBuilder(maxSize);
 	putTime!fmt(result, t);
 	return result.get();
 }
@@ -306,10 +321,6 @@ void putTimeImpl(alias fmt, S)(ref S sink, SysTime t)
 	foreach (c; CTIterate!fmt)
 		putToken!(c, context, sink)();
 }
-
-/// We assume that no timezone will have a name longer than this.
-/// If one does, it is truncated to this length.
-enum MaxTimezoneNameLength = 256;
 
 /// Calculate the maximum amount of characters needed to store a time in this format.
 /// Can be evaluated at compile-time.
