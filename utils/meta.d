@@ -367,7 +367,7 @@ mixin template StringMixinProxy(string targetPrefix)
 	// from std.typecons.Proxy
 	template opDispatch(string name)
 	{
-		static if (is(typeof(__traits(getMember, a, name)) == function))
+		static if (is(typeof(mixin(targetPrefix~name)) == function))
 		{
 			// non template function
 			auto ref opDispatch(this X, Args...)(auto ref Args args) { return mixin(targetPrefix~name~q{(args)}); }
@@ -377,7 +377,7 @@ mixin template StringMixinProxy(string targetPrefix)
 			// built-in type field, manifest constant, and static non-mutable field
 			enum opDispatch = mixin(targetPrefix~name);
 		}
-		else static if (is(typeof(mixin(targetPrefix~name))) || __traits(getOverloads, a, name).length != 0)
+		else static if (is(typeof(mixin(targetPrefix~name))) || __traits(getOverloads, __traits(parent, mixin(targetPrefix~name)), name).length != 0)
 		{
 			// field or property function
 			@property auto ref opDispatch(this X)()                { return mixin(targetPrefix~name        ); }
