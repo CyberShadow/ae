@@ -358,3 +358,87 @@ unittest
 	assert(p is &s);
 	assert(reference(p) is p);
 }
+
+// ************************************************************************
+
+/// Mixes in an opDispatch that forwards to the specified target prefix.
+mixin template StringMixinProxy(string targetPrefix)
+{
+	// from std.typecons.Proxy
+	template opDispatch(string name)
+	{
+		static if (is(typeof(__traits(getMember, a, name)) == function))
+		{
+			// non template function
+			auto ref opDispatch(this X, Args...)(auto ref Args args) { return mixin(targetPrefix~name~q{(args)}); }
+		}
+		else static if (is(typeof({ enum x = mixin(targetPrefix~name); })))
+		{
+			// built-in type field, manifest constant, and static non-mutable field
+			enum opDispatch = mixin(targetPrefix~name);
+		}
+		else static if (is(typeof(mixin(targetPrefix~name))) || __traits(getOverloads, a, name).length != 0)
+		{
+			// field or property function
+			@property auto ref opDispatch(this X)()                { return mixin(targetPrefix~name        ); }
+			@property auto ref opDispatch(this X, V)(auto ref V v) { return mixin(targetPrefix~name~q{ = v}); }
+		}
+		else
+		{
+			// member template
+			template opDispatch(T...)
+			{
+				auto ref opDispatch(this X, Args...)(auto ref Args args){ return mixin(targetPrefix~name~q{!T(args)}); }
+			}
+		}
+	}
+}
+
+alias Identity(alias a) = a;
+
+alias parentOf(alias a) = Identity!(__traits(parent, a));
+
+/// Instantiates to a type that points to a sub-aggregate
+/// (mixin or template alias) of a struct or class.
+/// Requires __traits(child) support:
+/// https://github.com/D-Programming-Language/dmd/pull/3329
+template ScopeProxy(alias a)
+{
+	alias parentOf!a S;
+	alias RefType!S R;
+
+	struct ScopeProxy
+	{
+		R _scopeProxy;
+
+		this(R s) { _scopeProxy = s; }
+
+		mixin StringMixinProxy!q{__traits(child, _scopeProxy, a).};
+	}
+}
+
+unittest
+{
+	// Can't declare template at statement level
+	static struct Dummy
+	{
+		static template T(alias a)
+		{
+			void set(int n)
+			{
+				a = n;
+			}
+		}
+	}
+
+	static struct S
+	{
+		int i;
+		alias t = Dummy.T!i;
+	}
+
+	S s;
+	auto w = ScopeProxy!(S.t)(&s);
+	w.set(42);
+	assert(s.i == 42);
+}
