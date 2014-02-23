@@ -129,8 +129,6 @@ enum LoadPolicy
 
 struct FileCache(alias DataGetter, alias DataPutter = None, FlushPolicy flushPolicy = FlushPolicy.none, LoadPolicy loadPolicy = LoadPolicy.automatic)
 {
-	import std.file;
-
 	string fileName;
 
 	static if (loadPolicy == LoadPolicy.automatic)
@@ -140,6 +138,7 @@ struct FileCache(alias DataGetter, alias DataPutter = None, FlushPolicy flushPol
 
 	ReturnType!DataGetter _FileCache_dataGetter()
 	{
+		import std.file : exists;
 		assert(fileName, "Filename not set");
 		static if (flushPolicy == FlushPolicy.none)
 			return DataGetter(fileName); // no existence checks if we are never saving it ourselves
@@ -162,8 +161,11 @@ struct FileCache(alias DataGetter, alias DataPutter = None, FlushPolicy flushPol
 	static if (_FileCache_loadPolicy == LoadPolicy.onModification)
 	{
 		import std.datetime : SysTime;
+
 		SysTime _FileCache_keyGetter()
 		{
+			import std.file  : exists, timeLastModified;
+
 			SysTime result;
 			if (fileName.exists)
 				result = fileName.timeLastModified();
@@ -185,6 +187,8 @@ version(unittest) import core.thread;
 
 unittest
 {
+	import std.file;
+
 	enum FN = "test.txt";
 	auto cachedData = FileCache!read(FN);
 
@@ -223,10 +227,10 @@ template JsonFileCache(T, FlushPolicy flushPolicy = FlushPolicy.none)
 	alias JsonFileCache = FileCache!(getJson!T, putJson!T, flushPolicy);
 }
 
-version(unittest) import std.file;
-
 unittest
 {
+	import std.file;
+
 	enum FN = "test1.json";
 	std.file.write(FN, "{}");
 	scope(exit) remove(FN);
@@ -237,6 +241,8 @@ unittest
 
 unittest
 {
+	import std.file;
+
 	enum FN = "test2.json";
 	scope(exit) if (FN.exists) remove(FN);
 
@@ -251,6 +257,8 @@ unittest
 
 unittest
 {
+	import std.file;
+
 	enum FN = "test3.json";
 	scope(exit) if (FN.exists) remove(FN);
 
@@ -293,6 +301,8 @@ struct PersistentMemoized(alias fun, FlushPolicy flushPolicy = FlushPolicy.atThr
 
 unittest
 {
+	import std.file;
+
 	static int value = 42;
 	int getValue(int x) { return value; }
 
