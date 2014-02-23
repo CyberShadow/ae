@@ -21,11 +21,13 @@ import std.datetime;
 import std.random;
 import std.string;
 
-public import ae.utils.text;
-public import ae.net.irc.common;
 import ae.net.asockets;
-debug(IRC) import std.stdio;
 import ae.sys.log;
+import ae.utils.text;
+
+public import ae.net.irc.common;
+
+debug(IRC) import std.stdio;
 
 /// An IRC client class.
 class IrcClient
