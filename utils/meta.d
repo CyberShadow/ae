@@ -394,6 +394,22 @@ mixin template StringMixinProxy(string targetPrefix)
 	}
 }
 
+/// Instantiates to a type that points to a named
+/// sub-aggregate of a struct or class.
+template SubProxy(alias S, string exp)
+{
+	alias RefType!S R;
+
+	struct SubProxy
+	{
+		R _subProxy;
+
+		this(R s) { _subProxy = s; }
+
+		mixin StringMixinProxy!(q{_subProxy.} ~ exp);
+	}
+}
+
 alias Identity(alias a) = a;
 
 alias parentOf(alias a) = Identity!(__traits(parent, a));
@@ -437,8 +453,17 @@ unittest
 		alias t = Dummy.T!i;
 	}
 
-	S s;
-	auto w = ScopeProxy!(S.t)(&s);
-	w.set(42);
-	assert(s.i == 42);
+	{
+		S s;
+		auto w = ScopeProxy!(S.t)(&s);
+		w.set(42);
+		assert(s.i == 42);
+	}
+
+	{
+		S s;
+		auto w = SubProxy!(S, "t.")(&s);
+		w.set(42);
+		assert(s.i == 42);
+	}
 }
