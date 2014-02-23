@@ -326,3 +326,74 @@ unittest
 		assert(getValueMemoized(2) == 24);
 	}
 }
+
+// ****************************************************************************
+
+/// A string hashset, stored one line per entry.
+struct PersistentStringSet
+{
+	import ae.utils.aa : HashSet;
+
+	static HashSet!string load(string fileName)
+	{
+		import std.file : readText;
+		import std.string : splitLines;
+
+		return HashSet!string(fileName.readText().splitLines());
+	}
+
+	static void save(string fileName, HashSet!string data)
+	{
+		import std.array : join;
+		import ae.sys.file : atomicWrite;
+
+		atomicWrite(fileName, data.keys.join("\n"));
+	}
+
+	alias Cache = FileCache!(load, save, FlushPolicy.manual);
+	Cache cache;
+
+	this(string fileName) { cache = Cache(fileName); }
+
+	auto opIn_r(string key)
+	{
+		return key in cache;
+	}
+
+	void add(string key)
+	{
+		assert(key !in cache);
+		cache.add(key);
+		cache.save();
+	}
+
+	void remove(string key)
+	{
+		assert(key in cache);
+		cache.remove(key);
+		cache.save();
+	}
+
+	@property size_t length() { return cache.length; }
+}
+
+unittest
+{
+	import std.file;
+
+	enum FN = "test.txt";
+	scope(exit) if (FN.exists) remove(FN);
+
+	{
+		auto s = PersistentStringSet(FN);
+		assert("foo" !in s);
+		assert(s.length == 0);
+		s.add("foo");
+	}
+	{
+		auto s = PersistentStringSet(FN);
+		assert("foo" in s);
+		assert(s.length == 1);
+		s.remove("foo");
+	}
+}
