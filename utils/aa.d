@@ -82,6 +82,7 @@ V[] sortedValues(K, V)(V[K] aa)
 	return result;
 }
 
+/// Merge b into a. Return a.
 V[K] merge(K, V)(V[K] a, V[K] b)
 {
 	foreach (k, v; b)
@@ -91,6 +92,7 @@ V[K] merge(K, V)(V[K] a, V[K] b)
 
 // ***************************************************************************
 
+/// An associative array which retains the order in which elements were added.
 struct OrderedMap(K, V)
 {
 	K[] keys;
