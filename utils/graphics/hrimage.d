@@ -36,7 +36,7 @@ struct HRImage(COLOR, int HRX, int HRY=HRX)
 		lr.downscaleDraw!(HRX, HRY)(hr);
 	}
 
-	static if (structFields!COLOR()==["r","g","b"] || structFields!COLOR()==["b","g","r"])
+	static if (StructFields!COLOR == ["r","g","b"] || StructFields!COLOR == ["b","g","r"])
 	void subpixelDownscale()
 	{
 		Image!COLOR i;
