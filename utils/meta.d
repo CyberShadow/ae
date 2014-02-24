@@ -414,12 +414,16 @@ alias Identity(alias a) = a;
 
 alias parentOf(alias a) = Identity!(__traits(parent, a));
 
+/// Does this compiler support __traits(child) ?
+enum haveChildTrait = is(typeof({ struct S { int i; } S s; __traits(child, s, S.i) = 0; }));
+
 /// Instantiates to a type that points to a sub-aggregate
 /// (mixin or template alias) of a struct or class.
 /// Requires __traits(child) support:
 /// https://github.com/D-Programming-Language/dmd/pull/3329
 template ScopeProxy(alias a)
 {
+	static assert(haveChildTrait, "Your compiler doesn't support __traits(child)");
 	alias parentOf!a S;
 	alias RefType!S R;
 
@@ -433,6 +437,7 @@ template ScopeProxy(alias a)
 	}
 }
 
+static if (haveChildTrait)
 unittest
 {
 	// Can't declare template at statement level
