@@ -14,6 +14,7 @@
 module ae.utils.aa;
 
 import std.algorithm;
+import std.range;
 
 // ***************************************************************************
 
@@ -220,4 +221,17 @@ unittest
 	assert(t.length==1);
 	t.remove(1);
 	assert(t.length==0);
+}
+
+auto toSet(R)(R r)
+{
+	alias E = ElementType!R;
+	return HashSet!E(r);
+}
+
+unittest
+{
+	auto set = [1, 2, 3].toSet();
+	assert(2 in set);
+	assert(4 !in set);
 }
