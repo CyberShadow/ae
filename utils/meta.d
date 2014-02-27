@@ -413,15 +413,16 @@ template SubProxy(alias S, string exp)
 alias parentOf(alias a) = Identity!(__traits(parent, a));
 
 /// Does this compiler support __traits(child) ?
+/// https://github.com/D-Programming-Language/dmd/pull/3329
 enum haveChildTrait = is(typeof({ struct S { int i; } S s; __traits(child, s, S.i) = 0; }));
 
 /// Instantiates to a type that points to a sub-aggregate
 /// (mixin or template alias) of a struct or class.
-/// Requires __traits(child) support:
-/// https://github.com/D-Programming-Language/dmd/pull/3329
+/// Requires __traits(child) support.
 template ScopeProxy(alias a)
 {
 	static assert(haveChildTrait, "Your compiler doesn't support __traits(child)");
+
 	alias parentOf!a S;
 	alias RefType!S R;
 
@@ -469,4 +470,148 @@ unittest
 		w.set(42);
 		assert(s.i == 42);
 	}
+}
+
+// ************************************************************************
+
+/// Get f's ancestor which represents its "this" pointer.
+/// Skips template and mixin ancestors until it finds a struct or class.
+template thisOf(alias f)
+{
+	alias p = Identity!(__traits(parent, f));
+	static if (is(p == class) || is(p == struct) || is(p == union))
+		alias thisOf = p;
+	else
+		alias thisOf = thisOf!p;
+}
+
+/// Disconnect function (or function template) f from its "this" pointer,
+/// creating a template that can be passed as an alias parameter
+/// to a template which already has a context (such as a non-static
+/// templated method).
+/// To connect the alias back to a "this" pointer, use .connect(p).
+/// Use .call(args) on the result to call the resulting function.
+/// Requires __traits(child) support.
+template disconnect(alias f)
+{
+	static assert(haveChildTrait, "Your compiler doesn't support __traits(child)");
+
+	alias P = thisOf!f;
+	alias R = RefType!P;
+
+	struct disconnect
+	{
+		R p;
+
+		@disable this();
+		private this(R p) { this.p = p; }
+
+		static typeof(this) connect(R p) { return typeof(this)(p); }
+
+		auto call(T...)(auto ref T args)
+		{
+			return __traits(child, p, f)(args);
+		}
+	}
+}
+
+// (illustration for why disconnect is needed)
+version(none)
+{
+	struct X
+	{
+		int i;
+
+		void funB(/* ??? */)(/* ??? */)
+		{
+			c(i);
+		}
+	}
+
+	struct Y
+	{
+		X* x;
+
+		void funA()
+		{
+			// Problem: pass funC to x.funB so that funB can call it.
+			// funC is a templated method, and Y doesn't know
+			// how X will instantiate it beforehand.
+
+			x.funB!funC(); // Doesn't work - X doesn't have an Y* and it
+			               // is not transmitted via the alias parameter
+
+			x.funB(&funC); // Doesn't work - can't take the address of a
+			               // template declaration
+
+			/* ??? */
+		}
+
+		void funC(T)(T v)
+		{
+			// ...
+		}
+	}
+}
+
+static if (haveChildTrait)
+unittest
+{
+	static struct A()
+	{
+		static template Impl(alias v)
+		{
+			void call(T)(T target)
+			{
+				target.callee!(disconnect!call2)();
+			}
+
+			void call2(T)(T target)
+			{
+				target.setter();
+			}
+		}
+	}
+
+	static struct B(alias a)
+	{
+		static template Impl(alias v)
+		{
+			void doCall()
+			{
+				alias RefType!(typeof(this)) Parent;
+				static struct Target
+				{
+					int i;
+					Parent parent;
+
+					void callee(alias setter)()
+					{
+						setter.connect(parent).call(&this);
+					}
+
+					void setter()
+					{
+						i = 42;
+					}
+				}
+
+				Target target;
+				target.parent = this.reference;
+				a.call(&target);
+				v = target.i;
+			}
+		}
+	}
+
+	static struct S
+	{
+		int v;
+		alias a = A!( ).Impl!v;
+		alias b = B!(a).Impl!v;
+	}
+
+	S s;
+	s.b.doCall();
+	assert(s.v == 42);
 }
