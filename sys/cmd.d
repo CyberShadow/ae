@@ -56,7 +56,7 @@ void run(string[] args)
 string query(string[] args)
 {
 	string output;
-	invoke!({ auto result = execute(args); output = result.output.strip(); return result.status; })(args);
+	invoke!({ auto result = execute(args); output = result.output.stripRight(); return result.status; })(args);
 	return output;
 }
 
