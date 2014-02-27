@@ -410,8 +410,6 @@ template SubProxy(alias S, string exp)
 	}
 }
 
-alias Identity(alias a) = a;
-
 alias parentOf(alias a) = Identity!(__traits(parent, a));
 
 /// Does this compiler support __traits(child) ?
