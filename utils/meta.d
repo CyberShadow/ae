@@ -349,14 +349,14 @@ T dereference(T)(T v)
 unittest
 {
 	Object o = new Object;
-	assert(reference(o) is o);
-	assert(dereference(o) is o);
+	assert(o.reference is o);
+	assert(o.dereference is o);
 
 	static struct S {}
 	S s;
-	auto p = reference(s);
+	auto p = s.reference;
 	assert(p is &s);
-	assert(reference(p) is p);
+	assert(p.reference is p);
 }
 
 // ************************************************************************

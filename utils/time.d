@@ -226,13 +226,13 @@ private void putToken(alias c, alias context, alias sink)()
 				case 'O':
 				{
 					auto minutes = (t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000 / 60;
-					reference(sink).formattedWrite("%+03d%02d", minutes/60, abs(minutes%60));
+					sink.reference.formattedWrite("%+03d%02d", minutes/60, abs(minutes%60));
 					break;
 				}
 				case 'P':
 				{
 					auto minutes = (t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000 / 60;
-					reference(sink).formattedWrite("%+03d:%02d", minutes/60, abs(minutes%60));
+					sink.reference.formattedWrite("%+03d:%02d", minutes/60, abs(minutes%60));
 					break;
 				}
 				case 'T':
