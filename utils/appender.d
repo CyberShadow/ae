@@ -63,6 +63,13 @@ public:
 		reserve(capacity);
 	}
 
+	/// Start with a given buffer
+	this(I[] arr)
+	{
+		start = cursor = cast(T*)arr.ptr;
+		end = start + arr.length;
+	}
+
 	void put(U...)(U items)
 		if (CanPutAll!U)
 	{
