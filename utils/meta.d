@@ -615,3 +615,29 @@ unittest
 	s.b.doCall();
 	assert(s.v == 42);
 }
+
+// ***************************************************************************
+
+struct TestMethodAliasBinding
+{
+	static template T(alias a)
+	{
+		void foo()() { a(); }
+	}
+
+	struct S(alias T)
+	{
+		void m() { }
+		alias t = T!m;
+	}
+
+	static void test()()
+	{
+		S!T s;
+		s.t.foo();
+	}
+}
+
+/// Does this compiler support binding method context via alias parameters?
+/// https://github.com/D-Programming-Language/dmd/pull/3345
+enum haveMethodAliasBinding = __traits(compiles, TestMethodAliasBinding.test());
