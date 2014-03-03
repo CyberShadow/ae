@@ -1,5 +1,5 @@
 /**
- * Type deserializer.
+ * Type serializer and deserializer.
  *
  * License:
  *   This Source Code Form is subject to the terms of
@@ -11,13 +11,14 @@
  *   Vladimir Panteleev <vladimir@thecybershadow.net>
  */
 
-module ae.utils.serialization.deserializer;
+module ae.utils.serialization.serialization;
 
 import std.conv;
 import std.string;
 
 import ae.utils.meta;
 
+/// Serialization sink which deserializes into a given type.
 struct Deserializer(alias source)
 {
 	static template Impl(alias anchor)
@@ -121,7 +122,7 @@ struct Deserializer(alias source)
 									return;
 								}
 							}
-							throw new Exception("Unknown field " ~ name);
+							throw new Exception("Unknown field %s".format(name));
 						}
 					}
 

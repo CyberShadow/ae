@@ -13,14 +13,19 @@
 
 module ae.utils.serialization.json;
 
+import std.conv;
 import std.exception;
+import std.format;
+import std.string : format;
+import std.traits;
 import std.utf;
 
 import ae.utils.meta;
 import ae.utils.text;
 
-import ae.utils.serialization.deserializer;
+import ae.utils.serialization.serialization;
 
+/// Serialization source which parses a JSON stream.
 struct JsonParser(C)
 {
 	// TODO: some abstract input stream?
@@ -72,7 +77,7 @@ struct JsonParser(C)
 
 		@property bool eof() { return data.p == data.s.length; }
 
-		// ***********************************************************************
+		// *******************************************************************
 
 		static bool isWhite(C c)
 		{
@@ -88,10 +93,10 @@ struct JsonParser(C)
 		void expect(C c)
 		{
 			auto n = next();
-			enforce(n==c, "Expected " ~ c ~ ", got " ~ n);
+			enforce(n==c, "Expected %s, got %s".format(c, n));
 		}
 
-		// ***********************************************************************
+		// *******************************************************************
 
 		void read(Sink)(Sink sink)
 		{
@@ -139,7 +144,7 @@ struct JsonParser(C)
 					sink.handleObject!(disconnect!readObject)();
 					break;
 				default:
-					throw new Exception("Unknown JSON symbol: " ~ peek());
+					throw new Exception("Unknown JSON symbol: %s".format(peek()));
 			}
 		}
 
@@ -215,7 +220,7 @@ struct JsonParser(C)
 
 			while (true)
 			{
-				char c = peek();
+				C c = peek();
 				if (c=='"')
 				{
 					flush();
@@ -246,7 +251,11 @@ struct JsonParser(C)
 								sink.handleStringFragment(buf[0..encode(buf, w)]);
 							}
 							else
-								one(w);
+							{
+								Unqual!C[1] buf;
+								buf[0] = w;
+								sink.handleStringFragment(buf[]);
+							}
 							break;
 						}
 						default: enforce(false, "Unknown escape");
@@ -306,6 +315,7 @@ struct JsonDeserializer(C)
 	}
 }
 
+/// Parse JSON from a string and deserialize it into the given type.
 T jsonParse(T, C)(C[] s)
 {
 	auto parser = JsonDeserializer!C(s);
@@ -322,5 +332,127 @@ unittest
 	assert(jsonParse!(int[string])(`{"a":1, "b":2}`) == ["a":1, "b":2]);
 	struct S { int i; string s; }
 	assert(jsonParse!S(`{"s" : "foo", "i":42}`) == S(42, "foo"));
+	assert(jsonParse!wstring(`"test"`w) == "test"w);
 	assert(jsonParse!S(`{"s" : null}`) == S(0, null));
+}
+
+// ***************************************************************************
+
+/// Serialization target which writes a JSON stream.
+struct JsonWriter(alias output)
+{
+	static template Impl(alias anchor)
+	{
+		alias Parent = RefType!(thisOf!anchor);
+
+		static struct Sink
+		{
+			Parent parent;
+
+			void handleNumeric(C)(C[] str)
+			{
+				__traits(child, parent, output).put(str);
+			}
+
+			void handleObject(alias reader)()
+			{
+				__traits(child, parent, output).put('{');
+				auto sink = ObjectSink(parent);
+				__traits(child, parent, reader)(&sink);
+				__traits(child, parent, output).put('}');
+			}
+		}
+
+		static struct ObjectSink
+		{
+			Parent parent;
+
+			void handleField(alias nameReader, alias valueReader)()
+			{
+				__traits(child, parent, nameReader)(Sink(this.reference));
+				__traits(child, parent, output).put(':');
+				__traits(child, parent, valueReader)(Sink(this.reference));
+			}
+		}
+
+		auto createSink()
+		{
+			return Sink(this.reference);
+		}
+	}
+}
+
+/// Serialization source which serializes a given object.
+struct Serializer(alias writer)
+{
+	static template Impl(alias anchor)
+	{
+		void serialize(T)(auto ref T v)
+		{
+			auto sink = writer.createSink();
+			read(sink, v);
+		}
+
+		void read(Sink, T)(Sink sink, auto ref T v)
+		{
+			static if (is(T : ulong))
+			{
+				char[DecimalSize!T] buf = void;
+				sink.handleNumeric(toDec(v, buf));
+			}
+			else
+			static if (isNumeric!T) // floating point
+			{
+				import ae.utils.textout;
+
+				static char[64] arr;
+				auto buf = StringBuffer(arr);
+				formattedWrite(&buf, "%s", v);
+				sink.handleNumeric(buf.get());
+			}
+			else
+			static if (is(T == struct))
+			{
+				sink.handleObject();
+			}
+			else
+				static assert(false, "Don't know how to serialize " ~ T.stringof);
+		}
+	}
+}
+
+struct JsonSerializer
+{
+	import ae.utils.textout;
+
+	StringBuilder sb;
+	void[0] anchor;
+	alias JsonWriter!sb.Impl!anchor writer;
+	alias Serializer!writer.Impl!anchor serializer;
+}
+
+string toJson(T)(auto ref T v)
+{
+	JsonSerializer s;
+	s.serializer.serialize(v);
+	return s.sb.get();
+}
+
+unittest
+{
+	assert(toJson(4) == "4", toJson(4));
+	assert(toJson(4.5) == "4.5");
+}
+
+unittest
+{
+//	struct X { int a; string b; }
+//	X x = {17, "aoeu"};
+//	assert(toJson(x) == `{"a":17,"b":"aoeu"}`);
+//	int[] arr = [1,5,7];
+//	assert(toJson(arr) == `[1,5,7]`);
+
+//	assert(toJson(tuple()) == ``);
+//	assert(toJson(tuple(42)) == `42`);
+//	assert(toJson(tuple(42, "banana")) == `[42,"banana"]`);
 }
