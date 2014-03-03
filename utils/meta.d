@@ -641,3 +641,178 @@ struct TestMethodAliasBinding
 /// Does this compiler support binding method context via alias parameters?
 /// https://github.com/D-Programming-Language/dmd/pull/3345
 enum haveMethodAliasBinding = __traits(compiles, TestMethodAliasBinding.test());
+
+// ***************************************************************************
+
+/// This function group manufactures delegate-like objects which selectively
+/// contain a context or function pointer. This allows avoiding the overhead
+/// of an indirect call (which prevents inlining), or passing around a context
+/// when that context is already available on the caller's side, all while
+/// having the same syntax for invocation. The invocation syntax is as follows:
+/// If fun is the return value of these functions, and Fun is its type,
+/// Fun.call(fun, args...) will invoke the respective function.
+/// Unbound variants provide a callWith method, which additionally take a
+/// context to rebind with.
+
+/// Unbound delegate alias.
+/// Return value contains nothing (empty struct).
+/// Example construction: $(D unboundDgAlias!method)
+@property auto unboundDgAlias(alias fun)()
+{
+	return UnboundDgAlias!fun();
+}
+struct UnboundDgAlias(alias fun)
+{
+	alias C = RefType!(thisOf!fun);
+
+	static template Caller(alias fun)
+	{
+		auto Caller(Args...)(UnboundDgAlias self, auto ref Args args)
+		{
+			return fun(args);
+		}
+	}
+
+	/// Call the delegate using the context from the callee's context.
+	alias call = Caller!fun;
+
+	/// Call the delegate using the given context.
+	static auto callWith(Args...)(UnboundDgAlias self, C context, auto ref Args args)
+	{
+		return __traits(child, context, fun)(args);
+	}
+}
+
+/// Bound delegate alias.
+/// Return value contains context.
+/// Example construction: $(D boundDgAlias!method(context))
+template boundDgAlias(alias fun)
+{
+	static auto boundDgAlias(RefType!(thisOf!fun) context)
+	{
+		return BoundDgAlias!fun(context);
+	}
+}
+struct BoundDgAlias(alias fun)
+{
+	alias C = RefType!(thisOf!fun);
+	C context;
+
+	static auto call(Args...)(BoundDgAlias self, auto ref Args args)
+	{
+		auto c = self.context;
+		return __traits(child, c, fun)(args);
+	}
+}
+
+/// Unbound delegate pointer.
+/// Return value contains function pointer without context.
+/// Example construction: $(D unboundDgPointer!method(&method))
+/// Currently only implements callWith.
+template unboundDgPointer(alias fun)
+{
+	static auto unboundDgPointer(Dg)(Dg dg)
+	{
+		return UnboundDgPointer!(RefType!(thisOf!fun), Dg)(dg);
+	}
+}
+struct UnboundDgPointer(C, Dg)
+{
+	typeof(Dg.init.funcptr) func;
+
+	this(Dg dg)
+	{
+		func = dg.funcptr;
+	}
+
+	static auto callWith(Args...)(UnboundDgPointer self, C context, auto ref Args args)
+	{
+		Dg dg;
+		dg.ptr = context;
+		dg.funcptr = self.func;
+		return dg(args);
+	}
+}
+
+/// Bound delegate pointer.
+/// Just a regular D delegate, basically.
+/// Return value contains a D delegate.
+/// Example construction: $(D boundDgPointer(&method))
+auto boundDgPointer(Dg)(Dg dg)
+{
+	return BoundDgPointer!Dg(dg);
+}
+struct BoundDgPointer(Dg)
+{
+	Dg dg;
+
+	static auto call(Args...)(BoundDgPointer self, auto ref Args args)
+	{
+		return self.dg(args);
+	}
+}
+
+static if (haveMethodAliasBinding)
+unittest
+{
+	static struct A
+	{
+		static template Impl(alias anchor)
+		{
+			void caller(Fun)(Fun fun)
+			{
+			//	pragma(msg, Fun.sizeof);
+				Fun.call(fun);
+			}
+
+			void callerIndirect(Fun, C)(Fun fun, C c)
+			{
+				Fun.callWith(fun, c);
+			}
+		}
+	}
+
+	static struct B(alias a)
+	{
+		static template Impl(alias anchor)
+		{
+			void test()
+			{
+				a.caller(unboundDgAlias!calleeB);
+				a.callerIndirect(unboundDgAlias!calleeB, this.reference);
+
+				C c;
+				a.caller(boundDgAlias!(C.calleeC)(c.reference));
+
+				a.callerIndirect(unboundDgPointer!(c.calleeC)(&c.calleeC), c.reference);
+
+				a.caller(boundDgPointer(&c.calleeC));
+			}
+
+			void calleeB()
+			{
+				anchor = 42;
+			}
+
+			struct C
+			{
+				int value;
+
+				void calleeC()
+				{
+					value = 42;
+				}
+			}
+		}
+	}
+
+	static struct Test
+	{
+		int anchor;
+		alias A.Impl!anchor a;
+		alias B!a.Impl!anchor b;
+	}
+
+	Test test;
+	test.b.test();
+}
