@@ -431,7 +431,7 @@ string hexDump(const(void)[] b)
 
 import std.conv;
 
-T fromHex(T : ulong = uint)(const(char)[] s)
+T fromHex(T : ulong = uint, C)(const(C)[] s)
 {
 	T result = parse!T(s, 16);
 	enforce(s.length==0, new ConvException("Could not parse entire string"));
