@@ -476,8 +476,9 @@ struct JsonWriter(alias output)
 	}
 }
 
-struct JsonSerializer
+struct JsonSerializer(C)
 {
+	static assert(is(C == char), "TODO");
 	import ae.utils.textout;
 
 	StringBuilder sb;
@@ -486,9 +487,9 @@ struct JsonSerializer
 	alias Serializer!writer.Impl!anchor serializer;
 }
 
-string toJson(T)(auto ref T v)
+S toJson(S = string, T)(auto ref T v)
 {
-	JsonSerializer s;
+	JsonSerializer!(Unqual!(typeof(S.init[0]))) s;
 	s.serializer.serialize(v);
 	return s.sb.get();
 }
@@ -497,32 +498,34 @@ string toJson(T)(auto ref T v)
 
 unittest
 {
-	assert(jsonParse!string(`"Hello \"world\""`) == `Hello "world"`);
-	assert(jsonParse!(string[])(`["Hello", "world"]`) == ["Hello", "world"]);
-	assert(jsonParse!(bool[])(`[true, false]`) == [true, false]);
-	assert(jsonParse!(int[])(`[4, 2]`) == [4, 2]);
-	assert(jsonParse!(int[string])(`{"a":1, "b":2}`) == ["a":1, "b":2]);
+	static void check(I, O)(I input, O output, O correct, string inputDescription, string outputDescription)
+	{
+		assert(output == correct, "%s => %s:\nValue:    %s\nResult:   %s\nExpected: %s".format(inputDescription, outputDescription, input, output, correct));
+	}
+
+	static void testSerialize(T, S)(T v, S s) { check(v, toJson!S(v)   , s, T.stringof, "JSON"); }
+	static void testParse    (T, S)(T v, S s) { check(s, jsonParse!T(s), v, "JSON", T.stringof); }
+
+	static void testAll(T, S)(T v, S s)
+	{
+		testSerialize(v, s);
+		testParse(v, s);
+	}
+
+	testAll  (`Hello "world"`   , `"Hello \"world\""` );
+	testAll  (["Hello", "world"], `["Hello","world"]` );
+	testAll  ([true, false]     , `[true,false]`      );
+	testAll  ([4, 2]            , `[4,2]`             );
+	testAll  (["a":1, "b":2]    , `{"a":1,"b":2}`     );
 	struct S { int i; string s; }
-	assert(jsonParse!S(`{"s" : "foo", "i":42}`) == S(42, "foo"));
-	assert(jsonParse!wstring(`"test"`w) == "test"w);
-	assert(jsonParse!S(`{"s" : null}`) == S(0, null));
-}
+	testAll  (S(42, "foo")      , `{"i":42,"s":"foo"}`);
+//	testAll  (`"test"`w         , "test"w             );
+	testParse(S(0, null)        , `{"s":null}`        );
 
-unittest
-{
-	assert(toJson(4) == "4", toJson(4));
-	assert(toJson(4.5) == "4.5");
-}
+	testAll  (4                 , `4`                 );
+	testAll  (4.5               , `4.5`               );
 
-unittest
-{
-	struct X { int a; string b; }
-	X x = {17, "aoeu"};
-	assert(toJson(x) == `{"a":17,"b":"aoeu"}`, toJson(x));
-	int[] arr = [1,5,7];
-	assert(toJson(arr) == `[1,5,7]`);
-	int[] arrNull = null;
-	assert(toJson(arrNull) == `null`);
+	testAll  ((int[]).init        ,  `null`             );
 
 //	assert(toJson(tuple()) == ``);
 //	assert(toJson(tuple(42)) == `42`);

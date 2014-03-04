@@ -14,9 +14,138 @@
 module ae.utils.serialization.serialization;
 
 import std.conv;
+import std.format;
 import std.string;
+import std.traits;
 
 import ae.utils.meta;
+import ae.utils.text;
+
+/// Serialization source which serializes a given object.
+struct Serializer(alias writer)
+{
+	static template Impl(alias anchor)
+	{
+		void serialize(T)(auto ref T v)
+		{
+			auto sink = writer.createSink();
+			read(sink, v);
+		}
+
+		static void read(Sink, T)(Sink sink, auto ref T v)
+		{
+			static if (is(typeof(v is null)))
+				if (v is null)
+				{
+					sink.handleNull();
+					return;
+				}
+
+			static if (is(T == bool))
+				sink.handleBoolean(v);
+			else
+			static if (is(T : ulong))
+			{
+				char[DecimalSize!T] buf = void;
+				sink.handleNumeric(toDec(v, buf));
+			}
+			else
+			static if (isNumeric!T) // floating point
+			{
+				import ae.utils.textout;
+
+				static char[64] arr;
+				auto buf = StringBuffer(arr);
+				formattedWrite(&buf, "%s", v);
+				sink.handleNumeric(buf.get());
+			}
+			else
+			static if (is(T == struct))
+			{
+				static struct StructReader
+				{
+					RefType!T p;
+					void read(Sink)(Sink sink)
+					{
+						foreach (i, ref field; p.dereference.tupleof)
+						{
+							import std.array : split;
+							enum name = p.dereference.tupleof[i].stringof.split(".")[$-1];
+
+							alias ValueReader = Reader!(typeof(field));
+							auto reader = ValueReader(&field);
+							sink.handleField(unboundDgAlias!(stringReader!name), boundDgAlias!(ValueReader.readValue)(&reader));
+						}
+					}
+				}
+				auto reader = StructReader(v.reference);
+				sink.handleObject(boundDgAlias!(StructReader.read)(&reader));
+			}
+			else
+			static if (is(T V : V[K], K))
+			{
+				static struct AAReader
+				{
+					T aa;
+					void read(Sink)(Sink sink)
+					{
+						foreach (K k, ref V v; aa)
+						{
+							alias KeyReader   = Reader!K;
+							auto keyReader   = KeyReader  (&k);
+							alias ValueReader = Reader!V;
+							auto valueReader = ValueReader(&v);
+							sink.handleField(
+								boundDgAlias!(KeyReader  .readValue)(&keyReader  ),
+								boundDgAlias!(ValueReader.readValue)(&valueReader),
+							);
+						}
+					}
+				}
+				auto reader = AAReader(v);
+				sink.handleObject(boundDgAlias!(AAReader.read)(&reader));
+			}
+			else
+			static if (is(T : string))
+				sink.handleString(v);
+			else
+			static if (is(T U : U[]))
+			{
+				static struct ArrayReader
+				{
+					T arr;
+					void readArray(Sink)(Sink sink)
+					{
+						foreach (ref v; arr)
+							read(sink, v);
+					}
+				}
+				auto reader = ArrayReader(v);
+				sink.handleArray(boundDgAlias!(ArrayReader.readArray)(&reader));
+			}
+			else
+				static assert(false, "Don't know how to serialize " ~ T.stringof);
+		}
+
+		static template stringReader(string name)
+		{
+			static void stringReader(Sink)(Sink sink)
+			{
+				sink.handleString(name);
+			}
+		}
+
+		static struct Reader(T)
+		{
+			T* p;
+
+			void readValue(Sink)(Sink sink)
+			{
+				read(sink, *p);
+			}
+		}
+	}
+}
 
 /// Serialization sink which deserializes into a given type.
 struct Deserializer(alias source)
@@ -192,108 +321,6 @@ struct Deserializer(alias source)
 
 			auto s = Sink(p, this.reference);
 			return boundObj(s);
-		}
-	}
-}
-
-/// Serialization source which serializes a given object.
-struct Serializer(alias writer)
-{
-	static template Impl(alias anchor)
-	{
-		void serialize(T)(auto ref T v)
-		{
-			auto sink = writer.createSink();
-			read(sink, v);
-		}
-
-		static void read(Sink, T)(Sink sink, auto ref T v)
-		{
-			static if (is(typeof(v is null)))
-				if (v is null)
-				{
-					sink.handleNull();
-					return;
-				}
-
-			static if (is(T : ulong))
-			{
-				char[DecimalSize!T] buf = void;
-				sink.handleNumeric(toDec(v, buf));
-			}
-			else
-			static if (isNumeric!T) // floating point
-			{
-				import ae.utils.textout;
-
-				static char[64] arr;
-				auto buf = StringBuffer(arr);
-				formattedWrite(&buf, "%s", v);
-				sink.handleNumeric(buf.get());
-			}
-			else
-			static if (is(T == struct))
-			{
-				static struct StructReader
-				{
-					RefType!T p;
-					void read(Sink)(Sink sink)
-					{
-						foreach (i, ref field; p.dereference.tupleof)
-						{
-							import std.array : split;
-							enum name = p.dereference.tupleof[i].stringof.split(".")[$-1];
-
-							alias ValueReader = Reader!(typeof(field));
-							auto reader = ValueReader(&field);
-							sink.handleField(unboundDgAlias!(stringReader!name), boundDgAlias!(ValueReader.readValue)(&reader));
-						}
-					}
-				}
-				auto reader = StructReader(v.reference);
-				sink.handleObject(boundDgAlias!(StructReader.read)(&reader));
-			}
-			else
-			static if (is(T : string))
-				sink.handleString(v);
-			else
-			static if (is(T U : U[]))
-			{
-				static struct ArrayReader
-				{
-					T arr;
-					void readArray(Sink)(Sink sink)
-					{
-						foreach (ref v; arr)
-							read(sink, v);
-					}
-				}
-				auto reader = ArrayReader(v);
-				sink.handleArray(boundDgAlias!(ArrayReader.readArray)(&reader));
-			}
-			else
-			static if (is(T == bool))
-				sink.handleBoolean(v);
-			else
-				static assert(false, "Don't know how to serialize " ~ T.stringof);
-		}
-
-		static template stringReader(string name)
-		{
-			static void stringReader(Sink)(Sink sink)
-			{
-				sink.handleString(name);
-			}
-		}
-
-		static struct Reader(T)
-		{
-			T* p;
-
-			void readValue(Sink)(Sink sink)
-			{
-				read(sink, *p);
-			}
 		}
 	}
 }
