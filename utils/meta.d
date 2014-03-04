@@ -673,7 +673,7 @@ struct UnboundDgAlias(alias fun)
 		}
 	}
 
-	/// Call the delegate using the context from the callee's context.
+	/// Call the delegate using the context from the caller's context.
 	alias call = Caller!fun;
 
 	/// Call the delegate using the given context.
@@ -815,4 +815,112 @@ unittest
 
 	Test test;
 	test.b.test();
+}
+
+// ***************************************************************************
+
+/// Equilavents to the above functions, but for entire objects.
+/// Caller syntax:
+/// Obj.method(obj, args...)
+
+/// Create an unbound "object" which forwards calls to the given alias.
+/// Context is inferred from caller site.
+/// Example construction: unboundObj!aggregate
+@property auto unboundObj(alias target)()
+{
+	return UnboundObj!target();
+}
+struct UnboundObj(alias target)
+{
+	template opDispatch(string name)
+	{
+		static template funTpl(alias fun)
+		{
+			auto funTpl(Args...)(UnboundObj!target self, auto ref Args args)
+			{
+				return fun(args);
+			}
+		}
+
+		mixin(`alias opDispatch = funTpl!(target.`~name~`);`);
+	}
+}
+
+/// Create a bound "object" with the given context.
+/// Example construction: boundObj(context)
+auto boundObj(S)(S s)
+{
+	return DispatchToFirstArg!S(s);
+}
+
+/// Create a bound "object" with the given sub-aggregate and context.
+/// Example construction: boundObjScope!aggregate(context)
+auto boundObjScope(alias obj, S)(S s)
+{
+	alias BoundProxy = ScopeProxy!obj;
+	return DispatchToFirstArg!BoundProxy(BoundProxy(s));
+}
+
+struct DispatchToFirstArg(T)
+{
+	T next;
+
+	template opDispatch(string name)
+	{
+		static auto opDispatch(Args...)(DispatchToFirstArg self, auto ref Args args)
+		{
+			return mixin("self.next." ~ name ~ "(args)");
+		}
+	}
+}
+
+static if (haveMethodAliasBinding)
+unittest
+{
+	static struct Consumer
+	{
+		static template Impl(alias anchor)
+		{
+			void caller(Obj)(Obj obj)
+			{
+				Obj.callee(obj);
+			}
+		}
+	}
+
+	static struct AliasTarget(alias consumer)
+	{
+		static template Impl(alias anchor)
+		{
+			void test()
+			{
+				consumer.caller(unboundObj!(Impl!anchor));
+				consumer.caller(boundObjScope!(Impl!anchor)(this.reference));
+
+				static struct Test
+				{
+					void callee() {}
+				}
+				Test test;
+				consumer.caller(boundObj(&test));
+			}
+
+			void callee() {}
+		}
+	}
+
+	static struct Test
+	{
+		int anchor;
+		alias Consumer.Impl!anchor c;
+		alias AliasTarget!c.Impl!anchor t;
+
+		void test()
+		{
+			t.test();
+		}
+	}
+
+	Test test;
+	test.test();
 }
