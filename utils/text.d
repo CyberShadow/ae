@@ -16,6 +16,7 @@ module ae.utils.text;
 import std.ascii;
 import std.exception;
 import std.conv;
+import std.format;
 import std.string;
 import std.traits;
 import std.typetuple;
@@ -486,20 +487,56 @@ unittest
 // TODO: generalize
 string doubleToString(double v)
 {
-	string s = format("%.18g", v);
+	StaticBuf!(char, 64) buf;
+	formattedWrite(&buf, "%.18g", v);
+	char[] s = buf.data();
 
 	/// Force IEEE double (bypass FPU register)
 	static double forceDouble(double d) { static double n; n = d; return n; }
 
-	if (s != "nan" && s != "inf" && s != "-inf")
+	if (s != "nan" && s != "-nan" && s != "inf" && s != "-inf")
 	{
 		foreach_reverse (i; 1..s.length)
-			if (s[i]>='0' && s[i]<='8' && forceDouble(to!double(s[0..i] ~ cast(char)(s[i]+1)))==v)
-				s = s[0..i] ~ cast(char)(s[i]+1);
+			if (s[i]>='0' && s[i]<='8')
+			{
+				s[i]++;
+				if (forceDouble(to!double(s[0..i+1]))==v)
+					s = s[0..i+1];
+				else
+					s[i]--;
+			}
 		while (s.length>2 && s[$-1]!='.' && forceDouble(to!double(s[0..$-1]))==v)
 			s = s[0..$-1];
 	}
-	return s;
+	return s.idup;
+}
+
+unittest
+{
+	union U
+	{
+		uint[2] words;
+		double d;
+		string toString() { return "%.18g %(%08X %)".format(d, words[]); }
+	}
+	import std.random : Xorshift, uniform;
+	import std.stdio : stderr;
+	Xorshift rng;
+	foreach (n; 0..10000)
+	{
+		U u;
+		u.words[0] = uniform!uint(rng);
+		u.words[1] = uniform!uint(rng);
+		scope(failure) stderr.writeln("Input:\t", u);
+		auto s = doubleToString(u.d);
+		scope(failure) stderr.writeln("Result:\t", s);
+		if (s == "nan" || s == "-nan")
+			continue; // there are many NaNs...
+		U r;
+		r.d = to!double(s);
+		assert(r.words == u.words,
+			"doubleToString mismatch:\nOutput:\t%s".format(r));
+	}
 }
 
 import std.algorithm : max;
