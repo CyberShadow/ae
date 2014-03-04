@@ -105,18 +105,18 @@ struct JsonParser(C)
 			{
 				case '[':
 					skip();
-					sink.handleArray!(disconnect!readArray)();
+					Sink.handleArray(sink, unboundDgAlias!readArray);
 					break;
 				case '"':
 					skip();
-					sink.handleStringFragments!(disconnect!readString)();
+					Sink.handleStringFragments(sink, unboundDgAlias!readString);
 					break;
 				case 't':
 					skip();
 					expect('r');
 					expect('u');
 					expect('e');
-					sink.handleBoolean(true);
+					Sink.handleBoolean(sink, true);
 					break;
 				case 'f':
 					skip();
@@ -124,24 +124,24 @@ struct JsonParser(C)
 					expect('l');
 					expect('s');
 					expect('e');
-					sink.handleBoolean(false);
+					Sink.handleBoolean(sink, false);
 					break;
 				case 'n':
 					skip();
 					expect('u');
 					expect('l');
 					expect('l');
-					sink.handleNull();
+					Sink.handleNull(sink);
 					break;
 				case '-':
 				case '0':
 					..
 				case '9':
-					sink.handleNumeric(readNumeric());
+					Sink.handleNumeric(sink, readNumeric());
 					break;
 				case '{':
 					skip();
-					sink.handleObject!(disconnect!readObject)();
+					Sink.handleObject(sink, unboundDgAlias!readObject);
 					break;
 				default:
 					throw new Exception("Unknown JSON symbol: %s".format(peek()));
@@ -180,7 +180,7 @@ struct JsonParser(C)
 
 			while (true)
 			{
-				sink.handleField!(disconnect!read, disconnect!readObjectValue)();
+				Sink.handleField(sink, unboundDgAlias!read, unboundDgAlias!readObjectValue);
 
 				skipWhitespace();
 				if (peek()=='}')
@@ -323,20 +323,48 @@ T jsonParse(T, C)(C[] s)
 	return parser.deserialize!T();
 }
 
-unittest
-{
-	assert(jsonParse!string(`"Hello \"world\""`) == `Hello "world"`);
-	assert(jsonParse!(string[])(`["Hello", "world"]`) == ["Hello", "world"]);
-	assert(jsonParse!(bool[])(`[true, false]`) == [true, false]);
-	assert(jsonParse!(int[])(`[4, 2]`) == [4, 2]);
-	assert(jsonParse!(int[string])(`{"a":1, "b":2}`) == ["a":1, "b":2]);
-	struct S { int i; string s; }
-	assert(jsonParse!S(`{"s" : "foo", "i":42}`) == S(42, "foo"));
-	assert(jsonParse!wstring(`"test"`w) == "test"w);
-	assert(jsonParse!S(`{"s" : null}`) == S(0, null));
-}
-
 // ***************************************************************************
+
+struct Escapes
+{
+	string[256] chars;
+	bool[256] escaped;
+
+	void populate()
+	{
+		import std.string;
+
+		escaped[] = true;
+		foreach (c; 0..256)
+			if (c=='\\')
+				chars[c] = `\\`;
+			else
+			if (c=='\"')
+				chars[c] = `\"`;
+			else
+			if (c=='\b')
+				chars[c] = `\b`;
+			else
+			if (c=='\f')
+				chars[c] = `\f`;
+			else
+			if (c=='\n')
+				chars[c] = `\n`;
+			else
+			if (c=='\r')
+				chars[c] = `\r`;
+			else
+			if (c=='\t')
+				chars[c] = `\t`;
+			else
+			if (c<'\x20' || c == '\x7F' || c=='<' || c=='>' || c=='&')
+				chars[c] = format(`\u%04x`, c);
+			else
+				chars[c] = [cast(char)c],
+				escaped[c] = false;
+	}
+}
+immutable Escapes escapes = { Escapes escapes; escapes.populate(); return escapes; }();
 
 /// Serialization target which writes a JSON stream.
 struct JsonWriter(alias output)
@@ -344,79 +372,106 @@ struct JsonWriter(alias output)
 	static template Impl(alias anchor)
 	{
 		alias Parent = RefType!(thisOf!anchor);
+		alias Output = ScopeProxy!output;
 
 		static struct Sink
 		{
-			Parent parent;
+			Output output;
 
 			void handleNumeric(C)(C[] str)
 			{
-				__traits(child, parent, output).put(str);
+				output.put(str);
 			}
 
-			void handleObject(alias reader)()
+			void handleString(C)(C[] str)
 			{
-				__traits(child, parent, output).put('{');
-				auto sink = ObjectSink(parent);
-				__traits(child, parent, reader)(&sink);
-				__traits(child, parent, output).put('}');
+				output.put('"');
+				handleStringFragment(str);
+				output.put('"');
+			}
+
+			void handleNull()
+			{
+				output.put("null");
+			}
+
+			void handleBoolean(bool v)
+			{
+				output.put(v ? "true" : "false");
+			}
+
+			void handleStringFragment(C)(C[] s)
+			{
+				auto start = s.ptr, p = start, end = start+s.length;
+
+				while (p < end)
+				{
+					auto c = *p++;
+					if (escapes.escaped[c])
+						output.put(start[0..p-start-1], escapes.chars[c]),
+						start = p;
+				}
+
+				output.put(start[0..p-start]);
+			}
+
+			void handleArray(Reader)(Reader reader)
+			{
+				output.put('[');
+				auto sink = ArraySink(output);
+				Reader.call(reader, &sink);
+				output.put(']');
+			}
+
+			void handleObject(Reader)(Reader reader)
+			{
+				output.put('{');
+				auto sink = ObjectSink(output);
+				Reader.call(reader, &sink);
+				output.put('}');
+			}
+		}
+
+		static struct ArraySink
+		{
+			Output output;
+			bool needComma;
+
+			template opDispatch(string name)
+			{
+				void opDispatch(Args...)(auto ref Args args)
+				{
+					if (needComma)
+						output.put(',');
+					else
+						needComma = true;
+
+					mixin("Sink(output)." ~ name ~ "(args);");
+				}
 			}
 		}
 
 		static struct ObjectSink
 		{
-			Parent parent;
+			Output output;
+			bool needComma;
 
-			void handleField(alias nameReader, alias valueReader)()
+			void handleField(NameReader, ValueReader)(NameReader nameReader, ValueReader valueReader)
 			{
-				__traits(child, parent, nameReader)(Sink(this.reference));
-				__traits(child, parent, output).put(':');
-				__traits(child, parent, valueReader)(Sink(this.reference));
+				if (needComma)
+					output.put(',');
+				else
+					needComma = true;
+
+				NameReader .call(nameReader , Sink(output));
+				output.put(':');
+				ValueReader.call(valueReader, Sink(output));
 			}
 		}
 
 		auto createSink()
 		{
-			return Sink(this.reference);
-		}
-	}
-}
-
-/// Serialization source which serializes a given object.
-struct Serializer(alias writer)
-{
-	static template Impl(alias anchor)
-	{
-		void serialize(T)(auto ref T v)
-		{
-			auto sink = writer.createSink();
-			read(sink, v);
-		}
-
-		void read(Sink, T)(Sink sink, auto ref T v)
-		{
-			static if (is(T : ulong))
-			{
-				char[DecimalSize!T] buf = void;
-				sink.handleNumeric(toDec(v, buf));
-			}
-			else
-			static if (isNumeric!T) // floating point
-			{
-				import ae.utils.textout;
-
-				static char[64] arr;
-				auto buf = StringBuffer(arr);
-				formattedWrite(&buf, "%s", v);
-				sink.handleNumeric(buf.get());
-			}
-			else
-			static if (is(T == struct))
-			{
-				sink.handleObject();
-			}
-			else
-				static assert(false, "Don't know how to serialize " ~ T.stringof);
+			return Sink(Output(this.reference));
 		}
 	}
 }
@@ -438,6 +493,21 @@ string toJson(T)(auto ref T v)
 	return s.sb.get();
 }
 
+// ***************************************************************************
+
+unittest
+{
+	assert(jsonParse!string(`"Hello \"world\""`) == `Hello "world"`);
+	assert(jsonParse!(string[])(`["Hello", "world"]`) == ["Hello", "world"]);
+	assert(jsonParse!(bool[])(`[true, false]`) == [true, false]);
+	assert(jsonParse!(int[])(`[4, 2]`) == [4, 2]);
+	assert(jsonParse!(int[string])(`{"a":1, "b":2}`) == ["a":1, "b":2]);
+	struct S { int i; string s; }
+	assert(jsonParse!S(`{"s" : "foo", "i":42}`) == S(42, "foo"));
+	assert(jsonParse!wstring(`"test"`w) == "test"w);
+	assert(jsonParse!S(`{"s" : null}`) == S(0, null));
+}
+
 unittest
 {
 	assert(toJson(4) == "4", toJson(4));
@@ -446,11 +516,13 @@ unittest
 
 unittest
 {
-//	struct X { int a; string b; }
-//	X x = {17, "aoeu"};
-//	assert(toJson(x) == `{"a":17,"b":"aoeu"}`);
-//	int[] arr = [1,5,7];
-//	assert(toJson(arr) == `[1,5,7]`);
+	struct X { int a; string b; }
+	X x = {17, "aoeu"};
+	assert(toJson(x) == `{"a":17,"b":"aoeu"}`, toJson(x));
+	int[] arr = [1,5,7];
+	assert(toJson(arr) == `[1,5,7]`);
+	int[] arrNull = null;
+	assert(toJson(arrNull) == `null`);
 
 //	assert(toJson(tuple()) == ``);
 //	assert(toJson(tuple(42)) == `42`);

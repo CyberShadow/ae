@@ -29,7 +29,7 @@ struct Deserializer(alias source)
 		{
 			T t;
 			auto sink = makeSink(&t);
-			source.read(&sink);
+			source.read(sink);
 			return t;
 		}
 
@@ -37,14 +37,14 @@ struct Deserializer(alias source)
 		{
 			template unparseable(string inputType)
 			{
-				void unparseable(alias reader)()
+				void unparseable(Reader)(Reader reader)
 				{
 					throw new Exception("Can't parse %s from %s".format(T.stringof, inputType));
 				}
 			}
 
 			static if (is(T : C[]))
-				void handleStringFragments(alias reader)()
+				void handleStringFragments(Reader)(Reader reader)
 				{
 					static struct FragmentSink
 					{
@@ -56,59 +56,59 @@ struct Deserializer(alias source)
 						}
 					}
 					FragmentSink sink;
-					reader.connect(parent).call(&sink);
+					Reader.callWith(reader, parent, &sink);
 					handleValue(sink.buf);
 				}
 			else
 				alias handleStringFragments = unparseable!"string";
 
 			static if (is(T U : U[]))
-				void handleArray(alias reader)()
+				void handleArray(Reader)(Reader reader)
 				{
 					auto sink = ArraySink!(U, Parent)(parent);
-					reader.connect(parent).call(&sink);
+					Reader.callWith(reader, parent, boundObj(&sink));
 					handleValue(sink.arr);
 				}
 			else
 				alias handleArray = unparseable!"array";
 
 			static if (is(T V : V[K], K))
-				void handleObject(alias reader)()
+				void handleObject(Reader)(Reader reader)
 				{
 					static struct FieldSink
 					{
 						Parent parent;
 						T aa;
 
-						void handleField(alias nameReader, alias valueReader)()
+						void handleField(NameReader, ValueReader)(NameReader nameReader, ValueReader valueReader)
 						{
 							K k;
 							V v;
-							nameReader .connect(parent).call(__traits(child, parent, makeSink!K)(&k));
-							valueReader.connect(parent).call(__traits(child, parent, makeSink!V)(&v));
+							NameReader .callWith(nameReader , parent, __traits(child, parent, makeSink!K)(&k));
+							ValueReader.callWith(valueReader, parent, __traits(child, parent, makeSink!V)(&v));
 							aa[k] = v;
 						}
 					}
 
 					auto sink = FieldSink(parent);
-					reader.connect(parent).call(&sink);
+					Reader.callWith(reader, parent, boundObj(&sink));
 					handleValue(sink.aa);
 				}
 			else
 			static if (is(T == struct))
 			{
-				void handleObject(alias reader)()
+				void handleObject(Reader)(Reader reader)
 				{
 					static struct FieldSink
 					{
 						Parent parent;
 						T s;
 
-						void handleField(alias nameReader, alias valueReader)()
+						void handleField(NameReader, ValueReader)(NameReader nameReader, ValueReader valueReader)
 						{
 							alias N = const(C)[];
 							N name;
-							nameReader .connect(parent).call(__traits(child, parent, makeSink!N)(&name));
+							NameReader.callWith(nameReader, parent, __traits(child, parent, makeSink!N)(&name));
 
 							// TODO: generate switch
 							foreach (i, field; s.tupleof)
@@ -118,7 +118,7 @@ struct Deserializer(alias source)
 								if (name == fieldName)
 								{
 									alias V = typeof(field);
-									valueReader.connect(parent).call(__traits(child, parent, makeSink!V)(&s.tupleof[i]));
+									ValueReader.callWith(valueReader, parent, __traits(child, parent, makeSink!V)(&s.tupleof[i]));
 									return;
 								}
 							}
@@ -127,7 +127,7 @@ struct Deserializer(alias source)
 					}
 
 					auto sink = FieldSink(parent);
-					reader.connect(parent).call(&sink);
+					Reader.callWith(reader, parent, boundObj(&sink));
 					handleValue(sink.s);
 				}
 			}
@@ -190,7 +190,110 @@ struct Deserializer(alias source)
 				mixin SinkHandlers!T;
 			}
 
-			return Sink(p, this.reference);
+			auto s = Sink(p, this.reference);
+			return boundObj(s);
+		}
+	}
+}
+
+/// Serialization source which serializes a given object.
+struct Serializer(alias writer)
+{
+	static template Impl(alias anchor)
+	{
+		void serialize(T)(auto ref T v)
+		{
+			auto sink = writer.createSink();
+			read(sink, v);
+		}
+
+		static void read(Sink, T)(Sink sink, auto ref T v)
+		{
+			static if (is(typeof(v is null)))
+				if (v is null)
+				{
+					sink.handleNull();
+					return;
+				}
+
+			static if (is(T : ulong))
+			{
+				char[DecimalSize!T] buf = void;
+				sink.handleNumeric(toDec(v, buf));
+			}
+			else
+			static if (isNumeric!T) // floating point
+			{
+				import ae.utils.textout;
+
+				static char[64] arr;
+				auto buf = StringBuffer(arr);
+				formattedWrite(&buf, "%s", v);
+				sink.handleNumeric(buf.get());
+			}
+			else
+			static if (is(T == struct))
+			{
+				static struct StructReader
+				{
+					RefType!T p;
+					void read(Sink)(Sink sink)
+					{
+						foreach (i, ref field; p.dereference.tupleof)
+						{
+							import std.array : split;
+							enum name = p.dereference.tupleof[i].stringof.split(".")[$-1];
+
+							alias ValueReader = Reader!(typeof(field));
+							auto reader = ValueReader(&field);
+							sink.handleField(unboundDgAlias!(stringReader!name), boundDgAlias!(ValueReader.readValue)(&reader));
+						}
+					}
+				}
+				auto reader = StructReader(v.reference);
+				sink.handleObject(boundDgAlias!(StructReader.read)(&reader));
+			}
+			else
+			static if (is(T : string))
+				sink.handleString(v);
+			else
+			static if (is(T U : U[]))
+			{
+				static struct ArrayReader
+				{
+					T arr;
+					void readArray(Sink)(Sink sink)
+					{
+						foreach (ref v; arr)
+							read(sink, v);
+					}
+				}
+				auto reader = ArrayReader(v);
+				sink.handleArray(boundDgAlias!(ArrayReader.readArray)(&reader));
+			}
+			else
+			static if (is(T == bool))
+				sink.handleBoolean(v);
+			else
+				static assert(false, "Don't know how to serialize " ~ T.stringof);
+		}
+
+		static template stringReader(string name)
+		{
+			static void stringReader(Sink)(Sink sink)
+			{
+				sink.handleString(name);
+			}
+		}
+
+		static struct Reader(T)
+		{
+			T* p;
+
+			void readValue(Sink)(Sink sink)
+			{
+				read(sink, *p);
+			}
 		}
 	}
 }
