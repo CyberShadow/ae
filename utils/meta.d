@@ -377,7 +377,11 @@ mixin template StringMixinProxy(string targetPrefix)
 			// built-in type field, manifest constant, and static non-mutable field
 			enum opDispatch = mixin(targetPrefix~name);
 		}
-		else static if (is(typeof(mixin(targetPrefix~name))) || __traits(getOverloads, __traits(parent, mixin(targetPrefix~name)), name).length != 0)
+		else static if (is(typeof(mixin(targetPrefix~name)))
+		  || (is(typeof(__traits(getOverloads, __traits(parent, mixin(targetPrefix~name)), name)))
+		             && __traits(getOverloads, __traits(parent, mixin(targetPrefix~name)), name).length != 0
+		     )
+		)
 		{
 			// field or property function
 			@property auto ref opDispatch(this X)()                { return mixin(targetPrefix~name        ); }
@@ -699,7 +703,15 @@ struct BoundDgAlias(alias fun)
 	alias C = RefType!(thisOf!fun);
 	C context;
 
+	/// Call the delegate using the stored context.
 	static auto call(Args...)(BoundDgAlias self, auto ref Args args)
+	{
+		auto c = self.context;
+		return __traits(child, c, fun)(args);
+	}
+
+	// HACK, TODO
+	static auto callWith(C, Args...)(BoundDgAlias self, C context, auto ref Args args)
 	{
 		auto c = self.context;
 		return __traits(child, c, fun)(args);
