@@ -51,6 +51,17 @@ unittest
 
 // **************************************************************************
 
+struct StaticBuf(T, size_t size)
+{
+	T[size] buf;
+	size_t pos;
+	void put(T v) { buf[pos++] = v; }
+	void put(in T[] v) { buf[pos..pos+v.length] = v[]; pos+=v.length; }
+	T[] data() { return buf[0..pos]; }
+}
+
+// **************************************************************************
+
 /// Sink which simply counts how much data is written to it.
 struct CountingWriter(T)
 {
