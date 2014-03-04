@@ -388,7 +388,8 @@ mixin template StringMixinProxy(string targetPrefix)
 			// member template
 			template opDispatch(T...)
 			{
-				auto ref opDispatch(this X, Args...)(auto ref Args args){ return mixin(targetPrefix~name~q{!T(args)}); }
+				enum targs = T.length ? "!T" : "";
+				auto ref opDispatch(this X, Args...)(auto ref Args args){ return mixin(targetPrefix~name~targs~q{(args)}); }
 			}
 		}
 	}
