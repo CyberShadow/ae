@@ -105,11 +105,11 @@ struct JsonParser(C)
 			{
 				case '[':
 					skip();
-					Sink.handleArray(sink, unboundDgAlias!readArray);
+					Sink.handleArray(sink, boundDgAlias!readArray(this.reference));
 					break;
 				case '"':
 					skip();
-					Sink.handleStringFragments(sink, unboundDgAlias!readString);
+					Sink.handleStringFragments(sink, unboundDgAlias!readString());
 					break;
 				case 't':
 					skip();
@@ -141,7 +141,7 @@ struct JsonParser(C)
 					break;
 				case '{':
 					skip();
-					Sink.handleObject(sink, unboundDgAlias!readObject);
+					Sink.handleObject(sink, unboundDgAlias!readObject());
 					break;
 				default:
 					throw new Exception("Unknown JSON symbol: %s".format(peek()));
@@ -180,7 +180,7 @@ struct JsonParser(C)
 
 			while (true)
 			{
-				Sink.handleField(sink, unboundDgAlias!read, unboundDgAlias!readObjectValue);
+				Sink.handleField(sink, unboundDgAlias!read(), unboundDgAlias!readObjectValue());
 
 				skipWhitespace();
 				if (peek()=='}')
@@ -209,13 +209,13 @@ struct JsonParser(C)
 			{
 				auto end = mark();
 				if (start != end)
-					sink.handleStringFragment(slice(start, end));
+					Sink.handleStringFragment(sink, slice(start, end));
 			}
 
 			void oneConst(C c)()
 			{
 				static C[1] arr = [c];
-				sink.handleStringFragment(arr[]);
+				Sink.handleStringFragment(sink, arr[]);
 			}
 
 			while (true)
@@ -248,13 +248,13 @@ struct JsonParser(C)
 							static if (C.sizeof == 1)
 							{
 								char[4] buf;
-								sink.handleStringFragment(buf[0..encode(buf, w)]);
+								Sink.handleStringFragment(sink, buf[0..encode(buf, w)]);
 							}
 							else
 							{
 								Unqual!C[1] buf;
 								buf[0] = w;
-								sink.handleStringFragment(buf[]);
+								Sink.handleStringFragment(sink, buf[]);
 							}
 							break;
 						}
@@ -311,7 +311,10 @@ struct JsonDeserializer(C)
 
 	T deserialize(T)()
 	{
-		return deserializer.deserialize!T();
+		T t;
+		auto sink = deserializer.makeSink(&t);
+		jsonImpl.read(sink);
+		return t;
 	}
 }
 
@@ -367,17 +370,14 @@ struct Escapes
 immutable Escapes escapes = { Escapes escapes; escapes.populate(); return escapes; }();
 
 /// Serialization target which writes a JSON stream.
-struct JsonWriter(alias output)
+struct JsonWriter
 {
-	static template Impl(alias anchor)
+	static template Impl(alias source, alias output)
 	{
-		alias Parent = RefType!(thisOf!anchor);
-		alias Output = ScopeProxy!output;
+		alias Parent = RefType!(thisOf!source);
 
-		static struct Sink
+		static template Sink(alias output)
 		{
-			Output output;
-
 			void handleNumeric(C)(C[] str)
 			{
 				output.put(str);
@@ -417,61 +417,82 @@ struct JsonWriter(alias output)
 
 			void handleArray(Reader)(Reader reader)
 			{
+				needComma = false;
 				output.put('[');
-				auto sink = ArraySink(output);
-				Reader.call(reader, &sink);
+				Reader.call(reader, boundObjScope!arraySink(this.reference));
 				output.put(']');
+			}
+
+			void handleStringFragments(Reader)(Reader reader)
+			{
+				output.put('"');
+				Reader.call(reader, boundObjScope!sink(this.reference));
+				output.put('"');
 			}
 
 			void handleObject(Reader)(Reader reader)
 			{
+				needComma = false;
 				output.put('{');
-				auto sink = ObjectSink(output);
-				Reader.call(reader, &sink);
+				Reader.call(reader, boundObjScope!objectSink(this.reference));
 				output.put('}');
 			}
 		}
+		alias sink = Sink!output;
 
-		static struct ArraySink
+		static bool needComma; // Yes, a global
+
+		static template ArraySink(alias output)
 		{
-			Output output;
-			bool needComma;
+			alias handleObject = opDispatch!"handleObject";
+			alias handleStringFragments = opDispatch!"handleStringFragments";
+			alias handleStringFragment = opDispatch!"handleStringFragment";
+			alias handleBoolean = opDispatch!"handleBoolean";
+			alias handleNull = opDispatch!"handleNull";
+			alias handleNumeric = opDispatch!"handleNumeric";
+			alias handleString = opDispatch!"handleString";
+			alias handleArray = opDispatch!"handleArray";
 
 			template opDispatch(string name)
 			{
 				void opDispatch(Args...)(auto ref Args args)
 				{
 					if (needComma)
+					{
 						output.put(',');
-					else
-						needComma = true;
+						needComma = false;
+					}
 
-					mixin("Sink(output)." ~ name ~ "(args);");
+					mixin("Sink!output." ~ name ~ "(args);");
+					needComma = true;
 				}
 			}
 		}
+		alias arraySink = ArraySink!output;
 
-		static struct ObjectSink
+		static template ObjectSink(alias output)
 		{
-			Output output;
-			bool needComma;
-
 			void handleField(NameReader, ValueReader)(NameReader nameReader, ValueReader valueReader)
 			{
 				if (needComma)
+				{
 					output.put(',');
-				else
-					needComma = true;
+					needComma = false;
+				}
 
-				NameReader .call(nameReader , Sink(output));
+				NameReader .call(nameReader , boundObjScope!sink(this.reference));
 				output.put(':');
-				ValueReader.call(valueReader, Sink(output));
+				ValueReader.call(valueReader, boundObjScope!sink(this.reference));
+
+				needComma = true;
 			}
 		}
+		alias objectSink = ObjectSink!output;
 
-		auto createSink()
+		auto makeSink()
 		{
-			return Sink(Output(this.reference));
+			auto s = boundObjScope!sink(this.reference);
+			return s;
 		}
 	}
 }
@@ -481,16 +502,23 @@ struct JsonSerializer(C)
 	static assert(is(C == char), "TODO");
 	import ae.utils.textout;
 
-	StringBuilder sb;
 	void[0] anchor;
-	alias JsonWriter!sb.Impl!anchor writer;
-	alias Serializer!writer.Impl!anchor serializer;
+	alias Serializer.Impl!anchor serializer;
+
+	StringBuilder sb;
+	alias JsonWriter.Impl!(serializer, sb) writer;
+
+	void serialize(T)(auto ref T v)
+	{
+		auto sink = writer.makeSink();
+		serializer.read(sink, v);
+	}
 }
 
 S toJson(S = string, T)(auto ref T v)
 {
 	JsonSerializer!(Unqual!(typeof(S.init[0]))) s;
-	s.serializer.serialize(v);
+	s.serialize(v);
 	return s.sb.get();
 }
 
@@ -498,18 +526,70 @@ S toJson(S = string, T)(auto ref T v)
 
 unittest
 {
+	static string jsonToJson(string s)
+	{
+		static struct Test
+		{
+			alias C = char; // TODO
+			import ae.utils.textout;
+
+			JsonParser!C.Data jsonData;
+			alias JsonParser!C.Impl!jsonData jsonImpl;
+			void[0] anchor;
+
+			StringBuilder sb;
+			alias JsonWriter.Impl!(jsonImpl, sb) writer;
+
+			string run(string s)
+			{
+				jsonData.s = s.dup;
+				auto sink = writer.makeSink();
+				jsonImpl.read(sink);
+				return sb.get();
+			}
+		}
+
+		Test test;
+		return test.run(s);
+	}
+
+	static T objToObj(T)(T v)
+	{
+		static struct Test
+		{
+			void[0] anchor;
+			alias Serializer.Impl!anchor serializer;
+			alias Deserializer!serializer.Impl!anchor deserializer;
+
+			T run(T v)
+			{
+				T r;
+				auto sink = deserializer.makeSink(&r);
+				serializer.read(sink, v);
+				return r;
+			}
+		}
+
+		Test test;
+		return test.run(v);
+	}
+
 	static void check(I, O)(I input, O output, O correct, string inputDescription, string outputDescription)
 	{
 		assert(output == correct, "%s => %s:\nValue:    %s\nResult:   %s\nExpected: %s".format(inputDescription, outputDescription, input, output, correct));
 	}
 
-	static void testSerialize(T, S)(T v, S s) { check(v, toJson!S(v)   , s, T.stringof, "JSON"); }
+	static void testSerialize(T, S)(T v, S s) { check(v, toJson   !S(v), s, T.stringof, "JSON"); }
 	static void testParse    (T, S)(T v, S s) { check(s, jsonParse!T(s), v, "JSON", T.stringof); }
+	static void testJson     (T, S)(T v, S s) { check(s, jsonToJson (s), s, "JSON", "JSON"); }
+	static void testObj      (T, S)(T v, S s) { check(v, objToObj   (v), v, T.stringof, T.stringof); }
 
 	static void testAll(T, S)(T v, S s)
 	{
 		testSerialize(v, s);
-		testParse(v, s);
+		testParse    (v, s);
+		testJson     (v, s);
+		testObj      (v, s);
 	}
 
 	testAll  (`Hello "world"`   , `"Hello \"world\""` );
@@ -525,7 +605,7 @@ unittest
 	testAll  (4                 , `4`                 );
 	testAll  (4.5               , `4.5`               );
 
-	testAll  ((int[]).init        ,  `null`             );
+	testAll  ((int[]).init      ,  `null`             );
 
 //	assert(toJson(tuple()) == ``);
 //	assert(toJson(tuple(42)) == `42`);

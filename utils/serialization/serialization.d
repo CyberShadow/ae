@@ -22,32 +22,26 @@ import ae.utils.meta;
 import ae.utils.text;
 
 /// Serialization source which serializes a given object.
-struct Serializer(alias writer)
+struct Serializer
 {
 	static template Impl(alias anchor)
 	{
-		void serialize(T)(auto ref T v)
-		{
-			auto sink = writer.createSink();
-			read(sink, v);
-		}
-
 		static void read(Sink, T)(Sink sink, auto ref T v)
 		{
 			static if (is(typeof(v is null)))
 				if (v is null)
 				{
-					sink.handleNull();
+					Sink.handleNull(sink, );
 					return;
 				}
 
 			static if (is(T == bool))
-				sink.handleBoolean(v);
+				Sink.handleBoolean(sink, v);
 			else
 			static if (is(T : ulong))
 			{
 				char[DecimalSize!T] buf = void;
-				sink.handleNumeric(toDec(v, buf));
+				Sink.handleNumeric(sink, toDec(v, buf));
 			}
 			else
 			static if (isNumeric!T) // floating point
@@ -57,7 +51,7 @@ struct Serializer(alias writer)
 				static char[64] arr;
 				auto buf = StringBuffer(arr);
 				formattedWrite(&buf, "%s", v);
-				sink.handleNumeric(buf.get());
+				Sink.handleNumeric(sink, buf.get());
 			}
 			else
 			static if (is(T == struct))
@@ -74,12 +68,12 @@ struct Serializer(alias writer)
 
 							alias ValueReader = Reader!(typeof(field));
 							auto reader = ValueReader(&field);
-							sink.handleField(unboundDgAlias!(stringReader!name), boundDgAlias!(ValueReader.readValue)(&reader));
+							Sink.handleField(sink, unboundDgAlias!(stringReader!name), boundDgAlias!(ValueReader.readValue)(&reader));
 						}
 					}
 				}
 				auto reader = StructReader(v.reference);
-				sink.handleObject(boundDgAlias!(StructReader.read)(&reader));
+				Sink.handleObject(sink, boundDgAlias!(StructReader.read)(&reader));
 			}
 			else
 			static if (is(T V : V[K], K))
@@ -95,7 +89,7 @@ struct Serializer(alias writer)
 							auto keyReader   = KeyReader  (&k);
 							alias ValueReader = Reader!V;
 							auto valueReader = ValueReader(&v);
-							sink.handleField(
+							Sink.handleField(sink,
 								boundDgAlias!(KeyReader  .readValue)(&keyReader  ),
 								boundDgAlias!(ValueReader.readValue)(&valueReader),
 							);
@@ -103,11 +97,11 @@ struct Serializer(alias writer)
 					}
 				}
 				auto reader = AAReader(v);
-				sink.handleObject(boundDgAlias!(AAReader.read)(&reader));
+				Sink.handleObject(sink, boundDgAlias!(AAReader.read)(&reader));
 			}
 			else
 			static if (is(T : string))
-				sink.handleString(v);
+				Sink.handleString(sink, v);
 			else
 			static if (is(T U : U[]))
 			{
@@ -121,7 +115,7 @@ struct Serializer(alias writer)
 					}
 				}
 				auto reader = ArrayReader(v);
-				sink.handleArray(boundDgAlias!(ArrayReader.readArray)(&reader));
+				Sink.handleArray(sink, boundDgAlias!(ArrayReader.readArray)(&reader));
 			}
 			else
 				static assert(false, "Don't know how to serialize " ~ T.stringof);
@@ -131,7 +125,7 @@ struct Serializer(alias writer)
 		{
 			static void stringReader(Sink)(Sink sink)
 			{
-				sink.handleString(name);
+				Sink.handleString(sink, name);
 			}
 		}
 
@@ -152,15 +146,7 @@ struct Deserializer(alias source)
 {
 	static template Impl(alias anchor)
 	{
-		alias C = source.Char;
-
-		T deserialize(T)()
-		{
-			T t;
-			auto sink = makeSink(&t);
-			source.read(sink);
-			return t;
-		}
+		alias C = immutable(char); // TODO
 
 		mixin template SinkHandlers(T)
 		{
@@ -171,6 +157,15 @@ struct Deserializer(alias source)
 					throw new Exception("Can't parse %s from %s".format(T.stringof, inputType));
 				}
 			}
+
+			static if (isSomeString!T)
+				void handleString(CC)(CC[] s)
+				{
+					T v = to!T(s);
+					handleValue(v);
+				}
+			else
+				alias handleString = unparseable!"string";
 
 			static if (is(T : C[]))
 				void handleStringFragments(Reader)(Reader reader)
@@ -185,17 +180,17 @@ struct Deserializer(alias source)
 						}
 					}
 					FragmentSink sink;
-					Reader.callWith(reader, parent, &sink);
+					Reader.callWith(reader, parent, boundObj(&sink));
 					handleValue(sink.buf);
 				}
 			else
-				alias handleStringFragments = unparseable!"string";
+				alias handleStringFragments = unparseable!"string fragments";
 
 			static if (is(T U : U[]))
 				void handleArray(Reader)(Reader reader)
 				{
 					auto sink = ArraySink!(U, Parent)(parent);
-					Reader.callWith(reader, parent, boundObj(&sink));
+					Reader.call(reader, boundObj(&sink));
 					handleValue(sink.arr);
 				}
 			else
@@ -282,7 +277,7 @@ struct Deserializer(alias source)
 					throw new Exception("Can't parse %s from %s".format(T.stringof, "boolean"));
 			}
 
-			void handleNumeric(C[] v)
+			void handleNumeric(CC)(in CC[] v)
 			{
 				static if (is(typeof(to!T(v))))
 				{
