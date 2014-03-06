@@ -74,9 +74,22 @@ template SubProxy(alias S, string exp)
 
 alias parentOf(alias a) = Identity!(__traits(parent, a));
 
-/// Instantiates to a type that points to a sub-aggregate
+/// Returns a type that points to a sub-aggregate
 /// (mixin or template alias) of a struct or class.
 /// Requires __traits(child) support.
+template scopeProxy(alias a)
+{
+	@property auto scopeProxy()
+	{
+		return ScopeProxy!a(this.reference);
+	}
+
+	static @property auto scopeProxy(R)(R r)
+	{
+		return ScopeProxy!a(r);
+	}
+}
+
 template ScopeProxy(alias a)
 {
 	static assert(haveChildTrait, "Your compiler doesn't support __traits(child)");
@@ -113,11 +126,27 @@ unittest
 	{
 		int i;
 		alias t = Dummy.T!i;
+
+		auto getProxy() { return scopeProxy!t; }
 	}
 
 	{
 		S s;
 		auto w = ScopeProxy!(S.t)(&s);
+		w.set(42);
+		assert(s.i == 42);
+	}
+
+	{
+		S s;
+		auto w = scopeProxy!(S.t)(&s);
+		w.set(42);
+		assert(s.i == 42);
+	}
+
+	{
+		S s;
+		auto w = s.getProxy();
 		w.set(42);
 		assert(s.i == 42);
 	}
