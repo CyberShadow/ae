@@ -11,7 +11,7 @@
  *   Vladimir Panteleev <vladimir@thecybershadow.net>
  */
 
-module ae.utils.meta_x;
+module ae.utils.meta.x;
 
 // Based on idea from Timon Gehr.
 // http://forum.dlang.org/post/jdiu5s$13bo$1@digitalmars.com
