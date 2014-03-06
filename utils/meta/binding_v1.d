@@ -16,19 +16,9 @@ module ae.utils.meta.binding_v1;
 import std.traits;
 
 import ae.utils.meta.caps;
+import ae.utils.meta.misc;
 import ae.utils.meta.proxy;
 import ae.utils.meta.reference;
-
-/// Get f's ancestor which represents its "this" pointer.
-/// Skips template and mixin ancestors until it finds a struct or class.
-template thisOf(alias f)
-{
-	alias p = Identity!(__traits(parent, f));
-	static if (is(p == class) || is(p == struct) || is(p == union))
-		alias thisOf = p;
-	else
-		alias thisOf = thisOf!p;
-}
 
 /// Disconnect function (or function template) f from its "this" pointer,
 /// creating a template that can be passed as an alias parameter

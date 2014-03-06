@@ -264,3 +264,16 @@ debug
 	enum IsDebug = true;
 else
 	enum IsDebug = false;
+
+// ************************************************************************
+
+/// Get f's ancestor which represents its "this" pointer.
+/// Skips template and mixin ancestors until it finds a struct or class.
+template thisOf(alias f)
+{
+	alias p = Identity!(__traits(parent, f));
+	static if (is(p == class) || is(p == struct) || is(p == union))
+		alias thisOf = p;
+	else
+		alias thisOf = thisOf!p;
+}
