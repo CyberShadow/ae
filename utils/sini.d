@@ -162,6 +162,9 @@ struct IniTraversingHandler(S)
 
 IniTraversingHandler!S makeIniHandler(S = string, U)(ref U v)
 {
+	static if (!is(U == Unqual!U))
+		return makeIniHandler!S(*cast(Unqual!U*)&v);
+	else
 	static if (is(U == struct))
 		return IniTraversingHandler!S
 		(
@@ -263,7 +266,7 @@ unittest
 		struct Section
 		{
 			string name;
-			string[string] values;
+			immutable string[string] values;
 		}
 		Section[] sections;
 
