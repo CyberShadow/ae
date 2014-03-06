@@ -937,3 +937,35 @@ unittest
 	Test test;
 	test.test();
 }
+
+// ***************************************************************************
+
+struct TestAliasCtxInference
+{
+	struct A
+	{
+		void fun() {}
+
+		void caller(T)(T t)
+		{
+			t.callee();
+		}
+	}
+
+	struct B
+	{
+		alias callee = A.fun;
+	}
+
+	static void test()()
+	{
+		A a;
+		B b;
+		a.caller(b);
+	}
+}
+
+/// Does this compiler support inferring "this" of an aliased
+/// method call from the current context?
+/// https://github.com/D-Programming-Language/dmd/pull/3361
+enum haveAliasCtxInference = __traits(compiles, TestAliasCtxInference.test());
