@@ -105,18 +105,18 @@ struct JsonParser(C)
 			{
 				case '[':
 					skip();
-					Sink.handleArray(sink, boundDgAlias!readArray(this.reference));
+					sink.handleArray(boundFunctorOf!readArray);
 					break;
 				case '"':
 					skip();
-					Sink.handleStringFragments(sink, unboundDgAlias!readString());
+					sink.handleStringFragments(unboundFunctorOf!readString);
 					break;
 				case 't':
 					skip();
 					expect('r');
 					expect('u');
 					expect('e');
-					Sink.handleBoolean(sink, true);
+					sink.handleBoolean(true);
 					break;
 				case 'f':
 					skip();
@@ -124,24 +124,24 @@ struct JsonParser(C)
 					expect('l');
 					expect('s');
 					expect('e');
-					Sink.handleBoolean(sink, false);
+					sink.handleBoolean(false);
 					break;
 				case 'n':
 					skip();
 					expect('u');
 					expect('l');
 					expect('l');
-					Sink.handleNull(sink);
+					sink.handleNull();
 					break;
 				case '-':
 				case '0':
 					..
 				case '9':
-					Sink.handleNumeric(sink, readNumeric());
+					sink.handleNumeric(readNumeric());
 					break;
 				case '{':
 					skip();
-					Sink.handleObject(sink, unboundDgAlias!readObject());
+					sink.handleObject(unboundFunctorOf!readObject);
 					break;
 				default:
 					throw new Exception("Unknown JSON symbol: %s".format(peek()));
@@ -180,7 +180,7 @@ struct JsonParser(C)
 
 			while (true)
 			{
-				Sink.handleField(sink, unboundDgAlias!read(), unboundDgAlias!readObjectValue());
+				sink.handleField(unboundFunctorOf!read, unboundFunctorOf!readObjectValue);
 
 				skipWhitespace();
 				if (peek()=='}')
@@ -209,13 +209,13 @@ struct JsonParser(C)
 			{
 				auto end = mark();
 				if (start != end)
-					Sink.handleStringFragment(sink, slice(start, end));
+					sink.handleStringFragment(slice(start, end));
 			}
 
 			void oneConst(C c)()
 			{
 				static C[1] arr = [c];
-				Sink.handleStringFragment(sink, arr[]);
+				sink.handleStringFragment(arr[]);
 			}
 
 			while (true)
@@ -248,13 +248,13 @@ struct JsonParser(C)
 							static if (C.sizeof == 1)
 							{
 								char[4] buf;
-								Sink.handleStringFragment(sink, buf[0..encode(buf, w)]);
+								sink.handleStringFragment(buf[0..encode(buf, w)]);
 							}
 							else
 							{
 								Unqual!C[1] buf;
 								buf[0] = w;
-								Sink.handleStringFragment(sink, buf[]);
+								sink.handleStringFragment(buf[]);
 							}
 							break;
 						}
@@ -419,14 +419,14 @@ struct JsonWriter
 			{
 				needComma = false;
 				output.put('[');
-				Reader.call(reader, boundObjScope!arraySink(this.reference));
+				reader(scopeProxy!arraySink);
 				output.put(']');
 			}
 
 			void handleStringFragments(Reader)(Reader reader)
 			{
 				output.put('"');
-				Reader.call(reader, boundObjScope!sink(this.reference));
+				reader(scopeProxy!sink);
 				output.put('"');
 			}
 
@@ -434,7 +434,7 @@ struct JsonWriter
 			{
 				needComma = false;
 				output.put('{');
-				Reader.call(reader, boundObjScope!objectSink(this.reference));
+				reader(scopeProxy!objectSink);
 				output.put('}');
 			}
 		}
@@ -480,9 +480,9 @@ struct JsonWriter
 					needComma = false;
 				}
 
-				NameReader .call(nameReader , boundObjScope!sink(this.reference));
+				nameReader (scopeProxy!sink);
 				output.put(':');
-				ValueReader.call(valueReader, boundObjScope!sink(this.reference));
+				valueReader(scopeProxy!sink);
 
 				needComma = true;
 			}
@@ -491,7 +491,7 @@ struct JsonWriter
 
 		auto makeSink()
 		{
-			auto s = boundObjScope!sink(this.reference);
+			auto s = scopeProxy!sink;
 			return s;
 		}
 	}

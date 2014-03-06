@@ -31,17 +31,17 @@ struct Serializer
 			static if (is(typeof(v is null)))
 				if (v is null)
 				{
-					Sink.handleNull(sink, );
+					sink.handleNull();
 					return;
 				}
 
 			static if (is(T == bool))
-				Sink.handleBoolean(sink, v);
+				sink.handleBoolean(v);
 			else
 			static if (is(T : ulong))
 			{
 				char[DecimalSize!T] buf = void;
-				Sink.handleNumeric(sink, toDec(v, buf));
+				sink.handleNumeric(toDec(v, buf));
 			}
 			else
 			static if (isNumeric!T) // floating point
@@ -51,7 +51,7 @@ struct Serializer
 				static char[64] arr;
 				auto buf = StringBuffer(arr);
 				formattedWrite(&buf, "%s", v);
-				Sink.handleNumeric(sink, buf.get());
+				sink.handleNumeric(buf.get());
 			}
 			else
 			static if (is(T == struct))
@@ -68,12 +68,12 @@ struct Serializer
 
 							alias ValueReader = Reader!(typeof(field));
 							auto reader = ValueReader(&field);
-							Sink.handleField(sink, unboundDgAlias!(stringReader!name), boundDgAlias!(ValueReader.readValue)(&reader));
+							sink.handleField(unboundFunctorOf!(stringReader!name), boundFunctorOf!(ValueReader.readValue)(&reader));
 						}
 					}
 				}
 				auto reader = StructReader(v.reference);
-				Sink.handleObject(sink, boundDgAlias!(StructReader.read)(&reader));
+				sink.handleObject(boundFunctorOf!(StructReader.read)(&reader));
 			}
 			else
 			static if (is(T V : V[K], K))
@@ -89,19 +89,19 @@ struct Serializer
 							auto keyReader   = KeyReader  (&k);
 							alias ValueReader = Reader!V;
 							auto valueReader = ValueReader(&v);
-							Sink.handleField(sink,
-								boundDgAlias!(KeyReader  .readValue)(&keyReader  ),
-								boundDgAlias!(ValueReader.readValue)(&valueReader),
+							sink.handleField(
+								boundFunctorOf!(KeyReader  .readValue)(&keyReader  ),
+								boundFunctorOf!(ValueReader.readValue)(&valueReader),
 							);
 						}
 					}
 				}
 				auto reader = AAReader(v);
-				Sink.handleObject(sink, boundDgAlias!(AAReader.read)(&reader));
+				sink.handleObject(boundFunctorOf!(AAReader.read)(&reader));
 			}
 			else
 			static if (is(T : string))
-				Sink.handleString(sink, v);
+				sink.handleString(v);
 			else
 			static if (is(T U : U[]))
 			{
@@ -115,7 +115,7 @@ struct Serializer
 					}
 				}
 				auto reader = ArrayReader(v);
-				Sink.handleArray(sink, boundDgAlias!(ArrayReader.readArray)(&reader));
+				sink.handleArray(boundFunctorOf!(ArrayReader.readArray)(&reader));
 			}
 			else
 				static assert(false, "Don't know how to serialize " ~ T.stringof);
@@ -125,7 +125,7 @@ struct Serializer
 		{
 			static void stringReader(Sink)(Sink sink)
 			{
-				Sink.handleString(sink, name);
+				sink.handleString(name);
 			}
 		}
 
@@ -180,7 +180,7 @@ struct Deserializer(alias source)
 						}
 					}
 					FragmentSink sink;
-					Reader.callWith(reader, parent, boundObj(&sink));
+					reader.bind(parent)(&sink);
 					handleValue(sink.buf);
 				}
 			else
@@ -190,7 +190,7 @@ struct Deserializer(alias source)
 				void handleArray(Reader)(Reader reader)
 				{
 					auto sink = ArraySink!(U, Parent)(parent);
-					Reader.call(reader, boundObj(&sink));
+					reader(&sink);
 					handleValue(sink.arr);
 				}
 			else
@@ -208,14 +208,14 @@ struct Deserializer(alias source)
 						{
 							K k;
 							V v;
-							NameReader .callWith(nameReader , parent, __traits(child, parent, makeSink!K)(&k));
-							ValueReader.callWith(valueReader, parent, __traits(child, parent, makeSink!V)(&v));
+							nameReader .bind(parent)(__traits(child, parent, makeSink!K)(&k));
+							valueReader.bind(parent)(__traits(child, parent, makeSink!V)(&v));
 							aa[k] = v;
 						}
 					}
 
 					auto sink = FieldSink(parent);
-					Reader.callWith(reader, parent, boundObj(&sink));
+					reader.bind(parent)(&sink);
 					handleValue(sink.aa);
 				}
 			else
@@ -232,7 +232,7 @@ struct Deserializer(alias source)
 						{
 							alias N = const(C)[];
 							N name;
-							NameReader.callWith(nameReader, parent, __traits(child, parent, makeSink!N)(&name));
+							nameReader.bind(parent)(__traits(child, parent, makeSink!N)(&name));
 
 							// TODO: generate switch
 							foreach (i, field; s.tupleof)
@@ -242,7 +242,7 @@ struct Deserializer(alias source)
 								if (name == fieldName)
 								{
 									alias V = typeof(field);
-									ValueReader.callWith(valueReader, parent, __traits(child, parent, makeSink!V)(&s.tupleof[i]));
+									valueReader.bind(parent)(__traits(child, parent, makeSink!V)(&s.tupleof[i]));
 									return;
 								}
 							}
@@ -251,7 +251,7 @@ struct Deserializer(alias source)
 					}
 
 					auto sink = FieldSink(parent);
-					Reader.callWith(reader, parent, boundObj(&sink));
+					reader.bind(parent)(&sink);
 					handleValue(sink.s);
 				}
 			}
@@ -315,7 +315,7 @@ struct Deserializer(alias source)
 			}
 
 			auto s = Sink(p, this.reference);
-			return boundObj(s);
+			return s;
 		}
 	}
 }
