@@ -607,6 +607,10 @@ unittest
 
 	testAll  ((int[]).init      ,  `null`             );
 
+	struct All { All[] arr; All[string] aa; }
+
+	testAll  ((All[]).init      ,  `null`             );
+
 //	assert(toJson(tuple()) == ``);
 //	assert(toJson(tuple(42)) == `42`);
 //	assert(toJson(tuple(42, "banana")) == `[42,"banana"]`);

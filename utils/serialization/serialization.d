@@ -56,48 +56,15 @@ struct Serializer
 			else
 			static if (is(T == struct))
 			{
-				static struct StructReader
-				{
-					RefType!T p;
-					void read(Sink)(Sink sink)
-					{
-						foreach (i, ref field; p.dereference.tupleof)
-						{
-							import std.array : split;
-							enum name = p.dereference.tupleof[i].stringof.split(".")[$-1];
-
-							alias ValueReader = Reader!(typeof(field));
-							auto reader = ValueReader(&field);
-							sink.handleField(unboundFunctorOf!(stringReader!name), boundFunctorOf!(ValueReader.readValue)(&reader));
-						}
-					}
-				}
-				auto reader = StructReader(v.reference);
-				sink.handleObject(boundFunctorOf!(StructReader.read)(&reader));
+				auto reader = StructReader!T(v.reference);
+				sink.handleObject(boundFunctorOf!(StructReader!T.read)(&reader));
 			}
 			else
 			static if (is(T V : V[K], K))
 			{
-				static struct AAReader
-				{
-					T aa;
-					void read(Sink)(Sink sink)
-					{
-						foreach (K k, ref V v; aa)
-						{
-							alias KeyReader   = Reader!K;
-							auto keyReader   = KeyReader  (&k);
-							alias ValueReader = Reader!V;
-							auto valueReader = ValueReader(&v);
-							sink.handleField(
-								boundFunctorOf!(KeyReader  .readValue)(&keyReader  ),
-								boundFunctorOf!(ValueReader.readValue)(&valueReader),
-							);
-						}
-					}
-				}
-				auto reader = AAReader(v);
-				sink.handleObject(boundFunctorOf!(AAReader.read)(&reader));
+				alias Reader = AAReader!(T, K, V);
+				auto reader = Reader(v);
+				sink.handleObject(boundFunctorOf!(Reader.read)(&reader));
 			}
 			else
 			static if (is(T : string))
@@ -105,20 +72,58 @@ struct Serializer
 			else
 			static if (is(T U : U[]))
 			{
-				static struct ArrayReader
-				{
-					T arr;
-					void readArray(Sink)(Sink sink)
-					{
-						foreach (ref v; arr)
-							read(sink, v);
-					}
-				}
-				auto reader = ArrayReader(v);
-				sink.handleArray(boundFunctorOf!(ArrayReader.readArray)(&reader));
+				alias Reader = ArrayReader!T;
+				auto reader = Reader(v);
+				sink.handleArray(boundFunctorOf!(Reader.readArray)(&reader));
 			}
 			else
 				static assert(false, "Don't know how to serialize " ~ T.stringof);
+		}
+
+		static struct StructReader(T)
+		{
+			RefType!T p;
+			void read(Sink)(Sink sink)
+			{
+				foreach (i, ref field; p.dereference.tupleof)
+				{
+					import std.array : split;
+					enum name = p.dereference.tupleof[i].stringof.split(".")[$-1];
+
+					alias ValueReader = Reader!(typeof(field));
+					auto reader = ValueReader(&field);
+					sink.handleField(unboundFunctorOf!(stringReader!name), boundFunctorOf!(ValueReader.readValue)(&reader));
+				}
+			}
+		}
+
+		static struct AAReader(T, K, V)
+		{
+			T aa;
+			void read(Sink)(Sink sink)
+			{
+				foreach (K k, ref V v; aa)
+				{
+					alias KeyReader   = Reader!K;
+					auto keyReader   = KeyReader  (&k);
+					alias ValueReader = Reader!V;
+					auto valueReader = ValueReader(&v);
+					sink.handleField(
+						boundFunctorOf!(KeyReader  .readValue)(&keyReader  ),
+						boundFunctorOf!(ValueReader.readValue)(&valueReader),
+					);
+				}
+			}
+		}
+
+		static struct ArrayReader(T)
+		{
+			T arr;
+			void readArray(Sink)(Sink sink)
+			{
+				foreach (ref v; arr)
+					read(sink, v);
+			}
 		}
 
 		static template stringReader(string name)
