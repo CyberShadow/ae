@@ -56,9 +56,13 @@ template boundFunctorOf(alias f)
 struct BoundFunctorOf(R, alias f)
 {
 	R context;
-	auto opCall(Args...)(auto ref Args args)
+	template opCall(Args...)
 	{
-		return __traits(child, context, f)(args);
+		alias Ret = typeof(__traits(child, context, f)(Args.init));
+		Ret opCall(auto ref Args args)
+		{
+			return __traits(child, context, f)(args);
+		}
 	}
 
 	/// Ignore - BoundFunctors are already bound
