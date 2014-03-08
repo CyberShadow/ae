@@ -302,7 +302,7 @@ struct JsonDeserializer(C)
 	JsonParser!C.Data jsonData;
 	alias JsonParser!C.Impl!jsonData jsonImpl;
 	void[0] anchor;
-	alias Deserializer!jsonImpl.Impl!anchor deserializer;
+	alias Deserializer!anchor deserializer;
 
 	this(C[] s)
 	{
@@ -559,7 +559,7 @@ unittest
 		{
 			void[0] anchor;
 			alias Serializer.Impl!anchor serializer;
-			alias Deserializer!serializer.Impl!anchor deserializer;
+			alias Deserializer!anchor deserializer;
 
 			T run(T v)
 			{
