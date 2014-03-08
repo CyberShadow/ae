@@ -161,14 +161,16 @@ template Deserializer(alias anchor)
 			}
 		}
 
-		static if (isSomeString!T)
-			void handleString(CC)(CC[] s)
+		void handleString(S)(S s)
+		{
+			static if (is(typeof(s.to!T)))
 			{
 				T v = to!T(s);
 				handleValue(v);
 			}
-		else
-			alias handleString = unparseable!"string";
+			else
+				throw new Exception("Can't parse %s from %s".format(T.stringof, S.stringof));
+		}
 
 		static if (is(T : C[]))
 			void handleStringFragments(Reader)(Reader reader)
