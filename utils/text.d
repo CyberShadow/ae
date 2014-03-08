@@ -483,60 +483,92 @@ unittest
 	assert(buf == "01234567");
 }
 
-/// Get shortest string representation of a double that still converts to exactly the same number.
-// TODO: generalize
-string doubleToString(double v)
+/// How many significant decimal digits does a FP type have
+/// (determined empirically)
+enum significantDigits(T : real) = 2 + 2 * T.sizeof;
+
+/// Format string for a FP type which includes all necessary
+/// significant digits
+enum fpFormatString(T) = "%." ~ text(significantDigits!T) ~ "g";
+
+/// Get shortest string representation of a FP type that still converts to exactly the same number.
+template fpToString(F)
 {
-	StaticBuf!(char, 64) buf;
-	formattedWrite(&buf, "%.18g", v);
-	char[] s = buf.data();
-
-	/// Force IEEE double (bypass FPU register)
-	static double forceDouble(double d) { static double n; n = d; return n; }
-
-	if (s != "nan" && s != "-nan" && s != "inf" && s != "-inf")
+	string fpToString(F v)
 	{
-		foreach_reverse (i; 1..s.length)
-			if (s[i]>='0' && s[i]<='8')
+		/// Bypass FPU register, which may contain a different precision
+		static F forceType(F d) { static F n; n = d; return n; }
+
+		StaticBuf!(char, 64) buf;
+		formattedWrite(&buf, fpFormatString!F, forceType(v));
+		char[] s = buf.data();
+
+		if (s != "nan" && s != "-nan" && s != "inf" && s != "-inf")
+		{
+			if (forceType(to!F(s)) != v)
 			{
-				s[i]++;
-				if (forceDouble(to!double(s[0..i+1]))==v)
-					s = s[0..i+1];
+				static if (is(F == real))
+				{
+					// Something funny with DM libc real parsing... e.g. 0.6885036635121051783
+					return s.idup;
+				}
 				else
-					s[i]--;
+					assert(false, "Initial conversion fails: " ~ format(fpFormatString!F, to!F(s)));
 			}
-		while (s.length>2 && s[$-1]!='.' && forceDouble(to!double(s[0..$-1]))==v)
-			s = s[0..$-1];
+
+			foreach_reverse (i; 1..s.length)
+				if (s[i]>='0' && s[i]<='8')
+				{
+					s[i]++;
+					if (forceType(to!F(s[0..i+1]))==v)
+						s = s[0..i+1];
+					else
+						s[i]--;
+				}
+			while (s.length>2 && s[$-1]!='.' && forceType(to!F(s[0..$-1]))==v)
+				s = s[0..$-1];
+		}
+		return s.idup;
 	}
-	return s.idup;
+
+	static if (!is(F == real))
+	unittest
+	{
+		union U
+		{
+			ubyte[F.sizeof] bytes;
+			F d;
+			string toString() { return (fpFormatString!F ~ " %a [%(%02X %)]").format(d, d, bytes[]); }
+		}
+		import std.random : Xorshift, uniform;
+		import std.stdio : stderr;
+		Xorshift rng;
+		foreach (n; 0..10000)
+		{
+			U u;
+			foreach (ref b; u.bytes[])
+				b = uniform!ubyte(rng);
+			static if (is(F == real))
+				u.bytes[7] |= 0x80; // require normalized value
+			scope(failure) stderr.writeln("Input:\t", u);
+			auto s = fpToString(u.d);
+			scope(failure) stderr.writeln("Result:\t", s);
+			if (s == "nan" || s == "-nan")
+				continue; // there are many NaNs...
+			U r;
+			r.d = to!F(s);
+			assert(r.bytes == u.bytes,
+				"fpToString mismatch:\nOutput:\t%s".format(r));
+		}
+	}
 }
+
+alias doubleToString = fpToString!double;
 
 unittest
 {
-	union U
-	{
-		uint[2] words;
-		double d;
-		string toString() { return "%.18g %(%08X %)".format(d, words[]); }
-	}
-	import std.random : Xorshift, uniform;
-	import std.stdio : stderr;
-	Xorshift rng;
-	foreach (n; 0..10000)
-	{
-		U u;
-		u.words[0] = uniform!uint(rng);
-		u.words[1] = uniform!uint(rng);
-		scope(failure) stderr.writeln("Input:\t", u);
-		auto s = doubleToString(u.d);
-		scope(failure) stderr.writeln("Result:\t", s);
-		if (s == "nan" || s == "-nan")
-			continue; // there are many NaNs...
-		U r;
-		r.d = to!double(s);
-		assert(r.words == u.words,
-			"doubleToString mismatch:\nOutput:\t%s".format(r));
-	}
+	alias floatToString = fpToString!float;
+	alias realToString = fpToString!real;
 }
 
 import std.algorithm : max;
@@ -619,6 +651,15 @@ char[U] toDecFixed(size_t U, N : ulong)(N n)
 unittest
 {
 	assert(toDecFixed!6(12345u) == "012345");
+}
+
+string numberToString(T)(T v)
+	if (isNumeric!T)
+{
+	static if (is(T : real))
+		return fpToString(v);
+	else
+		return toDec(v);
 }
 
 // ************************************************************************
