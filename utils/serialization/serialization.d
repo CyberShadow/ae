@@ -306,21 +306,26 @@ struct Deserializer(alias source)
 
 		auto makeSink(T)(T* p)
 		{
-			alias Parent = RefType!(typeof(this));
-
-			static struct Sink
+			static if (is(typeof(p.isSerializationSink)))
+				return p;
+			else
 			{
-				T* p;
-				Parent parent;
+				alias Parent = RefType!(typeof(this));
 
-				// TODO: avoid redundant copying for large types
-				void handleValue(ref T v) { *p = v; }
+				static struct Sink
+				{
+					T* p;
+					Parent parent;
 
-				mixin SinkHandlers!T;
+					// TODO: avoid redundant copying for large types
+					void handleValue(ref T v) { *p = v; }
+
+					mixin SinkHandlers!T;
+				}
+
+				auto s = Sink(p, this.reference);
+				return s;
 			}
-
-			auto s = Sink(p, this.reference);
-			return s;
 		}
 	}
 }

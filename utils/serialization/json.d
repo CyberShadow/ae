@@ -109,7 +109,7 @@ struct JsonParser(C)
 					break;
 				case '"':
 					skip();
-					sink.handleStringFragments(unboundFunctorOf!readString);
+					sink.handleStringFragments(boundFunctorOf!readString);
 					break;
 				case 't':
 					skip();
@@ -141,7 +141,7 @@ struct JsonParser(C)
 					break;
 				case '{':
 					skip();
-					sink.handleObject(unboundFunctorOf!readObject);
+					sink.handleObject(boundFunctorOf!readObject);
 					break;
 				default:
 					throw new Exception("Unknown JSON symbol: %s".format(peek()));
@@ -180,7 +180,7 @@ struct JsonParser(C)
 
 			while (true)
 			{
-				sink.handleField(unboundFunctorOf!read, unboundFunctorOf!readObjectValue);
+				sink.handleField(boundFunctorOf!read, boundFunctorOf!readObjectValue);
 
 				skipWhitespace();
 				if (peek()=='}')
