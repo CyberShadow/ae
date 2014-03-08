@@ -318,11 +318,12 @@ template Deserializer(alias anchor)
 				{
 					static if (is(T K : V[K], V))
 					{
-						auto pv = name in *p;
+						auto key = name.to!K();
+						auto pv = key in *p;
 						if (!pv)
 						{
-							(*p)[name] = V.init;
-							pv = name in *p;
+							(*p)[key] = V.init;
+							pv = key in *p;
 						}
 						return reader(makeSink(pv));
 					}
