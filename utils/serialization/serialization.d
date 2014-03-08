@@ -183,7 +183,7 @@ template Deserializer(alias anchor)
 					}
 				}
 				FragmentSink sink;
-				reader.bind(parent)(&sink);
+				reader(&sink);
 				handleValue(sink.buf);
 			}
 		else
@@ -192,7 +192,7 @@ template Deserializer(alias anchor)
 		static if (is(T U : U[]))
 			void handleArray(Reader)(Reader reader)
 			{
-				auto sink = ArraySink!(U, Parent)(parent);
+				ArraySink!U sink;
 				reader(&sink);
 				handleValue(sink.arr);
 			}
@@ -204,21 +204,20 @@ template Deserializer(alias anchor)
 			{
 				static struct FieldSink
 				{
-					Parent parent;
 					T aa;
 
 					void handleField(NameReader, ValueReader)(NameReader nameReader, ValueReader valueReader)
 					{
 						K k;
 						V v;
-						nameReader .bind(parent)(__traits(child, parent, makeSink!K)(&k));
-						valueReader.bind(parent)(__traits(child, parent, makeSink!V)(&v));
+						nameReader (makeSink!K(&k));
+						valueReader(makeSink!V(&v));
 						aa[k] = v;
 					}
 				}
 
-				auto sink = FieldSink(parent);
-				reader.bind(parent)(&sink);
+				FieldSink sink;
+				reader(&sink);
 				handleValue(sink.aa);
 			}
 		else
@@ -228,14 +227,13 @@ template Deserializer(alias anchor)
 			{
 				static struct FieldSink
 				{
-					Parent parent;
 					T s;
 
 					void handleField(NameReader, ValueReader)(NameReader nameReader, ValueReader valueReader)
 					{
 						alias N = const(C)[];
 						N name;
-						nameReader.bind(parent)(__traits(child, parent, makeSink!N)(&name));
+						nameReader(makeSink!N(&name));
 
 						// TODO: generate switch
 						foreach (i, field; s.tupleof)
@@ -245,7 +243,7 @@ template Deserializer(alias anchor)
 							if (name == fieldName)
 							{
 								alias V = typeof(field);
-								valueReader.bind(parent)(__traits(child, parent, makeSink!V)(&s.tupleof[i]));
+								valueReader(makeSink!V(&s.tupleof[i]));
 								return;
 							}
 						}
@@ -253,8 +251,8 @@ template Deserializer(alias anchor)
 					}
 				}
 
-				auto sink = FieldSink(parent);
-				reader.bind(parent)(&sink);
+				FieldSink sink;
+				reader(&sink);
 				handleValue(sink.s);
 			}
 		}
@@ -292,9 +290,8 @@ template Deserializer(alias anchor)
 		}
 	}
 
-	static struct ArraySink(T, Parent)
+	static struct ArraySink(T)
 	{
-		Parent parent;
 		T[] arr;
 
 		void handleValue(ref T v) { arr ~= v; }
@@ -302,18 +299,15 @@ template Deserializer(alias anchor)
 		mixin SinkHandlers!T;
 	}
 
-	auto makeSink(T)(T* p)
+	static auto makeSink(T)(T* p)
 	{
 		static if (is(typeof(p.isSerializationSink)))
 			return p;
 		else
 		{
-			alias Parent = RefType!(typeof(this));
-
 			static struct Sink
 			{
 				T* p;
-				Parent parent;
 
 				// TODO: avoid redundant copying for large types
 				void handleValue(ref T v) { *p = v; }
@@ -349,7 +343,7 @@ template Deserializer(alias anchor)
 				mixin SinkHandlers!T;
 			}
 
-			return Sink(p, this.reference);
+			return Sink(p);
 		}
 	}
 }
