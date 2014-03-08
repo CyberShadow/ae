@@ -237,6 +237,24 @@ struct SerializedObject(C)
 		reader(ObjectSink(&sObject));
 	}
 
+	auto traverse(CC, Reader)(in CC[] name, Reader reader)
+	{
+		if (type == Type.sNone)
+		{
+			type = Type.sObject;
+			sObject = null;
+		}
+		enforce(type == Type.sObject, "Can't traverse %s".format(type));
+
+		auto pv = name in sObject;
+		if (!pv)
+		{
+			*p[name] = SerializedObject.init;
+			pv = name in *p;
+		}
+		return reader(pv);
+	}
+
 	// ***********************************************************************
 
 	void read(Sink)(Sink sink)
