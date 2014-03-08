@@ -44,7 +44,7 @@ struct IniParser(R)
 		}
 	}
 
-	static string readSection(R, S, Sink)(ref R r, S[] segments, Sink sink)
+	static S readSection(R, S, Sink)(ref R r, S[] segments, Sink sink)
 	{
 		if (segments.length)
 		{
@@ -53,7 +53,7 @@ struct IniParser(R)
 				// https://d.puremagic.com/issues/show_bug.cgi?id=12318
 				void dummy() {}
 
-				string read(Sink)(Sink sink)
+				S read(Sink)(Sink sink)
 				{
 					return readSection(r, segments[1..$], sink);
 				}
@@ -91,7 +91,7 @@ struct IniParser(R)
 
 	void parseIni(R, Sink)(R r, Sink sink)
 	{
-		auto nextSection = readSection(r, (string[]).init, sink);
+		auto nextSection = readSection(r, typeof(r.front)[].init, sink);
 
 		while (nextSection)
 			nextSection = readSection(r, nextSection.split("."), sink);
@@ -136,6 +136,46 @@ unittest
 	assert(f.s.n1=="v1");
 	assert(f.s.n2=="v2");
 	assert(f.s.a==["foo":1, "bar":2]);
+}
+
+unittest
+{
+	import ae.utils.serialization.serialization;
+	import std.conv;
+
+	static struct Custom
+	{
+		struct Section
+		{
+			string name;
+			string[string] values;
+		}
+		Section[] sections;
+
+		enum isSerializationSink = true;
+
+		auto traverse(Reader)(wstring name, Reader reader)
+		{
+			sections.length++;
+			auto p = &sections[$-1];
+			p.name = to!string(name);
+			return reader(deserializer(&p.values));
+		}
+
+		void handleString(S)(S s) { assert(false); }
+	}
+
+	auto c = parseIni!Custom
+	(
+		q"<
+			[one]
+			a=a
+			[two]
+			b=b
+		>"w.splitLines()
+	);
+
+	assert(c == Custom([Custom.Section("one", ["a" : "a"]), Custom.Section("two", ["b" : "b"])]));
 }
 
 // ***************************************************************************
