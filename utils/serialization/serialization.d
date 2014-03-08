@@ -278,7 +278,7 @@ template Deserializer(alias anchor)
 				throw new Exception("Can't parse %s from %s".format(T.stringof, "boolean"));
 		}
 
-		void handleNumeric(CC)(in CC[] v)
+		void handleNumeric(CC)(CC[] v)
 		{
 			static if (is(typeof(to!T(v))))
 			{
@@ -312,14 +312,14 @@ template Deserializer(alias anchor)
 				// TODO: avoid redundant copying for large types
 				void handleValue(ref T v) { *p = v; }
 
-				auto traverse(CC, Reader)(in CC[] name, Reader reader)
+				auto traverse(CC, Reader)(CC[] name, Reader reader)
 				{
 					static if (is(T K : V[K], V))
 					{
 						auto pv = name in *p;
 						if (!pv)
 						{
-							*p[name] = V.init;
+							(*p)[name] = V.init;
 							pv = name in *p;
 						}
 						return reader(makeSink(pv));
@@ -327,17 +327,23 @@ template Deserializer(alias anchor)
 					else
 					static if (is(T == struct))
 					{
+						static immutable T dummy; // https://d.puremagic.com/issues/show_bug.cgi?id=12319
 						foreach (i, ref field; p.tupleof)
 						{
 							// TODO: Name customization UDAs
-							enum fieldName = to!(CC[])(__traits(identifier, p.tupleof[i]));
+							enum fieldName = to!(CC[])(__traits(identifier, dummy.tupleof[i]));
 							if (name == fieldName)
 								return reader(makeSink(&field));
 						}
 						throw new Exception("No such field in %s: %s".format(T.stringof, name));
 					}
 					else
-						static assert(false, "Can't traverse %s".format(T.stringof));
+					{
+						if (false) // coerce return value
+							return reader(this);
+						else
+							throw new Exception("Can't traverse %s".format(T.stringof));
+					}
 				}
 
 				mixin SinkHandlers!T;
