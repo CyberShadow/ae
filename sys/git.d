@@ -26,6 +26,7 @@ struct Repository
 {
 	string path;
 
+	// TODO: replace this with using the std.process workDir parameter in 2.066
 	string[] argsPrefix;
 
 	this(string path)
