@@ -461,6 +461,8 @@ class Rfc850Message
 			headers["References"] = references.join(" ");
 			headers["In-Reply-To"] = references[$-1];
 		}
+		if (time == SysTime.init)
+			time = Clock.currTime();
 		headers["Date"] = time.format!(TimeFormats.RFC2822);
 		headers["User-Agent"] = "ae.net.ietf.message";
 
