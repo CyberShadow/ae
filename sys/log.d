@@ -257,13 +257,18 @@ class FileAndConsoleLogger : MultiLogger
 	}
 }
 
-/// Create a logger depending on whether -q or --quiet was passed on the command line.
-Logger createLogger(string name)
+bool quiet;
+
+static this()
 {
 	import core.runtime;
-	bool quiet;
 	foreach (arg; Runtime.args[1..$])
 		if (arg == "-q" || arg == "--quiet")
 			quiet = true;
+}
+
+/// Create a logger depending on whether -q or --quiet was passed on the command line.
+Logger createLogger(string name)
+{
 	return quiet ? new FileLogger(name) : new FileAndConsoleLogger(name);
 }
