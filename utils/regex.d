@@ -60,6 +60,35 @@ unittest
 	assert(name == "Mary" && count == 5 && fruit == "apples");
 }
 
+/// Match into a delegate.
+bool matchCaptures(S, R, Ret, Args...)(S s, R r, Ret delegate(Args args) fun)
+{
+	auto m = s.match(r);
+	if (m)
+	{
+		assert(Args.length == m.captures.length-1, "matchInto called with %s arguments but %s capture groups".format(Args.length, m.captures.length-1));
+		Args args;
+		foreach (n, ref arg; args)
+			arg = to!(Args[n])(m.captures[n+1]);
+		fun(args);
+		return true;
+	}
+	return false;
+}
+
+///
+unittest
+{
+	assert("Mary has 5 apples"
+		.matchCaptures(`^(\w+) has (\d+) (\w+)$`,
+			(string name, int count, string fruit)
+			{
+				assert(name == "Mary" && count == 5 && fruit == "apples");
+			}
+		)
+	);
+}
+
 // ************************************************************************
 
 /// Take a string, and return a regular expression that matches that string
