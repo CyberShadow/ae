@@ -13,6 +13,8 @@
 
 module ae.sys.signals;
 
+import std.exception;
+
 public import core.sys.posix.signal;
 
 alias void delegate() nothrow @system SignalHandler;
@@ -38,6 +40,35 @@ void removeSignalHandler(int signum, SignalHandler fn)
 			return;
 		}
 	assert(0);
+}
+
+// ***************************************************************************
+
+/// If the signal signum is raised during execution of code,
+/// ignore it. Returns true if the signal was raised.
+bool collectSignal(int signum, void delegate() code)
+{
+	sigset_t mask;
+	sigemptyset(&mask);
+	sigaddset(&mask, signum);
+	sigset_t oldMask;
+	errnoEnforce(pthread_sigmask(SIG_BLOCK, &mask, &oldMask) != -1);
+
+	bool result;
+	{
+		scope(exit)
+			errnoEnforce(pthread_sigmask(SIG_SETMASK, &oldMask, null) != -1);
+
+		scope(exit)
+		{
+			timespec zerotime;
+			result = sigtimedwait(&mask, null, &zerotime) == 0;
+		}
+
+		code();
+	}
+
+	return result;
 }
 
 private:
