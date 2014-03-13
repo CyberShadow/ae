@@ -631,6 +631,9 @@ void[] readFile(File f)
 	return result;
 }
 
+// http://d.puremagic.com/issues/show_bug.cgi?id=7016
+version(Posix) static import ae.sys.signals;
+
 /// Start a thread which writes data to f asynchronously.
 Thread writeFileAsync(File f, in void[] data)
 {
@@ -645,7 +648,19 @@ Thread writeFileAsync(File f, in void[] data)
 			this.data = data;
 			super(&run);
 		}
+
 		void run()
+		{
+			version (Posix)
+			{
+				import ae.sys.signals;
+				collectSignal(SIGPIPE, &write);
+			}
+			else
+				write();
+		}
+
+		void write()
 		{
 			target.rawWrite(data);
 			target.close();
