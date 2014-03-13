@@ -273,6 +273,7 @@ public:
 		else                 // lengthen
 			expand(value, value);
 	}
+	alias length opDollar;
 
 	@property Data dup() const
 	{
