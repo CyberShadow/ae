@@ -25,6 +25,7 @@ import std.utf;
 import ae.net.asockets;
 import ae.net.ietf.headers;
 import ae.net.ietf.headerparse;
+import ae.net.ssl.ssl;
 import ae.sys.data;
 debug import std.stdio;
 
@@ -138,6 +139,11 @@ protected:
 		conn.handleReadData = null;
 	}
 
+	ClientSocket createSocket()
+	{
+		return new ClientSocket();
+	}
+
 public:
 	string agent = "ae.net.http.client (+https://github.com/CyberShadow/ae)";
 	bool compat = false;
@@ -147,7 +153,7 @@ public:
 	this(Duration timeout = 30.seconds)
 	{
 		assert(timeout > Duration.zero);
-		conn = new ClientSocket();
+		conn = createSocket();
 		conn.setIdleTimeout(timeout);
 		conn.handleConnect = &onConnect;
 		conn.handleDisconnect = &onDisconnect;
@@ -176,6 +182,16 @@ public:
 	void delegate(HttpResponse response, string disconnectReason) handleResponse;
 }
 
+class HttpsClient : HttpClient
+{
+	override ClientSocket createSocket()
+	{
+		return sslSocketFactory();
+	}
+
+	this(Duration timeout = 30.seconds) { super(timeout); }
+}
+
 /// Asynchronous HTTP request
 void httpRequest(HttpRequest request, void delegate(Data) resultHandler, void delegate(string) errorHandler)
 {
@@ -196,7 +212,12 @@ void httpRequest(HttpRequest request, void delegate(Data) resultHandler, void de
 				resultHandler(response.getContent());
 	}
 
-	auto client = new HttpClient;
+	HttpClient client;
+	if (request.resource.startsWith("https://"))
+		client = new HttpsClient;
+	else
+		client = new HttpClient;
+
 	client.handleResponse = &responseHandler;
 	client.request(request);
 }

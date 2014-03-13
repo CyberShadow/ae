@@ -35,6 +35,7 @@ import gzip = ae.utils.gzip;
 private abstract class HttpMessage
 {
 public:
+	string protocol = "http";
 	string protocolVersion = "1.0";
 	Headers headers;
 	Data[] data;
@@ -79,18 +80,28 @@ public:
 		_resource = value;
 
 		// applies to both Client/Server as some clients put a full URL in the GET line instead of using a "Host" header
+		string protocol;
 		if (_resource.length>7 && icmp(_resource[0 .. 7], "http://")==0)
+			protocol = "http";
+		else
+		if (_resource.length>8 && icmp(_resource[0 .. 8], "https://")==0)
+			protocol = "https";
+
+		if (protocol)
 		{
-			auto pathstart = _resource[7 .. $].indexOf('/');
+			this.protocol = protocol;
+
+			value = value[protocol.length+3..$];
+			auto pathstart = value.indexOf('/');
 			if (pathstart == -1)
 			{
-				host = _resource[7 .. $];
+				host = value;
 				_resource = "/";
 			}
 			else
 			{
-				host = _resource[7 .. 7 + pathstart];
-				_resource = _resource[7 + pathstart .. $];
+				host = value[0..pathstart];
+				_resource = value[pathstart..$];
 			}
 			auto portstart = host().indexOf(':');
 			if (portstart != -1)
@@ -112,7 +123,20 @@ public:
 	@property void host(string _host)
 	{
 		auto _port = this.port;
-		headers["Host"] = _port==80 ? _host : _host ~ ":" ~ text(_port);
+		headers["Host"] = _port==protocolDefaultPort ? _host : _host ~ ":" ~ text(_port);
+	}
+
+	@property ushort protocolDefaultPort()
+	{
+		switch (protocol)
+		{
+			case "http":
+				return 80;
+			case "https":
+				return 443;
+			default:
+				throw new Exception("Unknown protocol: " ~ protocol);
+		}
 	}
 
 	/// Port number, from Host header (defaults to 80)
@@ -122,7 +146,7 @@ public:
 		{
 			string _host = headers["Host"];
 			auto colon = _host.lastIndexOf(":");
-			return colon<0 ? 80 : to!ushort(_host[colon+1..$]);
+			return colon<0 ? protocolDefaultPort : to!ushort(_host[colon+1..$]);
 		}
 		else
 			return _port;
@@ -132,7 +156,7 @@ public:
 	{
 		if ("Host" in headers)
 		{
-			if (_port == 80)
+			if (_port == protocolDefaultPort)
 				headers["Host"] = this.host;
 			else
 				headers["Host"] = this.host ~ ":" ~ text(_port);
@@ -170,7 +194,7 @@ public:
 	/// Reconstruct full URL from host, port and resource
 	@property string url()
 	{
-		return "http://" ~ host ~ (port==80 ? null : to!string(port)) ~ resource;
+		return protocol ~ "://" ~ host ~ (port==protocolDefaultPort ? null : to!string(port)) ~ resource;
 	}
 
 	@property string proxyHost()
