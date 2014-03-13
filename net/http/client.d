@@ -193,6 +193,19 @@ class HttpsClient : HttpClient
 }
 
 /// Asynchronous HTTP request
+void httpRequest(HttpRequest request, void delegate(HttpResponse response, string disconnectReason) responseHandler)
+{
+	HttpClient client;
+	if (request.protocol == "https")
+		client = new HttpsClient;
+	else
+		client = new HttpClient;
+
+	client.handleResponse = responseHandler;
+	client.request(request);
+}
+
+/// ditto
 void httpRequest(HttpRequest request, void delegate(Data) resultHandler, void delegate(string) errorHandler)
 {
 	void responseHandler(HttpResponse response, string disconnectReason)
@@ -212,14 +225,7 @@ void httpRequest(HttpRequest request, void delegate(Data) resultHandler, void de
 				resultHandler(response.getContent());
 	}
 
-	HttpClient client;
-	if (request.protocol == "https")
-		client = new HttpsClient;
-	else
-		client = new HttpClient;
-
-	client.handleResponse = &responseHandler;
-	client.request(request);
+	httpRequest(request, &responseHandler);
 }
 
 /// ditto
