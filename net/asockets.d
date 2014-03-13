@@ -665,6 +665,7 @@ protected:
 
 			socketManager.register(this);
 			updateFlags();
+			debug (ASOCKETS) writefln("Attempting connection to %s", address.toString());
 			conn.connect(address);
 		}
 		catch (SocketException e)
