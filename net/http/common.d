@@ -149,7 +149,7 @@ public:
 			return colon<0 ? protocolDefaultPort : to!ushort(_host[colon+1..$]);
 		}
 		else
-			return _port;
+			return _port ? _port : protocolDefaultPort;
 	}
 
 	@property void port(ushort _port)
@@ -278,7 +278,7 @@ public:
 
 private:
 	string _resource;
-	ushort _port = 80; // used only when no "Host" in headers; otherwise, taken from there
+	ushort _port = 0; // used only when no "Host" in headers; otherwise, taken from there
 }
 
 /// HTTP response status codes

@@ -80,8 +80,21 @@ class CustomSSLSocket(Parent) : Parent
 		super.onReadable();
 	}
 
+	void callUserDataHandler(Data data)
+	{
+		assert(handleReadData is &onReadData);
+		scope(exit)
+			if (handleReadData !is &onReadData)
+			{
+				userDataHandler = handleReadData;
+				handleReadData = &onReadData;
+			}
+		userDataHandler(this, data);
+	}
+
 	void onReadData(ClientSocket sender, Data data)
 	{
+		assert(r.data.length == 0, "Would clobber data");
 		r.set(data.contents);
 
 		if (queue.length)
@@ -92,7 +105,7 @@ class CustomSSLSocket(Parent) : Parent
 			static ubyte[4096] buf;
 			auto result = SSL_read(sslHandle, buf.ptr, buf.length);
 			if (result > 0)
-				userDataHandler(this, Data(buf[0..result]));
+				callUserDataHandler(Data(buf[0..result]));
 			else
 			{
 				sslError(result);

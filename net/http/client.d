@@ -213,7 +213,7 @@ void httpRequest(HttpRequest request, void delegate(Data) resultHandler, void de
 	}
 
 	HttpClient client;
-	if (request.resource.startsWith("https://"))
+	if (request.protocol == "https")
 		client = new HttpsClient;
 	else
 		client = new HttpClient;
