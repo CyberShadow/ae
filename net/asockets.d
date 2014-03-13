@@ -740,23 +740,15 @@ public:
 	}
 
 	/// Append data to the send buffer.
-	final void send(Data data, int priority = DEFAULT_PRIORITY)
+	final void send(Data datum, int priority = DEFAULT_PRIORITY)
 	{
-		assert(connected, "Attempting to send on a disconnected socket");
-		assert(!disconnecting, "Attempting to send on a disconnecting socket");
-		outQueue[priority] ~= data;
-		notifyWrite = true; // Fast updateFlags()
-
-		debug (PRINTDATA)
-		{
-			std.stdio.writefln("== %s -> %s ==", localAddress, remoteAddress);
-			std.stdio.write(hexDump(data.contents));
-			std.stdio.stdout.flush();
-		}
+		Data[1] data;
+		data[0] = datum;
+		send(data);
 	}
 
 	/// ditto
-	final void send(Data[] data, int priority = DEFAULT_PRIORITY)
+	void send(Data[] data, int priority = DEFAULT_PRIORITY)
 	{
 		assert(connected, "Attempting to send on a disconnected socket");
 		assert(!disconnecting, "Attempting to send on a disconnecting socket");
@@ -870,12 +862,14 @@ public:
 	/// Callback for when the send buffer has been flushed.
 	void delegate(ClientSocket sender) handleBufferFlushed;
 
-	private void delegate(ClientSocket sender, Data data) _handleReadData;
+	alias void delegate(ClientSocket sender, Data data) ReadDataHandler;
+
+	private ReadDataHandler _handleReadData;
 	/// Callback for incoming data.
 	/// Data will not be received unless this handler is set.
-	@property final void delegate(ClientSocket sender, Data data) handleReadData() { return _handleReadData; }
+	@property final ReadDataHandler handleReadData() { return _handleReadData; }
 	/// ditto
-	@property final void handleReadData(void delegate(ClientSocket sender, Data data) value) { _handleReadData = value; updateFlags(); }
+	@property final void handleReadData(ReadDataHandler value) { _handleReadData = value; updateFlags(); }
 }
 
 /// An asynchronous server socket.
