@@ -26,7 +26,10 @@ import deimos.openssl.ssl;
 import deimos.openssl.err;
 
 pragma(lib, "ssl");
-pragma(lib, "eay");
+version(Windows)
+	{ pragma(lib, "eay"); }
+else
+	{ pragma(lib, "crypto"); }
 
 // ***************************************************************************
 
@@ -138,7 +141,7 @@ class CustomSSLSocket(Parent) : Parent
 	{
 		while (queue.length)
 		{
-			auto result = SSL_write(sslHandle, queue[0].ptr, queue[0].length);
+			auto result = SSL_write(sslHandle, queue[0].ptr, queue[0].length.to!int);
 			if (result > 0)
 			{
 				queue[0] = queue[0][result..$];
@@ -180,7 +183,7 @@ struct MemoryBIO
 
 	this(const(void)[] data)
 	{
-		bio_ = BIO_new_mem_buf(cast(void*)data.ptr, data.length);
+		bio_ = BIO_new_mem_buf(cast(void*)data.ptr, data.length.to!int);
 	}
 
 	void set(const(void)[] data)
