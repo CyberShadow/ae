@@ -303,7 +303,7 @@ CreatedProcess createDesktopUserProcess(string applicationName, string commandLi
 
 	TOKEN_PRIVILEGES tkp;
 	tkp.PrivilegeCount = 1;
-	LookupPrivilegeValueW(null, SE_INCREASE_QUOTA_NAME.ptr, &tkp.Privileges()[0].Luid);
+	LookupPrivilegeValue(null, SE_INCREASE_QUOTA_NAME.ptr, &tkp.Privileges()[0].Luid);
 	tkp.Privileges()[0].Attributes = SE_PRIVILEGE_ENABLED;
 	wenforce(AdjustTokenPrivileges(hProcessToken, FALSE, &tkp, 0, null, null), "AdjustTokenPrivileges failed");
 
