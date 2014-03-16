@@ -95,6 +95,8 @@ Data[] gzipToRawDeflate(Data[] data)
 
 Data[] uncompress(Data[] data)
 {
+	while (data.length >= 2 && data[$-1].length < 4)
+		data = data[0..$-2] ~ [data[$-2] ~ data[$-1]];
 	enforce(data.length && data[$-1].length >= 4, "No data to decompress");
 	ZlibOptions options; options.mode = ZlibMode.raw;
 	Data[] uncompressed = zlib.uncompress(gzipToRawDeflate(data), options);
