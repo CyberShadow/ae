@@ -81,10 +81,10 @@ public:
 
 		// applies to both Client/Server as some clients put a full URL in the GET line instead of using a "Host" header
 		string protocol;
-		if (_resource.length>7 && icmp(_resource[0 .. 7], "http://")==0)
+		if (_resource.asciiStartsWith("http://"))
 			protocol = "http";
 		else
-		if (_resource.length>8 && icmp(_resource[0 .. 8], "https://")==0)
+		if (_resource.asciiStartsWith("https://"))
 			protocol = "https";
 
 		if (protocol)
@@ -625,4 +625,15 @@ Data encodeMultipart(MultipartPart[] parts, string boundary)
 	}
 	data ~= "\r\n--" ~ boundary ~ "--\r\n";
 	return data;
+}
+
+private bool asciiStartsWith(string s, string prefix)
+{
+	if (s.length < prefix.length)
+		return false;
+	import std.ascii;
+	foreach (i, c; prefix)
+		if (toLower(c) != toLower(s[i]))
+			return false;
+	return true;
 }
