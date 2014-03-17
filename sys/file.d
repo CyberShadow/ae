@@ -581,7 +581,7 @@ File openFile()(string fn, string mode)
 		}
 
 		auto pathW = toUTF16z(longPath(fn));
-		auto h = CreateFileW(pathW, GENERIC_READ, FILE_SHARE_READ, null, OPEN_EXISTING, 0, HANDLE.init);
+		auto h = CreateFileW(pathW, access, FILE_SHARE_READ, null, creation, 0, HANDLE.init);
 		wenforce(h != INVALID_HANDLE_VALUE);
 
 		if (append)
