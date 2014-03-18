@@ -582,13 +582,13 @@ ubyte[] toPNG(SRC)(auto ref SRC src)
 	}
 
 	alias COLOR = ViewColor!SRC;
-	static if (structFields!COLOR == ["g"])
+	static if (structFields!COLOR == ["l"])
 		enum COLOUR_TYPE = PNGColourType.G;
 	else
 	static if (structFields!COLOR == ["r","g","b"])
 		enum COLOUR_TYPE = PNGColourType.RGB;
 	else
-	static if (structFields!COLOR == ["g","a"])
+	static if (structFields!COLOR == ["l","a"])
 		enum COLOUR_TYPE = PNGColourType.GA;
 	else
 	static if (structFields!COLOR == ["r","g","b","a"])
