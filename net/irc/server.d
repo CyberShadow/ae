@@ -16,6 +16,7 @@ module ae.net.irc.server;
 import std.algorithm;
 import std.conv;
 import std.datetime;
+import std.exception;
 import std.range;
 import std.regex;
 import std.socket;

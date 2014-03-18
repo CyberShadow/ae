@@ -20,6 +20,7 @@ import ae.sys.timing;
 import ae.utils.math;
 public import ae.sys.data;
 
+import std.exception;
 import std.socket;
 public import std.socket : Address, Socket;
 

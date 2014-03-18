@@ -133,7 +133,8 @@ unittest
 	// ...but rewrap quoted text
 	assert(wrapText(unwrapText("> Line 1 \n> Line 2 ", false, false)) == "> Line 1 Line 2");
 	// Wrap long lines
-	assert(wrapText(unwrapText(std.array.replicate("abcde ", 20), false, false)).split("\n").length > 1);
+	import std.array : replicate;
+	assert(wrapText(unwrapText(replicate("abcde ", 20), false, false)).split("\n").length > 1);
 
 	// Wrap by character count, not UTF-8 code-unit count. TODO: take into account surrogates and composite characters.
 	enum str = "Это очень очень очень очень очень очень очень длинная строка";

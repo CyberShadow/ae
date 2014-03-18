@@ -18,7 +18,7 @@ import std.exception;
 import std.functional;
 import std.range;
 import std.string;
-import std.typecons;
+import std.traits;
 
 import ae.utils.range;
 
@@ -46,7 +46,7 @@ struct XmlParser(INPUT, OUTPUT)
 	OUTPUT output;
 
 	alias typeof(input.front) C;
-	alias std.typecons.Unqual!C U;
+	alias std.traits.Unqual!C U;
 
 	void run()
 	{

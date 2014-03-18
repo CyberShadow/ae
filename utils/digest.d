@@ -212,7 +212,8 @@ else
 
 string digestToStringMH3(MH3Digest128 digest)
 {
-	return std.string.format("%08X%08X%08X%08X", digest[0], digest[1], digest[2], digest[3]);
+	import std.string;
+	return format("%08X%08X%08X%08X", digest[0], digest[1], digest[2], digest[3]);
 }
 
 unittest

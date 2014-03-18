@@ -20,8 +20,8 @@ import ae.net.http.responseex;
 import ae.sys.data;
 import ae.utils.mime;
 import ae.utils.time;
-import ae.utils.zlib;
-import ae.utils.gzip;
+import zlib = ae.utils.zlib;
+import gzip = ae.utils.gzip;
 
 /// Controls which caching headers are sent to clients.
 enum CachePolicy
@@ -101,7 +101,7 @@ private:
 	@property final Data[] deflateData()
 	{
 		if (!deflateDataCache)
-			deflateDataCache = ae.utils.zlib.compress(uncompressedData, zlib.ZlibOptions(compressionLevel));
+			deflateDataCache = zlib.compress(uncompressedData, zlib.ZlibOptions(compressionLevel));
 		return deflateDataCache;
 	}
 

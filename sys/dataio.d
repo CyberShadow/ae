@@ -17,9 +17,9 @@ import ae.sys.data;
 
 // ************************************************************************
 
-import std.stream : Stream;
+static import std.stream;
 
-Data readStreamData(Stream s)
+Data readStreamData(std.stream.Stream s)
 {
 	auto size = s.size - s.position;
 	assert(size < size_t.max);
@@ -37,9 +37,9 @@ Data readData(string filename)
 
 // ************************************************************************
 
-import std.stdio;
+static import std.stdio;
 
-Data readFileData(ref File f)
+Data readFileData(ref std.stdio.File f)
 {
 	Data buf = Data(1024*1024);
 	Data result;

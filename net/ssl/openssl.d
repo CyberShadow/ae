@@ -17,6 +17,8 @@ import ae.net.asockets;
 import ae.net.ssl.ssl;
 import ae.utils.text;
 
+import std.conv : to;
+import std.exception : enforce;
 import std.functional;
 import std.socket;
 import std.string;
