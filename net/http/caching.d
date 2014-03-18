@@ -20,8 +20,9 @@ import ae.net.http.responseex;
 import ae.sys.data;
 import ae.utils.mime;
 import ae.utils.time;
-import zlib = ae.utils.zlib;
-import gzip = ae.utils.gzip;
+import ae.utils.zlib;
+import ae.utils.gzip;
+alias zlib = ae.utils.zlib;
 
 /// Controls which caching headers are sent to clients.
 enum CachePolicy
