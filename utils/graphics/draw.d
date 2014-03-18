@@ -97,7 +97,7 @@ unittest
 }
 
 /// Fills a writable view with a solid color.
-void clear(V, COLOR)(auto ref V v, COLOR c)
+void fill(V, COLOR)(auto ref V v, COLOR c)
 	if (isWritableView!V
 	 && is(COLOR : ViewColor!V))
 {
@@ -110,6 +110,7 @@ void clear(V, COLOR)(auto ref V v, COLOR c)
 				v[x, y] = c;
 	}
 }
+deprecated alias clear = fill;
 
 unittest
 {
