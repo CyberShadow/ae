@@ -77,7 +77,7 @@ T nextPowerOfTwo(T)(T x)
 	return x + 1;
 }
 
-/// Integer log2
+/// Integer log2.
 ubyte ilog2(T)(T n)
 {
 	ubyte result = 0;
@@ -93,4 +93,17 @@ unittest
 	assert(ilog2(2) == 1);
 	assert(ilog2(3) == 1);
 	assert(ilog2(4) == 2);
+}
+
+/// Returns the number of bits needed to
+/// store a number up to n (inclusive).
+ubyte bitsFor(T)(T n)
+{
+	return cast(ubyte)(ilog2(n)+1);
+}
+
+unittest
+{
+	assert(bitsFor( int.max) == 31);
+	assert(bitsFor(uint.max) == 32);
 }

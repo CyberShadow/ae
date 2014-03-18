@@ -82,11 +82,11 @@ final class MyApplication : Application
 
 		static int offset;
 		offset++;
-		auto w = imgT.image.window(0, 0, imgT.image.w, imgT.image.h);
+		auto w = imgT.image.crop(0, 0, imgT.image.w, imgT.image.h).toRef;
 		for (int l=5; l>=0; l--)
 		{
 			checker(w, l, l%2 ? 0 : (offset%60==0?offset+0:offset) >> (3-l/2));
-			w = w.window(w.w/4, w.h/4, w.w/4*3, w.h/4*3);
+			w = w.crop(w.w/4, w.h/4, w.w/4*3, w.h/4*3).toRef;
 		}
 		imgT.textureVersion++;
 		s.draw(400, 50, imgT, 0, 0, imgT.image.w, imgT.image.h);

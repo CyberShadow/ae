@@ -191,8 +191,8 @@ final class SDLOpenGLRenderer : Renderer
 			if (data.textureVersion != source.textureVersion)
 			{
 				auto pixelInfo = source.getPixels();
-				glPixelStorei(GL_PACK_ROW_LENGTH, pixelInfo.stride);
-				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, pixelInfo.w, pixelInfo.h, TextureFormat, GL_UNSIGNED_BYTE, pixelInfo.pixelPtr(0, 0));
+				glPixelStorei(GL_PACK_ROW_LENGTH, pixelInfo.pitch / COLOR.sizeof);
+				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, pixelInfo.w, pixelInfo.h, TextureFormat, GL_UNSIGNED_BYTE, pixelInfo.scanline(0).ptr);
 				data.textureVersion = source.textureVersion;
 			}
 		}
@@ -210,13 +210,13 @@ final class SDLOpenGLRenderer : Renderer
 		data.w = roundUpToPowerOfTwo(pixelInfo.w);
 		data.h = roundUpToPowerOfTwo(pixelInfo.h);
 
-		glPixelStorei(GL_PACK_ROW_LENGTH, pixelInfo.stride);
+		glPixelStorei(GL_PACK_ROW_LENGTH, pixelInfo.pitch / COLOR.sizeof);
 		if (isPowerOfTwo(pixelInfo.w) && isPowerOfTwo(pixelInfo.h))
-			glTexImage2D(GL_TEXTURE_2D, 0, InternalTextureFormat, data.w, data.h, 0, TextureFormat, GL_UNSIGNED_BYTE, pixelInfo.pixelPtr(0, 0));
+			glTexImage2D(GL_TEXTURE_2D, 0, InternalTextureFormat, data.w, data.h, 0, TextureFormat, GL_UNSIGNED_BYTE, pixelInfo.scanline(0).ptr);
 		else
 		{
 			glTexImage2D(GL_TEXTURE_2D, 0, InternalTextureFormat, data.w, data.h, 0, TextureFormat, GL_UNSIGNED_BYTE, null);
-			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, pixelInfo.w, pixelInfo.h, TextureFormat, GL_UNSIGNED_BYTE, pixelInfo.pixelPtr(0, 0));
+			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, pixelInfo.w, pixelInfo.h, TextureFormat, GL_UNSIGNED_BYTE, pixelInfo.scanline(0).ptr);
 		}
 		data.textureVersion = source.textureVersion;
 	}

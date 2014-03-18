@@ -22,6 +22,7 @@ import ae.ui.shell.sdl.shell;
 import ae.ui.video.sdlopengl.video;
 import ae.ui.video.renderer;
 import ae.utils.fps;
+import ae.utils.math;
 import ae.utils.graphics.image;
 
 alias ae.utils.math.abs abs; // Issue 314?
@@ -48,7 +49,7 @@ final class MyApplication : Application
 	enum SAMPLE_COLORS = [BGRX(0, 0, 255), BGRX(0, 255, 0)];
 
 	/// Some (precise) time value of the moment, in hnsecs.
-	@property long now() { return MonoTime.currTime.to!("hnsecs", long); }
+	@property long now() { return TickDuration.currSystemTick.to!("hnsecs", long); }
 
 	override void render(Renderer s)
 	{

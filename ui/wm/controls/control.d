@@ -13,6 +13,8 @@
 
 module ae.ui.wm.controls.control;
 
+import std.algorithm : max;
+
 import ae.ui.shell.events;
 import ae.ui.video.renderer;
 

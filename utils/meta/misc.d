@@ -113,6 +113,15 @@ unittest
 	static assert(is(typeof(s.a) == ushort));
 }
 
+/// Return true if all of T's fields are the same type.
+@property bool isHomogenous(T)()
+{
+	foreach (i, f; T.init.tupleof)
+		if (!is(typeof(T.init.tupleof[i]) == typeof(T.init.tupleof[0])))
+			return false;
+	return true;
+}
+
 template isValueOfTypeInTuple(X, T...)
 {
 	static if (T.length==0)
@@ -276,4 +285,44 @@ template thisOf(alias f)
 		alias thisOf = p;
 	else
 		alias thisOf = thisOf!p;
+}
+
+// ************************************************************************
+
+/// Unsigned integer type big enough to fit N bits of precision.
+template UnsignedBitsType(uint bits)
+{
+	static if (bits <= 8)
+		alias ubyte UnsignedBitsType;
+	else
+	static if (bits <= 16)
+		alias ushort UnsignedBitsType;
+	else
+	static if (bits <= 32)
+		alias uint UnsignedBitsType;
+	else
+	static if (bits <= 64)
+		alias ulong UnsignedBitsType;
+	else
+		static assert(0, "No integer type big enough to fit " ~ bits.stringof ~ " bits");
+}
+
+template SignedBitsType(uint bits)
+{
+	alias Signed!(UnsignedBitsType!bits) SignedBitsType;
+}
+
+/// Evaluates to array of strings with name for each field.
+@property string[] structFields(T)()
+{
+	import std.string : split;
+
+	string[] fields;
+	foreach (i, f; T.init.tupleof)
+	{
+		string field = T.tupleof[i].stringof;
+		field = field.split(".")[$-1];
+		fields ~= field;
+	}
+	return fields;
 }

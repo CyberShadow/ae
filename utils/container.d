@@ -54,6 +54,7 @@ unittest
 
 import std.range : isInputRange;
 import ae.utils.alloc;
+import ae.utils.meta.reference;
 
 struct ListCommon
 {

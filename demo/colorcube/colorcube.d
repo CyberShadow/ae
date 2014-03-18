@@ -14,6 +14,8 @@
 module ae.demo.colorcube.colorcube;
 
 import std.datetime;
+import std.file;
+import std.math;
 import std.parallelism;
 
 import ae.ui.app.application;
@@ -23,9 +25,12 @@ import ae.ui.shell.sdl.shell;
 import ae.ui.video.video;
 import ae.ui.video.sdl.video;
 import ae.ui.video.renderer;
-import ae.utils.fps;
-import ae.utils.graphics.image;
+
 import ae.utils.array;
+import ae.utils.fps;
+
+import ae.utils.graphics.image;
+import ae.utils.graphics.draw;
 
 final class MyApplication : Application
 {
@@ -105,8 +110,7 @@ final class MyApplication : Application
 		if (args.length < 2)
 			throw new Exception("No file specified - please specify a 24-bit .BMP file");
 
-		Image!BGR image;
-		image.loadBMP(args[1]);
+		auto image = args[1].read().parseBMP!BGR();
 
 		//static bool havePixel[256][256][256];
 		auto havePixel = new bool[256][256][256];

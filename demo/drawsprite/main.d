@@ -41,14 +41,16 @@ final class MyApplication : Application
 
 		int x0 = (canvas.w - image.w) / 2;
 		int y0 = (canvas.h - image.h) / 2;
-		canvas.draw(x0, y0, image);
+		image.blitTo(canvas, x0, y0);
 	}
 
 	override int run(string[] args)
 	{
-		Image!BGR lena;
-		lena.loadBMP("lena.bmp");
-		image = lena.convert!`BGRX(c.b, c.g, c.r)`();
+		import std.file : read;
+		image = read("lena.bmp")
+			.parseBMP!BGR()
+			.colorMap!(c => BGRX(c.b, c.g, c.r))
+			.copy();
 
 		shell = new SDLShell(this);
 		shell.video = new SDLVideo();

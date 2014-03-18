@@ -12,7 +12,7 @@ struct HLS(COLOR, HLSTYPE=ushort, HLSTYPE HLSMAX=240)
 	// H,L, and S vary over 0-HLSMAX
 	// HLSMAX BEST IF DIVISIBLE BY 6
 
-	alias COLOR.BaseType RGBTYPE;
+	alias COLOR.ChannelType RGBTYPE;
 
 	// R,G, and B vary over 0-RGBMAX
 	enum RGBMAX = RGBTYPE.max;
@@ -24,8 +24,6 @@ struct HLS(COLOR, HLSTYPE=ushort, HLSTYPE HLSMAX=240)
 
 	void toHLS(COLOR rgb, out HLSTYPE h, out HLSTYPE l, out HLSTYPE s)
 	{
-		ushort Rdelta,Gdelta,Bdelta;
-
 		auto R = rgb.r;
 		auto G = rgb.g;
 		auto B = rgb.b;
@@ -117,7 +115,7 @@ struct HLS(COLOR, HLSTYPE=ushort, HLSTYPE HLSMAX=240)
 
 unittest
 {
-	import ae.utils.graphics.canvas;
+	import ae.utils.graphics.color;
 	HLS!RGB hls;
 	auto red = hls.fromHLS(0, 120, 240);
 	assert(red == RGB(255, 0, 0));
@@ -128,7 +126,7 @@ unittest
 
 unittest
 {
-	import ae.utils.graphics.canvas;
+	import ae.utils.graphics.color;
 	enum MAX = 30_000;
 	HLS!(RGB, int, MAX) hls;
 	auto red = hls.fromHLS(0, MAX/2, MAX);

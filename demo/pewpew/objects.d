@@ -18,7 +18,10 @@ import std.math;
 
 import ae.utils.container;
 import ae.utils.math;
+import ae.utils.meta.misc;
 import ae.utils.geometry;
+import ae.utils.graphics.color;
+import ae.utils.graphics.draw;
 import ae.utils.graphics.image;
 
 __gshared:
@@ -43,7 +46,7 @@ enum STAR_LAYERS = 3;
 DListContainer!GameEntity[Plane.Max] planes;
 bool initializing = true;
 
-alias G16 COLOR;
+alias L16 COLOR;
 //alias G8 COLOR; // less precise, but a bit faster
 
 Image!COLOR canvas;
@@ -51,7 +54,7 @@ float cf(float x) { assert(canvas.w == canvas.h); return x*canvas.w; }
 int   ci(float x) { assert(canvas.w == canvas.h); return cast(int)(x*canvas.w); }
 T cbound(T)(T x) { return bound(x, 0, canvas.w); }
 auto BLACK = COLOR(0);
-auto WHITE = COLOR(COLOR.BaseType.max);
+auto WHITE = COLOR(COLOR.ChannelType.max);
 
 bool up, down, left, right, fire;
 
@@ -62,6 +65,8 @@ float frands() { return uniform!`()`(-1.0f, 1.0f); }
 
 T ssqr(T)(T x) { return sqr(x) * sign(x); }
 float frands2() { return ssqr(frands()); }
+
+mixin FixMath;
 
 // *********************************************************
 
@@ -106,7 +111,7 @@ class Game : GameEntity
 			auto star = Star(
 				frand(), 0,
 				0.0001f + (1-z) * 0.00005f,
-				canvas.COLOR(canvas.fixfpart(canvas.tofix((1-z)*0.5f))));
+				COLOR(fixfpart(tofix((1-z)*0.5f))));
 			auto layer = cast(int)((1-z)*3);
 			starFields[layer].add(star);
 		}
@@ -392,8 +397,8 @@ class Ship : GameObject
 
 	override void render()
 	{
-		enum Gray25 = COLOR.BaseType.max / 4;
-		enum Gray75 = COLOR.BaseType.max / 4 * 3;
+		enum Gray25 = COLOR.ChannelType.max / 4;
+		enum Gray75 = COLOR.ChannelType.max / 4 * 3;
 
 		void drawRect(float x0, float y0, float x1, float y1, COLOR color)
 		{
@@ -419,28 +424,27 @@ class Ship : GameObject
 			auto bgy0 = cbound(ci(y-r));
 			auto bgx1 = cbound(ci(x+r));
 			auto bgy1 = cbound(ci(y+r));
-			auto window = canvas.window(bgx0, bgy0, bgx1, bgy1);
+			auto window = canvas.crop(bgx0, bgy0, bgx1, bgy1);
 			static Image!COLOR bg;
-			copyCanvas(window, bg);
-			window.warp!q{
-				alias extraArgs[0] cx;
-				alias extraArgs[1] cy;
+			window.copy(bg);
+			auto cx = ci(x)-bgx0;
+			auto cy = ci(y)-bgy0;
+			procedural!((x, y)
+			{
 				int dx = x-cx;
 				int dy = y-cy;
+				int sx = x;
+				int sy = y;
 				float f = dist(dx, dy) / cx;
 				if (f < 1f && f > 0f)
 				{
 					float f2 = (1-f)*sqrt(sqrt(f)) + f*f;
 					assert(f2 < 1f);
-					int sx = cx + cast(int)(dx / f * f2);
-					int sy = cy + cast(int)(dy / f * f2);
-
-					if (sx>=0 && sx<w && sy>=0 && sy<h)
-						c = src[sx, sy];
-					else
-						c = COLOR(0);
+					sx = cx + cast(int)(dx / f * f2);
+					sy = cy + cast(int)(dy / f * f2);
 				}
-			}(bg, ci(x)-bgx0, ci(y)-bgy0);
+				return bg.safeGet(sx, sy, COLOR(0));
+			})(window.w, window.h).blitTo(window);
 		}
 
 		if (spawning)
@@ -455,7 +459,7 @@ class Ship : GameObject
 		{
 			bgx0 = ci(x-0.050f);
 			bgyS = ci(spawnY());
-			copyCanvas(canvas.window(bgx0, bgyS, ci(x+0.050f), ci(y+0.050f)), bg);
+			canvas.crop(bgx0, bgyS, ci(x+0.050f), ci(y+0.050f)).copy(bg);
 		}
 
 		drawRect2 (shapes[0].rect);
@@ -465,7 +469,7 @@ class Ship : GameObject
 		drawCircle(shapes[4].circle      , COLOR(Gray75));
 
 		if (spawning)
-			canvas.draw(bgx0, bgyS, bg);
+			bg.blitTo(canvas, bgx0, bgyS);
 	}
 
 	float spawnY()
@@ -500,8 +504,8 @@ struct SpawnParticle
 		float ly0 = y0 + tt0*(y1-y0);
 		float lx1 = x0 + tt1*(x1-x0);
 		float ly1 = y0 + tt1*(y1-y0);
-		//canvas.aaPutPixel(cf(x), cf(y), WHITE, canvas.tofracBounded(tt));
-		canvas.aaLine(cf(lx0), cf(ly0), cf(lx1), cf(ly1), WHITE, canvas.tofracBounded(sqr(tt0)));
+		//canvas.aaPutPixel(cf(x), cf(y), WHITE, tofracBounded(tt));
+		canvas.aaLine(cf(lx0), cf(ly0), cf(lx1), cf(ly1), WHITE, tofracBounded(sqr(tt0)));
 	};
 }
 
@@ -577,7 +581,7 @@ struct TorpedoParticle
 
 	enum RENDER =
 	q{
-		canvas.aaPutPixel(cf(x), cf(y), WHITE, canvas.tofracBounded(1-t));
+		canvas.aaPutPixel(cf(x), cf(y), WHITE, tofracBounded(1-t));
 	};
 }
 
@@ -603,7 +607,7 @@ class ThingyPart : Enemy
 			canvas.softCircle(cf(x), cf(y), cf(r0), cf(r1), WHITE);
 		else
 		{
-			canvas.softCircle(cf(x), cf(y), cf(r0), cf(r1), COLOR(canvas.tofracBounded(1-death)));
+			canvas.softCircle(cf(x), cf(y), cf(r0), cf(r1), COLOR(tofracBounded(1-death)));
 			canvas.softCircle(cf(x), cf(y), cf(r0*death), cf(r1*death), BLACK);
 		}
 	}
@@ -816,11 +820,11 @@ class PlasmaOrb : Enemy
 		auto r = shapes[0].circle.r;
 		auto brightness = 0.75f+0.25f*(-sin(t/100f));
 		if (!dead)
-			canvas.softCircle(cf(x), cf(y), cf(r-0.003f), cf(r), COLOR(canvas.tofracBounded(brightness)));
+			canvas.softCircle(cf(x), cf(y), cf(r-0.003f), cf(r), COLOR(tofracBounded(brightness)));
 		else
 		{
 			brightness *= 1-(death/2);
-			canvas.softRing(cf(x), cf(y), cf(death*r), cf(average(r, death*r)), cf(r), COLOR(canvas.tofracBounded(brightness)));
+			canvas.softRing(cf(x), cf(y), cf(death*r), cf(average(r, death*r)), cf(r), COLOR(tofracBounded(brightness)));
 		}
 	}
 }
@@ -912,6 +916,6 @@ class Splode : GameEntity
 	override void render()
 	{
 		//std.stdio.writeln([x, y, cr]);
-		canvas.softCircle(cf(x), cf(y), max(0f, cf(cr)-1.5f), cf(cr), COLOR(canvas.tofracBounded(cr/r)));
+		canvas.softCircle(cf(x), cf(y), max(0f, cf(cr)-1.5f), cf(cr), COLOR(tofracBounded(cr/r)));
 	}
 }

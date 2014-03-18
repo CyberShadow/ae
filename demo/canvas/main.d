@@ -25,7 +25,8 @@ import ae.ui.video.video;
 import ae.ui.video.sdl.video;
 import ae.ui.video.renderer;
 import ae.utils.math;
-import ae.utils.geometry;
+import ae.utils.geometry : TAU;
+import ae.utils.graphics.draw;
 import ae.utils.fps;
 
 final class MyApplication : Application
@@ -122,10 +123,10 @@ final class MyApplication : Application
 		first = true;
 	}
 
-	override bool setWindowSize(uint x, uint y)
+	override void setShellSettings(ShellSettings settings)
 	{
 		first = true;
-		return super.setWindowSize(x, y);
+		return super.setShellSettings(settings);
 	}
 
 	override int run(string[] args)

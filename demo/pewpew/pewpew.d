@@ -26,6 +26,7 @@ import ae.ui.shell.sdl.shell;
 import ae.ui.video.video;
 import ae.ui.video.sdl.video;
 import ae.ui.video.renderer;
+import ae.utils.graphics.draw;
 import ae.utils.graphics.gamma;
 import ae.utils.fps;
 
@@ -38,7 +39,7 @@ final class MyApplication : Application
 
 	Shell shell;
 	uint ticks;
-	alias GammaRamp!(COLOR.BaseType, ubyte) MyGamma;
+	alias GammaRamp!(COLOR.ChannelType, ubyte) MyGamma;
 	MyGamma gamma;
 	FPSCounter fps;
 
@@ -91,17 +92,15 @@ final class MyApplication : Application
 
 		auto x = (screenCanvas.w-canvasSize)/2;
 		auto y = (screenCanvas.h-canvasSize)/2;
-		auto dest = screenCanvas.window(x, y, x+canvasSize, y+canvasSize);
+		auto dest = screenCanvas.crop(x, y, x+canvasSize, y+canvasSize);
 
 		import std.parallelism;
 		import std.range;
 		foreach (j; taskPool.parallel(iota(canvasSize)))
 		{
-			auto src = canvas.window(0, j, canvasSize, j+1);
-			dest.transformDraw!q{
-				//COLOR.monochrome(extraArgs[0][c.g]) // won't inline
-				COLOR(extraArgs[0][c.g], extraArgs[0][c.g], extraArgs[0][c.g])
-			}(0, j, src, gamma.lum2pixValues.ptr);// +/
+			auto src = canvas.crop(0, j, canvasSize, j+1);
+			auto ramp = gamma.lum2pixValues.ptr;
+			src.colorMap!(c => Renderer.COLOR.monochrome(ramp[c.l])).blitTo(dest, 0, j);
 		}
 	}
 

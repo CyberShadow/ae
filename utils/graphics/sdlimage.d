@@ -13,6 +13,7 @@
 
 module ae.utils.graphics.sdlimage;
 
+import ae.utils.graphics.color;
 import ae.utils.graphics.image;
 
 import derelict.sdl.sdl;
@@ -29,30 +30,29 @@ static this()
 	IMG_Init(IMG_INIT_JPG | IMG_INIT_PNG);
 }
 
-Image!RGBX loadImage(string path)
+auto loadImage(string path, ref Image!RGBX target = Image!RGBX.newImage())
 {
 	auto surface = IMG_Load(toStringz(path));
 	enforce(surface, "Failed to load image " ~ path);
 	scope(exit) SDL_FreeSurface(surface);
-	Image!RGBX result;
-	result.size(surface.w, surface.h);
+	target.size(surface.w, surface.h);
 
 	if (surface.format.palette)
 	{
 		switch (surface.format.BitsPerPixel)
 		{
-			case 1: depalettize!1(cast(ubyte*)surface.pixels, result.pixels.ptr, surface.format.palette, surface.w, surface.h, surface.pitch); break;
-			case 2: depalettize!2(cast(ubyte*)surface.pixels, result.pixels.ptr, surface.format.palette, surface.w, surface.h, surface.pitch); break;
-			case 4: depalettize!4(cast(ubyte*)surface.pixels, result.pixels.ptr, surface.format.palette, surface.w, surface.h, surface.pitch); break;
-			case 8: depalettize!8(cast(ubyte*)surface.pixels, result.pixels.ptr, surface.format.palette, surface.w, surface.h, surface.pitch); break;
+			case 1: depalettize!1(cast(ubyte*)surface.pixels, target.pixels.ptr, surface.format.palette, surface.w, surface.h, surface.pitch); break;
+			case 2: depalettize!2(cast(ubyte*)surface.pixels, target.pixels.ptr, surface.format.palette, surface.w, surface.h, surface.pitch); break;
+			case 4: depalettize!4(cast(ubyte*)surface.pixels, target.pixels.ptr, surface.format.palette, surface.w, surface.h, surface.pitch); break;
+			case 8: depalettize!8(cast(ubyte*)surface.pixels, target.pixels.ptr, surface.format.palette, surface.w, surface.h, surface.pitch); break;
 			default:
 				enforce(false, format("Don't know how to depalettize image with %d bits per pixel", surface.format.BitsPerPixel));
 		}
 	}
 	else
-		rgbTransform(cast(ubyte*)surface.pixels, result.pixels.ptr, surface.format, surface.w, surface.h, surface.pitch);
+		rgbTransform(cast(ubyte*)surface.pixels, target.pixels.ptr, surface.format, surface.w, surface.h, surface.pitch);
 
-	return result;
+	return target;
 }
 
 private:

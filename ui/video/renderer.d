@@ -13,14 +13,15 @@
 
 module ae.ui.video.renderer;
 
-public import ae.utils.graphics.canvas;
+public import ae.utils.graphics.color;
+public import ae.utils.graphics.image;
+public import ae.utils.graphics.view;
 
 /// Abstract class for a video renderer.
 class Renderer
 {
-	alias BGRX COLOR;
+	alias COLOR = BGRX;
 
-	// TODO: can we expect all hardware surfaces to be in this format? What can we do if they aren't?
 	/// BGRX/BGRA-only.
 	struct Bitmap
 	{
@@ -29,7 +30,13 @@ class Renderer
 		COLOR* pixels;
 		int w, h, stride;
 
-		mixin Canvas;
+		COLOR[] scanline(int y)
+		{
+			assert(y>=0 && y<h);
+			return pixels[stride*y..stride*(y+1)];
+		}
+
+		mixin DirectView;
 	}
 
 	/// True when this renderer can lock quickly (usually when it's rendering in software).
@@ -102,7 +109,7 @@ class TextureSource
 
 	uint textureVersion = 1;
 
-	alias RefCanvas!(Renderer.COLOR) TextureCanvas;
+	alias ImageRef!(Renderer.COLOR) TextureCanvas;
 
 	/// Used when the target pixel memory is already allocated
 	abstract void drawTo(TextureCanvas dest);
@@ -121,16 +128,15 @@ class TextureSource
 
 class ImageTextureSource : TextureSource
 {
-	import ae.utils.graphics.image;
 	Image!BGRX image;
 
 	override void drawTo(TextureCanvas dest)
 	{
-		dest.draw(0, 0, image);
+		image.blitTo(dest);
 	}
 
 	override TextureCanvas getPixels()
 	{
-		return image.getRef!TextureCanvas();
+		return image.toRef();
 	}
 }

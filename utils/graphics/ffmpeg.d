@@ -16,7 +16,8 @@ module ae.utils.graphics.ffmpeg;
 import std.exception;
 import std.typecons;
 
-public import ae.utils.graphics.image;
+import ae.utils.graphics.color;
+import ae.utils.graphics.image;
 
 private struct VideoStreamImpl
 {
@@ -42,7 +43,7 @@ private struct VideoStreamImpl
 		auto dataBuf = frameBuf[Header.sizeof..$];
 		enforce(stream.readExactly(dataBuf), "Unexpected end of stream");
 
-		frame.loadBMP(frameBuf);
+		frameBuf.parseBMP!BGR(frame);
 	}
 
 	@disable this(this);
@@ -84,7 +85,7 @@ private:
 	ProcessPipes pipes;
 	bool done;
 
-	alias Image!BGR.BitmapHeader!3 Header;
+	alias BitmapHeader!3 Header;
 	ubyte[] frameBuf;
 	Image!BGR frame;
 }

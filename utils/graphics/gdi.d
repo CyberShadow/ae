@@ -21,7 +21,9 @@ public import win32.wingdi;
 import win32.winuser;
 import win32.windef;
 
-import ae.utils.graphics.canvas;
+import ae.utils.graphics.color;
+import ae.utils.graphics.draw;
+import ae.utils.graphics.view;
 
 /// A canvas with added GDI functionality.
 struct GDICanvas(COLOR)
@@ -30,12 +32,15 @@ struct GDICanvas(COLOR)
 	HBITMAP hbm;
 	
 	int w, h;
-	alias w stride;
 	COLOR* pixels;
-	mixin Canvas;
 
-	alias std.algorithm.min min;
-	alias std.algorithm.max max;
+	COLOR[] scanline(int y)
+	{
+		assert(y>=0 && y<h);
+		return pixels[w*y..w*(y+1)];
+	}
+
+	mixin DirectView;
 
 	this(uint w, uint h)
 	{
@@ -60,7 +65,8 @@ struct GDICanvas(COLOR)
 		pixels = cast(COLOR*)pvBits;
 	}
 
-	// TODO: make this struct refcounted / copiable
+	@disable this(this); // TODO
+
 	~this()
 	{
 		DeleteDC(hdc);     hdc = null;
@@ -76,6 +82,8 @@ struct GDICanvas(COLOR)
 
 unittest
 {
+	alias RGB = ae.utils.graphics.color.RGB;
+
 //	alias BGR COLOR;
 	alias BGRX COLOR;
 	auto b = GDICanvas!COLOR(100, 100);
@@ -93,9 +101,7 @@ unittest
 	b[6, 6] = COLOR(255, 0, 0);
 
 	import ae.utils.graphics.image;
-	Image!RGB i;
-	i.size(b.w, b.h);
-	i.transformDraw!`RGB(c.r,c.g,c.b)`(0, 0, b);
+	auto i = b.copy.colorMap!(c => RGB(c.r,c.g,c.b))();
 	assert(i[5, 5] == RGB(0, 0, 255));
 	assert(i[6, 6] == RGB(0, 0, 255));
 
