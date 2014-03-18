@@ -28,7 +28,7 @@ public import ae.utils.graphics.view;
 struct ImageRef(COLOR)
 {
 	int w, h;
-	int pitch; /// In bytes, not COLORs
+	size_t pitch; /// In bytes, not COLORs
 	COLOR* pixels;
 
 	COLOR[] scanline(int y)
@@ -607,7 +607,7 @@ ubyte[] toPNG(SRC)(auto ref SRC src)
 		interlaceMethod : PNGInterlaceMethod.NONE,
 	};
 	chunks ~= PNGChunk("IHDR", cast(void[])[header]);
-	uint idatStride = src.w * COLOR.sizeof+1;
+	uint idatStride = to!uint(src.w * COLOR.sizeof+1);
 	ubyte[] idatData = new ubyte[src.h * idatStride];
 	for (uint y=0; y<src.h; y++)
 	{
@@ -632,7 +632,7 @@ ubyte[] toPNG(SRC)(auto ref SRC src)
 	foreach(chunk;chunks)
 	{
 		uint i = pos;
-		uint chunkLength = chunk.data.length;
+		uint chunkLength = to!uint(chunk.data.length);
 		pos += 12 + chunkLength;
 		*cast(uint*)&data[i] = swapBytes(chunkLength);
 		(cast(char[])data[i+4 .. i+8])[] = chunk.type[];
