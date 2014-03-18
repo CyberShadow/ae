@@ -149,7 +149,7 @@ template PartsWrapper(alias T)
 /// Common declarations for an allocator mixin
 mixin template AllocatorCommon()
 {
-	alias ae.utils.alloc.StorageType StorageType;
+	alias ae.utils.meta.StorageType StorageType;
 
 	static if (is(ALLOCATOR_TYPE))
 		alias StorageType!ALLOCATOR_TYPE VALUE_TYPE;
