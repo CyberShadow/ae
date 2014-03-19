@@ -441,6 +441,84 @@ unittest
 	assert(b[14, 15] == 42);
 }
 
+// ***************************************************************************
+
+/// Similar to Warp, but allows warped coordinates to go out of bounds.
+mixin template SafeWarp(V)
+{
+	V src;
+	ViewColor!V defaultColor;
+
+	auto ref ViewColor!V opIndex(int x, int y)
+	{
+		warp(x, y);
+		if (x >= 0 && y >= 0 && x < w && y < h)
+			return src[x, y];
+		else
+			return defaultColor;
+	}
+
+	static if (isWritableView!V)
+	ViewColor!V opIndexAssign(ViewColor!V value, int x, int y)
+	{
+		warp(x, y);
+		if (x >= 0 && y >= 0 && x < w && y < h)
+			return src[x, y] = value;
+		else
+			return defaultColor;
+	}
+}
+
+/// Rotate a view at an arbitrary angle (specified in radians),
+/// around the specified point. Rotated points that fall outside of
+/// the specified view resolve to defaultColor.
+auto rotate(V, COLOR)(auto ref V src, double angle, COLOR defaultColor,
+		double ox, double oy)
+//	if (isView!V && is(COLOR == ViewColor!V))
+{
+	static struct Rotate
+	{
+		mixin SafeWarp!V;
+		double theta, ox, oy;
+
+		@property int w() { return src.w; }
+		@property int h() { return src.h; }
+
+		void warp(ref int x, ref int y)
+		{
+			import std.math;
+			auto vx = x - ox;
+			auto vy = y - oy;
+			x = cast(int)(ox + cos(theta) * vx - sin(theta) * vy);
+			y = cast(int)(oy + sin(theta) * vx + cos(theta) * vy);
+		}
+	}
+
+	return Rotate(src, defaultColor, angle, ox, oy);
+}
+
+/// Rotate a view at an arbitrary angle (specified in radians) around
+/// its center.
+auto rotate(V, COLOR)(auto ref V src, double angle,
+		COLOR defaultColor = ViewColor!V.init)
+//	if (isView!V && is(COLOR == ViewColor!V))
+{
+	return src.rotate(angle, defaultColor, src.w / 2.0, src.h / 2.0);
+}
+
+unittest
+{
+	import ae.utils.graphics.image;
+	import ae.utils.geometry;
+	auto i = Image!int(3, 3);
+	i[1, 0] = 1;
+	auto r = i.rotate(cast(double)TAU/4, 0);
+	assert(r[1, 0] == 0);
+	assert(r[0, 1] == 1);
+}
+
+// ***************************************************************************
+
 /// Return a view which applies a predicate over the
 /// underlying view's pixel colors.
 template colorMap(alias pred)
