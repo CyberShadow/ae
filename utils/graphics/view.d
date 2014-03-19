@@ -39,17 +39,19 @@ enum isDirectView(T) =
 	isView!T &&
 	is(typeof(T.init.scanline(0)) : ViewColor!T[]);
 
-/// Mixin which implement view primitives on top of
+/// Mixin which implements view primitives on top of
 /// existing direct view primitives.
 mixin template DirectView()
 {
-	alias COLOR = typeof(pixels[0]);
+	alias COLOR = typeof(scanline(0)[0]);
 
+	/// Implements the view[x, y] operator.
 	ref COLOR opIndex(int x, int y)
 	{
 		return scanline(y)[x];
 	}
 
+	/// Implements the view[x, y] = c operator.
 	COLOR opIndexAssign(COLOR value, int x, int y)
 	{
 		return scanline(y)[x] = value;
@@ -151,7 +153,9 @@ mixin template Warp(V)
 auto crop(V)(auto ref V src, int x0, int y0, int x1, int y1)
 	if (isView!V)
 {
-	assert(x0 >= 0 && y0 >= 0 && x1 <= src.w && y1 <= src.h);
+	assert( 0 <=    x0 &&  0 <=    y0);
+	assert(x0 <     x1 && y0 <     y1);
+	assert(x1 <= src.w && y1 <= src.h);
 
 	static struct Crop
 	{
@@ -180,6 +184,13 @@ auto crop(V)(auto ref V src, int x0, int y0, int x1, int y1)
 	return Crop(src, x0, y0, x1, y1);
 }
 
+unittest
+{
+	auto g = procedural!((x, y) => y)(1, 256);
+	auto c = g.crop(0, 10, 1, 20);
+	assert(c[0, 0] == 10);
+}
+
 /// Tile another view.
 auto tile(V)(auto ref V src, int w, int h)
 	if (isView!V)
@@ -192,12 +203,20 @@ auto tile(V)(auto ref V src, int w, int h)
 
 		void warp(ref int x, ref int y)
 		{
+			assert(x >= 0 && y >= 0 && x < w && y < h);
 			x = x % src.w;
 			y = y % src.h;
 		}
 	}
 
 	return Tile(src, w, h);
+}
+
+unittest
+{
+	auto i = onePixel(4);
+	auto t = i.tile(100, 100);
+	assert(t[12, 34] == 4);
 }
 
 /// Present a resized view using nearest-neighbor interpolation.
@@ -346,7 +365,7 @@ template colorMap(alias pred)
 
 /// Returns a view which inverts all channels.
 // TODO: skip alpha and padding
-alias colorMap!`~c` invert;
+alias invert = colorMap!`~c`;
 
 unittest
 {

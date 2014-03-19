@@ -31,6 +31,7 @@ struct ImageRef(COLOR)
 	size_t pitch; /// In bytes, not COLORs
 	COLOR* pixels;
 
+	/// Returns an array for the pixels at row y.
 	COLOR[] scanline(int y)
 	{
 		assert(y>=0 && y<h);
@@ -73,6 +74,7 @@ struct Image(COLOR)
 	int w, h;
 	COLOR[] pixels;
 
+	/// Returns an array for the pixels at row y.
 	COLOR[] scanline(int y)
 	{
 		assert(y>=0 && y<h);
