@@ -377,6 +377,70 @@ unittest
 
 // ***************************************************************************
 
+/// Overlay the view fg over bg at a certain coordinate.
+/// The resulting view inherits bg's size.
+auto overlay(BG, FG)(auto ref BG bg, auto ref FG fg, int x, int y)
+	if (isView!BG && isView!FG && is(ViewColor!BG == ViewColor!FG))
+{
+	alias COLOR = ViewColor!BG;
+
+	static struct Overlay
+	{
+		BG bg;
+		FG fg;
+
+		int ox, oy;
+
+		@property int w() { return bg.w; }
+		@property int h() { return bg.h; }
+
+		auto ref COLOR opIndex(int x, int y)
+		{
+			if (x >= ox && y >= oy && x < ox + fg.w && y < oy + fg.h)
+				return fg[x - ox, y - oy];
+			else
+				return bg[x, y];
+		}
+
+		static if (isWritableView!BG && isWritableView!FG)
+		COLOR opIndexAssign(COLOR value, int x, int y)
+		{
+			if (x >= ox && y >= oy && x < ox + fg.w && y < oy + fg.h)
+				return fg[x - ox, y - oy] = value;
+			else
+				return bg[x, y] = value;
+		}
+	}
+
+	return Overlay(bg, fg, x, y);
+}
+
+/// Add a solid-color border around an image.
+/// The parameters indicate the border's thickness around each side
+/// (left, top, right, bottom in order).
+auto border(V, COLOR)(auto ref V src, int x0, int y0, int x1, int y1, COLOR color)
+	if (isView!V && is(COLOR == ViewColor!V))
+{
+	return color
+		.solid(
+			x0 + src.w + x1,
+			y0 + src.h + y1,
+		)
+		.overlay(src, x0, y0);
+}
+
+unittest
+{
+	auto g = procedural!((x, y) => x+10*y)(10, 10);
+	auto b = g.border(5, 5, 5, 5, 42);
+	assert(b.w == 20);
+	assert(b.h == 20);
+	assert(b[1, 2] == 42);
+	assert(b[5, 5] == 0);
+	assert(b[14, 14] == 99);
+	assert(b[14, 15] == 42);
+}
+
 /// Return a view which applies a predicate over the
 /// underlying view's pixel colors.
 template colorMap(alias pred)
