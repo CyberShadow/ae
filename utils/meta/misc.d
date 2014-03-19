@@ -314,6 +314,7 @@ template SignedBitsType(uint bits)
 
 /// Evaluates to array of strings with name for each field.
 @property string[] structFields(T)()
+	if (is(T == struct) || is(T == class))
 {
 	import std.string : split;
 
