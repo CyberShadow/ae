@@ -574,6 +574,9 @@ ubyte[] toPNG(SRC)(auto ref SRC src)
 	}
 
 	alias COLOR = ViewColor!SRC;
+	static if (!is(COLOR == struct))
+		enum COLOUR_TYPE = PNGColourType.G;
+	else
 	static if (structFields!COLOR == ["l"])
 		enum COLOUR_TYPE = PNGColourType.G;
 	else
@@ -639,4 +642,5 @@ ubyte[] toPNG(SRC)(auto ref SRC src)
 unittest
 {
 	onePixel(RGB(1,2,3)).toPNG();
+	onePixel(5).toPNG();
 }
