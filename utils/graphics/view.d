@@ -75,6 +75,7 @@ template procedural(alias formula)
 
 			auto ref COLOR opIndex(int x, int y)
 			{
+				assert(x >= 0 && y >= 0 && x < w && y < h);
 				return fun(x, y);
 			}
 		}
@@ -242,9 +243,29 @@ auto nearestNeighbor(V)(auto ref V src, int w, int h)
 
 unittest
 {
-	auto g = procedural!((x, y) => x*10+y)(10, 10);
+	auto g = procedural!((x, y) => x+10*y)(10, 10);
 	auto n = g.nearestNeighbor(100, 100);
-	assert(n[12, 34] == 13);
+	assert(n[12, 34] == 31);
+}
+
+/// Swap the X and Y axes (flip the image diagonally).
+auto flipXY(V)(auto ref V src)
+{
+	static struct FlipXY
+	{
+		mixin Warp!V;
+
+		@property int w() { return src.h; }
+		@property int h() { return src.w; }
+
+		void warp(ref int x, ref int y)
+		{
+			import std.algorithm;
+			swap(x, y);
+		}
+	}
+
+	return FlipXY(src);
 }
 
 // ***************************************************************************
@@ -325,11 +346,33 @@ unittest
 	import ae.utils.graphics.image;
 	auto vband = procedural!((x, y) => y)(1, 256).copy();
 	auto flipped = vband.vflip();
-	assert(flipped[0, 0] == 255);
+	assert(flipped[0, 1] == 254);
 	static assert(isDirectView!(typeof(flipped)));
 
 	import std.algorithm;
 	auto w = vband.warp!((ref x, ref y) { swap(x, y); });
+}
+
+/// Rotate a view 90 degrees clockwise.
+auto rotateCW(V)(auto ref V src)
+{
+	return src.flipXY().hflip();
+}
+
+/// Rotate a view 90 degrees counter-clockwise.
+auto rotateCCW(V)(auto ref V src)
+{
+	return src.flipXY().vflip();
+}
+
+unittest
+{
+	auto g = procedural!((x, y) => x+10*y)(10, 10);
+	int[] corners(V)(V v) { return [v[0, 0], v[9, 0], v[0, 9], v[9, 9]]; }
+	assert(corners(g          ) == [ 0,  9, 90, 99]);
+	assert(corners(g.flipXY   ) == [ 0, 90,  9, 99]);
+	assert(corners(g.rotateCW ) == [90,  0, 99,  9]);
+	assert(corners(g.rotateCCW) == [ 9, 99,  0, 90]);
 }
 
 // ***************************************************************************
