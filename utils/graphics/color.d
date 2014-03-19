@@ -241,6 +241,12 @@ template ChangeChannelType(COLOR, T)
 static assert(is(ChangeChannelType!(RGB, ushort) == RGB16));
 static assert(is(ChangeChannelType!(int, ushort) == ushort));
 
+alias ExpandChannelType(COLOR, int BYTES) =
+	ChangeChannelType!(COLOR,
+		UnsignedBitsType!((ChannelType!COLOR.sizeof + BYTES) * 8));
+
+static assert(is(ExpandChannelType!(RGB, 1) == RGB16));
+
 // ***************************************************************************
 
 // TODO: deprecate
