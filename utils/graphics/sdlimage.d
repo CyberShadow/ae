@@ -30,7 +30,7 @@ static this()
 	IMG_Init(IMG_INIT_JPG | IMG_INIT_PNG);
 }
 
-auto loadImage(string path, ref Image!RGBX target = Image!RGBX.newImage())
+auto loadImage(string path, ref Image!RGBX target = *new Image!RGBX)
 {
 	auto surface = IMG_Load(toStringz(path));
 	enforce(surface, "Failed to load image " ~ path);

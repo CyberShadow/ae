@@ -94,14 +94,6 @@ struct Image(COLOR)
 		if (pixels.length < w*h)
 			pixels.length = w*h;
 	}
-
-	/// Return a reference to an empty image.
-	/// Used as the default value for target parameters of
-	/// functions which accept an optional target image parameter.
-	static ref Image!COLOR newImage()
-	{
-		return *new Image!COLOR;
-	}
 }
 
 unittest
@@ -118,7 +110,7 @@ alias ViewImage(V) = Image!(ViewColor!V);
 
 /// Copy the given view into an image.
 /// If no target is specified, a new image is allocated.
-auto copy(SRC, TARGET = ViewImage!SRC)(auto ref SRC src, ref TARGET target = ViewImage!SRC.newImage())
+auto copy(SRC, TARGET = ViewImage!SRC)(auto ref SRC src, ref TARGET target = *new ViewImage!SRC)
 	if (isView!SRC)
 {
 	target.size(src.w, src.h);
@@ -136,7 +128,7 @@ unittest
 alias ElementViewImage(R) = ViewImage!(ElementType!R);
 
 /// Splice multiple images horizontally.
-auto hjoin(R, TARGET = ElementViewImage!R)(R images, ref TARGET target = ElementViewImage!R.newImage())
+auto hjoin(R, TARGET = ElementViewImage!R)(R images, ref TARGET target = *new ElementViewImage!R)
 	if (isView!(ElementType!R))
 {
 	int w, h;
@@ -152,7 +144,7 @@ auto hjoin(R, TARGET = ElementViewImage!R)(R images, ref TARGET target = Element
 }
 
 /// Splice multiple images vertically.
-auto vjoin(R, TARGET = ElementViewImage!R)(R images, ref TARGET target = ElementViewImage!R.newImage())
+auto vjoin(R, TARGET = ElementViewImage!R)(R images, ref TARGET target = *new ElementViewImage!R)
 	if (isView!(ElementType!R))
 {
 	int w, h;
@@ -246,7 +238,7 @@ private template PBMSignature(COLOR)
 }
 
 /// Parses a binary Netpbm monochrome (.pgm) or RGB (.ppm) file.
-auto parsePBM(COLOR, TARGET = Image!COLOR)(const(void)[] vdata, ref TARGET target = Image!COLOR.newImage())
+auto parsePBM(COLOR, TARGET = Image!COLOR)(const(void)[] vdata, ref TARGET target = *new Image!COLOR)
 {
 	auto data = cast(const(ubyte)[])vdata;
 	string[] fields = readPBMHeader(data);
@@ -316,7 +308,7 @@ unittest
 
 /// Loads a raw COLOR[] into an image of the indicated size.
 auto fromPixels(COLOR)(COLOR[] pixels, uint w, uint h,
-	ref Image!COLOR target = Image!COLOR.newImage())
+	ref Image!COLOR target = *new Image!COLOR)
 {
 	enforce(pixels.length == w*h, "Dimension / filesize mismatch");
 	target.size(w, h);
@@ -326,7 +318,7 @@ auto fromPixels(COLOR)(COLOR[] pixels, uint w, uint h,
 
 /// ditto
 auto fromPixels(COLOR)(const(void)[] pixels, uint w, uint h,
-	ref Image!COLOR target = Image!COLOR.newImage())
+	ref Image!COLOR target = *new Image!COLOR)
 {
 	return fromPixels(cast(COLOR[])pixels, w, h, target);
 }
@@ -416,7 +408,7 @@ template bitmapBitCount(COLOR)
 }
 
 /// Parses a Windows bitmap (.bmp) file.
-auto parseBMP(COLOR, TARGET = Image!COLOR)(const(void)[] data, ref TARGET target = Image!COLOR.newImage())
+auto parseBMP(COLOR, TARGET = Image!COLOR)(const(void)[] data, ref TARGET target = *new Image!COLOR)
 {
 	alias BitmapHeader!3 Header;
 	enforce(data.length > Header.sizeof);
