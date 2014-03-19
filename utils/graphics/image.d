@@ -285,14 +285,14 @@ ubyte[] toPBM(SRC)(auto ref SRC src)
 
 	auto length = src.w * src.h;
 	ubyte[] header = cast(ubyte[])"%s\n%d %d %d\n"
-		.format(PBMSignature!COLOR, src.w, src.h, COLOR.ChannelType.max);
+		.format(PBMSignature!COLOR, src.w, src.h, ChannelType!COLOR.max);
 	ubyte[] data = new ubyte[header.length + length * COLOR.sizeof];
 
 	data[0..header.length] = header;
 	src.copyPixels(cast(COLOR[])data[header.length..$]);
 
-	static if (COLOR.ChannelType.sizeof > 1)
-		foreach (ref p; cast(COLOR.ChannelType[])data[header.length..$])
+	static if (ChannelType!COLOR.sizeof > 1)
+		foreach (ref p; cast(ChannelType!COLOR[])data[header.length..$])
 			p = swapBytes(p); // TODO: proper endianness support
 
 	return data;
@@ -592,7 +592,7 @@ ubyte[] toPNG(SRC)(auto ref SRC src)
 	PNGHeader header = {
 		width : swapBytes(src.w),
 		height : swapBytes(src.h),
-		colourDepth : COLOR.ChannelType.sizeof * 8,
+		colourDepth : ChannelType!COLOR.sizeof * 8,
 		colourType : COLOUR_TYPE,
 		compressionMethod : PNGCompressionMethod.DEFLATE,
 		filterMethod : PNGFilterMethod.ADAPTIVE,
@@ -607,8 +607,8 @@ ubyte[] toPNG(SRC)(auto ref SRC src)
 		auto rowPixels = cast(COLOR[])idatData[y*idatStride+1..(y+1)*idatStride];
 		rowPixels[] = src.scanline(y);
 
-		static if (COLOR.ChannelType.sizeof > 1)
-			foreach (ref p; cast(COLOR.ChannelType[])rowPixels)
+		static if (ChannelType!COLOR.sizeof > 1)
+			foreach (ref p; cast(ChannelType!COLOR[])rowPixels)
 				p = swapBytes(p);
 	}
 	chunks ~= PNGChunk("IDAT", compress(idatData, 5));

@@ -193,6 +193,15 @@ unittest
 	assert(RGB(1, 2, 3) + RGB(4, 5, 6) == RGB(5, 7, 9));
 }
 
+/// Obtains the type of each channel for homogenous colors.
+template ChannelType(T)
+{
+	static if (is(T == struct))
+		alias ChannelType = T.ChannelType;
+	else
+		alias ChannelType = T;
+}
+
 /// Resolves to a Color instance with a different ChannelType.
 template ChangeChannelType(COLOR, T)
 	if (isNumeric!COLOR)
