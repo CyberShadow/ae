@@ -70,37 +70,59 @@ struct GammaRamp(LUM_BASETYPE, PIX_BASETYPE)
 		}
 	}
 
-	auto pix2lum(PIXCOLOR)(PIXCOLOR c)
+	auto pix2lum(PIXCOLOR)(PIXCOLOR c) const
 	{
 		alias LUMCOLOR = ChangeChannelType!(PIXCOLOR, LUM_BASETYPE);
 		return LUMCOLOR.op!q{b[a]}(c, pix2lumValues[]);
 	}
 
-	auto lum2pix(LUMCOLOR)(LUMCOLOR c)
+	auto lum2pix(LUMCOLOR)(LUMCOLOR c) const
 	{
 		alias PIXCOLOR = ChangeChannelType!(LUMCOLOR, PIX_BASETYPE);
 		return PIXCOLOR.op!q{b[a]}(c, lum2pixValues[]);
 	}
 }
 
-auto lum2pix(SRC, GAMMA)(auto ref SRC src, ref GAMMA gamma)
+/// Return a view which converts luminosity to image pixel data
+/// using the specified gamma ramp
+auto lum2pix(SRC, GAMMA)(auto ref SRC src, auto ref GAMMA gamma)
 	if (isView!SRC)
 {
 	auto g = &gamma;
 	return src.colorMap!(c => g.lum2pix(c));
 }
 
-auto pix2lum(SRC, GAMMA)(auto ref SRC src, ref GAMMA gamma)
+/// Return a view which converts image pixel data to luminosity
+/// using the specified gamma ramp
+auto pix2lum(SRC, GAMMA)(auto ref SRC src, auto ref GAMMA gamma)
 	if (isView!SRC)
 {
 	auto g = &gamma;
 	return src.colorMap!(c => g.pix2lum(c));
 }
 
+/// Return a reference to a statically-initialized GammaRamp
+/// with the indicated parameters
+ref auto gammaRamp(LUM_BASETYPE, PIX_BASETYPE, alias value)()
+{
+	alias Ramp = GammaRamp!(LUM_BASETYPE, PIX_BASETYPE);
+	static struct S
+	{
+		static immutable Ramp ramp;
+
+		// Need to use static initialization instead of CTFE due to
+		// https://d.puremagic.com/issues/show_bug.cgi?id=12412
+		shared static this()
+		{
+			ramp = Ramp(value);
+		}
+	}
+	return S.ramp;
+}
+
 unittest
 {
 	// test instantiation
-	auto gamma = GammaRamp!(ushort, ubyte)(ColorSpace.sRGB);
 	auto lum = onePixel(RGB16(1, 2, 3));
-	auto pix = lum.lum2pix(gamma);
+	auto pix = lum.lum2pix(gammaRamp!(ushort, ubyte, ColorSpace.sRGB));
 }
