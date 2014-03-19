@@ -180,6 +180,84 @@ unittest
 
 // ***************************************************************************
 
+/// Performs linear downscale by a constant factor
+template downscale(int HRX, int HRY)
+{
+	auto downscale(SRC, TARGET = ViewImage!SRC)(auto ref SRC src,
+			ref TARGET target = *new ViewImage!SRC)
+		if (isDirectView!SRC)
+	{
+		alias lr = target;
+		alias hr = src;
+
+		assert(hr.w % HRX == 0 && hr.h % HRY == 0, "Size mismatch");
+
+		lr.size(hr.w / HRX, hr.h / HRY);
+
+		foreach (y; 0..lr.h)
+			foreach (x; 0..lr.w)
+			{
+				static if (HRX*HRY <= 0x100)
+					enum EXPAND_BYTES = 1;
+				else
+				static if (HRX*HRY <= 0x10000)
+					enum EXPAND_BYTES = 2;
+				else
+					static assert(0);
+				static if (is(typeof(COLOR.init.a))) // downscale with alpha
+				{
+					ExpandType!(COLOR, EXPAND_BYTES+COLOR.init.a.sizeof) sum;
+					ExpandType!(typeof(COLOR.init.a), EXPAND_BYTES) alphaSum;
+					auto start = y*HRY*hr.stride + x*HRX;
+					foreach (j; 0..HRY)
+					{
+						foreach (p; hr.pixels[start..start+HRX])
+						{
+							foreach (i, f; p.tupleof)
+								static if (p.tupleof[i].stringof != "p.a")
+								{
+									enum FIELD = p.tupleof[i].stringof[2..$];
+									mixin("sum."~FIELD~" += cast(typeof(sum."~FIELD~"))p."~FIELD~" * p.a;");
+								}
+							alphaSum += p.a;
+						}
+						start += hr.stride;
+					}
+					if (alphaSum)
+					{
+						auto result = cast(COLOR)(sum / alphaSum);
+						result.a = cast(typeof(result.a))(alphaSum / (HRX*HRY));
+						lr[x, y] = result;
+					}
+					else
+					{
+						static assert(COLOR.init.a == 0);
+						lr[x, y] = COLOR.init;
+					}
+				}
+				else
+				{
+					ExpandChannelType!(ViewColor!SRC, EXPAND_BYTES) sum;
+					auto x0 = x*HRX;
+					auto x1 = x0+HRX;
+					foreach (j; y*HRY..(y+1)*HRY)
+						foreach (p; hr.scanline(j)[x0..x1])
+							sum += p;
+					lr[x, y] = cast(ViewColor!SRC)(sum / (HRX*HRY));
+				}
+			}
+
+		return target;
+	}
+}
+
+unittest
+{
+	onePixel(RGB.init).nearestNeighbor(4, 4).copy.downscale!(2, 2)();
+}
+
+// ***************************************************************************
+
 /// Copy the indicated row of src to a COLOR buffer.
 void copyScanline(SRC, COLOR)(auto ref SRC src, int y, COLOR[] dst)
 	if (isView!SRC && is(COLOR == ViewColor!SRC))
