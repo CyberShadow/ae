@@ -232,13 +232,14 @@ template ChangeChannelType(COLOR, T)
 
 /// ditto
 template ChangeChannelType(COLOR, T)
-	if (is(RGB : Color!Spec, Spec...))
+	if (is(COLOR : Color!Spec, Spec...))
 {
 	static assert(COLOR.homogenous, "Can't change ChannelType of non-homogenous Color");
 	alias ChangeChannelType = Color!(T, COLOR.Spec[1..$]);
 }
 
 static assert(is(ChangeChannelType!(RGB, ushort) == RGB16));
+static assert(is(ChangeChannelType!(int, ushort) == ushort));
 
 // ***************************************************************************
 
