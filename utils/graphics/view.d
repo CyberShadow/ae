@@ -37,7 +37,7 @@ enum isWritableView(T) =
 /// access. We call these "direct views".
 enum isDirectView(T) =
 	isView!T &&
-	is(typeof(T.init.scanline(0)));
+	is(typeof(T.init.scanline(0)) : ViewColor!T[]);
 
 /// Mixin which implement view primitives on top of
 /// existing direct view primitives.
