@@ -156,6 +156,15 @@ struct Color(FieldTuple...)
 		return r;
 	}
 
+	T opCast(T)()
+		if (is(T==struct) && structFields!T == structFields!Fields)
+	{
+		T t;
+		foreach (i, f; this.tupleof)
+			t.tupleof[i] = cast(typeof(t.tupleof[i])) this.tupleof[i];
+		return t;
+	}
+
 	/// Sum of all channels
 	UnsignedBitsType!(channelBits + ilog2(nextPowerOfTwo(channels))) sum()
 	{
