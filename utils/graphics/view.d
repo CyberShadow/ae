@@ -213,12 +213,19 @@ auto nearestNeighbor(V)(auto ref V src, int w, int h)
 
 		void warp(ref int x, ref int y)
 		{
-			x = cast(long)x * src.w / w;
-			y = cast(long)y * src.h / h;
+			x = cast(int)(long(x) * src.w / w);
+			y = cast(int)(long(y) * src.h / h);
 		}
 	}
 
-	return Tile(src, w, h);
+	return NearestNeighbor(src, w, h);
+}
+
+unittest
+{
+	auto g = procedural!((x, y) => x*10+y)(10, 10);
+	auto n = g.nearestNeighbor(100, 100);
+	assert(n[12, 34] == 13);
 }
 
 // ***************************************************************************
