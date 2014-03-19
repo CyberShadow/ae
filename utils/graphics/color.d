@@ -101,23 +101,29 @@ struct Color(FieldTuple...)
 	}
 
 	/// ditto
-	typeof(this) opBinary(string op, T)(T o)
-		if (is(T == typeof(this)))
+	typeof(this) opOpAssign(string op)(int o)
 	{
-		typeof(this) r;
-		foreach (i, f; r.tupleof)
-			static if(r.tupleof[i].stringof != "r.x") // skip padding
-				r.tupleof[i] = cast(typeof(r.tupleof[i])) mixin(`this.tupleof[i]` ~ op ~ `o.tupleof[i]`);
-		return r;
+		foreach (i, f; this.tupleof)
+			static if(this.tupleof[i].stringof != "this.x") // skip padding
+				this.tupleof[i] = cast(typeof(this.tupleof[i])) mixin(`this.tupleof[i]` ~ op ~ `=o`);
+		return this;
 	}
 
 	/// ditto
-	typeof(this) opBinary(string op)(int o)
+	typeof(this) opOpAssign(string op, T)(T o)
+		if (is(T==struct) && structFields!T == structFields!Fields)
 	{
-		typeof(this) r;
-		foreach (i, f; r.tupleof)
-			static if(r.tupleof[i].stringof != "r.x") // skip padding
-				r.tupleof[i] = cast(typeof(r.tupleof[i])) mixin(`this.tupleof[i]` ~ op ~ `o`);
+		foreach (i, f; this.tupleof)
+			static if(this.tupleof[i].stringof != "this.x") // skip padding
+				this.tupleof[i] = cast(typeof(this.tupleof[i])) mixin(`this.tupleof[i]` ~ op ~ `=o.tupleof[i]`);
+		return this;
+	}
+
+	/// ditto
+	typeof(this) opBinary(string op, T)(T o)
+	{
+		auto r = this;
+		mixin("r" ~ op ~ "=o;");
 		return r;
 	}
 
@@ -191,6 +197,12 @@ unittest
 	assert(hex.r == 0x12 && hex.g == 0x34 && hex.b == 0x56);
 
 	assert(RGB(1, 2, 3) + RGB(4, 5, 6) == RGB(5, 7, 9));
+
+	RGB c = RGB(1, 1, 1);
+	c += 1;
+	assert(c == RGB(2, 2, 2));
+	c += c;
+	assert(c == RGB(4, 4, 4));
 }
 
 /// Obtains the type of each channel for homogenous colors.
