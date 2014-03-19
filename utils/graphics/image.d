@@ -524,7 +524,7 @@ unittest
 /// Only basic PNG features are supported
 /// (no filters, interlacing, palettes etc.)
 ubyte[] toPNG(SRC)(auto ref SRC src)
-	if (isDirectView!SRC)
+	if (isView!SRC)
 {
 	import std.digest.crc;
 	import std.zlib : compress;
@@ -605,7 +605,7 @@ ubyte[] toPNG(SRC)(auto ref SRC src)
 	{
 		idatData[y*idatStride] = PNGFilterAdaptive.NONE;
 		auto rowPixels = cast(COLOR[])idatData[y*idatStride+1..(y+1)*idatStride];
-		rowPixels[] = src.scanline(y);
+		src.copyScanline(y, rowPixels);
 
 		static if (ChannelType!COLOR.sizeof > 1)
 			foreach (ref p; cast(ChannelType!COLOR[])rowPixels)
@@ -638,5 +638,5 @@ ubyte[] toPNG(SRC)(auto ref SRC src)
 
 unittest
 {
-	onePixel(RGB(1,2,3)).copy.toPNG();
+	onePixel(RGB(1,2,3)).toPNG();
 }
