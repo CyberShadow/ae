@@ -550,7 +550,7 @@ template colorMap(alias pred)
 
 /// Returns a view which inverts all channels.
 // TODO: skip alpha and padding
-alias invert = colorMap!`~c`;
+alias invert = colorMap!q{~c};
 
 unittest
 {
