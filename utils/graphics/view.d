@@ -545,7 +545,7 @@ mixin template SafeWarp(V)
 /// the specified view resolve to defaultColor.
 auto rotate(V, COLOR)(auto ref V src, double angle, COLOR defaultColor,
 		double ox, double oy)
-//	if (isView!V && is(COLOR == ViewColor!V))
+	if (isView!V && is(COLOR : ViewColor!V))
 {
 	static struct Rotate
 	{
@@ -560,8 +560,8 @@ auto rotate(V, COLOR)(auto ref V src, double angle, COLOR defaultColor,
 			import std.math;
 			auto vx = x - ox;
 			auto vy = y - oy;
-			x = cast(int)(ox + cos(theta) * vx - sin(theta) * vy);
-			y = cast(int)(oy + sin(theta) * vx + cos(theta) * vy);
+			x = cast(int)round(ox + cos(theta) * vx - sin(theta) * vy);
+			y = cast(int)round(oy + sin(theta) * vx + cos(theta) * vy);
 		}
 	}
 
@@ -572,9 +572,9 @@ auto rotate(V, COLOR)(auto ref V src, double angle, COLOR defaultColor,
 /// its center.
 auto rotate(V, COLOR)(auto ref V src, double angle,
 		COLOR defaultColor = ViewColor!V.init)
-//	if (isView!V && is(COLOR == ViewColor!V))
+	if (isView!V && is(COLOR : ViewColor!V))
 {
-	return src.rotate(angle, defaultColor, src.w / 2.0, src.h / 2.0);
+	return src.rotate(angle, defaultColor, src.w / 2.0 - 0.5, src.h / 2.0 - 0.5);
 }
 
 unittest
