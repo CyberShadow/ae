@@ -128,6 +128,14 @@ void blitTo(SRC, DST)(auto ref SRC src, auto ref DST dst, int x, int y)
 	src.blitTo(dst.crop(x, y, x+src.w, y+src.h));
 }
 
+/// Default implementation for the .size method.
+/// Asserts that the view has the desired size.
+void size(V)(auto ref V src, int w, int h)
+	if (isView!V)
+{
+	assert(src.w == w && src.h == h, "Wrong size for " ~ V.stringof);
+}
+
 // ***************************************************************************
 
 /// Mixin which implements view primitives on top of
