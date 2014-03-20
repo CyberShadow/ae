@@ -377,6 +377,77 @@ unittest
 
 // ***************************************************************************
 
+/// Return a view with the given views concatenated vertically.
+/// Assumes all views have the same width.
+/// Creates an index for fast row -> source view lookup.
+auto vjoiner(V)(V[] views)
+	if (isView!V)
+{
+	static struct VJoiner
+	{
+		struct Child { V view; int y; }
+		Child[] children;
+		size_t[] index;
+
+		@property int w() { return children[0].view.w; }
+		int h;
+
+		this(V[] views)
+		{
+			children = new Child[views.length];
+			int y = 0;
+			foreach (i, ref v; views)
+			{
+				assert(v.w == views[0].w, "Inconsistent width");
+				children[i] = Child(v, y);
+				y += v.h;
+			}
+
+			h = y;
+
+			index = new size_t[h];
+
+			foreach (i, ref child; children)
+				index[child.y .. child.y + child.view.h] = i;
+		}
+
+		auto ref ViewColor!V opIndex(int x, int y)
+		{
+			auto child = &children[index[y]];
+			return child.view[x, y - child.y];
+		}
+
+		static if (isWritableView!V)
+		ViewColor!V opIndexAssign(ViewColor!V value, int x, int y)
+		{
+			auto child = &children[index[y]];
+			return child.view[x, y - child.y] = value;
+		}
+
+		static if (isDirectView!V)
+		ViewColor!V[] scanline(int y)
+		{
+			auto child = &children[index[y]];
+			return child.view.scanline(y - child.y);
+		}
+	}
+
+	return VJoiner(views);
+}
+
+unittest
+{
+	import std.algorithm : map;
+	import std.array : array;
+	import std.range : iota;
+
+	auto v = 10.iota.map!onePixel.array.vjoiner();
+	foreach (i; 0..10)
+		assert(v[0, i] == i);
+}
+
+// ***************************************************************************
+
 /// Overlay the view fg over bg at a certain coordinate.
 /// The resulting view inherits bg's size.
 auto overlay(BG, FG)(auto ref BG bg, auto ref FG fg, int x, int y)
