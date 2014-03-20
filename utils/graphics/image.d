@@ -181,7 +181,7 @@ unittest
 // ***************************************************************************
 
 /// Performs linear downscale by a constant factor
-template downscale(int HRX, int HRY)
+template downscale(int HRX, int HRY=HRX)
 {
 	auto downscale(SRC, TARGET = ViewImage!SRC)(auto ref SRC src,
 			ref TARGET target = *new ViewImage!SRC)
