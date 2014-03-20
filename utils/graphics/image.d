@@ -278,7 +278,7 @@ void copyPixels(SRC, COLOR)(auto ref SRC src, COLOR[] dst)
 {
 	assert(dst.length == src.w * src.h);
 	foreach (y; 0..src.h)
-		copyScanline(src, y, dst[y*src.w..(y+1)*src.w]);
+		src.copyScanline(y, dst[y*src.w..(y+1)*src.w]);
 }
 
 // ***************************************************************************
@@ -474,7 +474,7 @@ template bitmapBitCount(COLOR)
 	static if (is(COLOR == BGRX) || is(COLOR == BGRA))
 		enum bitmapBitCount = 32;
 	else
-	static if (is(COLOR == G8))
+	static if (is(COLOR == L8))
 		enum bitmapBitCount = 8;
 	else
 		static assert(false, "Unsupported BMP color type: " ~ COLOR.stringof);
@@ -535,7 +535,7 @@ unittest
 
 /// Creates a Windows bitmap (.bmp) file.
 ubyte[] toBMP(SRC)(auto ref SRC src)
-	if (isDirectView!SRC)
+	if (isView!SRC)
 {
 	alias COLOR = ViewColor!SRC;
 
@@ -586,7 +586,7 @@ ubyte[] toBMP(SRC)(auto ref SRC src)
 
 	foreach (y; 0..src.h)
 	{
-		(cast(COLOR*)ptr)[0..src.w] = src.scanline(y);
+		src.copyScanline(y, (cast(COLOR*)ptr)[0..src.w]);
 		ptr += pixelStride;
 	}
 
@@ -595,7 +595,7 @@ ubyte[] toBMP(SRC)(auto ref SRC src)
 
 unittest
 {
-	onePixel(BGR(1,2,3)).copy.toBMP();
+	onePixel(BGR(1,2,3)).toBMP();
 }
 
 // ***************************************************************************
