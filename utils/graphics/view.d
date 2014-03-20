@@ -609,7 +609,7 @@ template colorMap(alias pred)
 			@property int w() { return src.w; }
 			@property int h() { return src.h; }
 
-			auto ref NEWCOLOR opIndex(int x, int y)
+			/*auto ref*/ NEWCOLOR opIndex(int x, int y)
 			{
 				return fun(src[x, y]);
 			}
