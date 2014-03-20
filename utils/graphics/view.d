@@ -233,8 +233,8 @@ auto nearestNeighbor(V)(auto ref V src, int w, int h)
 
 		void warp(ref int x, ref int y)
 		{
-			x = cast(int)(long(x) * src.w / w);
-			y = cast(int)(long(y) * src.h / h);
+			x = cast(int)(cast(long)x * src.w / w);
+			y = cast(int)(cast(long)y * src.h / h);
 		}
 	}
 
