@@ -642,3 +642,47 @@ unittest
 	auto i = onePixel(L8(1));
 	assert(i.invert[0, 0].l == 254);
 }
+
+// ***************************************************************************
+
+/// Splits a view into segments and
+/// calls fun on each segment in parallel.
+/// Returns an array of segments which
+/// can be joined using vjoin or vjoiner.
+template parallel(alias fun)
+{
+	auto parallel(V)(auto ref V src, size_t chunkSize = 0)
+		if (isView!V)
+	{
+		import std.parallelism : taskPool, parallel;
+
+		auto processSegment(R)(R rows)
+		{
+			auto y0 = rows[0];
+			auto y1 = y0 + rows.length;
+			auto segment = src.crop(0, y0, src.w, y1);
+			return fun(segment);
+		}
+
+		import std.range : iota, chunks;
+		if (!chunkSize)
+			chunkSize = taskPool.defaultWorkUnitSize(src.h);
+
+		auto range = src.h.iota.chunks(chunkSize);
+		alias Result = typeof(processSegment(range.front));
+		auto result = new Result[range.length];
+		foreach (n; range.length.iota.parallel(1))
+			result[n] = processSegment(range[n]);
+		return result;
+
+	}
+}
+
+unittest
+{
+	import ae.utils.graphics.image;
+	auto g = procedural!((x, y) => x+10*y)(10, 10);
+	auto i = g.parallel!(s => s.invert.copy).vjoiner;
+	assert(i[0, 0] == ~0);
+	assert(i[9, 9] == ~99);
+}
