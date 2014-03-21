@@ -29,6 +29,8 @@ import ae.utils.textout;
 
 public import ae.utils.regex;
 
+alias indexOf = std.string.indexOf;
+
 // ************************************************************************
 
 /// Semantic alias for an array of immutable bytes containing some
