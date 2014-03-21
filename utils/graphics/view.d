@@ -674,7 +674,6 @@ template parallel(alias fun)
 		foreach (n; range.length.iota.parallel(1))
 			result[n] = processSegment(range[n]);
 		return result;
-
 	}
 }
 
