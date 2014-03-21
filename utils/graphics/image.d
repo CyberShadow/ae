@@ -111,6 +111,7 @@ unittest
 // https://d.puremagic.com/issues/show_bug.cgi?id=12386
 // https://d.puremagic.com/issues/show_bug.cgi?id=12425
 // https://d.puremagic.com/issues/show_bug.cgi?id=12426
+// https://d.puremagic.com/issues/show_bug.cgi?id=12433
 
 alias ViewImage(V) = Image!(ViewColor!V);
 
@@ -317,6 +318,18 @@ void copyPixels(SRC, COLOR)(auto ref SRC src, COLOR[] dst)
 
 // ***************************************************************************
 
+import std.traits;
+
+// Workaround for https://d.puremagic.com/issues/show_bug.cgi?id=12433
+
+struct InputColor {}
+alias GetInputColor(COLOR, INPUT) = Select!(is(COLOR == InputColor), INPUT, COLOR);
+
+struct TargetColor {}
+enum isTargetColor(C, TARGET) = is(C == TargetColor) || is(C == ViewColor!TARGET);
+
+// ***************************************************************************
+
 import ae.utils.graphics.color;
 import ae.utils.meta.misc;
 
@@ -352,9 +365,11 @@ private template PBMSignature(COLOR)
 }
 
 /// Parses a binary Netpbm monochrome (.pgm) or RGB (.ppm) file.
-auto parsePBM(COLOR = ViewColor!TARGET, TARGET)(const(void)[] vdata, auto ref TARGET target)
-	if (isWritableView!TARGET)
+auto parsePBM(C = TargetColor, TARGET)(const(void)[] vdata, auto ref TARGET target)
+	if (isWritableView!TARGET && isTargetColor!(C, TARGET))
 {
+	alias COLOR = ViewColor!TARGET;
+
 	auto data = cast(const(ubyte)[])vdata;
 	string[] fields = readPBMHeader(data);
 	enforce(fields[0]==PBMSignature!COLOR, "Invalid signature");
@@ -428,10 +443,13 @@ unittest
 // ***************************************************************************
 
 /// Loads a raw COLOR[] into an image of the indicated size.
-auto fromPixels(COLOR = INPUT, INPUT, TARGET)(INPUT[] input, uint w, uint h,
+auto fromPixels(C = InputColor, INPUT, TARGET)(INPUT[] input, uint w, uint h,
 		auto ref TARGET target)
-	if (isWritableView!TARGET)
+	if (isWritableView!TARGET
+	 && is(GetInputColor!(C, INPUT) == ViewColor!TARGET))
 {
+	alias COLOR = ViewColor!TARGET;
+
 	auto pixels = cast(COLOR[])input;
 	enforce(pixels.length == w*h, "Dimension / filesize mismatch");
 	target.size(w, h);
@@ -440,16 +458,21 @@ auto fromPixels(COLOR = INPUT, INPUT, TARGET)(INPUT[] input, uint w, uint h,
 }
 
 /// ditto
-auto fromPixels(COLOR = INPUT, INPUT)(INPUT[] input, uint w, uint h)
+auto fromPixels(C = InputColor, INPUT)(INPUT[] input, uint w, uint h)
 {
+	alias COLOR = GetInputColor!(C, INPUT);
 	Image!COLOR target;
 	return fromPixels!COLOR(input, w, h, target);
 }
 
 unittest
 {
-	auto i = x"42".fromPixels!L8(1, 1);
+	Image!L8 i;
+	i = x"42".fromPixels!L8(1, 1);
+	i = x"42".fromPixels!L8(1, 1, i);
 	assert(i[0, 0].l == 0x42);
+	i = (cast(L8[])x"42").fromPixels(1, 1);
+	i = (cast(L8[])x"42").fromPixels(1, 1, i);
 }
 
 // ***************************************************************************
@@ -531,9 +554,11 @@ template bitmapBitCount(COLOR)
 }
 
 /// Parses a Windows bitmap (.bmp) file.
-auto parseBMP(COLOR = ViewColor!TARGET, TARGET)(const(void)[] data, auto ref TARGET target)
-	if (isWritableView!TARGET)
+auto parseBMP(C = TargetColor, TARGET)(const(void)[] data, auto ref TARGET target)
+	if (isWritableView!TARGET && isTargetColor!(C, TARGET))
 {
+	alias COLOR = ViewColor!TARGET;
+
 	alias BitmapHeader!3 Header;
 	enforce(data.length > Header.sizeof);
 	Header* header = cast(Header*) data.ptr;
@@ -580,8 +605,7 @@ auto parseBMP(COLOR)(const(void)[] data)
 
 unittest
 {
-	// http://d.puremagic.com/issues/show_bug.cgi?id=12426
-	//alias parseBMP!BGR parseBMP24;
+	alias parseBMP!BGR parseBMP24;
 }
 
 /// Creates a Windows bitmap (.bmp) file.
