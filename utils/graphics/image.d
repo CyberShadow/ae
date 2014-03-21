@@ -145,7 +145,7 @@ alias ElementViewImage(R) = ViewImage!(ElementType!R);
 
 /// Splice multiple images horizontally.
 auto hjoin(R, TARGET)(R images, auto ref TARGET target)
-	if (isView!(ElementType!R) && isWritableView!TARGET)
+	if (isInputRange!R && isView!(ElementType!R) && isWritableView!TARGET)
 {
 	int w, h;
 	foreach (ref image; images)
@@ -160,7 +160,7 @@ auto hjoin(R, TARGET)(R images, auto ref TARGET target)
 }
 /// ditto
 auto hjoin(R)(R images)
-	if (isView!(ElementType!R))
+	if (isInputRange!R && isView!(ElementType!R))
 {
 	ElementViewImage!R target;
 	return images.hjoin(target);
@@ -168,7 +168,7 @@ auto hjoin(R)(R images)
 
 /// Splice multiple images vertically.
 auto vjoin(R, TARGET)(R images, auto ref TARGET target)
-	if (isView!(ElementType!R) && isWritableView!TARGET)
+	if (isInputRange!R && isView!(ElementType!R) && isWritableView!TARGET)
 {
 	int w, h;
 	foreach (ref image; images)
@@ -183,7 +183,7 @@ auto vjoin(R, TARGET)(R images, auto ref TARGET target)
 }
 /// ditto
 auto vjoin(R)(R images)
-	if (isView!(ElementType!R))
+	if (isInputRange!R && isView!(ElementType!R))
 {
 	ElementViewImage!R target;
 	return images.vjoin(target);

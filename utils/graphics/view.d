@@ -141,6 +141,7 @@ void size(V)(auto ref V src, int w, int h)
 /// Mixin which implements view primitives on top of
 /// another view, using a coordinate transform function.
 mixin template Warp(V)
+	if (isView!V)
 {
 	V src;
 
