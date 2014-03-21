@@ -13,6 +13,7 @@
 
 module ae.sys.d.build;
 
+import std.algorithm;
 import std.array;
 import std.datetime;
 import std.exception;
@@ -28,7 +29,15 @@ class DBuilder
 {
 	struct Config
 	{
-		string model = "32";
+		version (Windows)
+			enum defaultModel = "32";
+		else
+		version (D_LP64)
+			enum defaultModel = "64";
+		else
+			enum defaultModel = "32";
+
+		string model = defaultModel;
 		bool debugDMD = false;
 	}
 	Config config;
