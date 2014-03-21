@@ -105,19 +105,30 @@ unittest
 
 // ***************************************************************************
 
+// Functions which need a target image to operate on are currenty declared
+// as two overloads. The code might be simplified if some of these get fixed:
+// https://d.puremagic.com/issues/show_bug.cgi?id=8074
+// https://d.puremagic.com/issues/show_bug.cgi?id=12386
+// https://d.puremagic.com/issues/show_bug.cgi?id=12425
+// https://d.puremagic.com/issues/show_bug.cgi?id=12426
+
 alias ViewImage(V) = Image!(ViewColor!V);
 
-// The TARGET template parameter could be removed if this was fixed:
-// https://d.puremagic.com/issues/show_bug.cgi?id=12386
-
-/// Copy the given view into an image.
-/// If no target is specified, a new image is allocated.
-auto copy(SRC, TARGET = ViewImage!SRC)(auto ref SRC src, ref TARGET target = *new ViewImage!SRC)
-	if (isView!SRC)
+/// Copy the given view into the specified target.
+auto copy(SRC, TARGET)(auto ref SRC src, auto ref TARGET target)
+	if (isView!SRC && isWritableView!TARGET)
 {
 	target.size(src.w, src.h);
 	src.blitTo(target);
 	return target;
+}
+
+/// Copy the given view into a newly-allocated image.
+auto copy(SRC)(auto ref SRC src)
+	if (isView!SRC)
+{
+	ViewImage!SRC target;
+	return src.copy(target);
 }
 
 unittest
@@ -125,13 +136,16 @@ unittest
 	auto v = onePixel(0);
 	auto i = v.copy();
 	v.copy(i);
+
+	auto c = i.crop(0, 0, 1, 1);
+	v.copy(c);
 }
 
 alias ElementViewImage(R) = ViewImage!(ElementType!R);
 
 /// Splice multiple images horizontally.
-auto hjoin(R, TARGET = ElementViewImage!R)(R images, ref TARGET target = *new ElementViewImage!R)
-	if (isView!(ElementType!R))
+auto hjoin(R, TARGET)(R images, auto ref TARGET target)
+	if (isView!(ElementType!R) && isWritableView!TARGET)
 {
 	int w, h;
 	foreach (ref image; images)
@@ -144,10 +158,17 @@ auto hjoin(R, TARGET = ElementViewImage!R)(R images, ref TARGET target = *new El
 		x += image.w;
 	return target;
 }
+/// ditto
+auto hjoin(R)(R images)
+	if (isView!(ElementType!R))
+{
+	ElementViewImage!R target;
+	return images.hjoin(target);
+}
 
 /// Splice multiple images vertically.
-auto vjoin(R, TARGET = ElementViewImage!R)(R images, ref TARGET target = *new ElementViewImage!R)
-	if (isView!(ElementType!R))
+auto vjoin(R, TARGET)(R images, auto ref TARGET target)
+	if (isView!(ElementType!R) && isWritableView!TARGET)
 {
 	int w, h;
 	foreach (ref image; images)
@@ -159,6 +180,13 @@ auto vjoin(R, TARGET = ElementViewImage!R)(R images, ref TARGET target = *new El
 		image.blitTo(target, 0, y),
 		y += image.h;
 	return target;
+}
+/// ditto
+auto vjoin(R)(R images)
+	if (isView!(ElementType!R))
+{
+	ElementViewImage!R target;
+	return images.vjoin(target);
 }
 
 unittest
@@ -183,9 +211,8 @@ unittest
 /// Performs linear downscale by a constant factor
 template downscale(int HRX, int HRY=HRX)
 {
-	auto downscale(SRC, TARGET = ViewImage!SRC)(auto ref SRC src,
-			ref TARGET target = *new ViewImage!SRC)
-		if (isDirectView!SRC)
+	auto downscale(SRC, TARGET)(auto ref SRC src, auto ref TARGET target)
+		if (isDirectView!SRC && isWritableView!TARGET)
 	{
 		alias lr = target;
 		alias hr = src;
@@ -248,6 +275,13 @@ template downscale(int HRX, int HRY=HRX)
 			}
 
 		return target;
+	}
+
+	auto downscale(SRC)(auto ref SRC src)
+		if (isView!SRC)
+	{
+		ViewImage!SRC target;
+		return src.downscale(target);
 	}
 }
 
@@ -318,7 +352,8 @@ private template PBMSignature(COLOR)
 }
 
 /// Parses a binary Netpbm monochrome (.pgm) or RGB (.ppm) file.
-auto parsePBM(COLOR, TARGET = Image!COLOR)(const(void)[] vdata, ref TARGET target = *new Image!COLOR)
+auto parsePBM(COLOR = ViewColor!TARGET, TARGET)(const(void)[] vdata, auto ref TARGET target)
+	if (isWritableView!TARGET)
 {
 	auto data = cast(const(ubyte)[])vdata;
 	string[] fields = readPBMHeader(data);
@@ -335,6 +370,12 @@ auto parsePBM(COLOR, TARGET = Image!COLOR)(const(void)[] vdata, ref TARGET targe
 			pixel = COLOR.op!q{swapBytes(a)}(pixel); // TODO: proper endianness support
 
 	return target;
+}
+/// ditto
+auto parsePBM(COLOR)(const(void)[] vdata)
+{
+	Image!COLOR target;
+	return vdata.parsePBM(target);
 }
 
 unittest
@@ -387,9 +428,11 @@ unittest
 // ***************************************************************************
 
 /// Loads a raw COLOR[] into an image of the indicated size.
-auto fromPixels(COLOR)(COLOR[] pixels, uint w, uint h,
-	ref Image!COLOR target = *new Image!COLOR)
+auto fromPixels(COLOR = INPUT, INPUT, TARGET)(INPUT[] input, uint w, uint h,
+		auto ref TARGET target)
+	if (isWritableView!TARGET)
 {
+	auto pixels = cast(COLOR[])input;
 	enforce(pixels.length == w*h, "Dimension / filesize mismatch");
 	target.size(w, h);
 	target.pixels[] = pixels;
@@ -397,10 +440,10 @@ auto fromPixels(COLOR)(COLOR[] pixels, uint w, uint h,
 }
 
 /// ditto
-auto fromPixels(COLOR)(const(void)[] pixels, uint w, uint h,
-	ref Image!COLOR target = *new Image!COLOR)
+auto fromPixels(COLOR = INPUT, INPUT)(INPUT[] input, uint w, uint h)
 {
-	return fromPixels(cast(COLOR[])pixels, w, h, target);
+	Image!COLOR target;
+	return fromPixels!COLOR(input, w, h, target);
 }
 
 unittest
@@ -488,7 +531,8 @@ template bitmapBitCount(COLOR)
 }
 
 /// Parses a Windows bitmap (.bmp) file.
-auto parseBMP(COLOR, TARGET = Image!COLOR)(const(void)[] data, ref TARGET target = *new Image!COLOR)
+auto parseBMP(COLOR = ViewColor!TARGET, TARGET)(const(void)[] data, auto ref TARGET target)
+	if (isWritableView!TARGET)
 {
 	alias BitmapHeader!3 Header;
 	enforce(data.length > Header.sizeof);
@@ -527,10 +571,17 @@ auto parseBMP(COLOR, TARGET = Image!COLOR)(const(void)[] data, ref TARGET target
 
 	return target;
 }
+/// ditto
+auto parseBMP(COLOR)(const(void)[] data)
+{
+	Image!COLOR target;
+	return data.parseBMP(target);
+}
 
 unittest
 {
-	alias parseBMP!BGR parseBMP24;
+	// http://d.puremagic.com/issues/show_bug.cgi?id=12426
+	//alias parseBMP!BGR parseBMP24;
 }
 
 /// Creates a Windows bitmap (.bmp) file.
@@ -595,7 +646,8 @@ ubyte[] toBMP(SRC)(auto ref SRC src)
 
 unittest
 {
-	onePixel(BGR(1,2,3)).toBMP();
+	Image!BGR output;
+	onePixel(BGR(1,2,3)).toBMP().parseBMP!BGR(output);
 }
 
 // ***************************************************************************
