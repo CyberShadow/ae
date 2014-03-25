@@ -242,7 +242,7 @@ void httpGet(string url, void delegate(string) resultHandler, void delegate(stri
 	httpGet(url,
 		(Data data)
 		{
-			auto result = (cast(string)data.contents).idup;
+			auto result = (cast(char[])data.contents).idup;
 			std.utf.validate(result);
 			resultHandler(result);
 		},
@@ -260,7 +260,7 @@ void httpPost(string url, string[string] vars, void delegate(string) resultHandl
 	httpRequest(request,
 		(Data data)
 		{
-			auto result = (cast(string)data.contents).idup;
+			auto result = (cast(char[])data.contents).idup;
 			std.utf.validate(result);
 			resultHandler(result);
 		},
