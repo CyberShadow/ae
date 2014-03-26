@@ -585,9 +585,18 @@ protected:
 		foreach (priority, ref queue; outQueue)
 			while (queue.length)
 			{
-				auto data = queue.ptr; // pointer to first data
-				auto sent = conn.send(data.contents);
-				debug (ASOCKETS) writefln("\t\t%s: sent %d/%d bytes", cast(void*)this, sent, data.length);
+				auto pdata = queue.ptr; // pointer to first data
+
+				ptrdiff_t sent = 0;
+				if (pdata.length)
+				{
+					sent = conn.send(pdata.contents);
+					debug (ASOCKETS) writefln("\t\t%s: sent %d/%d bytes", cast(void*)this, sent, pdata.length);
+				}
+				else
+				{
+					debug (ASOCKETS) writefln("\t\t%s: empty Data object", cast(void*)this);
+				}
 
 				if (sent == Socket.ERROR)
 				{
@@ -597,20 +606,20 @@ protected:
 						return onError("send() error: " ~ lastSocketError);
 				}
 				else
-				if (sent == 0)
-					return;
-				else
-				if (sent < data.length)
+				if (sent < pdata.length)
 				{
-					*data = (*data)[sent..data.length];
-					partiallySent[priority] = true;
+					if (sent > 0)
+					{
+						*pdata = (*pdata)[sent..pdata.length];
+						partiallySent[priority] = true;
+					}
 					return;
 				}
 				else
 				{
-					assert(sent == data.length);
+					assert(sent == pdata.length);
 					//debug writefln("[%s] Sent data:", remoteAddress);
-					//debug writefln("%s", hexDump(data.contents[0..sent]));
+					//debug writefln("%s", hexDump(pdata.contents[0..sent]));
 					queue = queue[1..$];
 					partiallySent[priority] = false;
 					if (queue.length == 0)
@@ -761,7 +770,10 @@ public:
 		{
 			std.stdio.writefln("== %s -> %s ==", localAddress, remoteAddress);
 			foreach (datum; data)
-				std.stdio.write(hexDump(datum.contents));
+				if (datum.length)
+					std.stdio.write(hexDump(datum.contents));
+				else
+					std.stdio.writeln("(empty Data)");
 			std.stdio.stdout.flush();
 		}
 	}
