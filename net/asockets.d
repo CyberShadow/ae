@@ -1002,6 +1002,7 @@ public:
 
 		this.port = port;
 		this.addr = addr;
+		listening = true;
 
 		updateFlags();
 
@@ -1014,6 +1015,11 @@ public:
 		foreach (listener; listeners)
 			result ~= listener.localAddress;
 		return result;
+	}
+
+	@property bool isListening()
+	{
+		return listening;
 	}
 
 	/// Stop listening on this socket.
