@@ -15,17 +15,19 @@
 
 module ae.net.http.server;
 
-import std.string;
 import std.conv;
 import std.datetime;
-import std.uri;
 import std.exception;
+import std.range;
+import std.string;
+import std.uri;
 
 import ae.net.asockets;
-import ae.net.ietf.headers;
 import ae.net.ietf.headerparse;
+import ae.net.ietf.headers;
 import ae.sys.data;
 import ae.sys.log;
+import ae.utils.container;
 import ae.utils.text;
 import ae.utils.textout;
 
@@ -77,11 +79,22 @@ public:
 
 	void close()
 	{
+		debug(HTTP) writeln("Shutting down");
 		if (log) log("Shutting down.");
 		conn.close();
+
+		debug(HTTP) writefln("There still are %d active connections", connections.iterator.walkLength);
+
+		// Close idle connections
+		foreach (connection; connections.iterator.array)
+			if (connection.idle)
+				connection.conn.disconnect("HTTP server shutting down");
 	}
 
 public:
+	/// Single-ended doubly-linked list of active connections
+	SEDListContainer!HttpServerConnection connections;
+
 	/// Callback for when the socket was closed.
 	void delegate() handleClose;
 	/// Callback for an incoming request.
@@ -97,6 +110,8 @@ public:
 	Address localAddress, remoteAddress;
 	bool persistent;
 
+	mixin DListLink;
+
 private:
 	Data[] inBuffer;
 	sizediff_t expect;
@@ -107,10 +122,11 @@ private:
 		this.server = server;
 		this.conn = conn;
 		conn.handleReadData = &onNewRequest;
+		conn.handleDisconnect = &onDisconnect;
 		conn.setIdleTimeout(server.timeout);
 		localAddress = conn.localAddress;
 		remoteAddress = conn.remoteAddress;
-		debug (HTTP) conn.handleDisconnect = &onDisconnect;
+		server.connections.pushFront(this);
 	}
 
 	void onNewRequest(ClientSocket sender, Data data)
@@ -166,10 +182,10 @@ private:
 		}
 	}
 
-	debug (HTTP)
 	void onDisconnect(ClientSocket sender, string reason, DisconnectType type)
 	{
-		writefln("[%s] Disconnect: %s", Clock.currTime(), reason);
+		debug (HTTP) writefln("[%s] Disconnect: %s", Clock.currTime(), reason);
+		server.connections.remove(this);
 	}
 
 	void onContinuation(ClientSocket sender, Data data)
@@ -217,6 +233,16 @@ private:
 			request.headers.get("Referer", "-"),
 			request.headers.get("User-Agent", "-"),
 		])).join("\t"));
+	}
+
+	@property bool idle()
+	{
+		if (requestProcessing)
+			return false;
+		foreach (datum; inBuffer)
+			if (datum.length)
+				return false;
+		return true;
 	}
 
 public:
