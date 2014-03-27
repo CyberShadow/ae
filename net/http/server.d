@@ -286,12 +286,17 @@ public:
 		if (persistent && server.conn.isListening)
 		{
 			// reset for next request
+			debug (HTTP) writefln("  Waiting for next request.");
 			conn.handleReadData = &onNewRequest;
 			if (inBuffer.length) // a second request has been pipelined
 				onNewRequest(conn, Data());
 		}
 		else
-			conn.disconnect();
+		{
+			string reason = persistent ? "Server has been shut down" : "Non-persistent connection";
+			debug (HTTP) writefln("  Closing connection (%s).", reason);
+			conn.disconnect(reason);
+		}
 
 		logRequest(currentRequest, response);
 	}
