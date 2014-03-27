@@ -729,7 +729,7 @@ public:
 			{
 				assert(conn, "Attempting to disconnect on an uninitialized socket");
 				// queue disconnect after all data is sent
-				//debug writefln("[%s] Queueing disconnect: ", remoteAddress, reason);
+				debug (ASOCKETS) writefln("[%s] Queueing disconnect: %s", remoteAddress, reason);
 				assert(!disconnecting, "Attempting to disconnect on a disconnecting socket");
 				disconnecting = true;
 				setIdleTimeout(30.seconds);
@@ -739,7 +739,7 @@ public:
 				discardQueues();
 		}
 
-		//debug writefln("[%s] Disconnecting: %s", remoteAddress, reason);
+		debug (ASOCKETS) writefln("[%s] Disconnecting: %s", remoteAddress, reason);
 		if (conn)
 		{
 			socketManager.unregister(this);
