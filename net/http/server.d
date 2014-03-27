@@ -283,7 +283,7 @@ public:
 		debug (HTTP) writefln("[%s] Sent response (%d bytes headers, %d bytes data)",
 			Clock.currTime(), respMessage.length, response ? response.data.bytes.length : 0);
 
-		if (persistent)
+		if (persistent && server.conn.isListening)
 		{
 			// reset for next request
 			conn.handleReadData = &onNewRequest;
