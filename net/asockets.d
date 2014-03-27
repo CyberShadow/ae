@@ -529,7 +529,15 @@ protected:
 			return disconnect("Connection closed", DisconnectType.Graceful);
 
 		if (received == Socket.ERROR)
-			onError("recv() error: " ~ lastSocketError);
+		{
+			if (wouldHaveBlocked)
+			{
+				debug (ASOCKETS) writefln("\t\t%s: wouldHaveBlocked or recv()", cast(void*)this);
+				return;
+			}
+			else
+				onError("recv() error: " ~ lastSocketError);
+		}
 		else
 		{
 			debug (PRINTDATA)
