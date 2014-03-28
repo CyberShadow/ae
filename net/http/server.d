@@ -203,6 +203,7 @@ private:
 	void processRequest(Data[] data)
 	{
 		currentRequest.data = data;
+		conn.cancelIdleTimeout();
 		if (server.handleRequest)
 		{
 			// Log unhandled exceptions, but don't mess up the stack trace
@@ -288,6 +289,7 @@ public:
 			// reset for next request
 			debug (HTTP) writefln("  Waiting for next request.");
 			conn.handleReadData = &onNewRequest;
+			conn.resumeIdleTimeout();
 			if (inBuffer.length) // a second request has been pipelined
 				onNewRequest(conn, Data());
 		}
