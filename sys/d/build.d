@@ -13,6 +13,7 @@
 
 module ae.sys.d.build;
 
+import std.array;
 import std.datetime;
 import std.exception;
 import std.file;
@@ -34,6 +35,7 @@ class DBuilder
 
 	string repoDir;
 	string buildDir;
+	string dmcDir;
 
 	string[string] dEnv;
 
@@ -135,6 +137,7 @@ LIB=%LIB%;"%WindowsSdkDir%\Lib\winv6.3\um\x64"
 LIB=%LIB%;"%WindowsSdkDir%\Lib\win8\um\x64"
 LIB=%LIB%;"%WindowsSdkDir%\Lib\x64"
 EOS";
+			ini = ini.replace("%DMC%", buildPath(dmcDir, `bin`).absolutePath());
 			buildPath(buildDir, "bin", "sc.ini").write(ini);
 		}
 		else
