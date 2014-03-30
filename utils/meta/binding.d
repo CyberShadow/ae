@@ -69,7 +69,7 @@ struct BoundFunctorOf(R, alias f)
 	auto bind(R)(R r) { return this; }
 }
 
-static if (haveAliasCtxInference)
+static if (haveAliasCtxInference && haveMethodAliasBinding)
 unittest
 {
 	static struct Test
