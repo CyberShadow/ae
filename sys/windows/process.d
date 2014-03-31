@@ -1,5 +1,5 @@
 /**
- * Various wrapper and utility code for the Windows API.
+ * Windows process utility code.
  *
  * License:
  *   This Source Code Form is subject to the terms of
@@ -11,233 +11,17 @@
  *   Vladimir Panteleev <vladimir@thecybershadow.net>
  */
 
-module ae.sys.windows;
+module ae.sys.windows.process;
 
 import std.exception;
-import std.string;
 import std.typecons;
-import std.utf;
 
-import win32.windows;
+import win32.w32api;
+import win32.winbase;
+import win32.windef;
+import win32.winuser;
 
-string fromWString(in wchar[] buf)
-{
-	foreach (i, c; buf)
-		if (!c)
-			return toUTF8(buf[0..i]);
-	return toUTF8(buf);
-}
-
-string fromWString(in wchar* buf)
-{
-	const(wchar)* p = buf;
-	for (; *p; p++) {}
-	return toUTF8(buf[0..p-buf]);
-}
-
-LPCWSTR toWStringz(string s)
-{
-	return s is null ? null : toUTF16z(s);
-}
-
-LARGE_INTEGER largeInteger(long n)
-{
-	LARGE_INTEGER li; li.QuadPart = n; return li;
-}
-
-ULARGE_INTEGER ulargeInteger(ulong n)
-{
-	ULARGE_INTEGER li; li.QuadPart = n; return li;
-}
-
-ulong makeUlong(DWORD dwLow, DWORD dwHigh)
-{
-	ULARGE_INTEGER li;
-	li.LowPart  = dwLow;
-	li.HighPart = dwHigh;
-	return li.QuadPart;
-}
-
-// --------------------------------------------------------------------------
-
-class WindowsException : Exception
-{
-	DWORD code;
-
-	this(DWORD code, string str=null)
-	{
-		this.code = code;
-
-		wchar *lpMsgBuf = null;
-		FormatMessageW(
-			FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-			null,
-			code,
-			MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-			cast(LPWSTR)&lpMsgBuf,
-			0,
-			null);
-
-		auto message = lpMsgBuf.fromWString();
-		if (lpMsgBuf)
-			LocalFree(lpMsgBuf);
-
-		message = strip(message);
-		message ~= format(" (error %d)", code);
-		if (str)
-			message = str ~ ": " ~ message;
-
-		super(message);
-	}
-}
-
-T wenforce(T)(T cond, string str=null)
-{
-	if (cond)
-		return cond;
-
-	throw new WindowsException(GetLastError(), str);
-}
-
-void sendCopyData(HWND hWnd, DWORD n, in void[] buf)
-{
-	COPYDATASTRUCT cds;
-	cds.dwData = n;
-	cds.cbData = cast(uint)buf.length;
-	cds.lpData = cast(PVOID)buf.ptr;
-	SendMessage(hWnd, WM_COPYDATA, 0, cast(LPARAM)&cds);
-}
-
-enum MAPVK_VK_TO_VSC = 0;
-
-void keyDown(ubyte c) { keybd_event(c, cast(ubyte)MapVirtualKey(c, MAPVK_VK_TO_VSC), 0              , 0); }
-void keyUp  (ubyte c) { keybd_event(c, cast(ubyte)MapVirtualKey(c, MAPVK_VK_TO_VSC), KEYEVENTF_KEYUP, 0); }
-
-void press(ubyte c, uint delay=0)
-{
-	if (c) keyDown(c);
-	Sleep(delay);
-	if (c) keyUp(c);
-	Sleep(delay);
-}
-
-void keyDownOn(HWND h, ubyte c) { PostMessage(h, WM_KEYDOWN, c, MapVirtualKey(c, MAPVK_VK_TO_VSC) << 16); }
-void keyUpOn  (HWND h, ubyte c) { PostMessage(h, WM_KEYUP  , c, MapVirtualKey(c, MAPVK_VK_TO_VSC) << 16); }
-
-void pressOn(HWND h, ubyte c, uint delay=0)
-{
-	if (c) keyDownOn(h, c);
-	Sleep(delay);
-	if (c) keyUpOn(h, c);
-	Sleep(delay);
-}
-
-// Messages
-
-void processWindowsMessages()
-{
-	MSG m;
-	while (PeekMessageW(&m, null, 0, 0, PM_REMOVE))
-	{
-		TranslateMessage(&m);
-		DispatchMessageW(&m);
-	}
-}
-
-void messageLoop()
-{
-	MSG m;
-	while (GetMessageW(&m, null, 0, 0))
-	{
-		TranslateMessage(&m);
-		DispatchMessageW(&m);
-	}
-}
-
-// Windows
-
-import std.range;
-
-struct WindowIterator
-{
-private:
-	LPCWSTR szClassName, szWindowName;
-	HWND hParent, h;
-
-public:
-	@property
-	bool empty() const { return h is null; }
-
-	@property
-	HWND front() const { return cast(HWND)h; }
-
-	void popFront()
-	{
-		h = FindWindowExW(hParent, h, szClassName, szWindowName);
-	}
-}
-
-WindowIterator windowIterator(string szClassName, string szWindowName, HWND hParent=null)
-{
-	auto iterator = WindowIterator(toWStringz(szClassName), toWStringz(szWindowName), hParent);
-	iterator.popFront(); // initiate search
-	return iterator;
-}
-
-private static wchar[0xFFFF] textBuf;
-
-string windowStringQuery(alias FUNC)(HWND h)
-{
-	SetLastError(0);
-	auto result = FUNC(h, textBuf.ptr, textBuf.length);
-	if (result)
-		return textBuf[0..result].toUTF8();
-	else
-	{
-		auto code = GetLastError();
-		if (code)
-			throw new WindowsException(code, __traits(identifier, FUNC));
-		else
-			return null;
-	}
-}
-
-alias windowStringQuery!GetClassNameW  getClassName;
-alias windowStringQuery!GetWindowTextW getWindowText;
-
-/// Create an utility hidden window.
-HWND createHiddenWindow(string name, WNDPROC proc)
-{
-	auto szName = toWStringz(name);
-
-	HINSTANCE hInstance = GetModuleHandle(null);
-
-	WNDCLASSEXW wcx;
-
-	wcx.cbSize = wcx.sizeof;
-	wcx.lpfnWndProc = proc;
-	wcx.hInstance = hInstance;
-	wcx.lpszClassName = szName;
-	wenforce(RegisterClassExW(&wcx), "RegisterClassEx failed");
-
-	HWND hWnd = CreateWindowW(
-		szName,              // name of window class
-		szName,              // title-bar string
-		WS_OVERLAPPEDWINDOW, // top-level window
-		CW_USEDEFAULT,       // default horizontal position
-		CW_USEDEFAULT,       // default vertical position
-		CW_USEDEFAULT,       // default width
-		CW_USEDEFAULT,       // default height
-		null,                // no owner window
-		null,                // use class menu
-		hInstance,           // handle to application instance
-		null);               // no window-creation data
-	wenforce(hWnd, "CreateWindow failed");
-
-	return hWnd;
-}
-
-// Processes
+import ae.sys.windows.misc;
 
 static if (_WIN32_WINNT >= 0x500) {
 
@@ -446,55 +230,9 @@ struct ProcessWatcher
 	}
 }
 
-// --------------------------------------------------------------------------
-
 } // _WIN32_WINNT >= 0x500
 
-int messageBox(string message, string title, int style=0)
-{
-	return MessageBoxW(null, toWStringz(message), toWStringz(title), style);
-}
-
-uint getLastInputInfo()
-{
-	LASTINPUTINFO lii = { LASTINPUTINFO.sizeof };
-	wenforce(GetLastInputInfo(&lii), "GetLastInputInfo");
-	return lii.dwTime;
-}
-
-// ---------------------------------------
-
-import std.traits;
-
-/// Given a static function declaration, generate a loader with the same name in the current scope
-/// that loads the function dynamically from the given DLL.
-mixin template DynamicLoad(alias F, string DLL, string NAME=__traits(identifier, F))
-{
-	static ReturnType!F loader(ARGS...)(ARGS args)
-	{
-		import win32.windef;
-
-		alias typeof(&F) FP;
-		static FP fp = null;
-		if (!fp)
-		{
-			HMODULE dll = wenforce(LoadLibrary(DLL), "LoadLibrary");
-			fp = cast(FP)wenforce(GetProcAddress(dll, NAME), "GetProcAddress");
-		}
-		return fp(args);
-	}
-
-	mixin(`alias loader!(ParameterTypeTuple!F) ` ~ NAME ~ `;`);
-}
-
-///
-unittest
-{
-	mixin DynamicLoad!(GetVersion, "kernel32.dll");
-	GetVersion(); // called via GetProcAddress
-}
-
-// ---------------------------------------
+// ***************************************************************************
 
 alias ubyte* RemoteAddress;
 
