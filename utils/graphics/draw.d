@@ -115,10 +115,10 @@ deprecated alias clear = fill;
 unittest
 {
 	auto i = onePixel(0).copy();
-	i.clear(1);
+	i.fill(1);
 	assert(i[0, 0] == 1);
 	auto t = i.tile(10, 10);
-	t.clear(2);
+	t.fill(2);
 	assert(i[0, 0] == 2);
 }
 
