@@ -87,7 +87,7 @@ public:
 
 		// Close idle connections
 		foreach (connection; connections.iterator.array)
-			if (connection.idle)
+			if (connection.idle && connection.conn.isConnected)
 				connection.conn.disconnect("HTTP server shutting down");
 	}
 
@@ -116,6 +116,7 @@ private:
 	Data[] inBuffer;
 	sizediff_t expect;
 	bool requestProcessing; // user code is asynchronously processing current request
+	bool timeoutActive;
 
 	this(HttpServer server, ClientSocket conn)
 	{
@@ -124,6 +125,7 @@ private:
 		conn.handleReadData = &onNewRequest;
 		conn.handleDisconnect = &onDisconnect;
 		conn.setIdleTimeout(server.timeout);
+		timeoutActive = true;
 		localAddress = conn.localAddress;
 		remoteAddress = conn.remoteAddress;
 		server.connections.pushFront(this);
@@ -203,6 +205,7 @@ private:
 	void processRequest(Data[] data)
 	{
 		currentRequest.data = data;
+		timeoutActive = false;
 		conn.cancelIdleTimeout();
 		if (server.handleRequest)
 		{
@@ -289,7 +292,11 @@ public:
 			// reset for next request
 			debug (HTTP) writefln("  Waiting for next request.");
 			conn.handleReadData = &onNewRequest;
-			conn.resumeIdleTimeout();
+			if (!timeoutActive)
+			{
+				conn.resumeIdleTimeout();
+				timeoutActive = true;
+			}
 			if (inBuffer.length) // a second request has been pipelined
 				onNewRequest(conn, Data());
 		}
