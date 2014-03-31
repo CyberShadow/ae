@@ -74,6 +74,33 @@ struct Color(FieldTuple...)
 		return r;
 	}
 
+	/// Alpha-blend two colors.
+	static typeof(this) blend()(typeof(this) c0, typeof(this) c1)
+		if (is(typeof(a)))
+	{
+		alias A = typeof(c0.a);
+		A a = ~cast(A)(~c0.a * ~c1.a / A.max);
+		if (!a)
+			return typeof(this).init;
+		A x = cast(A)(c1.a * A.max / a);
+
+		typeof(this) r;
+		foreach (i, f; r.tupleof)
+			static if (r.tupleof[i].stringof == "r.x")
+				{} // skip padding
+			else
+			static if (r.tupleof[i].stringof == "r.a")
+				r.a = a;
+			else
+			{
+				auto v0 = c0.tupleof[i];
+				auto v1 = c1.tupleof[i];
+				auto vr = .blend(v1, v0, x);
+				r.tupleof[i] = vr;
+			}
+		return r;
+	}
+
 	/// Construct an RGB color from a typical hex string.
 	static if (is(typeof(this.r) == ubyte) && is(typeof(this.g) == ubyte) && is(typeof(this.b) == ubyte))
 	static typeof(this) fromHex(in char[] s)
@@ -214,6 +241,25 @@ unittest
 	assert(c == RGB(4, 4, 4));
 }
 
+unittest
+{
+	import std.conv;
+
+	LA r;
+
+	r = LA.blend(LA(123,   0),
+	             LA(111, 222));
+	assert(r ==  LA(111, 222), text(r));
+
+	r = LA.blend(LA(123, 213),
+	             LA(111, 255));
+	assert(r ==  LA(111, 255), text(r));
+
+	r = LA.blend(LA(  0, 255),
+	             LA(255, 100));
+	assert(r ==  LA(100, 255), text(r));
+}
+
 /// Obtains the type of each channel for homogenous colors.
 template ChannelType(T)
 {
@@ -250,4 +296,4 @@ static assert(is(ExpandChannelType!(RGB, 1) == RGB16));
 // ***************************************************************************
 
 // TODO: deprecate
-T blend(T)(T f, T b, T a) { return cast(T) ( ((f*a) + (b*~a)) / T.max ); }
+T blend(T)(T f, T b, T a) if (is(typeof(f*a+~b))) { return cast(T) ( ((f*a) + (b*~a)) / T.max ); }

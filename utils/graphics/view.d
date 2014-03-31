@@ -14,6 +14,7 @@
 module ae.utils.graphics.view;
 
 import std.functional;
+import std.typetuple;
 
 /// A view is any type which provides a width, height,
 /// and can be indexed to get the color at a specific
@@ -519,6 +520,48 @@ unittest
 	assert(b[5, 5] == 0);
 	assert(b[14, 14] == 99);
 	assert(b[14, 15] == 42);
+}
+
+// ***************************************************************************
+
+/// Alpha-blend a number of views.
+/// The order is bottom-to-top.
+auto blend(SRCS...)(SRCS sources)
+	if (allSatisfy!(isView, SRCS)
+	 && sources.length > 0)
+{
+	alias COLOR = ViewColor!(SRCS[0]);
+
+	foreach (src; sources)
+		assert(src.w == sources[0].w && src.h == sources[0].h,
+			"Mismatching layer size");
+
+	static struct Blend
+	{
+		SRCS sources;
+
+		@property int w() { return sources[0].w; }
+		@property int h() { return sources[0].h; }
+
+		COLOR opIndex(int x, int y)
+		{
+			COLOR c = sources[0][x, y];
+			foreach (ref src; sources[1..$])
+				c = COLOR.blend(c, src[x, y]);
+			return c;
+		}
+	}
+
+	return Blend(sources);
+}
+
+unittest
+{
+	import ae.utils.graphics.color : LA;
+	auto v0 = onePixel(LA(  0, 255));
+	auto v1 = onePixel(LA(255, 100));
+	auto vb = blend(v0, v1);
+	assert(vb[0, 0] == LA(100, 255));
 }
 
 // ***************************************************************************
