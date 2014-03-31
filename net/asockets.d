@@ -871,7 +871,7 @@ public:
 
 	final bool isConnected()
 	{
-		return connected;
+		return connected && !disconnecting;
 	}
 
 public:
