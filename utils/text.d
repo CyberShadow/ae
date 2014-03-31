@@ -13,6 +13,7 @@
 
 module ae.utils.text;
 
+import std.algorithm;
 import std.ascii;
 import std.exception;
 import std.conv;
@@ -386,6 +387,39 @@ string forceValidUTF8(string s)
 	}
 	catch (UTFException)
 		return rawToUTF8(s);
+}
+
+// ************************************************************************
+
+/// Return the slice up to the first NUL character,
+/// or of the whole array if none is found.
+C[] fromZArray(C, n)(ref C[n] arr)
+{
+	auto p = arr.representation.countUntil(0);
+	return arr[0 .. p<0 ? $ : p];
+}
+
+/// ditto
+C[] fromZArray(C)(C[] arr)
+{
+	auto p = arr.representation.countUntil(0);
+	return arr[0 .. p<0 ? $ : p];
+}
+
+unittest
+{
+	char[4] arr = "ab\0d";
+	assert(arr.fromZArray == "ab");
+	arr[] = "abcd";
+	assert(arr.fromZArray == "abcd");
+}
+
+unittest
+{
+	string arr = "ab\0d";
+	assert(arr.fromZArray == "ab");
+	arr = "abcd";
+	assert(arr.fromZArray == "abcd");
 }
 
 // ************************************************************************
