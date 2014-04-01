@@ -733,7 +733,8 @@ import ae.utils.meta;
 auto safeUpdate(alias impl, string targetName = "target")(staticMap!(Unqual, ParameterTypeTuple!impl) args)
 {
 	enum targetIndex = findParameter!(impl, targetName);
-	auto target = args[targetIndex];
+	// idup for https://d.puremagic.com/issues/show_bug.cgi?id=12503
+	auto target = args[targetIndex].idup;
 	auto temp = "%s.%s.temp".format(target, thisProcessID);
 	if (temp.exists) temp.removeRecurse();
 	scope(failure) if (temp.exists) temp.removeRecurse();
