@@ -17,6 +17,7 @@ import std.string;
 import std.utf;
 
 import win32.winbase;
+import win32.wincon;
 import win32.winnt;
 import win32.winuser;
 
@@ -135,4 +136,18 @@ uint getLastInputInfo()
 	LASTINPUTINFO lii = { LASTINPUTINFO.sizeof };
 	wenforce(GetLastInputInfo(&lii), "GetLastInputInfo");
 	return lii.dwTime;
+}
+
+// ***************************************************************************
+
+/// Hides the console window, but only if we are the owner.
+void hideOwnConsoleWindow()
+{
+	HWND w = GetConsoleWindow();
+	if (!w)
+		return;
+	DWORD pid;
+	GetWindowThreadProcessId(w, &pid);
+	if (pid == GetCurrentProcessId())
+		ShowWindow(w, SW_HIDE);
 }
