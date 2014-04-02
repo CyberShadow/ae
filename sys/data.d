@@ -493,6 +493,10 @@ final class DataWrapper
 		return data[0..size];
 	}
 
+	// https://github.com/D-Programming-Language/druntime/pull/759
+	version(OSX)
+		enum _SC_PAGE_SIZE = 29;
+
 	version(Windows)
 	{
 		static immutable size_t pageSize;
@@ -527,13 +531,9 @@ final class DataWrapper
 		else
 		version(Posix)
 		{
-			auto mapFlags = MAP_PRIVATE;
 			version(linux)
-			{
-				import core.sys.linux.sys.mman;
-				mapFlags |= MAP_ANON;
-			}
-			auto p = mmap(null, size, PROT_READ | PROT_WRITE, mapFlags, -1, 0);
+				import core.sys.linux.sys.mman : MAP_ANON;
+			auto p = mmap(null, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
 			return (p == MAP_FAILED) ? null : p;
 		}
 		else

@@ -458,7 +458,12 @@ public:
 	{
 		assert(conn, "Attempting to set keep-alive on an uninitialized socket");
 		if (enabled)
-			conn.setKeepAlive(time, interval);
+		{
+			try
+				conn.setKeepAlive(time, interval);
+			catch (SocketFeatureException)
+				conn.setOption(SocketOptionLevel.SOCKET, SocketOption.KEEPALIVE, true);
+		}
 		else
 			conn.setOption(SocketOptionLevel.SOCKET, SocketOption.KEEPALIVE, false);
 	}

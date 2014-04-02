@@ -19,6 +19,14 @@ public import core.sys.posix.signal;
 
 alias void delegate() nothrow @system SignalHandler;
 
+// https://github.com/D-Programming-Language/druntime/pull/759
+version(OSX) private
+{
+	enum SIG_BLOCK   = 1;
+	enum SIG_UNBLOCK = 2;
+	enum SIG_SETMASK = 3;
+}
+
 void addSignalHandler(int signum, SignalHandler fn)
 {
 	if (handlers[signum].length == 0)
@@ -61,8 +69,24 @@ bool collectSignal(int signum, void delegate() code)
 
 		scope(exit)
 		{
-			timespec zerotime;
-			result = sigtimedwait(&mask, null, &zerotime) == 0;
+			static if (is(typeof(&sigpending)))
+			{
+				errnoEnforce(sigpending(&mask) == 0);
+				auto m = sigismember(&mask, signum);
+				errnoEnforce(m >= 0);
+				result = m == 0;
+				if (result)
+				{
+					int s;
+					errnoEnforce(sigwait(&mask, &s) == 0);
+					assert(s == signum);
+				}
+			}
+			else
+			{
+				timespec zerotime;
+				result = sigtimedwait(&mask, null, &zerotime) == 0;
+			}
 		}
 
 		code();
