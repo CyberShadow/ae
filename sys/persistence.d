@@ -329,6 +329,9 @@ unittest
 
 // ****************************************************************************
 
+// http://d.puremagic.com/issues/show_bug.cgi?id=7016
+static import ae.sys.file;
+
 /// A string hashset, stored one line per entry.
 struct PersistentStringSet
 {
