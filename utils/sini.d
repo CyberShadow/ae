@@ -177,8 +177,8 @@ IniTraversingHandler!S makeIniHandler(S = string, U)(ref U v)
 					enum fieldName = to!S(v.tupleof[i].stringof[2..$]);
 					if (name == fieldName)
 					{
-						static if (is(typeof(makeIniHandler(v.tupleof[i]))))
-							return makeIniHandler(v.tupleof[i]);
+						static if (is(typeof(makeIniHandler!S(v.tupleof[i]))))
+							return makeIniHandler!S(v.tupleof[i]);
 						else
 							throw new Exception("Can't parse " ~ U.stringof ~ "." ~ cast(string)name ~ " of type " ~ typeof(v.tupleof[i]).stringof);
 					}
@@ -251,7 +251,7 @@ unittest
 			[s]
 			n2=v2
 			a.bar=2
-		>".splitLines()
+		>".dup.splitLines()
 	);
 
 	assert(f.s.n1=="v1");
