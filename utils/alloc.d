@@ -356,6 +356,8 @@ struct DataAllocator
 
 	static template Impl(alias data)
 	{
+		import ae.sys.data : SysData = Data;
+
 		StorageType!T[] allocateMany(T)(size_t n)
 		{
 			mixin AllocTypes;
