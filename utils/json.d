@@ -618,7 +618,7 @@ unittest
  */
 template NonSerialized(fields...)
 {
-	mixin(NonSerializedFields(toArray!fields()));
+	mixin(NonSerializedFields(stringofArray!fields()));
 }
 
 private string NonSerializedFields(string[] fields)

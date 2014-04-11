@@ -163,7 +163,7 @@ unittest
 // ************************************************************************
 
 static // http://d.puremagic.com/issues/show_bug.cgi?id=7805
-string[] toArray(Args...)()
+string[] stringofArray(Args...)()
 {
 	string[] args;
 	foreach (i, _ ; typeof(Args))
