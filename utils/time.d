@@ -738,6 +738,12 @@ unittest
 	assert(t == t1);
 }
 
+unittest
+{
+	"Tue, 21 Nov 2006 21:19:46 +0000".parseTime!(TimeFormats.RFC2822);
+	"Tue, 21 Nov 2006 21:19:46 +0000".parseTimeUsing(TimeFormats.RFC2822);
+}
+
 // ***************************************************************************
 
 @property bool empty(Duration d)
