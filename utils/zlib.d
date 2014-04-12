@@ -138,6 +138,11 @@ struct ZlibProcess(bool COMPRESSING)
 		return process([input], options).joinData();
 	}
 
+	~this()
+	{
+		zenforce(endFunc(&zs));
+	}
+
 private:
 	z_stream zs;
 	Data currentChunk;
@@ -189,11 +194,6 @@ private:
 		currentChunk.length = currentChunk.capacity;
 		zs.next_out  = cast(ubyte*)currentChunk.mptr;
 		zs.avail_out = to!uint(currentChunk.length);
-	}
-
-	~this()
-	{
-		zenforce(endFunc(&zs));
 	}
 }
 
