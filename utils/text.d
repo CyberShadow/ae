@@ -700,6 +700,68 @@ string numberToString(T)(T v)
 
 // ************************************************************************
 
+/// Simpler implementation of Levenshtein string distance
+int stringDistance(string s, string t)
+{
+	int n = cast(int)s.length;
+	int m = cast(int)t.length;
+	if (n == 0) return m;
+	if (m == 0) return n;
+	int[][] distance = new int[][](n+1, m+1); // matrix
+	int cost=0;
+	//init1
+	foreach (i; 0..n+1) distance[i][0]=i;
+	foreach (j; 0..m+1) distance[0][j]=j;
+	//find min distance
+	foreach (i; 1..n+1)
+		foreach (j; 1..m+1)
+		{
+			cost = t[j-1] == s[i-1] ? 0 : 1;
+			distance[i][j] = min(
+				distance[i-1][j  ] + 1,
+				distance[i  ][j-1] + 1,
+				distance[i-1][j-1] + cost
+			);
+		}
+	return distance[n][m];
+}
+
+/// Return a number between 0.0 and 1.0 indicating how similar two strings are
+/// (1.0 if identical)
+float stringSimilarity(string string1, string string2)
+{
+	float dis = stringDistance(string1, string2);
+	float maxLen = string1.length;
+	if (maxLen < string2.length)
+		maxLen = string2.length;
+	if (maxLen == 0)
+		return 1;
+	else
+		return 1f - dis/maxLen;
+}
+
+/// Select best match from a list of items.
+/// Returns null if none are above the threshold.
+string selectBestFrom(in string[] items, string target, float threshold = 0.7)
+{
+	string found = null;
+	float best = 0;
+
+	foreach (item; items)
+	{
+		float match = stringSimilarity(toLower(item),toLower(target));
+		if (match>threshold && match>=best)
+		{
+			best = match;
+			found = item;
+		}
+	}
+
+	return found;
+}
+
+// ************************************************************************
+
 import std.random;
 
 string randomString(int length=20, string chars="abcdefghijklmnopqrstuvwxyz")
