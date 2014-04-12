@@ -48,3 +48,96 @@ Data readFileData(ref std.stdio.File f)
 	buf.deleteContents();
 	return result;
 }
+
+// ************************************************************************
+
+/// Wrapper for Data class, allowing an object to be swapped to disk
+/// and automatically retreived as required.
+
+final class SwappedData
+{
+	import std.file;
+	import std.string;
+	debug(SwappedData) import ae.sys.log;
+
+private:
+	Data _data;
+	string fileName;
+	const(char)* cFileName;
+
+	static const MIN_SIZE = 4096; // minimum size to swap out
+
+	debug(SwappedData) static Logger log;
+
+public:
+	this(string fileName)
+	{
+		debug(SwappedData) { if (log is null) log = new FileAndConsoleLogger("SwappedData"); log(fileName ~ " - Creating"); }
+		this.fileName = fileName;
+		cFileName = fileName.toStringz();
+		if (exists(fileName))
+			remove(fileName);
+	}
+
+	void unload()
+	{
+		if (!_data.empty && _data.length >= MIN_SIZE)
+		{
+			debug(SwappedData) log(fileName ~ " - Unloading");
+			write(fileName, _data.contents);
+			_data.clear();
+		}
+	}
+
+	bool isLoaded()
+	{
+		return !exists(fileName);
+	}
+
+	// Getter
+	Data data()
+	{
+		if (!_data.length)
+		{
+			debug(SwappedData) log(fileName ~ " - Reloading");
+			if (!exists(fileName))
+				return Data();
+			_data = readData(fileName);
+			remove(fileName);
+		}
+		return _data;
+	}
+
+	// Setter
+	void data(Data data)
+	{
+		debug(SwappedData) log(fileName ~ " - Setting");
+		if (exists(fileName))
+			remove(fileName);
+		_data = data;
+	}
+
+	size_t length()
+	{
+		if (!_data.empty)
+			return _data.length;
+		else
+		if (exists(fileName))
+			return cast(size_t)getSize(fileName);
+		else
+			return 0;
+	}
+
+	~this()
+	{
+		// Can't allocate in destructors.
+
+		//debug(SwappedData) log(fileName ~ " - Destroying");
+		/*if (exists(fileName))
+		{
+			debug(SwappedData) log(fileName ~ " - Deleting");
+			remove(fileName);
+		}*/
+		std.c.stdio.remove(cFileName);
+	}
+}
