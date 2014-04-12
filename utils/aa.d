@@ -83,12 +83,26 @@ V[] sortedValues(K, V)(V[K] aa)
 	return result;
 }
 
-/// Merge b into a. Return a.
-V[K] merge(K, V)(V[K] a, V[K] b)
+/// Merge source into target. Return target.
+V[K] merge(K, V)(auto ref V[K] target, in V[K] source)
 {
-	foreach (k, v; b)
-		a[k] = v;
-	return a;
+	foreach (k, v; source)
+		target[k] = v;
+	return target;
+}
+
+unittest
+{
+	int[int] target;
+	int[int] source = [2:4];
+	merge(target, source);
+	assert(source == target);
+
+	target = [1:1, 2:2, 3:3];
+	merge(target, source);
+	assert(target == [1:1, 2:4, 3:3]);
+
+	assert(merge([1:1], [2:2]) == [1:1, 2:2]);
 }
 
 // ***************************************************************************
