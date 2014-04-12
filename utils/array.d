@@ -16,6 +16,12 @@ module ae.utils.array;
 public import ae.utils.aa;
 public import ae.utils.appender;
 
+/// Slice a variable.
+T[] toArray(T)(ref T v)
+{
+	return (&v)[0..1];
+}
+
 T[] vector(string op, T)(T[] a, T[] b)
 {
 	assert(a.length == b.length);
