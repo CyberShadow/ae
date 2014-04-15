@@ -240,6 +240,8 @@ else // Use select
 			assert(false, "Socket not registered");
 		}
 
+		void delegate()[] idleHandlers;
+
 	public:
 		size_t size()
 		{
@@ -299,7 +301,11 @@ else // Use select
 					errorset.add(conn.socket);
 					debug (ASOCKETS) writeln();
 				}
-				debug (ASOCKETS) writefln("Waiting (%d sockets, %s timer events)...", sockcount, mainTimer.isWaiting() ? "with" : "no");
+				debug (ASOCKETS) writefln("Waiting (%d sockets, %s timer events, %d idle handlers)...",
+					sockcount,
+					mainTimer.isWaiting() ? "with" : "no",
+					idleHandlers.length,
+				);
 				if (!haveActive && !mainTimer.isWaiting())
 				{
 					debug (ASOCKETS) writeln("No more sockets or timer events, exiting loop.");
@@ -307,6 +313,14 @@ else // Use select
 				}
 
 				int events;
+				if (idleHandlers.length)
+				{
+					if (sockcount==0)
+						events = 0;
+					else
+						events = Socket.select(readset, writeset, errorset, 0.seconds);
+				}
+				else
 				if (USE_SLEEP && sockcount==0)
 				{
 					version(Windows)
@@ -370,6 +384,18 @@ else // Use select
 						}
 					}
 				}
+				else
+				if (idleHandlers.length)
+				{
+					import ae.utils.array;
+					auto handler = idleHandlers.shift();
+
+					// Rotate the idle handler queue before running it,
+					// in case the handler unregisters itself.
+					idleHandlers ~= handler;
+
+					handler();
+				}
 
 				// Timers may invalidate our select results, so fire them after processing the latter
 				mainTimer.prod();
@@ -377,6 +403,28 @@ else // Use select
 				eventCounter++;
 			}
 		}
+	}
+
+	// Use UFCS to allow removeIdleHandler to have a predicate with context
+	void addIdleHandler(ref SocketManager socketManager, void delegate() handler)
+	{
+		foreach (i, idleHandler; socketManager.idleHandlers)
+			assert(handler !is idleHandler);
+
+		socketManager.idleHandlers ~= handler;
+	}
+
+	static bool isFun(T)(T a, T b) { return a is b; }
+	void removeIdleHandler(alias pred=isFun, Args...)(ref SocketManager socketManager, Args args)
+	{
+		foreach (i, idleHandler; socketManager.idleHandlers)
+			if (pred(idleHandler, args))
+			{
+				import std.algorithm;
+				socketManager.idleHandlers = socketManager.idleHandlers.remove(i);
+				return;
+			}
+		assert(false, "No such idle handler");
 	}
 
 	private mixin template SocketMixin()
