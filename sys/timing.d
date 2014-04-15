@@ -201,13 +201,13 @@ public:
 			{
 				TimerTask task = head;
 				remove(head);
-				debug (TIMER) writefln("%d: Firing a task that waited for %d of %d ticks.", now, task.delay + (now - task.when), task.delay);
+				debug (TIMER) writefln("%s: Firing a task that waited for %s of %s.", now, task.delay + (now - task.when), task.delay);
 				if (task.handleTask)
 					task.handleTask(this, task);
 				ran = true;
 			}
 
-			debug (TIMER_VERBOSE) if (head !is null) writefln("Current task is waiting for %d ticks, %d remaining.", head.delay, head.when - now);
+			debug (TIMER_VERBOSE) if (head !is null) writefln("Current task is waiting for %s, %s remaining.", head.delay, head.when - now);
 		}
 
 		return ran;
