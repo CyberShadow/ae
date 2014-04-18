@@ -73,7 +73,7 @@ bool collectSignal(int signum, void delegate() code)
 				errnoEnforce(sigpending(&mask) == 0);
 				auto m = sigismember(&mask, signum);
 				errnoEnforce(m >= 0);
-				result = m == 0;
+				result = m != 0;
 				if (result)
 				{
 					int s;
