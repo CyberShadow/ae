@@ -59,13 +59,12 @@ bool collectSignal(int signum, void delegate() code)
 	sigset_t mask;
 	sigemptyset(&mask);
 	sigaddset(&mask, signum);
-	sigset_t oldMask;
-	errnoEnforce(pthread_sigmask(SIG_BLOCK, &mask, &oldMask) != -1);
+	errnoEnforce(pthread_sigmask(SIG_BLOCK, &mask, null) != -1);
 
 	bool result;
 	{
 		scope(exit)
-			errnoEnforce(pthread_sigmask(SIG_SETMASK, &oldMask, null) != -1);
+			errnoEnforce(pthread_sigmask(SIG_UNBLOCK, &mask, null) != -1);
 
 		scope(exit)
 		{
