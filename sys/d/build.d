@@ -44,6 +44,17 @@ class DBuilder
 
 			string model = defaultModel;
 			bool debugDMD = false;
+
+			/// Returns a string representation of this build configuration
+			/// usable for a cache directory name. Must reflect all fields.
+			string toString() const
+			{
+				import std.conv : text;
+				string buildID = text(model);
+				if (debugDMD)
+					buildID ~= "-debug";
+				return buildID;
+			}
 		}
 		Build build; /// ditto
 
