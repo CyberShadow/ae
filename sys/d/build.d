@@ -25,60 +25,43 @@ import std.string;
 import ae.sys.cmd;
 import ae.sys.file;
 
+/// Class which builds D from source.
 class DBuilder
 {
+	/// DBuilder configuration.
 	struct Config
 	{
-		version (Windows)
-			enum defaultModel = "32";
-		else
-		version (D_LP64)
-			enum defaultModel = "64";
-		else
-			enum defaultModel = "32";
+		/// Build configuration.
+		struct Build
+		{
+			version (Windows)
+				enum defaultModel = "32";
+			else
+			version (D_LP64)
+				enum defaultModel = "64";
+			else
+				enum defaultModel = "32";
 
-		string model = defaultModel;
-		bool debugDMD = false;
+			string model = defaultModel;
+			bool debugDMD = false;
+		}
+		Build build; /// ditto
+
+		/// Local configuration.
+		struct Local
+		{
+			string repoDir;  /// D source location (as checked out from GitHub).
+			string buildDir; /// Build target directory.
+			string dmcDir;   /// Where dmc.zip is unpacked.
+
+			/// D build environment.
+			string[string] env;
+		}
+		Local local; /// ditto
 	}
 	Config config;
 
-	string repoDir;
-	string buildDir;
-	string dmcDir;
-
-	string[string] dEnv;
-
-	@property string model() { return config.model; }
-	@property string modelSuffix() { return config.model == config.init.model ? "" : config.model; }
-	version (Windows)
-	{
-		enum string makeFileName = "win32.mak";
-		@property string makeFileNameModel() { return "win"~model~".mak"; }
-		enum string binExt = ".exe";
-	}
-	else
-	{
-		enum string makeFileName = "posix.mak";
-		enum string makeFileNameModel = "posix.mak";
-		enum string binExt = "";
-	}
-
-	void run(string[] args, ref string[string] newEnv)
-	{
-		if (newEnv is null) newEnv = environment.toAA();
-		string oldPath = environment["PATH"];
-		scope(exit) environment["PATH"] = oldPath;
-		environment["PATH"] = newEnv["PATH"];
-
-		auto status = spawnProcess(args, newEnv, .Config.newEnv).wait();
-		enforce(status == 0, "Command %s failed with status %d".format(args, status));
-	}
-
-	void run(string[] args...)
-	{
-		run(args, dEnv);
-	}
-
+	/// Build everything.
 	void build()
 	{
 		buildDMD();
@@ -88,40 +71,17 @@ class DBuilder
 		buildTools();
 	}
 
-	void install(string src, string dst)
-	{
-		ensurePathExists(dst);
-		if (src.isDir)
-		{
-			if (!dst.exists)
-				dst.mkdirRecurse();
-			foreach (de; src.dirEntries(SpanMode.shallow))
-				install(de.name, dst.buildPath(de.name.baseName));
-		}
-		else
-		{
-			debug log(src ~ " -> " ~ dst);
-			hardLink(src, dst);
-		}
-	}
-
-	void log(string line)
-	{
-		import std.stdio;
-		stderr.writeln(line);
-	}
-
 	void buildDMD()
 	{
 		{
-			auto owd = pushd(buildPath(repoDir, "dmd", "src"));
-			string[] targets = config.debugDMD ? [] : ["dmd"];
-			run(["make", "-f", makeFileName, "MODEL=" ~ model] ~ targets, dEnv);
+			auto owd = pushd(buildPath(config.local.repoDir, "dmd", "src"));
+			string[] targets = config.build.debugDMD ? [] : ["dmd"];
+			run(["make", "-f", makeFileName, "MODEL=" ~ config.build.model] ~ targets);
 		}
 
 		install(
-			buildPath(repoDir, "dmd", "src", "dmd" ~ binExt),
-			buildPath(buildDir, "bin", "dmd" ~ binExt),
+			buildPath(config.local.repoDir, "dmd", "src", "dmd" ~ binExt),
+			buildPath(config.local.buildDir, "bin", "dmd" ~ binExt),
 		);
 
 		version (Windows)
@@ -146,8 +106,10 @@ LIB=%LIB%;"%WindowsSdkDir%\Lib\winv6.3\um\x64"
 LIB=%LIB%;"%WindowsSdkDir%\Lib\win8\um\x64"
 LIB=%LIB%;"%WindowsSdkDir%\Lib\x64"
 EOS";
-			ini = ini.replace("%DMC%", buildPath(dmcDir, `bin`).absolutePath());
-			buildPath(buildDir, "bin", "sc.ini").write(ini);
+			auto dmcBinDir = buildPath(config.local.dmcDir, `bin`);
+			ini = ini.replace("%DMC%", dmcBinDir.absolutePath());
+
+			buildPath(config.local.buildDir, "bin", "sc.ini").write(ini);
 		}
 		else
 		{
@@ -155,7 +117,7 @@ EOS";
 [Environment]
 DFLAGS="-I%@P%/../import" "-L-L%@P%/../lib"
 EOS";
-			buildPath(buildDir, "bin", "dmd.conf").write(ini);
+			buildPath(config.local.buildDir, "bin", "dmd.conf").write(ini);
 		}
 
 		log("DMD OK!");
@@ -164,19 +126,19 @@ EOS";
 	void buildDruntime()
 	{
 		{
-			auto owd = pushd(buildPath(repoDir, "druntime"));
+			auto owd = pushd(buildPath(config.local.repoDir, "druntime"));
 
 			mkdirRecurse("import");
 			mkdirRecurse("lib");
 
 			setTimes(buildPath("src", "rt", "minit.obj"), Clock.currTime(), Clock.currTime());
 
-			run(["make", "-f", makeFileNameModel, "MODEL=" ~ model], dEnv);
+			run(["make", "-f", makeFileNameModel, "MODEL=" ~ config.build.model]);
 		}
 
 		install(
-			buildPath(repoDir, "druntime", "import"),
-			buildPath(buildDir, "import"),
+			buildPath(config.local.repoDir, "druntime", "import"),
+			buildPath(config.local.buildDir, "import"),
 		);
 
 
@@ -187,10 +149,10 @@ EOS";
 	{
 		// In older versions of D, Druntime depended on Phobos modules.
 		foreach (f; ["std", "etc", "crc32.d"])
-			if (buildPath(repoDir, "phobos", f).exists)
+			if (buildPath(config.local.repoDir, "phobos", f).exists)
 				install(
-					buildPath(repoDir, "phobos", f),
-					buildPath(buildDir, "import", f),
+					buildPath(config.local.repoDir, "phobos", f),
+					buildPath(config.local.buildDir, "import", f),
 				);
 	}
 
@@ -199,25 +161,25 @@ EOS";
 		string[] targets;
 
 		{
-			auto owd = pushd(buildPath(repoDir, "phobos"));
+			auto owd = pushd(buildPath(config.local.repoDir, "phobos"));
 			version (Windows)
 			{
 				auto lib = "phobos%s.lib".format(modelSuffix);
-				run(["make", "-f", makeFileNameModel, "MODEL=" ~ model, lib], dEnv);
+				run(["make", "-f", makeFileNameModel, "MODEL=" ~ config.build.model, lib]);
 				enforce(lib.exists);
 				targets = [lib];
 			}
 			else
 			{
-				run(["make", "-f", makeFileNameModel, "MODEL=" ~ model], dEnv);
+				run(["make", "-f", makeFileNameModel, "MODEL=" ~ config.build.model], env);
 				targets = "generated".dirEntries(SpanMode.depth).filter!(de => de.name.endsWith(".a")).map!(de => de.name).array();
 			}
 		}
 
 		foreach (lib; targets)
 			install(
-				buildPath(repoDir, "phobos", lib),
-				buildPath(buildDir, "lib", lib.baseName()),
+				buildPath(config.local.repoDir, "phobos", lib),
+				buildPath(config.local.buildDir, "lib", lib.baseName()),
 			);
 
 		log("Phobos OK!");
@@ -227,14 +189,67 @@ EOS";
 	{
 		// Just build rdmd
 		{
-			auto owd = pushd(buildPath(repoDir, "tools"));
-			run(["dmd", "-m" ~ model, "rdmd"], dEnv);
+			auto owd = pushd(buildPath(config.local.repoDir, "tools"));
+			run(["dmd", "-m" ~ config.build.model, "rdmd"]);
 		}
 		install(
-			buildPath(repoDir, "tools", "rdmd" ~ binExt),
-			buildPath(buildDir, "bin", "rdmd" ~ binExt),
+			buildPath(config.local.repoDir, "tools", "rdmd" ~ binExt),
+			buildPath(config.local.buildDir, "bin", "rdmd" ~ binExt),
 		);
 
 		log("Tools OK!");
+	}
+
+protected:
+	@property string modelSuffix() { return config.build.model == config.init.build.model ? "" : config.build.model; }
+	version (Windows)
+	{
+		enum string makeFileName = "win32.mak";
+		@property string makeFileNameModel() { return "win"~config.build.model~".mak"; }
+		enum string binExt = ".exe";
+	}
+	else
+	{
+		enum string makeFileName = "posix.mak";
+		enum string makeFileNameModel = "posix.mak";
+		enum string binExt = "";
+	}
+
+	void run(string[] args, ref string[string] newEnv)
+	{
+		if (newEnv is null) newEnv = environment.toAA();
+		string oldPath = environment["PATH"];
+		scope(exit) environment["PATH"] = oldPath;
+		environment["PATH"] = newEnv["PATH"];
+
+		auto status = spawnProcess(args, newEnv, .Config.newEnv).wait();
+		enforce(status == 0, "Command %s failed with status %d".format(args, status));
+	}
+
+	void run(string[] args...)
+	{
+		run(args, config.local.env);
+	}
+
+	void install(string src, string dst)
+	{
+		ensurePathExists(dst);
+		if (src.isDir)
+		{
+			if (!dst.exists)
+				dst.mkdirRecurse();
+			foreach (de; src.dirEntries(SpanMode.shallow))
+				install(de.name, dst.buildPath(de.name.baseName));
+		}
+		else
+		{
+			debug log(src ~ " -> " ~ dst);
+			hardLink(src, dst);
+		}
+	}
+
+	/// Override to add logging.
+	void log(string line)
+	{
 	}
 }
