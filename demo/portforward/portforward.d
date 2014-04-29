@@ -17,6 +17,7 @@ import ae.net.asockets;
 import ae.sys.log;
 import ae.utils.text;
 
+import std.ascii;
 import std.stdio;
 import std.string;
 import std.conv;
@@ -46,7 +47,7 @@ class Connection
 
 	void onInnerConnect(ClientSocket sender)
 	{
-		log("Connected to " ~ inner.remoteAddress());
+		log("Connected to " ~ inner.remoteAddress().toString());
 		if (record) recordLog(format("%d C %d %s", Clock.currStdTime(), index, inner.remoteAddress()));
 		outer.handleReadData = &onOuterData;
 		outer.handleDisconnect = &onOuterDisconnect;
@@ -61,7 +62,7 @@ class Connection
 
 	void onOuterDisconnect(ClientSocket sender, string reason, DisconnectType type)
 	{
-		log("Outer connection from " ~ outer.remoteAddress() ~ " disconnected: " ~ reason);
+		log("Outer connection from " ~ outer.remoteAddress().toString() ~ " disconnected: " ~ reason);
 		if (record) recordLog(format("%d [ %d %s", Clock.currStdTime(), index, reason));
 		if (type != DisconnectType.Requested)
 			inner.disconnect();
@@ -76,7 +77,7 @@ class Connection
 
 	void onInnerDisconnect(ClientSocket sender, string reason, DisconnectType type)
 	{
-		log("Inner connection to " ~ inner.remoteAddress() ~ " disconnected: " ~ reason);
+		log("Inner connection to " ~ inner.remoteAddress().toString() ~ " disconnected: " ~ reason);
 		if (record) recordLog(format("%d ] %d %s", Clock.currStdTime(), index, reason));
 		if (type != DisconnectType.Requested)
 			outer.disconnect();
@@ -155,7 +156,7 @@ string hexEscape(const(void)[] data)
 	string s;
 	foreach (b; bytes)
 		if (b<0x20 || b>0x7E || b=='\\')
-			s ~= `\` ~ hexdigits[b>>4] ~ hexdigits[b&15];
+			s ~= `\` ~ hexDigits[b>>4] ~ hexDigits[b&15];
 		else
 			s ~= cast(char)b;
 	return s;
