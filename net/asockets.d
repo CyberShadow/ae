@@ -30,6 +30,9 @@ private import std.conv : to;
 
 import std.random : randomShuffle;
 
+// http://d.puremagic.com/issues/show_bug.cgi?id=7016
+static import ae.utils.array;
+
 version(LIBEV)
 {
 	import deimos.ev;
