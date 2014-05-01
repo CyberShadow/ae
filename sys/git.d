@@ -41,6 +41,11 @@ struct Repository
 		this.argsPrefix = [`git`, `--work-tree=` ~ path, `--git-dir=` ~ dotGit];
 	}
 
+	invariant()
+	{
+		assert(argsPrefix.length, "Not initialized");
+	}
+
 	// Have just some primitives here.
 	// Higher-level functionality can be added using UFCS.
 	void   run  (string[] args...) { auto owd = pushd(workPath(args[0])); return .run  (argsPrefix ~ args); }
