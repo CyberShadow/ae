@@ -1,5 +1,6 @@
 /**
- * Simple execution of shell commands, and wrappers for common utilities.
+ * Simple execution of shell commands,
+ * and wrappers for common utilities.
  *
  * License:
  *   This Source Code Form is subject to the terms of
@@ -43,24 +44,33 @@ private void invoke(alias runner)(string[] args)
 {
 	//debug scope(failure) std.stdio.writeln("[CWD] ", getcwd());
 	auto status = runner();
-	enforce(status == 0, "Command %s failed with status %d".format(args, status));
+	enforce(status == 0,
+		"Command %s failed with status %d".format(args, status));
 }
 
-/// std.process helper. Run a command, and throw if it exited with a non-zero status.
+/// std.process helper.
+/// Run a command, and throw if it exited with a non-zero status.
 void run(string[] args)
 {
 	invoke!({ return spawnProcess(args).wait(); })(args);
 }
 
-/// std.process helper. Run a command, collect its output, and throw if it exited with a non-zero status.
+/// std.process helper.
+/// Run a command and collect its output.
+/// Throw if it exited with a non-zero status.
 string query(string[] args)
 {
 	string output;
-	invoke!({ auto result = execute(args); output = result.output.stripRight(); return result.status; })(args);
+	invoke!({
+		auto result = execute(args);
+		output = result.output.stripRight();
+		return result.status;
+	})(args);
 	return output;
 }
 
-/// std.process helper. Run a command, feed it the given input, and collect its output.
+/// std.process helper.
+/// Run a command, feed it the given input, and collect its output.
 /// Throw if it exited with non-zero status. Return output.
 T[] pipe(T)(string[] args, in T[] input)
 {
@@ -80,7 +90,8 @@ T[] pipe(T)(string[] args, in T[] input)
 
 ubyte[] iconv(in void[] data, string inputEncoding, string outputEncoding)
 {
-	auto result = pipe(["iconv", "-f", inputEncoding, "-t", outputEncoding], data);
+	auto args = ["iconv", "-f", inputEncoding, "-t", outputEncoding];
+	auto result = pipe(args, data);
 	return cast(ubyte[])result;
 }
 
@@ -92,9 +103,10 @@ string iconv(in void[] data, string inputEncoding)
 	return result;
 }
 
+version (HAVE_UNIX)
 unittest
 {
-	//assert(iconv("Hello"w, "UTF-16LE") == "Hello");
+	assert(iconv("Hello"w, "UTF-16LE") == "Hello");
 }
 
 string sha1sum(in void[] data)
@@ -103,7 +115,7 @@ string sha1sum(in void[] data)
 	return output[0..40];
 }
 
-version (sha1sum)
+version (HAVE_UNIX)
 unittest
 {
 	assert(sha1sum("") == "da39a3ee5e6b4b0d3255bfef95601890afd80709");
