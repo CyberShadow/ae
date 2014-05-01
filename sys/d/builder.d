@@ -11,7 +11,7 @@
  *   Vladimir Panteleev <vladimir@thecybershadow.net>
  */
 
-module ae.sys.d.build;
+module ae.sys.d.builder;
 
 import std.algorithm;
 import std.array;
@@ -22,7 +22,6 @@ import std.path;
 import std.process;
 import std.string;
 
-import ae.sys.cmd;
 import ae.sys.file;
 
 /// Class which builds D from source.
@@ -42,8 +41,10 @@ class DBuilder
 			else
 				enum defaultModel = "32";
 
-			string model = defaultModel;
-			bool debugDMD = false;
+			string model = defaultModel; /// Target model ("32" or "64").
+			bool debugDMD = false;       /// Whether to build a debug DMD.
+			                             /// Debug builds are faster to build,
+			                             /// but run slower. Windows only.
 
 			/// Returns a string representation of this build configuration
 			/// usable for a cache directory name. Must reflect all fields.
