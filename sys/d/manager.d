@@ -24,6 +24,7 @@ import std.range;
 import std.string;
 
 import ae.sys.cmd;
+import ae.sys.d.builder;
 import ae.sys.file;
 import ae.sys.git;
 
@@ -57,6 +58,9 @@ class DManager
 		/// config.environment["PATHEXT"] = "%PATHEXT%";
 		/// ---
 		string[string] environment;
+
+		/// Build configuration.
+		DBuilder.Config.Build build;
 	}
 	Config config; /// ditto
 
@@ -77,7 +81,51 @@ class DManager
 	/// Environment used when building D.
 	string[string] dEnv;
 
+	/// Our custom D builder.
+	class Builder : DBuilder
+	{
+		override void log(string s)
+		{
+			this.outer.log(s);
+		}
+	}
+	Builder builder; /// ditto
+
 	// ******************************* Methods *******************************
+
+	void prepareBuilder()
+	{
+		builder = new Builder();
+		builder.config.build = config.build;
+		builder.config.local.repoDir = repoDir;
+		builder.config.local.buildDir = buildDir;
+		version(Windows)
+		builder.config.local.dmcDir = dmcDir;
+		builder.config.local.env = dEnv;
+	}
+
+	void build()
+	{
+		clean();
+
+		repo.run("submodule", "update");
+
+		log("Building...");
+		mkdir(buildDir);
+
+		builder.build();
+	}
+
+	void clean()
+	{
+		log("Cleaning up...");
+		if (buildDir.exists)
+			buildDir.rmdirRecurse();
+		enforce(!buildDir.exists);
+
+		repo.run("submodule", "foreach", "git", "reset", "--hard");
+		repo.run("submodule", "foreach", "git", "clean", "--force", "-x", "-d", "--quiet");
+	}
 
 	/// Prepare the build environment (dEnv).
 	void prepareEnv()
@@ -252,9 +300,13 @@ class DManager
 		repo.run("reset", "--hard", "origin/master");
 	}
 
-protected:
 	/// Override to add logging.
 	void log(string line)
 	{
+	}
+
+	void logProgress(string s)
+	{
+		log((" " ~ s ~ " ").center(70, '-'));
 	}
 }
