@@ -19,6 +19,7 @@ import std.exception;
 import std.file;
 import std.parallelism : parallel;
 import std.path;
+import std.process;
 import std.range;
 import std.string;
 
@@ -71,8 +72,7 @@ class DManager
 	alias repoDir    = subDir!"repo";        /// The git repository location.
 	version(Windows)
 	alias dmcDir     = subDir!"dm" ;         /// The Digital Mars C compiler location.
-	alias buildDir   = subDir!"build";       /// Temporary build directory.
-	alias currentDir = subDir!"current";     /// Final build directory.
+	alias buildDir   = subDir!"build";       /// The build directory.
 
 	/// Environment used when building D.
 	string[string] dEnv;
@@ -107,7 +107,6 @@ class DManager
 
 		// Add the DMD we built
 		newPaths ~= buildPath(buildDir, "bin").absolutePath();   // For Phobos/Druntime/Tools
-		newPaths ~= buildPath(currentDir, "bin").absolutePath(); // For other D programs
 
 		// Add the DM tools
 		version (Windows)
