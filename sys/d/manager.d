@@ -44,6 +44,18 @@ class DManager
 
 		/// Location for the checkout, temporary files, etc.
 		string workDir;
+
+		/// Additional environment strings used when building D.
+		/// Can refer to existing environment variables using %NAME% syntax.
+		/// Examples:
+		/// ---
+		/// // Add something to PATH
+		/// config.environment["PATH"] = `%PATH%;C:\Tools`;
+		///
+		/// // Import PATHEXT from the original environment
+		/// config.environment["PATHEXT"] = "%PATHEXT%";
+		/// ---
+		string[string] environment;
 	}
 	Config config; /// ditto
 
@@ -56,14 +68,80 @@ class DManager
 	/// Get a specific subdirectory of the work directory.
 	@property string subDir(string name)() { return buildPath(config.workDir, name); }
 
-	/// The git repository location.
-	alias subDir!"repo" repoDir;
-
-	/// The Digital Mars C compiler location.
+	alias repoDir    = subDir!"repo";        /// The git repository location.
 	version(Windows)
-	alias subDir!"dm" dmcDir;
+	alias dmcDir     = subDir!"dm" ;         /// The Digital Mars C compiler location.
+	alias buildDir   = subDir!"build";       /// Temporary build directory.
+	alias currentDir = subDir!"current";     /// Final build directory.
+
+	/// Environment used when building D.
+	string[string] dEnv;
 
 	// ******************************* Methods *******************************
+
+	/// Prepare the build environment (dEnv).
+	void prepareEnv()
+	{
+		if (dEnv)
+			return;
+
+		auto oldPaths = environment["PATH"].split(pathSeparator);
+
+		// Build a new environment from scratch, to avoid tainting the build with the current environment.
+		string[] newPaths;
+
+		version(Windows)
+		{
+			import std.utf;
+			import win32.winbase;
+			import win32.winnt;
+
+			TCHAR buf[1024];
+			auto winDir = buf[0..GetWindowsDirectory(buf.ptr, buf.length)].toUTF8();
+			auto sysDir = buf[0..GetSystemDirectory (buf.ptr, buf.length)].toUTF8();
+			auto tmpDir = buf[0..GetTempPath(buf.length, buf.ptr)].toUTF8()[0..$-1];
+			newPaths ~= [sysDir, winDir];
+		}
+		else
+			newPaths = ["/bin", "/usr/bin"];
+
+		// Add the DMD we built
+		newPaths ~= buildPath(buildDir, "bin").absolutePath();   // For Phobos/Druntime/Tools
+		newPaths ~= buildPath(currentDir, "bin").absolutePath(); // For other D programs
+
+		// Add the DM tools
+		version (Windows)
+		{
+			auto dmc = buildPath(dmcDir, `bin`).absolutePath();
+			dEnv["DMC"] = dmc;
+			newPaths ~= dmc;
+		}
+
+		dEnv["PATH"] = newPaths.join(pathSeparator);
+
+		version(Windows)
+		{
+			dEnv["TEMP"] = dEnv["TMP"] = tmpDir;
+			dEnv["SystemRoot"] = winDir;
+		}
+
+		applyEnv(config.environment);
+	}
+
+	/// Apply user-specified environment settings over the calculated environment.
+	void applyEnv(in string[string] env)
+	{
+		auto oldEnv = environment.toAA();
+		foreach (name, value; dEnv)
+			oldEnv[name] = value;
+		foreach (name, value; env)
+		{
+			string newValue = value;
+			foreach (oldName, oldValue; oldEnv)
+				newValue = newValue.replace("%" ~ oldName ~ "%", oldValue);
+			dEnv[name] = oldEnv[name] = newValue;
+		}
+	}
 
 	/// Obtains prerequisites necessary for building D.
 	void preparePrerequisites()
