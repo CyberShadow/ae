@@ -47,18 +47,6 @@ class DManager
 		/// Location for the checkout, temporary files, etc.
 		string workDir;
 
-		/// Additional environment strings used when building D.
-		/// Can refer to existing environment variables using %NAME% syntax.
-		/// Examples:
-		/// ---
-		/// // Add something to PATH
-		/// config.environment["PATH"] = `%PATH%;C:\Tools`;
-		///
-		/// // Import PATHEXT from the original environment
-		/// config.environment["PATHEXT"] = "%PATHEXT%";
-		/// ---
-		string[string] environment;
-
 		/// Build configuration.
 		DBuilder.Config.Build build;
 	}
@@ -170,23 +158,6 @@ class DManager
 		{
 			dEnv["TEMP"] = dEnv["TMP"] = tmpDir;
 			dEnv["SystemRoot"] = winDir;
-		}
-
-		applyEnv(config.environment);
-	}
-
-	/// Apply user-specified environment settings over the calculated environment.
-	void applyEnv(in string[string] env)
-	{
-		auto oldEnv = environment.toAA();
-		foreach (name, value; dEnv)
-			oldEnv[name] = value;
-		foreach (name, value; env)
-		{
-			string newValue = value;
-			foreach (oldName, oldValue; oldEnv)
-				newValue = newValue.replace("%" ~ oldName ~ "%", oldValue);
-			dEnv[name] = oldEnv[name] = newValue;
 		}
 	}
 
