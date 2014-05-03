@@ -112,13 +112,13 @@ version(LIBEV)
 				else
 				{
 					auto remaining = mainTimer.getRemainingTime();
-					while (remaining.length <= 0)
+					while (remaining <= Duration.zero)
 					{
 						debug (ASOCKETS) writefln("remaining=%s, prodding timer.", remaining);
 						mainTimer.prod();
 						remaining = mainTimer.getRemainingTime();
 					}
-					ev_tstamp tstamp = remaining.to!("seconds", ev_tstamp)();
+					ev_tstamp tstamp = remaining.total!"hnsecs" * 1.0 / convert!("seconds", "hnsecs")(1);
 					debug (ASOCKETS) writefln("remaining=%s, ev_tstamp=%s", remaining, tstamp);
 					if (lastNextEvent == MonoTime.max) // Starting
 					{
