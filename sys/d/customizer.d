@@ -24,31 +24,22 @@ import std.string;
 import ae.sys.d.manager;
 
 /// Class which manages a customized D checkout and its dependencies.
-class DCustomizer : DManager
+class DCustomizer
 {
-	alias resultDir = subDir!"result";
+	DManager d;
+
+	this(DManager manager) { this.d = manager; }
 
 	/// Initialize the repository and prerequisites.
-	/// Invokes prepareRepo, preparePrerequisites, clean etc.
 	void initialize()
 	{
-		if (!repoDir.exists)
-			log("First run detected.\nPlease be patient, " ~
-				"cloning everything might take a few minutes...\n");
-
-		log("Preparing repository...");
-		prepareRepo(true);
+		d.initialize(true);
+		d.reset();
 
 		log("Preparing component repositories...");
-		foreach (component; listComponents().parallel)
+		foreach (component; d.listComponents().parallel)
 		{
-			auto crepo = componentRepo(component);
-
-			log(component ~ ": Resetting repository...");
-			crepo.run("reset", "--hard");
-
-			log(component ~ ": Cleaning up...");
-			crepo.run("clean", "--force", "-x", "-d", "--quiet");
+			auto crepo = d.componentRepo(component);
 
 			log(component ~ ": Fetching pull requests...");
 			crepo.run("fetch", "origin", "+refs/pull/*/head:refs/remotes/origin/pr/*");
@@ -56,13 +47,6 @@ class DCustomizer : DManager
 			log(component ~ ": Creating work branch...");
 			crepo.run("checkout", "-B", "custom", "origin/master");
 		}
-
-		log("Preparing tools...");
-		preparePrerequisites();
-
-		clean();
-
-		log("Ready.");
 	}
 
 	private static const mergeCommitMessage = "ae-custom-pr-%s-merge";
@@ -73,7 +57,7 @@ class DCustomizer : DManager
 		enforce(component.match(`^[a-z]+$`), "Bad component");
 		enforce(pull.match(`^\d+$`), "Bad pull number");
 
-		auto crepo = componentRepo(component);
+		auto crepo = d.componentRepo(component);
 
 		scope(failure)
 		{
@@ -113,7 +97,7 @@ class DCustomizer : DManager
 		enforce(component.match(`^[a-z]+$`), "Bad component");
 		enforce(pull.match(`^\d+$`), "Bad pull number");
 
-		auto crepo = componentRepo(component);
+		auto crepo = d.componentRepo(component);
 
 		log("Rebasing...");
 		environment["GIT_EDITOR"] = "%s unmerge-rebase-edit %s".format(getCallbackCommand(), pull);
@@ -165,24 +149,8 @@ class DCustomizer : DManager
 		std.file.write(fileName, lines.join("\n"));
 	}
 
-	/// Build the customized D version.
-	/// The result will be in resultDir.
-	void runBuild()
+	void log(string s)
 	{
-		log("Preparing build...");
-		prepareEnv();
-		prepareBuilder();
-
-		log("Building...");
-		builder.build();
-
-		log("Moving...");
-		if (resultDir.exists)
-			resultDir.rmdirRecurse();
-		rename(buildDir, resultDir);
-
-		log("Build successful.\n\nAdd %s to your PATH to start using it.".format(
-			resultDir.buildPath("bin").absolutePath()
-		));
+		d.log(s);
 	}
 }

@@ -79,41 +79,45 @@ class DManager
 	}
 	Builder builder; /// ditto
 
-	// ******************************* Methods *******************************
+	// **************************** Main methods *****************************
 
-	void prepareBuilder()
+	/// Initialize the repository and prerequisites.
+	void initialize(bool update)
 	{
-		builder = new Builder();
-		builder.config.build = config.build;
-		builder.config.local.repoDir = repoDir;
-		builder.config.local.buildDir = buildDir;
-		version(Windows)
-		builder.config.local.dmcDir = dmcDir;
-		builder.config.local.env = dEnv;
+		log("Preparing prerequisites...");
+		preparePrerequisites();
+
+		log("Preparing repository...");
+		prepareRepo(update);
 	}
 
+	/// Build D.
 	void build()
 	{
-		clean();
-
-		repo.run("submodule", "update");
+		log("Preparing to build...");
+		prepareEnv();
+		prepareBuilder();
 
 		log("Building...");
 		mkdir(buildDir);
-
 		builder.build();
 	}
 
-	void clean()
+	/// Clean up and reset everything.
+	void reset()
 	{
 		log("Cleaning up...");
+
 		if (buildDir.exists)
 			buildDir.rmdirRecurse();
 		enforce(!buildDir.exists);
 
+		repo.run("submodule", "update");
 		repo.run("submodule", "foreach", "git", "reset", "--hard");
 		repo.run("submodule", "foreach", "git", "clean", "--force", "-x", "-d", "--quiet");
 	}
+
+	// ************************** Auxiliary methods **************************
 
 	/// Prepare the build environment (dEnv).
 	void prepareEnv()
@@ -159,6 +163,18 @@ class DManager
 			dEnv["TEMP"] = dEnv["TMP"] = tmpDir;
 			dEnv["SystemRoot"] = winDir;
 		}
+	}
+
+	/// Create the Builder.
+	void prepareBuilder()
+	{
+		builder = new Builder();
+		builder.config.build = config.build;
+		builder.config.local.repoDir = repoDir;
+		builder.config.local.buildDir = buildDir;
+		version(Windows)
+		builder.config.local.dmcDir = dmcDir;
+		builder.config.local.env = dEnv;
 	}
 
 	/// Obtains prerequisites necessary for building D.
