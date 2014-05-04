@@ -28,12 +28,18 @@ import ae.utils.text;
 ///   if (text.match(`^\d+$`)) {}    // old code - recompiles every time
 ///   if (text.match(re!`^\d+$`)) {} // new code - recompiles once
 
-Regex!char re(string pattern)
+Regex!char re(string pattern)()
 {
 	static Regex!char r;
 	if (r.empty)
 		r = regex(pattern);
 	return r;
+}
+
+unittest
+{
+	assert( "123".match(re!`^\d+$`));
+	assert(!"abc".match(re!`^\d+$`));
 }
 
 /// Lua-like pattern matching.
