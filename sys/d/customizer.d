@@ -77,7 +77,7 @@ class DCustomizer
 			crepo.run("merge", "--abort");
 		}
 
-		log("Merging...");
+		log("Merging %s pull request %s...".format(component, pull));
 
 		void doMerge()
 		{
@@ -111,7 +111,7 @@ class DCustomizer
 
 		auto crepo = d.componentRepo(component);
 
-		log("Rebasing...");
+		log("Rebasing to unmerge %s pull request %s...".format(component, pull));
 		environment["GIT_EDITOR"] = "%s %s %s".format(getCallbackCommand(), unmergeRebaseEditAction, pull);
 		// "sed -i \"s#.*" ~ mergeCommitMessage.format(pull).escapeRE() ~ ".*##g\"";
 		crepo.run("rebase", "--interactive", "--preserve-merges", "origin/master");
