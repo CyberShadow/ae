@@ -28,6 +28,8 @@ class DCustomizer : DManager
 {
 	alias resultDir = subDir!"result";
 
+	/// Initialize the repository and prerequisites.
+	/// Invokes prepareRepo, preparePrerequisites, clean etc.
 	void initialize()
 	{
 		if (!repoDir.exists)
@@ -63,8 +65,9 @@ class DCustomizer : DManager
 		log("Ready.");
 	}
 
-	static const mergeCommitMessage = "ae-custom-pr-%s-merge";
+	private static const mergeCommitMessage = "ae-custom-pr-%s-merge";
 
+	/// Merge in the specified pull request.
 	void merge(string component, string pull)
 	{
 		enforce(component.match(`^[a-z]+$`), "Bad component");
@@ -103,6 +106,8 @@ class DCustomizer : DManager
 		log("Merge successful.");
 	}
 
+	/// Unmerge the specified pull request.
+	/// Requires additional set-up - see callback below.
 	void unmerge(string component, string pull)
 	{
 		enforce(component.match(`^[a-z]+$`), "Bad component");
@@ -111,14 +116,35 @@ class DCustomizer : DManager
 		auto crepo = componentRepo(component);
 
 		log("Rebasing...");
-		environment["GIT_EDITOR"] = "%s do unmerge-rebase-edit %s".format(escapeShellFileName(thisExePath), pull);
+		environment["GIT_EDITOR"] = "%s unmerge-rebase-edit %s".format(getCallbackCommand(), pull);
 		// "sed -i \"s#.*" ~ mergeCommitMessage.format(pull).escapeRE() ~ ".*##g\"";
 		crepo.run("rebase", "--interactive", "--preserve-merges", "origin/master");
 
 		log("Unmerge successful.");
 	}
 
-	void unmergeRebaseEdit(string pull, string fileName)
+	/// Override this method with one which return a command,
+	/// which will invoke the unmergeRebaseEdit function below,
+	/// passing to it any additional parameters.
+	abstract string getCallbackCommand();
+
+	/// This function must be invoked when the command line
+	/// returned by getUnmergeEditorCommand() is ran.
+	void callback(string[] args)
+	{
+		enforce(args.length, "No callback parameters");
+		switch (args[0])
+		{
+			case "unmerge-rebase-edit":
+				enforce(args.length == 3, "Invalid argument count");
+				unmergeRebaseEdit(args[1], args[2]);
+				break;
+			default:
+				throw new Exception("Unknown callback");
+		}
+	}
+
+	private void unmergeRebaseEdit(string pull, string fileName)
 	{
 		auto lines = fileName.readText().splitLines();
 
@@ -139,6 +165,8 @@ class DCustomizer : DManager
 		std.file.write(fileName, lines.join("\n"));
 	}
 
+	/// Build the customized D version.
+	/// The result will be in resultDir.
 	void runBuild()
 	{
 		log("Preparing build...");
