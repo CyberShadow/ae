@@ -103,7 +103,15 @@ class DManager
 		builder.build();
 	}
 
-	/// Clean up and reset everything.
+	/// Go to a specific revision.
+	/// Assumes a clean state (call reset first).
+	void checkout(string rev)
+	{
+		repo.run("checkout", rev ? rev : "origin/master");
+		repo.run("submodule", "update");
+	}
+
+	/// Clean up (delete all built and intermediary files).
 	void reset()
 	{
 		log("Cleaning up...");
