@@ -100,7 +100,7 @@ class DCustomizer
 		auto crepo = d.componentRepo(component);
 
 		log("Rebasing...");
-		environment["GIT_EDITOR"] = "%s unmerge-rebase-edit %s".format(getCallbackCommand(), pull);
+		environment["GIT_EDITOR"] = "%s %s %s".format(getCallbackCommand(), unmergeRebaseEditAction, pull);
 		// "sed -i \"s#.*" ~ mergeCommitMessage.format(pull).escapeRE() ~ ".*##g\"";
 		crepo.run("rebase", "--interactive", "--preserve-merges", "origin/master");
 
@@ -119,7 +119,7 @@ class DCustomizer
 		enforce(args.length, "No callback parameters");
 		switch (args[0])
 		{
-			case "unmerge-rebase-edit":
+			case unmergeRebaseEditAction:
 				enforce(args.length == 3, "Invalid argument count");
 				unmergeRebaseEdit(args[1], args[2]);
 				break;
@@ -127,6 +127,8 @@ class DCustomizer
 				throw new Exception("Unknown callback");
 		}
 	}
+
+	private enum unmergeRebaseEditAction = "unmerge-rebase-edit";
 
 	private void unmergeRebaseEdit(string pull, string fileName)
 	{
