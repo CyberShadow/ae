@@ -43,6 +43,18 @@ class DCustomizer
 
 			log(component ~ ": Fetching pull requests...");
 			crepo.run("fetch", "origin", "+refs/pull/*/head:refs/remotes/origin/pr/*");
+		}
+	}
+
+	/// Begin customization, starting at the specified revision
+	/// (master by default).
+	void begin(string rev = null)
+	{
+		d.checkout(rev);
+
+		foreach (component; d.listComponents())
+		{
+			auto crepo = d.componentRepo(component);
 
 			log(component ~ ": Creating work branch...");
 			crepo.run("checkout", "-B", "custom", "origin/master");
