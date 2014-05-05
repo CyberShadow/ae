@@ -103,7 +103,13 @@ class DManager
 	/// Assumes a clean state (call reset first).
 	void checkout(string rev)
 	{
-		repo.run("checkout", rev ? rev : "origin/master");
+		if (!rev)
+			rev = "origin/master";
+
+		log("Checking out %s...".format(rev));
+		repo.run("checkout", rev);
+
+		log("Updating submodules...");
 		repo.run("submodule", "update");
 	}
 
