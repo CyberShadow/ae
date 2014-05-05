@@ -22,6 +22,7 @@ import std.regex;
 import std.string;
 
 import ae.sys.d.manager;
+import ae.utils.regex;
 
 /// Class which manages a customized D checkout and its dependencies.
 class DCustomizer
@@ -61,14 +62,12 @@ class DCustomizer
 		}
 	}
 
-	private static const mergeCommitMessage = "ae-custom-pr-%s-merge";
+	private enum mergeMessagePrefix = "ae-custom-merge-";
+	private enum pullMessageTemplate = mergeMessagePrefix ~ "pr-%s";
+	private enum remoteMessageTemplate = mergeMessagePrefix ~ "remote-%s-%s";
 
-	/// Merge in the specified pull request.
-	void merge(string component, string pull)
+	void mergeRef(string component, string refName, string mergeCommitMessage)
 	{
-		enforce(component.match(`^[a-z]+$`), "Bad component");
-		enforce(pull.match(`^\d+$`), "Bad pull number");
-
 		auto crepo = d.componentRepo(component);
 
 		scope(failure)
@@ -77,11 +76,9 @@ class DCustomizer
 			crepo.run("merge", "--abort");
 		}
 
-		log("Merging %s pull request %s...".format(component, pull));
-
 		void doMerge()
 		{
-			crepo.run("merge", "--no-ff", "-m", mergeCommitMessage.format(pull), "origin/pr/" ~ pull);
+			crepo.run("merge", "--no-ff", "-m", mergeCommitMessage, refName);
 		}
 
 		if (component == "dmd")
@@ -93,7 +90,7 @@ class DCustomizer
 				log("Merge failed. Attempting conflict resolution...");
 				crepo.run("checkout", "--theirs", "test");
 				crepo.run("add", "test");
-				crepo.run("-c", "rerere.enabled=false", "commit", "-m", mergeCommitMessage.format(pull));
+				crepo.run("-c", "rerere.enabled=false", "commit", "-m", mergeCommitMessage);
 			}
 		}
 		else
@@ -102,27 +99,73 @@ class DCustomizer
 		log("Merge successful.");
 	}
 
-	/// Unmerge the specified pull request.
-	/// Requires additional set-up - see callback below.
-	void unmerge(string component, string pull)
+	void unmergeRef(string component, string mergeCommitMessage)
 	{
-		enforce(component.match(`^[a-z]+$`), "Bad component");
-		enforce(pull.match(`^\d+$`), "Bad pull number");
-
 		auto crepo = d.componentRepo(component);
 
-		log("Rebasing to unmerge %s pull request %s...".format(component, pull));
-		environment["GIT_EDITOR"] = "%s %s %s".format(getCallbackCommand(), unmergeRebaseEditAction, pull);
-		// "sed -i \"s#.*" ~ mergeCommitMessage.format(pull).escapeRE() ~ ".*##g\"";
+		// "sed -i \"s#.*" ~ mergeCommitMessage.escapeRE() ~ ".*##g\"";
+		environment["GIT_EDITOR"] = "%s %s %s"
+			.format(getCallbackCommand(), unmergeRebaseEditAction, mergeCommitMessage);
+		scope(exit) environment.remove("GIT_EDITOR");
+
 		crepo.run("rebase", "--interactive", "--preserve-merges", "origin/master");
 
 		log("Unmerge successful.");
 	}
 
-	/// Override this method with one which return a command,
+	/// Merge in the specified pull request.
+	void mergePull(string component, string pull)
+	{
+		enforce(component.match(re!`^[a-z]+$`), "Bad component");
+		enforce(pull.match(re!`^\d+$`), "Bad pull number");
+
+		log("Merging %s pull request %s...".format(component, pull));
+
+		mergeRef(component, "origin/pr/" ~ pull, pullMessageTemplate.format(pull));
+	}
+
+	/// Unmerge the specified pull request.
+	/// Requires additional set-up - see callback below.
+	void unmergePull(string component, string pull)
+	{
+		enforce(component.match(re!`^[a-z]+$`), "Bad component");
+		enforce(pull.match(re!`^\d+$`), "Bad pull number");
+
+		log("Rebasing to unmerge %s pull request %s...".format(component, pull));
+
+		unmergeRef(component, pullMessageTemplate.format(pull));
+	}
+
+	/// Merge in a branch from the given remote.
+	void mergeRemoteBranch(string component, string remoteName, string repoUrl, string branch)
+	{
+		enforce(component.match(re!`^[a-z]+$`), "Bad component");
+		enforce(remoteName.match(re!`^\w[\w\-]*$`), "Bad remote name");
+		enforce(repoUrl.match(re!`^\w[\w\-]*:[\w/\-\.]+$`), "Bad remote URL");
+		enforce(branch.match(re!`^\w[\w\-]*$`), "Bad branch name");
+
+		auto crepo = d.componentRepo(component);
+		try
+			crepo.run("remote", "rm", remoteName);
+		catch (Exception e) {}
+		crepo.run("remote", "add", "-f", "--tags", remoteName, repoUrl);
+
+		mergeRef(component,
+			"%s/%s".format(remoteName, branch),
+			remoteMessageTemplate.format(remoteName, branch));
+	}
+
+	void mergeFork(string user, string repo, string branch)
+	{
+		mergeRemoteBranch(repo, user, "https://github.com/%s/%s".format(user, repo), branch);
+	}
+
+	/// Override this method with one which returns a command,
 	/// which will invoke the unmergeRebaseEdit function below,
 	/// passing to it any additional parameters.
 	abstract string getCallbackCommand();
+
+	private enum unmergeRebaseEditAction = "unmerge-rebase-edit";
 
 	/// This function must be invoked when the command line
 	/// returned by getUnmergeEditorCommand() is ran.
@@ -140,9 +183,7 @@ class DCustomizer
 		}
 	}
 
-	private enum unmergeRebaseEditAction = "unmerge-rebase-edit";
-
-	private void unmergeRebaseEdit(string pull, string fileName)
+	private void unmergeRebaseEdit(string mergeCommitMessage, string fileName)
 	{
 		auto lines = fileName.readText().splitLines();
 
@@ -150,8 +191,8 @@ class DCustomizer
 		foreach_reverse (ref line; lines)
 			if (line.startsWith("pick "))
 			{
-				if (line.match(`^pick [0-9a-f]+ ` ~ mergeCommitMessage.format(`\d+`) ~ `$`))
-					removing = line.canFind(mergeCommitMessage.format(pull));
+				if (line.match(re!(`^pick [0-9a-f]+ ` ~ escapeRE(mergeMessagePrefix))))
+					removing = line.canFind(mergeCommitMessage);
 				if (removing)
 					line = "# " ~ line;
 				else
