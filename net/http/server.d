@@ -180,7 +180,16 @@ private:
 		catch (Exception e)
 		{
 			debug (HTTP) writefln("[%s] Exception onNewRequest: %s", Clock.currTime(), e);
-			sendResponse(null);
+			HttpResponse response;
+			debug
+			{
+				response = new HttpResponse();
+				response.status = HttpStatusCode.InternalServerError;
+				response.statusMessage = HttpResponse.getStatusMessage(HttpStatusCode.InternalServerError);
+				response.headers["Content-Type"] = "text/plain";
+				response.data = [Data(e.toString())];
+			}
+			sendResponse(response);
 		}
 	}
 
