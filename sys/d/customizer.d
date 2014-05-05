@@ -142,7 +142,7 @@ class DCustomizer
 		enforce(component.match(re!`^[a-z]+$`), "Bad component");
 		enforce(remoteName.match(re!`^\w[\w\-]*$`), "Bad remote name");
 		enforce(repoUrl.match(re!`^\w[\w\-]*:[\w/\-\.]+$`), "Bad remote URL");
-		enforce(branch.match(re!`^\w[\w\-]*$`), "Bad branch name");
+		enforce(branch.match(re!`^\w[\w\-\.]*$`), "Bad branch name");
 
 		auto crepo = d.componentRepo(component);
 		try
@@ -160,7 +160,7 @@ class DCustomizer
 	{
 		enforce(component.match(re!`^[a-z]+$`), "Bad component");
 		enforce(remoteName.match(re!`^\w[\w\-]*$`), "Bad remote name");
-		enforce(branch.match(re!`^\w[\w\-]*$`), "Bad branch name");
+		enforce(branch.match(re!`^\w[\w\-\.]*$`), "Bad branch name");
 
 		unmergeRef(component, remoteMessageTemplate.format(remoteName, branch));
 	}
