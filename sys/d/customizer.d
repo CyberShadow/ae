@@ -155,9 +155,24 @@ class DCustomizer
 			remoteMessageTemplate.format(remoteName, branch));
 	}
 
+	/// Undo a mergeRemoteBranch call.
+	void unmergeRemoteBranch(string component, string remoteName, string branch)
+	{
+		enforce(component.match(re!`^[a-z]+$`), "Bad component");
+		enforce(remoteName.match(re!`^\w[\w\-]*$`), "Bad remote name");
+		enforce(branch.match(re!`^\w[\w\-]*$`), "Bad branch name");
+
+		unmergeRef(component, remoteMessageTemplate.format(remoteName, branch));
+	}
+
 	void mergeFork(string user, string repo, string branch)
 	{
 		mergeRemoteBranch(repo, user, "https://github.com/%s/%s".format(user, repo), branch);
+	}
+
+	void unmergeFork(string user, string repo, string branch)
+	{
+		unmergeRemoteBranch(repo, user, branch);
 	}
 
 	/// Override this method with one which returns a command,
