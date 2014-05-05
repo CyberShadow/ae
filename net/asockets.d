@@ -603,7 +603,16 @@ protected:
 				std.stdio.stdout.flush();
 			}
 
-			if (!disconnecting && handleReadData)
+			if (disconnecting)
+			{
+				debug (ASOCKETS) writefln("\t\t%s: Discarding received data because we are disconnecting", cast(void*)this);
+			}
+			else
+			if (!handleReadData)
+			{
+				debug (ASOCKETS) writefln("\t\t%s: Discarding received data because there is no data handler", cast(void*)this);
+			}
+			else
 			{
 				// Currently, unlike the D1 version of this module,
 				// we will always reallocate read network data.
