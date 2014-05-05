@@ -54,10 +54,6 @@ class DManager
 
 	// ******************************* Fields ********************************
 
-	/// The repository.
-	/// Call prepare() to initialize.
-	Repository repo;
-
 	/// Get a specific subdirectory of the work directory.
 	@property string subDir(string name)() { return buildPath(config.workDir, name); }
 
@@ -126,6 +122,9 @@ class DManager
 	}
 
 	// ************************** Auxiliary methods **************************
+
+	/// The repository.
+	@property Repository repo() { return Repository(repoDir); }
 
 	/// Prepare the build environment (dEnv).
 	void prepareEnv()
@@ -277,7 +276,6 @@ class DManager
 			return;
 		}
 
-		repo = Repository(repoDir);
 		repo.run("bisect", "reset");
 		repo.run("checkout", "--force", "master");
 
