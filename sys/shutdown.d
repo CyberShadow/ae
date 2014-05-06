@@ -103,7 +103,8 @@ void register()
 			return FALSE;
 		}
 
-		SetConsoleCtrlHandler(&handlerRoutine, TRUE);
+		// https://issues.dlang.org/show_bug.cgi?id=12710
+		SetConsoleCtrlHandler(cast(PHANDLER_ROUTINE)&handlerRoutine, TRUE);
 	}
 }
 
