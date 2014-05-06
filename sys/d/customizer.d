@@ -145,9 +145,15 @@ class DCustomizer
 		enforce(branch.match(re!`^\w[\w\-\.]*$`), "Bad branch name");
 
 		auto crepo = d.componentRepo(component);
-		try
-			crepo.run("remote", "rm", remoteName);
-		catch (Exception e) {}
+
+		void rm()
+		{
+			try
+				crepo.run("remote", "rm", remoteName);
+			catch (Exception e) {}
+		}
+		rm();
+		scope(exit) rm();
 		crepo.run("remote", "add", "-f", "--tags", remoteName, repoUrl);
 
 		mergeRef(component,
