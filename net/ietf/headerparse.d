@@ -29,6 +29,7 @@ import ae.utils.text;
  * The header string data is duplicated to the managed
  * heap.
  */
+/// ditto
 bool parseHeaders(ref Data[] data, out Headers headers)
 {
 	string dummy;
@@ -40,6 +41,13 @@ bool parseHeaders(ref Data[] data, out Headers headers)
 bool parseHeaders(ref Data[] data, out string firstLine, out Headers headers)
 {
 	return parseHeadersImpl!true(data, firstLine, headers);
+}
+
+/// Parse headers from the given string.
+Headers parseHeaders(string headerData)
+{
+	string firstLine; // unused
+	return parseHeadersImpl!false(headerData, firstLine);
 }
 
 private:
