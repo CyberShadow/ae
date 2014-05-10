@@ -212,15 +212,17 @@ void line(bool CHECKED=true, V, COLOR)(auto ref V v, int x1, int y1, int x2, int
 	}
 }
 
-void rect(bool CHECKED=true, V, COLOR)(auto ref V v, int x1, int y1, int x2, int y2, COLOR c) // [)
+/// Draws a rectangle with a solid line.
+/// The coordinates represent bounds (open on the right) for the outside of the rectangle.
+void rect(bool CHECKED=true, V, COLOR)(auto ref V v, int x1, int y1, int x2, int y2, COLOR c)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
 	sort2(x1, x2);
 	sort2(y1, y2);
-	v.hline!CHECKED(x1, x2-1, y1, c);
-	v.hline!CHECKED(x1, x2-1, y2, c);
-	v.vline!CHECKED(x1, y1, y2-1, c);
-	v.vline!CHECKED(x2, y1, y2-1, c);
+	v.hline!CHECKED(x1, x2, y1  , c);
+	v.hline!CHECKED(x1, x2, y2-1, c);
+	v.vline!CHECKED(x1  , y1, y2, c);
+	v.vline!CHECKED(x2-1, y1, y2, c);
 }
 
 void fillRect(bool CHECKED=true, V, COLOR)(auto ref V v, int x1, int y1, int x2, int y2, COLOR b) // [)
