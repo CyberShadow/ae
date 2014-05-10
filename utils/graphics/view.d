@@ -689,6 +689,57 @@ unittest
 
 // ***************************************************************************
 
+/// Returns the smallest window containing all
+/// pixels that satisfy the given predicate.
+template trim(alias pred)
+{
+	alias fun = unaryFun!(pred, false, "c");
+
+	auto trim(V)(auto ref V src)
+	{
+		int x0 = 0, y0 = 0, x1 = src.w, y1 = src.h;
+	topLoop:
+		while (y0 < y1)
+		{
+			foreach (x; 0..src.w)
+				if (fun(src[x, y0]))
+					break topLoop;
+			y0++;
+		}
+	bottomLoop:
+		while (y1 > y0)
+		{
+			foreach (x; 0..src.w)
+				if (fun(src[x, y1-1]))
+					break bottomLoop;
+			y1--;
+		}
+
+	leftLoop:
+		while (x0 < x1)
+		{
+			foreach (y; y0..y1)
+				if (fun(src[x0, y]))
+					break leftLoop;
+			x0++;
+		}
+	rightLoop:
+		while (x1 > x0)
+		{
+			foreach (y; y0..y1)
+				if (fun(src[x1-1, y]))
+					break rightLoop;
+			x1--;
+		}
+
+		return src.crop(x0, y0, x1, y1);
+	}
+}
+
+alias trimAlpha = trim!`c.a`;
+
+// ***************************************************************************
+
 /// Splits a view into segments and
 /// calls fun on each segment in parallel.
 /// Returns an array of segments which
