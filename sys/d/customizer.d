@@ -154,7 +154,7 @@ class DCustomizer
 		}
 		rm();
 		scope(exit) rm();
-		crepo.run("remote", "add", "-f", "--tags", remoteName, repoUrl);
+		crepo.run("remote", "add", "-f", remoteName, repoUrl);
 
 		mergeRef(component,
 			"%s/%s".format(remoteName, branch),
