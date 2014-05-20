@@ -230,7 +230,10 @@ class DManager
 						auto path = buildPath(target, name);
 						ensurePathExists(path);
 						if (name.endsWith(`/`))
-							path.mkdirRecurse();
+						{
+							if (!path.exists)
+								path.mkdirRecurse();
+						}
 						else
 							std.file.write(path, archive.expand(entry));
 					}
