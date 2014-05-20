@@ -183,7 +183,7 @@ EOS";
 			}
 			else
 			{
-				run(["make", "-f", makeFileNameModel, "MODEL=" ~ config.build.model], env);
+				run(["make", "-f", makeFileNameModel, "MODEL=" ~ config.build.model]);
 				targets = "generated".dirEntries(SpanMode.depth).filter!(de => de.name.endsWith(".a")).map!(de => de.name).array();
 			}
 		}
