@@ -35,7 +35,6 @@ class DCustomizer
 	void initialize(bool update = true)
 	{
 		d.initialize(update);
-		d.reset();
 
 		log("Preparing component repositories...");
 		foreach (component; d.listComponents().parallel)
@@ -54,6 +53,7 @@ class DCustomizer
 	/// (master by default).
 	void begin(string rev = null)
 	{
+		d.reset();
 		d.checkout(rev);
 
 		foreach (component; d.listComponents())
