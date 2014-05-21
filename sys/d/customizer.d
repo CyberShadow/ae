@@ -32,9 +32,9 @@ class DCustomizer
 	this(DManager manager) { this.d = manager; }
 
 	/// Initialize the repository and prerequisites.
-	void initialize()
+	void initialize(bool update = true)
 	{
-		d.initialize(true);
+		d.initialize(update);
 		d.reset();
 
 		log("Preparing component repositories...");
@@ -42,8 +42,11 @@ class DCustomizer
 		{
 			auto crepo = d.componentRepo(component);
 
-			log(component ~ ": Fetching pull requests...");
-			crepo.run("fetch", "origin", "+refs/pull/*/head:refs/remotes/origin/pr/*");
+			if (update)
+			{
+				log(component ~ ": Fetching pull requests...");
+				crepo.run("fetch", "origin", "+refs/pull/*/head:refs/remotes/origin/pr/*");
+			}
 		}
 	}
 
