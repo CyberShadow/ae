@@ -256,7 +256,10 @@ protected:
 		else
 		{
 			debug log(src ~ " -> " ~ dst);
-			hardLink(src, dst);
+			try
+				hardLink(src, dst);
+			catch (FileException e)
+				copy(src, dst);
 		}
 	}
 
