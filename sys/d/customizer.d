@@ -81,6 +81,16 @@ class DCustomizer
 
 		void doMerge()
 		{
+			string[string] mergeEnv;
+			foreach (person; ["AUTHOR", "COMMITTER"])
+			{
+				mergeEnv["GIT_%s_DATE".format(person)] = "Thu, 01 Jan 1970 00:00:00 +0000";
+				mergeEnv["GIT_%s_NAME".format(person)] = "ae.sys.d.customizer";
+				mergeEnv["GIT_%s_EMAIL".format(person)] = "ae.sys.d.customizer@thecybershadow.net";
+			}
+			foreach (k, v; mergeEnv)
+				environment[k] = v;
+			// TODO: restore environment
 			crepo.run("merge", "--no-ff", "-m", mergeCommitMessage, refName);
 		}
 
