@@ -61,7 +61,7 @@ class DCustomizer
 			auto crepo = d.componentRepo(component);
 
 			log(component ~ ": Creating work branch...");
-			crepo.run("checkout", "-B", "custom", "origin/master");
+			crepo.run("checkout", "-B", "custom");
 		}
 	}
 
