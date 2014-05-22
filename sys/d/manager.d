@@ -15,6 +15,7 @@ module ae.sys.d.manager;
 
 import std.algorithm;
 import std.array;
+import std.datetime;
 import std.exception;
 import std.file;
 import std.parallelism : parallel;
@@ -111,6 +112,27 @@ class DManager
 
 		log("Updating submodules...");
 		repo.run("submodule", "update");
+	}
+
+	struct LogEntry
+	{
+		string message, hash;
+		SysTime time;
+	}
+
+	/// Gets the D merge log (newest first).
+	LogEntry[] getLog()
+	{
+		auto history = repo.getHistory();
+		LogEntry[] logs;
+		auto master = history.commits[history.refs["refs/remotes/origin/master"]];
+		for (auto c = master; c; c = c.parents.length ? c.parents[0] : null)
+		{
+			auto title = c.message.length ? c.message[0] : null;
+			auto time = SysTime(c.time.unixTimeToStdTime);
+			logs ~= LogEntry(title, c.hash.toString(), time);
+		}
+		return logs;
 	}
 
 	/// Clean up (delete all built and intermediary files).
