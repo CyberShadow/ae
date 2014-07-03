@@ -542,7 +542,7 @@ void softRing(T, V, COLOR)(auto ref V v, T x, T y, T r0, T r1, T r2, COLOR color
 void softCircle(T, V, COLOR)(auto ref V v, T x, T y, T r1, T r2, COLOR color)
 	if (isWritableView!V && isNumeric!T && is(COLOR : ViewColor!V))
 {
-	v.softRoundShape!false(x, y, 0, r1, r2, color);
+	v.softRoundShape!false(x, y, cast(T)0, r1, r2, color);
 }
 
 template aaPutPixel(bool CHECKED=true, bool USE_ALPHA=true)
