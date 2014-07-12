@@ -335,6 +335,15 @@ void removeRecurse(string fn)
 		fn.remove();
 }
 
+/// Create an empty directory, deleting
+/// all its contents if it already exists.
+void recreateEmptyDirectory(string dir)
+{
+	if (dir.exists)
+		forceDelete(dir);
+	mkdir(dir);
+}
+
 bool isHidden()(string fn)
 {
 	if (baseName(fn).startsWith("."))
