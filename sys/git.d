@@ -178,12 +178,11 @@ struct Repository
 
 		Hash write(in void[] data)
 		{
-			string fileName;
-			auto f = createNamedPipe("ae-sys-git-writeObjects", fileName);
-			pipes.stdin.writeln(fileName);
+			auto p = NamedPipe("ae-sys-git-writeObjects");
+			pipes.stdin.writeln(p.fileName);
 			pipes.stdin.flush();
 
-			connectNamedPipe(f);
+			auto f = p.connect();
 			f.rawWrite(data);
 			f.flush();
 			f.close();

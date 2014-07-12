@@ -21,6 +21,7 @@ import std.file;
 import std.path;
 import std.stdio : File;
 import std.string;
+import std.typecons;
 import std.utf;
 
 // ************************************************************************
@@ -681,37 +682,64 @@ Thread writeFileAsync(File f, in void[] data)
 	return t;
 }
 
-/// Create a named pipe.
-File createNamedPipe()(string name, out string fileName)
+struct NamedPipeImpl
 {
-	version(Windows)
+	immutable string fileName;
+
+	/// Create a named pipe, and reserve a filename.
+	this()(string name)
 	{
-		import win32.winbase;
-		import ae.sys.windows;
+		version(Windows)
+		{
+			import win32.winbase;
+			import ae.sys.windows;
 
-		fileName = `\\.\pipe\` ~ name;
-		auto h = CreateNamedPipeW(fileName.toUTF16z, PIPE_ACCESS_OUTBOUND, PIPE_TYPE_BYTE, 10, 4096, 4096, 0, null).wenforce("CreateNamedPipeW");
-		File f;
-		f.windowsHandleOpen(h, "wb");
-		return f;
+			fileName = `\\.\pipe\` ~ name;
+			auto h = CreateNamedPipeW(fileName.toUTF16z, PIPE_ACCESS_OUTBOUND, PIPE_TYPE_BYTE, 10, 4096, 4096, 0, null).wenforce("CreateNamedPipeW");
+			File f;
+			f.windowsHandleOpen(h, "wb");
+			return f;
+		}
+		else
+		{
+			import core.sys.posix.sys.stat;
+
+			fileName = `/tmp/` ~ name ~ `.fifo`;
+			mkfifo(fileName.toStringz, S_IWUSR | S_IRUSR);
+		}
 	}
-	else
-		static assert(false, "TODO");
-}
 
-/// Wait for a peer to open the other end of the pipe.
-void connectNamedPipe()(ref File f)
-{
-	version(Windows)
+	/// Wait for a peer to open the other end of the pipe.
+	File connect()()
 	{
-		import win32.winbase;
-		import ae.sys.windows;
+		version(Windows)
+		{
+			import win32.winbase;
+			import ae.sys.windows;
 
-		ConnectNamedPipe(f.windowsHandle, null).wenforce("ConnectNamedPipe");
+			ConnectNamedPipe(f.windowsHandle, null).wenforce("ConnectNamedPipe");
+			return f;
+		}
+		else
+		{
+			return File(fileName, "w");
+		}
 	}
-	else
-		static assert(false, "TODO");
+
+	~this()
+	{
+		version(Windows)
+		{
+			// File.~this will take care of cleanup
+		}
+		else
+			fileName.remove();
+	}
+
+private:
+	File f;
 }
+alias NamedPipe = RefCounted!NamedPipeImpl;
 
 // ****************************************************************************
 
