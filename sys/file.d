@@ -681,6 +681,38 @@ Thread writeFileAsync(File f, in void[] data)
 	return t;
 }
 
+/// Create a named pipe.
+File createNamedPipe()(string name, out string fileName)
+{
+	version(Windows)
+	{
+		import win32.winbase;
+		import ae.sys.windows;
+
+		fileName = `\\.\pipe\` ~ name;
+		auto h = CreateNamedPipeW(fileName.toUTF16z, PIPE_ACCESS_OUTBOUND, PIPE_TYPE_BYTE, 10, 4096, 4096, 0, null).wenforce("CreateNamedPipeW");
+		File f;
+		f.windowsHandleOpen(h, "wb");
+		return f;
+	}
+	else
+		static assert(false, "TODO");
+}
+
+/// Wait for a peer to open the other end of the pipe.
+void connectNamedPipe()(ref File f)
+{
+	version(Windows)
+	{
+		import win32.winbase;
+		import ae.sys.windows;
+
+		ConnectNamedPipe(f.windowsHandle, null).wenforce("ConnectNamedPipe");
+	}
+	else
+		static assert(false, "TODO");
+}
+
 // ****************************************************************************
 
 /// Change the current directory to the given directory. Does nothing if dir is null.
