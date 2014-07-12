@@ -35,7 +35,7 @@ struct Repository
 		path = path.absolutePath();
 		enforce(path.exists, "Repository path does not exist");
 		auto dotGit = path.buildPath(".git");
-		if (dotGit.isFile)
+		if (dotGit.exists && dotGit.isFile)
 			dotGit = path.buildPath(dotGit.readText().strip()[8..$]);
 		//path = path.replace(`\`, `/`);
 		this.path = path;
