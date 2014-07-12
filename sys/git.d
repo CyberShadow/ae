@@ -165,3 +165,18 @@ unittest
 {
 	assert(toCommitHash("0123456789abcdef0123456789ABCDEF01234567") == [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67]);
 }
+
+/// Tries to match the default destination of `git clone`.
+string repositoryNameFromURL(string url)
+{
+	return url
+		.split(":")[$-1]
+		.split("/")[$-1]
+		.chomp(".git");
+}
+
+unittest
+{
+	assert(repositoryNameFromURL("https://github.com/CyberShadow/ae.git") == "ae");
+	assert(repositoryNameFromURL("git@example.com:ae.git") == "ae");
+}
