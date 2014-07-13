@@ -71,6 +71,8 @@ else // POSIX
 	import std.ascii;
 	import std.file;
 
+	alias toLower = std.ascii.toLower;
+
 	string getExecutableName()
 	{
 		// TODO: is this valid with OS X app bundles?
