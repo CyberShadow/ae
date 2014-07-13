@@ -16,8 +16,8 @@ module ae.demo.drawsprite.main;
 import ae.ui.app.application;
 import ae.ui.app.main;
 import ae.ui.shell.shell;
-import ae.ui.shell.sdl.shell;
-import ae.ui.video.sdl.video;
+import ae.ui.shell.sdl2.shell;
+import ae.ui.video.sdl2.video;
 import ae.ui.video.renderer;
 import ae.utils.fps;
 import ae.utils.graphics.image;
@@ -32,16 +32,19 @@ final class MyApplication : Application
 	Image!BGRX image;
 	enum SCALE_BASE = 0x10000;
 
+	ImageTextureSource source;
+
 	override void render(Renderer s)
 	{
 		fps.tick(&shell.setCaption);
 
-		auto canvas = s.lock();
-		scope(exit) s.unlock();
+		//auto canvas = s.lock();
+		//scope(exit) s.unlock();
 
-		int x0 = (canvas.w - image.w) / 2;
-		int y0 = (canvas.h - image.h) / 2;
-		image.blitTo(canvas, x0, y0);
+		int x0 = (s.width  - image.w) / 2;
+		int y0 = (s.height - image.h) / 2;
+		//image.blitTo(canvas, x0, y0);
+		s.draw(x0, y0, source, 0, 0, image.w, image.h);
 	}
 
 	override int run(string[] args)
@@ -51,9 +54,11 @@ final class MyApplication : Application
 			.parseBMP!BGR()
 			.colorMap!(c => BGRX(c.b, c.g, c.r))
 			.copy();
+		source = new ImageTextureSource;
+		source.image = image;
 
-		shell = new SDLShell(this);
-		shell.video = new SDLVideo();
+		shell = new SDL2Shell(this);
+		shell.video = new SDL2Video();
 		shell.run();
 		shell.video.shutdown();
 		return 0;

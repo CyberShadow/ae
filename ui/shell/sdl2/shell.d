@@ -162,7 +162,7 @@ final class SDL2Shell : Shell
 
 	enum SDL_BUTTON_LAST = SDL_BUTTON_X2;
 
-	MouseButtons translateMouseButtons(ubyte sdlButtons)
+	MouseButtons translateMouseButtons(uint sdlButtons)
 	{
 		MouseButtons result;
 		for (ubyte i=SDL_BUTTON_LEFT; i<=SDL_BUTTON_LAST; i++)

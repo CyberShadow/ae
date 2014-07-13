@@ -18,11 +18,10 @@ import std.random;
 import ae.ui.app.application;
 import ae.ui.app.posix.main;
 import ae.ui.shell.shell;
-import ae.ui.shell.sdl.shell;
-import ae.ui.video.sdl.video;
-import ae.ui.video.sdlopengl.video;
+import ae.ui.shell.sdl2.shell;
 import ae.ui.video.renderer;
-import ae.ui.timer.sdl.timer;
+import ae.ui.video.sdl2.video;
+import ae.ui.timer.sdl2.timer;
 import ae.ui.timer.thread.timer;
 import ae.utils.fps;
 import ae.utils.graphics.image;
@@ -121,9 +120,9 @@ final class MyApplication : Application
 			imgT.image.size(W*2, H*2);
 		}
 
-		shell = new SDLShell(this);
-		auto sdl    = new SDLVideo();
-		auto opengl = new SDLOpenGLVideo();
+		shell = new SDL2Shell(this);
+		auto sdl2   = new SDL2Video();
+	//	auto opengl = new SDLOpenGLVideo();
 	//	opengl.aa = false;
 
 		timer = new SDLTimer();
@@ -133,13 +132,14 @@ final class MyApplication : Application
 		do
 		{
 			switching = false;
-			useOpenGL = !useOpenGL;
-			shell.video = useOpenGL ? opengl : sdl;
+	//		useOpenGL = !useOpenGL;
+	//		shell.video = useOpenGL ? opengl : sdl;
+			shell.video = sdl2;
 			updateFPS("?");
 			shell.run();
 		} while (switching);
-		sdl.shutdown();
-		opengl.shutdown();
+		sdl2.shutdown();
+	//	opengl.shutdown();
 		return 0;
 	}
 

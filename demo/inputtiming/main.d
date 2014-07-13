@@ -18,9 +18,9 @@ import core.time;
 import ae.ui.app.application;
 import ae.ui.app.main;
 import ae.ui.shell.shell;
-import ae.ui.shell.sdl.shell;
-import ae.ui.video.sdlopengl.video;
+import ae.ui.shell.sdl2.shell;
 import ae.ui.video.renderer;
+import ae.ui.video.sdl2.video;
 import ae.utils.fps;
 import ae.utils.math;
 import ae.utils.graphics.image;
@@ -76,8 +76,8 @@ final class MyApplication : Application
 
 	override int run(string[] args)
 	{
-		shell = new SDLShell(this);
-		shell.video = new SDLOpenGLVideo();
+		shell = new SDL2Shell(this);
+		shell.video = new SDL2Video();
 		shell.run();
 		shell.video.shutdown();
 		return 0;

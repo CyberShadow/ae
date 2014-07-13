@@ -20,9 +20,9 @@ import std.datetime, std.conv;
 import ae.ui.app.application;
 import ae.ui.app.posix.main;
 import ae.ui.shell.shell;
-import ae.ui.shell.sdl.shell;
+import ae.ui.shell.sdl2.shell;
 import ae.ui.video.video;
-import ae.ui.video.sdl.video;
+import ae.ui.video.sdl2.video;
 import ae.ui.video.renderer;
 import ae.utils.math;
 import ae.utils.geometry : TAU;
@@ -131,8 +131,8 @@ final class MyApplication : Application
 
 	override int run(string[] args)
 	{
-		shell = new SDLShell(this);
-		shell.video = new SDLVideo();
+		shell = new SDL2Shell(this);
+		shell.video = new SDL2SoftwareVideo();
 		shell.run();
 		shell.video.shutdown();
 		return 0;

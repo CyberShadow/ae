@@ -21,9 +21,9 @@ import std.parallelism;
 import ae.ui.app.application;
 import ae.ui.app.main;
 import ae.ui.shell.shell;
-import ae.ui.shell.sdl.shell;
+import ae.ui.shell.sdl2.shell;
 import ae.ui.video.video;
-import ae.ui.video.sdl.video;
+import ae.ui.video.sdl2.video;
 import ae.ui.video.renderer;
 
 import ae.utils.array;
@@ -140,8 +140,8 @@ final class MyApplication : Application
 					if (havePixel[r][g][b])
 						pixels ~= Pixel(cast(ubyte)r, cast(ubyte)g, cast(ubyte)b);
 
-		shell = new SDLShell(this);
-		shell.video = new SDLVideo();
+		shell = new SDL2Shell(this);
+		shell.video = new SDL2SoftwareVideo();
 		shell.run();
 		shell.video.shutdown();
 		return 0;

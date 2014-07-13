@@ -18,9 +18,9 @@ import std.conv;
 import ae.ui.app.application;
 import ae.ui.app.posix.main;
 import ae.ui.shell.shell;
-import ae.ui.shell.sdl.shell;
+import ae.ui.shell.sdl2.shell;
 import ae.ui.video.renderer;
-import ae.ui.video.sdl.video;
+import ae.ui.video.sdl2.video;
 import ae.ui.video.video;
 import ae.ui.wm.application;
 import ae.ui.wm.controls.control;
@@ -32,8 +32,8 @@ final class MyApplication : WMApplication
 
 	override int run(string[] args)
 	{
-		shell = new SDLShell(this);
-		shell.video = new SDLVideo();
+		shell = new SDL2Shell(this);
+		shell.video = new SDL2SoftwareVideo();
 		root.addChild(createView());
 		shell.run();
 		shell.video.shutdown();
@@ -107,9 +107,10 @@ class PaintControl : Control
 		// if (coords.length > 100) throw new Exception("derp");
 
 		auto b = s.lock();
+		scope(exit) s.unlock();
 		foreach (coord; coords)
 			if (coord.x < w && coord.y < h)
 				b[x+coord.x, y+coord.y] = coord.c;
-		s.unlock();
+		//s.unlock();
 	}
 }

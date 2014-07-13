@@ -1,5 +1,5 @@
 /**
- * ae.ui.timer.sdl.timer
+ * ae.ui.timer.sdl2.timer
  *
  * License:
  *   This Source Code Form is subject to the terms of
@@ -11,13 +11,13 @@
  *   Vladimir Panteleev <vladimir@thecybershadow.net>
  */
 
-module ae.ui.timer.sdl.timer;
+module ae.ui.timer.sdl2.timer;
 
-import derelict.sdl.sdl;
+import derelict.sdl2.sdl;
 
 public import ae.ui.timer.timer;
 import ae.ui.app.application;
-import ae.ui.shell.sdl.shell : sdlEnforce;
+import ae.ui.shell.sdl2.shell : sdlEnforce;
 
 final class SDLTimer : Timer
 {
@@ -34,13 +34,16 @@ private:
 		return event;
 	}
 
-	extern(C) static uint sdlCallback(uint ms, void* param)
+	extern(C) static uint sdlCallback(uint ms, void* param) nothrow
 	{
 		auto event = cast(SDLTimerEvent)param;
-		if (event.call())
-			return ms;
-		else
-			return 0;
+		try
+			if (event.call())
+				return ms;
+			else
+				return 0;
+		catch (Exception e)
+			throw new Error("Exception thrown from timer event", e);
 	}
 }
 
