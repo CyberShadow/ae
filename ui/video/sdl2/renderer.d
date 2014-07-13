@@ -51,7 +51,7 @@ final class SDL2SoftwareRenderer : Renderer
 			void* pixels;
 			int pitch;
 			sdlEnforce(SDL_LockTexture(t, null, &pixels, &pitch)==0, "SDL_LockTexture failed");
-			_bitmap = Bitmap(cast(COLOR*)pixels, w, h, pitch / COLOR.sizeof);
+			_bitmap = Bitmap(cast(COLOR*)pixels, w, h, pitch / cast(int)COLOR.sizeof);
 			locked = true;
 		}
 		return _bitmap;
@@ -233,7 +233,7 @@ final class SDL2Renderer : Renderer
 	{
 		auto pixelInfo = source.getPixels();
 		data.t = sdlEnforce(SDL_CreateTexture(renderer, PIXEL_FORMAT, SDL_TEXTUREACCESS_STREAMING, pixelInfo.w, pixelInfo.h), "SDL_CreateTexture failed");
-		SDL_UpdateTexture(data.t, null, pixelInfo.pixels, pixelInfo.pitch);
+		SDL_UpdateTexture(data.t, null, pixelInfo.pixels, cast(uint)pixelInfo.pitch);
 		data.textureVersion = source.textureVersion;
 	}
 
