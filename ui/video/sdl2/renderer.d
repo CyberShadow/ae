@@ -222,7 +222,7 @@ final class SDL2Renderer : Renderer
 			if (data.textureVersion != source.textureVersion)
 			{
 				auto pixelInfo = source.getPixels();
-				SDL_UpdateTexture(data.t, null, pixelInfo.pixels, pixelInfo.pitch);
+				SDL_UpdateTexture(data.t, null, pixelInfo.pixels, cast(uint)pixelInfo.pitch);
 				data.textureVersion = source.textureVersion;
 			}
 		}
