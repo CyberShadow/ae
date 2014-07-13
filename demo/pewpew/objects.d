@@ -81,7 +81,7 @@ class GameEntity
 	void add(Plane plane)
 	{
 		this.plane = plane;
-		planes[plane].add(this);
+		planes[plane].pushBack(this);
 	}
 
 	void remove()
