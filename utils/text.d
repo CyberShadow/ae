@@ -633,20 +633,21 @@ char[] toDec(N : ulong, size_t U)(N o, ref char[U] buf)
 	Unqual!N n = o;
 	char* p = buf.ptr+buf.length;
 
-	static if (isSigned!N)
+	if (isSigned!N && n<0)
 	{
-		bool negative;
-		if (n<0)
-			negative = true, n = -n;
+		do
+		{
+			*--p = '0' - n%10;
+			n = n/10;
+		} while (n);
+		*--p = '-';
 	}
-	do
-	{
-		*--p = '0' + n%10;
-		n = n/10;
-	} while (n);
-	static if (isSigned!N)
-		if (negative)
-			*--p = '-';
+	else
+		do
+		{
+			*--p = '0' + n%10;
+			n = n/10;
+		} while (n);
 
 	return p[0 .. buf.ptr + buf.length - p];
 }
@@ -660,6 +661,7 @@ string toDec(T : ulong)(T n)
 unittest
 {
 	assert(toDec(42) == "42");
+	assert(toDec(int.min) == int.min.to!string());
 }
 
 /// Print an unsigned integer as a zero-padded, right-aligned decimal number into a buffer
