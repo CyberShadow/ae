@@ -202,9 +202,6 @@ class Config
 
 	T read(T)(string name, T defaultValue = T.init)
 	{
-		static if (is(typeof(readImpl(name, defaultValue))))
-			return readImpl(name, defaultValue);
-		else
 		static if (is(T==struct))
 		{
 			T v = defaultValue;
@@ -213,6 +210,9 @@ class Config
 				v.tupleof[i] = readImpl(prefix ~ Capitalize!(v.tupleof[i].stringof[2..$]), v.tupleof[i]);
 			return v;
 		}
+		else
+		static if (is(typeof(readImpl(name, defaultValue))))
+			return readImpl(name, defaultValue);
 		else
 		static if (is(typeof(to!T(string.init))))
 		{
@@ -225,15 +225,15 @@ class Config
 
 	void write(T)(string name, T v)
 	{
-		static if (is(typeof(writeImpl(name, v))))
-			return writeImpl(name, v);
-		else
 		static if (is(T==struct))
 		{
 			auto prefix = name ~ ".";
 			foreach (i, field; v.tupleof)
 				writeImpl(prefix ~ Capitalize!(v.tupleof[i].stringof[2..$]), v.tupleof[i]);
 		}
+		else
+		static if (is(typeof(writeImpl(name, v))))
+			return writeImpl(name, v);
 		else
 		static if (is(typeof(to!string(v))))
 			writeImpl(name, to!string(v));
