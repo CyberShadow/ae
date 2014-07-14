@@ -47,13 +47,7 @@ class SDL2CommonVideo : ThreadedVideo
 protected:
 	override @property bool initializeVideoInRenderThread()
 	{
-		// On Windows, OpenGL commands must come from the same thread that initialized video,
-		// since SDL does not expose anything like wglMakeCurrent.
-		// However, on X11 (and probably other platforms) video initialization must happen in the main thread.
-		version (Windows)
-			return true;
-		else
-			return false;
+		return true;
 	}
 
 	uint getSDLFlags     () { return 0; }
