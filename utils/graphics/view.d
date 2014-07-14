@@ -165,7 +165,7 @@ auto crop(V)(auto ref V src, int x0, int y0, int x1, int y1)
 	if (isView!V)
 {
 	assert( 0 <=    x0 &&  0 <=    y0);
-	assert(x0 <     x1 && y0 <     y1);
+	assert(x0 <=    x1 && y0 <=    y1);
 	assert(x1 <= src.w && y1 <= src.h);
 
 	static struct Crop
