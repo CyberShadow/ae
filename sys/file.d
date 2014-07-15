@@ -701,9 +701,7 @@ struct NamedPipeImpl
 
 			fileName = `\\.\pipe\` ~ name;
 			auto h = CreateNamedPipeW(fileName.toUTF16z, PIPE_ACCESS_OUTBOUND, PIPE_TYPE_BYTE, 10, 4096, 4096, 0, null).wenforce("CreateNamedPipeW");
-			File f;
 			f.windowsHandleOpen(h, "wb");
-			return f;
 		}
 		else
 		{
