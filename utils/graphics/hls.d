@@ -94,7 +94,7 @@ struct HLS(COLOR, HLSTYPE=ushort, HLSTYPE HLSMAX=240)
 
 		if (sat == 0) {            /* achromatic case */
 			c.r = c.g = c.b = cast(RGBTYPE)((lum*RGBMAX)/HLSMAX);
-			assert(hue == UNDEFINED);
+		//	assert(hue == UNDEFINED);
 		}
 		else  {                    /* chromatic case */
 			/* set up magic numbers */
