@@ -550,6 +550,11 @@ version (Posix)
 	}
 }
 
+void toFile(in void[] data, in char[] name)
+{
+	std.file.write(name, data);
+}
+
 /// Uses UNC paths to open a file.
 /// Requires https://github.com/D-Programming-Language/phobos/pull/1888
 File openFile()(string fn, string mode)
