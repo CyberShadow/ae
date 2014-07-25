@@ -68,7 +68,7 @@ Paragraph[] unwrapText(string text, bool flowed, bool delsp)
 	return paragraphs;
 }
 
-enum DEFAULT_WRAP_LENGTH = 66;
+enum DEFAULT_WRAP_LENGTH = 72;
 
 string wrapText(Paragraph[] paragraphs, int margin = DEFAULT_WRAP_LENGTH)
 {
