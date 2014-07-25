@@ -207,8 +207,7 @@ class ConsoleLogger : Logger
 
 	override void log(in char[] str)
 	{
-		auto output = name ~ ": " ~ str ~ "\n";
-		stderr.write(output);
+		stderr.write(name, ": ", str, "\n");
 		stderr.flush();
 	}
 }
