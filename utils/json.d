@@ -56,6 +56,9 @@ struct CustomJsonWriter(WRITER)
 		static if (is(T : const(char)[]))
 			putString(v);
 		else
+		static if (is(T == bool))
+			return output.put(v ? "true" : "false");
+		else
 		static if (is(T : long))
 			return .put(output, v);
 		else
@@ -203,6 +206,7 @@ unittest
 	assert(toJson(x) == `{"a":17,"b":"aoeu"}`);
 	int[] arr = [1,5,7];
 	assert(toJson(arr) == `[1,5,7]`);
+	assert(toJson(true) == `true`);
 
 	assert(toJson(tuple()) == ``);
 	assert(toJson(tuple(42)) == `42`);
