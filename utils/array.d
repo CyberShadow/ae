@@ -13,6 +13,8 @@
 
 module ae.utils.array;
 
+import std.traits;
+
 public import ae.utils.aa;
 public import ae.utils.appender;
 
@@ -20,6 +22,43 @@ public import ae.utils.appender;
 T[] toArray(T)(ref T v)
 {
 	return (&v)[0..1];
+}
+
+/// Return the value represented as an array of bytes.
+@property inout(ubyte)[] bytes(T)(ref inout(T) value)
+	if (!(is(T == class) || isDynamicArray!T))
+{
+	return value.toArray().bytes;
+}
+
+/// ditto
+@property inout(ubyte)[] bytes(T)(inout(T) value)
+	if ( (is(T == class) || isDynamicArray!T))
+{
+	static if (is(T U : U[]))
+		return cast(inout(ubyte)[])value;
+	else
+		return (cast(inout(ubyte)*)value)[0..__traits(classInstanceSize, T)];
+}
+
+unittest
+{
+	ubyte b = 5;
+	assert(b.bytes == [5]);
+
+	struct S { ubyte b = 5; }
+	S s;
+	assert(s.bytes == [5]);
+
+	ubyte[1] sa = [5];
+	assert(sa.bytes == [5]);
+}
+
+int memcmp(in ubyte[] a, in ubyte[] b)
+{
+	import core.stdc.string;
+	assert(a.length == b.length);
+	return memcmp(a.ptr, b.ptr, a.length);
 }
 
 T[] vector(string op, T)(T[] a, T[] b)
