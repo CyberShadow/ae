@@ -550,6 +550,58 @@ version (Posix)
 	}
 }
 
+version (Windows)
+{
+	/// Enumerate all hard links to the specified file.
+	string[] enumerateHardLinks()(string fn)
+	{
+		import win32.winnt;
+		import win32.winbase;
+		import ae.sys.windows;
+
+		alias TFindFirstFileNameW = static extern(System) HANDLE function(LPCWSTR lpFileName, DWORD dwFlags, LPDWORD StringLength, PWCHAR LinkName);
+		alias TFindNextFileNameW = static extern(System) BOOL function(HANDLE hFindStream, LPDWORD StringLength, PWCHAR LinkName);
+
+		auto kernel32 = GetModuleHandle("kernel32.dll");
+		auto FindFirstFileNameW = cast(TFindFirstFileNameW)GetProcAddress(kernel32, "FindFirstFileNameW").wenforce("GetProcAddress(FindFirstFileNameW)");
+		auto FindNextFileNameW = cast(TFindNextFileNameW)GetProcAddress(kernel32, "FindNextFileNameW").wenforce("GetProcAddress(FindNextFileNameW)");
+
+		static WCHAR[0x8000] buf;
+		DWORD len = buf.length;
+		auto h = FindFirstFileNameW(toUTF16z(fn), 0, &len, buf.ptr);
+		wenforce(h != INVALID_HANDLE_VALUE, "FindFirstFileNameW");
+		scope(exit) FindClose(h);
+
+		string[] result;
+		do
+		{
+			enforce(len > 0 && len < buf.length && buf[len-1] == 0, "Bad FindFirst/NextFileNameW result");
+			result ~= buf[0..len-1].toUTF8();
+			len = buf.length;
+			auto ok = FindNextFileNameW(h, &len, buf.ptr);
+			if (!ok && GetLastError() == ERROR_HANDLE_EOF)
+				break;
+			wenforce(ok, "FindNextFileNameW");
+		} while(true);
+		return result;
+	}
+}
+
+version(Windows)
+unittest
+{
+	touch("a.test");
+	scope(exit) remove("a.test");
+	hardLink("a.test", "b.test");
+	scope(exit) remove("b.test");
+
+	auto paths = enumerateHardLinks("a.test");
+	assert(paths.length == 2);
+	paths.sort;
+	assert(paths[0].endsWith(`\a.test`), paths[0]);
+	assert(paths[1].endsWith(`\b.test`));
+}
+
 void toFile(in void[] data, in char[] name)
 {
 	std.file.write(name, data);
