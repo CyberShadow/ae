@@ -559,8 +559,8 @@ version (Windows)
 		import win32.winbase;
 		import ae.sys.windows;
 
-		alias TFindFirstFileNameW = static extern(System) HANDLE function(LPCWSTR lpFileName, DWORD dwFlags, LPDWORD StringLength, PWCHAR LinkName);
-		alias TFindNextFileNameW = static extern(System) BOOL function(HANDLE hFindStream, LPDWORD StringLength, PWCHAR LinkName);
+		alias extern(System) HANDLE function(LPCWSTR lpFileName, DWORD dwFlags, LPDWORD StringLength, PWCHAR LinkName) TFindFirstFileNameW;
+		alias extern(System) BOOL function(HANDLE hFindStream, LPDWORD StringLength, PWCHAR LinkName) TFindNextFileNameW;
 
 		auto kernel32 = GetModuleHandle("kernel32.dll");
 		auto FindFirstFileNameW = cast(TFindFirstFileNameW)GetProcAddress(kernel32, "FindFirstFileNameW").wenforce("GetProcAddress(FindFirstFileNameW)");
