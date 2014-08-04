@@ -625,8 +625,8 @@ private void parseToken(alias c, alias context)()
 				{
 					auto tzStr = take!5();
 					enforce(tzStr[0]=='-' || tzStr[0]=='+', "-/+ expected");
-					auto minutes = (to!int(tzStr[1..3]) * 60 + to!int(tzStr[3..5])) * (tzStr[0]=='-' ? -1 : 1);
-					tz = new immutable(SimpleTimeZone)(minutes);
+					auto n = (to!int(tzStr[1..3]) * 60 + to!int(tzStr[3..5])) * (tzStr[0]=='-' ? -1 : 1);
+					tz = new immutable(SimpleTimeZone)(minutes(n));
 				}
 				break;
 			}
@@ -635,8 +635,8 @@ private void parseToken(alias c, alias context)()
 				auto tzStr = take!6();
 				enforce(tzStr[0]=='-' || tzStr[0]=='+', "-/+ expected");
 				enforce(tzStr[3]==':', ": expected");
-				auto minutes = (to!int(tzStr[1..3]) * 60 + to!int(tzStr[4..6])) * (tzStr[0]=='-' ? -1 : 1);
-				tz = new immutable(SimpleTimeZone)(minutes);
+				auto n = (to!int(tzStr[1..3]) * 60 + to!int(tzStr[4..6])) * (tzStr[0]=='-' ? -1 : 1);
+				tz = new immutable(SimpleTimeZone)(minutes(n));
 				break;
 			}
 			case 'T':
@@ -646,9 +646,8 @@ private void parseToken(alias c, alias context)()
 			case 'Z':
 			{
 				// TODO: is this correct?
-				auto seconds = takeNumber!(1, 6);
-				enforce(seconds % 60 == 0, "Timezone granularity lower than minutes not supported");
-				tz = new immutable(SimpleTimeZone)(seconds / 60);
+				auto n = takeNumber!(1, 6);
+				tz = new immutable(SimpleTimeZone)(seconds(n));
 				break;
 			}
 
