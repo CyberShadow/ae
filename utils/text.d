@@ -318,6 +318,28 @@ unittest
 	assert(normalizeWhitespace(" Mary  had\ta\nlittle\r\n\tlamb") == "Mary had a little lamb");
 }
 
+string[] splitByCamelCase(string s)
+{
+	string[] result;
+	size_t start = 0;
+	foreach (i; 1..s.length+1)
+		if (i == s.length
+		 || (isLower(s[i-1]) && isUpper(s[i]))
+		 || (i+1 < s.length && isUpper(s[i-1]) && isUpper(s[i]) && isLower(s[i+1]))
+		)
+		{
+			result ~= s[start..i];
+			start = i;
+		}
+	return result;
+}
+
+unittest
+{
+	assert(splitByCamelCase("parseIPString") == ["parse", "IP", "String"]);
+	assert(splitByCamelCase("IPString") == ["IP", "String"]);
+}
+
 // ************************************************************************
 
 private __gshared char[256] asciiLower, asciiUpper;
