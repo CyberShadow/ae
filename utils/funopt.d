@@ -84,6 +84,9 @@ private template isParameter(T)
 	static if (is(T == OptionImpl!Args, Args...))
 		enum isParameter = T.type == OptionType.parameter;
 	else
+	static if (is(T == bool))
+		enum isParameter = false;
+	else
 		enum isParameter = true;
 }
 
@@ -207,7 +210,7 @@ auto funopt(alias FUN)(string[] args)
 
 unittest
 {
-	void f1(Switch!() verbose, Option!int tries, string filename)
+	void f1(bool verbose, Option!int tries, string filename)
 	{
 		assert(verbose);
 		assert(tries == 5);
