@@ -90,6 +90,18 @@ private template isParameter(T)
 		enum isParameter = true;
 }
 
+private template isOptionArray(Param)
+{
+	alias T = OptionValueType!Param;
+	static if (is(T == string))
+		enum isOptionArray = false;
+	else
+	static if (is(T U : U[]))
+		enum isOptionArray = true;
+	else
+		enum isOptionArray = false;
+}
+
 private template optionShorthand(T)
 {
 	static if (is(T == OptionImpl!Args, Args...))
@@ -110,13 +122,21 @@ private enum bool optionHasDescription(T) = optionDescription!T !is null;
 
 private template optionPlaceholder(T)
 {
-	static if (T.placeholder.length)
-		enum optionPlaceholder = T.placeholder;
+	static if (is(T == OptionImpl!Args, Args...))
+	{
+		static if (T.placeholder.length)
+			enum optionPlaceholder = T.placeholder;
+		else
+			enum optionPlaceholder = optionPlaceholder!(OptionValueType!T);
+	}
 	else
-	static if (is(OptionValueType!T : real))
+	static if (isOptionArray!T)
+		enum optionPlaceholder = optionPlaceholder!(typeof(T.init[0]));
+	else
+	static if (is(T : real))
 		enum optionPlaceholder = "N";
 	else
-	static if (is(OptionValueType!T == string))
+	static if (is(T == string))
 		enum optionPlaceholder = "STR";
 	else
 		enum optionPlaceholder = "X";
@@ -263,25 +283,44 @@ string getUsageFormatString(alias FUN)()
 
 	string result = "Usage: %s";
 	enum haveNonParameters = !allSatisfy!(isParameter, Params);
-	static if (haveNonParameters)
+	enum haveDescriptions = anySatisfy!(optionHasDescription, Params);
+	static if (haveNonParameters && haveDescriptions)
 		result ~= " [OPTION]...";
 
+	string getSwitchText(int i)()
+	{
+		alias Param = Params[i];
+		string switchText = "--" ~ names[i].splitByCamelCase().join("-").toLower();
+		static if (is(Param == OptionImpl!Args, Args...))
+			static if (Param.type == OptionType.option)
+				switchText ~= "=" ~ optionPlaceholder!Param;
+		return switchText;
+	}
+
 	foreach (i, Param; Params)
-		if (isParameter!Param)
 		{
-			result ~= " ";
-			static if (!is(defaults[i] == void))
-				result ~= "[";
-			result ~= toUpper(names[i].splitByCamelCase().join("-"));
-			static if (!is(defaults[i] == void))
-				result ~= "]";
-			static if (is(OptionValueType!Param == string[]))
+			static if (isParameter!Param)
+			{
+				result ~= " ";
+				static if (!is(defaults[i] == void))
+					result ~= "[";
+				result ~= toUpper(names[i].splitByCamelCase().join("-"));
+				static if (!is(defaults[i] == void))
+					result ~= "]";
+			}
+			else
+			{
+				static if (optionHasDescription!Param)
+					continue;
+				else
+					result ~= " [" ~ getSwitchText!i() ~ "]";
+			}
+			static if (isOptionArray!Param)
 				result ~= "...";
 		}
 
 	result ~= "\n";
 
-	enum haveDescriptions = anySatisfy!(optionHasDescription, Params);
 	static if (haveDescriptions)
 	{
 		enum haveShorthands = anySatisfy!(optionShorthand, Params);
@@ -291,19 +330,17 @@ string getUsageFormatString(alias FUN)()
 		foreach (i, Param; Params)
 			static if (optionHasDescription!Param)
 			{
-				string longName = names[i].splitByCamelCase().join("-");
-				static if (Param.type == OptionType.option)
-					longName ~= "=" ~ optionPlaceholder!Param;
+				string switchText = getSwitchText!i();
 				if (haveShorthands)
 				{
 					auto c = optionShorthand!Param;
 					if (c)
-						selectors[i] = "-%s, --%s".format(c, longName);
+						selectors[i] = "-%s, %s".format(c, switchText);
 					else
-						selectors[i] = "    --%s".format(longName);
+						selectors[i] = "    %s".format(switchText);
 				}
 				else
-					selectors[i] = "--" ~ longName;
+					selectors[i] = switchText;
 				longestSelector = max(longestSelector, selectors[i].length);
 			}
 
@@ -343,5 +380,18 @@ Options:
   -v, --verbose       Enable verbose logging
       --tries=N       Number of tries
       --timeout=SECS  Seconds to wait each try
+", usage);
+
+	void f2(
+		bool verbose,
+		Option!(string[]) extraFile,
+		string filename,
+		string output = "default"
+	)
+	{}
+
+	usage = getUsage!f2("program");
+	assert(usage ==
+"Usage: program [--verbose] [--extra-file=STR]... FILENAME [OUTPUT]
 ", usage);
 }
