@@ -256,6 +256,7 @@ string getUsageFormatString(alias FUN)()
 {
 	alias ParameterTypeTuple!FUN Params;
 	enum names = [ParameterIdentifierTuple!FUN];
+	alias defaults = ParameterDefaultValueTuple!FUN;
 
 	string result = "Usage: %s";
 	enum haveNonParameters = !allSatisfy!(isParameter, Params);
@@ -265,8 +266,13 @@ string getUsageFormatString(alias FUN)()
 	foreach (i, Param; Params)
 		if (isParameter!Param)
 		{
-			result ~= " " ~ toUpper(names[i]);
-			if (is(OptionValueType!Param == string[]))
+			result ~= " ";
+			static if (!is(defaults[i] == void))
+				result ~= "[";
+			result ~= toUpper(names[i].splitByCamelCase().join("-"));
+			static if (!is(defaults[i] == void))
+				result ~= "]";
+			static if (is(OptionValueType!Param == string[]))
 				result ~= "...";
 		}
 
@@ -321,15 +327,18 @@ unittest
 		Option!(int, "Number of tries") tries,
 		Option!(int, "Seconds to wait each try", "SECS") timeout,
 		string filename,
+		string output = "default",
+		string[] extraFiles = null
 	)
 	{}
 
-	assert(getUsage!f1("program") ==
-"Usage: program [OPTION]... FILENAME
+	auto usage = getUsage!f1("program");
+	assert(usage ==
+"Usage: program [OPTION]... FILENAME [OUTPUT] [EXTRA-FILES]...
 
 Options:
   -v, --verbose       Enable verbose logging
       --tries=N       Number of tries
       --timeout=SECS  Seconds to wait each try
-");
+", usage);
 }
