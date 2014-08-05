@@ -21,7 +21,8 @@ import win32.winbase;
 import win32.windef;
 import win32.winuser;
 
-import ae.sys.windows.misc;
+import ae.sys.windows.exception;
+import ae.sys.windows.text;
 
 static if (_WIN32_WINNT >= 0x500) {
 

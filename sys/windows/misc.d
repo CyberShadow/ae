@@ -14,32 +14,14 @@
 module ae.sys.windows.misc;
 
 import std.string;
-import std.utf;
 
 import win32.winbase;
 import win32.wincon;
 import win32.winnt;
 import win32.winuser;
 
-string fromWString(in wchar[] buf)
-{
-	foreach (i, c; buf)
-		if (!c)
-			return toUTF8(buf[0..i]);
-	return toUTF8(buf);
-}
-
-string fromWString(in wchar* buf)
-{
-	const(wchar)* p = buf;
-	for (; *p; p++) {}
-	return toUTF8(buf[0..p-buf]);
-}
-
-LPCWSTR toWStringz(string s)
-{
-	return s is null ? null : toUTF16z(s);
-}
+import ae.sys.windows.exception;
+import ae.sys.windows.text;
 
 LARGE_INTEGER largeInteger(long n)
 {
@@ -57,47 +39,6 @@ ulong makeUlong(DWORD dwLow, DWORD dwHigh)
 	li.LowPart  = dwLow;
 	li.HighPart = dwHigh;
 	return li.QuadPart;
-}
-
-// ***************************************************************************
-
-class WindowsException : Exception
-{
-	DWORD code;
-
-	this(DWORD code, string str=null)
-	{
-		this.code = code;
-
-		wchar *lpMsgBuf = null;
-		FormatMessageW(
-			FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-			null,
-			code,
-			MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-			cast(LPWSTR)&lpMsgBuf,
-			0,
-			null);
-
-		auto message = lpMsgBuf.fromWString();
-		if (lpMsgBuf)
-			LocalFree(lpMsgBuf);
-
-		message = strip(message);
-		message ~= format(" (error %d)", code);
-		if (str)
-			message = str ~ ": " ~ message;
-
-		super(message);
-	}
-}
-
-T wenforce(T)(T cond, string str=null)
-{
-	if (cond)
-		return cond;
-
-	throw new WindowsException(GetLastError(), str);
 }
 
 // ***************************************************************************

@@ -20,7 +20,8 @@ import win32.winbase;
 import win32.winnt;
 import win32.winuser;
 
-import ae.sys.windows.misc;
+import ae.sys.windows.exception;
+import ae.sys.windows.text;
 
 struct WindowIterator
 {

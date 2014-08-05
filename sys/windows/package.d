@@ -13,8 +13,10 @@
 
 module ae.sys.windows;
 
+public import ae.sys.windows.exception;
 public import ae.sys.windows.dll;
 public import ae.sys.windows.input;
 public import ae.sys.windows.misc;
 public import ae.sys.windows.process;
+public import ae.sys.windows.text;
 public import ae.sys.windows.window;

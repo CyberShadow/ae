@@ -607,6 +607,8 @@ void toFile(in void[] data, in char[] name)
 	std.file.write(name, data);
 }
 
+version(Windows) static import ae.sys.windows.exception;
+
 /// Uses UNC paths to open a file.
 /// Requires https://github.com/D-Programming-Language/phobos/pull/1888
 File openFile()(string fn, string mode)
@@ -614,9 +616,8 @@ File openFile()(string fn, string mode)
 	File f;
 	static if (is(typeof(&f.windowsHandleOpen)))
 	{
-		import win32.winnt;
-		import win32.winbase;
-		import ae.sys.windows;
+		import core.sys.windows.windows;
+		import ae.sys.windows.exception;
 
 		string winMode;
 		foreach (c; mode)
@@ -652,7 +653,7 @@ File openFile()(string fn, string mode)
 		wenforce(h != INVALID_HANDLE_VALUE);
 
 		if (append)
-			h.SetFilePointerEx(largeInteger(0), null, FILE_END);
+			h.SetFilePointer(0, null, FILE_END);
 
 		f.windowsHandleOpen(h, mode);
 	}
