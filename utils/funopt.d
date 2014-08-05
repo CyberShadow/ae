@@ -142,9 +142,14 @@ private template optionPlaceholder(T)
 		enum optionPlaceholder = "X";
 }
 
+struct FunOptConfig
+{
+	std.getopt.config[] getoptConfig;
+}
+
 /// Parse the given arguments according to FUN's parameters, and call FUN.
 /// Throws GetOptException on errors.
-auto funopt(alias FUN)(string[] args)
+auto funopt(alias FUN, FunOptConfig config = FunOptConfig.init)(string[] args)
 {
 	alias ParameterTypeTuple!FUN Params;
 	Params values;
@@ -161,7 +166,9 @@ auto funopt(alias FUN)(string[] args)
 		}
 	}
 
-	enum structFields = Params.length.iota.map!(n => "string selector%d; OptionValueType!(Params[%d])* value%d;\n".format(n, n, n)).join();
+	enum structFields =
+		config.getoptConfig.length.iota.map!(n => "std.getopt.config config%d = std.getopt.config.%s;\n".format(n, config.getoptConfig[n])).join() ~
+		Params.length.iota.map!(n => "string selector%d; OptionValueType!(Params[%d])* value%d;\n".format(n, n, n)).join();
 
 	static struct GetOptArgs { mixin(structFields); }
 	GetOptArgs getOptArgs;
@@ -190,8 +197,9 @@ auto funopt(alias FUN)(string[] args)
 
 	getopt(args,
 		std.getopt.config.bundling,
+		getOptArgs.tupleof,
 		"h|help", &help,
-		getOptArgs.tupleof);
+	);
 
 	if (help)
 	{
