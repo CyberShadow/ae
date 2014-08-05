@@ -152,8 +152,14 @@ auto funopt(alias FUN)(string[] args)
 	alias defaults = ParameterDefaultValueTuple!FUN;
 
 	foreach (i, defaultValue; defaults)
+	{
 		static if (!is(defaultValue == void))
-			values[i] = defaultValue;
+		{
+			//values[i] = defaultValue;
+			// https://issues.dlang.org/show_bug.cgi?id=13252
+			values[i] = cast(OptionValueType!(Params[i])) defaultValue;
+		}
+	}
 
 	enum structFields = Params.length.iota.map!(n => "string selector%d; OptionValueType!(Params[%d])* value%d;\n".format(n, n, n)).join();
 
@@ -259,6 +265,12 @@ unittest
 		assert(dataFiles == []);
 	}
 	funopt!f4(["program"]);
+
+	void f5(string input = null)
+	{
+		assert(input is null);
+	}
+	funopt!f5(["program"]);
 }
 
 string getUsage(alias FUN)(string programName)
