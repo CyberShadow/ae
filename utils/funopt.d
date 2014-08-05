@@ -241,7 +241,7 @@ auto funopt(alias FUN, FunOptConfig config = FunOptConfig.init)(string[] args)
 					{
 						// If the first argument is mandatory,
 						// and no arguments were given, print usage.
-						if (i == 0 && origArgs.length == 1)
+						if (origArgs.length == 1)
 							printUsage();
 
 						throw new GetOptException("No " ~ names[i] ~ " specified.");
