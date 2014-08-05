@@ -23,6 +23,7 @@ import std.string;
 import std.traits;
 import std.typetuple;
 
+import ae.utils.meta.misc;
 import ae.utils.text;
 
 private enum OptionType { switch_, option, parameter }
@@ -194,6 +195,7 @@ auto funopt(alias FUN, FunOptConfig config = FunOptConfig.init)(string[] args)
 		mixin("getOptArgs.value%d = optionValue(values[%d]);".format(i, i));
 	}
 
+	auto origArgs = args;
 	bool help;
 
 	getopt(args,
@@ -202,10 +204,15 @@ auto funopt(alias FUN, FunOptConfig config = FunOptConfig.init)(string[] args)
 		"h|help", &help,
 	);
 
-	if (help)
+	void printUsage()
 	{
 		import std.stdio;
-		stderr.writeln(config.usageHeader, getUsage!FUN(args[0]), config.usageFooter);
+		stderr.writeln(config.usageHeader, getUsage!FUN(origArgs[0]), config.usageFooter);
+	}
+
+	if (help)
+	{
+		printUsage();
 		return cast(ReturnType!FUN)0;
 	}
 
@@ -231,7 +238,14 @@ auto funopt(alias FUN, FunOptConfig config = FunOptConfig.init)(string[] args)
 				else
 				{
 					static if (is(defaults[i] == void))
+					{
+						// If the first argument is mandatory,
+						// and no arguments were given, print usage.
+						if (i == 0 && origArgs.length == 1)
+							printUsage();
+
 						throw new GetOptException("No " ~ names[i] ~ " specified.");
+					}
 				}
 			}
 		}
@@ -282,9 +296,11 @@ unittest
 	funopt!f5(["program"]);
 }
 
-string getUsage(alias FUN)(string programName)
+// ***************************************************************************
+
+private string getProgramName(string program)
 {
-	programName = programName.baseName();
+	auto programName = program.baseName();
 	version(Windows)
 	{
 		programName = programName.toLower();
@@ -292,11 +308,17 @@ string getUsage(alias FUN)(string programName)
 			programName = programName.stripExtension();
 	}
 
+	return programName;
+}
+
+private string getUsage(alias FUN)(string program)
+{
+	auto programName = getProgramName(program);
 	enum formatString = getUsageFormatString!FUN();
 	return formatString.format(programName);
 }
 
-string getUsageFormatString(alias FUN)()
+private string getUsageFormatString(alias FUN)()
 {
 	alias ParameterTypeTuple!FUN Params;
 	enum names = [ParameterIdentifierTuple!FUN];
@@ -415,4 +437,81 @@ Options:
 	assert(usage ==
 "Usage: program [--verbose] [--extra-file=STR]... FILENAME [OUTPUT]
 ", usage);
+}
+
+// ***************************************************************************
+
+/// Dispatch the command line to a type's static methods, according to the
+/// first parameter on the given command line (the "action").
+/// String UDAs are used as usage documentation for generating --help output
+/// (or when no action is specified).
+auto funoptDispatch(alias Actions, FunOptConfig config = FunOptConfig.init)(string[] args)
+{
+	string program = args[0];
+
+	auto fun(string action, string[] actionArguments = [])
+	{
+		foreach (m; __traits(allMembers, Actions))
+		{
+			enum name = m.toLower();
+			if (name == action)
+			{
+				auto args = [getProgramName(program) ~ " " ~ action] ~ actionArguments;
+				return funopt!(__traits(getMember, Actions, m), config)(args);
+			}
+		}
+
+		throw new GetOptException("Unknown action: " ~ action);
+	}
+
+	enum actionList = genActionList!Actions();
+
+	const FunOptConfig myConfig = (){
+		auto c = config;
+		c.getoptConfig ~= std.getopt.config.stopOnFirstNonOption;
+		c.usageFooter = actionList ~ c.usageFooter;
+		return c;
+	}();
+	return funopt!(fun, myConfig)(args);
+}
+
+private string genActionList(alias Actions)()
+{
+	string result = "\nActions:\n";
+
+	size_t longestAction = 0;
+	foreach (m; __traits(allMembers, Actions))
+		static if (hasAttribute!(string, __traits(getMember, Actions, m)))
+			longestAction = max(longestAction, m.length);
+
+	foreach (m; __traits(allMembers, Actions))
+		static if (hasAttribute!(string, __traits(getMember, Actions, m)))
+		{
+			enum name = m.toLower();
+			result ~= wrap(
+				//__traits(comment, __traits(getMember, Actions, m)), // https://github.com/D-Programming-Language/dmd/pull/3531
+				getAttribute!(string, __traits(getMember, Actions, m)),
+				79,
+				"  %-*s  ".format(longestAction, name),
+				" ".replicate(2 + longestAction + 2)
+			);
+		}
+
+	return result;
+}
+
+unittest
+{
+	struct Actions
+	{
+		@(`Perform action f1`)
+		static void f1(bool verbose) {}
+	}
+
+	funoptDispatch!Actions(["program", "f1", "--verbose"]);
+
+	assert(genActionList!Actions() == "
+Actions:
+  f1  Perform action f1
+");
 }
