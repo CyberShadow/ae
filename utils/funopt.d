@@ -145,6 +145,7 @@ private template optionPlaceholder(T)
 struct FunOptConfig
 {
 	std.getopt.config[] getoptConfig;
+	string usageHeader, usageFooter;
 }
 
 /// Parse the given arguments according to FUN's parameters, and call FUN.
@@ -204,7 +205,7 @@ auto funopt(alias FUN, FunOptConfig config = FunOptConfig.init)(string[] args)
 	if (help)
 	{
 		import std.stdio;
-		stderr.writeln(getUsage!FUN(args[0]));
+		stderr.writeln(config.usageHeader, getUsage!FUN(args[0]), config.usageFooter);
 		return cast(ReturnType!FUN)0;
 	}
 
