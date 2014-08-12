@@ -115,6 +115,36 @@ bool isOneOf(T)(T val, T[] arr...)
 	return arr.contains(val);
 }
 
+import std.random;
+
+/// Select and return a random element from the array.
+inout(T) sample(T)(inout(T)[] arr)
+{
+	return arr[uniform(0, $)];
+}
+
+unittest
+{
+	assert([7, 7, 7].sample == 7);
+}
+
+/// Select and return a random element from the array,
+/// and remove it from the array.
+T pluck(T)(ref T[] arr)
+{
+	auto pos = uniform(0, arr.length);
+	auto result = arr[pos];
+	arr = arr.remove(pos);
+	return result;
+}
+
+unittest
+{
+	auto arr = [1, 2, 3];
+	auto res = [arr.pluck, arr.pluck, arr.pluck];
+	assert(res.sort == [1, 2, 3]);
+}
+
 import std.functional;
 
 T[] countSort(alias value = "a", T)(T[] arr)
