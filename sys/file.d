@@ -84,6 +84,7 @@ version (Posix)
 {
 	private import core.stdc.errno;
 	private import core.sys.posix.dirent;
+	private import core.stdc.string;
 
 	string[] fastListDir(bool recursive=false, bool symlinks=false)(string pathname, string pattern = null)
 	{
@@ -99,8 +100,8 @@ version (Posix)
 				while((fdata = readdir(h)) != null)
 				{
 					// Skip "." and ".."
-					if (!std.c.string.strcmp(fdata.d_name.ptr, ".") ||
-						!std.c.string.strcmp(fdata.d_name.ptr, ".."))
+					if (!core.stdc.string.strcmp(fdata.d_name.ptr, ".") ||
+						!core.stdc.string.strcmp(fdata.d_name.ptr, ".."))
 							continue;
 
 					static if (!symlinks)
@@ -109,7 +110,7 @@ version (Posix)
 							continue;
 					}
 
-					size_t len = std.c.string.strlen(fdata.d_name.ptr);
+					size_t len = core.stdc.string.strlen(fdata.d_name.ptr);
 					string name = fdata.d_name[0 .. len].idup;
 					if (pattern && !globMatch(name, pattern))
 						continue;
