@@ -43,20 +43,26 @@ final class SQLite
 			sqlite3* db;
 			F dg;
 			int fres;
+			Throwable throwable = null;
 
 			int opApply(F dg)
 			{
 				this.dg = dg;
 				auto res = sqlite3_exec(db, toStringz(sql), &callback, &this, null);
 				if (res == SQLITE_ABORT)
-					return fres;
+				{
+					if (throwable)
+						throw throwable;
+					else
+						return fres;
+				}
 				else
 				if (res != SQLITE_OK)
 					throw new SQLiteException(db, res);
 				return 0;
 			}
 
-			static extern(C) int callback(void* ctx, int argc, char** argv, char** colv)
+			static nothrow extern(C) int callback(void* ctx, int argc, char** argv, char** colv)
 			{
 				auto i = cast(Iterator*)ctx;
 				static const(char)[][] args, cols;
@@ -64,7 +70,13 @@ final class SQLite
 				foreach (n; 0..argc)
 					args[n] = to!(const(char)[])(argv[n]),
 					cols[n] = to!(const(char)[])(colv[n]);
-				return i.fres = i.dg(args, cols);
+				try
+					return i.fres = i.dg(args, cols);
+				catch (Exception e)
+				{
+					i.throwable = e;
+					return 1;
+				}
 			}
 		}
 
@@ -169,6 +181,7 @@ final class SQLite
 				int res = 0;
 				while (stmt.step())
 				{
+					scope(failure) stmt.reset();
 					static if (U.length == 1 && is(U[0] V : V[string]))
 					{
 						U[0] result;
