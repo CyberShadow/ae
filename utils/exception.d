@@ -50,6 +50,16 @@ unittest
 		assert(e.classinfo.name.indexOf("Cheese") > 0);
 }
 
+/// This exception can never be thrown.
+/// Useful for a temporary or aliased catch block exception type.
+class NoException : Exception
+{
+	@disable this()
+	{
+		super(null);
+	}
+}
+
 // --------------------------------------------------------------------------
 
 import std.conv;
