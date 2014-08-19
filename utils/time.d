@@ -210,10 +210,10 @@ private void putToken(alias c, alias context, alias sink)()
 					sink.put(toDecFixed!2(dt.second));
 					break;
 				case 'u':
-					sink.put(toDecFixed!6(cast(uint)t.fracSec.usecs));
+					sink.put(toDecFixed!6(cast(uint)t.fracSecs.split!"usecs".usecs));
 					break;
 				case 'E': // not standard
-					sink.put(toDecFixed!3(cast(uint)t.fracSec.msecs));
+					sink.put(toDecFixed!3(cast(uint)t.fracSecs.split!"msecs".msecs));
 					break;
 
 				// Timezone
@@ -692,7 +692,7 @@ private SysTime parseTimeImpl(alias fmt, bool checked, C)(C[] t)
 
 		result = SysTime(
 			DateTime(year, month, day, hour, minute, second),
-			FracSec.from!"usecs"(usecs),
+			dur!"usecs"(usecs),
 			tz);
 
 		if (dow >= 0)
