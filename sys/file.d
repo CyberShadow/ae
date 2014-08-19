@@ -699,6 +699,12 @@ void[] readFile(File f)
 	return result;
 }
 
+/// Like std.file.readText for non-UTF8
+ascii readAscii(string fileName)
+{
+	return cast(ascii)readFile(openFile(fileName, "rb"));
+}
+
 // http://d.puremagic.com/issues/show_bug.cgi?id=7016
 version(Posix) static import ae.sys.signals;
 
