@@ -359,11 +359,11 @@ class Rfc850Message
 		time = Clock.currTime; // default value
 
 		if ("NNTP-Posting-Date" in headers)
-			time = parseTime!`D, j M Y H:i:s O \(\U\T\C\)`(headers["NNTP-Posting-Date"]);
+			time = parseTime!`D, j M Y H:i:s O \(\U\T\C\)`(headers["NNTP-Posting-Date"].strip());
 		else
 		if ("Date" in headers)
 		{
-			auto str = headers["Date"];
+			auto str = headers["Date"].strip();
 			try
 				time = parseTime!(TimeFormats.RFC850)(str);
 			catch (Exception e)
