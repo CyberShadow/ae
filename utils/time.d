@@ -690,9 +690,15 @@ private SysTime parseTimeImpl(alias fmt, bool checked, C)(C[] t)
 		if (hour12)
 			hour = hour12%12 + (pm ? 12 : 0);
 
+		// Compatibility with both <=2.066 and >=2.067
+		static if (__traits(hasMember, SysTime, "fracSecs"))
+			auto frac = dur!"usecs"(usecs);
+		else
+			auto frac = FracSec.from!"usecs"(usecs);
+
 		result = SysTime(
 			DateTime(year, month, day, hour, minute, second),
-			dur!"usecs"(usecs),
+			frac,
 			tz);
 
 		if (dow >= 0)
