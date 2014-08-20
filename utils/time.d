@@ -749,3 +749,11 @@ unittest
 {
 	return !d.total!"hnsecs"();
 }
+
+/// Workaround SysTime.fracSecs only being available in 2.067,
+/// and SysTime.fracSec becoming deprecated in the same version.
+@property Duration fracSecs(SysTime s)
+{
+	enum hnsecsPerSecond = convert!("seconds", "hnsecs")(1);
+	return hnsecs(s.stdTime % hnsecsPerSecond);
+}
