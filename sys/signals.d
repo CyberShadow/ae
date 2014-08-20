@@ -31,7 +31,8 @@ void addSignalHandler(int signum, SignalHandler fn)
 {
 	if (handlers[signum].length == 0)
 	{
-		auto old = signal(signum, &sighandle);
+		alias sigfn_t = typeof(signal(0, null));
+		auto old = signal(signum, cast(sigfn_t)&sighandle);
 		assert(old == SIG_DFL, "A signal handler was already set");
 	}
 	handlers[signum] ~= fn;
