@@ -13,6 +13,7 @@
 
 module ae.utils.array;
 
+import std.exception;
 import std.traits;
 
 public import ae.utils.aa;
@@ -113,6 +114,32 @@ bool isIn(T)(T val, in T[] arr)
 bool isOneOf(T)(T val, T[] arr...)
 {
 	return arr.contains(val);
+}
+
+/// Like AA.get - soft indexing, throws an
+/// Exception (not an Error) on out-of-bounds,
+/// even in release builds.
+ref T get(T)(T[] arr, size_t index)
+{
+	enforce(index < arr.length, "Out-of-bounds array access");
+	return arr[index];
+}
+
+/// Like AA.get - soft indexing, returns
+/// default value on out-of-bounds.
+auto get(T)(T[] arr, size_t index, auto ref T defaultValue)
+{
+	if (index >= arr)
+		return defaultValue;
+	return arr[index];
+}
+
+/// Slices an array. Throws an Exception (not an Error)
+/// on out-of-bounds, even in release builds.
+T[] slice(T)(T[] arr, size_t p0, size_t p1)
+{
+	enforce(p0 < p1 && p1 < arr.length, "Out-of-bounds array slice");
+	return arr[p0..p1];
 }
 
 import std.random;
