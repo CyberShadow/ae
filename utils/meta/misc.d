@@ -173,7 +173,7 @@ string[] stringofArray(Args...)()
 
 /// Returns the index of fun's parameter called "name",
 /// or asserts if the parameter is not found.
-size_t findParameter(alias fun, string name)()
+static size_t findParameter(alias fun, string name)()
 {
 	foreach (i, param; ParameterIdentifierTuple!fun)
 		if (param == name)
