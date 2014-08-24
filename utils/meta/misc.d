@@ -268,6 +268,43 @@ unittest
 
 // ************************************************************************
 
+/// Generate a @property function which creates/returns
+/// a thread-local singleton of a class with the given arguments.
+
+@property T singleton(T, args...)()
+	if (is(typeof(new T(args))))
+{
+	static T instance;
+	if (!instance)
+		instance = new T(args);
+	return instance;
+}
+
+unittest
+{
+	static class C
+	{
+		static int n = 0;
+
+		this()      { n++; }
+		this(int x) { n += x; }
+
+		void fun() {}
+	}
+
+	alias singleton!C c0;
+	c0.fun();
+	c0.fun();
+	assert(C.n == 1);
+
+	alias singleton!(C, 5) c1;
+	c1.fun();
+	c1.fun();
+	assert(C.n == 6);
+}
+
+// ************************************************************************
+
 /// Were we built with -debug?
 debug
 	enum IsDebug = true;
