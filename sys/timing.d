@@ -20,31 +20,34 @@ import std.exception;
 
 /// Prototype for core.time.MonoTime (TickDuration replacement).
 /// See https://github.com/D-Programming-Language/druntime/pull/711
-struct MonoTime
+static if (!is(core.time.MonoTime))
 {
-	enum max = MonoTime(ulong.max);
-
-	static MonoTime currTime()
+	struct MonoTime
 	{
-		return MonoTime(TickDuration.currSystemTick().hnsecs);
+		enum max = MonoTime(ulong.max);
+
+		static MonoTime currTime()
+		{
+			return MonoTime(TickDuration.currSystemTick().hnsecs);
+		}
+
+		MonoTime opBinary(string op)(Duration d) const
+			if (op == "+")
+		{
+			return MonoTime(hnsecs + d.total!"hnsecs");
+		}
+
+		Duration opBinary(string op)(MonoTime o) const
+			if (op == "-")
+		{
+			return dur!"hnsecs"(cast(long)(hnsecs - o.hnsecs));
+		}
+
+		int opCmp(MonoTime o) const { return hnsecs == o.hnsecs ? 0 : hnsecs > o.hnsecs ? 1 : -1; }
+
+	private:
+		ulong hnsecs;
 	}
-
-	MonoTime opBinary(string op)(Duration d) const
-		if (op == "+")
-	{
-		return MonoTime(hnsecs + d.total!"hnsecs");
-	}
-
-	Duration opBinary(string op)(MonoTime o) const
-		if (op == "-")
-	{
-		return dur!"hnsecs"(cast(long)(hnsecs - o.hnsecs));
-	}
-
-	int opCmp(MonoTime o) const { return hnsecs == o.hnsecs ? 0 : hnsecs > o.hnsecs ? 1 : -1; }
-
-private:
-	ulong hnsecs;
 }
 
 unittest
