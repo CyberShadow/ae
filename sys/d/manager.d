@@ -28,9 +28,8 @@ import ae.sys.cmd;
 import ae.sys.d.builder;
 import ae.sys.file;
 import ae.sys.git;
-
-// http://d.puremagic.com/issues/show_bug.cgi?id=7016
-static import ae.net.http.client;
+import ae.sys.install.dmc;
+import ae.sys.install.git;
 
 /// Class which manages a D checkout and its dependencies.
 class DManager
@@ -215,68 +214,12 @@ class DManager
 	/// Obtains prerequisites necessary for building D.
 	void preparePrerequisites()
 	{
+		Installer.logger = &log;
+
+		gitInstaller.require();
+
 		version(Windows)
-		{
-			void prepareDMC(string dmc)
-			{
-				auto workDir = config.workDir;
-
-				void downloadFile(string url, string target)
-				{
-					log("Downloading " ~ url);
-
-					import std.stdio : File;
-					import ae.net.http.client;
-					import ae.net.asockets;
-					import ae.sys.data;
-
-					httpGet(url,
-						(Data data) { std.file.write(target, data.contents); },
-						(string error) { throw new Exception(error); }
-					);
-
-					socketManager.loop();
-				}
-
-				alias obtainUsing!downloadFile cachedDownload;
-				cachedDownload("http://ftp.digitalmars.com/dmc.zip", buildPath(workDir, "dmc.zip"));
-				cachedDownload("http://ftp.digitalmars.com/optlink.zip", buildPath(workDir, "optlink.zip"));
-
-				void unzip(string zip, string target)
-				{
-					log("Unzipping " ~ zip);
-					import std.zip;
-					auto archive = new ZipArchive(zip.read);
-					foreach (name, entry; archive.directory)
-					{
-						auto path = buildPath(target, name);
-						ensurePathExists(path);
-						if (name.endsWith(`/`))
-						{
-							if (!path.exists)
-								path.mkdirRecurse();
-						}
-						else
-							std.file.write(path, archive.expand(entry));
-					}
-				}
-
-				alias safeUpdate!unzip safeUnzip;
-
-				safeUnzip(buildPath(workDir, "dmc.zip"), buildPath(workDir, "dmc"));
-				enforce(buildPath(workDir, "dmc", "dm", "bin", "dmc.exe").exists);
-				rename(buildPath(workDir, "dmc", "dm"), dmc);
-				rmdir(buildPath(workDir, "dmc"));
-				remove(buildPath(workDir, "dmc.zip"));
-
-				safeUnzip(buildPath(workDir, "optlink.zip"), buildPath(workDir, "optlink"));
-				rename(buildPath(workDir, "optlink", "link.exe"), buildPath(dmc, "bin", "link.exe"));
-				rmdir(buildPath(workDir, "optlink"));
-				remove(buildPath(workDir, "optlink.zip"));
-			}
-
-			obtainUsing!(prepareDMC, q{dmc})(dmcDir);
-		}
+			dmcInstaller.requireLocal(false);
 	}
 
 	/// Return array of component (submodule) names.
