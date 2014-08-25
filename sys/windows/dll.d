@@ -17,7 +17,7 @@ import std.traits;
 
 import win32.winbase;
 
-import ae.sys.windows.misc;
+import ae.sys.windows.exception;
 
 /// Given a static function declaration, generate a loader with the same name in the current scope
 /// that loads the function dynamically from the given DLL.
