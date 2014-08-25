@@ -13,6 +13,7 @@
 
 module ae.utils.meta.misc;
 
+import std.algorithm;
 import std.traits;
 
 /**
@@ -171,14 +172,29 @@ string[] stringofArray(Args...)()
 	return args;
 }
 
-/// Returns the index of fun's parameter called "name",
-/// or asserts if the parameter is not found.
-static size_t findParameter(alias fun, string name)()
+/// Returns the index of fun's parameter with the name
+/// matching "names", or asserts if the parameter is not found.
+/// "names" can contain multiple names separated by slashes.
+static size_t findParameter(alias fun, string names)()
 {
-	foreach (i, param; ParameterIdentifierTuple!fun)
-		if (param == name)
-			return i;
+	foreach (name; names.split("/"))
+		foreach (i, param; ParameterIdentifierTuple!fun)
+			if (param == name)
+				return i;
 	assert(false, "Function " ~ __traits(identifier, fun) ~ " doesn't have a parameter called " ~ name);
+}
+
+/// ditto
+// Workaround for no "static alias" template parameters
+static size_t findParameter()(string[] searchedNames, string soughtNames, string funName)
+{
+	foreach (soughtName; soughtNames.split("/"))
+	{
+		auto targetIndex = searchedNames.countUntil(soughtName);
+		if (targetIndex >= 0)
+			return targetIndex;
+	}
+	assert(false, "No argument %s in %s's parameters (%s)".format(soughtNames, funName, searchedNames));
 }
 
 // ************************************************************************
