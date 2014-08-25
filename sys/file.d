@@ -230,15 +230,29 @@ deprecated SysTime getMTime(string name)
 	return timeLastModified(name);
 }
 
-void touch(in char[] fn)
+/// If target exists, update its modification time;
+/// otherwise create it as an empty file.
+void touch(in char[] target)
 {
-	if (exists(fn))
+	if (exists(target))
 	{
 		auto now = Clock.currTime();
-		setTimes(fn, now, now);
+		setTimes(target, now, now);
 	}
 	else
-		std.file.write(fn, "");
+		std.file.write(target, "");
+}
+
+/// Try to rename; copy/delete if rename fails
+void move(string src, string dst)
+{
+	try
+		src.rename(dst);
+	catch (Exception e)
+	{
+		atomicCopy(src, dst);
+		src.remove();
+	}
 }
 
 /// Make sure that the path exists (and create directories as necessary).
@@ -850,10 +864,13 @@ auto pushd(string dir)
 
 // ****************************************************************************
 
+import std.algorithm;
 import std.process : thisProcessID;
 import std.traits;
 import std.typetuple;
 import ae.utils.meta;
+
+enum targetParameterNames = "target/to/name";
 
 /// Wrap an operation which creates a file or directory,
 /// so that it is created safely and, for files, atomically
@@ -861,9 +878,15 @@ import ae.utils.meta;
 /// location, then renaming the completed file/directory to
 /// the actual target location). targetName specifies the name
 /// of the parameter containing the target file/directory.
-auto safeUpdate(alias impl, string targetName = "target")(staticMap!(Unqual, ParameterTypeTuple!impl) args)
+auto atomic(alias impl, string targetName = targetParameterNames)(staticMap!(Unqual, ParameterTypeTuple!impl) args)
 {
-	enum targetIndex = findParameter!(impl, targetName);
+	enum targetIndex = findParameter([ParameterIdentifierTuple!impl], targetName, __traits(identifier, impl));
+	return atomic!(impl, targetIndex)(args);
+}
+
+/// ditto
+auto atomic(alias impl, size_t targetIndex)(staticMap!(Unqual, ParameterTypeTuple!impl) args)
+{
 	// idup for https://d.puremagic.com/issues/show_bug.cgi?id=12503
 	auto target = args[targetIndex].idup;
 	auto temp = "%s.%s.temp".format(target, thisProcessID);
@@ -874,33 +897,74 @@ auto safeUpdate(alias impl, string targetName = "target")(staticMap!(Unqual, Par
 	return impl(args);
 }
 
-/// Wrap an operation so that it is skipped entirely
-/// if the target already exists. Implies safeUpdate.
-void obtainUsing(alias impl, string targetName = "target")(ParameterTypeTuple!impl args)
+/// ditto
+// Workaround for https://d.puremagic.com/issues/show_bug.cgi?id=12230
+// Can't be an overload because of https://issues.dlang.org/show_bug.cgi?id=13374
+//R atomicDg(string targetName = "target", R, Args...)(R delegate(Args) impl, staticMap!(Unqual, Args) args)
+auto atomicDg(size_t targetIndexA = size_t.max, Impl, Args...)(Impl impl, Args args)
 {
-	auto target = args[findParameter!(impl, targetName)];
+	enum targetIndex = targetIndexA == size_t.max ? ParameterTypeTuple!impl.length-1 : targetIndexA;
+	return atomic!(impl, targetIndex)(args);
+}
+
+deprecated alias safeUpdate = atomic;
+
+unittest
+{
+	enum fn = "atomic.tmp";
+	scope(exit) if (fn.exists) fn.remove();
+
+	atomic!touch(fn);
+	assert(fn.exists);
+	fn.remove();
+
+	atomicDg(&touch, fn);
+	assert(fn.exists);
+}
+
+/// Wrap an operation so that it is skipped entirely
+/// if the target already exists. Implies atomic.
+void cached(alias impl, string targetName = targetParameterNames)(ParameterTypeTuple!impl args)
+{
+	enum targetIndex = findParameter([ParameterIdentifierTuple!impl], targetName, __traits(identifier, impl));
+	auto target = args[targetIndex];
 	if (target.exists)
 		return;
-	safeUpdate!(impl, targetName)(args);
+	atomic!(impl, targetIndex)(args);
 }
+
+/// ditto
+// Exists due to the same reasons as atomicDg
+auto cachedDg(size_t targetIndexA = size_t.max, Impl, Args...)(Impl impl, Args args)
+{
+	enum targetIndex = targetIndexA == size_t.max ? ParameterTypeTuple!impl.length-1 : targetIndexA;
+	auto target = args[targetIndex];
+	if (target.exists)
+		return;
+	atomic!(impl, targetIndex)(args);
+}
+
+deprecated alias obtainUsing = cached;
 
 /// Create a file, or replace an existing file's contents
 /// atomically.
-alias safeUpdate!(std.file.write, "name") atomicWrite;
+alias atomic!(std.file.write) atomicWrite;
 deprecated alias safeWrite = atomicWrite;
 
 /// Copy a file, or replace an existing file's contents
 /// with another file's, atomically.
-alias safeUpdate!(std.file.copy, "to") atomicCopy;
+alias atomic!(std.file.copy) atomicCopy;
 
-/// Try to rename; copy/delete if rename fails
-void move(string src, string dst)
+unittest
 {
-	try
-		src.rename(dst);
-	catch (Exception e)
-	{
-		atomicCopy(src, dst);
-		src.remove();
-	}
+	enum fn = "cached.tmp";
+	scope(exit) if (fn.exists) fn.remove();
+
+	cached!touch(fn);
+	assert(fn.exists);
+
+	std.file.write(fn, "test");
+
+	cachedDg!0(&std.file.write, fn, "test2");
+	assert(fn.readText() == "test");
 }
