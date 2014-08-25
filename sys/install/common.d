@@ -73,11 +73,6 @@ class Installer
 		return false;
 	}
 
-	/// Set this to true to always install this component
-	/// locally, ignoring whether it may be already available
-	/// on the system.
-	bool ignoreSystemInstallation = false;
-
 	/// Whether the component is installed locally.
 	@property final bool installedLocally()
 	{
@@ -87,25 +82,20 @@ class Installer
 		return directory.exists;
 	}
 
-	/// Whether the component is installed, locally or
-	/// already present on the system.
-	@property final bool available()
-	{
-		if (installedLocally)
-			return true;
-
-		if (!ignoreSystemInstallation)
-			return availableOnSystem;
-
-		return false;
-	}
-
+	/// Whether the component is already present on the system.
 	@property bool availableOnSystem()
 	{
 		if (requiredExecutables is null)
 			return false;
 
 		return requiredExecutables.all!haveExecutable();
+	}
+
+	/// Whether the component is installed, locally or
+	/// already present on the system.
+	@property final bool available()
+	{
+		return installedLocally || availableOnSystem;
 	}
 
 	/// Install this component if necessary.
@@ -117,13 +107,28 @@ class Installer
 		assert(available);
 
 		if (installedLocally)
-			foreach (binPath; binPaths)
-			{
-				auto path = buildPath(directory, binPath).absolutePath();
-				log("Adding " ~ path ~ " to PATH.");
-				// Override any system installations
-				environment["PATH"] = path ~ pathSeparator ~ environment["PATH"];
-			}
+			addToPath();
+	}
+
+	/// Install this component locally, if it isn't already installed.
+	final void requireLocal(bool addToPath = true)
+	{
+		if (!installedLocally)
+			install();
+
+		if (!addToPath)
+			this.addToPath();
+	}
+
+	void addToPath()
+	{
+		foreach (binPath; binPaths)
+		{
+			auto path = buildPath(directory, binPath).absolutePath();
+			log("Adding " ~ path ~ " to PATH.");
+			// Override any system installations
+			environment["PATH"] = path ~ pathSeparator ~ environment["PATH"];
+		}
 	}
 
 	private void install()
