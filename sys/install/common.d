@@ -23,12 +23,12 @@ import std.path;
 import std.process : environment;
 import std.string;
 
-/// Where all software will be unpacked
-/// (current directory, by default).
-string installationDirectory = null;
-
 class Installer
 {
+	/// Where all software will be unpacked
+	/// (current directory, by default).
+	static string installationDirectory = null;
+
 	/// Log sink
 	static void delegate(string) logger;
 
