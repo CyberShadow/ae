@@ -16,7 +16,9 @@ module ae.sys.net.curl;
 
 import std.file;
 import std.net.curl;
+import std.string;
 
+import ae.net.ietf.url;
 import ae.sys.net;
 
 class CurlNetwork : Network
@@ -29,6 +31,27 @@ class CurlNetwork : Network
 	override void[] getFile(string url)
 	{
 		return get!(AutoProtocol, ubyte)(url);
+	}
+
+	override string resolveRedirect(string url)
+	{
+		string result = null;
+
+		auto http = HTTP(url);
+		http.method = HTTP.Method.head;
+		http.onReceiveHeader =
+			(in char[] key, in char[] value)
+			{
+				if (icmp(key, "Location")==0)
+				{
+					result = value.idup;
+					if (result)
+						result = url.applyRelativeURL(result);
+				}
+			};
+		http.perform();
+
+		return result;
 	}
 }
 

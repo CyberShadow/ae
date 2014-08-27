@@ -16,6 +16,7 @@ module ae.sys.net.ae;
 
 import ae.net.asockets;
 import ae.net.http.client;
+import ae.net.ietf.url;
 import ae.sys.net;
 
 class AENetwork : Network
@@ -44,6 +45,33 @@ class AENetwork : Network
 	override void[] getFile(string url)
 	{
 		return getData(url).toHeap;
+	}
+
+	override string resolveRedirect(string url)
+	{
+		string result; bool got;
+
+		auto request = new HttpRequest;
+		request.method = "HEAD";
+		request.resource = url;
+		httpRequest(request,
+			(HttpResponse response, string disconnectReason)
+			{
+				if (!response)
+					throw new Exception(disconnectReason);
+				else
+				{
+					got = true;
+					result = response.headers.get("Location", null);
+					if (result)
+						result = url.applyRelativeURL(result);
+				}
+			}
+		);
+
+		socketManager.loop();
+		assert(got);
+		return result;
 	}
 }
 

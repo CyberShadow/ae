@@ -29,6 +29,12 @@ void test(string moduleName, string className)()
 		net.downloadFile("http://net.d-lang.appspot.com/testUrl1", fn);
 		assert(fn.readText() == "Hello world\n");
 	}
+
+	debug std.stdio.stderr.writeln(" - resolveRedirect");
+	{
+		auto result = net.resolveRedirect("http://net.d-lang.appspot.com/testUrl3");
+		assert(result == "http://net.d-lang.appspot.com/testUrl2", result);
+	}
 }
 
 unittest
@@ -36,5 +42,5 @@ unittest
 	test!("ae", "AENetwork");
 	test!("curl", "CurlNetwork");
 	version(Windows)
-	test!("wininet", "WinInet");
+	test!("wininet", "WinINetNetwork");
 }

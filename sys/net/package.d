@@ -36,6 +36,13 @@ class Network
 		assert(false);
 	}
 
+	/// Get the destination of an HTTP redirect.
+	string resolveRedirect(string url)
+	{
+		notImplemented();
+		assert(false);
+	}
+
 	private final void notImplemented()
 	{
 		assert(false, "Not implemented or Network implementation not set");
