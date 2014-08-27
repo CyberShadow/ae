@@ -111,13 +111,13 @@ class Installer
 	}
 
 	/// Install this component locally, if it isn't already installed.
-	final void requireLocal(bool addToPath = true)
+	final void requireLocal(bool shouldAddToPath = true)
 	{
 		if (!installedLocally)
 			install();
 
-		if (!addToPath)
-			this.addToPath();
+		if (shouldAddToPath)
+			addToPath();
 	}
 
 	void addToPath()
