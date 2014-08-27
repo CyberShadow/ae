@@ -215,6 +215,7 @@ class DManager
 	void preparePrerequisites()
 	{
 		Installer.logger = &log;
+		Installer.installationDirectory = config.workDir;
 
 		gitInstaller.require();
 
