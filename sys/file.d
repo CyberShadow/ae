@@ -980,3 +980,10 @@ template withTarget(alias targetGen, alias fun)
 		return target;
 	}
 }
+
+/// Two-argument buildPath with reversed arguments.
+/// Useful for UFCS chaining.
+string prependPath(string target, string path)
+{
+	return buildPath(path, target);
+}
