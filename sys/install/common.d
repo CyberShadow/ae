@@ -142,6 +142,8 @@ class Installer
 
 	private void install()
 	{
+		mkdirRecurse(installationDirectory);
+
 		log("Installing " ~ name ~ " to " ~ directory ~ "...");
 
 		void installProxy(string target) { installImpl(target); }
