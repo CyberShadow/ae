@@ -21,7 +21,6 @@ import std.process;
 
 import ae.sys.archive;
 import ae.sys.file;
-import ae.sys.net;
 import ae.utils.meta.misc;
 
 public import ae.sys.install.common;
@@ -37,8 +36,8 @@ class Git : Installer
 	{
 		windowsOnly();
 		url
-			.downloadTo(installationDirectory)
-			.unpack(target);
+			.I!save()
+			.I!unpackTo(target);
 	}
 }
 

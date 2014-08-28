@@ -56,13 +56,3 @@ void unpack(string archive, string target)
 		enforce(pid.wait() == 0, "Extraction failed");
 	}
 }
-
-/// Unpacks archive to a directory in targetDirectory.
-/// Skips unpacking if the target already exists.
-string unpackTo(string archive, string targetDirectory)
-{
-	auto target = buildPath(targetDirectory, archive.stripExtension());
-	enforce(target != archive);
-	cached!unpack(archive, target);
-	return target;
-}

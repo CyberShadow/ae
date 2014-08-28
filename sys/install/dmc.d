@@ -22,7 +22,6 @@ import std.path;
 
 import ae.sys.archive;
 import ae.sys.file;
-import ae.sys.net;
 import ae.utils.meta.misc;
 
 public import ae.sys.install.common;
@@ -40,14 +39,10 @@ class DMC : Installer
 
 	override void installImpl(string target)
 	{
-		auto dmcZip = buildPath(installationDirectory, "dmc.zip");
-		auto optlinkZip = buildPath(installationDirectory, "optlink.zip");
-
-		log("Fetching DMC...");
-		auto dmcDir = buildPath(installationDirectory, "dmc");
-		dmcURL
-			.downloadTo(installationDirectory)
-			.atomic!unpack(dmcDir);
+		auto dmcDir =
+			dmcURL
+			.I!save()
+			.I!unpack();
 		scope(success) removeRecurse(dmcDir);
 
 		enforce(buildPath(dmcDir, "dm", "bin", "dmc.exe").exists);
@@ -55,11 +50,10 @@ class DMC : Installer
 
 		// Get latest OPTLINK
 
-		log("Fetching OPTLINK...");
-		auto optlinkDir = buildPath(installationDirectory, "optlink");
-		optlinkURL
-			.downloadTo(installationDirectory)
-			.atomic!unpack(optlinkDir);
+		auto optlinkDir =
+			optlinkURL
+			.I!save()
+			.I!unpack();
 		scope(success) rmdir(optlinkDir);
 
 		rename(buildPath(optlinkDir, "link.exe"), buildPath(target, "bin", "link.exe"));

@@ -14,7 +14,11 @@
 module ae.sys.install.common;
 
 import ae.net.ietf.url;
+import ae.sys.archive;
 import ae.sys.file;
+import ae.sys.net;
+import ae.sys.persistence;
+import ae.utils.meta;
 
 import std.algorithm;
 import std.array;
@@ -149,7 +153,51 @@ class Installer
 	// ----------------------------------------------------
 
 final:
-	protected void windowsOnly()
+protected:
+	static string saveLocation(string url)
+	{
+		return buildPath(installationDirectory, url.fileNameFromURL());
+	}
+
+	template cachedAction(alias fun, string fmt)
+	{
+		static void cachedAction(Args...)(Args args, string target)
+		{
+			if (target.exists)
+				return;
+			log(fmt.format(args, target));
+			atomic!fun(args, target);
+		}
+	}
+
+	alias saveTo = cachedAction!(downloadFile, "Downloading %s to %s...");
+	alias save = withTarget!(saveLocation, saveTo);
+
+	static auto saveAs(string url, string fn)
+	{
+		auto target = buildPath(installationDirectory, fn);
+		ensurePathExists(target);
+		url.I!saveTo(target);
+		return target;
+	}
+
+	alias unpackTo = cachedAction!(ae.sys.archive.unpack, "Unpacking %s to %s...");
+	alias unpack = withTarget!(stripExtension, unpackTo);
+
+	static string resolveRedirectImpl(string url)
+	{
+		return net.resolveRedirect(url);
+	}
+	static string resolveRedirect(string url)
+	{
+		alias P = PersistentMemoized!(resolveRedirectImpl, FlushPolicy.atThreadExit);
+		static P* p;
+		if (!p)
+			p = new P(buildPath(installationDirectory, "redirects.json"));
+		return (*p)(url);
+	}
+
+	void windowsOnly()
 	{
 		version(Windows)
 			return;
@@ -160,7 +208,7 @@ final:
 		}
 	}
 
-	protected void uninstallable()
+	void uninstallable()
 	{
 		throw new Exception("Please install " ~ name ~ " and make sure it is on your PATH.");
 	}

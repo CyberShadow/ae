@@ -19,7 +19,6 @@ import std.path;
 
 import ae.sys.archive;
 import ae.sys.file;
-import ae.sys.net;
 import ae.utils.array;
 import ae.utils.meta.misc;
 import ae.utils.xmllite;
@@ -39,8 +38,8 @@ class SevenZip : Installer
 	{
 		windowsOnly();
 		url
-			.downloadTo(installationDirectory)
-			.unpack(target);
+			.I!save()
+			.I!unpackTo(target);
 	}
 
 	@property override bool availableOnSystem()

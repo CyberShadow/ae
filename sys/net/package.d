@@ -58,14 +58,7 @@ static this()
 	net = new Network();
 }
 
-/// Download a file and save it to the given directory,
-/// unless the file already exists.
-/// By default, the file name is extracted from the URL.
-string downloadTo(string url, string targetDirectory, string fileName = null)
-{
-	if (!fileName)
-		fileName = url.fileNameFromURL();
-	auto target = buildPath(targetDirectory, fileName);
-	cachedDg(&net.downloadFile, url, target);
-	return target;
-}
+/// UFCS-able global synonym functions.
+void downloadFile(string url, string target) { net.downloadFile(url, target); }
+void[] getFile(string url) { return net.getFile(url); } /// ditto
+string resolveRedirect(string url) { return net.resolveRedirect(url); } /// ditto

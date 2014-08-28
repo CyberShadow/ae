@@ -968,3 +968,15 @@ unittest
 	cachedDg!0(&std.file.write, fn, "test2");
 	assert(fn.readText() == "test");
 }
+
+// ****************************************************************************
+
+template withTarget(alias targetGen, alias fun)
+{
+	auto withTarget(Args...)(auto ref Args args)
+	{
+		auto target = targetGen(args);
+		fun(args, target);
+		return target;
+	}
+}
