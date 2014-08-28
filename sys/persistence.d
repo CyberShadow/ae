@@ -273,6 +273,9 @@ unittest
 
 // ****************************************************************************
 
+// http://d.puremagic.com/issues/show_bug.cgi?id=7016
+static import ae.utils.json;
+
 /// std.functional.memoize variant with automatic persistence
 struct PersistentMemoized(alias fun, FlushPolicy flushPolicy = FlushPolicy.atThreadExit)
 {
