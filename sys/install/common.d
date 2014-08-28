@@ -124,8 +124,12 @@ class Installer
 			addToPath();
 	}
 
+	bool addedToPath;
+
 	void addToPath()
 	{
+		if (addedToPath)
+			return;
 		foreach (binPath; binPaths)
 		{
 			auto path = buildPath(directory, binPath).absolutePath();
@@ -133,6 +137,7 @@ class Installer
 			// Override any system installations
 			environment["PATH"] = path ~ pathSeparator ~ environment["PATH"];
 		}
+		addedToPath = true;
 	}
 
 	private void install()
