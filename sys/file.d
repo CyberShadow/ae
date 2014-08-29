@@ -266,28 +266,36 @@ void ensurePathExists(string fn)
 import ae.utils.text;
 
 /// Forcibly remove a file or directory.
-/// If recursive is true, the entire directory is deleted "atomically"
+/// If atomic is true, the entire directory is deleted "atomically"
 /// (it is first moved/renamed to another location).
-void forceDelete()(string fn, bool recursive=false)
+/// On Windows, this will move the file/directory out of the way,
+/// if it is in use and cannot be deleted (but can be renamed).
+void forceDelete(bool atomic=true)(string fn, bool recursive = false)
 {
+	import std.process : environment;
 	version(Windows)
 	{
-		import std.process : environment;
 		import win32.winnt;
 		import win32.winbase;
+		import ae.sys.windows;
+	}
 
-		auto name = fn.baseName();
-		fn = fn.absolutePath().longPath();
+	auto name = fn.baseName();
+	fn = fn.absolutePath().longPath();
 
+	version(Windows)
+	{
 		auto fnW = toUTF16z(fn);
 		auto attr = GetFileAttributesW(fnW);
-		enforce(attr != INVALID_FILE_ATTRIBUTES, "GetFileAttributesW error");
+		wenforce(attr != INVALID_FILE_ATTRIBUTES, "GetFileAttributes");
 		if (attr & FILE_ATTRIBUTE_READONLY)
-			SetFileAttributesW(fnW, attr & ~FILE_ATTRIBUTE_READONLY);
+			SetFileAttributesW(fnW, attr & ~FILE_ATTRIBUTE_READONLY).wenforce("SetFileAttributes");
+	}
 
-		// To avoid zombifying locked directories,
-		// try renaming it first. Attempting to delete a locked directory
-		// will make it inaccessible.
+	static if (atomic)
+	{
+		// To avoid zombifying locked directories, try renaming it first.
+		// Attempting to delete a locked directory will make it inaccessible.
 
 		bool tryMoveTo(string target)
 		{
@@ -301,32 +309,64 @@ void forceDelete()(string fn, bool recursive=false)
 			do
 				newfn = format("%s\\deleted-%s.%s.%s", target, name, thisProcessID, randomString());
 			while (newfn.exists);
-			auto newfnW = toUTF16z(newfn);
-			if (MoveFileW(fnW, newfnW))
+
+			version(Windows)
 			{
-				if (attr & FILE_ATTRIBUTE_DIRECTORY)
-				{
-					foreach (de; newfn.dirEntries(SpanMode.shallow))
-						forceDelete(de.name);
-					RemoveDirectoryW(newfnW);
-				}
-				else
-					DeleteFileW(newfnW);
-				return true;
+				auto newfnW = toUTF16z(newfn);
+				if (!MoveFileW(fnW, newfnW))
+					return false;
 			}
-			return false;
+			else
+			{
+				try
+					rename(fn, newfn);
+				catch (FileException e)
+					return false;
+			}
+
+			fn = newfn;
+			version(Windows) fnW = newfnW;
+			return true;
 		}
 
-		auto tmp = environment.get("TEMP");
-		if (tmp)
-			if (tryMoveTo(tmp))
-				return;
-		if (tryMoveTo(fn[0..7]~"Temp"))
-			return;
-		if (tryMoveTo(fn.dirName()))
-			return;
+		void tryMove()
+		{
+			auto tmp = environment.get("TEMP");
+			if (tmp)
+				if (tryMoveTo(tmp))
+					return;
 
-		return;
+			version(Windows)
+				string tempDir = fn[0..7]~"Temp";
+			else
+				enum tempDir = "/tmp";
+
+			if (tryMoveTo(tempDir))
+				return;
+
+			if (tryMoveTo(fn.dirName()))
+				return;
+
+			throw new Exception("Unable to delete " ~ fn ~ " atomically (all rename attempts failed)");
+		}
+
+		tryMove();
+	}
+
+	version(Windows)
+	{
+		if (attr & FILE_ATTRIBUTE_DIRECTORY)
+		{
+			if (recursive && (attr & FILE_ATTRIBUTE_REPARSE_POINT) == 0)
+			{
+				foreach (de; fn.dirEntries(SpanMode.shallow))
+					forceDelete!false(de.name, true);
+			}
+			// Will fail if !recursive and directory is not empty
+			RemoveDirectoryW(fnW).wenforce("RemoveDirectory");
+		}
+		else
+			DeleteFileW(fnW).wenforce("DeleteFile");
 	}
 	else
 	{
