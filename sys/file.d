@@ -420,12 +420,14 @@ ulong getFileID()(string fn)
 		import win32.winnt;
 		import win32.winbase;
 
+		import ae.sys.windows;
+
 		auto fnW = toUTF16z(fn);
 		auto h = CreateFileW(fnW, FILE_READ_ATTRIBUTES, 0, null, OPEN_EXISTING, 0, HANDLE.init);
 		enforce(h!=INVALID_HANDLE_VALUE, new FileException(fn));
 		scope(exit) CloseHandle(h);
 		BY_HANDLE_FILE_INFORMATION fi;
-		enforce(GetFileInformationByHandle(h, &fi), "GetFileInformationByHandle");
+		GetFileInformationByHandle(h, &fi).wenforce("GetFileInformationByHandle");
 
 		ULARGE_INTEGER li;
 		li.LowPart  = fi.nFileIndexLow;
