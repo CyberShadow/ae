@@ -26,6 +26,7 @@ import ae.sys.archive;
 import ae.sys.file;
 import ae.sys.install.wix;
 import ae.sys.net;
+import ae.utils.json;
 import ae.utils.meta.misc;
 import ae.utils.xmllite;
 
@@ -98,9 +99,9 @@ private:
 	public static string setExtensionWXS(string fn) { return fn.setExtension(".wxs"); }
 	alias decompileMSI = withTarget!(setExtensionWXS, cachedAction!(decompileMSITo, "Decompiling %s to %s..."));
 
-	static void installWXS(string wxs, string root)
+	static void installWXS(string wxs, string target)
 	{
-		log("Installing %s to %s...".format(wxs, root));
+		log("Installing %s to %s...".format(wxs, target));
 
 		auto wxsDoc = wxs
 			.readText()
@@ -124,7 +125,7 @@ private:
 					switch (id)
 					{
 						case "TARGETDIR":
-							dir = root;
+							dir = target;
 							break;
 						case "ProgramFilesFolder":
 							dir = dir.buildPath("Program Files (x86)");
