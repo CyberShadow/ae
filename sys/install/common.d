@@ -78,7 +78,7 @@ class Installer
 	}
 
 	/// Whether the component is installed locally.
-	@property final bool installedLocally()
+	@property bool installedLocally()
 	{
 		// The directory should only be created atomically upon
 		// the end of a successful installation, so an exists

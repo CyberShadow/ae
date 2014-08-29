@@ -56,7 +56,31 @@ class VisualStudio : Installer
 		];
 	}
 
+	@property override bool installedLocally()
+	{
+		if (!directory.exists)
+			return false;
+
+		auto installedPackages =
+			packageFile
+			.prependPath(directory)
+			.readText()
+			.jsonParse!(string[])
+			.sort().uniq().array();
+		auto wantedPackages = packages.sort().uniq().array();
+		if (installedPackages != wantedPackages)
+		{
+			log("Requested package set differs from previous install - deleting " ~ directory);
+			directory.forceDelete(true);
+			return false;
+		}
+
+		return true;
+	}
+
 private:
+	enum packageFile = "packages.json";
+
 	static string msdl(int n)
 	{
 		return "http://go.microsoft.com/fwlink/?LinkId=%d&clcid=0x409"
@@ -195,6 +219,8 @@ protected:
 			msi
 			.I!decompileMSI()
 			.I!installWXS(target);
+
+		std.file.write(buildPath(target, packageFile), packages.toJson());
 	}
 
 	public void getAllMSIs()
