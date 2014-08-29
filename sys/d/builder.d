@@ -65,6 +65,8 @@ class DBuilder
 			string repoDir;  /// D source location (as checked out from GitHub).
 			string buildDir; /// Build target directory.
 			string dmcDir;   /// Where dmc.zip is unpacked.
+			string vsDir;    /// Where Visual Studio is installed
+			string sdkDir;   /// Where the Windows SDK is installed
 
 			/// D build environment.
 			string[string] env;
@@ -105,21 +107,24 @@ class DBuilder
 [Environment]
 LIB="%@P%\..\lib"
 DFLAGS="-I%@P%\..\import"
+DMC=__DMC__
 LINKCMD=%DMC%\link.exe
 [Environment64]
 LIB="%@P%\..\lib"
 DFLAGS=%DFLAGS% -L/OPT:NOICF
-VCINSTALLDIR=\Program Files (x86)\Microsoft Visual Studio 10.0\VC\
+VSINSTALLDIR=__VS__\
+VCINSTALLDIR=%VSINSTALLDIR%VC\
 PATH=%PATH%;%VCINSTALLDIR%\bin\amd64
-WindowsSdkDir=\Program Files (x86)\Microsoft SDKs\Windows\v7.0A
+WindowsSdkDir=__SDK__
 LINKCMD=%VCINSTALLDIR%\bin\amd64\link.exe
 LIB=%LIB%;"%VCINSTALLDIR%\lib\amd64"
 LIB=%LIB%;"%WindowsSdkDir%\Lib\winv6.3\um\x64"
 LIB=%LIB%;"%WindowsSdkDir%\Lib\win8\um\x64"
 LIB=%LIB%;"%WindowsSdkDir%\Lib\x64"
 EOS";
-			auto dmcBinDir = buildPath(config.local.dmcDir, `bin`);
-			ini = ini.replace("%DMC%", dmcBinDir.absolutePath());
+			ini = ini.replace("__DMC__", config.local.dmcDir.buildPath(`bin`).absolutePath());
+			ini = ini.replace("__VS__" , config.local.vsDir .absolutePath());
+			ini = ini.replace("__SDK__", config.local.sdkDir.absolutePath());
 
 			buildPath(config.local.buildDir, "bin", "sc.ini").write(ini);
 		}
@@ -135,6 +140,22 @@ EOS";
 		log("DMD OK!");
 	}
 
+	@property string[] platformMakeVars()
+	{
+		string[] args;
+
+		args ~= "MODEL=" ~ config.build.model;
+
+		version (Windows)
+			if (config.build.model == "64")
+			{
+				args ~= "VCDIR="  ~ config.local.vsDir .absolutePath() ~ `\VC`;
+				args ~= "SDKDIR=" ~ config.local.sdkDir.absolutePath();
+			}
+
+		return args;
+	}
+
 	void buildDruntime()
 	{
 		{
@@ -145,7 +166,7 @@ EOS";
 
 			setTimes(buildPath("src", "rt", "minit.obj"), Clock.currTime(), Clock.currTime());
 
-			run(["make", "-f", makeFileNameModel, "MODEL=" ~ config.build.model]);
+			run(["make", "-f", makeFileNameModel] ~ platformMakeVars);
 		}
 
 		install(
@@ -177,13 +198,13 @@ EOS";
 			version (Windows)
 			{
 				auto lib = "phobos%s.lib".format(modelSuffix);
-				run(["make", "-f", makeFileNameModel, "MODEL=" ~ config.build.model, lib]);
+				run(["make", "-f", makeFileNameModel, lib] ~ platformMakeVars);
 				enforce(lib.exists);
 				targets = [lib];
 			}
 			else
 			{
-				run(["make", "-f", makeFileNameModel, "MODEL=" ~ config.build.model]);
+				run(["make", "-f", makeFileNameModel] ~ platformMakeVars);
 				targets = "generated".dirEntries(SpanMode.depth).filter!(de => de.name.endsWith(".a")).map!(de => de.name).array();
 			}
 		}

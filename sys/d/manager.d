@@ -28,7 +28,13 @@ import ae.sys.cmd;
 import ae.sys.d.builder;
 import ae.sys.file;
 import ae.sys.git;
-import ae.sys.install.dmc;
+
+version(Windows)
+{
+	import ae.sys.install.dmc;
+	import ae.sys.install.vs;
+}
+
 import ae.sys.install.git;
 
 /// Class which manages a D checkout and its dependencies.
@@ -58,9 +64,11 @@ class DManager
 	@property string subDir(string name)() { return buildPath(config.workDir, name); }
 
 	alias repoDir    = subDir!"repo";        /// The git repository location.
-	version(Windows)
-	alias dmcDir     = subDir!"dm" ;         /// The Digital Mars C compiler location.
 	alias buildDir   = subDir!"build";       /// The build directory.
+	alias dlDir      = subDir!"dl" ;         /// The directory for downloaded software.
+
+	version(Windows) string dmcDir, vsDir, sdkDir;
+	string[] paths;
 
 	/// Environment used when building D.
 	string[string] dEnv;
@@ -81,7 +89,7 @@ class DManager
 	void initialize(bool update)
 	{
 		log("Preparing prerequisites...");
-		preparePrerequisites();
+		prepareRepoPrerequisites();
 
 		log("Preparing repository...");
 		prepareRepo(update);
@@ -90,6 +98,9 @@ class DManager
 	/// Build D.
 	void build()
 	{
+		log("Preparing build prerequisites...");
+		prepareBuildPrerequisites();
+
 		log("Preparing to build...");
 		prepareEnv();
 		prepareBuilder();
@@ -179,6 +190,9 @@ class DManager
 		else
 			newPaths = ["/bin", "/usr/bin"];
 
+		// Add component paths, if any
+		newPaths ~= paths;
+
 		// Add the DMD we built
 		newPaths ~= buildPath(buildDir, "bin").absolutePath();   // For Phobos/Druntime/Tools
 
@@ -207,20 +221,57 @@ class DManager
 		builder.config.local.repoDir = repoDir;
 		builder.config.local.buildDir = buildDir;
 		version(Windows)
-		builder.config.local.dmcDir = dmcDir;
+		{
+			builder.config.local.dmcDir = dmcDir;
+			builder.config.local.vsDir  = vsDir ;
+			builder.config.local.sdkDir = sdkDir;
+		}
 		builder.config.local.env = dEnv;
 	}
 
-	/// Obtains prerequisites necessary for building D.
-	void preparePrerequisites()
+	/// Obtains prerequisites necessary for managing the D repository.
+	void prepareRepoPrerequisites()
 	{
 		Installer.logger = &log;
-		Installer.installationDirectory = config.workDir;
+		Installer.installationDirectory = dlDir;
 
 		gitInstaller.require();
+	}
 
+	/// Obtains prerequisites necessary for building D with the current configuration.
+	void prepareBuildPrerequisites()
+	{
 		version(Windows)
+		{
+			if (config.build.model == "64")
+			{
+				vs2013.requirePackages(
+					[
+						"vcRuntimeMinimum_x86",
+						"vc_compilercore86",
+						"vc_compilercore86res",
+						"vc_librarycore86",
+						"vc_libraryDesktop_x64",
+						"win_xpsupport",
+					],
+				);
+				vs2013.requireLocal(false);
+				vsDir  = vs2013.directory.buildPath("Program Files (x86)", "Microsoft Visual Studio 12.0").absolutePath();
+				sdkDir = vs2013.directory.buildPath("Program Files", "Microsoft SDKs", "Windows", "v7.1A").absolutePath();
+				paths ~= vs2013.directory.buildPath("Windows", "system32").absolutePath();
+
+				// D makefiles use the 64-bit (host architecture) compilers,
+				// which the Express edition does not include.
+				// Patch up the local VC installation instead.
+				auto binDir = vsDir.buildPath("VC", "bin");
+				cached!(dirLink!(), "link")(buildPath(binDir, "x86_amd64"), buildPath(binDir, "amd64"));
+				cached!(hardLink!())(buildPath(binDir, "mspdb120.dll"), buildPath(binDir, "amd64", "mspdb120.dll"));
+			}
+
+			// We need DMC even for 64-bit builds (for DM make)
 			dmcInstaller.requireLocal(false);
+			dmcDir = dmcInstaller.directory;
+		}
 	}
 
 	/// Return array of component (submodule) names.
