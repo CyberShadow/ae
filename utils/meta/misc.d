@@ -194,7 +194,7 @@ static size_t findParameter()(string[] searchedNames, string soughtNames, string
 		if (targetIndex >= 0)
 			return targetIndex;
 	}
-	assert(false, "No argument %s in %s's parameters (%s)".format(soughtNames, funName, searchedNames));
+	assert(false, "No argument %s in %s's parameters (%s)".format(soughtNames, funName, searchedNames).idup);
 }
 
 // ************************************************************************
