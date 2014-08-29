@@ -150,7 +150,7 @@ private:
 					auto dst = dir.buildPath(node.attributes["Name"]);
 					if (dst.exists)
 						break;
-					log(src ~ " -> " ~ dst);
+					//log(src ~ " -> " ~ dst);
 					ensurePathExists(dst);
 					src.hardLink(dst);
 					break;
