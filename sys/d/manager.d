@@ -199,7 +199,11 @@ class DManager
 		// Add the DM tools
 		version (Windows)
 		{
+			if (!dmcDir)
+				prepareBuildPrerequisites();
+
 			auto dmc = buildPath(dmcDir, `bin`).absolutePath();
+			log("DMC=" ~ dmc);
 			dEnv["DMC"] = dmc;
 			newPaths ~= dmc;
 		}
@@ -241,6 +245,9 @@ class DManager
 	/// Obtains prerequisites necessary for building D with the current configuration.
 	void prepareBuildPrerequisites()
 	{
+		Installer.logger = &log;
+		Installer.installationDirectory = dlDir;
+
 		version(Windows)
 		{
 			if (config.build.model == "64")
@@ -271,6 +278,7 @@ class DManager
 			// We need DMC even for 64-bit builds (for DM make)
 			dmcInstaller.requireLocal(false);
 			dmcDir = dmcInstaller.directory;
+			log("dmcDir=" ~ dmcDir);
 		}
 	}
 

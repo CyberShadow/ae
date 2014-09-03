@@ -254,6 +254,7 @@ protected:
 		string oldPath = environment["PATH"];
 		scope(exit) environment["PATH"] = oldPath;
 		environment["PATH"] = newEnv["PATH"];
+		log("PATH=" ~ newEnv["PATH"]);
 
 		auto status = spawnProcess(args, newEnv, .Config.newEnv).wait();
 		enforce(status == 0, "Command %s failed with status %d".format(args, status));
