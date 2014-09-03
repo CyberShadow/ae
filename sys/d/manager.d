@@ -154,9 +154,9 @@ class DManager
 			buildDir.rmdirRecurse();
 		enforce(!buildDir.exists);
 
-		repo.run("submodule", "update");
 		repo.run("submodule", "foreach", "git", "reset", "--hard");
 		repo.run("submodule", "foreach", "git", "clean", "--force", "-x", "-d", "--quiet");
+		repo.run("submodule", "update");
 	}
 
 	// ************************** Auxiliary methods **************************
