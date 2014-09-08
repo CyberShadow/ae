@@ -222,13 +222,20 @@ IniTraversingHandler!S makeIniHandler(S = string, U)(ref U v)
 		static assert(false, "Can't parse " ~ U.stringof);
 }
 
-/// Parse a structured INI from a range of lines, into a user-defined struct.
+/// Parse structured INI lines from a range of strings, into a user-defined struct.
 T parseIni(T, R)(R r)
 	if (isInputRange!R && isSomeString!(ElementType!R))
 {
 	T result;
-	parseIni(r, makeIniHandler!(ElementType!R)(result).conv());
+	r.parseIniInto(result);
 	return result;
+}
+
+/// ditto
+void parseIniInto(R, T)(R r, ref T result)
+	if (isInputRange!R && isSomeString!(ElementType!R))
+{
+	parseIni(r, makeIniHandler!(ElementType!R)(result).conv());
 }
 
 unittest
@@ -312,7 +319,30 @@ S loadIni(S)(string fileName)
 		s = fileName
 			.readText()
 			.splitLines()
-			.parseStructuredIni!S();
+			.parseIni!S();
+
+	return s;
+}
+
+/// As above, though loads several INI files
+/// (duplicate values appearing in later INI files
+/// override any values from earlier files).
+S loadInis(S)(in char[][] fileNames)
+{
+	S s;
+
+	import std.file;
+	s = fileNames
+		.map!(fileName =>
+			fileName.exists ?
+				fileName
+				.readText()
+				.splitLines()
+			:
+				null
+		)
+		.joiner(["[]"])
+		.parseIni!S();
 
 	return s;
 }
