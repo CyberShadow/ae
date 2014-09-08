@@ -244,6 +244,25 @@ void touch(in char[] target)
 		std.file.write(target, "");
 }
 
+/// Returns true if the target file doesn't exist,
+/// or source is newer than the target.
+bool newerThan(string source, string target)
+{
+	if (!target.exists)
+		return true;
+	return source.timeLastModified() > target.timeLastModified();
+}
+
+/// Returns true if the target file doesn't exist,
+/// or any of the sources are newer than the target.
+bool anyNewerThan(string[] sources, string target)
+{
+	if (!target.exists)
+		return true;
+	auto targetTime = target.timeLastModified();
+	return sources.any!(source => source.timeLastModified() > targetTime)();
+}
+
 /// Try to rename; copy/delete if rename fails
 void move(string src, string dst)
 {
