@@ -393,7 +393,7 @@ void removeRecurse(string fn)
 
 /// Create an empty directory, deleting
 /// all its contents if it already exists.
-void recreateEmptyDirectory(string dir)
+void recreateEmptyDirectory()(string dir)
 {
 	if (dir.exists)
 		forceDelete(dir);
@@ -664,8 +664,6 @@ void toFile(in void[] data, in char[] name)
 	std.file.write(name, data);
 }
 
-version(Windows) static import ae.sys.windows.exception;
-
 /// Uses UNC paths to open a file.
 /// Requires https://github.com/D-Programming-Language/phobos/pull/1888
 File openFile()(string fn, string mode)
@@ -757,7 +755,7 @@ void[] readFile(File f)
 }
 
 /// Like std.file.readText for non-UTF8
-ascii readAscii(string fileName)
+ascii readAscii()(string fileName)
 {
 	return cast(ascii)readFile(openFile(fileName, "rb"));
 }
