@@ -340,6 +340,21 @@ unittest
 	assert(splitByCamelCase("IPString") == ["IP", "String"]);
 }
 
+string camelCaseJoin(string[] arr)
+{
+	if (!arr.length)
+		return null;
+	string result = arr[0];
+	foreach (s; arr[1..$])
+		result ~= std.ascii.toUpper(s[0]) ~ s[1..$];
+	return result;
+}
+
+unittest
+{
+	assert("parse-IP-string".split('-').camelCaseJoin() == "parseIPString");
+}
+
 // ************************************************************************
 
 private __gshared char[256] asciiLower, asciiUpper;
