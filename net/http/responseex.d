@@ -14,6 +14,8 @@
 
 module ae.net.http.responseex;
 
+import std.algorithm;
+import std.exception;
 import std.string;
 import std.conv;
 import std.file;
@@ -21,7 +23,7 @@ import std.path;
 
 public import ae.net.http.common;
 import ae.sys.data;
-import ae.sys.dataio;
+import ae.sys.datamm;
 import ae.utils.array;
 import ae.utils.json;
 import ae.utils.xml;
@@ -81,7 +83,7 @@ public:
 	}
 
 	/// Send a file from the disk
-	HttpResponseEx serveFile(string path, string fsBase, bool enableIndex = false, string urlBase="/")
+	HttpResponseEx serveFile(string path, string fsBase, HttpRequest request, bool enableIndex = false, string urlBase="/")
 	{
 		if (!checkPath(path))
 		{
@@ -144,10 +146,28 @@ public:
 		if (mimeType)
 			headers["Content-Type"] = mimeType;
 
-		setStatus(HttpStatusCode.OK);
-		data = [readData(filename)];
 		headers["Last-Modified"] = httpTime(timeLastModified(filename));
+		headers["Accept-Ranges"] = "bytes";
+		if (request && "Range" in request.headers && request.headers["Range"].startsWith("bytes="))
+		{
+			setStatus(HttpStatusCode.PartialContent);
+			auto ranges = request.headers["Range"][6..$].split(",")[0].split("-").map!(s => s.length ? s.to!size_t : size_t.max)();
+			enforce(ranges.length == 2, "Bad range request");
+			auto mapped = mapFile(filename, MmMode.read, ranges[0], ranges[1] + 1);
+			data = [mapped];
+			headers["Content-Range"] = "bytes %d-%d/%d".format(ranges[0], ranges[0] + mapped.length - 1, filename.getSize());
+		}
+		else
+		{
+			setStatus(HttpStatusCode.OK);
+			data = [mapFile(filename, MmMode.read)];
+		}
 		return this;
+	}
+
+	HttpResponseEx serveFile(string path, string fsBase, bool enableIndex = false, string urlBase="/")
+	{
+		return serveFile(path, fsBase, null, enableIndex, urlBase);
 	}
 
 	static string loadTemplate(string filename, string[string] dictionary)
