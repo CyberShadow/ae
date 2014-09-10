@@ -106,7 +106,8 @@ public:
 		if (forceReallocation || GC.addrOf(data.ptr) is null)
 		{
 			// copy to unmanaged memory
-			wrapper = new DataWrapper(data.length, data.length);
+			auto wrapper = new MemoryDataWrapper(data.length, data.length);
+			this.wrapper = wrapper;
 			wrapper.contents[] = data[];
 			contents = wrapper.contents;
 			mutable = true;
@@ -142,7 +143,8 @@ public:
 
 		if (capacity)
 		{
-			wrapper = new DataWrapper(size, capacity);
+			auto wrapper = new MemoryDataWrapper(size, capacity);
+			this.wrapper = wrapper;
 			contents = wrapper.contents;
 			mutable = true;
 		}
@@ -153,6 +155,13 @@ public:
 		}
 
 		assert(this.length == size);
+	}
+
+	this(DataWrapper wrapper, bool mutable)
+	{
+		this.wrapper = wrapper;
+		this.mutable = mutable;
+		this.contents = wrapper.contents;
 	}
 
 /*
@@ -235,7 +244,8 @@ public:
 
 	private void reallocate(size_t size, size_t capacity)
 	{
-		wrapper = new DataWrapper(size, capacity);
+		auto wrapper = new MemoryDataWrapper(size, capacity);
+		this.wrapper = wrapper;
 		wrapper.contents[0..this.length] = contents[];
 		//(cast(ubyte[])newWrapper.contents)[this.length..value] = 0;
 		contents = wrapper.contents;
@@ -257,7 +267,7 @@ public:
 		if (newCapacity <= capacity)
 		{
 			auto pos = ptr - wrapper.contents.ptr; // start position in wrapper data
-			wrapper.size = pos + newSize;
+			wrapper.setSize(pos + newSize);
 			contents = ptr[0..newSize];
 		}
 		else
@@ -412,6 +422,15 @@ public:
 static /*thread-local*/ size_t dataMemory, dataMemoryPeak;
 static /*thread-local*/ uint   dataCount, allocCount;
 
+// Abstract wrapper.
+abstract class DataWrapper
+{
+	abstract @property inout(void)[] contents() inout;
+	abstract @property size_t size() const;
+	abstract void setSize(size_t newSize);
+	abstract @property size_t capacity() const;
+}
+
 private:
 
 version (Windows)
@@ -422,15 +441,15 @@ else
 	import core.sys.posix.sys.mman;
 }
 
-/// Actual wrapper.
-final class DataWrapper
+/// Wrapper for data in RAM, allocated from the OS.
+final class MemoryDataWrapper : DataWrapper
 {
 	/// Pointer to actual data.
 	void* data;
 	/// Used size. Needed for safe appends.
-	size_t size;
+	size_t _size;
 	/// Allocated capacity.
-	size_t capacity;
+	size_t _capacity;
 
 	/// Threshold of allocated memory to trigger a collect.
 	enum { COLLECT_THRESHOLD = 8*1024*1024 } // 8MB
@@ -458,8 +477,8 @@ final class DataWrapper
 		dataCount ++;
 		allocCount ++;
 
-		this.size = size;
-		this.capacity = capacity;
+		this._size = size;
+		this._capacity = capacity;
 
 		// also collect
 		allocatedThreshold += capacity;
@@ -487,7 +506,19 @@ final class DataWrapper
 		dataCount --;
 	}
 
-	@property
+	@property override
+	size_t size() const { return _size; }
+
+	@property override
+	size_t capacity() const { return _capacity; }
+
+	override void setSize(size_t newSize)
+	{
+		assert(newSize <= capacity);
+		_size = newSize;
+	}
+
+	@property override
 	inout(void)[] contents() inout
 	{
 		return data[0..size];
