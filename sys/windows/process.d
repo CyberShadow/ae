@@ -24,6 +24,8 @@ import win32.winuser;
 import ae.sys.windows.exception;
 import ae.sys.windows.text;
 
+alias wenforce = ae.sys.windows.exception.wenforce;
+
 static if (_WIN32_WINNT >= 0x500) {
 
 struct CreatedProcessImpl
