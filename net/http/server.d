@@ -135,8 +135,8 @@ private:
 	{
 		try
 		{
-			debug (HTTP) writefln("[%s] Receiving start of request: \n%s---", Clock.currTime(), cast(string)data.contents);
 			inBuffer ~= data;
+			debug (HTTP) writefln("[%s] Receiving start of request (%d new bytes, %d total)", Clock.currTime(), data.length, inBuffer.bytes.length);
 
 			string reqLine;
 			Headers headers;
@@ -145,6 +145,14 @@ private:
 			{
 				debug (HTTP) writefln("[%s] Headers not yet received. Data in buffer:\n%s---", Clock.currTime(), cast(string)inBuffer.joinToHeap());
 				return;
+			}
+
+			debug (HTTP)
+			{
+				writefln("[%s] Headers received:", Clock.currTime());
+				writefln("> %s", reqLine);
+				foreach (name, value; headers)
+					writefln("> %s: %s", name, value);
 			}
 
 			currentRequest = new HttpRequest;
@@ -287,6 +295,8 @@ public:
 		foreach (string header, string value; response.headers)
 			respMessage.put(header, ": ", value, "\r\n");
 
+		debug (HTTP) writefln("[%s] Response headers:\n> %s", Clock.currTime(), respMessage.get().chomp().replace("\r\n", "\n> "));
+
 		respMessage.put("\r\n");
 
 		conn.send(Data(respMessage.get()));
@@ -306,8 +316,11 @@ public:
 				conn.resumeIdleTimeout();
 				timeoutActive = true;
 			}
-			if (inBuffer.length) // a second request has been pipelined
+			if (inBuffer.bytes.length) // a second request has been pipelined
+			{
+				debug (HTTP) writefln("A second request has been pipelined: %d datums, %d bytes", inBuffer.length, inBuffer.bytes.length);
 				onNewRequest(conn, Data());
+			}
 		}
 		else
 		{
