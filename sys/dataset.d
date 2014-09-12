@@ -85,6 +85,11 @@ struct DataSetBytes
 		return (cast(ubyte[])data[index].contents)[offset];
 	}
 
+	Data[] opSlice()
+	{
+		return data;
+	}
+
 	Data[] opSlice(size_t start, size_t end)
 	{
 		Data[] range = data;
@@ -131,10 +136,12 @@ unittest
 	ds = [
 		Data("aaaaa"),
 	];
-	s = cast(string)(ds.bytes[1..4].joinToHeap);
-	assert(s == "aaa");
 	s = cast(string)(ds.joinToHeap);
 	assert(s == "aaaaa");
+	s = cast(string)(ds.bytes[].joinToHeap);
+	assert(s == "aaaaa");
+	s = cast(string)(ds.bytes[1..4].joinToHeap);
+	assert(s == "aaa");
 
 	ds = [
 		Data("aaaaa"),

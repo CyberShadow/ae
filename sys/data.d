@@ -45,8 +45,8 @@ import std.c.string : memmove;
 import std.traits;
 import core.memory;
 import core.exception;
-debug(DATA) import std.stdio;
-debug(DATA) import std.string;
+debug import std.stdio;
+debug import std.string;
 public import ae.sys.dataset;
 import ae.utils.math;
 
@@ -164,6 +164,22 @@ public:
 		this.contents = wrapper.contents;
 	}
 
+	this(this)
+	{
+		if (wrapper)
+		{
+			wrapper.references++;
+			debug (DATA_REFCOUNT) writefln("%s -> %s: Incrementing refcount to %d", cast(void*)&this, cast(void*)wrapper, wrapper.references);
+		}
+		else
+			debug (DATA_REFCOUNT) writefln("%s -> %s: this(this) with no wrapper", cast(void*)&this, cast(void*)wrapper);
+	}
+
+	~this()
+	{
+		clear();
+	}
+
 /*
 	/// Create new instance as a slice over an existing DataWrapper.
 	private this(DataWrapper wrapper, size_t start = 0, size_t end = size_t.max)
@@ -245,10 +261,12 @@ public:
 	private void reallocate(size_t size, size_t capacity)
 	{
 		auto wrapper = new MemoryDataWrapper(size, capacity);
-		this.wrapper = wrapper;
 		wrapper.contents[0..this.length] = contents[];
 		//(cast(ubyte[])newWrapper.contents)[this.length..value] = 0;
-		contents = wrapper.contents;
+
+		clear();
+		this.wrapper = wrapper;
+		this.contents = wrapper.contents;
 		mutable = true;
 	}
 
@@ -304,6 +322,15 @@ public:
 
 	void clear()
 	{
+		if (wrapper)
+		{
+			assert(wrapper.references > 0, "Dangling pointer to wrapper");
+			wrapper.references--;
+			debug (DATA_REFCOUNT) writefln("%s -> %s: Decrementing refcount to %d", cast(void*)&this, cast(void*)wrapper, wrapper.references);
+			if (wrapper.references == 0)
+				destroy(wrapper);
+		}
+
 		wrapper = null;
 		contents = null;
 	}
@@ -386,10 +413,11 @@ public:
 		assert(x <= y);
 		assert(y <= length);
 	}
-	out(result)
-	{
-		assert(result.length == y-x);
-	}
+// https://issues.dlang.org/show_bug.cgi?id=13463
+//	out(result)
+//	{
+//		assert(result.length == y-x);
+//	}
 	body
 	{
 		if (x == y)
@@ -417,6 +445,14 @@ public:
 	}
 }
 
+unittest
+{
+	Data d = Data("aaaaa");
+	assert(d.wrapper.references == 1);
+	Data s = d[1..4];
+	assert(d.wrapper.references == 2);
+}
+
 // ************************************************************************
 
 static /*thread-local*/ size_t dataMemory, dataMemoryPeak;
@@ -425,6 +461,7 @@ static /*thread-local*/ uint   dataCount, allocCount;
 // Abstract wrapper.
 abstract class DataWrapper
 {
+	size_t references = 1;
 	abstract @property inout(void)[] contents() inout;
 	abstract @property size_t size() const;
 	abstract void setSize(size_t newSize);
@@ -575,7 +612,7 @@ final class MemoryDataWrapper : DataWrapper
 	{
 		debug
 		{
-			(cast(ubyte*)p)[0..size] = 0xDA;
+			(cast(ubyte*)p)[0..size] = 0xDB;
 		}
 		version(Windows)
 			VirtualFree(p, 0, MEM_RELEASE);
