@@ -169,10 +169,10 @@ public:
 		if (wrapper)
 		{
 			wrapper.references++;
-			debug (DATA_REFCOUNT) writefln("%s -> %s: Incrementing refcount to %d", cast(void*)&this, cast(void*)wrapper, wrapper.references);
+			debug (DATA_REFCOUNT) debugLog(format("%s -> %s: Incrementing refcount to %d", cast(void*)&this, cast(void*)wrapper, wrapper.references));
 		}
 		else
-			debug (DATA_REFCOUNT) writefln("%s -> %s: this(this) with no wrapper", cast(void*)&this, cast(void*)wrapper);
+			debug (DATA_REFCOUNT) debugLog(format("%s -> %s: this(this) with no wrapper", cast(void*)&this, cast(void*)wrapper));
 	}
 
 	~this()
@@ -326,7 +326,7 @@ public:
 		{
 			assert(wrapper.references > 0, "Dangling pointer to wrapper");
 			wrapper.references--;
-			debug (DATA_REFCOUNT) writefln("%s -> %s: Decrementing refcount to %d", cast(void*)&this, cast(void*)wrapper, wrapper.references);
+			debug (DATA_REFCOUNT) debugLog(format("%s -> %s: Decrementing refcount to %d", cast(void*)&this, cast(void*)wrapper, wrapper.references));
 			if (wrapper.references == 0)
 				destroy(wrapper);
 		}
@@ -648,4 +648,13 @@ version(Windows)
 	alias SYSTEM_INFO* LPSYSTEM_INFO;
 
 	extern(Windows) VOID GetSystemInfo(LPSYSTEM_INFO);
+}
+
+debug(DATA_REFCOUNT) import ae.utils.exception;
+
+debug(DATA_REFCOUNT) void debugLog(string s)
+{
+	writeln(s);
+	foreach (line; getStackTrace())
+		writeln("\t", line);
 }

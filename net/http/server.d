@@ -398,4 +398,25 @@ b=7654321"));
 	socketManager.loop();
 
 	assert(replies == [777777, 8888888]);
+
+/+
+	void testFile(string fn)
+	{
+		std.file.write(fn, "42");
+		s.handleRequest = (HttpRequest request, HttpServerConnection conn) {
+			auto response = new HttpResponseEx;
+			conn.sendResponse(response.serveFile(request.resource[1..$], ""));
+			if (--closeAfter == 0)
+				s.close();
+		};
+		port = s.listen(0, "localhost");
+		closeAfter = 1;
+		httpGet("http://localhost:" ~ to!string(port) ~ "/" ~ fn, (string s) { assert(s=="42"); }, null);
+		socketManager.loop();
+		std.file.remove(fn);
+	}
+
+	testFile("http-test.bin");
+	testFile("http-test.txt");
++/
 }

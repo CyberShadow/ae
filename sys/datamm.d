@@ -14,6 +14,7 @@
 module ae.sys.datamm;
 
 import std.mmfile;
+debug import std.stdio;
 
 import ae.sys.data;
 
@@ -25,6 +26,12 @@ class MappedDataWrapper : DataWrapper
 {
 	MmFile mmFile;
 	void[] mappedData;
+
+	debug(DATA_REFCOUNT)
+	this()
+	{
+		writefln("? -> %s: Created MappedDataWrapper", cast(void*)this);
+	}
 
 	override @property inout(void)[] contents() inout { return mappedData; }
 	override @property size_t size() const { return mappedData.length; }

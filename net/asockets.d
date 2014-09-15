@@ -693,6 +693,7 @@ protected:
 					assert(sent == pdata.length);
 					//debug writefln("[%s] Sent data:", remoteAddress);
 					//debug writefln("%s", hexDump(pdata.contents[0..sent]));
+					pdata.clear();
 					queue = queue[1..$];
 					partiallySent[priority] = false;
 					if (queue.length == 0)
@@ -829,6 +830,7 @@ public:
 		Data[1] data;
 		data[0] = datum;
 		send(data);
+		data[] = Data.init;
 	}
 
 	/// ditto

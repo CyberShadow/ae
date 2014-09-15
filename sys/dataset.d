@@ -122,7 +122,7 @@ struct DataSetBytes
 	size_t length()
 	{
 		size_t result = 0;
-		foreach (d; data)
+		foreach (ref d; data)
 			result += d.length;
 		return result;
 	}
