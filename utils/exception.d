@@ -13,6 +13,7 @@
 
 module ae.utils.exception;
 
+import std.algorithm;
 import std.string;
 
 string formatException(Throwable e)
@@ -87,4 +88,21 @@ unittest
 		assert(e.msg == "First");
 		assert(e.next.msg == "Second");
 	}
+}
+
+// --------------------------------------------------------------------------
+
+string[] getStackTrace(string until = __FUNCTION__, string since = "_d_run_main")
+{
+	string[] lines;
+	try
+		throw new Exception(null);
+	catch (Exception e)
+		lines = e.toString().splitLines()[1..$];
+
+	auto start = lines.countUntil!(line => line.canFind(until));
+	auto end   = lines.countUntil!(line => line.canFind(since));
+	if (start < 0) start = -1;
+	if (end   < 0) end   = lines.length;
+	return lines[start+1..end];
 }
