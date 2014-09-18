@@ -74,7 +74,7 @@ protected:
 			.wenforce("InternetConnect");
 	}
 
-	static ubyte[0x10000] buf;
+	static ubyte[0x10000] buf = void;
 
 	final static void[][] httpQuery(ref HNet hUrl, uint infoLevel)
 	{

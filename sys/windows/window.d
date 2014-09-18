@@ -49,7 +49,7 @@ WindowIterator windowIterator(string szClassName, string szWindowName, HWND hPar
 	return iterator;
 }
 
-private static wchar[0xFFFF] textBuf;
+private static wchar[0xFFFF] textBuf = void;
 
 string windowStringQuery(alias FUNC)(HWND h)
 {

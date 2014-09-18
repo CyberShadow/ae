@@ -744,7 +744,7 @@ ubyte[16] mdFile()(string fn)
 	context.start();
 
 	auto f = openFile(fn, "rb");
-	static ubyte[64 * 1024] buffer;
+	static ubyte[64 * 1024] buffer = void;
 	while (true)
 	{
 		auto readBuffer = f.rawRead(buffer);
@@ -762,7 +762,7 @@ ubyte[16] mdFile()(string fn)
 void[] readFile(File f)
 {
 	ubyte[] result;
-	static ubyte[64 * 1024] buffer;
+	static ubyte[64 * 1024] buffer = void;
 	while (true)
 	{
 		auto readBuffer = f.rawRead(buffer);
