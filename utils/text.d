@@ -38,10 +38,17 @@ alias indexOf = std.string.indexOf;
 /// necessarily - thus, is a semantic superset of the D "string" alias.
 alias string ascii;
 
+/// Convenience helper
 bool contains(T, U)(T[] str, U[] what)
 	if (is(Unqual!T == Unqual!U))
 {
 	return str.indexOf(what)>=0;
+}
+
+/// CTFE helper
+string formatAs(T)(auto ref T obj, string fmt)
+{
+	return format(fmt, obj);
 }
 
 // Uses memchr (not Boyer-Moore), best for short strings.
