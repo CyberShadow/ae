@@ -323,9 +323,11 @@ unittest
 
 /// Were we built with -debug?
 debug
-	enum IsDebug = true;
+	enum isDebug = true;
 else
-	enum IsDebug = false;
+	enum isDebug = false;
+
+deprecated alias IsDebug = isDebug;
 
 // ************************************************************************
 
