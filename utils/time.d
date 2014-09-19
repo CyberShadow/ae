@@ -758,8 +758,30 @@ unittest
 
 /// Workaround SysTime.fracSecs only being available in 2.067,
 /// and SysTime.fracSec becoming deprecated in the same version.
+static if (!is(typeof(SysTime.init.fracSecs)))
 @property Duration fracSecs(SysTime s)
 {
 	enum hnsecsPerSecond = convert!("seconds", "hnsecs")(1);
 	return hnsecs(s.stdTime % hnsecsPerSecond);
+}
+
+/// As above, for Duration.split and Duration.get
+static if (!is(typeof(Duration.init.split!())))
+@property auto split(units...)(Duration d)
+{
+	static struct Result
+	{
+		mixin("long " ~ [units].join(", ") ~ ";");
+	}
+
+	Result result;
+	foreach (unit; units)
+	{
+		static if (is(typeof(d.get!unit))) // unit == "msecs" || unit == "usecs" || unit == "hnsecs" || unit == "nsecs")
+			long value = d.get!unit();
+		else
+			long value = mixin("d.fracSec." ~ unit);
+		mixin("result." ~ unit ~ " = value;");
+	}
+	return result;
 }
