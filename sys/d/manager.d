@@ -154,6 +154,7 @@ class DManager
 			buildDir.rmdirRecurse();
 		enforce(!buildDir.exists);
 
+		prepareRepoPrerequisites();
 		repo.run("submodule", "foreach", "git", "reset", "--hard");
 		repo.run("submodule", "foreach", "git", "clean", "--force", "-x", "-d", "--quiet");
 		repo.run("submodule", "update");
@@ -295,6 +296,7 @@ class DManager
 	/// Return the Git repository of the specified component.
 	Repository componentRepo(string component)
 	{
+		prepareRepoPrerequisites();
 		return Repository(buildPath(repoDir, component));
 	}
 
