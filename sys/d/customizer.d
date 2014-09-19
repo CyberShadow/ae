@@ -69,6 +69,20 @@ class DCustomizer
 	private enum pullMessageTemplate = mergeMessagePrefix ~ "pr-%s";
 	private enum remoteMessageTemplate = mergeMessagePrefix ~ "remote-%s-%s";
 
+	void setupGitEnv()
+	{
+		string[string] mergeEnv;
+		foreach (person; ["AUTHOR", "COMMITTER"])
+		{
+			mergeEnv["GIT_%s_DATE".format(person)] = "Thu, 01 Jan 1970 00:00:00 +0000";
+			mergeEnv["GIT_%s_NAME".format(person)] = "ae.sys.d.customizer";
+			mergeEnv["GIT_%s_EMAIL".format(person)] = "ae.sys.d.customizer@thecybershadow.net";
+		}
+		foreach (k, v; mergeEnv)
+			environment[k] = v;
+		// TODO: restore environment
+	}
+
 	void mergeRef(string component, string refName, string mergeCommitMessage)
 	{
 		auto crepo = d.componentRepo(component);
@@ -81,16 +95,7 @@ class DCustomizer
 
 		void doMerge()
 		{
-			string[string] mergeEnv;
-			foreach (person; ["AUTHOR", "COMMITTER"])
-			{
-				mergeEnv["GIT_%s_DATE".format(person)] = "Thu, 01 Jan 1970 00:00:00 +0000";
-				mergeEnv["GIT_%s_NAME".format(person)] = "ae.sys.d.customizer";
-				mergeEnv["GIT_%s_EMAIL".format(person)] = "ae.sys.d.customizer@thecybershadow.net";
-			}
-			foreach (k, v; mergeEnv)
-				environment[k] = v;
-			// TODO: restore environment
+			setupGitEnv();
 			crepo.run("merge", "--no-ff", "-m", mergeCommitMessage, refName);
 		}
 
@@ -117,6 +122,7 @@ class DCustomizer
 		auto crepo = d.componentRepo(component);
 
 		// "sed -i \"s#.*" ~ mergeCommitMessage.escapeRE() ~ ".*##g\"";
+		setupGitEnv();
 		environment["GIT_EDITOR"] = "%s %s %s"
 			.format(getCallbackCommand(), unmergeRebaseEditAction, mergeCommitMessage);
 		scope(exit) environment.remove("GIT_EDITOR");
