@@ -13,36 +13,60 @@
 
 module ae.sys.windows.dll;
 
-import std.traits;
 
 import win32.winbase;
+import win32.windef;
 
 import ae.sys.windows.exception;
+
+/// Loads or retrieves the handle of a DLL.
+/// As there will be only one template instantiation
+/// per unique DLL string, LoadLibrary will be called
+/// at most once per unique "dll" parameter.
+@property HMODULE moduleHandle(string dll)()
+{
+	static HMODULE hModule = null;
+	if (!hModule)
+		hModule = LoadLibrary(dll).wenforce("LoadLibrary");
+	return hModule;
+}
 
 /// Given a static function declaration, generate a loader with the same name in the current scope
 /// that loads the function dynamically from the given DLL.
 mixin template DynamicLoad(alias F, string DLL, string NAME=__traits(identifier, F))
 {
-	static ReturnType!F loader(ARGS...)(ARGS args)
-	{
-		import win32.windef;
+	static import std.traits;
 
+	static std.traits.ReturnType!F loader(ARGS...)(ARGS args)
+	{
 		alias typeof(&F) FP;
 		static FP fp = null;
 		if (!fp)
-		{
-			HMODULE dll = wenforce(LoadLibrary(DLL), "LoadLibrary");
-			fp = cast(FP)wenforce(GetProcAddress(dll, NAME), "GetProcAddress");
-		}
+			fp = cast(FP)wenforce(GetProcAddress(moduleHandle!DLL, NAME), "GetProcAddress");
 		return fp(args);
 	}
 
-	mixin(`alias loader!(ParameterTypeTuple!F) ` ~ NAME ~ `;`);
+	mixin(`alias loader!(std.traits.ParameterTypeTuple!F) ` ~ NAME ~ `;`);
 }
+
+/// Ditto
+mixin template DynamicLoad(string DLL, FUNCS...)
+{
+	static if (FUNCS.length)
+	{
+		mixin DynamicLoad!(FUNCS[0], DLL);
+		mixin DynamicLoad!(DLL, FUNCS[1..$]);
+	}
+}
+
+version(unittest) import win32.winuser;
 
 ///
 unittest
 {
 	mixin DynamicLoad!(GetVersion, "kernel32.dll");
 	GetVersion(); // called via GetProcAddress
+
+	// Multiple imports
+	mixin DynamicLoad!("user32.dll", GetDC, ReleaseDC);
 }
