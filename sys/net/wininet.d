@@ -26,17 +26,31 @@ import win32.wininet;
 import ae.net.http.common : HttpRequest;
 import ae.net.ietf.url;
 import ae.sys.net;
+import ae.sys.windows.dll;
 import ae.sys.windows.exception;
 import ae.utils.meta;
 
 class WinINetNetwork : Network
 {
+private:
+	// Don't require wininet.lib
+	mixin DynamicLoad!("wininet.dll",
+		HttpQueryInfoA,
+		HttpOpenRequestA,
+		HttpSendRequestA,
+		InternetCloseHandle,
+		InternetConnectA,
+		InternetOpenA,
+		InternetOpenUrlA,
+		InternetReadFile,
+	);
+
 protected:
 	struct HNetImpl
 	{
 		HINTERNET hNet;
 		alias hNet this;
-		~this() { if (hNet != hNet.init) hNet.InternetCloseHandle(); }
+		~this() { if (hNet != hNet.init) InternetCloseHandle(hNet); }
 	}
 	alias HNet = RefCounted!HNetImpl;
 
@@ -70,7 +84,7 @@ protected:
 
 	final static void sendRequest(ref HNet hReq)
 	{
-		HttpSendRequest(hReq, null, 0, null, 0);
+		HttpSendRequestA(hReq, null, 0, null, 0);
 			.wenforce("InternetConnect");
 	}
 
