@@ -78,14 +78,14 @@ protected:
 	final static HNet openRequest(ref HNet hCon, string method, string resource, DWORD flags = 0)
 	{
 		auto hReq = HttpOpenRequestA(hCon, method.toStringz(), resource.toStringz(), null, null, null, flags, 0);
-			.wenforce("InternetConnect");
+			.wenforce("HttpOpenRequest");
 		return HNet(hReq);
 	}
 
 	final static void sendRequest(ref HNet hReq)
 	{
 		HttpSendRequestA(hReq, null, 0, null, 0);
-			.wenforce("InternetConnect");
+			.wenforce("HttpSendRequest");
 	}
 
 	static ubyte[0x10000] buf = void;
