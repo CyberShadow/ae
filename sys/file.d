@@ -951,8 +951,8 @@ auto atomic(alias impl, size_t targetIndex)(staticMap!(Unqual, ParameterTypeTupl
 	auto target = args[targetIndex].idup;
 	auto temp = "%s.%s.temp".format(target, thisProcessID);
 	if (temp.exists) temp.removeRecurse();
-	scope(failure) if (temp.exists) temp.removeRecurse();
 	scope(success) rename(temp, target);
+	scope(failure) if (temp.exists) temp.removeRecurse();
 	args[targetIndex] = temp;
 	return impl(args);
 }
