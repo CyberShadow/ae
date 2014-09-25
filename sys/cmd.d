@@ -128,3 +128,16 @@ version (Windows)
 	enum NULL_FILE = "nul";
 else
 	enum NULL_FILE = "/dev/null";
+
+// ************************************************************************
+
+/// Reverse of std.process.environment.toAA
+void setEnvironment(string[string] env)
+{
+	foreach (k, v; env)
+		if (k.length)
+			environment[k] = v;
+	foreach (k, v; environment.toAA())
+		if (k.length && k !in env)
+			environment.remove(k);
+}
