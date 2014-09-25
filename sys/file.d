@@ -820,6 +820,8 @@ Thread writeFileAsync(File f, in void[] data)
 	return t;
 }
 
+version(Windows) import ae.sys.windows.exception;
+
 struct NamedPipeImpl
 {
 	immutable string fileName;
@@ -830,7 +832,6 @@ struct NamedPipeImpl
 		version(Windows)
 		{
 			import win32.winbase;
-			import ae.sys.windows;
 
 			fileName = `\\.\pipe\` ~ name;
 			auto h = CreateNamedPipeW(fileName.toUTF16z, PIPE_ACCESS_OUTBOUND, PIPE_TYPE_BYTE, 10, 4096, 4096, 0, null).wenforce("CreateNamedPipeW");
@@ -851,7 +852,6 @@ struct NamedPipeImpl
 		version(Windows)
 		{
 			import win32.winbase;
-			import ae.sys.windows;
 
 			ConnectNamedPipe(f.windowsHandle, null).wenforce("ConnectNamedPipe");
 			return f;
