@@ -13,7 +13,7 @@
 
 module ae.utils.range;
 
-import ae.utils.meta : IsDebug;
+import ae.utils.meta : isDebug;
 
 /// An equivalent of an array range, but which maintains
 /// a start and end pointer instead of a start pointer
@@ -23,7 +23,7 @@ import ae.utils.meta : IsDebug;
 //       -release, like regular arrays?
 // TODO: Does this actually make a difference in practice?
 //       Run some benchmarks...
-struct FastArrayRange(T, bool CHECKED=IsDebug)
+struct FastArrayRange(T, bool CHECKED=isDebug)
 {
 	T* ptr, end;
 
