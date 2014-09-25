@@ -415,7 +415,7 @@ void removeRecurse(string fn)
 void recreateEmptyDirectory()(string dir)
 {
 	if (dir.exists)
-		forceDelete(dir);
+		dir.forceDelete(true);
 	mkdir(dir);
 }
 
