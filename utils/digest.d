@@ -13,6 +13,8 @@
 
 module ae.utils.digest;
 
+import std.traits;
+
 import ae.sys.cmd;
 import ae.utils.text;
 import ae.utils.array;
@@ -52,6 +54,8 @@ uint fastCRC(in void[] data, uint start = cast(uint)-1)
 		crc = crc32Table[cast(ubyte) crc ^ val] ^ (crc >> 8);
 	return crc;
 }
+
+// TODO: reimplement via std.digest.digest
 
 // Struct (for streaming)
 struct MurmurHash2A
@@ -228,4 +232,36 @@ unittest
 	assert(murmurHash3_x64_128("The quick brown fox jumps over the lazy cog") == [ 0xff85269a , 0x658ca970 , 0xa68e5c3e , 0x43fee3ea ]);
 
 	assert(digestToStringMH3(murmurHash3_x86_128("The quick brown fox jumps over the lazy dog")) == "2F1583C3ECEE2C675D7BF66CE5E91D2C");
+}
+
+// ************************************************************************
+
+public import std.digest.md;
+
+/// Get digest string of given data.
+/// Short-hand for std.digest.md5Of (and similar) and toHexString.
+/// Similar to the old std.md5.getDigestString.
+template getDigestString(Digest)
+{
+	string getDigestString(T)(in T[][] data...)
+		if (!hasIndirections!T)
+	{
+		return getDigestStringImpl(cast(const(ubyte[])[])data);
+	}
+
+	string getDigestStringImpl(in ubyte[][] data)
+	{
+		Digest digest;
+		digest.start();
+		foreach (datum; data)
+			digest.put(cast(const(ubyte)[])datum);
+		auto result = digest.finish();
+		return result.toHexString();
+	}
+}
+
+///
+unittest
+{
+	assert(getDigestString!MD5("abc") == "900150983CD24FB0D6963F7D28E17F72");
 }
