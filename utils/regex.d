@@ -28,11 +28,11 @@ import ae.utils.text;
 ///   if (text.match(`^\d+$`)) {}    // old code - recompiles every time
 ///   if (text.match(re!`^\d+$`)) {} // new code - recompiles once
 
-Regex!char re(string pattern)()
+Regex!char re(string pattern, alias flags = [])()
 {
 	static Regex!char r;
 	if (r.empty)
-		r = regex(pattern);
+		r = regex(pattern, flags);
 	return r;
 }
 
