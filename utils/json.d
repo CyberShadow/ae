@@ -271,8 +271,8 @@ private struct JsonParser(C)
 		static if (is(T==bool))
 			return readBool();
 		else
-		static if (is(T : long))
-			return readInt!(T)();
+		static if (is(T : real))
+			return readNumber!(T)();
 		else
 		static if (isDynamicArray!T)
 			return readArray!(typeof(T.init[0]))();
@@ -419,13 +419,13 @@ private struct JsonParser(C)
 		}
 		else
 		{
-			ubyte i = readInt!ubyte();
+			ubyte i = readNumber!ubyte();
 			enforce(i < 2);
 			return !!i;
 		}
 	}
 
-	T readInt(T)()
+	T readNumber(T)()
 	{
 		skipWhitespace();
 		T v;
@@ -434,35 +434,14 @@ private struct JsonParser(C)
 		if (c == '"')
 			s = readString();
 		else
-			while (c=='-' || (c>='0' && c<='9'))
+			while (c=='+' || c=='-' || (c>='0' && c<='9') || c=='e' || c=='E' || c=='.')
 			{
 				s ~= c, p++;
 				if (eof) break;
 				c=peek();
 			}
-		static if (is(T==byte))
-			return to!byte(s);
-		else
-		static if (is(T==ubyte))
-			return to!ubyte(s);
-		else
-		static if (is(T==short))
-			return to!short(s);
-		else
-		static if (is(T==ushort))
-			return to!ushort(s);
-		else
-		static if (is(T==int))
-			return to!int(s);
-		else
-		static if (is(T==uint))
-			return to!uint(s);
-		else
-		static if (is(T==long))
-			return to!long(s);
-		else
-		static if (is(T==ulong))
-			return to!ulong(s);
+		static if (is(T : real))
+			return to!T(s);
 		else
 			static assert(0, "Don't know how to parse numerical type " ~ T.stringof);
 	}
