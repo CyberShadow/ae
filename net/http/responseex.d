@@ -82,7 +82,7 @@ public:
 	}
 
 	/// Send a file from the disk
-	HttpResponseEx serveFile(string path, string fsBase, HttpRequest request, bool enableIndex = false, string urlBase="/")
+	HttpResponseEx serveFile(string path, string fsBase, bool enableIndex = false, string urlBase="/")
 	{
 		if (!checkPath(path))
 		{
@@ -150,11 +150,6 @@ public:
 		data = [readData(filename)];
 		setStatus(HttpStatusCode.OK);
 		return this;
-	}
-
-	HttpResponseEx serveFile(string path, string fsBase, bool enableIndex = false, string urlBase="/")
-	{
-		return serveFile(path, fsBase, null, enableIndex, urlBase);
 	}
 
 	static string loadTemplate(string filename, string[string] dictionary)
