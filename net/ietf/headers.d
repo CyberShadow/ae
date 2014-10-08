@@ -26,7 +26,7 @@ struct Headers
 
 	/// If multiple headers with this name are present,
 	/// only the first one is returned.
-	string opIndex(string name)
+	ref inout(string) opIndex(string name) inout
 	{
 		return headers[toUpper(name)][0];
 	}
@@ -37,7 +37,7 @@ struct Headers
 		return value;
 	}
 
-	string* opIn_r(string name)
+	inout(string)* opIn_r(string name) inout
 	{
 		auto pvalues = toUpper(name) in headers;
 		if (pvalues && (*pvalues).length)
@@ -66,6 +66,22 @@ struct Headers
 		return ret;
 	}
 
+	// Copy-paste because of https://issues.dlang.org/show_bug.cgi?id=7543
+	int opApply(int delegate(ref string name, ref const(string) value) dg) const
+	{
+		int ret;
+		outer:
+		foreach (name, values; headers)
+			foreach (value; values)
+			{
+				auto normName = normalizeHeaderName(name);
+				ret = dg(normName, value);
+				if (ret)
+					break outer;
+			}
+		return ret;
+	}
+
 	void add(string name, string value)
 	{
 		name = toUpper(name);
@@ -75,24 +91,24 @@ struct Headers
 			headers[name] ~= value;
 	}
 
-	string get(string key, string def)
+	string get(string key, string def) const
 	{
 		return getLazy(key, def);
 	}
 
-	string getLazy(string key, lazy string def)
+	string getLazy(string key, lazy string def) const
 	{
 		auto pvalue = key in this;
 		return pvalue ? *pvalue : def;
 	}
 
-	string[] getAll(string key)
+	inout(string)[] getAll(string key) inout
 	{
 		return headers[toUpper(key)];
 	}
 
 	/// Warning: discards repeating headers
-	string[string] opCast(T)()
+	string[string] opCast(T)() const
 		if (is(T == string[string]))
 	{
 		string[string] result;
@@ -101,7 +117,7 @@ struct Headers
 		return result;
 	}
 
-	string[][string] opCast(T)()
+	string[][string] opCast(T)() inout
 		if (is(T == string[][string]))
 	{
 		string[][string] result;
@@ -109,6 +125,32 @@ struct Headers
 			result[k] ~= v;
 		return result;
 	}
+}
+
+unittest
+{
+	Headers headers;
+	headers["test"] = "test";
+
+	void test(T)(T headers)
+	{
+		assert("TEST" in headers);
+		assert(headers["TEST"] == "test");
+
+		foreach (k, v; headers)
+			assert(k == "Test" && v == "test");
+
+		auto aas = cast(string[string])headers;
+		assert(aas == ["Test" : "test"]);
+
+		auto aaa = cast(string[][string])headers;
+		assert(aaa == ["Test" : ["test"]]);
+	}
+
+	test(headers);
+
+	const constHeaders = headers;
+	test(constHeaders);
 }
 
 /// Normalize capitalization
