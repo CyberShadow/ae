@@ -17,6 +17,8 @@ module ae.net.http.common;
 
 import core.time;
 
+import std.algorithm;
+import std.array;
 import std.string;
 import std.conv;
 import std.ascii;
@@ -440,36 +442,70 @@ public:
 	}
 
 	/// Called by the server to compress content, if possible/appropriate
-	final package void optimizeData(string acceptEncoding)
+	final package void optimizeData(in ref Headers requestHeaders)
 	{
-		if ("Content-Encoding" in headers)
-			return; // data is already encoded
-		auto contentType = headers.get("Content-Type", null);
-		if (contentType.startsWith("text/") || contentType=="application/json")
+		auto acceptEncoding = headers.get("Accept-Encoding", null);
+		if (acceptEncoding && "Content-Encoding" !in headers)
 		{
-			auto supported = parseItemList(acceptEncoding) ~ ["*"];
+			auto contentType = headers.get("Content-Type", null);
+			if (contentType.startsWith("text/") || contentType=="application/json")
+			{
+				auto supported = parseItemList(acceptEncoding) ~ ["*"];
 
-			foreach (method; supported)
-				switch (method)
+				foreach (method; supported)
+					switch (method)
+					{
+						case "deflate":
+							headers["Content-Encoding"] = method;
+							headers.add("Vary", "Accept-Encoding");
+							compressWithDeflate();
+							return;
+						case "gzip":
+							headers["Content-Encoding"] = method;
+							headers.add("Vary", "Accept-Encoding");
+							compressWithGzip();
+							return;
+						case "*":
+							if("Content-Encoding" in headers)
+								headers.remove("Content-Encoding");
+							return;
+						default:
+							break;
+					}
+				assert(0);
+			}
+		}
+	}
+
+	/// Called by the server to apply range request.
+	final package void sliceData(in ref Headers requestHeaders)
+	{
+		if (status == HttpStatusCode.OK)
+		{
+			headers["Accept-Ranges"] = "bytes";
+			auto prange = "Range" in requestHeaders;
+			if (prange && (*prange).startsWith("bytes="))
+			{
+				auto ranges = (*prange)[6..$].split(",")[0].split("-").map!(s => s.length ? s.to!size_t : size_t.max)().array();
+				enforce(ranges.length == 2, "Bad range request");
+				ranges[1]++;
+				auto datum = DataSetBytes(this.data);
+				if (ranges[1] == size_t.min) // was not specified (size_t.max overflowed into 0)
+					ranges[1] = datum.length;
+				if (ranges[0] >= datum.length || ranges[0] >= ranges[1])
 				{
-					case "deflate":
-						headers["Content-Encoding"] = method;
-						headers.add("Vary", "Accept-Encoding");
-						compressWithDeflate();
-						return;
-					case "gzip":
-						headers["Content-Encoding"] = method;
-						headers.add("Vary", "Accept-Encoding");
-						compressWithGzip();
-						return;
-					case "*":
-						if("Content-Encoding" in headers)
-							headers.remove("Content-Encoding");
-						return;
-					default:
-						break;
+					//writeError(HttpStatusCode.RequestedRangeNotSatisfiable);
+					setStatus(HttpStatusCode.RequestedRangeNotSatisfiable);
+					data = [Data(statusMessage)];
+					return;
 				}
-			assert(0);
+				else
+				{
+					setStatus(HttpStatusCode.PartialContent);
+					this.data = datum[ranges[0]..ranges[1]];
+					headers["Content-Range"] = "bytes %d-%d/%d".format(ranges[0], ranges[0] + this.data.length - 1, datum.length);
+				}
+			}
 		}
 	}
 }

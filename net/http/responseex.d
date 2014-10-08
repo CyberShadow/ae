@@ -14,7 +14,6 @@
 
 module ae.net.http.responseex;
 
-import std.algorithm;
 import std.exception;
 import std.string;
 import std.conv;
@@ -23,7 +22,7 @@ import std.path;
 
 public import ae.net.http.common;
 import ae.sys.data;
-import ae.sys.datamm;
+import ae.sys.dataio;
 import ae.utils.array;
 import ae.utils.json;
 import ae.utils.xml;
@@ -147,21 +146,9 @@ public:
 			headers["Content-Type"] = mimeType;
 
 		headers["Last-Modified"] = httpTime(timeLastModified(filename));
-		headers["Accept-Ranges"] = "bytes";
-		if (request && "Range" in request.headers && request.headers["Range"].startsWith("bytes="))
-		{
-			setStatus(HttpStatusCode.PartialContent);
-			auto ranges = request.headers["Range"][6..$].split(",")[0].split("-").map!(s => s.length ? s.to!size_t : size_t.max)();
-			enforce(ranges.length == 2, "Bad range request");
-			auto mapped = mapFile(filename, MmMode.read, ranges[0], ranges[1] + 1);
-			data = [mapped];
-			headers["Content-Range"] = "bytes %d-%d/%d".format(ranges[0], ranges[0] + mapped.length - 1, filename.getSize());
-		}
-		else
-		{
-			setStatus(HttpStatusCode.OK);
-			data = [mapFile(filename, MmMode.read)];
-		}
+		//data = [mapFile(filename, MmMode.read)];
+		data = [readData(filename)];
+		setStatus(HttpStatusCode.OK);
 		return this;
 	}
 

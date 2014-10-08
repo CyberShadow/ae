@@ -280,8 +280,8 @@ public:
 			response.data = [Data("Internal Server Error")];
 		}
 
-		if ("Accept-Encoding" in currentRequest.headers)
-			response.optimizeData(currentRequest.headers["Accept-Encoding"]);
+		response.optimizeData(currentRequest.headers);
+		response.sliceData(currentRequest.headers);
 		response.headers["Content-Length"] = response ? to!string(response.data.bytes.length) : "0";
 		response.headers["X-Powered-By"] = "ae.net.http.server (+https://github.com/CyberShadow/ae)";
 		response.headers["Date"] = httpTime(Clock.currTime());
