@@ -27,6 +27,7 @@ string fromWString(in wchar[] buf)
 
 string fromWString(in wchar* buf)
 {
+	if (!buf) return null;
 	const(wchar)* p = buf;
 	for (; *p; p++) {}
 	return toUTF8(buf[0..p-buf]);
