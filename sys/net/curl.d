@@ -33,6 +33,19 @@ class CurlNetwork : Network
 		return get!(AutoProtocol, ubyte)(url);
 	}
 
+	override bool urlOK(string url)
+	{
+		try
+		{
+			auto http = HTTP(url);
+			http.method = HTTP.Method.head;
+			http.perform();
+			return http.statusLine.code == 200; // OK
+		}
+		catch (Exception e)
+			return false;
+	}
+
 	override string resolveRedirect(string url)
 	{
 		string result = null;

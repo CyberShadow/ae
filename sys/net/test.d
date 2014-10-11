@@ -45,6 +45,12 @@ void test(string moduleName, string className)()
 		assert(fn.readText() == "Hello world\n");
 	}
 
+	debug std.stdio.stderr.writeln(" - urlOK");
+	{
+		assert( net.urlOK("http://net.d-lang.appspot.com/testUrl1"));
+		assert(!net.urlOK("http://net.d-lang.appspot.com/testUrlNX"));
+	}
+
 	debug std.stdio.stderr.writeln(" - resolveRedirect");
 	{
 		auto result = net.resolveRedirect("http://net.d-lang.appspot.com/testUrl3");

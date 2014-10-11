@@ -36,6 +36,14 @@ class Network
 		assert(false);
 	}
 
+	/// Check if the resource exists and is downloadable.
+	/// E.g. the HTTP status code for a HEAD request should be 200.
+	bool urlOK(string url)
+	{
+		notImplemented();
+		assert(false);
+	}
+
 	/// Get the destination of an HTTP redirect.
 	string resolveRedirect(string url)
 	{
@@ -61,4 +69,5 @@ static this()
 /// UFCS-able global synonym functions.
 void downloadFile(string url, string target) { net.downloadFile(url, target); }
 void[] getFile(string url) { return net.getFile(url); } /// ditto
+bool urlOK(string url) { return net.urlOK(url); } /// ditto
 string resolveRedirect(string url) { return net.resolveRedirect(url); } /// ditto

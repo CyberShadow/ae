@@ -47,6 +47,35 @@ class AENetwork : Network
 		return getData(url).toHeap;
 	}
 
+	override bool urlOK(string url)
+	{
+		bool got, result;
+
+		auto request = new HttpRequest;
+		request.method = "HEAD";
+		request.resource = url;
+		try
+		{
+			httpRequest(request,
+				(HttpResponse response, string disconnectReason)
+				{
+					got = true;
+					if (!response)
+						result = false;
+					else
+						result = response.status == HttpStatusCode.OK;
+				}
+			);
+
+			socketManager.loop();
+		}
+		catch (Exception e)
+			return false;
+
+		assert(got);
+		return result;
+	}
+
 	override string resolveRedirect(string url)
 	{
 		string result; bool got;

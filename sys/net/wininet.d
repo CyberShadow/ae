@@ -195,6 +195,23 @@ public:
 		return result.data;
 	}
 
+	override bool urlOK(string url)
+	{
+		try
+		{
+			auto request = new HttpRequest(url);
+
+			auto hNet = open();
+			auto hCon = hNet.I!connect(request.host, request.port);
+			auto hReq = hCon.I!openRequest("HEAD", request.resource);
+			hReq.I!sendRequest();
+
+			return hReq.I!httpQueryNumber(HTTP_QUERY_STATUS_CODE) == 200;
+		}
+		catch (Exception e)
+			return false;
+	}
+
 	override string resolveRedirect(string url)
 	{
 		auto request = new HttpRequest(url);
