@@ -11,67 +11,8 @@
  *   Vladimir Panteleev <vladimir@thecybershadow.net>
  */
 
+deprecated:
+
 module ae.sys.vfs_curl;
 
-private:
-
-import ae.sys.vfs;
-
-import etc.c.curl : CurlOption;
-import std.net.curl;
-import std.string;
-
-class CurlVFS : VFS
-{
-	override void[] read(string path) { return get!(AutoProtocol, ubyte)(path); }
-	override void write(string path, const(void)[] data) { put!(AutoProtocol, ubyte)(path, cast(ubyte[])data); }
-	override bool exists(string path)
-	{
-		auto proto = path.split("://")[0];
-		if (proto == "http" || proto == "https")
-		{
-			auto http = HTTP(path);
-			http.method = HTTP.Method.head;
-			bool ok = false;
-			http.onReceiveStatusLine = (statusLine) { ok = statusLine.code < 400; };
-			http.perform();
-			return ok;
-		}
-		else
-		{
-			try
-			{
-				read(path);
-				return true;
-			}
-			catch (Exception e)
-				return false;
-		}
-	}
-	override void remove(string path) { del(path); }
-	override void mkdirRecurse(string path) { assert(false, "Operation not supported"); }
-
-	static this()
-	{
-		registry["http"] =
-		registry["https"] =
-		registry["ftp"] =
-		registry["ftps"] =
-		// std.net.curl (artificially) restricts supported protocols to the above
-		//registry["scp"] =
-		//registry["sftp"] =
-		//registry["telnet"] =
-		//registry["ldap"] =
-		//registry["ldaps"] =
-		//registry["dict"] =
-		//registry["file"] =
-		//registry["tftp"] =
-			new CurlVFS();
-	}
-}
-
-unittest
-{
-	assert( "http://thecybershadow.net/robots.txt".exists);
-	assert(!"http://thecybershadow.net/nonexistent".exists);
-}
+import ae.sys.vfs.curl;
