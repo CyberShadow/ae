@@ -15,7 +15,14 @@
 module ae.sys.net.system;
 
 version(Windows)
-	import ae.sys.net.wininet;
+{
+	// ae.sys.windows.dll does not compile on
+	// 2.066 or earlier due to a compiler bug.
+	static if (__VERSION__ > 2_066)
+		import ae.sys.net.wininet;
+	else
+		import ae.sys.net.curl;
+}
 else
 {
 	import ae.sys.net.ae;
