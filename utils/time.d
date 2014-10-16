@@ -622,6 +622,12 @@ private void parseToken(alias c, alias context)()
 					tz = UTC();
 				}
 				else
+				if (peek() == 'G')
+				{
+					enforce(take!3() == "GMT expected");
+					tz = UTC();
+				}
+				else
 				{
 					auto tzStr = take!5();
 					enforce(tzStr[0]=='-' || tzStr[0]=='+', "-/+ expected");
