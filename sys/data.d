@@ -40,8 +40,8 @@
 
 module ae.sys.data;
 
-static import std.c.stdlib;
-import std.c.string : memmove;
+static import core.stdc.stdlib;
+import core.stdc.string : memmove;
 import std.traits;
 import core.memory;
 import core.exception;
@@ -471,7 +471,7 @@ abstract class DataWrapper
 private:
 
 version (Windows)
-	import std.c.windows.windows;
+	import core.sys.windows.windows;
 else
 {
 	import core.sys.posix.unistd;
@@ -605,7 +605,7 @@ final class MemoryDataWrapper : DataWrapper
 			return (p == MAP_FAILED) ? null : p;
 		}
 		else
-			return std.c.malloc(size);
+			return core.stdc.malloc(size);
 	}
 
 	static void free(void* p, size_t size)
@@ -620,7 +620,7 @@ final class MemoryDataWrapper : DataWrapper
 		version(Posix)
 			munmap(p, size);
 		else
-			std.c.free(size);
+			core.stdc.free(size);
 	}
 }
 

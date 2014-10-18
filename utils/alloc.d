@@ -401,7 +401,7 @@ struct GCRootAllocatorProxy(alias ALLOCATOR)
 struct PageAllocator
 {
 	version(Windows)
-		import std.c.windows.windows;
+		import core.sys.windows.windows;
 	else
 	version(Posix)
 		import core.sys.posix.sys.mman;

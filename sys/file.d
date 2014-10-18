@@ -30,7 +30,7 @@ version(Windows)
 {
 	string[] fastListDir(bool recursive = false, bool symlinks=false)(string pathname, string pattern = null)
 	{
-		import std.c.windows.windows;
+		import core.sys.windows.windows;
 
 		static if (recursive)
 			enforce(!pattern, "TODO: recursive fastListDir with pattern");
@@ -444,7 +444,7 @@ ulong getFileID()(string fn)
 
 		auto fnW = toUTF16z(fn);
 		auto h = CreateFileW(fnW, FILE_READ_ATTRIBUTES, 0, null, OPEN_EXISTING, 0, HANDLE.init);
-		enforce(h!=INVALID_HANDLE_VALUE, new FileException(fn));
+		wenforce(h!=INVALID_HANDLE_VALUE, fn);
 		scope(exit) CloseHandle(h);
 		BY_HANDLE_FILE_INFORMATION fi;
 		GetFileInformationByHandle(h, &fi).wenforce("GetFileInformationByHandle");
@@ -614,7 +614,7 @@ version (Windows)
 		import win32.winnt;
 		import win32.winbase;
 
-		enforce(CreateHardLinkW(toUTF16z(dst), toUTF16z(src), null), new FileException(dst));
+		wenforce(CreateHardLinkW(toUTF16z(dst), toUTF16z(src), null), "CreateHardLink failed: " ~ src ~ " -> " ~ dst);
 	}
 }
 version (Posix)
@@ -673,7 +673,7 @@ unittest
 
 	auto paths = enumerateHardLinks("a.test");
 	assert(paths.length == 2);
-	paths.sort;
+	paths.sort();
 	assert(paths[0].endsWith(`\a.test`), paths[0]);
 	assert(paths[1].endsWith(`\b.test`));
 }

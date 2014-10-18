@@ -527,7 +527,7 @@ static this()
 }
 
 import std.utf;
-import std.c.stdio;
+import core.stdc.stdio;
 
 public string encodeEntities(string str)
 {

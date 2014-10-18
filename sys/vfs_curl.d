@@ -11,8 +11,6 @@
  *   Vladimir Panteleev <vladimir@thecybershadow.net>
  */
 
-deprecated:
+deprecated module ae.sys.vfs_curl;
 
-module ae.sys.vfs_curl;
-
-import ae.sys.vfs.curl;
+deprecated import ae.sys.vfs.curl;

@@ -41,7 +41,7 @@ version(LIBEV)
 
 version(Windows)
 {
-	import std.c.windows.windows : Sleep;
+	import core.sys.windows.windows : Sleep;
 	enum USE_SLEEP = true; // avoid convoluted mix of static and runtime conditions
 }
 else
@@ -1141,7 +1141,7 @@ private:
 
 		if (delimiter.length == 1)
 		{
-			import std.c.string; // memchr
+			import core.stdc.string; // memchr
 
 			char c = delimiter[0];
 			auto p = memchr(inBuffer.ptr + oldBufferLength, c, data.length);

@@ -138,6 +138,6 @@ public:
 			debug(SwappedData) log(fileName ~ " - Deleting");
 			remove(fileName);
 		}*/
-		std.c.stdio.remove(cFileName);
+		core.stdc.stdio.remove(cFileName);
 	}
 }

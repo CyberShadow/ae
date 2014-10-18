@@ -169,7 +169,8 @@ unittest
 {
 	auto arr = [1, 2, 3];
 	auto res = [arr.pluck, arr.pluck, arr.pluck];
-	assert(res.sort == [1, 2, 3]);
+	res.sort();
+	assert(res == [1, 2, 3]);
 }
 
 import std.functional;
