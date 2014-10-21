@@ -624,7 +624,7 @@ private void parseToken(alias c, alias context)()
 				else
 				if (peek() == 'G')
 				{
-					enforce(take!3() == "GMT expected");
+					enforce(take!3() == "GMT", "GMT expected");
 					tz = UTC();
 				}
 				else
