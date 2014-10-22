@@ -161,6 +161,14 @@ unittest
 	static assert(findValueOfTypeInTuple!(int, "a", int, Object, 42)==42);
 }
 
+/// One past the biggest element of the enum T.
+/// Example: string[EnumLength!E] arr;
+template EnumLength(T)
+	if (is(T==enum))
+{
+	enum EnumLength = cast(T)(cast(size_t)T.max + 1);
+}
+
 // ************************************************************************
 
 static // http://d.puremagic.com/issues/show_bug.cgi?id=7805
