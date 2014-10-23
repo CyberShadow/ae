@@ -13,6 +13,7 @@
 
 module ae.utils.regex;
 
+import std.algorithm;
 import std.conv;
 import std.exception;
 import std.regex;
@@ -96,6 +97,40 @@ unittest
 			}
 		)
 	);
+}
+
+/// Call a delegate over all matches.
+size_t matchAllCaptures(S, R, Ret, Args...)(S s, R r, Ret delegate(Args args) fun)
+{
+	size_t matches;
+	foreach (m; s.matchAll(r))
+	{
+		Args args;
+		convertCaptures(m.captures, args);
+		fun(args);
+		matches++;
+	}
+	return matches;
+}
+
+/// Returns a range which extracts a capture from text.
+template extractCapture(T)
+{
+	auto extractCapture(S, R)(S s, R r)
+	{
+		return s.matchAll(r).map!(m => m.captures[1].to!T);
+	}
+}
+
+auto extractCapture(S, R)(S s, R r) { alias x = extractCapture!S; return x(s, r); }
+
+///
+unittest
+{
+	auto s = "One 2 three 42";
+	auto r = `(\d+)`;
+	assert(s.extractCapture    (r).equal(["2", "42"]));
+	assert(s.extractCapture!int(r).equal([ 2 ,  42 ]));
 }
 
 // ************************************************************************
