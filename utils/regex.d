@@ -42,15 +42,20 @@ unittest
 	assert(!"abc".match(re!`^\d+$`));
 }
 
+void convertCaptures(C, T...)(C captures, out T values)
+{
+	assert(values.length == captures.length-1, "Capture group count mismatch: %s arguments / %s capture groups".format(values.length, captures.length-1));
+	foreach (n, ref value; values)
+		value = to!(T[n])(captures[n+1]);
+}
+
 /// Lua-like pattern matching.
 bool matchInto(S, R, Args...)(S s, R r, ref Args args)
 {
 	auto m = s.match(r);
 	if (m)
 	{
-		assert(args.length == m.captures.length-1, "matchInto called with %s arguments but %s capture groups".format(args.length, m.captures.length-1));
-		foreach (n, ref arg; args)
-			arg = to!(Args[n])(m.captures[n+1]);
+		convertCaptures(m.captures, args);
 		return true;
 	}
 	return false;
@@ -72,10 +77,8 @@ bool matchCaptures(S, R, Ret, Args...)(S s, R r, Ret delegate(Args args) fun)
 	auto m = s.match(r);
 	if (m)
 	{
-		assert(Args.length == m.captures.length-1, "matchInto called with %s arguments but %s capture groups".format(Args.length, m.captures.length-1));
 		Args args;
-		foreach (n, ref arg; args)
-			arg = to!(Args[n])(m.captures[n+1]);
+		convertCaptures(m.captures, args);
 		fun(args);
 		return true;
 	}
