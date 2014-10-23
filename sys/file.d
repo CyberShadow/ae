@@ -984,13 +984,13 @@ unittest
 
 /// Wrap an operation so that it is skipped entirely
 /// if the target already exists. Implies atomic.
-void cached(alias impl, string targetName = targetParameterNames)(ParameterTypeTuple!impl args)
+auto cached(alias impl, string targetName = targetParameterNames)(ParameterTypeTuple!impl args)
 {
 	enum targetIndex = findParameter([ParameterIdentifierTuple!impl], targetName, __traits(identifier, impl));
 	auto target = args[targetIndex];
-	if (target.exists)
-		return;
-	atomic!(impl, targetIndex)(args);
+	if (!target.exists)
+		atomic!(impl, targetIndex)(args);
+	return target;
 }
 
 /// ditto
@@ -999,9 +999,9 @@ auto cachedDg(size_t targetIndexA = size_t.max, Impl, Args...)(Impl impl, Args a
 {
 	enum targetIndex = targetIndexA == size_t.max ? ParameterTypeTuple!impl.length-1 : targetIndexA;
 	auto target = args[targetIndex];
-	if (target.exists)
-		return;
-	atomic!(impl, targetIndex)(args);
+	if (!target.exists)
+		atomic!(impl, targetIndex)(args);
+	return target;
 }
 
 deprecated alias obtainUsing = cached;
