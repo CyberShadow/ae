@@ -62,6 +62,15 @@ int memcmp(in ubyte[] a, in ubyte[] b)
 	return memcmp(a.ptr, b.ptr, a.length);
 }
 
+/// Like std.algorithm.copy, but without the auto-decode bullshit.
+/// https://issues.dlang.org/show_bug.cgi?id=13650
+void memmove(T)(T[] dst, in T[] src)
+{
+	import core.stdc.string;
+	assert(src.length == dst.length);
+	memmove(dst.ptr, src.ptr, dst.length * T.sizeof);
+}
+
 T[] vector(string op, T)(T[] a, T[] b)
 {
 	assert(a.length == b.length);
