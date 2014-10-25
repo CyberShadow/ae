@@ -256,7 +256,9 @@ template getDigestString(Digest)
 		foreach (datum; data)
 			digest.put(cast(const(ubyte)[])datum);
 		auto result = digest.finish();
-		return result.toHexString();
+		// https://issues.dlang.org/show_bug.cgi?id=9279
+		auto str = result.toHexString();
+		return str[].idup;
 	}
 }
 
