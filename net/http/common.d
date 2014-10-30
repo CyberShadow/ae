@@ -25,11 +25,11 @@ import std.ascii;
 import std.exception;
 import std.datetime;
 
-import ae.utils.text;
-import ae.utils.array;
-import ae.utils.time;
 import ae.net.ietf.headers;
 import ae.sys.data;
+import ae.utils.array : amap, afilter, auniq, asort;
+import ae.utils.text;
+import ae.utils.time;
 import zlib = ae.utils.zlib;
 import gzip = ae.utils.gzip;
 
@@ -503,7 +503,7 @@ public:
 				{
 					setStatus(HttpStatusCode.PartialContent);
 					this.data = datum[ranges[0]..ranges[1]];
-					headers["Content-Range"] = "bytes %d-%d/%d".format(ranges[0], ranges[0] + this.data.length - 1, datum.length);
+					headers["Content-Range"] = "bytes %d-%d/%d".format(ranges[0], ranges[0] + this.data.bytes.length - 1, datum.length);
 				}
 			}
 		}
