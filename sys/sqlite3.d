@@ -62,7 +62,7 @@ final class SQLite
 				return 0;
 			}
 
-			static nothrow extern(C) int callback(void* ctx, int argc, char** argv, char** colv)
+			static /*nothrow*/ extern(C) int callback(void* ctx, int argc, char** argv, char** colv)
 			{
 				auto i = cast(Iterator*)ctx;
 				static const(char)[][] args, cols;
