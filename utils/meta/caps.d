@@ -19,6 +19,34 @@ enum haveChildTrait = is(typeof({ struct S { int i; } S s; __traits(child, s, S.
 
 // ************************************************************************
 
+struct TestFieldAliasBinding
+{
+	static template T(alias a)
+	{
+		void foo()() { a = 0; }
+	}
+
+	struct S(alias T)
+	{
+		int f;
+		alias t = T!f;
+	}
+
+	static void test()()
+	{
+		S!T s;
+		s.t.foo();
+	}
+}
+
+/// Does this compiler support binding field context via alias parameters?
+/// https://github.com/D-Programming-Language/dmd/pull/2794
+/// Added   in 2.065.0: https://github.com/D-Programming-Language/dmd/pull/2794
+/// Removed in 2.066.1: https://github.com/D-Programming-Language/dmd/pull/3884
+enum haveFieldAliasBinding = __traits(compiles, TestFieldAliasBinding.test());
+
+// ************************************************************************
+
 struct TestMethodAliasBinding
 {
 	static template T(alias a)
