@@ -83,6 +83,7 @@ import std.conv : emplace;
 import std.traits : fullyQualifiedName;
 
 import ae.utils.meta : RefType, FromRefType, StorageType;
+import ae.utils.meta.caps : haveFieldAliasBinding;
 
 /// Generates code to create forwarding aliases to the given mixin/template member.
 /// Used as a replacement for "alias M this", which doesn't seem to work with mixins
@@ -102,6 +103,8 @@ static template mixAliasForward(alias M, string name = __traits(identifier, M))
 /// Instantiates a struct from a type containing a Data/Impl template pair.
 struct WrapParts(T)
 {
+	static assert(haveFieldAliasBinding, "Your compiler doesn't support field alias template parameter binding, which is required for " ~ __MODULE__ ~ ".");
+
 	T.Data data;
 	alias impl = T.Impl!data;
 //	pragma(msg, __traits(identifier, impl));
@@ -713,6 +716,7 @@ struct HybridBufferAllocator(size_t SIZE, BASE_TYPE=ubyte, alias ALLOCATOR=heapA
 	}
 }
 
+static if (haveFieldAliasBinding)
 unittest
 {
 	static class C { int x=2; this() {} this(int p) { x = p; } }
