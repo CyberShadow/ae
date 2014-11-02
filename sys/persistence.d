@@ -402,4 +402,10 @@ unittest
 		assert(s.length == 1);
 		s.remove("foo");
 	}
+	{
+		auto s = PersistentStringSet(FN);
+		assert("foo" !in s);
+		std.file.write(FN, "foo\n");
+		assert("foo" in s);
+	}
 }
