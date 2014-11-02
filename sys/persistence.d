@@ -380,6 +380,7 @@ struct PersistentStringSet
 		cache.save();
 	}
 
+	@property string[] lines() { return cache.keys; }
 	@property size_t length() { return cache.length; }
 }
 
@@ -407,5 +408,7 @@ unittest
 		assert("foo" !in s);
 		std.file.write(FN, "foo\n");
 		assert("foo" in s);
+		std.file.write(FN, "bar\n");
+		assert(s.lines == ["bar"]);
 	}
 }
