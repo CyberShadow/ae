@@ -103,8 +103,6 @@ static template mixAliasForward(alias M, string name = __traits(identifier, M))
 /// Instantiates a struct from a type containing a Data/Impl template pair.
 struct WrapParts(T)
 {
-	static assert(haveFieldAliasBinding, "Your compiler doesn't support field alias template parameter binding, which is required for " ~ __MODULE__ ~ ".");
-
 	T.Data data;
 	alias impl = T.Impl!data;
 //	pragma(msg, __traits(identifier, impl));
@@ -152,6 +150,8 @@ template PartsWrapper(alias T)
 /// Common declarations for an allocator mixin
 mixin template AllocatorCommon()
 {
+	static assert(haveFieldAliasBinding, "Your compiler doesn't support field alias template parameter binding, which is required for " ~ __MODULE__ ~ ".");
+
 	alias ae.utils.meta.StorageType StorageType;
 
 	static if (is(ALLOCATOR_TYPE))
