@@ -6,3 +6,10 @@
 *.ilk
 *.exp
 *.lib
+
+*.[oa]
+*.so
+*.dll
+
+.dub
+dub.selections.json
