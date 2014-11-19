@@ -13,3 +13,6 @@
 
 .dub
 dub.selections.json
+
+# demos
+demo/http/ae-http-demo

@@ -4,18 +4,25 @@
   "homepage": "https://github.com/CyberShadow/ae",
   "license": "MPL-2.0",
 
-  "targetType": "library",
+  "targetType": "sourceLibrary",
 
   "authors": [
     "CyberShadow (Vladimir Panteleev)"
   ],
 
+  "systemDependencies": "curl, sqlite3",
+  "libs-posix" : ["curl", "sqlite3"],
+
   "dependencies": {
-    "openssl": ">=1.1.3+1.0.1g"
+    "openssl": {
+      "version": ">=1.1.3+1.0.1g",
+      "optional": true
+    }
   },
 
   "sourcePaths": [ "." ],
   "importPaths": [ "." ],
+
   "excludedSourceFiles": [
     "demo/*",
     "*sdl*",
@@ -23,6 +30,7 @@
     "sys/net/wininet.d",
     "sys/windows/*",
     "ui/app/windows/*",
-    "sys/benchmark.d"
+    "sys/benchmark.d",
+    "*/main.d"
   ]
 }
