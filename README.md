@@ -1,4 +1,4 @@
-﻿Current progress on merging: https://github.com/CyberShadow/ae/pull/9
+﻿Current progress on merging: [https://github.com/CyberShadow/ae/pull/9](https://github.com/CyberShadow/ae/pull/9)
 
 About this library
 ==================
