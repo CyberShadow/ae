@@ -1,0 +1,15 @@
+{
+  "name": "ae-http-demo",
+  "mainSourceFile": "httpserve.d",
+  "targetType": "executable",
+
+  "dependencies": {
+    "ae": ">=1.0.0"
+  },
+
+  "dependencies /* local (disabled) */": {
+    "ae": {
+      "path": "../../"
+    }
+  }
+}
