@@ -20,6 +20,50 @@
     }
   },
 
+  "subPackages": [
+    {
+      "name": "net-http-server",
+      "targetType": "sourceLibrary",
+      "sourceFiles": [
+        "net/http/server.d",
+        "net/http/server.d",
+        "net/http/common.d",
+        "net/asockets.d",
+        "net/ietf/url.d",
+        "net/ietf/headers.d",
+        "net/ietf/headerparse.d",
+        "sys/data.d",
+        "sys/log.d",
+        "sys/file.d",
+        "sys/timing.d",
+        "sys/dataset.d",
+        "sys/signals.d",
+        "utils/aa.d",
+        "utils/appender.d",
+        "utils/meta/package.d",
+        "utils/meta/misc.d",
+        "utils/meta/reference.d",
+        "utils/meta/x.d",
+        "utils/meta/proxy.d",
+        "utils/meta/binding_v1.d",
+        "utils/meta/binding.d",
+        "utils/meta/caps.d",
+        "utils/regex.d",
+        "utils/math.d",
+        "utils/container.d",
+        "utils/text.d",
+        "utils/textout.d",
+        "utils/array.d",
+        "utils/time.d",
+        "utils/zlib.d",
+        "utils/gzip.d",
+        "utils/alloc.d",
+        "net/shutdown.d",
+        "sys/shutdown.d"
+      ],
+    }
+  ],
+
   "sourcePaths": [ "." ],
   "importPaths": [ "." ],
 
