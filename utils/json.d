@@ -262,6 +262,9 @@ private struct JsonParser(C)
 
 	T read(T)()
 	{
+		static if (is(T X == Nullable!X))
+			return readNullable!X();
+		else
 		static if (is(T==enum))
 			return readEnum!(T)();
 		else
@@ -320,6 +323,20 @@ private struct JsonParser(C)
 			expect(']');
 			return v;
 		}
+	}
+
+	auto readNullable(T)()
+	{
+		if (peek() == 'n')
+		{
+			next();
+			expect('u');
+			expect('l');
+			expect('l');
+			return Nullable!T();
+		}
+		else
+			return Nullable!T(read!T);
 	}
 
 	string readString()
@@ -630,6 +647,23 @@ unittest
 	S s = S(42, 5, [S(1), S(2)], [S(3), S(4)], ["apple":"fruit", "pizza":"vegetable"], En.two);
 	auto s2 = jsonParse!S(toJson(s));
 	assert(s.i1 == s2.i1 && s2.i2 is int.init && s.arr1 == s2.arr1 && s2.arr2 is null && s.dic == s2.dic && s.en == En.two);
+}
+
+unittest
+{
+	alias B = Nullable!bool;
+	B b;
+
+	b = jsonParse!B("true");
+	assert(!b.isNull);
+	assert(b == true);
+
+	b = jsonParse!B("false");
+	assert(!b.isNull);
+	assert(b == false);
+
+	b = jsonParse!B("null");
+	assert(b.isNull);
 }
 
 // ************************************************************************
