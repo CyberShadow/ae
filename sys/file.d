@@ -13,6 +13,7 @@
 
 module ae.sys.file;
 
+import core.stdc.wchar_;
 import core.thread;
 
 import std.array;
@@ -50,8 +51,8 @@ version(Windows)
 			do
 			{
 				// Skip "." and ".."
-				if (std.string.wcscmp(fileinfo.cFileName.ptr, ".") == 0 ||
-					std.string.wcscmp(fileinfo.cFileName.ptr, "..") == 0)
+				if (wcscmp(fileinfo.cFileName.ptr, ".") == 0 ||
+					wcscmp(fileinfo.cFileName.ptr, "..") == 0)
 					continue;
 
 				static if (!symlinks)
@@ -60,7 +61,7 @@ version(Windows)
 						continue;
 				}
 
-				size_t clength = std.string.wcslen(fileinfo.cFileName.ptr);
+				size_t clength = wcslen(fileinfo.cFileName.ptr);
 				string name = std.utf.toUTF8(fileinfo.cFileName[0 .. clength]);
 				string path = buildPath(pathname, name);
 
