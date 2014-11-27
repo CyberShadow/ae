@@ -1217,7 +1217,8 @@ public:
 
 /// The default socket manager.
 // __gshared for ae.sys.shutdown
-__gshared SocketManager socketManager;
+//__gshared
+SocketManager socketManager;
 
 // ***************************************************************************
 
