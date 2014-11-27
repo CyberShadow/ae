@@ -171,13 +171,16 @@ template EnumLength(T)
 
 // ************************************************************************
 
-static // http://d.puremagic.com/issues/show_bug.cgi?id=7805
-string[] stringofArray(Args...)()
+// http://d.puremagic.com/issues/show_bug.cgi?id=7805
+static template stringofArray(Args...)
 {
-	string[] args;
-	foreach (i, _ ; typeof(Args))
-		args ~= Args[i].stringof;
-	return args;
+	static string[] stringofArray()
+	{
+		string[] args;
+		foreach (i, _ ; typeof(Args))
+			args ~= Args[i].stringof;
+		return args;
+	}
 }
 
 /// Returns the index of fun's parameter with the name
