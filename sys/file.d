@@ -25,6 +25,9 @@ import std.string;
 import std.typecons;
 import std.utf;
 
+alias wcscmp = core.stdc.wchar_.wcscmp;
+alias wcslen = core.stdc.wchar_.wcslen;
+
 // ************************************************************************
 
 version(Windows)
