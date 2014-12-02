@@ -273,7 +273,7 @@ unittest
 		struct Section
 		{
 			string name;
-			immutable string[string] values;
+			string[string] values;
 		}
 		Section[] sections;
 
