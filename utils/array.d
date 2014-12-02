@@ -154,7 +154,7 @@ T[] slice(T)(T[] arr, size_t p0, size_t p1)
 import std.random;
 
 /// Select and return a random element from the array.
-inout(T) sample(T)(inout(T)[] arr)
+auto ref sample(T)(T[] arr)
 {
 	return arr[uniform(0, $)];
 }
@@ -162,6 +162,8 @@ inout(T) sample(T)(inout(T)[] arr)
 unittest
 {
 	assert([7, 7, 7].sample == 7);
+	auto s = ["foo", "bar"].sample(); // Issue 13807
+	const(int)[] a2 = [5]; sample(a2);
 }
 
 /// Select and return a random element from the array,
