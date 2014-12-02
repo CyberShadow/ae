@@ -1171,11 +1171,11 @@ private:
 
 	final void processLine(size_t index)
 	{
-		string line = cast(string)inBuffer.contents[0..index];
+		auto line = inBuffer[0..index];
 		inBuffer = inBuffer[index+delimiter.length..inBuffer.length];
 
 		if (handleReadLine)
-			handleReadLine(this, line.idup);
+			handleReadLine(this, cast(string)line.toHeap());
 	}
 
 public:
