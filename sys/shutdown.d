@@ -47,9 +47,11 @@ void syncShutdown() nothrow @system
 		scope(exit) thread_resumeAll();
 		shutdown();
 	}
-	catch
+	catch (Throwable e)
 	{
-		// Welp, I tried
+		import core.stdc.stdio;
+		string s = e.msg;
+		fprintf(stderr, "Unhandled error while shutting down:\r\n%.*s", s.length, s.ptr);
 	}
 }
 
