@@ -175,9 +175,11 @@ public:
 			debug (DATA_REFCOUNT) debugLog(format("%s -> %s: this(this) with no wrapper", cast(void*)&this, cast(void*)wrapper));
 	}
 
-	~this()
+	~this() pure
 	{
-		clear();
+		//clear();
+		// https://issues.dlang.org/show_bug.cgi?id=13809
+		(cast(void delegate() pure)&clear)();
 	}
 
 /*
