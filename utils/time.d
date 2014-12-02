@@ -267,7 +267,7 @@ private void putToken(alias c, alias context, alias sink)()
 
 /// Format a SysTime using the format spec fmt.
 /// This version generates specialized code for the given fmt.
-string format(string fmt)(SysTime t)
+string formatTime(string fmt)(SysTime t)
 {
 	enum maxSize = timeFormatSize(fmt);
 	auto result = StringBuilder(maxSize);
@@ -284,7 +284,7 @@ void putTime(string fmt, S)(ref S sink, SysTime t)
 
 /// Format a SysTime using the format spec fmt.
 /// This version parses fmt at runtime.
-string format(SysTime t, string fmt)
+string formatTime(SysTime t, string fmt)
 {
 	auto result = StringBuilder(timeFormatSize(fmt));
 	putTime(result, t, fmt);
@@ -305,6 +305,8 @@ void putTime(S)(ref S sink, SysTime t, string fmt)
 {
 	putTimeImpl!fmt(sink, t);
 }
+
+deprecated alias format = formatTime;
 
 /// ditto
 deprecated void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime())
@@ -743,8 +745,8 @@ unittest
 	const s0 = "Tue Jun 07 13:23:19 GMT+0100 2011";
 	//enum t = s0.parseTime!(TimeFormats.STD_DATE); // https://d.puremagic.com/issues/show_bug.cgi?id=12042
 	auto t = s0.parseTime!(TimeFormats.STD_DATE);
-	auto s1 = t.format(TimeFormats.STD_DATE);
-	assert(s0 == s1);
+	auto s1 = t.formatTime(TimeFormats.STD_DATE);
+	assert(s0 == s1, s0 ~ "/" ~ s1);
 	auto t1 = s0.parseTimeUsing(TimeFormats.STD_DATE);
 	assert(t == t1);
 }
