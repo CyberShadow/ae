@@ -427,7 +427,7 @@ class Rfc850Message
 		auto replyTime = time;
 		replyTime.timezone = UTC();
 		post.content =
-			"On " ~ replyTime.format!`l, j F Y \a\t H:i:s e`() ~ ", " ~ this.author ~ " wrote:\n" ~
+			"On " ~ replyTime.formatTime!`l, j F Y \a\t H:i:s e`() ~ ", " ~ this.author ~ " wrote:\n" ~
 			wrapText(paragraphs) ~
 			"\n\n";
 		post.flowed = true;
@@ -463,7 +463,7 @@ class Rfc850Message
 		}
 		if (time == SysTime.init)
 			time = Clock.currTime();
-		headers["Date"] = time.format!(TimeFormats.RFC2822);
+		headers["Date"] = time.formatTime!(TimeFormats.RFC2822);
 		headers["User-Agent"] = "ae.net.ietf.message";
 
 		string[] lines;

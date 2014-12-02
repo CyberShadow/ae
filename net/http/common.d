@@ -528,7 +528,7 @@ string httpTime(SysTime time)
 {
 	// Apache is bad at timezones
 	time.timezone = UTC();
-	return time.format!(TimeFormats.RFC2822)();
+	return time.formatTime!(TimeFormats.RFC2822)();
 }
 
 import std.algorithm : sort;
