@@ -110,6 +110,13 @@ class DManager
 		builder.build();
 	}
 
+	void incrementalBuild()
+	{
+		prepareEnv();
+		prepareBuilder();
+		builder.build();
+	}
+
 	/// Go to a specific revision.
 	/// Assumes a clean state (call reset first).
 	void checkout(string rev)
