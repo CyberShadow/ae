@@ -492,7 +492,7 @@ public:
 				auto datum = DataSetBytes(this.data);
 				if (ranges[1] == size_t.min) // was not specified (size_t.max overflowed into 0)
 					ranges[1] = datum.length;
-				if (ranges[0] >= datum.length || ranges[0] >= ranges[1])
+				if (ranges[0] >= datum.length || ranges[0] >= ranges[1] || ranges[1] > datum.length)
 				{
 					//writeError(HttpStatusCode.RequestedRangeNotSatisfiable);
 					setStatus(HttpStatusCode.RequestedRangeNotSatisfiable);
