@@ -410,10 +410,18 @@ public:
 		statusLine = statusLine[versionEnd+1..statusLine.length];
 
 		auto statusEnd = statusLine.indexOf(' ');
-		if (statusEnd == -1)
-			throw new Exception("Malformed status line");
-		status = cast(HttpStatusCode)to!ushort(statusLine[0 .. statusEnd]);
-		statusMessage = statusLine[statusEnd+1..statusLine.length];
+		string statusCode;
+		if (statusEnd >= 0)
+		{
+			statusCode = statusLine[0 .. statusEnd];
+			statusMessage = statusLine[statusEnd+1..statusLine.length];
+		}
+		else
+		{
+			statusCode = statusLine;
+			statusMessage = null;
+		}
+		status = cast(HttpStatusCode)to!ushort(statusCode);
 	}
 
 	/// If the data is compressed, return the decompressed data
