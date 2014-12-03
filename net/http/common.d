@@ -263,7 +263,7 @@ public:
 			(headers.get("X-Forwarded-For", null).split(",").amap!strip() ~
 			 headers.get("X-Forwarded-Host", null) ~
 			 remoteHost)
-			.afilter!`a`()
+			.afilter!`a && a != "unknown"`()
 			.auniq();
 	}
 
