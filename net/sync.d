@@ -33,7 +33,7 @@ import ae.net.asockets;
 	void onConnect(ClientSocket socket)
 	{
 		auto anchor = new ThreadAnchor;
-		Thread.create({
+		new Thread({
 			string s = readln();
 			anchor.runAsync({
 				socket.send(s);
