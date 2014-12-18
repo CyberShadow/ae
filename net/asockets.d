@@ -228,14 +228,14 @@ else // Use select
 		/// Register a socket with the manager.
 		void register(GenericSocket conn)
 		{
-			debug (ASOCKETS) writefln("Registering %s (%d total)", cast(void*)socket, sockets.length + 1);
+			debug (ASOCKETS) writefln("Registering %s (%d total)", cast(void*)conn, sockets.length + 1);
 			sockets ~= conn;
 		}
 
 		/// Unregister a socket with the manager.
 		void unregister(GenericSocket conn)
 		{
-			debug (ASOCKETS) writefln("Unregistering %s (%d total)", cast(void*)socket, sockets.length - 1);
+			debug (ASOCKETS) writefln("Unregistering %s (%d total)", cast(void*)conn, sockets.length - 1);
 			foreach (size_t i, GenericSocket j; sockets)
 				if (j is conn)
 				{
