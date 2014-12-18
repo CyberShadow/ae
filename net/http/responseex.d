@@ -90,8 +90,8 @@ public:
 			return this;
 		}
 
-		assert(fsBase=="" || fsBase.endsWith("/"));
-		assert(urlBase.endsWith("/"));
+		assert(fsBase=="" || fsBase.endsWith("/"), "Invalid fsBase specified to serveFile");
+		assert(urlBase.endsWith("/"), "Invalid urlBase specified to serveFile");
 
 		string filename = fsBase ~ path;
 
