@@ -824,6 +824,35 @@ Thread writeFileAsync(File f, in void[] data)
 	return t;
 }
 
+/// Write data to a file, and ensure it gets written to disk
+/// before this function returns.
+/// Consider using as atomic!syncWrite.
+/// See also: syncUpdate
+void syncWrite()(string target, in void[] data)
+{
+	auto f = File(target, "wb");
+	f.rawWrite(data);
+	version (Windows)
+	{
+		import win32.windows;
+		FlushFileBuffers(f.windowsHandle);
+	}
+	else
+	{
+		import core.sys.posix.unistd;
+		fsync(f.fileno);
+	}
+	f.close();
+}
+
+/// Atomically save data to a file (if the file doesn't exist,
+/// or its contents differs).
+void syncUpdate(string fn, in void[] data)
+{
+	if (!fn.exists || fn.read() != data)
+		atomic!(syncWrite!())(fn, data);
+}
+
 version(Windows) import ae.sys.windows.exception;
 
 struct NamedPipeImpl
@@ -1012,6 +1041,8 @@ deprecated alias obtainUsing = cached;
 
 /// Create a file, or replace an existing file's contents
 /// atomically.
+/// Note: Consider using atomic!syncWrite or
+/// atomic!syncUpdate instead.
 alias atomic!(std.file.write) atomicWrite;
 deprecated alias safeWrite = atomicWrite;
 
