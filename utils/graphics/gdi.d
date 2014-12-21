@@ -16,6 +16,7 @@ module ae.utils.graphics.gdi;
 version(Windows):
 
 import std.exception;
+import std.typecons;
 
 public import win32.wingdi;
 import win32.winuser;
@@ -28,9 +29,22 @@ import ae.utils.graphics.view;
 /// A canvas with added GDI functionality.
 struct GDICanvas(COLOR)
 {
-	HDC hdc;
-	HBITMAP hbm;
-	
+	struct Data
+	{
+		HDC hdc;
+		HBITMAP hbm;
+
+		@disable this(this);
+
+		~this()
+		{
+			DeleteDC(hdc);     hdc = null;
+			DeleteObject(hbm); hbm = null;
+		}
+	}
+
+	RefCounted!Data data;
+
 	int w, h;
 	COLOR* pixels;
 
@@ -49,7 +63,7 @@ struct GDICanvas(COLOR)
 
 		auto hddc = GetDC(null);
 		scope(exit) ReleaseDC(null, hddc);
-		hdc = CreateCompatibleDC(hddc);
+		data.hdc = CreateCompatibleDC(hddc);
 
 		BITMAPINFO bmi;
 		bmi.bmiHeader.biSize        = bmi.bmiHeader.sizeof;
@@ -59,24 +73,16 @@ struct GDICanvas(COLOR)
 		bmi.bmiHeader.biBitCount    = COLOR.sizeof * 8;
 		bmi.bmiHeader.biCompression = BI_RGB;
 		void* pvBits;
-		hbm = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &pvBits, null, 0);
-		enforce(hbm, "CreateDIBSection");
-		SelectObject(hdc, hbm);
+		data.hbm = CreateDIBSection(data.hdc, &bmi, DIB_RGB_COLORS, &pvBits, null, 0);
+		enforce(data.hbm, "CreateDIBSection");
+		SelectObject(data.hdc, data.hbm);
 		pixels = cast(COLOR*)pvBits;
 	}
 
-	@disable this(this); // TODO
-
-	~this()
-	{
-		DeleteDC(hdc);     hdc = null;
-		DeleteObject(hbm); hbm = null;
-	}
-
 	auto opDispatch(string F, A...)(A args)
-		if (is(typeof(mixin(F~"(hdc, args)"))))
+		if (is(typeof(mixin(F~"(data.hdc, args)"))))
 	{
-		mixin("return "~F~"(hdc, args);");
+		mixin("return "~F~"(data.hdc, args);");
 	}
 }
 
