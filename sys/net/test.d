@@ -32,7 +32,7 @@ void test(string moduleName, string className)()
 
 	debug std.stdio.stderr.writeln(" - getFile");
 	{
-		assert(net.getFile("http://net.d-lang.appspot.com/testUrl1") == "Hello world\n");
+		assert(net.getFile("http://d-lang.appspot.com/testUrl1") == "Hello world\n");
 	}
 
 	debug std.stdio.stderr.writeln(" - downloadFile");
@@ -41,20 +41,20 @@ void test(string moduleName, string className)()
 		if (fn.exists) fn.remove();
 		scope(exit) if (fn.exists) fn.remove();
 
-		net.downloadFile("http://net.d-lang.appspot.com/testUrl1", fn);
+		net.downloadFile("http://d-lang.appspot.com/testUrl1", fn);
 		assert(fn.readText() == "Hello world\n");
 	}
 
 	debug std.stdio.stderr.writeln(" - urlOK");
 	{
-		assert( net.urlOK("http://net.d-lang.appspot.com/testUrl1"));
-		assert(!net.urlOK("http://net.d-lang.appspot.com/testUrlNX"));
+		assert( net.urlOK("http://d-lang.appspot.com/testUrl1"));
+		assert(!net.urlOK("http://d-lang.appspot.com/testUrlNX"));
 	}
 
 	debug std.stdio.stderr.writeln(" - resolveRedirect");
 	{
-		auto result = net.resolveRedirect("http://net.d-lang.appspot.com/testUrl3");
-		assert(result == "http://net.d-lang.appspot.com/testUrl2", result);
+		auto result = net.resolveRedirect("http://d-lang.appspot.com/testUrl3");
+		assert(result == "http://d-lang.appspot.com/testUrl2", result);
 	}
 }
 
