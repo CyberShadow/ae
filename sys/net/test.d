@@ -49,6 +49,8 @@ void test(string moduleName, string className)()
 	{
 		assert( net.urlOK("http://d-lang.appspot.com/testUrl1"));
 		assert(!net.urlOK("http://d-lang.appspot.com/testUrlNX"));
+		static if (moduleName == "wininet")
+			assert( net.urlOK("https://d-lang.appspot.com/testUrl1"));
 	}
 
 	debug std.stdio.stderr.writeln(" - resolveRedirect");

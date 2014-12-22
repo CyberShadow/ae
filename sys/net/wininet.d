@@ -170,6 +170,11 @@ protected:
 			"Failed to download the whole object (got %s out of %s bytes)".format(bytesReadTotal, bytesTotal));
 	}
 
+	final static DWORD urlFlags(string url)
+	{
+		return url.startsWith("https://") ? INTERNET_FLAG_SECURE : 0;
+	}
+
 public:
 	override void downloadFile(string url, string target)
 	{
@@ -203,7 +208,7 @@ public:
 
 			auto hNet = open();
 			auto hCon = hNet.I!connect(request.host, request.port);
-			auto hReq = hCon.I!openRequest("HEAD", request.resource);
+			auto hReq = hCon.I!openRequest("HEAD", request.resource, urlFlags(url));
 			hReq.I!sendRequest();
 
 			return hReq.I!httpQueryNumber(HTTP_QUERY_STATUS_CODE) == 200;
@@ -218,7 +223,7 @@ public:
 
 		auto hNet = open(INTERNET_FLAG_NO_AUTO_REDIRECT);
 		auto hCon = hNet.I!connect(request.host, request.port);
-		auto hReq = hCon.I!openRequest("HEAD", request.resource, INTERNET_FLAG_NO_AUTO_REDIRECT);
+		auto hReq = hCon.I!openRequest("HEAD", request.resource, INTERNET_FLAG_NO_AUTO_REDIRECT | urlFlags(url));
 		hReq.I!sendRequest();
 
 		auto location = hReq.I!httpQueryString(HTTP_QUERY_LOCATION);
