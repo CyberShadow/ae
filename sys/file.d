@@ -847,7 +847,7 @@ void syncWrite()(string target, in void[] data)
 
 /// Atomically save data to a file (if the file doesn't exist,
 /// or its contents differs).
-void syncUpdate(string fn, in void[] data)
+void syncUpdate()(string fn, in void[] data)
 {
 	if (!fn.exists || fn.read() != data)
 		atomic!(syncWrite!())(fn, data);
