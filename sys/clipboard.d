@@ -19,7 +19,7 @@ version (Windows)
 	import win32.windef;
 	import win32.winnls;
 	import win32.winuser;
-	import ae.sys.windows;
+	import ae.sys.windows.exception;
 	import std.utf;
 	import std.conv;
 
