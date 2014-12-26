@@ -1046,9 +1046,12 @@ deprecated alias obtainUsing = cached;
 alias atomic!(std.file.write) atomicWrite;
 deprecated alias safeWrite = atomicWrite;
 
+// Work around for https://github.com/D-Programming-Language/phobos/pull/2784#issuecomment-68117241
+private void copy2(string source, string target) { std.file.copy(source, target); }
+
 /// Copy a file, or replace an existing file's contents
 /// with another file's, atomically.
-alias atomic!(std.file.copy) atomicCopy;
+alias atomic!copy2 atomicCopy;
 
 unittest
 {

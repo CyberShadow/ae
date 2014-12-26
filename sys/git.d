@@ -301,7 +301,7 @@ struct GitObject
 			auto ei = zi + 1 + Hash.sizeof;
 			auto str = cast(string)rem[0..zi];
 			enforce(0 < si && si < zi && ei <= rem.length, "Malformed tree entry:\n" ~ hexDump(rem));
-			result ~= TreeEntry(str[0..si].to!uint(8), str[si+1..zi], cast(Hash)rem[zi+1..ei]); // https://issues.dlang.org/show_bug.cgi?id=13112
+			result ~= TreeEntry(str[0..si].to!uint(8), str[si+1..zi], cast(Hash)rem[zi+1..ei][0..20]); // https://issues.dlang.org/show_bug.cgi?id=13112
 			rem = rem[ei..$];
 		}
 		return result;
