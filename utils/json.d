@@ -62,6 +62,9 @@ struct CustomJsonWriter(WRITER)
 		static if (is(T : long))
 			return .put(output, v);
 		else
+		static if (is(T : real))
+			return output.put(fpToString!T(v)); // TODO: don't allocate
+		else
 		static if (is(T U : U[]))
 		{
 			output.put('[');
