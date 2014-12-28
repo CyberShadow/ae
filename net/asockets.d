@@ -1176,8 +1176,13 @@ private:
 		auto line = inBuffer[0..index];
 		inBuffer = inBuffer[index+delimiter.length..inBuffer.length];
 
-		if (handleReadLine)
-			handleReadLine(this, cast(string)line.toHeap());
+		if (_handleReadLine)
+			_handleReadLine(this, cast(string)line.toHeap());
+	}
+
+	final void updateHandler()
+	{
+		handleReadData = _handleReadLine ? &onReadData : null;
 	}
 
 public:
@@ -1188,13 +1193,11 @@ public:
 
 	this(Duration idleTimeout)
 	{
-		handleReadData = &onReadData;
 		super.setIdleTimeout(idleTimeout);
 	}
 
 	this(Socket conn)
 	{
-		handleReadData = &onReadData;
 		super.setIdleTimeout(60.seconds);
 		super(conn);
 	}
@@ -1213,8 +1216,14 @@ public:
 	}
 
 public:
+	alias void delegate(LineBufferedSocket sender, string line) ReadLineHandler;
+
+	private ReadLineHandler _handleReadLine;
 	/// Callback for an incoming line.
-	void delegate(LineBufferedSocket sender, string line) handleReadLine;
+	/// Data will not be received unless this handler is set.
+	@property final ReadLineHandler handleReadLine() { return _handleReadLine; }
+	/// ditto
+	@property final void handleReadLine(ReadLineHandler value) { _handleReadLine = value; updateHandler(); }
 }
 
 /// The default socket manager.
