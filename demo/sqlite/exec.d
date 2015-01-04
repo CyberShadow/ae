@@ -29,7 +29,7 @@ void main(string[] args)
 
 	auto db = new SQLite(args[1]);
 
-	void exec(string sql)
+	void exec(string sql, bool interactive)
 	{
 		int idx = 0;
 		string[][] rows;
@@ -44,7 +44,9 @@ void main(string[] args)
 			sw.start();
 		}
 		sw.stop();
-		writeln("Query executed in ", dur!"hnsecs"(sw.peek().hnsecs));
+		if (interactive || rows.length == 0)
+			stderr.writeln("Query executed in ", dur!"hnsecs"(sw.peek().hnsecs).toString().replace("μ", "u"));
+
 		if (rows.length == 0)
 			return;
 		auto widths = new size_t[rows[0].length];
@@ -83,14 +85,14 @@ void main(string[] args)
 	}
 
 	if (args.length == 3)
-		exec(args[2]);
+		exec(args[2], false);
 	else
 		while (!stdin.eof())
 		{
 			write("sqlite> ");
 			stdout.flush();
 			try
-				exec(readln().chomp());
+				exec(readln().chomp(), true);
 			catch (Exception e)
 				writeln(e.msg);
 		}
