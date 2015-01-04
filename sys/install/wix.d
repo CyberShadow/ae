@@ -13,11 +13,10 @@
 
 module ae.sys.install.wix;
 
-import std.array;
-import std.exception;
+import std.conv;
 import std.file;
-import std.path;
-import std.process;
+import std.format;
+import std.regex;
 
 import ae.sys.archive;
 import ae.sys.file;
@@ -27,16 +26,30 @@ public import ae.sys.install.common;
 
 class Wix : Installer
 {
-	string url = "http://download-codeplex.sec.s-msft.com/Download/Release?ProjectName=wix&DownloadId=762938&FileTime=130301249355530000&Build=20928";
+	int downloadId = 762938;
+	long fileTime = 130301249355530000;
 
 	@property override string[] requiredExecutables() { return ["candle", "dark", "heat", "light", "lit", "lux", "melt", "nit", "pyro", "retina", "shine", "smoke", "torch"]; }
 
 	override void installImpl(string target)
 	{
 		windowsOnly();
-		url
-			.I!saveAs("wix-762938-20928.zip")
+		// CodePlex does not have direct download URLs. Scrape it!
+		"http://wix.codeplex.com/downloads/get/%d"
+			.format(downloadId)
+			.I!saveAs("wix-%d.html".format(downloadId))
+			.readText()
+			.match(regex(`<li>Version \d+\.\d+\.\d+\.(\d+)</li>`)).front[1]
+			.to!int
+			.I!buildZipUrl()
+			.I!saveAs("wix-%d.zip".format(downloadId))
 			.I!unpackTo(target);
+	}
+
+	string buildZipUrl(int build)
+	{
+		return "http://download-codeplex.sec.s-msft.com/Download/Release?ProjectName=wix&DownloadId=%d&FileTime=%d&Build=%d"
+			.format(downloadId, fileTime, build);
 	}
 }
 
