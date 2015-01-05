@@ -31,7 +31,8 @@ class NntpClient
 {
 private:
 	/// Socket connection.
-	LineBufferedSocket conn;
+	LineBufferedAdapter lineAdapter;
+	IConnection conn;
 
 	/// Protocol log.
 	Logger log;
@@ -76,12 +77,12 @@ private:
 	/// Commands that have been sent to the NNTP server, and are expecting a reply.
 	Command[] sentCommands;
 
-	void onConnect(ClientSocket sender)
+	void onConnect()
 	{
 		log("* Connected, waiting for greeting...");
 	}
 
-	void onDisconnect(ClientSocket sender, string reason, DisconnectType type)
+	void onDisconnect(string reason, DisconnectType type)
 	{
 		log("* Disconnected (" ~ reason ~ ")");
 		foreach (command; queuedCommands ~ sentCommands)
@@ -99,7 +100,7 @@ private:
 	void sendLine(string line)
 	{
 		log("< " ~ line);
-		conn.send(line);
+		lineAdapter.send(line);
 	}
 
 	/// Reply line buffer.
@@ -108,8 +109,9 @@ private:
 	/// Reply currently being received/processed.
 	Reply* currentReply;
 
-	void onReadLine(LineBufferedSocket s, string line)
+	void onReadData(Data data)
 	{
+		auto line = cast(string)data.toHeap();
 		try
 		{
 			log("> " ~ line);
@@ -201,10 +203,20 @@ public:
 
 	void connect(string server, void delegate() handleConnect=null)
 	{
-		conn = new LineBufferedSocket(30.seconds);
+		auto tcp = new TcpConnection();
+		IConnection c = tcp;
+
+		c = lineAdapter = new LineBufferedAdapter(c);
+
+		TimeoutAdapter timer;
+		c = timer = new TimeoutAdapter(c);
+		timer.setIdleTimeout(30.seconds);
+
+		conn = c;
+
 		conn.handleConnect = &onConnect;
 		conn.handleDisconnect = &onDisconnect;
-		conn.handleReadLine = &onReadLine;
+		conn.handleReadData = &onReadData;
 
 		// Manually place a fake command in the queue
 		// (server automatically sends a greeting when a client connects).
@@ -216,7 +228,7 @@ public:
 		]);
 
 		log("* Connecting to " ~ server ~ "...");
-		conn.connect(server, 119);
+		tcp.connect(server, 119);
 	}
 
 	void disconnect()

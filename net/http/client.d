@@ -32,11 +32,13 @@ debug import std.stdio;
 
 public import ae.net.http.common;
 
-
 class HttpClient
 {
 private:
-	ClientSocket conn;
+	TcpConnection tcp;    // Bottom-level transport. Reused for new connections.
+	TimeoutAdapter timer; // Timeout adapter.
+	IConnection conn;     // Top-level abstract connection.
+
 	Data[] inBuffer;
 
 	HttpRequest currentRequest;
@@ -45,7 +47,7 @@ private:
 	size_t expect;
 
 protected:
-	void onConnect(ClientSocket sender)
+	void onConnect()
 	{
 		string reqMessage = currentRequest.method ~ " ";
 		if (currentRequest.proxy !is null) {
@@ -75,12 +77,12 @@ protected:
 		conn.send(currentRequest.data);
 	}
 
-	void onNewResponse(ClientSocket sender, Data data)
+	void onNewResponse(Data data)
 	{
 		try
 		{
 			inBuffer ~= data;
-			conn.markNonIdle();
+			timer.markNonIdle();
 
 			string statusLine;
 			Headers headers;
@@ -105,15 +107,13 @@ protected:
 			}
 		}
 		catch (Exception e)
-		{
-			conn.disconnect(e.msg, DisconnectType.Error);
-		}
+			conn.disconnect(e.msg, DisconnectType.error);
 	}
 
-	void onContinuation(ClientSocket sender, Data data)
+	void onContinuation(Data data)
 	{
 		inBuffer ~= data;
-		sender.markNonIdle();
+		timer.markNonIdle();
 
 		if (expect!=size_t.max && inBuffer.length >= expect)
 		{
@@ -122,9 +122,9 @@ protected:
 		}
 	}
 
-	void onDisconnect(ClientSocket sender, string reason, DisconnectType type)
+	void onDisconnect(string reason, DisconnectType type)
 	{
-		if (type == DisconnectType.Error)
+		if (type == DisconnectType.error)
 			currentResponse = null;
 		else
 		if (currentResponse)
@@ -140,9 +140,9 @@ protected:
 		conn.handleReadData = null;
 	}
 
-	ClientSocket createSocket()
+	IConnection adaptConnection(IConnection conn)
 	{
-		return new ClientSocket();
+		return conn;
 	}
 
 public:
@@ -154,8 +154,16 @@ public:
 	this(Duration timeout = 30.seconds)
 	{
 		assert(timeout > Duration.zero);
-		conn = createSocket();
-		conn.setIdleTimeout(timeout);
+
+		IConnection c = tcp = new TcpConnection;
+
+		c = adaptConnection(c);
+
+		timer = new TimeoutAdapter(c);
+		timer.setIdleTimeout(timeout);
+		c = timer;
+
+		conn = c;
 		conn.handleConnect = &onConnect;
 		conn.handleDisconnect = &onDisconnect;
 	}
@@ -168,9 +176,9 @@ public:
 		conn.handleReadData = &onNewResponse;
 		expect = 0;
 		if (request.proxy !is null)
-			conn.connect(request.proxyHost, request.proxyPort);
+			tcp.connect(request.proxyHost, request.proxyPort);
 		else
-			conn.connect(request.host, request.port);
+			tcp.connect(request.host, request.port);
 	}
 
 	bool connected()
@@ -185,9 +193,9 @@ public:
 
 class HttpsClient : HttpClient
 {
-	override ClientSocket createSocket()
+	override IConnection adaptConnection(IConnection conn)
 	{
-		return sslSocketFactory();
+		return sslAdapterFactory(conn);
 	}
 
 	this(Duration timeout = 30.seconds) { super(timeout); }

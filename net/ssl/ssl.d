@@ -17,16 +17,21 @@ import std.functional;
 
 import ae.net.asockets;
 
-alias ClientSocket delegate() SSLSocketFactory;
-
-SSLSocketFactory sslSocketFactory;
-static this()
+abstract class SSLAdapter : ConnectionAdapter
 {
-	assert(!sslSocketFactory);
-	sslSocketFactory = toDelegate(&defaultProvider);
+	this(IConnection next) { super(next); }
 }
 
-private ClientSocket defaultProvider()
+alias SSLAdapter delegate(IConnection next) SSLAdapterFactory;
+
+SSLAdapterFactory sslAdapterFactory;
+static this()
+{
+	assert(!sslAdapterFactory);
+	sslAdapterFactory = toDelegate(&defaultProvider);
+}
+
+private SSLAdapter defaultProvider(IConnection next)
 {
 	assert(false, "No SSL provider (import a provider from ae.net.ssl.*)");
 }

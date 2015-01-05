@@ -74,26 +74,28 @@ class IrcServer
 			return result;
 		}
 
-		string realHostname() { return conn.remoteAddress.toAddrString; }
+		string realHostname() { return remoteAddress.toAddrString; }
 		string publicHostname() { return server.addressMask ? server.addressMask : realHostname; }
 
 	private:
 		IrcServer server;
-		IrcSocket conn;
+		IrcConnection conn;
+		Address remoteAddress;
 
-		this(IrcServer server, IrcSocket incoming)
+		this(IrcServer server, IrcConnection incoming, Address remoteAddress)
 		{
 			this.server = server;
+			this.remoteAddress = remoteAddress;
 
 			conn = incoming;
 			conn.handleReadLine = &onReadLine;
 			conn.handleInactivity = &onInactivity;
 			conn.handleDisconnect = &onDisconnect;
 
-			server.log("New IRC connection from " ~ incoming.remoteAddress.toString);
+			server.log("New IRC connection from " ~ remoteAddress.toString);
 		}
 
-		void onReadLine(LineBufferedSocket sender, string line)
+		void onReadLine(string line)
 		{
 			try
 			{
@@ -392,7 +394,7 @@ class IrcServer
 			}
 		}
 
-		void onInactivity(IrcSocket sender)
+		void onInactivity()
 		{
 			sendReply("PING", Clock.currTime.stdTime.text);
 		}
@@ -405,11 +407,11 @@ class IrcServer
 			conn.disconnect(why);
 		}
 
-		void onDisconnect(ClientSocket sender, string reason, DisconnectType type)
+		void onDisconnect(string reason, DisconnectType type)
 		{
 			if (registered)
 				unregister(reason);
-			server.log("IRC: %s disconnecting: %s".format(conn.remoteAddress, reason));
+			server.log("IRC: %s disconnecting: %s".format(remoteAddress, reason));
 		}
 
 		void checkRegistration()
@@ -878,11 +880,11 @@ class IrcServer
 
 	Channel[string] channels;
 
-	IrcServerSocket conn;
+	TcpServer conn;
 
 	this()
 	{
-		conn = new IrcServerSocket;
+		conn = new TcpServer;
 		conn.handleAccept = &onAccept;
 
 		hostname = Socket.hostName;
@@ -901,9 +903,9 @@ class IrcServer
 	}
 
 private:
-	void onAccept(IrcSocket incoming)
+	void onAccept(TcpConnection incoming)
 	{
-		new Client(this, incoming);
+		new Client(this, new IrcConnection(incoming), incoming.remoteAddress);
 		totalConnections++;
 	}
 

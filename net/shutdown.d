@@ -43,7 +43,7 @@ import ae.sys.data;
 // Per-thread
 void delegate()[] handlers;
 
-final class ShutdownSocket : ClientSocket
+final class ShutdownConnection : TcpConnection
 {
 	Socket pinger;
 
@@ -68,7 +68,7 @@ final class ShutdownSocket : ClientSocket
 		pinger.close();
 	}
 
-	void onReadData(ClientSocket socket, Data data)
+	void onReadData(Data data)
 	{
 		shutdown();
 	}
@@ -76,6 +76,6 @@ final class ShutdownSocket : ClientSocket
 
 void register()
 {
-	auto socket = new ShutdownSocket();
+	auto socket = new ShutdownConnection();
 	ae.sys.shutdown.addShutdownHandler(&socket.ping);
 }

@@ -71,7 +71,7 @@ private:
 		{
 			if (pollTimer && pollTimer.isWaiting())
 				pollTimer.cancel();
-			if (type != DisconnectType.Requested)
+			if (type != DisconnectType.requested)
 				setTimeout(&reconnect, 10.seconds);
 		}
 	}

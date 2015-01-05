@@ -34,7 +34,7 @@ class IrcClient
 {
 private:
 	/// The socket this class wraps.
-	IrcSocket conn;
+	IrcConnection conn;
 	/// Whether the socket is connected
 	bool _connected;
 	/// The password used when logging in.
@@ -69,7 +69,7 @@ private:
 	}
 
 	/// Called when a connection has been established.
-	void onConnect(ClientSocket sender)
+	void onConnect()
 	{
 		if (log) log("* Connected.");
 		if (password.length > 0)
@@ -79,14 +79,14 @@ private:
 	}
 
 	/// Called when a connection was closed.
-	void onDisconnect(ClientSocket sender, string reason, DisconnectType type)
+	void onDisconnect(string reason, DisconnectType type)
 	{
 		if (log) log(format("* Disconnected (%s)", reason));
 		nickname = realname = null;
 		password = null;
 		_connected = false;
 		if (handleDisconnect)
-			handleDisconnect(this, reason, type);
+			handleDisconnect(reason, type);
 		channels = null;
 		users = null;
 		canonicalChannelNames = canonicalUserNames = null;
@@ -103,12 +103,12 @@ private:
 	}
 
 	/// Called when a line has been received.
-	void onReadLine(LineBufferedSocket sender, string line)
+	void onReadLine(string line)
 	{
 		line = decoder(line);
 		if (handleRaw)
 		{
-			handleRaw(this, line);
+			handleRaw(line);
 			if (line is null)
 				return;
 		}
@@ -157,14 +157,14 @@ private:
 			onEnter(nickname, username, hostname, realname); // add ourselves
 
 			if (handleConnect)
-				handleConnect(this);
+				handleConnect();
 			if (autoWho)
 				who();  // get info on all users
 			break;
 
 		case "433":     // nickname in use
 			if (exactNickname)
-				disconnect("Nickname in use", DisconnectType.Error);
+				disconnect("Nickname in use", DisconnectType.error);
 			else
 			{
 				while (nickname.length > 1 && nickname[$-1] >= '0' && nickname[$-1] <= '9')
@@ -185,7 +185,7 @@ private:
 
 		case "323":     // LIST channel end
 			if (handleChannelList)
-				handleChannelList(this, channelList);
+				handleChannelList(channelList);
 			break;
 
 		case "353":     // NAMES line
@@ -246,37 +246,37 @@ private:
 			}
 
 			if (handleWho)
-				handleWho(this, params[1],params[2],params[3],params[4],params[5],params[6],hopcount,std.string.join(gecos, " "));
+				handleWho(params[1],params[2],params[3],params[4],params[5],params[6],hopcount,std.string.join(gecos, " "));
 			break;
 
 		case "315":     // WHO end
 			if(handleWhoEnd)
-				handleWhoEnd(this, params.length>=2 ? params[1] : null);
+				handleWhoEnd(params.length>=2 ? params[1] : null);
 			break;
 
 		case "437":     // Nick/channel is temporarily unavailable
 			if (handleUnavailable)
-				handleUnavailable(this, params[1], params[2]);
+				handleUnavailable(params[1], params[2]);
 			break;
 
 		case "471":     // Channel full
 			if (handleChannelFull)
-				handleChannelFull(this, params[1], params[2]);
+				handleChannelFull(params[1], params[2]);
 			break;
 
 		case "473":     // Invite only
 			if (handleInviteOnly)
-				handleInviteOnly(this, params[1], params[2]);
+				handleInviteOnly(params[1], params[2]);
 			break;
 
 		case "474":     // Banned
 			if (handleBanned)
-				handleBanned(this, params[1], params[2]);
+				handleBanned(params[1], params[2]);
 			break;
 
 		case "475":     // Wrong key
 			if (handleChannelKey)
-				handleChannelKey(this, params[1], params[2]);
+				handleChannelKey(params[1], params[2]);
 			break;
 
 		case "PING":
@@ -338,7 +338,7 @@ private:
 			}
 
 			if (handleJoin)
-				handleJoin(this, channel, nick);
+				handleJoin(channel, nick);
 
 			break;
 
@@ -349,7 +349,7 @@ private:
 			string channel = canonicalChannelName(params[0]);
 
 			if (handlePart)
-				handlePart(this, channel, nick, params.length == 2 ? params[1] : null);
+				handlePart(channel, nick, params.length == 2 ? params[1] : null);
 
 			onUserParted(nick, channel);
 			break;
@@ -361,7 +361,7 @@ private:
 					oldChannels ~= channelName;
 
 			if (handleQuit)
-				handleQuit(this, nick, params.length == 1 ? params[0] : null, oldChannels);
+				handleQuit(nick, params.length == 1 ? params[0] : null, oldChannels);
 
 			foreach (channel;channels)
 				if (nick in channel.users)
@@ -380,9 +380,9 @@ private:
 			if (handleKick)
 			{
 				if (params.length == 3)
-					handleKick(this, channel, user, nick, params[2]);
+					handleKick(channel, user, nick, params[2]);
 				else
-					handleKick(this, channel, user, nick, null);
+					handleKick(channel, user, nick, null);
 			}
 
 			onUserParted(user, channel);
@@ -453,14 +453,14 @@ private:
 		}
 	}
 
-	void onSocketInactivity(IrcSocket sender)
+	void onSocketInactivity()
 	{
 		command("PING", to!string(Clock.currTime().toUnixTime()));
 	}
 
-	void onSocketTimeout(IrcSocket sender)
+	void onSocketTimeout()
 	{
-		disconnect("Time-out", DisconnectType.Error);
+		disconnect("Time-out", DisconnectType.error);
 	}
 
 protected: // overridable methods
@@ -469,7 +469,7 @@ protected: // overridable methods
 		users[nick] = User(1, username, hostname, realname);
 		canonicalUserNames[rfc1459toLower(nick)] = nick;
 		if (handleEnter)
-			handleEnter(this, nick);
+			handleEnter(nick);
 	}
 
 	void onLeave(string nick)
@@ -477,7 +477,7 @@ protected: // overridable methods
 		users.remove(nick);
 		canonicalUserNames.remove(rfc1459toLower(nick));
 		if (handleLeave)
-			handleLeave(this, nick);
+			handleLeave(nick);
 	}
 
 	void onNick(string oldNick, string newNick)
@@ -498,7 +498,7 @@ protected: // overridable methods
 	void onMessage(string from, string to, string message, IrcMessageType type)
 	{
 		if (handleMessage)
-			handleMessage(this, from, to, message, type);
+			handleMessage(from, to, message, type);
 	}
 
 public:
@@ -579,11 +579,9 @@ public:
 		return result;
 	}
 
-
-	this()
+	this(IConnection c)
 	{
-		conn = new IrcSocket();
-		conn.delimiter = "\r\n";
+		conn = new IrcConnection(c);
 		conn.handleConnect = &onConnect;
 		conn.handleDisconnect = &onDisconnect;
 		conn.handleReadLine = &onReadLine;
@@ -596,19 +594,8 @@ public:
 	/// (and can thus join channels, send private messages, etc.)
 	@property bool connected() { return _connected; }
 
-	/// Start establishing a connection to the IRC network.
-	void connect(string nickname, string realname, string host, ushort port = 6667, string password = null)
-	{
-		assert(!connected);
-		this.nickname = nickname;
-		this.realname = realname;
-		this.password = password;
-		if (log) log(format("* Connecting to %s:%d...", host, port));
-		conn.connect(host, port);
-	}
-
 	/// Cancel a connection.
-	void disconnect(string reason = null, DisconnectType type = DisconnectType.Requested)
+	void disconnect(string reason = null, DisconnectType type = DisconnectType.requested)
 	{
 		assert(conn.connected);
 
@@ -678,42 +665,42 @@ public:
 	}
 
 	/// Callback for received data before it's processed.
-	void delegate(IrcClient sender, ref string s) handleRaw;
+	void delegate(ref string s) handleRaw;
 
 	/// Callback for when we have succesfully logged in.
-	void delegate(IrcClient sender) handleConnect;
+	void delegate() handleConnect;
 	/// Callback for when the socket was closed.
-	void delegate(IrcClient sender, string reason, DisconnectType type) handleDisconnect;
+	void delegate(string reason, DisconnectType type) handleDisconnect;
 	/// Callback for when a message has been received.
-	void delegate(IrcClient sender, string from, string to, string message, IrcMessageType type) handleMessage;
+	void delegate(string from, string to, string message, IrcMessageType type) handleMessage;
 	/// Callback for when someone has joined a channel.
-	void delegate(IrcClient sender, string channel, string nick) handleJoin;
+	void delegate(string channel, string nick) handleJoin;
 	/// Callback for when someone has left a channel.
-	void delegate(IrcClient sender, string channel, string nick, string reason) handlePart;
+	void delegate(string channel, string nick, string reason) handlePart;
 	/// Callback for when someone was kicked from a channel.
-	void delegate(IrcClient sender, string channel, string nick, string op, string reason) handleKick;
+	void delegate(string channel, string nick, string op, string reason) handleKick;
 	/// Callback for when someone has quit from the network.
-	void delegate(IrcClient sender, string nick, string reason, string[] channels) handleQuit;
+	void delegate(string nick, string reason, string[] channels) handleQuit;
 	/// Callback for when the channel list was retreived
-	void delegate(IrcClient sender, string[] channelList) handleChannelList;
+	void delegate(string[] channelList) handleChannelList;
 	/// Callback for a WHO result line
-	void delegate(IrcClient sender, string channel, string username, string host, string server, string name, string flags, int hopcount, string realname) handleWho;
+	void delegate(string channel, string username, string host, string server, string name, string flags, int hopcount, string realname) handleWho;
 	/// Callback for a WHO listing end
-	void delegate(IrcClient sender, string mask) handleWhoEnd;
+	void delegate(string mask) handleWhoEnd;
 
 	/// Callback for when we're banned from a channel.
-	void delegate(IrcClient sender, string channel, string reason) handleBanned;
+	void delegate(string channel, string reason) handleBanned;
 	/// Callback for when a channel is invite only.
-	void delegate(IrcClient sender, string channel, string reason) handleInviteOnly;
+	void delegate(string channel, string reason) handleInviteOnly;
 	/// Callback for when a nick/channel is unavailable.
-	void delegate(IrcClient sender, string what, string reason) handleUnavailable;
+	void delegate(string what, string reason) handleUnavailable;
 	/// Callback for when a channel is full.
-	void delegate(IrcClient sender, string channel, string reason) handleChannelFull;
+	void delegate(string channel, string reason) handleChannelFull;
 	/// Callback for when a channel needs a key.
-	void delegate(IrcClient sender, string channel, string reason) handleChannelKey;
+	void delegate(string channel, string reason) handleChannelKey;
 
 	/// Callback for when a user enters our sight.
-	void delegate(IrcClient sender, string nick) handleEnter;
+	void delegate(string nick) handleEnter;
 	/// Callback for when a user leaves our sight.
-	void delegate(IrcClient sender, string nick) handleLeave;
+	void delegate(string nick) handleLeave;
 }

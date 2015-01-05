@@ -53,74 +53,74 @@ unittest
 	assert(rfc1459toUpper("{}|[]\\") == "[]\\[]\\");
 }
 
-class IrcSocket : LineBufferedSocket
+final class IrcConnection
 {
-	this()
+private:
+	LineBufferedAdapter line;
+	TimeoutAdapter timer;
+
+public:
+	IConnection conn;
+	alias conn this;
+
+	this(IConnection c)
 	{
-		super(90.seconds);
-		init();
+		c = line = new LineBufferedAdapter(c);
+		line.delimiter = "\n";
+
+		c = timer = new TimeoutAdapter(timer);
+		timer.setIdleTimeout(90.seconds);
+		timer.handleIdleTimeout = &onIdleTimeout;
+		timer.handleNonIdle = &onNonIdle;
+
+		conn = c;
+		conn.handleReadData = &onReadData;
 	}
 
-	this(Socket conn)
-	{
-		super.setIdleTimeout(60.seconds);
-		super(conn);
-		init();
-	}
-
-	void init()
-	{
-		handleIdleTimeout = &onIdleTimeout;
-
-		super.delimiter = "\n";
-		super.handleReadLine = &onReadLine;
-	}
-
-	override void markNonIdle()
+	void onNonIdle()
 	{
 		if (pingSent)
 			pingSent = false;
-		super.markNonIdle();
 	}
 
-	override final void send(string line)
+	void send(string line)
 	{
 		// Send with \r\n, but support receiving with \n
 		import ae.sys.data;
-		ClientSocket.send(Data(line ~ "\r\n"));
+		conn.send(Data(line ~ "\r\n"));
 	}
 
-	void delegate (IrcSocket sender) handleInactivity;
-	void delegate (IrcSocket sender) handleTimeout;
-	void delegate(LineBufferedSocket sender, string line) handleReadLine; // redefine
+	void delegate() handleInactivity;
+	void delegate() handleTimeout;
+	void delegate(string line) handleReadLine;
 
 private:
-	final void onReadLine(LineBufferedSocket sender, string line)
+	void onReadData(Data data)
 	{
+		string line = cast(string)data.toHeap();
+
 		if (handleReadLine)
-			handleReadLine(sender, line.chomp("\r"));
+			handleReadLine(line.chomp("\r"));
 	}
 
-	final void onIdleTimeout(ClientSocket sender)
+	void onIdleTimeout()
 	{
 		if (pingSent || handleInactivity is null)
 		{
 			if (handleTimeout)
-				handleTimeout(this);
+				handleTimeout();
 			else
-				disconnect("Time-out", DisconnectType.Error);
+				conn.disconnect("Time-out", DisconnectType.error);
 		}
 		else
 		{
-			handleInactivity(this);
+			handleInactivity();
 			pingSent = true;
 		}
 	}
 
 	bool pingSent;
 }
-
-alias GenericServerSocket!(IrcSocket) IrcServerSocket;
 
 // TODO: this is server-specific
 const string IRC_NICK_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-`";

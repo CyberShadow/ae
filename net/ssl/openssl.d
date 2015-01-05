@@ -33,6 +33,8 @@ version(Windows)
 else
 	{ pragma(lib, "crypto"); }
 
+debug(OPENSSL) import std.stdio : stderr;
+
 // ***************************************************************************
 
 shared static this()
@@ -57,17 +59,19 @@ SSLContext sslContext;
 static this()
 {
 	sslContext = new SSLContext();
-	sslSocketFactory = toDelegate(&factory);
+	sslAdapterFactory = toDelegate(&factory);
 }
 
 // ***************************************************************************
 
-class CustomSSLSocket(Parent) : Parent
+class OpenSSLAdapter : SSLAdapter
 {
 	SSL* sslHandle;
 
-	this(SSLContext context = sslContext)
+	this(IConnection next, SSLContext context = sslContext)
 	{
+		super(next);
+
 		sslHandle = sslEnforce(SSL_new(context.sslCtx));
 		SSL_set_connect_state(sslHandle);
 		SSL_set_bio(sslHandle, r.bio, w.bio);
@@ -75,29 +79,7 @@ class CustomSSLSocket(Parent) : Parent
 
 	MemoryBIO r, w;
 
-	ReadDataHandler userDataHandler;
-
-	override void onReadable()
-	{
-		userDataHandler = handleReadData;
-		handleReadData = &onReadData;
-		scope(exit) handleReadData = userDataHandler;
-		super.onReadable();
-	}
-
-	void callUserDataHandler(Data data)
-	{
-		assert(handleReadData is &onReadData);
-		scope(exit)
-			if (handleReadData !is &onReadData)
-			{
-				userDataHandler = handleReadData;
-				handleReadData = &onReadData;
-			}
-		userDataHandler(this, data);
-	}
-
-	void onReadData(ClientSocket sender, Data data)
+	override void onReadData(Data data)
 	{
 		assert(r.data.length == 0, "Would clobber data");
 		r.set(data.contents);
@@ -110,7 +92,7 @@ class CustomSSLSocket(Parent) : Parent
 			static ubyte[4096] buf;
 			auto result = SSL_read(sslHandle, buf.ptr, buf.length);
 			if (result > 0)
-				callUserDataHandler(Data(buf[0..result]));
+				super.onReadData(Data(buf[0..result]));
 			else
 			{
 				sslError(result);
@@ -124,7 +106,7 @@ class CustomSSLSocket(Parent) : Parent
 	{
 		if (w.data.length)
 		{
-			super.send([Data(w.data)]);
+			next.send([Data(w.data)]);
 			w.clear();
 		}
 	}
@@ -133,11 +115,14 @@ class CustomSSLSocket(Parent) : Parent
 
 	override void send(Data[] data, int priority = DEFAULT_PRIORITY)
 	{
+		debug(OPENSSL) stderr.writeln("OpenSSLAdapter.send");
 		if (data.length)
 			queue ~= data;
 
 		flushQueue();
 	}
+
+	alias send = super.send;
 
 	void flushQueue()
 	{
@@ -173,9 +158,7 @@ class CustomSSLSocket(Parent) : Parent
 	}
 }
 
-alias CustomSSLSocket!ClientSocket SSLSocket;
-
-SSLSocket factory() { return new SSLSocket(); }
+SSLAdapter factory(IConnection next) { return new OpenSSLAdapter(next); }
 
 // ***************************************************************************
 
@@ -236,20 +219,22 @@ T sslEnforce(T)(T v)
 	}
 }
 
+// ***************************************************************************
+
 unittest
 {
-//	import std.stdio;
-	ClientSocket s = new SSLSocket();
+	auto c = new TcpConnection;
+	auto s = new OpenSSLAdapter(c);
 
-	s.handleConnect = (ClientSocket c)
+	c.handleConnect =
 	{
-	//	writeln("Connected!");
+		debug(OPENSSL) stderr.writeln("Connected!");
 		s.send(Data("GET / HTTP/1.0\r\n\r\n"));
 	};
-	s.handleReadData = (ClientSocket c, Data data)
+	s.handleReadData = (Data data)
 	{
-	//	write(cast(string)data.contents); stdout.flush();
+		debug(OPENSSL) { stderr.write(cast(string)data.contents); stderr.flush(); }
 	};
-	s.connect("www.openssl.org", 443);
+	c.connect("www.openssl.org", 443);
 	socketManager.loop();
 }

@@ -41,7 +41,7 @@ public:
 	Logger log;
 
 private:
-	ServerSocket conn;
+	TcpServer conn;
 	Duration timeout;
 
 private:
@@ -51,7 +51,7 @@ private:
 			handleClose();
 	}
 
-	void onAccept(ClientSocket incoming)
+	void onAccept(TcpConnection incoming)
 	{
 		debug (HTTP) writefln("[%s] New connection from %s", Clock.currTime(), incoming.remoteAddress);
 		new HttpServerConnection(this, incoming);
@@ -63,7 +63,7 @@ public:
 		assert(timeout > Duration.zero);
 		this.timeout = timeout;
 
-		conn = new ServerSocket();
+		conn = new TcpServer();
 		conn.handleClose = &onClose;
 		conn.handleAccept = &onAccept;
 	}
@@ -87,7 +87,7 @@ public:
 
 		// Close idle connections
 		foreach (connection; connections.iterator.array)
-			if (connection.idle && connection.conn.isConnected)
+			if (connection.idle && connection.conn.connected && !connection.conn.disconnecting)
 				connection.conn.disconnect("HTTP server shutting down");
 	}
 
@@ -104,8 +104,11 @@ public:
 final class HttpServerConnection
 {
 public:
+	TcpConnection tcp;
+	TimeoutAdapter timer;
+	IConnection conn;
+
 	HttpServer server;
-	ClientSocket conn;
 	HttpRequest currentRequest;
 	Address localAddress, remoteAddress;
 	bool persistent;
@@ -118,20 +121,26 @@ private:
 	bool requestProcessing; // user code is asynchronously processing current request
 	bool timeoutActive;
 
-	this(HttpServer server, ClientSocket conn)
+	this(HttpServer server, TcpConnection incoming)
 	{
 		this.server = server;
-		this.conn = conn;
+		IConnection c = tcp = incoming;
+
+		timer = new TimeoutAdapter(c);
+		timer.setIdleTimeout(server.timeout);
+		c = timer;
+
+		this.conn = c;
 		conn.handleReadData = &onNewRequest;
 		conn.handleDisconnect = &onDisconnect;
-		conn.setIdleTimeout(server.timeout);
+
 		timeoutActive = true;
-		localAddress = conn.localAddress;
-		remoteAddress = conn.remoteAddress;
+		localAddress = tcp.localAddress;
+		remoteAddress = tcp.remoteAddress;
 		server.connections.pushFront(this);
 	}
 
-	void onNewRequest(ClientSocket sender, Data data)
+	void onNewRequest(Data data)
 	{
 		try
 		{
@@ -201,13 +210,13 @@ private:
 		}
 	}
 
-	void onDisconnect(ClientSocket sender, string reason, DisconnectType type)
+	void onDisconnect(string reason, DisconnectType type)
 	{
 		debug (HTTP) writefln("[%s] Disconnect: %s", Clock.currTime(), reason);
 		server.connections.remove(this);
 	}
 
-	void onContinuation(ClientSocket sender, Data data)
+	void onContinuation(Data data)
 	{
 		debug (HTTP) writefln("[%s] Receiving continuation of request: \n%s---", Clock.currTime(), cast(string)data.contents);
 		inBuffer ~= data;
@@ -223,7 +232,7 @@ private:
 	{
 		currentRequest.data = data;
 		timeoutActive = false;
-		conn.cancelIdleTimeout();
+		timer.cancelIdleTimeout();
 		if (server.handleRequest)
 		{
 			// Log unhandled exceptions, but don't mess up the stack trace
@@ -313,13 +322,13 @@ public:
 			conn.handleReadData = &onNewRequest;
 			if (!timeoutActive)
 			{
-				conn.resumeIdleTimeout();
+				timer.resumeIdleTimeout();
 				timeoutActive = true;
 			}
 			if (inBuffer.bytes.length) // a second request has been pipelined
 			{
 				debug (HTTP) writefln("A second request has been pipelined: %d datums, %d bytes", inBuffer.length, inBuffer.bytes.length);
-				onNewRequest(conn, Data());
+				onNewRequest(Data());
 			}
 		}
 		else
@@ -374,8 +383,8 @@ unittest
 	replies = null;
 	closeAfter = 2;
 	port = s.listen(0, "localhost");
-	ClientSocket c = new ClientSocket;
-	c.handleConnect = (ClientSocket sender) {
+	TcpConnection c = new TcpConnection;
+	c.handleConnect = {
 		c.send(Data(
 "GET /?a=123456 HTTP/1.1
 Content-length: 8

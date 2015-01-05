@@ -28,7 +28,6 @@ debug(ASOCKETS) import std.stdio;
 debug(PRINTDATA) import ae.utils.text : hexDump;
 private import std.conv : to;
 
-import std.random : randomShuffle;
 
 // http://d.puremagic.com/issues/show_bug.cgi?id=7016
 static import ae.utils.array;
@@ -441,14 +440,12 @@ else // Use select
 	}
 }
 
-enum DisconnectType
-{
-	Requested, // initiated by the application
-	Graceful,  // peer gracefully closed the connection
-	Error      // abnormal network condition
-}
+/// The default socket manager.
+SocketManager socketManager;
 
-/// General methods for an asynchronous socket
+// ***************************************************************************
+
+/// General methods for an asynchronous socket.
 private abstract class GenericSocket
 {
 	/// Declares notifyRead and notifyWrite.
@@ -522,13 +519,64 @@ public:
 	}
 }
 
+// ***************************************************************************
 
-/// An asynchronous client socket.
-class ClientSocket : GenericSocket
+enum DisconnectType
+{
+	requested, // initiated by the application
+	graceful,  // peer gracefully closed the connection
+	error      // abnormal network condition
+}
+
+/// Common interface for connections and adapters.
+interface IConnection
+{
+	enum MAX_PRIORITY = 4;
+	enum DEFAULT_PRIORITY = 2;
+
+	static const defaultDisconnectReason = "Software closed the connection";
+
+	/// Has a connection been established?
+	@property bool connected();
+
+	/// Are we in the process of disconnecting? (Waiting for data to be flushed)
+	@property bool disconnecting();
+
+	/// Queue Data for sending.
+	void send(Data[] data, int priority = DEFAULT_PRIORITY);
+
+	/// ditto
+	final void send(Data datum, int priority = DEFAULT_PRIORITY)
+	{
+		Data[1] data;
+		data[0] = datum;
+		this.send(data);
+		data[] = Data.init;
+	}
+
+	/// Terminate the connection.
+	void disconnect(string reason = defaultDisconnectReason, DisconnectType type = DisconnectType.requested);
+
+	/// Callback setter for when a connection has been established
+	/// (if applicable).
+	alias void delegate() ConnectHandler;
+	@property void handleConnect(ConnectHandler value); /// ditto
+
+	/// Callback setter for when new data is read.
+	alias void delegate(Data data) ReadDataHandler;
+	@property void handleReadData(ReadDataHandler value); /// ditto
+
+	/// Callback setter for when a connection was closed.
+	alias void delegate(string reason, DisconnectType type) DisconnectHandler;
+	@property void handleDisconnect(DisconnectHandler value); /// ditto
+}
+
+// ***************************************************************************
+
+/// An asynchronous TCP connection.
+class TcpConnection : GenericSocket, IConnection
 {
 private:
-	TimerTask idleTask;
-
 	/// Blocks of data larger than this value are passed as unmanaged memory
 	/// (in Data objects). Blocks smaller than this value will be reallocated
 	/// on the managed heap. The disadvantage of placing large objects on the
@@ -540,20 +588,24 @@ private:
 	/// Queue of addresses to try connecting to.
 	Address[] addressQueue;
 
+	bool _connected;
+	final @property bool connected(bool value) { return _connected = value; }
+
+	bool _disconnecting;
+	final @property bool disconnecting(bool value) { return _disconnecting = value; }
+
 public:
 	/// Whether the socket is connected.
-	bool connected;
+	override @property bool connected() { return _connected; }
 
-	enum MAX_PRIORITY = 4;
-	enum DEFAULT_PRIORITY = 2;
+	/// Whether a disconnect is pending after all data is sent
+	override @property bool disconnecting() { return _disconnecting; }
 
 protected:
 	/// The send buffers.
 	Data[][MAX_PRIORITY+1] outQueue;
 	/// Whether the first item from each queue has been partially sent (and thus can't be cancelled).
 	bool[MAX_PRIORITY+1] partiallySent;
-	/// Whether a disconnect is pending after all data is sent
-	bool disconnecting;
 
 	/// Constructor used by a ServerSocket for new connections
 	this(Socket conn)
@@ -573,7 +625,7 @@ protected:
 		else
 			notifyWrite = writePending;
 
-		notifyRead = connected && handleReadData;
+		notifyRead = connected && readDataHandler;
 	}
 
 	/// Called when a socket is readable.
@@ -584,7 +636,7 @@ protected:
 		auto received = conn.receive(inBuffer);
 
 		if (received == 0)
-			return disconnect("Connection closed", DisconnectType.Graceful);
+			return disconnect("Connection closed", DisconnectType.graceful);
 
 		if (received == Socket.ERROR)
 		{
@@ -610,7 +662,7 @@ protected:
 				debug (ASOCKETS) writefln("\t\t%s: Discarding received data because we are disconnecting", cast(void*)this);
 			}
 			else
-			if (!handleReadData)
+			if (!readDataHandler)
 			{
 				debug (ASOCKETS) writefln("\t\t%s: Discarding received data because there is no data handler", cast(void*)this);
 			}
@@ -625,12 +677,12 @@ protected:
 				if (received < UNMANAGED_THRESHOLD)
 				{
 					// Copy to the managed heap
-					_handleReadData(this, Data(inBuffer[0 .. received].dup));
+					readDataHandler(Data(inBuffer[0 .. received].dup));
 				}
 				else
 				{
 					// Copy to unmanaged memory
-					_handleReadData(this, Data(inBuffer[0 .. received], true));
+					readDataHandler(Data(inBuffer[0 .. received], true));
 				}
 			}
 		}
@@ -648,11 +700,9 @@ protected:
 			try
 				setKeepAlive();
 			catch (Exception e)
-				return disconnect(e.msg, DisconnectType.Error);
-			if (idleTask !is null)
-				mainTimer.add(idleTask);
-			if (handleConnect)
-				handleConnect(this);
+				return disconnect(e.msg, DisconnectType.error);
+			if (connectHandler)
+				connectHandler();
 			return;
 		}
 		//debug writefln(remoteAddress(), ": Writable - handler ", handleBufferFlushed?"OK":"not set", ", outBuffer.length=", outBuffer.length);
@@ -705,9 +755,9 @@ protected:
 
 		// outQueue is now empty
 		if (handleBufferFlushed)
-			handleBufferFlushed(this);
+			handleBufferFlushed();
 		if (disconnecting)
-			disconnect("Delayed disconnect - buffer flushed", DisconnectType.Requested);
+			disconnect("Delayed disconnect - buffer flushed", DisconnectType.requested);
 	}
 
 	/// Called when an error occurs on the socket.
@@ -715,28 +765,7 @@ protected:
 	{
 		if (!connected && addressQueue.length)
 			return tryNextAddress();
-		disconnect("Socket error: " ~ reason, DisconnectType.Error);
-	}
-
-	final void onTask_Idle(Timer timer, TimerTask task)
-	{
-		if (!connected)
-			return;
-
-		if (disconnecting)
-			return disconnect("Delayed disconnect - time-out", DisconnectType.Error);
-
-		if (handleIdleTimeout)
-		{
-			handleIdleTimeout(this);
-			if (connected && !disconnecting)
-			{
-				assert(!idleTask.isWaiting());
-				mainTimer.add(idleTask);
-			}
-		}
-		else
-			disconnect("Time-out", DisconnectType.Error);
+		disconnect("Socket error: " ~ reason, DisconnectType.error);
 	}
 
 	final void tryNextAddress()
@@ -762,7 +791,7 @@ public:
 	/// Default constructor
 	this()
 	{
-		debug (ASOCKETS) writefln("New ClientSocket @ %s", cast(void*)this);
+		debug (ASOCKETS) writefln("New TcpConnection @ %s", cast(void*)this);
 	}
 
 	/// Start establishing a connection.
@@ -776,7 +805,10 @@ public:
 			addressQueue = getAddress(host, port);
 			enforce(addressQueue.length, "No addresses found");
 			if (addressQueue.length > 1)
+			{
+				import std.random : randomShuffle;
 				randomShuffle(addressQueue);
+			}
 		}
 		catch (SocketException e)
 			return onError("Lookup error: " ~ e.msg);
@@ -784,23 +816,22 @@ public:
 		tryNextAddress();
 	}
 
-	static const DefaultDisconnectReason = "Software closed the connection";
-
 	/// Close a connection. If there is queued data waiting to be sent, wait until it is sent before disconnecting.
-	void disconnect(string reason = DefaultDisconnectReason, DisconnectType type = DisconnectType.Requested)
+	/// The disconnect handler will be called when all data has been flushed.
+	void disconnect(string reason = defaultDisconnectReason, DisconnectType type = DisconnectType.requested)
 	{
 		scope(success) updateFlags();
 
 		if (writePending)
 		{
-			if (type==DisconnectType.Requested)
+			if (type==DisconnectType.requested)
 			{
 				assert(conn, "Attempting to disconnect on an uninitialized socket");
 				// queue disconnect after all data is sent
 				debug (ASOCKETS) writefln("[%s] Queueing disconnect: %s", remoteAddress, reason);
 				assert(!disconnecting, "Attempting to disconnect on a disconnecting socket");
 				disconnecting = true;
-				setIdleTimeout(30.seconds);
+				//setIdleTimeout(30.seconds);
 				return;
 			}
 			else
@@ -820,22 +851,11 @@ public:
 		{
 			assert(!connected);
 		}
-		if (idleTask && idleTask.isWaiting())
-			idleTask.cancel();
-		if (handleDisconnect)
-			handleDisconnect(this, reason, type);
+		if (disconnectHandler)
+			disconnectHandler(reason, type);
 	}
 
 	/// Append data to the send buffer.
-	final void send(Data datum, int priority = DEFAULT_PRIORITY)
-	{
-		Data[1] data;
-		data[0] = datum;
-		send(data);
-		data[] = Data.init;
-	}
-
-	/// ditto
 	void send(Data[] data, int priority = DEFAULT_PRIORITY)
 	{
 		assert(connected, "Attempting to send on a disconnected socket");
@@ -854,6 +874,9 @@ public:
 			std.stdio.stdout.flush();
 		}
 	}
+
+	/// ditto
+	alias send = IConnection.send;
 
 	final void clearQueue(int priority)
 	{
@@ -898,73 +921,28 @@ public:
 			return outQueue[priority].length > 0;
 	}
 
-	void cancelIdleTimeout()
-	{
-		assert(idleTask !is null);
-		assert(idleTask.isWaiting());
-		idleTask.cancel();
-	}
-
-	void resumeIdleTimeout()
-	{
-		assert(connected);
-		assert(idleTask !is null);
-		assert(!idleTask.isWaiting());
-		mainTimer.add(idleTask);
-	}
-
-	final void setIdleTimeout(Duration duration)
-	{
-		assert(duration > Duration.zero);
-		if (idleTask is null)
-		{
-			idleTask = new TimerTask(duration);
-			idleTask.handleTask = &onTask_Idle;
-		}
-		else
-		{
-			if (idleTask.isWaiting())
-				idleTask.cancel();
-			idleTask.delay = duration;
-		}
-		if (connected)
-			mainTimer.add(idleTask);
-	}
-
-	void markNonIdle()
-	{
-		assert(idleTask !is null);
-		if (idleTask.isWaiting())
-			idleTask.restart();
-	}
-
-	final bool isConnected()
-	{
-		return connected && !disconnecting;
-	}
-
 public:
+	private ConnectHandler connectHandler;
 	/// Callback for when a connection has been established.
-	void delegate(ClientSocket sender) handleConnect;
-	/// Callback for when a connection was closed.
-	void delegate(ClientSocket sender, string reason, DisconnectType type) handleDisconnect;
-	/// Callback for when a connection has stopped responding.
-	void delegate(ClientSocket sender) handleIdleTimeout;
+	@property final void handleConnect(ConnectHandler value) { connectHandler = value; updateFlags(); }
+
 	/// Callback for when the send buffer has been flushed.
-	void delegate(ClientSocket sender) handleBufferFlushed;
+	void delegate() handleBufferFlushed;
 
-	alias void delegate(ClientSocket sender, Data data) ReadDataHandler;
-
-	private ReadDataHandler _handleReadData;
+	private ReadDataHandler readDataHandler;
 	/// Callback for incoming data.
 	/// Data will not be received unless this handler is set.
-	@property final ReadDataHandler handleReadData() { return _handleReadData; }
-	/// ditto
-	@property final void handleReadData(ReadDataHandler value) { _handleReadData = value; updateFlags(); }
+	@property final void handleReadData(ReadDataHandler value) { readDataHandler = value; updateFlags(); }
+
+	private DisconnectHandler disconnectHandler;
+	/// Callback for when a connection was closed.
+	@property final void handleDisconnect(DisconnectHandler value) { disconnectHandler = value; updateFlags(); }
 }
 
-/// An asynchronous server socket.
-final class GenericServerSocket(T : ClientSocket)
+// ***************************************************************************
+
+/// An asynchronous TCP connection server.
+final class TcpServer
 {
 private:
 	/// Class that actually performs listening on a certain address family
@@ -984,11 +962,11 @@ private:
 			acceptSocket.blocking = false;
 			if (handleAccept)
 			{
-				T connection = new T(acceptSocket);
+				TcpConnection connection = new TcpConnection(acceptSocket);
 				connection.setKeepAlive();
 				//assert(connection.connected);
 				//connection.connected = true;
-				_handleAccept(connection);
+				acceptHandler(connection);
 			}
 			else
 				acceptSocket.close();
@@ -1106,31 +1084,107 @@ public:
 	/// Callback for when the socket was closed.
 	void delegate() handleClose;
 
-	private void delegate(T incoming) _handleAccept;
+	private void delegate(TcpConnection incoming) acceptHandler;
 	/// Callback for an incoming connection.
 	/// Connections will not be accepted unless this handler is set.
-	@property final void delegate(T incoming) handleAccept() { return _handleAccept; }
+	@property final void delegate(TcpConnection incoming) handleAccept() { return acceptHandler; }
 	/// ditto
-	@property final void handleAccept(void delegate(T incoming) value) { _handleAccept = value; updateFlags(); }
+	@property final void handleAccept(void delegate(TcpConnection incoming) value) { acceptHandler = value; updateFlags(); }
 }
 
-/// Server socket type for ordinary sockets.
-alias GenericServerSocket!(ClientSocket) ServerSocket;
+// ***************************************************************************
 
-/// Asynchronous class for client sockets with a line-based protocol.
-class LineBufferedSocket : ClientSocket
+/// Base class for a connection adapter.
+/// By itself, does nothing.
+class ConnectionAdapter : IConnection
 {
-private:
-	/// The receive buffer.
-	Data inBuffer;
+	IConnection next;
 
-public:
+	this(IConnection next)
+	{
+		this.next = next;
+		next.handleConnect = &onConnect;
+		next.handleDisconnect = &onDisconnect;
+	}
+
+	@property bool connected() { return next.connected; }
+	@property bool disconnecting() { return next.disconnecting; }
+
+	/// Queue Data for sending.
+	void send(Data[] data, int priority)
+	{
+		next.send(data, priority);
+	}
+
+	alias send = IConnection.send; /// ditto
+
+	/// Terminate the connection.
+	void disconnect(string reason, DisconnectType type)
+	{
+		next.disconnect(reason, type);
+	}
+
+	protected void onConnect()
+	{
+		if (connectHandler)
+			connectHandler();
+	}
+
+	protected void onReadData(Data data)
+	{
+		// onReadData should be fired only if readDataHandler is set
+		readDataHandler(data);
+	}
+
+	protected void onDisconnect(string reason, DisconnectType type)
+	{
+		if (disconnectHandler)
+			disconnectHandler(reason, type);
+	}
+
+	/// Callback for when a connection has been established.
+	@property void handleConnect(ConnectHandler value) { connectHandler = value; }
+	private ConnectHandler connectHandler;
+
+	/// Callback setter for when new data is read.
+	@property void handleReadData(ReadDataHandler value)
+	{
+		readDataHandler = value;
+		next.handleReadData = value ? &onReadData : null ;
+	}
+	private ReadDataHandler readDataHandler;
+
+	/// Callback setter for when a connection was closed.
+	@property void handleDisconnect(DisconnectHandler value) { disconnectHandler = value; }
+	private DisconnectHandler disconnectHandler;
+}
+
+// ***************************************************************************
+
+/// Adapter for connections with a line-based protocol.
+/// Splits data stream into delimiter-separated lines.
+class LineBufferedAdapter : ConnectionAdapter
+{
 	/// The protocol's line delimiter.
 	string delimiter = "\r\n";
 
-private:
+	this(IConnection next)
+	{
+		super(next);
+	}
+
+	/// Append a line to the send buffer.
+	void send(string line)
+	{
+		super.send(Data(line ~ delimiter));
+	}
+
+protected:
+	/// The receive buffer.
+	Data inBuffer;
+
 	/// Called when data has been received.
-	final void onReadData(ClientSocket sender, Data data)
+	final override void onReadData(Data data)
 	{
 		import std.string;
 		auto oldBufferLength = inBuffer.length;
@@ -1138,8 +1192,6 @@ private:
 			inBuffer ~= data;
 		else
 			inBuffer = data;
-
-		bool gotLines;
 
 		if (delimiter.length == 1)
 		{
@@ -1151,7 +1203,6 @@ private:
 			{
 				sizediff_t index = p - inBuffer.ptr;
 				processLine(index);
-				gotLines = true;
 
 				p = memchr(inBuffer.ptr, c, inBuffer.length);
 			}
@@ -1161,75 +1212,123 @@ private:
 			sizediff_t index;
 			// TODO: we can start the search at oldBufferLength-delimiter.length+1
 			while ((index=indexOf(cast(string)inBuffer.contents, delimiter)) >= 0)
-			{
 				processLine(index);
-				gotLines = true;
-			}
 		}
-
-		if (gotLines)
-			markNonIdle();
 	}
 
 	final void processLine(size_t index)
 	{
 		auto line = inBuffer[0..index];
 		inBuffer = inBuffer[index+delimiter.length..inBuffer.length];
-
-		if (_handleReadLine)
-			_handleReadLine(this, cast(string)line.toHeap());
+		super.onReadData(line);
 	}
 
-	final void updateHandler()
+	override void onDisconnect(string reason, DisconnectType type)
 	{
-		handleReadData = _handleReadLine ? &onReadData : null;
-	}
-
-public:
-	override void cancelIdleTimeout() { assert(false); }
-	override void resumeIdleTimeout() { assert(false); }
-	//override void setIdleTimeout(d_time duration) { assert(false); }
-	//override void markNonIdle() { assert(false); }
-
-	this(Duration idleTimeout)
-	{
-		super.setIdleTimeout(idleTimeout);
-	}
-
-	this(Socket conn)
-	{
-		super.setIdleTimeout(60.seconds);
-		super(conn);
-	}
-
-	/// Cancel a connection.
-	override final void disconnect(string reason = DefaultDisconnectReason, DisconnectType type = DisconnectType.Requested)
-	{
-		super.disconnect(reason, type);
+		super.onDisconnect(reason, type);
 		inBuffer.clear();
 	}
-
-	/// Append a line to the send buffer.
-	void send(string line)
-	{
-		super.send(Data(line ~ delimiter));
-	}
-
-public:
-	alias void delegate(LineBufferedSocket sender, string line) ReadLineHandler;
-
-	private ReadLineHandler _handleReadLine;
-	/// Callback for an incoming line.
-	/// Data will not be received unless this handler is set.
-	@property final ReadLineHandler handleReadLine() { return _handleReadLine; }
-	/// ditto
-	@property final void handleReadLine(ReadLineHandler value) { _handleReadLine = value; updateHandler(); }
 }
 
-/// The default socket manager.
-// __gshared for ae.sys.shutdown
-//__gshared
-SocketManager socketManager;
+// ***************************************************************************
+
+/// Fires an event handler or disconnects connections
+/// after a period of inactivity.
+class TimeoutAdapter : ConnectionAdapter
+{
+	this(IConnection next)
+	{
+		super(next);
+	}
+
+	void cancelIdleTimeout()
+	{
+		assert(idleTask !is null);
+		assert(idleTask.isWaiting());
+		idleTask.cancel();
+	}
+
+	void resumeIdleTimeout()
+	{
+		assert(connected);
+		assert(idleTask !is null);
+		assert(!idleTask.isWaiting());
+		mainTimer.add(idleTask);
+	}
+
+	final void setIdleTimeout(Duration duration)
+	{
+		assert(duration > Duration.zero);
+		if (idleTask is null)
+		{
+			idleTask = new TimerTask(duration);
+			idleTask.handleTask = &onTask_Idle;
+		}
+		else
+		{
+			if (idleTask.isWaiting())
+				idleTask.cancel();
+			idleTask.delay = duration;
+		}
+		if (connected)
+			mainTimer.add(idleTask);
+	}
+
+	void markNonIdle()
+	{
+		assert(idleTask !is null);
+		if (handleNonIdle)
+			handleNonIdle();
+		if (idleTask.isWaiting())
+			idleTask.restart();
+	}
+
+	/// Callback for when a connection has stopped responding.
+	/// If unset, the connection will be disconnected.
+	void delegate() handleIdleTimeout;
+
+	/// Callback for when a connection is marked as non-idle
+	/// (when data is received).
+	void delegate() handleNonIdle;
+
+protected:
+	override void onReadData(Data data)
+	{
+		markNonIdle();
+		super.onReadData(data);
+	}
+
+	override void onDisconnect(string reason, DisconnectType type)
+	{
+		super.onDisconnect(reason, type);
+		if (idleTask && idleTask.isWaiting())
+			idleTask.cancel();
+	}
+
+private:
+	TimerTask idleTask;
+
+	final void onTask_Idle(Timer timer, TimerTask task)
+	{
+		if (!connected)
+			return;
+
+		if (disconnecting)
+			return disconnect("Delayed disconnect - time-out", DisconnectType.error);
+
+		if (handleIdleTimeout)
+		{
+			handleIdleTimeout();
+			if (connected && !disconnecting)
+			{
+				assert(!idleTask.isWaiting());
+				mainTimer.add(idleTask);
+			}
+		}
+		else
+			disconnect("Time-out", DisconnectType.error);
+	}
+}
 
 // ***************************************************************************
 
