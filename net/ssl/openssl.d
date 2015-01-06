@@ -15,6 +15,7 @@ module ae.net.ssl.openssl;
 
 import ae.net.asockets;
 import ae.net.ssl;
+import ae.utils.meta : enumLength;
 import ae.utils.text;
 
 import std.conv : to;
@@ -99,6 +100,29 @@ class OpenSSLContext : SSLContext
 	{
 		SSL_CTX_use_PrivateKey_file(sslCtx, toStringz(path), SSL_FILETYPE_PEM)
 			.sslEnforce("Failed to load private key file " ~ path);
+	}
+
+	override void setPeerVerify(Verify verify)
+	{
+		static const int[enumLength!Verify] modes =
+		[
+			SSL_VERIFY_NONE,
+			SSL_VERIFY_PEER,
+			SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT,
+		];
+		SSL_CTX_set_verify(sslCtx, modes[verify], null);
+	}
+
+	override void setPeerRootCertificate(string path)
+	{
+		auto szPath = toStringz(path);
+		SSL_CTX_load_verify_locations(sslCtx, szPath, null).sslEnforce();
+
+		if (kind == Kind.server)
+		{
+			auto list = SSL_load_client_CA_file(szPath).sslEnforce();
+			SSL_CTX_set_client_CA_list(sslCtx, list);
+		}
 	}
 }
 
@@ -213,6 +237,34 @@ class OpenSSLAdapter : SSLAdapter
 			default:
 				sslEnforce(false);
 		}
+	}
+
+	override OpenSSLCertificate getHostCertificate()
+	{
+		return new OpenSSLCertificate(SSL_get_certificate(sslHandle).sslEnforce());
+	}
+
+	override OpenSSLCertificate getPeerCertificate()
+	{
+		return new OpenSSLCertificate(SSL_get_peer_certificate(sslHandle).sslEnforce());
+	}
+}
+
+class OpenSSLCertificate : SSLCertificate
+{
+	X509* x509;
+
+	this(X509* x509)
+	{
+		this.x509 = x509;
+	}
+
+	override string getSubjectName()
+	{
+		char[256] buf;
+		X509_NAME_oneline(X509_get_subject_name(x509), buf.ptr, buf.length);
+		buf[$-1] = 0;
+		return buf.ptr.to!string();
 	}
 }
 

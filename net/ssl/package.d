@@ -15,11 +15,6 @@ module ae.net.ssl;
 
 import ae.net.asockets : IConnection, ConnectionAdapter;
 
-abstract class SSLAdapter : ConnectionAdapter
-{
-	this(IConnection next) { super(next); }
-}
-
 class SSLProvider
 {
 	abstract SSLContext createContext(SSLContext.Kind kind);
@@ -29,9 +24,25 @@ class SSLProvider
 abstract class SSLContext
 {
 	enum Kind { client, server }
+	enum Verify { none, verify, require }
+
+	abstract void setCipherList(string[] ciphers);
 	abstract void setCertificate(string path);
 	abstract void setPrivateKey(string path);
-	abstract void setCipherList(string[] ciphers);
+	abstract void setPeerVerify(Verify verify);
+	abstract void setPeerRootCertificate(string path);
+}
+
+abstract class SSLAdapter : ConnectionAdapter
+{
+	this(IConnection next) { super(next); }
+	abstract SSLCertificate getHostCertificate();
+	abstract SSLCertificate getPeerCertificate();
+}
+
+abstract class SSLCertificate
+{
+	string getSubjectName();
 }
 
 SSLProvider ssl;
