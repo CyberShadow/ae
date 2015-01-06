@@ -331,7 +331,7 @@ enum isTargetColor(C, TARGET) = is(C == TargetColor) || is(C == ViewColor!TARGET
 // ***************************************************************************
 
 import ae.utils.graphics.color;
-import ae.utils.meta.misc;
+import ae.utils.meta : structFields;
 
 private string[] readPBMHeader(ref const(ubyte)[] data)
 {

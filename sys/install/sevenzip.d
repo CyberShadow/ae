@@ -20,7 +20,7 @@ import std.path;
 import ae.sys.archive;
 import ae.sys.file;
 import ae.utils.array;
-import ae.utils.meta.misc;
+import ae.utils.meta : singleton, I;
 import ae.utils.xmllite;
 
 public import ae.sys.install.common;

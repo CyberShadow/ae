@@ -19,7 +19,7 @@ import std.traits;
 import ae.utils.geometry : TAU;
 import ae.utils.graphics.view;
 import ae.utils.math;
-import ae.utils.meta.misc;
+import ae.utils.meta : structFields, SignedBitsType, UnsignedBitsType;
 
 version(unittest) import ae.utils.graphics.image;
 

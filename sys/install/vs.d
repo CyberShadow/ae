@@ -27,7 +27,7 @@ import ae.sys.file;
 import ae.sys.install.wix;
 import ae.sys.net;
 import ae.utils.json;
-import ae.utils.meta.misc;
+import ae.utils.meta : singleton, I;
 import ae.utils.xmllite;
 
 public import ae.sys.install.common;

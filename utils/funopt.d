@@ -24,7 +24,7 @@ import std.string;
 import std.traits;
 import std.typetuple;
 
-import ae.utils.meta.misc;
+import ae.utils.meta : structFields, hasAttribute, getAttribute;
 import ae.utils.text;
 
 private enum OptionType { switch_, option, parameter }
