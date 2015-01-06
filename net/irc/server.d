@@ -159,6 +159,8 @@ class IrcServer
 							if (!server.isChannelName(channame))
 								{ sendReply(Reply.ERR_NOSUCHCHANNEL, channame, "No such channel"); continue; }
 							auto normchan = channame.normalized;
+							if (!mayJoin(normchan))
+								continue;
 							auto pchannel = normchan in server.channels;
 							Channel channel;
 							if (pchannel)
@@ -488,6 +490,11 @@ class IrcServer
 			foreach (line; server.motd)
 				sendReply(Reply.RPL_MOTD, "- %s".format(line));
 			sendReply(Reply.RPL_ENDOFMOTD    , "End of /MOTD command.");
+		}
+
+		bool mayJoin(string name)
+		{
+			return true;
 		}
 
 		void join(Channel channel)
@@ -908,7 +915,6 @@ protected:
 		return new Client(this, new IrcConnection(incoming), incoming.remoteAddress);
 	}
 
-private:
 	void onAccept(TcpConnection incoming)
 	{
 		createClient(incoming);
@@ -952,13 +958,12 @@ private:
 	}
 }
 
-private:
-
 bool maskMatch(string subject, string mask)
 {
 	import std.path;
 	return globMatch!(CaseSensitive.no)(subject, mask);
 }
+
 
 alias rfc1459toUpper normalized;
 
