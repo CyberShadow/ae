@@ -1004,15 +1004,11 @@ private:
 	}
 
 public:
-	/// Debugging aids
-	ushort port;
-	string addr;
-
 	/// Start listening on this socket.
 	ushort listen(ushort port, string addr = null)
 	{
-		//debug writefln("Listening on %s:%d", addr, port);
-		assert(!listening, "Attempting to listen on a listening socket");
+		debug(ASOCKETS) writefln("Attempting to listen on %s:%d", addr, port);
+		//assert(!listening, "Attempting to listen on a listening socket");
 
 		auto addressInfos = getAddressInfo(addr, to!string(port), AddressInfoFlags.PASSIVE, SocketType.STREAM, ProtocolType.TCP);
 
@@ -1047,8 +1043,6 @@ public:
 		if (listeners.length==0)
 			throw new Exception("Unable to bind service");
 
-		this.port = port;
-		this.addr = addr;
 		listening = true;
 
 		updateFlags();
