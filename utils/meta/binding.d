@@ -13,8 +13,8 @@
 
 module ae.utils.meta.binding;
 
+import ae.utils.meta : thisOf;
 import ae.utils.meta.caps;
-import ae.utils.meta.misc : thisOf;
 import ae.utils.meta.reference;
 
 /// Create unbound functor of a method

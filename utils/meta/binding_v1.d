@@ -16,7 +16,6 @@ module ae.utils.meta.binding_v1;
 import std.traits;
 
 import ae.utils.meta.caps;
-import ae.utils.meta.misc;
 import ae.utils.meta.proxy;
 import ae.utils.meta.reference;
 
