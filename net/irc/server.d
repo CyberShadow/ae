@@ -53,7 +53,7 @@ class IrcServer
 	Logger log;
 
 	/// Client connection and information
-	final static class Client
+	static class Client
 	{
 		/// Registration details
 		string nickname, password;
@@ -77,7 +77,7 @@ class IrcServer
 		string realHostname() { return remoteAddress.toAddrString; }
 		string publicHostname() { return server.addressMask ? server.addressMask : realHostname; }
 
-	private:
+	protected:
 		IrcServer server;
 		IrcConnection conn;
 		Address remoteAddress;
@@ -394,7 +394,7 @@ class IrcServer
 			}
 		}
 
-		void onInactivity()
+		final void onInactivity()
 		{
 			sendLine("PING %s".format(Clock.currTime.stdTime));
 		}
@@ -902,10 +902,16 @@ class IrcServer
 		return channels[name.normalized] = new Channel(name);
 	}
 
+protected:
+	Client createClient(TcpConnection incoming)
+	{
+		return new Client(this, new IrcConnection(incoming), incoming.remoteAddress);
+	}
+
 private:
 	void onAccept(TcpConnection incoming)
 	{
-		new Client(this, new IrcConnection(incoming), incoming.remoteAddress);
+		createClient(incoming);
 		totalConnections++;
 	}
 
