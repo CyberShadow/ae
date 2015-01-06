@@ -30,7 +30,7 @@ import ae.net.asockets;
 
 	Example:
 	---
-	void onConnect(ClientSocket socket)
+	void onConnect(TcpConnection socket)
 	{
 		auto anchor = new ThreadAnchor;
 		new Thread({
@@ -44,7 +44,7 @@ import ae.net.asockets;
 	---
 **/
 
-final class ThreadAnchor : ClientSocket
+final class ThreadAnchor : TcpConnection
 {
 private:
 	enum Command : ubyte
@@ -57,7 +57,7 @@ private:
 
 	alias Dg = void delegate();
 
-	final static class AnchorSocket : ClientSocket
+	final static class AnchorSocket : TcpConnection
 	{
 		Socket pinger;
 		Dg[] queue;
@@ -71,7 +71,7 @@ private:
 			this.daemon = true;
 		}
 
-		void onReadData(ClientSocket socket, Data data)
+		void onReadData(Data data)
 		{
 			import ae.utils.array;
 
@@ -133,7 +133,7 @@ unittest
 {
 	// keep socketManager running -
 	// ThreadAnchor sockets are daemon
-	auto dummy = new ServerSocket();
+	auto dummy = new TcpServer();
 	dummy.listen(0, "localhost");
 
 	import ae.sys.timing;
