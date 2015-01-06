@@ -1119,7 +1119,7 @@ class ConnectionAdapter : IConnection
 	alias send = IConnection.send; /// ditto
 
 	/// Terminate the connection.
-	void disconnect(string reason, DisconnectType type)
+	void disconnect(string reason = defaultDisconnectReason, DisconnectType type = DisconnectType.requested)
 	{
 		next.disconnect(reason, type);
 	}

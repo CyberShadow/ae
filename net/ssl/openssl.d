@@ -14,7 +14,7 @@
 module ae.net.ssl.openssl;
 
 import ae.net.asockets;
-import ae.net.ssl.ssl;
+import ae.net.ssl;
 import ae.utils.text;
 
 import std.conv : to;
@@ -41,25 +41,70 @@ shared static this()
 {
 	SSL_load_error_strings();
 	SSL_library_init();
+	OpenSSL_add_all_algorithms();
 }
 
 // ***************************************************************************
 
-class SSLContext
+class OpenSSLProvider : SSLProvider
 {
-	SSL_CTX* sslCtx;
-
-	this()
+	override SSLContext createContext(SSLContext.Kind kind)
 	{
-		sslCtx = sslEnforce(SSL_CTX_new(SSLv23_client_method()));
+		return new OpenSSLContext(kind);
+	}
+
+	override SSLAdapter createAdapter(SSLContext context, IConnection next)
+	{
+		auto ctx = cast(OpenSSLContext)context;
+		assert(ctx, "Not an OpenSSLContext");
+		return new OpenSSLAdapter(ctx, next);
 	}
 }
 
-SSLContext sslContext;
+class OpenSSLContext : SSLContext
+{
+	SSL_CTX* sslCtx;
+	Kind kind;
+
+	this(Kind kind)
+	{
+		this.kind = kind;
+
+		const(SSL_METHOD)* method;
+
+		final switch (kind)
+		{
+			case Kind.client:
+				method = SSLv23_client_method().sslEnforce();
+				break;
+			case Kind.server:
+				method = SSLv23_server_method().sslEnforce();
+				break;
+		}
+		sslCtx = SSL_CTX_new(method).sslEnforce();
+	}
+
+	override void setCipherList(string[] ciphers)
+	{
+		SSL_CTX_set_cipher_list(sslCtx, ciphers.join(":").toStringz()).sslEnforce();
+	}
+
+	override void setCertificate(string path)
+	{
+		SSL_CTX_use_certificate_chain_file(sslCtx, toStringz(path))
+			.sslEnforce("Failed to load certificate file " ~ path);
+	}
+
+	override void setPrivateKey(string path)
+	{
+		SSL_CTX_use_PrivateKey_file(sslCtx, toStringz(path), SSL_FILETYPE_PEM)
+			.sslEnforce("Failed to load private key file " ~ path);
+	}
+}
+
 static this()
 {
-	sslContext = new SSLContext();
-	sslAdapterFactory = toDelegate(&factory);
+	ssl = new OpenSSLProvider();
 }
 
 // ***************************************************************************
@@ -68,13 +113,18 @@ class OpenSSLAdapter : SSLAdapter
 {
 	SSL* sslHandle;
 
-	this(IConnection next, SSLContext context = sslContext)
+	this(OpenSSLContext context, IConnection next)
 	{
 		super(next);
 
 		sslHandle = sslEnforce(SSL_new(context.sslCtx));
-		SSL_set_connect_state(sslHandle);
 		SSL_set_bio(sslHandle, r.bio, w.bio);
+
+		final switch (context.kind)
+		{
+			case OpenSSLContext.Kind.client: SSL_connect(sslHandle).sslEnforce(); break;
+			case OpenSSLContext.Kind.server: SSL_accept (sslHandle).sslEnforce(); break;
+		}
 	}
 
 	MemoryBIO r, w;
@@ -84,22 +134,31 @@ class OpenSSLAdapter : SSLAdapter
 		assert(r.data.length == 0, "Would clobber data");
 		r.set(data.contents);
 
-		if (queue.length)
-			flushQueue();
-
-		while (r.data.length)
+		try
 		{
-			static ubyte[4096] buf;
-			auto result = SSL_read(sslHandle, buf.ptr, buf.length);
-			if (result > 0)
-				super.onReadData(Data(buf[0..result]));
-			else
+			if (queue.length)
+				flushQueue();
+
+			while (r.data.length)
 			{
-				sslError(result);
-				break;
+				static ubyte[4096] buf;
+				auto result = SSL_read(sslHandle, buf.ptr, buf.length);
+				flushWritten();
+				if (result > 0)
+					super.onReadData(Data(buf[0..result]));
+				else
+				{
+					sslError(result);
+					break;
+				}
 			}
+			enforce(r.data.length == 0, "SSL did not consume all read data");
 		}
-		enforce(r.data.length == 0, "SSL did not consume all read data");
+		catch (Exception e)
+		{
+			debug(OPENSSL) stderr.writeln("Error while processing incoming data: " ~ e.msg);
+			disconnect(e.msg, DisconnectType.error);
+		}
 	}
 
 	void flushWritten()
@@ -115,7 +174,6 @@ class OpenSSLAdapter : SSLAdapter
 
 	override void send(Data[] data, int priority = DEFAULT_PRIORITY)
 	{
-		debug(OPENSSL) stderr.writeln("OpenSSLAdapter.send");
 		if (data.length)
 			queue ~= data;
 
@@ -158,10 +216,9 @@ class OpenSSLAdapter : SSLAdapter
 	}
 }
 
-SSLAdapter factory(IConnection next) { return new OpenSSLAdapter(next); }
-
 // ***************************************************************************
 
+/// TODO: replace with custom BIO which hooks into IConnection
 struct MemoryBIO
 {
 	@disable this(this);
@@ -205,7 +262,7 @@ private:
 	BIO* bio_;
 }
 
-T sslEnforce(T)(T v)
+T sslEnforce(T)(T v, string message = null)
 {
 	if (v)
 		return v;
@@ -215,6 +272,9 @@ T sslEnforce(T)(T v)
 		ERR_print_errors(m.bio);
 		string msg = (cast(char[])m.data).idup;
 
+		if (message)
+			msg = message ~ ": " ~ msg;
+
 		throw new Exception(msg);
 	}
 }
@@ -223,18 +283,24 @@ T sslEnforce(T)(T v)
 
 unittest
 {
-	auto c = new TcpConnection;
-	auto s = new OpenSSLAdapter(c);
+	void testServer(string host, ushort port)
+	{
+		auto c = new TcpConnection;
+		auto ctx = ssl.createContext(SSLContext.Kind.client);
+		auto s = ssl.createAdapter(ctx, c);
 
-	c.handleConnect =
-	{
-		debug(OPENSSL) stderr.writeln("Connected!");
-		s.send(Data("GET / HTTP/1.0\r\n\r\n"));
-	};
-	s.handleReadData = (Data data)
-	{
-		debug(OPENSSL) { stderr.write(cast(string)data.contents); stderr.flush(); }
-	};
-	c.connect("www.openssl.org", 443);
-	socketManager.loop();
+		c.handleConnect =
+		{
+			debug(OPENSSL) stderr.writeln("Connected!");
+			s.send(Data("GET / HTTP/1.0\r\n\r\n"));
+		};
+		s.handleReadData = (Data data)
+		{
+			debug(OPENSSL) { stderr.write(cast(string)data.contents); stderr.flush(); }
+		};
+		c.connect(host, port);
+		socketManager.loop();
+	}
+
+	testServer("www.openssl.org", 443);
 }

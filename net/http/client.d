@@ -26,7 +26,7 @@ import ae.net.asockets;
 import ae.net.ietf.headers;
 import ae.net.ietf.headerparse;
 import ae.net.ietf.url;
-import ae.net.ssl.ssl;
+import ae.net.ssl;
 import ae.sys.data;
 debug import std.stdio;
 
@@ -193,12 +193,18 @@ public:
 
 class HttpsClient : HttpClient
 {
-	override IConnection adaptConnection(IConnection conn)
+	SSLContext ctx;
+
+	this(Duration timeout = 30.seconds)
 	{
-		return sslAdapterFactory(conn);
+		super(timeout);
+		ctx = ssl.createContext(SSLContext.Kind.client);
 	}
 
-	this(Duration timeout = 30.seconds) { super(timeout); }
+	override IConnection adaptConnection(IConnection conn)
+	{
+		return ssl.createAdapter(ctx, conn);
+	}
 }
 
 /// Asynchronous HTTP request
