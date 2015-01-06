@@ -157,6 +157,8 @@ struct HashTable(K, V, uint SIZE, alias ALLOCATOR, alias HASHFUNC="k")
 
 unittest
 {
+	import ae.utils.alloc;
+
 	static struct Test
 	{
 		WrapParts!(RegionAllocator!()) allocator;
