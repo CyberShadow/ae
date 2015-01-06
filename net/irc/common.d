@@ -68,7 +68,7 @@ public:
 		c = line = new LineBufferedAdapter(c);
 		line.delimiter = "\n";
 
-		c = timer = new TimeoutAdapter(timer);
+		c = timer = new TimeoutAdapter(c);
 		timer.setIdleTimeout(90.seconds);
 		timer.handleIdleTimeout = &onIdleTimeout;
 		timer.handleNonIdle = &onNonIdle;
