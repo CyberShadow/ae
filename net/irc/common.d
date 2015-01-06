@@ -21,6 +21,8 @@ import std.string;
 
 import ae.net.asockets;
 
+debug(IRC) import std.stdio : stderr;
+
 /// Types of a chat message.
 enum IrcMessageType
 {
@@ -85,6 +87,7 @@ public:
 
 	void send(string line)
 	{
+		debug(IRC) stderr.writeln("> ", line);
 		// Send with \r\n, but support receiving with \n
 		import ae.sys.data;
 		conn.send(Data(line ~ "\r\n"));
@@ -97,10 +100,11 @@ public:
 private:
 	void onReadData(Data data)
 	{
-		string line = cast(string)data.toHeap();
+		string line = (cast(string)data.toHeap()).chomp("\r");
+		debug(IRC) stderr.writeln("< ", line);
 
 		if (handleReadLine)
-			handleReadLine(line.chomp("\r"));
+			handleReadLine(line);
 	}
 
 	void onIdleTimeout()
