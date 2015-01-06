@@ -396,7 +396,7 @@ class IrcServer
 
 		void onInactivity()
 		{
-			sendReply("PING", Clock.currTime.stdTime.text);
+			sendLine("PING %s".format(Clock.currTime.stdTime));
 		}
 
 		void disconnect(string why)
