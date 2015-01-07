@@ -63,7 +63,7 @@ class IrcServer
 		string away;
 
 		bool registered;
-		bool[char.max] modeFlags;
+		Modes modes;
 
 		Channel[] joinedChannels()
 		{
@@ -174,9 +174,9 @@ class IrcServer
 							}
 							if (nickname.normalized in channel.members)
 								continue; // already on channel
-							if (channel.modeStrings['k'] && channel.modeStrings['k'] != key)
+							if (channel.modes.strings['k'] && channel.modes.strings['k'] != key)
 								{ sendReply(Reply.ERR_BADCHANNELKEY, channame, "Cannot join channel (+k)"); continue; }
-							if (channel.modeMasks['b'].any!(mask => prefix.maskMatch(mask)))
+							if (channel.modes.masks['b'].any!(mask => prefix.maskMatch(mask)))
 								{ sendReply(Reply.ERR_BANNEDFROMCHAN, channame, "Cannot join channel (+b)"); continue; }
 							join(channel);
 						}
@@ -237,7 +237,7 @@ class IrcServer
 						if (!registered)
 							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
 						foreach (channel; server.channels)
-							if (!(channel.modeFlags['p'] || channel.modeFlags['s']) || nickname.normalized in channel.members)
+							if (!(channel.modes.flags['p'] || channel.modes.flags['s']) || nickname.normalized in channel.members)
 								sendReply(Reply.RPL_LIST, channel.name, channel.members.length.text, channel.topic ? channel.topic : "");
 						sendReply(Reply.RPL_LISTEND, "End of LIST");
 						break;
@@ -250,10 +250,10 @@ class IrcServer
 						foreach (channel; server.channels)
 						{
 							auto inChannel = nickname.normalized in channel.members;
-							if (!inChannel && channel.modeFlags['s'])
+							if (!inChannel && channel.modes.flags['s'])
 								continue;
 							foreach (member; channel.members)
-								if (inChannel || !member.client.modeFlags['i'])
+								if (inChannel || !member.client.modes.flags['i'])
 									if (!mask || member.client.publicPrefix.maskMatch(mask))
 									{
 										auto phit = member.client.nickname in result;
@@ -265,7 +265,7 @@ class IrcServer
 						}
 
 						foreach (client; server.nicknames)
-							if (!client.modeFlags['i'])
+							if (!client.modes.flags['i'])
 								if (!mask || client.publicPrefix.maskMatch(mask))
 									if (client.nickname !in result)
 										result[client.nickname] = "*";
@@ -302,7 +302,7 @@ class IrcServer
 							return sendReply(Reply.ERR_NOTONCHANNEL, target, "You're not on that channel");
 						if (!parameters.length)
 							return sendTopic(channel);
-						if (channel.modeFlags['t'] && (pmember.modes & Channel.Member.Modes.op) == 0)
+						if (channel.modes.flags['t'] && (pmember.modes & Channel.Member.Modes.op) == 0)
 							return sendReply(Reply.ERR_CHANOPRIVSNEEDED, target, "You're not channel operator");
 						return setChannelTopic(channel, parameters[0]);
 					}
@@ -324,7 +324,7 @@ class IrcServer
 							auto client = *pclient;
 							replies ~= "%s%s=%s%s@%s".format(
 								nick,
-								client.modeFlags['o'] ? "*" : "",
+								client.modes.flags['o'] ? "*" : "",
 								client.away ? "+" : "-",
 								client.username,
 								this is client ? client.realHostname : client.publicHostname,
@@ -351,12 +351,12 @@ class IrcServer
 								auto pmember = nickname.normalized in channel.members;
 								if (pmember) // On channel?
 								{
-									if (channel.modeFlags['m'] && (pmember.modes & Channel.Member.Modes.bypassM) == 0)
+									if (channel.modes.flags['m'] && (pmember.modes & Channel.Member.Modes.bypassM) == 0)
 										{ sendReply(Reply.ERR_CANNOTSENDTOCHAN, target, "Cannot send to channel"); continue; }
 								}
 								else
 								{
-									if (channel.modeFlags['n']) // No external messages
+									if (channel.modes.flags['n']) // No external messages
 										{ sendReply(Reply.ERR_NOTONCHANNEL, target, "You're not on that channel"); continue; }
 								}
 								sendToChannel(channel, command, message);
@@ -377,7 +377,7 @@ class IrcServer
 							return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
 						if (!server.operPassword || parameters[$-1] != server.operPassword)
 							return sendReply(Reply.ERR_PASSWDMISMATCH, "Password incorrect");
-						modeFlags['o'] = true;
+						modes.flags['o'] = true;
 						sendReply(Reply.RPL_YOUREOPER, "You are now an IRC operator");
 						sendUserModes(this);
 						foreach (channel; server.channels)
@@ -506,8 +506,8 @@ class IrcServer
 			sendNames(channel);
 			auto pmember = nickname.normalized in channel.members;
 			// Sync OPER status with (initial) channel op status
-			if (server.staticChannels || modeFlags['o'])
-				setChannelMode(channel, nickname, Channel.Member.Mode.op, modeFlags['o']);
+			if (server.staticChannels || modes.flags['o'])
+				setChannelMode(channel, nickname, Channel.Member.Mode.op, modes.flags['o']);
 		}
 
 		// For server-imposed mode changes.
@@ -553,7 +553,7 @@ class IrcServer
 		void sendNames(Channel channel)
 		{
 			foreach (chunk; channel.members.values.chunks(10)) // can't use byValue - http://j.mp/IUhhGC (Issue 11761)
-				sendReply(Reply.RPL_NAMREPLY, channel.modeFlags['s'] ? "@" : channel.modeFlags['p'] ? "*" : "=", channel.name, chunk.map!q{a.displayName}.join(" "));
+				sendReply(Reply.RPL_NAMREPLY, channel.modes.flags['s'] ? "@" : channel.modes.flags['p'] ? "*" : "=", channel.name, chunk.map!q{a.displayName}.join(" "));
 			sendReply(Reply.RPL_ENDOFNAMES, channel.name, "End of /NAMES list");
 		}
 
@@ -571,26 +571,26 @@ class IrcServer
 						// sent after RPL_CHANNELMODEIS
 						break;
 					case ChannelModes.Type.flag:
-						if (channel.modeFlags[c])
+						if (channel.modes.flags[c])
 							modes ~= c;
 						break;
 					case ChannelModes.Type.str:
-						if (channel.modeStrings[c])
+						if (channel.modes.strings[c])
 						{
 							modes ~= c;
-							modeParams ~= channel.modeStrings[c];
+							modeParams ~= channel.modes.strings[c];
 						}
 						break;
 					case ChannelModes.Type.number:
-						if (channel.modeNumbers[c])
+						if (channel.modes.numbers[c])
 						{
 							modes ~= c;
-							modeParams ~= channel.modeNumbers[c].text;
+							modeParams ~= channel.modes.numbers[c].text;
 						}
 						break;
 				}
 			sendReply(Reply.RPL_CHANNELMODEIS, channel.name, ([modes] ~ modeParams).join(" "), null);
-			sendChannelMaskList(channel, channel.modeMasks['b'], Reply.RPL_BANLIST, Reply.RPL_ENDOFBANLIST, "End of channel ban list");
+			sendChannelMaskList(channel, channel.modes.masks['b'], Reply.RPL_BANLIST, Reply.RPL_ENDOFBANLIST, "End of channel ban list");
 		}
 
 		void sendChannelMaskList(Channel channel, string[] masks, Reply lineReply, Reply endReply, string endText)
@@ -644,9 +644,9 @@ class IrcServer
 							sendReply(Reply.ERR_UNKNOWNMODE, [c], "is unknown mode char to me for %s".format(channel.name));
 							break;
 						case ChannelModes.Type.flag:
-							if (adding != channel.modeFlags[c])
+							if (adding != channel.modes.flags[c])
 							{
-								channel.modeFlags[c] = adding;
+								channel.modes.flags[c] = adding;
 								effectedChars[adding] ~= c;
 							}
 							break;
@@ -674,16 +674,16 @@ class IrcServer
 							auto mask = modes.shift;
 							if (adding)
 							{
-								if (channel.modeMasks[c].canFind(mask))
+								if (channel.modes.masks[c].canFind(mask))
 									continue;
-								channel.modeMasks[c] ~= mask;
+								channel.modes.masks[c] ~= mask;
 							}
 							else
 							{
-								auto index = channel.modeMasks[c].countUntil(mask);
+								auto index = channel.modes.masks[c].countUntil(mask);
 								if (index < 0)
 									continue;
-								channel.modeMasks[c] = channel.modeMasks[c][0..index] ~ channel.modeMasks[c][index+1..$];
+								channel.modes.masks[c] = channel.modes.masks[c][0..index] ~ channel.modes.masks[c][index+1..$];
 							}
 							effectedChars[adding] ~= c;
 							effectedParams[adding] ~= mask;
@@ -695,17 +695,17 @@ class IrcServer
 								if (!modes.length)
 									{ sendReply(Reply.ERR_NEEDMOREPARAMS, "MODE", "Not enough parameters"); continue; }
 								auto str = modes.shift;
-								if (channel.modeStrings[c] == str)
+								if (channel.modes.strings[c] == str)
 									continue;
-								channel.modeStrings[c] = str;
+								channel.modes.strings[c] = str;
 								effectedChars[adding] ~= c;
 								effectedParams[adding] ~= str;
 							}
 							else
 							{
-								if (!channel.modeStrings[c])
+								if (!channel.modes.strings[c])
 									continue;
-								channel.modeStrings[c] = null;
+								channel.modes.strings[c] = null;
 								effectedChars[adding] ~= c;
 							}
 							break;
@@ -716,17 +716,17 @@ class IrcServer
 									{ sendReply(Reply.ERR_NEEDMOREPARAMS, "MODE", "Not enough parameters"); continue; }
 								auto numText = modes.shift;
 								auto num = numText.to!long;
-								if (channel.modeNumbers[c] == num)
+								if (channel.modes.numbers[c] == num)
 									continue;
-								channel.modeNumbers[c] = num;
+								channel.modes.numbers[c] = num;
 								effectedChars[adding] ~= c;
 								effectedParams[adding] ~= numText;
 							}
 							else
 							{
-								if (!channel.modeNumbers[c])
+								if (!channel.modes.numbers[c])
 									continue;
-								channel.modeNumbers[c] = 0;
+								channel.modes.numbers[c] = 0;
 								effectedChars[adding] ~= c;
 							}
 							break;
@@ -755,7 +755,7 @@ class IrcServer
 							break;
 						case UserModes.Type.flag:
 							if (UserModes.isSettable[c])
-								modeFlags[c] = adding;
+								this.modes.flags[c] = adding;
 							break;
 					}
 			}
@@ -764,7 +764,7 @@ class IrcServer
 		void sendUserModes(Client client)
 		{
 			string modeString = "+";
-			foreach (char c, on; modeFlags)
+			foreach (char c, on; modes.flags)
 				if (on)
 					modeString ~= c;
 			return sendReply(Reply.RPL_UMODEIS, modeString, null);
@@ -817,10 +817,7 @@ class IrcServer
 		string name;
 		string topic;
 
-		bool[char.max] modeFlags;
-		string[char.max] modeStrings;
-		long[char.max] modeNumbers;
-		string[][char.max] modeMasks;
+		Modes modes;
 
 		struct Member
 		{
@@ -868,7 +865,7 @@ class IrcServer
 		this(string name)
 		{
 			this.name = name;
-			modeFlags['t'] = modeFlags['n'] = true;
+			modes.flags['t'] = modes.flags['n'] = true;
 		}
 
 		void add(Client client)
@@ -974,6 +971,14 @@ string[] ircSplit(string line)
 		return line.split;
 	else
 		return line[0..colon].strip.split ~ [line[colon+1..$]];
+}
+
+struct Modes
+{
+	bool[char.max] flags;
+	string[char.max] strings;
+	long[char.max] numbers;
+	string[][char.max] masks;
 }
 
 mixin template CommonModes()
