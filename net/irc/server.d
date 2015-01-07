@@ -521,6 +521,7 @@ class IrcServer
 			auto c = ChannelModes.memberModeChars[mode];
 			foreach (member; channel.members)
 				member.client.sendCommand(server.hostname, "MODE", channel.name, [value ? '+' : '-', c], nickname, null);
+			server.channelChanged(channel);
 		}
 
 		void part(Channel channel)
@@ -605,6 +606,7 @@ class IrcServer
 			channel.topic = topic;
 			foreach (ref member; channel.members)
 				member.client.sendCommand(this, "TOPIC", channel.name, topic);
+			server.channelChanged(channel);
 		}
 
 		void setChannelModes(Channel channel, string[] modes)
@@ -732,6 +734,7 @@ class IrcServer
 							break;
 					}
 			}
+			server.channelChanged(channel);
 		}
 
 		void setUserModes(string[] modes)
@@ -952,6 +955,11 @@ protected:
 			result ~= "NETWORK=" ~ network;
 		result ~= "CASEMAPPING=rfc1459";
 		return result;
+	}
+
+	/// Persistence hook
+	void channelChanged(Channel channel)
+	{
 	}
 }
 
