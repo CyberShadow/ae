@@ -880,7 +880,7 @@ class IrcServer
 		void remove(Client client)
 		{
 			members.remove(client.nickname.normalized);
-			if (!staticChannels && !members.length)
+			if (!staticChannels && !members.length && !modes.flags['P'])
 				channels.remove(name.normalized);
 		}
 	}
@@ -1006,7 +1006,7 @@ static:
 
 	static this()
 	{
-		foreach (c; "ntps")
+		foreach (c; "ntpsP")
 			modeTypes[c] = Type.flag;
 		foreach (c; "ov")
 			modeTypes[c] = Type.member;
