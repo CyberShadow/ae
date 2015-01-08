@@ -128,11 +128,19 @@ EOS";
 
 			buildPath(config.local.buildDir, "bin", "sc.ini").write(ini);
 		}
-		else
+		else version (OSX)
 		{
 			auto ini = q"EOS
 [Environment]
 DFLAGS="-I%@P%/../import" "-L-L%@P%/../lib"
+EOS";
+			buildPath(config.local.buildDir, "bin", "dmd.conf").write(ini);
+		}
+		else
+		{
+			auto ini = q"EOS
+[Environment]
+DFLAGS="-I%@P%/../import" "-L-L%@P%/../lib" -L--export-dynamic
 EOS";
 			buildPath(config.local.buildDir, "bin", "dmd.conf").write(ini);
 		}
