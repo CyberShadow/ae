@@ -99,6 +99,9 @@ class IrcServer
 		{
 			try
 			{
+				if (!conn.connected || conn.disconnecting)
+					return; // A previous line in the same buffer caused a disconnect
+
 				enforce(line.indexOf('\0')<0 && line.indexOf('\r')<0 && line.indexOf('\n')<0, "Forbidden character");
 
 				auto parameters = line.strip.ircSplit();
