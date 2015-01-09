@@ -65,7 +65,7 @@ class IrcServer
 		bool registered;
 		Modes modes;
 
-		Channel[] joinedChannels()
+		Channel[] getJoinedChannels()
 		{
 			Channel[] result;
 			foreach (channel; server.channels)
@@ -475,11 +475,11 @@ class IrcServer
 		void unregister(string why)
 		{
 			assert(registered);
-			auto channels = joinedChannels;
-			foreach (client; server.allClientsInChannels(joinedChannels))
-				client.sendCommand(this, "QUIT", why);
+			auto channels = getJoinedChannels();
 			foreach (channel; channels)
 				channel.remove(this);
+			foreach (client; server.allClientsInChannels(channels))
+				client.sendCommand(this, "QUIT", why);
 			server.nicknames.remove(nickname.normalized);
 			registered = false;
 		}
@@ -932,7 +932,7 @@ protected:
 
 	Client[] inSameChannelAs(Client client)
 	{
-		return allClientsInChannels(client.joinedChannels);
+		return allClientsInChannels(client.getJoinedChannels());
 	}
 
 	bool isChannelName(string target)
