@@ -189,6 +189,7 @@ class IrcServer
 							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
 						if (parameters.length < 1) // TODO: part reason
 							return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
+						string reason = parameters.length < 2 ? null : parameters[1];
 						foreach (channame; parameters[0].split(","))
 						{
 							auto pchan = channame.normalized in server.channels;
@@ -197,7 +198,7 @@ class IrcServer
 							auto chan = *pchan;
 							if (nickname.normalized !in chan.members)
 								{ sendReply(Reply.ERR_NOTONCHANNEL, channame, "You're not on that channel"); continue; }
-							part(chan);
+							part(chan, reason);
 						}
 						break;
 					case "MODE":
@@ -244,6 +245,28 @@ class IrcServer
 								sendReply(Reply.RPL_LIST, channel.name, channel.members.length.text, channel.topic ? channel.topic : "");
 						sendReply(Reply.RPL_LISTEND, "End of LIST");
 						break;
+					case "MOTD":
+						if (!registered)
+							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
+						sendMotd();
+						break;
+					case "NAMES":
+						if (!registered)
+							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
+						if (parameters.length < 1)
+							return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
+						foreach (channame; parameters[0].split(","))
+						{
+							auto pchan = channame.normalized in server.channels;
+							if (!pchan)
+								{ sendReply(Reply.ERR_NOSUCHCHANNEL, channame, "No such channel"); continue; }
+							auto channel = *pchan;
+							auto pmember = nickname.normalized in channel.members;
+							if (!pmember)
+								{ sendReply(Reply.ERR_NOTONCHANNEL, channame, "You're not on that channel"); continue; }
+							sendNames(channel);
+						}
+						break;
 					case "WHO":
 					{
 						if (!registered)
@@ -257,7 +280,7 @@ class IrcServer
 								continue;
 							foreach (member; channel.members)
 								if (inChannel || !member.client.modes.flags['i'])
-									if (!mask || member.client.publicPrefix.maskMatch(mask))
+									if (!mask || channel.name.maskMatch(mask) || member.client.publicPrefix.maskMatch(mask))
 									{
 										auto phit = member.client.nickname in result;
 										if (phit)
@@ -527,10 +550,10 @@ class IrcServer
 			server.channelChanged(channel);
 		}
 
-		void part(Channel channel)
+		void part(Channel channel, string reason=null)
 		{
 			foreach (member; channel.members)
-				member.client.sendCommand(this, "PART", channel.name);
+				member.client.sendCommand(this, "PART", channel.name, reason);
 			channel.remove(this);
 		}
 
