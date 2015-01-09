@@ -120,12 +120,23 @@ class IrcServer
 						password = parameters[0];
 						break;
 					case "NICK":
-						if (registered)
-							return sendServerNotice("Nick change not allowed."); // TODO. NB: update prefix, nicknames and Channel.members keys
 						if (parameters.length != 1)
 							return sendReply(Reply.ERR_NONICKNAMEGIVEN, "No nickname given");
-						nickname = parameters[0];
-						checkRegistration();
+						if (!registered)
+						{
+							nickname = parameters[0];
+							checkRegistration();
+						}
+						else
+						{
+							auto newNick = parameters[0];
+							if (!newNick.match(server.nicknameValidationPattern))
+								return sendReply(Reply.ERR_ERRONEUSNICKNAME, newNick, "Erroneus nickname");
+							if (newNick.normalized in server.nicknames)
+								return sendReply(Reply.ERR_NICKNAMEINUSE, newNick, "Nickname is already in use");
+
+							changeNick(newNick);
+						}
 						break;
 					case "USER":
 						if (registered)
@@ -475,8 +486,7 @@ class IrcServer
 		{
 			if (!identified)
 				username = "~" ~ username;
-			prefix       = "%s!%s@%s".format(nickname, username, realHostname  );
-			publicPrefix = "%s!%s@%s".format(nickname, username, publicHostname);
+			update();
 
 			registered = true;
 			server.nicknames[nickname.normalized] = this;
@@ -498,6 +508,12 @@ class IrcServer
 			sendMotd();
 		}
 
+		void update()
+		{
+			prefix       = "%s!%s@%s".format(nickname, username, realHostname  );
+			publicPrefix = "%s!%s@%s".format(nickname, username, publicHostname);
+		}
+
 		void unregister(string why)
 		{
 			assert(registered);
@@ -508,6 +524,29 @@ class IrcServer
 				client.sendCommand(this, "QUIT", why);
 			server.nicknames.remove(nickname.normalized);
 			registered = false;
+		}
+
+		void changeNick(string newNick)
+		{
+			auto channels = getJoinedChannels();
+
+			foreach (channel; channels)
+			{
+				auto pmember = nickname.normalized in channel.members;
+				assert(pmember);
+				auto member = *pmember;
+				channel.members.remove(nickname.normalized);
+				channel.members[newNick.normalized] = member;
+			}
+
+			foreach (client; server.whoCanSee(this))
+				client.sendCommand(this, "NICK", newNick, null);
+
+			server.nicknames.remove(nickname.normalized);
+			server.nicknames[newNick.normalized] = this;
+
+			nickname = newNick;
+			update();
 		}
 
 		void sendMotd()
@@ -947,18 +986,22 @@ protected:
 		totalConnections++;
 	}
 
-	Client[] allClientsInChannels(Channel[] channels)
+	Client[string] allClientsInChannels(Channel[] channels)
 	{
 		Client[string] result;
 		foreach (channel; channels)
 			foreach (ref member; channel.members)
 				result[member.client.nickname.normalized] = member.client;
-		return result.values;
+		return result;
 	}
 
-	Client[] inSameChannelAs(Client client)
+	/// Clients who can see the given client (are in the same channer).
+	/// Includes the target client himself.
+	Client[string] whoCanSee(Client who)
 	{
-		return allClientsInChannels(client.getJoinedChannels());
+		auto clients = allClientsInChannels(who.getJoinedChannels());
+		clients[who.nickname.normalized] = who;
+		return clients;
 	}
 
 	bool isChannelName(string target)
