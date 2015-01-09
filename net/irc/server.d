@@ -625,7 +625,7 @@ class IrcServer
 						parameters ~= [(adding ? "+" : "-") ~ effectedChars[adding]] ~ effectedParams[adding];
 				if (parameters.length)
 				{
-					parameters = ["MODE", channel.name] ~ parameters ~ null;
+					parameters = ["MODE", channel.name] ~ parameters ~ [string.init];
 					foreach (ref member; channel.members)
 						member.client.sendCommand(this, parameters);
 				}
