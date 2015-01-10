@@ -90,6 +90,38 @@ class OpenSSLContext : SSLContext
 		SSL_CTX_set_cipher_list(sslCtx, ciphers.join(":").toStringz()).sslEnforce();
 	}
 
+	override void enableDH(int bits)
+	{
+		typeof(&get_rfc3526_prime_2048) func;
+
+		switch (bits)
+		{
+			case 1536: func = &get_rfc3526_prime_1536; break;
+			case 2048: func = &get_rfc3526_prime_2048; break;
+			case 3072: func = &get_rfc3526_prime_3072; break;
+			case 4096: func = &get_rfc3526_prime_4096; break;
+			case 6144: func = &get_rfc3526_prime_6144; break;
+			case 8192: func = &get_rfc3526_prime_8192; break;
+			default: assert(false, "No RFC3526 prime available for %d bits".format(bits));
+		}
+
+		DH* dh;
+		scope(exit) DH_free(dh);
+
+		dh = DH_new().sslEnforce();
+		dh.p = func(null).sslEnforce();
+		ubyte gen = 2;
+		dh.g = BN_bin2bn(&gen, gen.sizeof, null);
+		SSL_CTX_set_tmp_dh(sslCtx, dh).sslEnforce();
+	}
+
+	override void enableECDH()
+	{
+		auto ecdh = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1).sslEnforce();
+		scope(exit) EC_KEY_free(ecdh);
+		SSL_CTX_set_tmp_ecdh(sslCtx, ecdh).sslEnforce();
+	}
+
 	override void setCertificate(string path)
 	{
 		SSL_CTX_use_certificate_chain_file(sslCtx, toStringz(path))
@@ -123,6 +155,11 @@ class OpenSSLContext : SSLContext
 			auto list = SSL_load_client_CA_file(szPath).sslEnforce();
 			SSL_CTX_set_client_CA_list(sslCtx, list);
 		}
+	}
+
+	override void setFlags(int flags)
+	{
+		SSL_CTX_set_options(sslCtx, flags).sslEnforce();
 	}
 }
 

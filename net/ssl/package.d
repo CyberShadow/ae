@@ -27,10 +27,13 @@ abstract class SSLContext
 	enum Verify { none, verify, require }
 
 	abstract void setCipherList(string[] ciphers);
+	abstract void enableDH(int bits);
+	abstract void enableECDH();
 	abstract void setCertificate(string path);
 	abstract void setPrivateKey(string path);
 	abstract void setPeerVerify(Verify verify);
 	abstract void setPeerRootCertificate(string path);
+	abstract void setFlags(int); // implementation-specific
 }
 
 abstract class SSLAdapter : ConnectionAdapter
