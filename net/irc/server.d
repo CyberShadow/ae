@@ -229,8 +229,6 @@ class IrcServer
 								return sendReply(Reply.ERR_NOTONCHANNEL, target, "You're not on that channel");
 							if (!parameters.length)
 								return sendChannelModes(channel);
-							if ((pmember.modes & Channel.Member.Modes.op) == 0)
-								return sendReply(Reply.ERR_CHANOPRIVSNEEDED, target, "You're not channel operator");
 							return setChannelModes(channel, parameters);
 						}
 						else
@@ -656,7 +654,18 @@ class IrcServer
 						break;
 				}
 			sendReply(Reply.RPL_CHANNELMODEIS, channel.name, ([modes] ~ modeParams).join(" "), null);
-			sendChannelMaskList(channel, channel.modes.masks['b'], Reply.RPL_BANLIST, Reply.RPL_ENDOFBANLIST, "End of channel ban list");
+		}
+
+		void sendChannelModeMasks(Channel channel, char mode)
+		{
+			switch (mode)
+			{
+				case 'b':
+					sendChannelMaskList(channel, channel.modes.masks[mode], Reply.RPL_BANLIST, Reply.RPL_ENDOFBANLIST, "End of channel ban list");
+					break;
+				default:
+					assert(false);
+			}
 		}
 
 		void sendChannelMaskList(Channel channel, string[] masks, Reply lineReply, Reply endReply, string endText)
@@ -676,6 +685,9 @@ class IrcServer
 
 		void setChannelModes(Channel channel, string[] modes)
 		{
+			auto pself = nickname.normalized in channel.members;
+			bool op = (pself.modes & Channel.Member.Modes.op) != 0;
+
 			string[2] effectedChars;
 			string[][2] effectedParams;
 
@@ -687,6 +699,7 @@ class IrcServer
 						parameters ~= [(adding ? "+" : "-") ~ effectedChars[adding]] ~ effectedParams[adding];
 				if (parameters.length)
 				{
+					assert(op);
 					parameters = ["MODE", channel.name] ~ parameters ~ [string.init];
 					foreach (ref member; channel.members)
 						member.client.sendCommand(this, parameters);
@@ -711,6 +724,7 @@ class IrcServer
 							sendReply(Reply.ERR_UNKNOWNMODE, [c], "is unknown mode char to me for %s".format(channel.name));
 							break;
 						case ChannelModes.Type.flag:
+							if (!op) return sendReply(Reply.ERR_CHANOPRIVSNEEDED, channel.name, "You're not channel operator");
 							if (adding != channel.modes.flags[c])
 							{
 								channel.modes.flags[c] = adding;
@@ -719,6 +733,7 @@ class IrcServer
 							break;
 						case ChannelModes.Type.member:
 						{
+							if (!op) return sendReply(Reply.ERR_CHANOPRIVSNEEDED, channel.name, "You're not channel operator");
 							if (!modes.length)
 								{ sendReply(Reply.ERR_NEEDMOREPARAMS, "MODE", "Not enough parameters"); continue; }
 							auto memberName = modes.shift;
@@ -737,7 +752,8 @@ class IrcServer
 						case ChannelModes.Type.mask:
 						{
 							if (!modes.length)
-								{ sendReply(Reply.ERR_NEEDMOREPARAMS, "MODE", "Not enough parameters"); continue; }
+								return sendChannelModeMasks(channel, c);
+							if (!op) return sendReply(Reply.ERR_CHANOPRIVSNEEDED, channel.name, "You're not channel operator");
 							auto mask = modes.shift;
 							if (adding)
 							{
@@ -757,6 +773,7 @@ class IrcServer
 							break;
 						}
 						case ChannelModes.Type.str:
+							if (!op) return sendReply(Reply.ERR_CHANOPRIVSNEEDED, channel.name, "You're not channel operator");
 							if (adding)
 							{
 								if (!modes.length)
@@ -777,6 +794,7 @@ class IrcServer
 							}
 							break;
 						case ChannelModes.Type.number:
+							if (!op) return sendReply(Reply.ERR_CHANOPRIVSNEEDED, channel.name, "You're not channel operator");
 							if (adding)
 							{
 								if (!modes.length)
