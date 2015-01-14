@@ -75,7 +75,7 @@ searchAgain:
 		if (data.length > 1)
 		{
 			// coagulate first two blocks
-			startFrom = data0.length > delim.length ? data0.length - (delim.length-1) : 0;
+			startFrom = data0.length > delim.length ? data0.length - (DELIM1.length-1) : 0;
 			data = [data[0] ~ data[1]] ~ data[2..$];
 			goto searchAgain;
 		}
