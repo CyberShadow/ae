@@ -197,8 +197,8 @@ class HttpsClient : HttpClient
 
 	this(Duration timeout = 30.seconds)
 	{
-		super(timeout);
 		ctx = ssl.createContext(SSLContext.Kind.client);
+		super(timeout);
 	}
 
 	override IConnection adaptConnection(IConnection conn)
