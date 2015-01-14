@@ -72,6 +72,14 @@ protected:
 			reqMessage ~= header ~ ": " ~ value ~ "\r\n";
 
 		reqMessage ~= "\r\n";
+		debug(HTTP)
+		{
+			stderr.writefln("Sending request:");
+			foreach (line; reqMessage.split("\r\n"))
+				stderr.writeln("> ", line);
+			if (currentRequest.data)
+				stderr.writefln("} (%d bytes data follow)", currentRequest.data.bytes.length);
+		}
 
 		conn.send(Data(reqMessage));
 		conn.send(currentRequest.data);
@@ -87,8 +95,18 @@ protected:
 			string statusLine;
 			Headers headers;
 
+			debug(HTTP) auto oldData = inBuffer.dup;
+
 			if (!parseHeaders(inBuffer, statusLine, headers))
 				return;
+
+			debug(HTTP)
+			{
+				stderr.writefln("Got response:");
+				auto reqMessage = cast(string)oldData.bytes[0..oldData.bytes.length-inBuffer.bytes.length].joinToHeap();
+				foreach (line; reqMessage.split("\r\n"))
+					stderr.writeln("< ", line);
+			}
 
 			currentResponse = new HttpResponse;
 			currentResponse.parseStatusLine(statusLine);
