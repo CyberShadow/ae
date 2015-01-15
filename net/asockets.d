@@ -1170,7 +1170,10 @@ class LineBufferedAdapter : ConnectionAdapter
 	/// Append a line to the send buffer.
 	void send(string line)
 	{
-		super.send(Data(line ~ delimiter));
+		//super.send(Data(line ~ delimiter));
+		// https://issues.dlang.org/show_bug.cgi?id=13985
+		ConnectionAdapter ca = this;
+		ca.send(Data(line ~ delimiter));
 	}
 
 protected:
