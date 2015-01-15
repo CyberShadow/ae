@@ -111,9 +111,9 @@ private:
 
 	void onReadData(Data data)
 	{
-		auto line = cast(string)data.toHeap();
 		try
 		{
+			auto line = cast(string)data.toHeap();
 			log("> " ~ line);
 
 			bool replyDone;
@@ -165,7 +165,11 @@ private:
 			}
 		}
 		catch (Exception e)
+		{
+			foreach (line; e.toString().splitLines())
+				log("* " ~ line);
 			conn.disconnect("Unhandled " ~ e.classinfo.name ~ ": " ~ e.msg);
+		}
 	}
 
 	enum PIPELINE_LIMIT = 64;
