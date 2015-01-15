@@ -352,41 +352,9 @@ else // Use select
 
 				if (events > 0)
 				{
-					foreach (GenericSocket conn; sockets)
-					{
-						if (!conn.socket)
-						{
-							debug (ASOCKETS) writefln("\t%s is unset", cast(void*)conn);
-							continue;
-						}
-						if (readset.isSet(conn.socket))
-						{
-							debug (ASOCKETS) writefln("\t%s is readable", cast(void*)conn);
-							conn.onReadable();
-						}
-
-						if (!conn.socket)
-						{
-							debug (ASOCKETS) writefln("\t%s is unset", cast(void*)conn);
-							continue;
-						}
-						if (writeset.isSet(conn.socket))
-						{
-							debug (ASOCKETS) writefln("\t%s is writable", cast(void*)conn);
-							conn.onWritable();
-						}
-
-						if (!conn.socket)
-						{
-							debug (ASOCKETS) writefln("\t%s is unset", cast(void*)conn);
-							continue;
-						}
-						if (errorset.isSet(conn.socket))
-						{
-							debug (ASOCKETS) writefln("\t%s is errored", cast(void*)conn);
-							conn.onError("select() error: " ~ conn.socket.getErrorText());
-						}
-					}
+					// Handle just one event at a time, as the first
+					// handler might invalidate select()'s results.
+					handleEvent(readset, writeset, errorset);
 				}
 				else
 				if (idleHandlers.length)
@@ -406,6 +374,38 @@ else // Use select
 
 				eventCounter++;
 			}
+		}
+
+		void handleEvent(SocketSet readset, SocketSet writeset, SocketSet errorset)
+		{
+			foreach (GenericSocket conn; sockets)
+			{
+				if (!conn.socket)
+				{
+					debug (ASOCKETS) writefln("\t%s is unset", cast(void*)conn);
+					continue;
+				}
+
+				if (readset.isSet(conn.socket))
+				{
+					debug (ASOCKETS) writefln("\t%s is readable", cast(void*)conn);
+					return conn.onReadable();
+				}
+				else
+				if (writeset.isSet(conn.socket))
+				{
+					debug (ASOCKETS) writefln("\t%s is writable", cast(void*)conn);
+					return conn.onWritable();
+				}
+				else
+				if (errorset.isSet(conn.socket))
+				{
+					debug (ASOCKETS) writefln("\t%s is errored", cast(void*)conn);
+					return conn.onError("select() error: " ~ conn.socket.getErrorText());
+				}
+			}
+
+			assert(false, "select() reported events available, but no registered sockets are set");
 		}
 	}
 
