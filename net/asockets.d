@@ -224,18 +224,40 @@ else // Use select
 		/// List of all sockets to poll.
 		GenericSocket[] sockets;
 
+		/// Debug AA to check for dangling socket references.
+		debug GenericSocket[socket_t] socketHandles;
+
 		/// Register a socket with the manager.
 		void register(GenericSocket conn)
 		{
 			debug (ASOCKETS) writefln("Registering %s (%d total)", cast(void*)conn, sockets.length + 1);
 			assert(!conn.socket.blocking, "Trying to register a blocking socket");
 			sockets ~= conn;
+
+			debug
+			{
+				auto handle = conn.socket.handle;
+				assert(handle != socket_t.init, "Can't register a closed socket");
+				assert(handle !in socketHandles, "This socket handle is already registered");
+				socketHandles[handle] = conn;
+			}
 		}
 
 		/// Unregister a socket with the manager.
 		void unregister(GenericSocket conn)
 		{
 			debug (ASOCKETS) writefln("Unregistering %s (%d total)", cast(void*)conn, sockets.length - 1);
+
+			debug
+			{
+				auto handle = conn.socket.handle;
+				assert(handle != socket_t.init, "Can't unregister a closed socket");
+				auto pconn = handle in socketHandles;
+				assert(pconn, "This socket handle is not registered");
+				assert(*pconn is conn, "This socket handle is registered but belongs to another GenericSocket");
+				socketHandles.remove(handle);
+			}
+
 			foreach (size_t i, GenericSocket j; sockets)
 				if (j is conn)
 				{
