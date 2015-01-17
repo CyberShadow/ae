@@ -65,6 +65,7 @@ private:
 		this()
 		{
 			auto pair = socketPair();
+			pair[0].blocking = false;
 			super(pair[0]);
 			pinger = pair[1];
 			this.handleReadData = &onReadData;

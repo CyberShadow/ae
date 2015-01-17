@@ -228,6 +228,7 @@ else // Use select
 		void register(GenericSocket conn)
 		{
 			debug (ASOCKETS) writefln("Registering %s (%d total)", cast(void*)conn, sockets.length + 1);
+			assert(!conn.socket.blocking, "Trying to register a blocking socket");
 			sockets ~= conn;
 		}
 
