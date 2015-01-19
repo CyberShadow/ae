@@ -49,7 +49,7 @@ struct FastArrayRange(T, bool CHECKED=isDebug)
 
 	@property bool empty() { return ptr==end; }
 
-	alias this save;
+	@property ref typeof(this) save() { return this; }
 
 	T opIndex(size_t index)
 	{
@@ -76,4 +76,10 @@ auto fastArrayRange(T)(T[] arr) { return FastArrayRange!T(arr); }
 T[] ptrSlice(T)(T* a, T* b)
 {
 	return a[0..b-a];
+}
+
+unittest
+{
+	FastArrayRange!ubyte r;
+	auto x = r.save;
 }
