@@ -369,6 +369,59 @@ template thisOf(alias f)
 
 // ************************************************************************
 
+/// Return the number of bits used to store the value part, i.e.
+/// T.sizeof*8 for integer parts and the mantissa size for
+/// floating-point types.
+template valueBits(T)
+{
+	static if (is(T : ulong))
+		enum valueBits = T.sizeof * 8;
+	else
+	static if (is(T : real))
+		enum valueBits = T.mant_dig;
+	else
+		static assert(false, "Don't know how many value bits there are in " ~ T.stringof);
+}
+
+static assert(valueBits!uint == 32);
+static assert(valueBits!real == 64);
+
+/// Expand to a built-in numeric type of the same kind
+/// (signed integer / unsigned integer / floating-point)
+/// with at least the indicated number of bits of precision.
+template ResizeNumericType(T, uint bits)
+{
+	static if (is(T : ulong))
+		static if (isSigned!T)
+			alias ResizeNumericType = SignedBitsType!bits;
+		else
+			alias ResizeNumericType = UnsignedBitsType!bits;
+	else
+	static if (is(T : real))
+	{
+		static if (bits <= float.mant_dig)
+			alias ResizeNumericType = float;
+		else
+		static if (bits <= double.mant_dig)
+			alias ResizeNumericType = double;
+		else
+		static if (bits <= real.mant_dig)
+			alias ResizeNumericType = real;
+		else
+			static assert(0, "No floating-point type big enough to fit " ~ bits.stringof ~ " bits");
+	}
+	else
+		static assert(false, "Don't know how to resize type: " ~ T.stringof);
+}
+
+static assert(is(ResizeNumericType!(float, double.mant_dig) == double));
+
+/// Expand to a built-in numeric type of the same kind
+/// (signed integer / unsigned integer / floating-point)
+/// with at least additionalBits more bits of precision.
+alias ExpandNumericType(T, uint additionalBits) =
+	ResizeNumericType!(T, valueBits!T + additionalBits);
+
 /// Unsigned integer type big enough to fit N bits of precision.
 template UnsignedBitsType(uint bits)
 {
