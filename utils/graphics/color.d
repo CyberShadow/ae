@@ -50,7 +50,7 @@ struct Color(FieldTuple...)
 	static if (homogenous)
 	{
 		alias ChannelType = typeof(Fields.init.tupleof[0]);
-		enum channelBits = ChannelType.sizeof*8;
+		enum channelBits = valueBits!ChannelType;
 	}
 
 	/// Return a Color instance with all fields set to "value".
@@ -65,7 +65,7 @@ struct Color(FieldTuple...)
 	/// Interpolate between two colors.
 	static typeof(this) itpl(P)(typeof(this) c0, typeof(this) c1, P p, P p0, P p1)
 	{
-		alias UnsignedBitsType!(channelBits + P.sizeof*8) U;
+		alias ExpandNumericType!(ChannelType, P.sizeof*8) U;
 		alias Signed!U S;
 		typeof(this) r;
 		foreach (i, f; r.tupleof)
@@ -194,7 +194,7 @@ struct Color(FieldTuple...)
 	}
 
 	/// Sum of all channels
-	UnsignedBitsType!(channelBits + ilog2(nextPowerOfTwo(channels))) sum()
+	ExpandNumericType!(ChannelType, ilog2(nextPowerOfTwo(channels))) sum()
 	{
 		typeof(return) result;
 		foreach (i, f; this.tupleof)
@@ -224,6 +224,9 @@ alias Color!(ushort , "l", "a"          ) LA16   ;
 alias Color!(byte   , "l"               ) S8     ;
 alias Color!(short  , "l"               ) S16    ;
 
+alias Color!(float  , "r", "g", "b"     ) RGBf   ;
+alias Color!(double , "r", "g", "b"     ) RGBd   ;
+
 unittest
 {
 	static assert(RGB.sizeof == 3);
@@ -240,6 +243,16 @@ unittest
 	assert(c == RGB(2, 2, 2));
 	c += c;
 	assert(c == RGB(4, 4, 4));
+}
+
+unittest
+{
+	import std.conv;
+
+	L8 r;
+
+	r = L8.itpl(L8(100), L8(200), 15, 10, 20);
+	assert(r ==  L8(150), text(r));
 }
 
 unittest
@@ -290,9 +303,20 @@ static assert(is(ChangeChannelType!(int, ushort) == ushort));
 
 alias ExpandChannelType(COLOR, int BYTES) =
 	ChangeChannelType!(COLOR,
-		UnsignedBitsType!((ChannelType!COLOR.sizeof + BYTES) * 8));
+		ExpandNumericType!(ChannelType!COLOR, BYTES * 8));
 
 static assert(is(ExpandChannelType!(RGB, 1) == RGB16));
+
+unittest
+{
+	alias RGBf = ChangeChannelType!(RGB, float);
+	auto rgb = RGB(1, 2, 3);
+	import std.conv : to;
+	auto rgbf = rgb.to!RGBf();
+	assert(rgbf.r == 1f);
+	assert(rgbf.g == 2f);
+	assert(rgbf.b == 3f);
+}
 
 // ***************************************************************************
 
