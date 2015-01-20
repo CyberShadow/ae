@@ -282,19 +282,30 @@ else // Use select
 
 			SocketSet readset, writeset, errorset;
 			size_t sockcount;
-			readset  = new SocketSet(FD_SETSIZE);
-			writeset = new SocketSet(FD_SETSIZE);
-			errorset = new SocketSet(FD_SETSIZE);
+			uint setSize = FD_SETSIZE; // Can't trust SocketSet.max due to Issue 14012
+			readset  = new SocketSet(setSize);
+			writeset = new SocketSet(setSize);
+			errorset = new SocketSet(setSize);
 			while (true)
 			{
-				// SocketSet.add() doesn't have an overflow check, so we need to do it manually
-				// this is just a debug check, the actual check is done when registering sockets
-				// TODO: this is inaccurate on POSIX, "max" means maximum fd value
-				if (sockets.length > readset.max || sockets.length > writeset.max || sockets.length > errorset.max)
+				uint minSize = 0;
+				version(Windows)
+					minSize = cast(uint)sockets.length;
+				else
 				{
-					readset  = new SocketSet(to!uint(sockets.length*2));
-					writeset = new SocketSet(to!uint(sockets.length*2));
-					errorset = new SocketSet(to!uint(sockets.length*2));
+					foreach (s; sockets)
+						if (s.socket && s.socket.handle != socket_t.init && s.socket.handle > minSize)
+							minSize = s.socket.handle;
+				}
+				minSize++;
+
+				if (setSize < minSize)
+				{
+					debug (ASOCKETS) writefln("Resizing SocketSets: %d => %d", setSize, minSize*2);
+					setSize = minSize * 2;
+					readset  = new SocketSet(setSize);
+					writeset = new SocketSet(setSize);
+					errorset = new SocketSet(setSize);
 				}
 				else
 				{
