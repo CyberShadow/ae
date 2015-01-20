@@ -697,12 +697,12 @@ protected:
 
 		if (received == Socket.ERROR)
 		{
-			if (wouldHaveBlocked)
-			{
-				debug (ASOCKETS) writefln("\t\t%s: wouldHaveBlocked or recv()", cast(void*)this);
-				return;
-			}
-			else
+		//	if (wouldHaveBlocked)
+		//	{
+		//		debug (ASOCKETS) writefln("\t\t%s: wouldHaveBlocked or recv()", this);
+		//		return;
+		//	}
+		//	else
 				onError("recv() error: " ~ lastSocketError);
 		}
 		else
