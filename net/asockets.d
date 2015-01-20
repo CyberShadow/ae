@@ -69,7 +69,7 @@ version(LIBEV)
 			eventCounter++;
 			auto socket = cast(GenericSocket)w.data;
 			assert(socket, "libev event fired on stopped watcher");
-			debug (ASOCKETS) writefln("ioCallback(%s, 0x%X)", cast(void*)socket, revents);
+			debug (ASOCKETS) writefln("ioCallback(%s, 0x%X)", socket, revents);
 
 			if (revents & EV_READ)
 				socket.onReadable();
@@ -137,7 +137,7 @@ version(LIBEV)
 		/// Register a socket with the manager.
 		void register(GenericSocket socket)
 		{
-			debug (ASOCKETS) writefln("Registering %s", cast(void*)socket);
+			debug (ASOCKETS) writefln("Registering %s", socket);
 			debug assert(socket.evRead.data is null && socket.evWrite.data is null, "Re-registering a started socket");
 			auto fd = socket.conn.handle;
 			assert(fd, "Must have fd before socket registration");
@@ -149,7 +149,7 @@ version(LIBEV)
 		/// Unregister a socket with the manager.
 		void unregister(GenericSocket socket)
 		{
-			debug (ASOCKETS) writefln("Unregistering %s", cast(void*)socket);
+			debug (ASOCKETS) writefln("Unregistering %s", socket);
 			socket.notifyRead  = false;
 			socket.notifyWrite = false;
 			count--;
@@ -230,7 +230,7 @@ else // Use select
 		/// Register a socket with the manager.
 		void register(GenericSocket conn)
 		{
-			debug (ASOCKETS) writefln("Registering %s (%d total)", cast(void*)conn, sockets.length + 1);
+			debug (ASOCKETS) writefln("Registering %s (%d total)", conn, sockets.length + 1);
 			assert(!conn.socket.blocking, "Trying to register a blocking socket");
 			sockets ~= conn;
 
@@ -246,7 +246,7 @@ else // Use select
 		/// Unregister a socket with the manager.
 		void unregister(GenericSocket conn)
 		{
-			debug (ASOCKETS) writefln("Unregistering %s (%d total)", cast(void*)conn, sockets.length - 1);
+			debug (ASOCKETS) writefln("Unregistering %s (%d total)", conn, sockets.length - 1);
 
 			debug
 			{
@@ -282,19 +282,30 @@ else // Use select
 
 			SocketSet readset, writeset, errorset;
 			size_t sockcount;
-			readset  = new SocketSet(FD_SETSIZE);
-			writeset = new SocketSet(FD_SETSIZE);
-			errorset = new SocketSet(FD_SETSIZE);
+			uint setSize = FD_SETSIZE; // Can't trust SocketSet.max due to Issue 14012
+			readset  = new SocketSet(setSize);
+			writeset = new SocketSet(setSize);
+			errorset = new SocketSet(setSize);
 			while (true)
 			{
-				// SocketSet.add() doesn't have an overflow check, so we need to do it manually
-				// this is just a debug check, the actual check is done when registering sockets
-				// TODO: this is inaccurate on POSIX, "max" means maximum fd value
-				if (sockets.length > readset.max || sockets.length > writeset.max || sockets.length > errorset.max)
+				uint minSize = 0;
+				version(Windows)
+					minSize = cast(uint)sockets.length;
+				else
 				{
-					readset  = new SocketSet(to!uint(sockets.length*2));
-					writeset = new SocketSet(to!uint(sockets.length*2));
-					errorset = new SocketSet(to!uint(sockets.length*2));
+					foreach (s; sockets)
+						if (s.socket && s.socket.handle != socket_t.init && s.socket.handle > minSize)
+							minSize = s.socket.handle;
+				}
+				minSize++;
+
+				if (setSize < minSize)
+				{
+					debug (ASOCKETS) writefln("Resizing SocketSets: %d => %d", setSize, minSize*2);
+					setSize = minSize * 2;
+					readset  = new SocketSet(setSize);
+					writeset = new SocketSet(setSize);
+					errorset = new SocketSet(setSize);
 				}
 				else
 				{
@@ -314,7 +325,7 @@ else // Use select
 					if (!conn.daemon)
 						haveActive = true;
 
-					debug (ASOCKETS) writef("\t%s:", cast(void*)conn);
+					debug (ASOCKETS) writef("\t%s:", conn);
 					if (conn.notifyRead)
 					{
 						readset.add(conn.socket);
@@ -328,6 +339,12 @@ else // Use select
 					errorset.add(conn.socket);
 					debug (ASOCKETS) writeln();
 				}
+				debug (ASOCKETS)
+				{
+					writefln("Sets populated as follows:");
+					printSets(readset, writeset, errorset);
+				}
+
 				debug (ASOCKETS) writefln("Waiting (%d sockets, %s timer events, %d idle handlers)...",
 					sockcount,
 					mainTimer.isWaiting() ? "with" : "no",
@@ -399,31 +416,53 @@ else // Use select
 			}
 		}
 
-		void handleEvent(SocketSet readset, SocketSet writeset, SocketSet errorset)
+		debug (ASOCKETS)
+		void printSets(SocketSet readset, SocketSet writeset, SocketSet errorset)
 		{
 			foreach (GenericSocket conn; sockets)
 			{
 				if (!conn.socket)
-				{
-					debug (ASOCKETS) writefln("\t%s is unset", cast(void*)conn);
+					writefln("\t\t%s is unset", conn);
+				else
+				if (readset.isSet(conn.socket))
+					writefln("\t\t%s is readable", conn);
+				else
+				if (writeset.isSet(conn.socket))
+					writefln("\t\t%s is writable", conn);
+				else
+				if (errorset.isSet(conn.socket))
+					writefln("\t\t%s is errored", conn);
+			}
+		}
+
+		void handleEvent(SocketSet readset, SocketSet writeset, SocketSet errorset)
+		{
+			debug (ASOCKETS)
+			{
+				writefln("\tSelect results:");
+				printSets(readset, writeset, errorset);
+			}
+
+			foreach (GenericSocket conn; sockets)
+			{
+				if (!conn.socket)
 					continue;
-				}
 
 				if (readset.isSet(conn.socket))
 				{
-					debug (ASOCKETS) writefln("\t%s is readable", cast(void*)conn);
+					debug (ASOCKETS) writefln("\t%s - calling onReadable", conn);
 					return conn.onReadable();
 				}
 				else
 				if (writeset.isSet(conn.socket))
 				{
-					debug (ASOCKETS) writefln("\t%s is writable", cast(void*)conn);
+					debug (ASOCKETS) writefln("\t%s - calling onWritable", conn);
 					return conn.onWritable();
 				}
 				else
 				if (errorset.isSet(conn.socket))
 				{
-					debug (ASOCKETS) writefln("\t%s is errored", cast(void*)conn);
+					debug (ASOCKETS) writefln("\t%s - calling onError", conn);
 					return conn.onError("select() error: " ~ conn.socket.getErrorText());
 				}
 			}
@@ -539,6 +578,12 @@ public:
 		}
 		else
 			conn.setOption(SocketOptionLevel.SOCKET, SocketOption.KEEPALIVE, false);
+	}
+
+	override string toString() const
+	{
+		import std.string;
+		return "%s {this=%s, fd=%s}".format(this.classinfo.name.split(".")[$-1], cast(void*)this, conn ? conn.handle : -1);
 	}
 }
 
@@ -663,12 +708,12 @@ protected:
 
 		if (received == Socket.ERROR)
 		{
-			if (wouldHaveBlocked)
-			{
-				debug (ASOCKETS) writefln("\t\t%s: wouldHaveBlocked or recv()", cast(void*)this);
-				return;
-			}
-			else
+		//	if (wouldHaveBlocked)
+		//	{
+		//		debug (ASOCKETS) writefln("\t\t%s: wouldHaveBlocked or recv()", this);
+		//		return;
+		//	}
+		//	else
 				onError("recv() error: " ~ lastSocketError);
 		}
 		else
@@ -682,12 +727,12 @@ protected:
 
 			if (disconnecting)
 			{
-				debug (ASOCKETS) writefln("\t\t%s: Discarding received data because we are disconnecting", cast(void*)this);
+				debug (ASOCKETS) writefln("\t\t%s: Discarding received data because we are disconnecting", this);
 			}
 			else
 			if (!readDataHandler)
 			{
-				debug (ASOCKETS) writefln("\t\t%s: Discarding received data because there is no data handler", cast(void*)this);
+				debug (ASOCKETS) writefln("\t\t%s: Discarding received data because there is no data handler", this);
 			}
 			else
 			{
@@ -739,11 +784,11 @@ protected:
 				if (pdata.length)
 				{
 					sent = conn.send(pdata.contents);
-					debug (ASOCKETS) writefln("\t\t%s: sent %d/%d bytes", cast(void*)this, sent, pdata.length);
+					debug (ASOCKETS) writefln("\t\t%s: sent %d/%d bytes", this, sent, pdata.length);
 				}
 				else
 				{
-					debug (ASOCKETS) writefln("\t\t%s: empty Data object", cast(void*)this);
+					debug (ASOCKETS) writefln("\t\t%s: empty Data object", this);
 				}
 
 				if (sent == Socket.ERROR)
@@ -814,7 +859,7 @@ public:
 	/// Default constructor
 	this()
 	{
-		debug (ASOCKETS) writefln("New TcpConnection @ %s", cast(void*)this);
+		debug (ASOCKETS) writefln("New TcpConnection @ %s", this);
 	}
 
 	/// Start establishing a connection.
@@ -861,7 +906,7 @@ public:
 				discardQueues();
 		}
 
-		debug (ASOCKETS) writefln("[%s] Disconnecting: %s", remoteAddress, reason);
+		debug (ASOCKETS) writefln("Disconnecting @ %s: %s", this, reason);
 		if (conn)
 		{
 			socketManager.unregister(this);
@@ -973,7 +1018,7 @@ private:
 	{
 		this(Socket conn)
 		{
-			debug (ASOCKETS) writefln("New Listener @ %s", cast(void*)this);
+			debug (ASOCKETS) writefln("New Listener @ %s", this);
 			this.conn = conn;
 			socketManager.register(this);
 		}
@@ -981,11 +1026,13 @@ private:
 		/// Called when a socket is readable.
 		override void onReadable()
 		{
+			debug (ASOCKETS) writefln("Accepting connection from listener @ %s", this);
 			Socket acceptSocket = conn.accept();
 			acceptSocket.blocking = false;
 			if (handleAccept)
 			{
 				TcpConnection connection = new TcpConnection(acceptSocket);
+				debug (ASOCKETS) writefln("\tAccepted connection %s from %s", connection, connection.remoteAddress);
 				connection.setKeepAlive();
 				//assert(connection.connected);
 				//connection.connected = true;
