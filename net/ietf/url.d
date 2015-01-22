@@ -63,3 +63,56 @@ unittest
 	assert(fileNameFromURL("http://example.com/dir/index.html") == "index.html");
 	assert(fileNameFromURL("http://example.com/script.php?path=a/b/c") == "script.php");
 }
+
+// ***************************************************************************
+
+string encodeUrlParameter(string param)
+{
+	string s;
+	foreach (c; param)
+		if (!isAlphaNum(c) && c!='-' && c!='_')
+			s ~= format("%%%02X", cast(ubyte)c);
+		else
+			s ~= c;
+	return s;
+}
+
+string encodeUrlParameters(string[string] dic)
+{
+	string[] segs;
+	foreach (name, value; dic)
+		segs ~= encodeUrlParameter(name) ~ '=' ~ encodeUrlParameter(value);
+	return join(segs, "&");
+}
+
+string decodeUrlParameter(string encoded)
+{
+	string s;
+	for (auto i=0; i<encoded.length; i++)
+		if (encoded[i] == '%' && i+3 <= encoded.length)
+		{
+			s ~= cast(char)fromHex!ubyte(encoded[i+1..i+3]);
+			i += 2;
+		}
+		else
+		if (encoded[i] == '+')
+			s ~= ' ';
+		else
+			s ~= encoded[i];
+	return s;
+}
+
+string[string] decodeUrlParameters(string qs)
+{
+	string[] segs = split(qs, "&");
+	string[string] dic;
+	foreach (pair; segs)
+	{
+		auto p = pair.indexOf('=');
+		if (p < 0)
+			dic[decodeUrlParameter(pair)] = null;
+		else
+			dic[decodeUrlParameter(pair[0..p])] = decodeUrlParameter(pair[p+1..$]);
+	}
+	return dic;
+}
