@@ -111,6 +111,46 @@ unittest
 
 // **************************************************************************
 
+/// Calls putter to count the length of the output, allocates a buffer of
+/// that size, and then calls putter a second time to write to the buffer.
+/// Returns the buffer.
+
+template countCopy(T)
+{
+	T[] countCopy(Putter)(Putter putter)
+	{
+		CountingWriter!T counter;
+		putter(&counter);
+
+		T[] buf = new T[counter.count];
+
+		BlindWriter!T writer;
+		writer.ptr = buf.ptr;
+		putter(&writer);
+		assert(writer.ptr == buf.ptr + buf.length);
+
+		return buf;
+	}
+}
+
+version(none) // Method alias binding
+T[] countCopy(T, alias putter)()
+{
+	CountingWriter!T counter;
+	putter(&counter);
+
+	T[] buf = new T[counter.count];
+
+	BlindWriter!T writer;
+	writer.ptr = buf.ptr;
+	putter(&writer);
+	assert(writer.ptr = buf.ptr + buf.length);
+
+	return buf;
+}
+
+// **************************************************************************
+
 /// Default implementation of put for dchars
 void put(S)(ref S sink, dchar c)
 	if (isStringSink!S)
