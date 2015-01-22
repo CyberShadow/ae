@@ -66,15 +66,67 @@ unittest
 
 // ***************************************************************************
 
-string encodeUrlParameter(string param)
+/// Encode an URL part using a custom function to decide
+/// characters to encode.
+template UrlEncoder(alias isCharAllowed)
 {
-	string s;
-	foreach (c; param)
-		if (!isAlphaNum(c) && c!='-' && c!='_')
-			s ~= format("%%%02X", cast(ubyte)c);
-		else
-			s ~= c;
-	return s;
+	bool[256] genCharAllowed()
+	{
+		bool[256] result;
+		foreach (char c; 0..256)
+			result[c] = isCharAllowed(c);
+		return result;
+	}
+
+	immutable bool[256] charAllowed = genCharAllowed();
+
+	struct UrlEncoder(Sink)
+	{
+		Sink sink;
+
+		void put(in char[] s)
+		{
+			foreach (c; s)
+				if (charAllowed[c])
+					sink.put(c);
+				else
+				{
+					sink.put('%');
+					sink.put(hexDigits[cast(ubyte)c >> 4]);
+					sink.put(hexDigits[cast(ubyte)c & 15]);
+				}
+		}
+	}
+}
+
+import ae.utils.textout : countCopy;
+
+string encodeUrlPart(alias isCharAllowed)(string s)
+{
+	alias UrlPartEncoder = UrlEncoder!isCharAllowed;
+
+	static struct Encoder
+	{
+		string s;
+
+		void opCall(Sink)(Sink sink)
+		{
+			auto encoder = UrlPartEncoder!Sink(sink);
+			encoder.put(s);
+		}
+	}
+
+	Encoder encoder = {s};
+	return countCopy!char(encoder).assumeUnique();
+}
+
+import std.ascii;
+
+alias encodeUrlParameter = encodeUrlPart!(c => isAlphaNum(c) || c=='-' || c=='_');
+
+unittest
+{
+	assert(encodeUrlParameter("abc?123") == "abc%3F123");
 }
 
 string encodeUrlParameters(string[string] dic)
@@ -84,6 +136,8 @@ string encodeUrlParameters(string[string] dic)
 		segs ~= encodeUrlParameter(name) ~ '=' ~ encodeUrlParameter(value);
 	return join(segs, "&");
 }
+
+import ae.utils.text;
 
 string decodeUrlParameter(string encoded)
 {
