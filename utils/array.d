@@ -257,19 +257,45 @@ bool eat(T)(ref T[] arr, T[] prefix)
 	return false;
 }
 
-/// Return arr until the first instance of separator (excluding it),
-/// and set arr to the remaining part (again, excluding the separator).
-/// Throws if the separator is not found.
-T[] eatUntil(T)(ref T[] arr, T[] separator)
-{
-	import std.exception;
-	import std.string;
+enum OnEof { returnNull, returnRemainder, throwException }
 
-	auto p = arr.countUntil(separator);
-	enforce(p >= 0, "%s not found in %s".format(separator, arr));
-	auto result = arr[0..p];
-	arr = arr[p+separator.length..$];
-	return result;
+template eatUntil(OnEof onEof = OnEof.throwException)
+{
+	T[] eatUntil(T, D)(ref T[] source, D delim)
+	{
+		auto parts = source.findSplit(delim);
+		if (!parts[1].length)
+		{
+			if (onEof == OnEof.returnNull)
+				return null;
+			else
+			if (onEof == OnEof.returnRemainder)
+			{
+				auto result = source;
+				source = null;
+				return result;
+			}
+			else
+				//throw new Exception("%s not found in %s".format(delim, source));
+				throw new Exception("Delimiter not found in source");
+		}
+		source = parts[2];
+		return parts[0];
+	}
+}
+
+unittest
+{
+	string s;
+
+	s = "Mary had a little lamb";
+	assert(s.eatUntil(" ") == "Mary");
+	assert(s.eatUntil(" ") == "had");
+	assert(s.eatUntil(" ") == "a");
+
+	assertThrown!Exception(s.eatUntil("#"));
+	assert(s.eatUntil!(OnEof.returnNull)("#") is null);
+	assert(s.eatUntil!(OnEof.returnRemainder)("#") == "little lamb");
 }
 
 // ***************************************************************************
