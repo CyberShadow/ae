@@ -24,6 +24,7 @@ import std.typetuple;
 
 import core.stdc.string;
 
+import ae.utils.array;
 import ae.utils.meta;
 import ae.utils.textout;
 
@@ -49,6 +50,26 @@ bool contains(T, U)(T[] str, U[] what)
 string formatAs(T)(auto ref T obj, string fmt)
 {
 	return format(fmt, obj);
+}
+
+/// Consume a LF or CRLF terminated line from s.
+/// Sets s to null and returns the remainder
+/// if there is no line terminator in s.
+template eatLine(OnEof onEof = OnEof.returnRemainder)
+{
+	T[] eatLine(T)(ref T[] s)
+	{
+		return s.eatUntil!onEof([T('\n')]).chomp();
+	}
+}
+
+unittest
+{
+	string s = "Hello\nworld";
+	assert(s.eatLine() == "Hello");
+	assert(s.eatLine() == "world");
+	assert(s is null);
+	assert(s.eatLine() is null);
 }
 
 // Uses memchr (not Boyer-Moore), best for short strings.
