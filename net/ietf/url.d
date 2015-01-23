@@ -139,7 +139,7 @@ string encodeUrlParameters(string[string] dic)
 
 import ae.utils.text;
 
-string decodeUrlParameter(string encoded)
+string decodeUrlParameter(bool plusToSpace=true)(string encoded)
 {
 	string s;
 	for (auto i=0; i<encoded.length; i++)
@@ -149,7 +149,7 @@ string decodeUrlParameter(string encoded)
 			i += 2;
 		}
 		else
-		if (encoded[i] == '+')
+		if (plusToSpace && encoded[i] == '+')
 			s ~= ' ';
 		else
 			s ~= encoded[i];
