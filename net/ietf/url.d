@@ -68,7 +68,7 @@ unittest
 
 /// Encode an URL part using a custom function to decide
 /// characters to encode.
-template UrlEncoder(alias isCharAllowed)
+template UrlEncoder(alias isCharAllowed, char escape = '%')
 {
 	bool[256] genCharAllowed()
 	{
@@ -91,7 +91,7 @@ template UrlEncoder(alias isCharAllowed)
 					sink.put(c);
 				else
 				{
-					sink.put('%');
+					sink.put(escape);
 					sink.put(hexDigits[cast(ubyte)c >> 4]);
 					sink.put(hexDigits[cast(ubyte)c & 15]);
 				}
@@ -101,9 +101,9 @@ template UrlEncoder(alias isCharAllowed)
 
 import ae.utils.textout : countCopy;
 
-string encodeUrlPart(alias isCharAllowed)(string s)
+string encodeUrlPart(alias isCharAllowed, char escape = '%')(string s)
 {
-	alias UrlPartEncoder = UrlEncoder!isCharAllowed;
+	alias UrlPartEncoder = UrlEncoder!(isCharAllowed, escape);
 
 	static struct Encoder
 	{
@@ -139,11 +139,11 @@ string encodeUrlParameters(string[string] dic)
 
 import ae.utils.text;
 
-string decodeUrlParameter(bool plusToSpace=true)(string encoded)
+string decodeUrlParameter(bool plusToSpace=true, char escape = '%')(string encoded)
 {
 	string s;
 	for (auto i=0; i<encoded.length; i++)
-		if (encoded[i] == '%' && i+3 <= encoded.length)
+		if (encoded[i] == escape && i+3 <= encoded.length)
 		{
 			s ~= cast(char)fromHex!ubyte(encoded[i+1..i+3]);
 			i += 2;
