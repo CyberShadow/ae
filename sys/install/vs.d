@@ -171,20 +171,25 @@ protected:
 	string versionName;
 	string[] packages;
 
-	override void installImpl(string target)
+	XmlNode getManifest()
 	{
-		windowsOnly();
-		assert(packages.length, "No packages specified");
-
-		auto manifest = webInstaller
+		return webInstaller
 			.I!msdl()
 			.I!unpack()
 			.buildPath("0")
 			.readText()
 			.xmlParse()
 			["BurnManifest"];
+	}
 
+	override void installImpl(string target)
+	{
+		windowsOnly();
+
+		assert(packages.length, "No packages specified");
 		auto seenPackage = new bool[packages.length];
+
+		auto manifest = getManifest();
 
 		string[] payloadIDs;
 		foreach (node; manifest["Chain"].findChildren("MsiPackage"))
@@ -204,7 +209,7 @@ protected:
 				auto path =
 					node
 					.attributes["FilePath"]
-					.prependPath("vs%d-payloads".format(year));
+					.prependPath("%s-payloads".format(subdirectory));
 
 				files[path.extension.toLower()] ~=
 					node
@@ -224,35 +229,29 @@ protected:
 		std.file.write(buildPath(target, packageFile), packages.toJson());
 	}
 
+	/// Decompile all MSI files.
+	/// Useful for finding the name of the package which contains the file you want.
 	public void getAllMSIs()
 	{
-		auto manifest = webInstaller
-			.I!msdl()
-			.I!unpack()
-			.buildPath("0")
-			.readText()
-			.xmlParse()
-			["BurnManifest"];
+		auto manifest = getManifest();
 
 		string[] payloadIDs;
 		foreach (node; manifest["Chain"].findChildren("MsiPackage"))
-				foreach (payload; node.findChildren("PayloadRef"))
-					payloadIDs ~= payload.attributes["Id"];
+			foreach (payload; node.findChildren("PayloadRef"))
+				payloadIDs ~= payload.attributes["Id"];
 
-		string[][string] files;
 		foreach (node; manifest.findChildren("Payload"))
 		{
 			auto path =
 				node
 				.attributes["FilePath"]
-				.prependPath("vs%d-payloads".format(year));
+				.prependPath("%s-payloads".format(subdirectory));
 
 			if (path.extension.toLower() == ".msi")
-				files[path.extension.toLower()] ~=
-					node
-					.attributes["DownloadUrl"]
-					.I!saveAs(path)
-					.I!decompileMSI();
+				node
+				.attributes["DownloadUrl"]
+				.I!saveAs(path)
+				.I!decompileMSI();
 		}
 	}
 }
