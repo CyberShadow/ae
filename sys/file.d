@@ -301,7 +301,6 @@ void forceDelete(bool atomic=true)(string fn, bool recursive = false)
 	{
 		import win32.winnt;
 		import win32.winbase;
-		import ae.sys.windows;
 	}
 
 	auto name = fn.baseName();
@@ -444,8 +443,6 @@ ulong getFileID()(string fn)
 		import win32.winnt;
 		import win32.winbase;
 
-		import ae.sys.windows;
-
 		auto fnW = toUTF16z(fn);
 		auto h = CreateFileW(fnW, FILE_READ_ATTRIBUTES, 0, null, OPEN_EXISTING, 0, HANDLE.init);
 		wenforce(h!=INVALID_HANDLE_VALUE, fn);
@@ -498,8 +495,6 @@ version (Windows)
 		import win32.winbase;
 		import win32.windef;
 		import win32.winioctl;
-
-		import ae.sys.windows;
 
 		enum SYMLINK_FLAG_RELATIVE = 1;
 
@@ -594,7 +589,6 @@ version (Windows)
 else
 	alias std.file.symlink dirLink;
 
-version (unittest) version(Windows) static import ae.sys.windows;
 
 unittest
 {
@@ -637,7 +631,6 @@ version (Windows)
 	{
 		import win32.winnt;
 		import win32.winbase;
-		import ae.sys.windows;
 
 		alias extern(System) HANDLE function(LPCWSTR lpFileName, DWORD dwFlags, LPDWORD StringLength, PWCHAR LinkName) TFindFirstFileNameW;
 		alias extern(System) BOOL function(HANDLE hFindStream, LPDWORD StringLength, PWCHAR LinkName) TFindNextFileNameW;
