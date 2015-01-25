@@ -260,27 +260,23 @@ class DManager
 		{
 			if (config.build.model == "64")
 			{
-				vs2013.requirePackages(
+				auto vs = vs2013community;
+				vs.requirePackages(
 					[
 						"vcRuntimeMinimum_x86",
 						"vc_compilercore86",
 						"vc_compilercore86res",
+						"vc_compilerx64nat",
+						"vc_compilerx64natres",
 						"vc_librarycore86",
 						"vc_libraryDesktop_x64",
 						"win_xpsupport",
 					],
 				);
-				vs2013.requireLocal(false);
-				vsDir  = vs2013.directory.buildPath("Program Files (x86)", "Microsoft Visual Studio 12.0").absolutePath();
-				sdkDir = vs2013.directory.buildPath("Program Files", "Microsoft SDKs", "Windows", "v7.1A").absolutePath();
-				paths ~= vs2013.directory.buildPath("Windows", "system32").absolutePath();
-
-				// D makefiles use the 64-bit (host architecture) compilers,
-				// which the Express edition does not include.
-				// Patch up the local VC installation instead.
-				auto binDir = vsDir.buildPath("VC", "bin");
-				cached!(dirLink!(), "link")(buildPath(binDir, "x86_amd64"), buildPath(binDir, "amd64"));
-				cached!(hardLink!())(buildPath(binDir, "mspdb120.dll"), buildPath(binDir, "amd64", "mspdb120.dll"));
+				vs.requireLocal(false);
+				vsDir  = vs.directory.buildPath("Program Files (x86)", "Microsoft Visual Studio 12.0").absolutePath();
+				sdkDir = vs.directory.buildPath("Program Files", "Microsoft SDKs", "Windows", "v7.1A").absolutePath();
+				paths ~= vs.directory.buildPath("Windows", "system32").absolutePath();
 			}
 
 			// We need DMC even for 64-bit builds (for DM make)
