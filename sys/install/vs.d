@@ -34,9 +34,10 @@ public import ae.sys.install.common;
 
 class VisualStudio : Installer
 {
-	this(int year, int webInstaller, string versionName)
+	this(int year, string edition, int webInstaller, string versionName)
 	{
 		this.year = year;
+		this.edition = edition;
 		this.webInstaller = webInstaller;
 		this.versionName = versionName;
 	}
@@ -46,8 +47,8 @@ class VisualStudio : Installer
 		this.packages ~= packages;
 	}
 
-	@property override string name() { return "Visual Studio %d (%-(%s, %))".format(year, packages); }
-	@property override string subdirectory() { return "vs%s".format(year); }
+	@property override string name() { return "Visual Studio %d %s (%-(%s, %))".format(year, edition, packages); }
+	@property override string subdirectory() { return "vs%s-%s".format(year, edition.toLower()); }
 
 	@property override string[] binPaths()
 	{
@@ -168,7 +169,7 @@ private:
 
 protected:
 	int year, webInstaller;
-	string versionName;
+	string edition, versionName;
 	string[] packages;
 
 	XmlNode getManifest()
@@ -256,4 +257,7 @@ protected:
 	}
 }
 
-alias vs2013 = singleton!(VisualStudio, 2013, 320697, "12.0");
+deprecated alias vs2013 = vs2013express;
+
+alias vs2013express   = singleton!(VisualStudio, 2013, "Express"  , 320697, "12.0");
+alias vs2013community = singleton!(VisualStudio, 2013, "Community", 517284, "12.0");
