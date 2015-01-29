@@ -409,6 +409,11 @@ public:
 		return append((&value)[0..1]);
 	}
 
+	Data opSlice()
+	{
+		return this;
+	}
+
 	Data opSlice(size_t x, size_t y)
 	in
 	{
