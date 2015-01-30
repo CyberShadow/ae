@@ -15,8 +15,8 @@ module ae.sys.install.wix;
 
 import std.conv;
 import std.file;
-import std.format;
 import std.regex;
+import std.string;
 
 import ae.sys.archive;
 import ae.sys.file;
