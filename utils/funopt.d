@@ -342,26 +342,26 @@ private string getUsageFormatString(alias FUN)()
 	}
 
 	foreach (i, Param; Params)
+	{
+		static if (isParameter!Param)
 		{
-			static if (isParameter!Param)
-			{
-				result ~= " ";
-				static if (!is(defaults[i] == void))
-					result ~= "[";
-				result ~= toUpper(names[i].splitByCamelCase().join("-"));
-				static if (!is(defaults[i] == void))
-					result ~= "]";
-			}
-			else
-			{
-				static if (optionHasDescription!Param)
-					continue;
-				else
-					result ~= " [" ~ getSwitchText!i() ~ "]";
-			}
-			static if (isOptionArray!Param)
-				result ~= "...";
+			result ~= " ";
+			static if (!is(defaults[i] == void))
+				result ~= "[";
+			result ~= toUpper(names[i].splitByCamelCase().join("-"));
+			static if (!is(defaults[i] == void))
+				result ~= "]";
 		}
+		else
+		{
+			static if (optionHasDescription!Param)
+				continue;
+			else
+				result ~= " [" ~ getSwitchText!i() ~ "]";
+		}
+		static if (isOptionArray!Param)
+			result ~= "...";
+	}
 
 	result ~= "\n";
 
