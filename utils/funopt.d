@@ -167,7 +167,7 @@ private template optionNames(alias FUN)
 	alias Params = ParameterTypeTuple!FUN;
 	alias parameterNames = ParameterIdentifierTuple!FUN;
 	enum optionNameAt(int i) = optionName!(Params[i], parameterNames[i]);
-	enum optionNames = staticMap!(optionNameAt, RangeTuple!(parameterNames.length));
+	alias optionNames = staticMap!(optionNameAt, RangeTuple!(parameterNames.length));
 }
 
 /// Parse the given arguments according to FUN's parameters, and call FUN.
@@ -234,26 +234,31 @@ auto funopt(alias FUN, FunOptConfig config = FunOptConfig.init)(string[] args)
 	if (help)
 	{
 		printUsage();
-		return cast(ReturnType!FUN)0;
+		static if (is(ReturnType!FUN == void))
+			return;
+		else
+			return ReturnType!FUN.init;
 	}
 
 	args = args[1..$];
+
+	// Slurp remaining, unparsed arguments into parameter fields
 
 	foreach (i, ref value; values)
 	{
 		alias T = Params[i];
 		static if (isParameter!T)
 		{
-			static if (is(T == string[]))
+			static if (is(OptionValueType!T : const(string)[]))
 			{
-				values[i] = args;
+				values[i] = cast(OptionValueType!T)args;
 				args = null;
 			}
 			else
 			{
 				if (args.length)
 				{
-					values[i] = to!T(args[0]);
+					values[i] = to!(OptionValueType!T)(args[0]);
 					args = args[1..$];
 				}
 				else
