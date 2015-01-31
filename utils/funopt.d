@@ -451,12 +451,16 @@ string getUsageFormatString(alias FUN)()
 string optionWrap(string text, string firstIndent, int indentWidth)
 {
 	enum width = 79;
-	return wrap(
-		text,
+	auto padding = " ".replicate(2 + indentWidth + 2);
+	auto paragraphs = text.split("\n");
+	auto result = wrap(
+		paragraphs[0],
 		width,
 		"  %-*s  ".format(indentWidth, firstIndent),
-		" ".replicate(2 + indentWidth + 2)
+		padding
 	);
+	result ~= paragraphs[1..$].map!(p => wrap(p, width, padding, padding)).join();
+	return result;
 }
 
 unittest
@@ -464,7 +468,7 @@ unittest
 	void f1(
 		Switch!("Enable verbose logging", 'v') verbose,
 		Option!(int, "Number of tries") tries,
-		Option!(int, "Seconds to wait each try", "SECS", 0, "timeout") t,
+		Option!(int, "Seconds to\nwait each try", "SECS", 0, "timeout") t,
 		string filename,
 		string output = "default",
 		string[] extraFiles = null
@@ -478,7 +482,8 @@ unittest
 Options:
   -v, --verbose       Enable verbose logging
       --tries=N       Number of tries
-      --timeout=SECS  Seconds to wait each try
+      --timeout=SECS  Seconds to
+                      wait each try
 ", usage);
 
 	void f2(
