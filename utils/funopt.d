@@ -498,13 +498,27 @@ auto funoptDispatch(alias Actions, FunOptConfig config = FunOptConfig.init, alia
 
 	auto fun(string action, string[] actionArguments = [])
 	{
+		static void descUsageFun(string description)(string usage)
+		{
+			auto lines = usage.split("\n");
+			usageFun((lines[0..1] ~ [null, description] ~ lines[1..$]).join("\n"));
+		}
+
 		foreach (m; __traits(allMembers, Actions))
 		{
 			enum name = m.toLower();
 			if (name == action)
 			{
+				static if (hasAttribute!(string, __traits(getMember, Actions, m)))
+				{
+					enum description = getAttribute!(string, __traits(getMember, Actions, m));
+					alias myUsageFun = descUsageFun!description;
+				}
+				else
+					alias myUsageFun = usageFun;
+
 				auto args = [getProgramName(program) ~ " " ~ action] ~ actionArguments;
-				return funopt!(__traits(getMember, Actions, m), config)(args);
+				return funopt!(__traits(getMember, Actions, m), config, myUsageFun)(args);
 			}
 		}
 
@@ -560,4 +574,12 @@ unittest
 Actions:
   f1  Perform action f1
 ");
+
+	static string usage;
+	static void usageFun(string _usage) { usage = _usage; }
+	funoptDispatch!(Actions, FunOptConfig.init, usageFun)(["unittest", "f1", "--help"]);
+	assert(usage == "Usage: unittest f1 [--verbose]
+
+Perform action f1
+", usage);
 }
