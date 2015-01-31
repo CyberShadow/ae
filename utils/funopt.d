@@ -379,11 +379,16 @@ string getUsageFormatString(alias FUN)()
 	string getSwitchText(int i)()
 	{
 		alias Param = Params[i];
-		string switchText = "--" ~ names[i].splitByCamelCase().join("-").toLower();
-		static if (is(Param == OptionImpl!Args, Args...))
-			static if (Param.type == OptionType.option)
-				switchText ~= "=" ~ optionPlaceholder!Param;
-		return switchText;
+		static if (isParameter!Param)
+			return names[i].splitByCamelCase().join("-").toUpper();
+		else
+		{
+			string switchText = "--" ~ names[i].splitByCamelCase().join("-").toLower();
+			static if (is(Param == OptionImpl!Args, Args...))
+				static if (Param.type == OptionType.option)
+					switchText ~= "=" ~ optionPlaceholder!Param;
+			return switchText;
+		}
 	}
 
 	foreach (i, Param; Params)
@@ -394,7 +399,7 @@ string getUsageFormatString(alias FUN)()
 				result ~= " ";
 				static if (!is(defaults[i] == void))
 					result ~= "[";
-				result ~= toUpper(names[i].splitByCamelCase().join("-"));
+				result ~= names[i].splitByCamelCase().join("-").toUpper();
 				static if (!is(defaults[i] == void))
 					result ~= "]";
 			}
