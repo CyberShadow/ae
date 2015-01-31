@@ -27,6 +27,14 @@ version(OSX) private
 	enum SIG_SETMASK = 3;
 }
 
+// https://github.com/D-Programming-Language/druntime/pull/1140
+version(FreeBSD) private
+{
+	enum SIG_BLOCK   = 1;
+	enum SIG_UNBLOCK = 2;
+	enum SIG_SETMASK = 3;
+}
+
 void addSignalHandler(int signum, SignalHandler fn)
 {
 	if (handlers[signum].length == 0)
