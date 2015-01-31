@@ -24,18 +24,19 @@ import std.string;
 import std.traits;
 import std.typetuple;
 
-import ae.utils.meta : structFields, hasAttribute, getAttribute;
+import ae.utils.meta : structFields, hasAttribute, getAttribute, RangeTuple;
 import ae.utils.text;
 
 private enum OptionType { switch_, option, parameter }
 
-struct OptionImpl(OptionType type_, T_, string description_, char shorthand_, string placeholder_)
+struct OptionImpl(OptionType type_, T_, string description_, char shorthand_, string placeholder_, string name_)
 {
 	enum type = type_;
 	alias T = T_;
 	enum description = description_;
 	enum shorthand = shorthand_;
 	enum placeholder = placeholder_;
+	enum name = name_;
 
 	T value;
 	alias value this;
@@ -47,22 +48,22 @@ struct OptionImpl(OptionType type_, T_, string description_, char shorthand_, st
 }
 
 /// An on/off switch (e.g. --verbose). Does not have a value, other than its presence.
-template Switch(string description=null, char shorthand=0)
+template Switch(string description=null, char shorthand=0, string name=null)
 {
-	alias Switch = OptionImpl!(OptionType.switch_, bool, description, shorthand, null);
+	alias Switch = OptionImpl!(OptionType.switch_, bool, description, shorthand, null, name);
 }
 
 /// An option with a value (e.g. --tries N). The default placeholder depends on the type
 /// (N for numbers, STR for strings).
-template Option(T, string description=null, string placeholder=null, char shorthand=0)
+template Option(T, string description=null, string placeholder=null, char shorthand=0, string name=null)
 {
-	alias Option = OptionImpl!(OptionType.option, T, description, shorthand, placeholder);
+	alias Option = OptionImpl!(OptionType.option, T, description, shorthand, placeholder, name);
 }
 
 /// An ordered parameter.
-template Parameter(T, string description=null)
+template Parameter(T, string description=null, string name=null)
 {
-	alias Parameter = OptionImpl!(OptionType.parameter, T, description, 0, null);
+	alias Parameter = OptionImpl!(OptionType.parameter, T, description, 0, null, name);
 }
 
 private template OptionValueType(T)
@@ -144,19 +145,38 @@ private template optionPlaceholder(T)
 		enum optionPlaceholder = "X";
 }
 
+private template optionName(T, string paramName)
+{
+	static if (is(T == OptionImpl!Args, Args...))
+		static if (T.name)
+			enum optionName = T.name;
+		else
+			enum optionName = paramName;
+	else
+		enum optionName = paramName;
+}
+
 struct FunOptConfig
 {
 	std.getopt.config[] getoptConfig;
 	string usageHeader, usageFooter;
 }
 
+private template optionNames(alias FUN)
+{
+	alias Params = ParameterTypeTuple!FUN;
+	alias parameterNames = ParameterIdentifierTuple!FUN;
+	enum optionNameAt(int i) = optionName!(Params[i], parameterNames[i]);
+	enum optionNames = staticMap!(optionNameAt, RangeTuple!(parameterNames.length));
+}
+
 /// Parse the given arguments according to FUN's parameters, and call FUN.
 /// Throws GetOptException on errors.
 auto funopt(alias FUN, FunOptConfig config = FunOptConfig.init)(string[] args)
 {
-	alias ParameterTypeTuple!FUN Params;
+	alias Params = ParameterTypeTuple!FUN;
 	Params values;
-	enum names = [ParameterIdentifierTuple!FUN];
+	enum names = optionNames!FUN;
 	alias defaults = ParameterDefaultValueTuple!FUN;
 
 	foreach (i, defaultValue; defaults)
@@ -322,7 +342,7 @@ private string getUsage(alias FUN)(string program)
 private string getUsageFormatString(alias FUN)()
 {
 	alias ParameterTypeTuple!FUN Params;
-	enum names = [ParameterIdentifierTuple!FUN];
+	enum names = [optionNames!FUN];
 	alias defaults = ParameterDefaultValueTuple!FUN;
 
 	string result = "Usage: %s";
@@ -409,7 +429,7 @@ unittest
 	void f1(
 		Switch!("Enable verbose logging", 'v') verbose,
 		Option!(int, "Number of tries") tries,
-		Option!(int, "Seconds to wait each try", "SECS") timeout,
+		Option!(int, "Seconds to wait each try", "SECS", 0, "timeout") t,
 		string filename,
 		string output = "default",
 		string[] extraFiles = null
