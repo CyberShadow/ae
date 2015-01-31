@@ -46,6 +46,9 @@ class DBuilder
 			                             /// Debug builds are faster to build,
 			                             /// but run slower. Windows only.
 
+			string[] makeArgs; /// Additional make parameters,
+			                   /// e.g. "-j8" or "HOST_CC=g++48"
+
 			/// Returns a string representation of this build configuration
 			/// usable for a cache directory name. Must reflect all fields.
 			string toString() const
@@ -111,7 +114,7 @@ class DBuilder
 		{
 			auto owd = pushd(buildPath(config.local.repoDir, "dmd", "src"));
 			string[] targets = config.build.debugDMD ? [] : ["dmd"];
-			run([make, "-f", makeFileName, "MODEL=" ~ config.build.model] ~ targets);
+			run([make, "-f", makeFileName, "MODEL=" ~ config.build.model] ~ config.build.makeArgs ~ targets);
 		}
 
 		install(
@@ -176,7 +179,7 @@ EOS";
 
 			setTimes(buildPath("src", "rt", "minit.obj"), Clock.currTime(), Clock.currTime());
 
-			run([make, "-f", makeFileNameModel] ~ platformMakeVars);
+			run([make, "-f", makeFileNameModel] ~ config.build.makeArgs ~ platformMakeVars);
 		}
 
 		install(
@@ -208,13 +211,13 @@ EOS";
 			version (Windows)
 			{
 				auto lib = "phobos%s.lib".format(modelSuffix);
-				run([make, "-f", makeFileNameModel, lib] ~ platformMakeVars);
+				run([make, "-f", makeFileNameModel, lib] ~ config.build.makeArgs ~ platformMakeVars);
 				enforce(lib.exists);
 				targets = [lib];
 			}
 			else
 			{
-				run([make, "-f", makeFileNameModel] ~ platformMakeVars);
+				run([make, "-f", makeFileNameModel] ~ config.build.makeArgs ~ platformMakeVars);
 				targets = "generated".dirEntries(SpanMode.depth).filter!(de => de.name.endsWith(".a")).map!(de => de.name).array();
 			}
 		}
