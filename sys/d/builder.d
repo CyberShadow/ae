@@ -75,6 +75,27 @@ class DBuilder
 	}
 	Config config;
 
+	@property string make()
+	{
+		return environment.get("MAKE", "make");
+	}
+
+	@property string[] platformMakeVars()
+	{
+		string[] args;
+
+		args ~= "MODEL=" ~ config.build.model;
+
+		version (Windows)
+			if (config.build.model == "64")
+			{
+				args ~= "VCDIR="  ~ config.local.vsDir .absolutePath() ~ `\VC`;
+				args ~= "SDKDIR=" ~ config.local.sdkDir.absolutePath();
+			}
+
+		return args;
+	}
+
 	/// Build everything.
 	void build()
 	{
@@ -90,7 +111,7 @@ class DBuilder
 		{
 			auto owd = pushd(buildPath(config.local.repoDir, "dmd", "src"));
 			string[] targets = config.build.debugDMD ? [] : ["dmd"];
-			run(["make", "-f", makeFileName, "MODEL=" ~ config.build.model] ~ targets);
+			run([make, "-f", makeFileName, "MODEL=" ~ config.build.model] ~ targets);
 		}
 
 		install(
@@ -145,22 +166,6 @@ EOS";
 		log("DMD OK!");
 	}
 
-	@property string[] platformMakeVars()
-	{
-		string[] args;
-
-		args ~= "MODEL=" ~ config.build.model;
-
-		version (Windows)
-			if (config.build.model == "64")
-			{
-				args ~= "VCDIR="  ~ config.local.vsDir .absolutePath() ~ `\VC`;
-				args ~= "SDKDIR=" ~ config.local.sdkDir.absolutePath();
-			}
-
-		return args;
-	}
-
 	void buildDruntime()
 	{
 		{
@@ -171,7 +176,7 @@ EOS";
 
 			setTimes(buildPath("src", "rt", "minit.obj"), Clock.currTime(), Clock.currTime());
 
-			run(["make", "-f", makeFileNameModel] ~ platformMakeVars);
+			run([make, "-f", makeFileNameModel] ~ platformMakeVars);
 		}
 
 		install(
@@ -203,13 +208,13 @@ EOS";
 			version (Windows)
 			{
 				auto lib = "phobos%s.lib".format(modelSuffix);
-				run(["make", "-f", makeFileNameModel, lib] ~ platformMakeVars);
+				run([make, "-f", makeFileNameModel, lib] ~ platformMakeVars);
 				enforce(lib.exists);
 				targets = [lib];
 			}
 			else
 			{
-				run(["make", "-f", makeFileNameModel] ~ platformMakeVars);
+				run([make, "-f", makeFileNameModel] ~ platformMakeVars);
 				targets = "generated".dirEntries(SpanMode.depth).filter!(de => de.name.endsWith(".a")).map!(de => de.name).array();
 			}
 		}
