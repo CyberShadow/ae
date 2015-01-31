@@ -448,7 +448,7 @@ string getUsageFormatString(alias FUN)()
 	return result;
 }
 
-string optionWrap(string text, string firstIndent, int indentWidth)
+string optionWrap(string text, string firstIndent, size_t indentWidth)
 {
 	enum width = 79;
 	auto padding = " ".replicate(2 + indentWidth + 2);
