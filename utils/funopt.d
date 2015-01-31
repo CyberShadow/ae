@@ -379,7 +379,7 @@ private string getUsageFormatString(alias FUN)()
 			else
 				result ~= " [" ~ getSwitchText!i() ~ "]";
 		}
-		static if (isOptionArray!Param)
+		static if (isOptionArray!Param && !optionHasDescription!Param)
 			result ~= "...";
 	}
 
@@ -450,7 +450,7 @@ Options:
 		bool verbose,
 		Option!(string[]) extraFile,
 		string filename,
-		string output = "default"
+		string output = "default",
 	)
 	{}
 
