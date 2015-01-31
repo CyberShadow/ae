@@ -66,6 +66,9 @@ template Parameter(T, string description=null, string name=null)
 	alias Parameter = OptionImpl!(OptionType.parameter, T, description, 0, null, name);
 }
 
+/// Specify this as the description to hide the option from --help output.
+enum hiddenOption = "hiddenOption";
+
 private template OptionValueType(T)
 {
 	static if (is(T == OptionImpl!Args, Args...))
@@ -121,7 +124,7 @@ private template optionDescription(T)
 		enum string optionDescription = null;
 }
 
-private enum bool optionHasDescription(T) = optionDescription!T !is null;
+private enum bool optionHasDescription(T) = !isHiddenOption!T && optionDescription!T !is null;
 
 private template optionPlaceholder(T)
 {
@@ -154,6 +157,17 @@ private template optionName(T, string paramName)
 			enum optionName = paramName;
 	else
 		enum optionName = paramName;
+}
+
+private template isHiddenOption(T)
+{
+	static if (is(T == OptionImpl!Args, Args...))
+		static if (T.description is hiddenOption)
+			enum isHiddenOption = true;
+		else
+			enum isHiddenOption = false;
+	else
+		enum isHiddenOption = false;
 }
 
 struct FunOptConfig
@@ -367,26 +381,27 @@ private string getUsageFormatString(alias FUN)()
 	}
 
 	foreach (i, Param; Params)
-	{
-		static if (isParameter!Param)
+		static if (!isHiddenOption!Param)
 		{
-			result ~= " ";
-			static if (!is(defaults[i] == void))
-				result ~= "[";
-			result ~= toUpper(names[i].splitByCamelCase().join("-"));
-			static if (!is(defaults[i] == void))
-				result ~= "]";
-		}
-		else
-		{
-			static if (optionHasDescription!Param)
-				continue;
+			static if (isParameter!Param)
+			{
+				result ~= " ";
+				static if (!is(defaults[i] == void))
+					result ~= "[";
+				result ~= toUpper(names[i].splitByCamelCase().join("-"));
+				static if (!is(defaults[i] == void))
+					result ~= "]";
+			}
 			else
-				result ~= " [" ~ getSwitchText!i() ~ "]";
+			{
+				static if (optionHasDescription!Param)
+					continue;
+				else
+					result ~= " [" ~ getSwitchText!i() ~ "]";
+			}
+			static if (isOptionArray!Param && !optionHasDescription!Param)
+				result ~= "...";
 		}
-		static if (isOptionArray!Param && !optionHasDescription!Param)
-			result ~= "...";
-	}
 
 	result ~= "\n";
 
