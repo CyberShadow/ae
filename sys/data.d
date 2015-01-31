@@ -572,6 +572,10 @@ final class MemoryDataWrapper : DataWrapper
 	version(OSX)
 		enum _SC_PAGE_SIZE = 29;
 
+	// https://github.com/D-Programming-Language/druntime/pull/1140
+	version(FreeBSD)
+		enum _SC_PAGE_SIZE = 47;
+
 	version(Windows)
 	{
 		static immutable size_t pageSize;
