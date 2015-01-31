@@ -442,17 +442,21 @@ string getUsageFormatString(alias FUN)()
 		result ~= "\nOptions:\n";
 		foreach (i, Param; Params)
 			static if (optionHasDescription!Param)
-			{
-				result ~= wrap(
-					optionDescription!Param,
-					79,
-					"  %-*s  ".format(longestSelector, selectors[i]),
-					" ".replicate(2 + longestSelector + 2)
-				);
-			}
+				result ~= optionWrap(optionDescription!Param, selectors[i], longestSelector);
 	}
 
 	return result;
+}
+
+string optionWrap(string text, string firstIndent, int indentWidth)
+{
+	enum width = 79;
+	return wrap(
+		text,
+		width,
+		"  %-*s  ".format(indentWidth, firstIndent),
+		" ".replicate(2 + indentWidth + 2)
+	);
 }
 
 unittest
@@ -553,13 +557,8 @@ private string genActionList(alias Actions)()
 		static if (hasAttribute!(string, __traits(getMember, Actions, m)))
 		{
 			enum name = m.toLower();
-			result ~= wrap(
-				//__traits(comment, __traits(getMember, Actions, m)), // https://github.com/D-Programming-Language/dmd/pull/3531
-				getAttribute!(string, __traits(getMember, Actions, m)),
-				79,
-				"  %-*s  ".format(longestAction, name),
-				" ".replicate(2 + longestAction + 2)
-			);
+			//__traits(comment, __traits(getMember, Actions, m)) // https://github.com/D-Programming-Language/dmd/pull/3531
+			result ~= optionWrap(getAttribute!(string, __traits(getMember, Actions, m)), name, longestAction);
 		}
 
 	return result;
