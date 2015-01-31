@@ -173,7 +173,6 @@ private template isHiddenOption(T)
 struct FunOptConfig
 {
 	std.getopt.config[] getoptConfig;
-	string usageHeader, usageFooter;
 }
 
 private template optionNames(alias FUN)
@@ -184,9 +183,17 @@ private template optionNames(alias FUN)
 	alias optionNames = staticMap!(optionNameAt, RangeTuple!(parameterNames.length));
 }
 
+/// Default help text print function.
+/// Sends the text to stderr.writeln.
+void defaultUsageFun(string usage)
+{
+	import std.stdio;
+	stderr.writeln(usage);
+}
+
 /// Parse the given arguments according to FUN's parameters, and call FUN.
 /// Throws GetOptException on errors.
-auto funopt(alias FUN, FunOptConfig config = FunOptConfig.init)(string[] args)
+auto funopt(alias FUN, FunOptConfig config = FunOptConfig.init, alias usageFun = defaultUsageFun)(string[] args)
 {
 	alias Params = ParameterTypeTuple!FUN;
 	Params values;
@@ -241,8 +248,7 @@ auto funopt(alias FUN, FunOptConfig config = FunOptConfig.init)(string[] args)
 
 	void printUsage()
 	{
-		import std.stdio;
-		stderr.writeln(config.usageHeader, getUsage!FUN(origArgs[0]), config.usageFooter);
+		usageFun(getUsage!FUN(origArgs[0]));
 	}
 
 	if (help)
@@ -351,14 +357,14 @@ private string getProgramName(string program)
 	return programName;
 }
 
-private string getUsage(alias FUN)(string program)
+string getUsage(alias FUN)(string program)
 {
 	auto programName = getProgramName(program);
 	enum formatString = getUsageFormatString!FUN();
 	return formatString.format(programName);
 }
 
-private string getUsageFormatString(alias FUN)()
+string getUsageFormatString(alias FUN)()
 {
 	alias ParameterTypeTuple!FUN Params;
 	enum names = [optionNames!FUN];
@@ -486,7 +492,7 @@ Options:
 /// first parameter on the given command line (the "action").
 /// String UDAs are used as usage documentation for generating --help output
 /// (or when no action is specified).
-auto funoptDispatch(alias Actions, FunOptConfig config = FunOptConfig.init)(string[] args)
+auto funoptDispatch(alias Actions, FunOptConfig config = FunOptConfig.init, alias usageFun = defaultUsageFun)(string[] args)
 {
 	string program = args[0];
 
@@ -505,15 +511,14 @@ auto funoptDispatch(alias Actions, FunOptConfig config = FunOptConfig.init)(stri
 		throw new GetOptException("Unknown action: " ~ action);
 	}
 
-	enum actionList = genActionList!Actions();
+	static void myUsageFun(string usage) { usageFun(usage ~ genActionList!Actions()); }
 
 	const FunOptConfig myConfig = (){
 		auto c = config;
 		c.getoptConfig ~= std.getopt.config.stopOnFirstNonOption;
-		c.usageFooter = actionList ~ c.usageFooter;
 		return c;
 	}();
-	return funopt!(fun, myConfig)(args);
+	return funopt!(fun, myConfig, myUsageFun)(args);
 }
 
 private string genActionList(alias Actions)()
