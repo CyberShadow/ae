@@ -1359,6 +1359,13 @@ class TimeoutAdapter : ConnectionAdapter
 	void delegate() handleNonIdle;
 
 protected:
+	override void onConnect()
+	{
+		super.onConnect();
+		if (idleTask)
+			resumeIdleTimeout();
+	}
+
 	override void onReadData(Data data)
 	{
 		markNonIdle();
