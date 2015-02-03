@@ -80,7 +80,7 @@ class DBuilder
 
 	@property string make()
 	{
-		return environment.get("MAKE", "make");
+		return config.local.env.get("MAKE", environment.get("MAKE", "make"));
 	}
 
 	@property string[] platformMakeVars()
