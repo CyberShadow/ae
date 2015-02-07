@@ -53,7 +53,6 @@ private:
 
 	void onAccept(TcpConnection incoming)
 	{
-		debug (HTTP) writefln("[%s] New connection from %s", Clock.currTime(), incoming.remoteAddress);
 		new HttpServerConnection(this, incoming);
 	}
 
@@ -123,6 +122,7 @@ private:
 
 	this(HttpServer server, TcpConnection incoming)
 	{
+		debug (HTTP) debugLog("New connection from %s", incoming.remoteAddress);
 		this.server = server;
 		IConnection c = tcp = incoming;
 
@@ -140,28 +140,35 @@ private:
 		server.connections.pushFront(this);
 	}
 
+	debug (HTTP)
+	final void debugLog(Args...)(Args args)
+	{
+		std.stdio.stderr.writef("[%s %s] ", Clock.currTime(), cast(void*)this);
+		std.stdio.stderr.writefln(args);
+	}
+
 	void onNewRequest(Data data)
 	{
 		try
 		{
 			inBuffer ~= data;
-			debug (HTTP) writefln("[%s] Receiving start of request (%d new bytes, %d total)", Clock.currTime(), data.length, inBuffer.bytes.length);
+			debug (HTTP) debugLog("Receiving start of request (%d new bytes, %d total)", data.length, inBuffer.bytes.length);
 
 			string reqLine;
 			Headers headers;
 
 			if (!parseHeaders(inBuffer, reqLine, headers))
 			{
-				debug (HTTP) writefln("[%s] Headers not yet received. Data in buffer:\n%s---", Clock.currTime(), cast(string)inBuffer.joinToHeap());
+				debug (HTTP) debugLog("Headers not yet received. Data in buffer:\n%s---", cast(string)inBuffer.joinToHeap());
 				return;
 			}
 
 			debug (HTTP)
 			{
-				writefln("[%s] Headers received:", Clock.currTime());
-				writefln("> %s", reqLine);
+				debugLog("Headers received:", Clock.currTime());
+				debugLog("> %s", reqLine);
 				foreach (name, value; headers)
-					writefln("> %s: %s", name, value);
+					debugLog("> %s: %s", name, value);
 			}
 
 			currentRequest = new HttpRequest;
@@ -178,7 +185,7 @@ private:
 					persistent = connection != "close";
 					break;
 			}
-			debug (HTTP) writefln("[%s] This %s connection %s persistent", Clock.currTime(), currentRequest.protocolVersion, persistent ? "IS" : "is NOT");
+			debug (HTTP) debugLog("This %s connection %s persistent", currentRequest.protocolVersion, persistent ? "IS" : "is NOT");
 
 			expect = 0;
 			if ("Content-Length" in currentRequest.headers)
@@ -196,7 +203,7 @@ private:
 		}
 		catch (Exception e)
 		{
-			debug (HTTP) writefln("[%s] Exception onNewRequest: %s", Clock.currTime(), e);
+			debug (HTTP) debugLog("Exception onNewRequest: %s", e);
 			HttpResponse response;
 			debug
 			{
@@ -212,18 +219,18 @@ private:
 
 	void onDisconnect(string reason, DisconnectType type)
 	{
-		debug (HTTP) writefln("[%s] Disconnect: %s", Clock.currTime(), reason);
+		debug (HTTP) debugLog("Disconnect: %s", reason);
 		server.connections.remove(this);
 	}
 
 	void onContinuation(Data data)
 	{
-		debug (HTTP) writefln("[%s] Receiving continuation of request: \n%s---", Clock.currTime(), cast(string)data.contents);
+		debug (HTTP) debugLog("Receiving continuation of request: \n%s---", cast(string)data.contents);
 		inBuffer ~= data;
 
 		if (!requestProcessing && inBuffer.bytes.length >= expect)
 		{
-			debug (HTTP) writefln("[%s] %s/%s", Clock.currTime(), inBuffer.bytes.length, expect);
+			debug (HTTP) debugLog("%s/%s", inBuffer.bytes.length, expect);
 			processRequest(inBuffer.popFront(expect));
 		}
 	}
@@ -304,7 +311,7 @@ public:
 		foreach (string header, string value; response.headers)
 			respMessage.put(header, ": ", value, "\r\n");
 
-		debug (HTTP) writefln("[%s] Response headers:\n> %s", Clock.currTime(), respMessage.get().chomp().replace("\r\n", "\n> "));
+		debug (HTTP) debugLog("Response headers:\n> %s", respMessage.get().chomp().replace("\r\n", "\n> "));
 
 		respMessage.put("\r\n");
 
@@ -312,13 +319,13 @@ public:
 		if (response && response.data.length && currentRequest.method != "HEAD")
 			conn.send(response.data);
 
-		debug (HTTP) writefln("[%s] Sent response (%d bytes headers, %d bytes data)",
-			Clock.currTime(), respMessage.length, response ? response.data.bytes.length : 0);
+		debug (HTTP) debugLog("Sent response (%d bytes headers, %d bytes data)",
+			respMessage.length, response ? response.data.bytes.length : 0);
 
 		if (persistent && server.conn.isListening)
 		{
 			// reset for next request
-			debug (HTTP) writefln("  Waiting for next request.");
+			debug (HTTP) debugLog("  Waiting for next request.");
 			conn.handleReadData = &onNewRequest;
 			if (!timeoutActive)
 			{
@@ -327,14 +334,14 @@ public:
 			}
 			if (inBuffer.bytes.length) // a second request has been pipelined
 			{
-				debug (HTTP) writefln("A second request has been pipelined: %d datums, %d bytes", inBuffer.length, inBuffer.bytes.length);
+				debug (HTTP) debugLog("A second request has been pipelined: %d datums, %d bytes", inBuffer.length, inBuffer.bytes.length);
 				onNewRequest(Data());
 			}
 		}
 		else
 		{
 			string reason = persistent ? "Server has been shut down" : "Non-persistent connection";
-			debug (HTTP) writefln("  Closing connection (%s).", reason);
+			debug (HTTP) debugLog("  Closing connection (%s).", reason);
 			conn.disconnect(reason);
 		}
 
