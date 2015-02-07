@@ -466,14 +466,13 @@ public:
 	/// Called by the server to compress content, if possible/appropriate
 	final package void optimizeData(in ref Headers requestHeaders)
 	{
-		auto acceptEncoding = headers.get("Accept-Encoding", null);
+		auto acceptEncoding = requestHeaders.get("Accept-Encoding", null);
 		if (acceptEncoding && "Content-Encoding" !in headers)
 		{
 			auto contentType = headers.get("Content-Type", null);
 			if (contentType.startsWith("text/") || contentType=="application/json")
 			{
 				auto supported = parseItemList(acceptEncoding) ~ ["*"];
-
 				foreach (method; supported)
 					switch (method)
 					{
