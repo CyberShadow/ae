@@ -309,7 +309,7 @@ public:
 		respMessage.put("\r\n");
 
 		conn.send(Data(respMessage.get()));
-		if (response && response.data.length)
+		if (response && response.data.length && currentRequest.method != "HEAD")
 			conn.send(response.data);
 
 		debug (HTTP) writefln("[%s] Sent response (%d bytes headers, %d bytes data)",
