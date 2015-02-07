@@ -278,6 +278,20 @@ public:
 		assert(req.remoteHosts("3.3.3.3") == ["1.1.1.1", "2.2.2.2", "3.3.3.3"]);
 	}
 
+	/// Basic cookie parsing
+	string[string] getCookies()
+	{
+		string[string] cookies;
+		foreach (segment; headers.get("Cookie", null).split(";"))
+		{
+			segment = segment.strip();
+			auto p = segment.indexOf('=');
+			if (p > 0)
+				cookies[segment[0..p]] = segment[p+1..$];
+		}
+		return cookies;
+	}
+
 private:
 	string _resource;
 	ushort _port = 0; // used only when no "Host" in headers; otherwise, taken from there
