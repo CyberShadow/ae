@@ -353,8 +353,14 @@ struct DataAllocator
 
 	struct Data
 	{
+		struct Node
+		{
+			Node* next;
+			SysData data;
+		}
+
 		// Needed to make data referenced in Data instances reachable by the GC
-		SysData[] datas; // TODO: use linked list or something
+		Node* root;
 	}
 
 	static template Impl(alias data)
@@ -365,16 +371,17 @@ struct DataAllocator
 		{
 			mixin AllocTypes;
 
-			auto sysData = SysData(V.sizeof * n);
-			data.datas ~= sysData;
-			return cast(V[])sysData.mcontents;
+			data.root = new data.Node(data.root, SysData(V.sizeof * n));
+			return cast(V[])data.root.data.mcontents;
 		}
 
 		void freeAll()
 		{
-			foreach (sysData; data.datas)
-				sysData.deleteContents();
-			data.datas = null;
+			while (data.root)
+			{
+				data.root.data.deleteContents();
+				data.root = data.root.next;
+			}
 		}
 	}
 }
