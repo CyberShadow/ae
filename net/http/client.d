@@ -28,7 +28,7 @@ import ae.net.ietf.headerparse;
 import ae.net.ietf.url;
 import ae.net.ssl;
 import ae.sys.data;
-debug import std.stdio;
+debug(HTTP) import std.stdio : stderr;
 
 public import ae.net.http.common;
 

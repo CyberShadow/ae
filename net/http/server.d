@@ -33,7 +33,7 @@ import ae.utils.textout;
 
 public import ae.net.http.common;
 
-debug (HTTP) import std.stdio, std.datetime;
+debug(HTTP) import std.stdio : stderr;
 
 final class HttpServer
 {
@@ -78,11 +78,11 @@ public:
 
 	void close()
 	{
-		debug(HTTP) writeln("Shutting down");
+		debug(HTTP) stderr.writeln("Shutting down");
 		if (log) log("Shutting down.");
 		conn.close();
 
-		debug(HTTP) writefln("There still are %d active connections", connections.iterator.walkLength);
+		debug(HTTP) stderr.writefln("There still are %d active connections", connections.iterator.walkLength);
 
 		// Close idle connections
 		foreach (connection; connections.iterator.array)
@@ -143,8 +143,8 @@ private:
 	debug (HTTP)
 	final void debugLog(Args...)(Args args)
 	{
-		std.stdio.stderr.writef("[%s %s] ", Clock.currTime(), cast(void*)this);
-		std.stdio.stderr.writefln(args);
+		stderr.writef("[%s %s] ", Clock.currTime(), cast(void*)this);
+		stderr.writefln(args);
 	}
 
 	void onNewRequest(Data data)
@@ -165,7 +165,7 @@ private:
 
 			debug (HTTP)
 			{
-				debugLog("Headers received:", Clock.currTime());
+				debugLog("Headers received:");
 				debugLog("> %s", reqLine);
 				foreach (name, value; headers)
 					debugLog("> %s: %s", name, value);
