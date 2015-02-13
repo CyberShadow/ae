@@ -14,7 +14,10 @@
 module ae.utils.array;
 
 import std.exception;
+import std.format;
 import std.traits;
+
+import ae.utils.meta;
 
 public import ae.utils.aa;
 public import ae.utils.appender;
@@ -313,4 +316,31 @@ unittest
 {
 	assert([1, 2, 3].amap!`a*2`() == [2, 4, 6]);
 	assert([1, 2, 3].amap!(n => n*n)() == [1, 4, 9]);
+}
+
+// ***************************************************************************
+
+auto list(Args...)(auto ref Args args)
+{
+	struct List
+	{
+		auto dummy() { return args[0]; }
+		void opAssign(T)(auto ref T t)
+		{
+			assert(t.length == args.length,
+				"Assigning %d elements to list with %d elements"
+				.format(t.length, args.length));
+			foreach (i; RangeTuple!(Args.length))
+				static if (!is(Args[i] == typeof(null)))
+					args[i] = t[i];
+		}
+	}
+	return List();
+}
+
+unittest
+{
+	string name, value;
+	list(name, null, value) = "NAME=VALUE".findSplit("=");
+	assert(name == "NAME" && value == "VALUE");
 }
