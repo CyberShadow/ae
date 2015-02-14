@@ -832,7 +832,13 @@ protected:
 	override void onError(string reason)
 	{
 		if (!connected && addressQueue.length)
+		{
+			socketManager.unregister(this);
+			conn.close();
+			conn = null;
+
 			return tryNextAddress();
+		}
 		disconnect("Socket error: " ~ reason, DisconnectType.error);
 	}
 
