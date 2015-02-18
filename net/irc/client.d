@@ -37,8 +37,6 @@ private:
 	IrcConnection conn;
 	/// Whether the socket is connected
 	bool _connected;
-	/// The password used when logging in.
-	string password;
 
 	/// Helper function for sending a command.
 	void command(string command, string[] params ...)
@@ -504,6 +502,8 @@ protected: // overridable methods
 public:
 	/// The user's information.
 	string nickname, realname;
+	/// The password used when logging in.
+	string password;
 	/// A list of joined channels.
 	Channel[string] channels;
 	/// Canonical names
