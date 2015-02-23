@@ -871,6 +871,10 @@ public:
 	/// Start establishing a connection.
 	final void connect(string host, ushort port)
 	{
+		assert(host.length, "Empty host");
+		assert(port, "No port specified");
+
+		debug (ASOCKETS) writefln("Connecting to %s:%s", host, port);
 		if (conn || connected)
 			throw new Exception("Socket object is already connected");
 
@@ -878,6 +882,12 @@ public:
 		{
 			addressQueue = getAddress(host, port);
 			enforce(addressQueue.length, "No addresses found");
+			debug (ASOCKETS)
+			{
+				writefln("Resolved to %s addresses:", addressQueue.length);
+				foreach (address; addressQueue)
+					writefln("- %s", address.toString());
+			}
 			if (addressQueue.length > 1)
 			{
 				import std.random : randomShuffle;
