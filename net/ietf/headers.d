@@ -13,6 +13,7 @@
 
 module ae.net.ietf.headers;
 
+import std.algorithm;
 import std.string;
 import std.ascii;
 import std.exception;
@@ -21,19 +22,21 @@ import std.exception;
 /// compatibility with the old HTTP string[string] headers field
 struct Headers
 {
+	struct Header { string name, value; }
+
 	// All keys are internally upper-case.
-	private string[][string] headers;
+	private Header[][string] headers;
 
 	/// If multiple headers with this name are present,
 	/// only the first one is returned.
 	ref inout(string) opIndex(string name) inout
 	{
-		return headers[toUpper(name)][0];
+		return headers[toUpper(name)][0].value;
 	}
 
 	string opIndexAssign(string value, string name)
 	{
-		headers[toUpper(name)] = [value];
+		headers[toUpper(name)] = [Header(name, value)];
 		return value;
 	}
 
@@ -41,7 +44,7 @@ struct Headers
 	{
 		auto pvalues = toUpper(name) in headers;
 		if (pvalues && (*pvalues).length)
-			return (*pvalues).ptr;
+			return &(*pvalues)[0].value;
 		return null;
 	}
 
@@ -55,11 +58,10 @@ struct Headers
 	{
 		int ret;
 		outer:
-		foreach (name, values; headers)
-			foreach (value; values)
+		foreach (key, values; headers)
+			foreach (header; values)
 			{
-				auto normName = normalizeHeaderName(name);
-				ret = dg(normName, value);
+				ret = dg(header.name, header.value);
 				if (ret)
 					break outer;
 			}
@@ -67,15 +69,14 @@ struct Headers
 	}
 
 	// Copy-paste because of https://issues.dlang.org/show_bug.cgi?id=7543
-	int opApply(int delegate(ref string name, ref const(string) value) dg) const
+	int opApply(int delegate(ref const(string) name, ref const(string) value) dg) const
 	{
 		int ret;
 		outer:
 		foreach (name, values; headers)
-			foreach (value; values)
+			foreach (header; values)
 			{
-				auto normName = normalizeHeaderName(name);
-				ret = dg(normName, value);
+				ret = dg(header.name, header.value);
 				if (ret)
 					break outer;
 			}
@@ -84,11 +85,11 @@ struct Headers
 
 	void add(string name, string value)
 	{
-		name = toUpper(name);
-		if (name !in headers)
-			headers[name] = [value];
+		auto key = toUpper(name);
+		if (key !in headers)
+			headers[key] = [Header(name, value)];
 		else
-			headers[name] ~= value;
+			headers[key] ~= Header(name, value);
 	}
 
 	string get(string key, string def) const
@@ -104,7 +105,10 @@ struct Headers
 
 	inout(string)[] getAll(string key) inout
 	{
-		return headers[toUpper(key)];
+		inout(string)[] result;
+		foreach (header; headers.get(toUpper(key), null))
+			result ~= header.value;
+		return result;
 	}
 
 	/// Warning: discards repeating headers
@@ -138,13 +142,13 @@ unittest
 		assert(headers["TEST"] == "test");
 
 		foreach (k, v; headers)
-			assert(k == "Test" && v == "test");
+			assert(k == "test" && v == "test");
 
 		auto aas = cast(string[string])headers;
-		assert(aas == ["Test" : "test"]);
+		assert(aas == ["test" : "test"]);
 
 		auto aaa = cast(string[][string])headers;
-		assert(aaa == ["Test" : ["test"]]);
+		assert(aaa == ["test" : ["test"]]);
 	}
 
 	test(headers);
