@@ -72,16 +72,16 @@ private:
 		if (log) log("* Connected.");
 		if (password.length > 0)
 			command("PASS", password);
-		command("NICK", nickname);
-		command("USER", nickname, "hostname", "servername", realname);
+		currentNickname = connectNickname;
+		command("NICK", currentNickname);
+		command("USER", currentNickname, "hostname", "servername", realname);
 	}
 
 	/// Called when a connection was closed.
 	void onDisconnect(string reason, DisconnectType type)
 	{
 		if (log) log(format("* Disconnected (%s)", reason));
-		nickname = realname = null;
-		password = null;
+		currentNickname = null;
 		_connected = false;
 		if (handleDisconnect)
 			handleDisconnect(reason, type);
@@ -152,7 +152,7 @@ private:
 		case "001":     // login successful
 			// VP 2006.12.13: changing 376 to 001, since 376 doesn't appear on all servers and it's safe to send commands after 001 anyway
 			_connected = true;
-			onEnter(nickname, username, hostname, realname); // add ourselves
+			onEnter(currentNickname, username, hostname, realname); // add ourselves
 
 			if (handleConnect)
 				handleConnect();
@@ -165,11 +165,8 @@ private:
 				disconnect("Nickname in use", DisconnectType.error);
 			else
 			{
-				while (nickname.length > 1 && nickname[$-1] >= '0' && nickname[$-1] <= '9')
-					nickname = nickname[0..$-1];
-				if (params[1] == nickname)
-					nickname ~= format("%03d", uniform(0, 1000));
-				this.command("NICK", nickname);
+				currentNickname = "%s%03d".format(connectNickname, uniform(0, 1000));
+				this.command("NICK", currentNickname);
 			}
 			break;
 
@@ -324,7 +321,7 @@ private:
 			else
 				users[nick].channelsJoined++;
 
-			if (nick == nickname)
+			if (nick == currentNickname)
 			{
 				assert(!(channel in channels));
 				channels[channel] = Channel();
@@ -401,7 +398,7 @@ private:
 	void onUserParted(string nick, string channel)
 	{
 		assert(channel in channels);
-		if (nick == nickname)
+		if (nick == currentNickname)
 		{
 			foreach(user,b;channels[channel].users)
 				users[user].channelsJoined--;
@@ -500,8 +497,19 @@ protected: // overridable methods
 	}
 
 public:
+	/// The nickname to identify with.
+	string connectNickname;
+	/// Fail to connect if the specified nickname is taken.
+	bool exactNickname;
+	/// The nickname we are logged in with.
+	/// May be different from connectNickname if
+	/// exactNickname is false.
+	string currentNickname;
+	/// Refers to currentNickname when connected, connectNickname otherwise.
+	@property ref string nickname() { return connected ? currentNickname : connectNickname; }
+
 	/// The user's information.
-	string nickname, realname;
+	string realname;
 	/// The password used when logging in.
 	string password;
 	/// A list of joined channels.
@@ -517,8 +525,6 @@ public:
 	bool autoWho;
 	/// Log all input/output to this logger.
 	Logger log;
-	/// Fail to connect if the specified nickname is taken.
-	bool exactNickname;
 	/// How to convert the IRC 8-bit data to and from UTF-8 (D strings must be valid UTF-8).
 	string function(in char[]) decoder = &rawToUTF8, encoder = &UTF8ToRaw;
 
