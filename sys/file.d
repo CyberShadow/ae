@@ -267,6 +267,31 @@ bool anyNewerThan(string[] sources, string target)
 	return sources.any!(source => source.timeLastModified() > targetTime)();
 }
 
+version (Posix)
+{
+	import core.sys.posix.sys.stat;
+	import core.sys.posix.unistd;
+
+	int getOwner(string fn)
+	{
+		stat_t s;
+		errnoEnforce(stat64(toStringz(fn), &s) == 0, "stat: " ~ fn);
+		return s.st_uid;
+	}
+
+	int getGroup(string fn)
+	{
+		stat_t s;
+		errnoEnforce(stat64(toStringz(fn), &s) == 0, "stat: " ~ fn);
+		return s.st_gid;
+	}
+
+	void setOwner(string fn, int uid, int gid)
+	{
+		errnoEnforce(chown(toStringz(fn), uid, gid) == 0, "chown: " ~ fn);
+	}
+}
+
 /// Try to rename; copy/delete if rename fails
 void move(string src, string dst)
 {
