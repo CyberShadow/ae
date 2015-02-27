@@ -275,14 +275,14 @@ version (Posix)
 	int getOwner(string fn)
 	{
 		stat_t s;
-		errnoEnforce(stat64(toStringz(fn), &s) == 0, "stat: " ~ fn);
+		errnoEnforce(stat(toStringz(fn), &s) == 0, "stat: " ~ fn);
 		return s.st_uid;
 	}
 
 	int getGroup(string fn)
 	{
 		stat_t s;
-		errnoEnforce(stat64(toStringz(fn), &s) == 0, "stat: " ~ fn);
+		errnoEnforce(stat(toStringz(fn), &s) == 0, "stat: " ~ fn);
 		return s.st_gid;
 	}
 
