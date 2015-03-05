@@ -15,6 +15,7 @@ module ae.utils.aa;
 
 import std.algorithm;
 import std.range;
+import std.typecons;
 
 // ***************************************************************************
 
@@ -103,6 +104,34 @@ unittest
 	assert(target == [1:1, 2:4, 3:3]);
 
 	assert(merge([1:1], [2:2]) == [1:1, 2:2]);
+}
+
+/// Slurp a range of two elements (or two-element struct/class) into an AA.
+auto toAA(R)(R r)
+	if (is(typeof(r.front[1])))
+{
+	alias K = typeof(r.front[0]);
+	alias V = typeof(r.front[1]);
+	V[K] result;
+	foreach (pair; r)
+	{
+		assert(pair.length == 2);
+		result[pair[0]] = pair[1];
+	}
+	return result;
+}
+
+/// ditto
+auto toAA(R)(R r)
+	if (is(typeof(r.front.tupleof)) && r.front.tupleof.length == 2 && !is(typeof(r.front[1])))
+{
+	return r.map!(el => tuple(el.tupleof)).toAA();
+}
+
+unittest
+{
+	assert([[2, 4]].toAA() == [2:4]);
+	assert([2:4].pairs.toAA() == [2:4]);
 }
 
 // ***************************************************************************
