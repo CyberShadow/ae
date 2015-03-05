@@ -53,8 +53,7 @@ class DBuilder
 			/// usable for a cache directory name. Must reflect all fields.
 			string toString() const
 			{
-				import std.conv : text;
-				string buildID = text(model);
+				string buildID = model;
 				if (debugDMD)
 					buildID ~= "-debug";
 				return buildID;
