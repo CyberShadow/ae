@@ -194,7 +194,7 @@ private:
 					if (!(nickname in users))
 						onEnter(nickname, null, null);
 					else
-						users[nick].channelsJoined++;
+						users[nickname].channelsJoined++;
 					channels[channel].users[nickname] = true;
 				}
 			break;
