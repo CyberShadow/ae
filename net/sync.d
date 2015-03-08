@@ -110,7 +110,7 @@ public:
 	void runAsync(Dg dg)
 	{
 		synchronized(socket) socket.queue ~= dg;
-		Command[] data = [Command.runWait];
+		Command[] data = [Command.runAsync];
 		socket.pinger.send(data);
 	}
 
