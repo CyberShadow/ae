@@ -193,6 +193,8 @@ private:
 					auto nickname = removePrefix(fullnick);
 					if (!(nickname in users))
 						onEnter(nickname, null, null);
+					else
+						users[nick].channelsJoined++;
 					channels[channel].users[nickname] = true;
 				}
 			break;
