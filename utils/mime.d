@@ -41,6 +41,8 @@ string guessMime(string fileName, string defaultResult = null)
 		case ".jpg":
 		case ".jpeg":
 			return "image/jpeg";
+		case ".svg":
+			return "image/svg+xml";
 		case ".webm":
 			return "video/webm";
 		case ".ico":
