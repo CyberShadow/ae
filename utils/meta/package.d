@@ -181,6 +181,15 @@ template enumLength(T)
 
 deprecated alias EnumLength = enumLength;
 
+/// A range that iterates over all members of an enum.
+@property auto enumIota(T)() { return iota(T.init, enumLength!T); }
+
+unittest
+{
+	enum E { a, b, c }
+	static assert(equal(enumIota!E, [E.a, E.b, E.c]));
+}
+
 // ************************************************************************
 
 // http://d.puremagic.com/issues/show_bug.cgi?id=7805
