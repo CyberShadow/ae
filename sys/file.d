@@ -864,7 +864,8 @@ void syncWrite()(string target, in void[] data)
 }
 
 /// Atomically save data to a file (if the file doesn't exist,
-/// or its contents differs).
+/// or its contents differs). The update operation as a whole
+/// is not atomic, only the write is.
 void syncUpdate()(string fn, in void[] data)
 {
 	if (!fn.exists || fn.read() != data)
