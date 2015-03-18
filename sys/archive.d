@@ -13,6 +13,7 @@
 
 module ae.sys.archive;
 
+import std.datetime;
 import std.exception;
 import std.file;
 import std.path;
@@ -38,6 +39,13 @@ void unzip(string zip, string target)
 		}
 		else
 			std.file.write(path, archive.expand(entry));
+
+		auto attr = entry.fileAttributes;
+		if (attr)
+			path.setAttributes(attr);
+
+		auto time = entry.time().DosFileTimeToSysTime(UTC());
+		path.setTimes(time, time);
 	}
 }
 
