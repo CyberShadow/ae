@@ -13,8 +13,6 @@
 
 module ae.sys.install.dmd;
 
-version(Windows):
-
 import std.array;
 import std.conv;
 import std.exception;
