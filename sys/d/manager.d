@@ -32,10 +32,10 @@ import ae.sys.git;
 version(Windows)
 {
 	import ae.sys.install.dmc;
-	import ae.sys.install.dmd;
 	import ae.sys.install.vs;
 }
 
+import ae.sys.install.dmd;
 import ae.sys.install.git;
 
 /// Class which manages a D checkout and its dependencies.
