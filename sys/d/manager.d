@@ -160,7 +160,7 @@ class DManager
 		log("Cleaning up...");
 
 		if (buildDir.exists)
-			buildDir.rmdirRecurse();
+			buildDir.removeRecurse();
 		enforce(!buildDir.exists);
 
 		prepareRepoPrerequisites();
