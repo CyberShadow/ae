@@ -19,7 +19,7 @@ import std.array;
 import std.conv;
 import std.exception;
 import std.file;
-import std.format;
+import std.string;
 import std.path;
 
 import ae.sys.archive;
