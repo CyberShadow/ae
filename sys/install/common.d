@@ -51,8 +51,13 @@ class Installer
 	/// containing executables which need to be added to PATH.
 	@property string[] binPaths() { return [""]; }
 
+	/// As above, but expanded to full absolute directory paths.
+	@property final string[] binDirs() { return binPaths.map!(binPath => buildPath(directory, binPath)).array; }
+
+	@property static string[] pathDirs() { return environment["PATH"].split(pathSeparator); }
+
 	/// The full installation directory.
-	@property string directory()
+	@property final string directory()
 	{
 		return buildPath(installationDirectory, subdirectory);
 	}
@@ -64,17 +69,33 @@ class Installer
 
 	/*protected*/ static bool haveExecutable(string name)
 	{
+		return findExecutable(name, pathDirs) !is null;
+	}
+
+	/// Helper function. Find an executable with the given name
+	/// (no extension) in the given directories.
+	static string findExecutable(string name, string[] dirs)
+	{
 		version(Windows)
 			enum executableSuffixes = [".exe", ".bat", ".cmd"];
 		else
 			enum executableSuffixes = [""];
 
-		foreach (entry; environment["PATH"].split(pathSeparator))
+		foreach (dir; dirs)
 			foreach (suffix; executableSuffixes)
-				if ((buildPath(entry, name) ~ suffix).exists)
-					return true;
+			{
+				auto fn = buildPath(dir, name) ~ suffix;
+				if (fn.exists)
+					return fn;
+			}
 
-		return false;
+		return null;
+	}
+
+	/// Get the full path to an executable.
+	string exePath(string name)
+	{
+		return findExecutable(name, installedLocally ? binDirs : pathDirs);
 	}
 
 	/// Whether the component is installed locally.
