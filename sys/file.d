@@ -429,10 +429,22 @@ void forceDelete(bool atomic=true)(string fn, bool recursive = false)
 }
 
 /// If fn is a directory, delete it recursively.
-/// Otherwise, delete the file fn.
+/// Otherwise, delete the file or symlink fn.
 void removeRecurse(string fn)
 {
-	if (fn.isDir)
+	auto attr = fn.getAttributes();
+	if (attr.attrIsSymlink)
+	{
+		version (Windows)
+			if (attr.attrIsDir)
+				fn.rmdir();
+			else
+				fn.remove();
+		else
+			fn.remove();
+	}
+	else
+	if (attr.attrIsDir)
 		fn.rmdirRecurse();
 	else
 		fn.remove();
