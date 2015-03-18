@@ -69,6 +69,7 @@ class DBuilder
 			string dmcDir;   /// Where dmc.zip is unpacked.
 			string vsDir;    /// Where Visual Studio is installed
 			string sdkDir;   /// Where the Windows SDK is installed
+			string hostDC;   /// Host D compiler (for DDMD bootstrapping)
 
 			/// D build environment.
 			string[string] env;
@@ -113,7 +114,12 @@ class DBuilder
 		{
 			auto owd = pushd(buildPath(config.local.repoDir, "dmd", "src"));
 			string[] targets = config.build.debugDMD ? [] : ["dmd"];
-			run([make, "-f", makeFileName, "MODEL=" ~ config.build.model] ~ config.build.makeArgs ~ targets);
+			run([make,
+					"-f", makeFileName,
+					"MODEL=" ~ config.build.model,
+					"HOST_DC=" ~ config.local.hostDC,
+				] ~ config.build.makeArgs ~ targets,
+			);
 		}
 
 		install(

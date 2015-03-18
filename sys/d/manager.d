@@ -32,6 +32,7 @@ import ae.sys.git;
 version(Windows)
 {
 	import ae.sys.install.dmc;
+	import ae.sys.install.dmd;
 	import ae.sys.install.vs;
 }
 
@@ -68,6 +69,7 @@ class DManager
 	alias dlDir      = subDir!"dl" ;         /// The directory for downloaded software.
 
 	version(Windows) string dmcDir, vsDir, sdkDir;
+	string dmd; /// For DDMD bootstrapping
 	string[] paths;
 
 	/// Environment used when building D.
@@ -204,12 +206,12 @@ class DManager
 		// Add the DMD we built
 		newPaths ~= buildPath(buildDir, "bin").absolutePath();   // For Phobos/Druntime/Tools
 
+		if (!dmd)
+			prepareBuildPrerequisites();
+
 		// Add the DM tools
 		version (Windows)
 		{
-			if (!dmcDir)
-				prepareBuildPrerequisites();
-
 			auto dmc = buildPath(dmcDir, `bin`).absolutePath();
 			log("DMC=" ~ dmc);
 			dEnv["DMC"] = dmc;
@@ -238,6 +240,7 @@ class DManager
 			builder.config.local.vsDir  = vsDir ;
 			builder.config.local.sdkDir = sdkDir;
 		}
+		builder.config.local.hostDC = dmd;
 		builder.config.local.env = dEnv;
 	}
 
@@ -284,6 +287,10 @@ class DManager
 			dmcDir = dmcInstaller.directory;
 			log("dmcDir=" ~ dmcDir);
 		}
+
+		auto dmdInstaller = new DMD("2.066.1");
+		dmdInstaller.requireLocal(false);
+		dmd = dmdInstaller.exePath("dmd");
 	}
 
 	/// Return array of component (submodule) names.
