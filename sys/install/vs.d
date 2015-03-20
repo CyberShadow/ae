@@ -32,7 +32,7 @@ import ae.utils.xmllite;
 
 public import ae.sys.install.common;
 
-class VisualStudio : Installer
+class VisualStudioInstaller : Installer
 {
 	this(int year, string edition, int webInstaller, string versionName)
 	{
@@ -259,5 +259,5 @@ protected:
 
 deprecated alias vs2013 = vs2013express;
 
-alias vs2013express   = singleton!(VisualStudio, 2013, "Express"  , 320697, "12.0");
-alias vs2013community = singleton!(VisualStudio, 2013, "Community", 517284, "12.0");
+alias vs2013express   = singleton!(VisualStudioInstaller, 2013, "Express"  , 320697, "12.0");
+alias vs2013community = singleton!(VisualStudioInstaller, 2013, "Community", 517284, "12.0");

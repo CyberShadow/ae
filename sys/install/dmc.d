@@ -26,7 +26,7 @@ import ae.utils.meta : singleton, I;
 
 public import ae.sys.install.common;
 
-class DMC : Installer
+class DMCInstaller : Installer
 {
 	@property override string name() { return "DigitalMars C++"; }
 	@property override string subdirectory() { return "dm"; }
@@ -60,4 +60,4 @@ class DMC : Installer
 	}
 }
 
-alias dmcInstaller = singleton!DMC;
+alias dmcInstaller = singleton!DMCInstaller;

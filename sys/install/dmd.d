@@ -26,7 +26,7 @@ import ae.utils.meta : singleton, I;
 
 public import ae.sys.install.common;
 
-class DMD : Installer
+class DMDInstaller : Installer
 {
 	string dmdVersion;
 
@@ -79,4 +79,4 @@ class DMD : Installer
 	}
 }
 
-alias dmdInstaller = singleton!DMD;
+alias dmdInstaller = singleton!DMDInstaller;

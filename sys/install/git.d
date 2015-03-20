@@ -25,7 +25,7 @@ import ae.utils.meta : singleton, I;
 
 public import ae.sys.install.common;
 
-class Git : Installer
+class GitInstaller : Installer
 {
 	string url = "https://github.com/msysgit/msysgit/releases/download/Git-1.9.4-preview20140815/PortableGit-1.9.4-preview20140815.7z";
 
@@ -41,4 +41,4 @@ class Git : Installer
 	}
 }
 
-alias gitInstaller = singleton!Git;
+alias gitInstaller = singleton!GitInstaller;

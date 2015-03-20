@@ -24,7 +24,7 @@ import ae.utils.meta : singleton, I;
 
 public import ae.sys.install.common;
 
-class Wix : Installer
+class WixInstaller : Installer
 {
 	int downloadId = 762938;
 	long fileTime = 130301249355530000;
@@ -53,4 +53,4 @@ class Wix : Installer
 	}
 }
 
-alias wixInstaller = singleton!Wix;
+alias wixInstaller = singleton!WixInstaller;

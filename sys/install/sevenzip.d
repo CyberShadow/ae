@@ -25,7 +25,7 @@ import ae.utils.xmllite;
 
 public import ae.sys.install.common;
 
-class SevenZip : Installer
+class SevenZipInstaller : Installer
 {
 	string url = "http://downloads.sourceforge.net/sevenzip/7za920.zip";
 
@@ -56,4 +56,4 @@ class SevenZip : Installer
 	}
 }
 
-alias sevenZip = singleton!SevenZip;
+alias sevenZip = singleton!SevenZipInstaller;
