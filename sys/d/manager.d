@@ -278,6 +278,11 @@ class DManager
 
 		void needBuild()
 		{
+			auto unbuildableMarker = buildPath(cacheDir, UNBUILDABLE_MARKER);
+
+			if (unbuildableMarker.exists)
+				throw new Exception(getBuildID() ~ " was cached as unbuildable");
+
 			void buildTo(string target)
 			{
 				foreach (dependency; sourceDeps)
@@ -287,6 +292,14 @@ class DManager
 
 				needSource();
 				stageDir = target;
+
+				scope (failure)
+				{
+					// Create "unbuildable" marker directly
+					unbuildableMarker.ensurePathExists();
+					unbuildableMarker.touch();
+				}
+
 				performBuild();
 			}
 
