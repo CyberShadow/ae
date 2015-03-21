@@ -263,8 +263,11 @@ class DManager
 		/// The components the source code of which this component depends on.
 		@property abstract string[] sourceDeps();
 
-		/// The components the built version of which this component depends on.
+		/// The components the just-built (in source directory) version of which this component depends on.
 		@property abstract string[] buildDeps();
+
+		/// The components the built, cached version of which this component depends on.
+		@property abstract string[] cacheDeps();
 
 		/// This metadata is saved to a .json file,
 		/// and is also used to calculate the cache key.
@@ -275,7 +278,7 @@ class DManager
 			string commit;
 			CommonConfig commonConfig;
 			string[] sourceDepCommits;
-			Metadata[] buildDepMetadata;
+			Metadata[] buildDepMetadata, cacheDepMetadata;
 		}
 
 		Metadata getMetadata() /// ditto
@@ -289,6 +292,9 @@ class DManager
 					dependency => getComponent(dependency).commit
 				).array(),
 				buildDeps.map!(
+					dependency => getComponent(dependency).getMetadata()
+				).array(),
+				cacheDeps.map!(
 					dependency => getComponent(dependency).getMetadata()
 				).array(),
 			);
@@ -327,7 +333,7 @@ class DManager
 		/// This will then be atomically added to the cache.
 		protected string stageDir;
 
-		void needBuild()
+		void needBuild(bool force = false)
 		{
 			if (name in buildState.componentBuilt) return;
 			scope(success) buildState.componentBuilt[name] = true;
@@ -336,7 +342,7 @@ class DManager
 
 			log("Preparing build " ~ getBuildID());
 
-			if (cacheDir.exists)
+			if (cacheDir.exists && !force)
 			{
 				log("Cache hit: " ~ cacheDir);
 				if (buildPath(cacheDir, unbuildableMarker).exists)
@@ -346,13 +352,15 @@ class DManager
 			{
 				log("Cache miss: " ~ cacheDir);
 
-				if (sourceDeps.length || buildDeps.length)
+				if (sourceDeps.length || buildDeps.length || cacheDeps.length)
 				{
 					log("Checking dependencies...");
 
 					foreach (dependency; sourceDeps)
 						getComponent(dependency).needSource();
 					foreach (dependency; buildDeps)
+						getComponent(dependency).needBuild(true);
+					foreach (dependency; cacheDeps)
 						getComponent(dependency).needBuild();
 				}
 
@@ -370,7 +378,17 @@ class DManager
 				{
 					// Don't cache failed build results during delve
 					if (failed && !config.cacheFailures)
+					{
+						log("Not caching failed build.");
 						rmdirRecurse(stageDir);
+					}
+					else
+					if (cacheDir.exists)
+					{
+						// Can happen due to force==true
+						log("Already in cache: " ~ cacheDir);
+						rmdirRecurse(stageDir);
+					}
 					else
 					{
 						log("Saving to cache: " ~ cacheDir);
@@ -392,6 +410,7 @@ class DManager
 				}
 
 				log("Building " ~ getBuildID());
+				submodule.clean = false;
 				performBuild();
 			}
 
@@ -502,6 +521,7 @@ class DManager
 		@property override string submoduleName() { return "dmd"; }
 		@property override string[] sourceDeps() { return []; }
 		@property override string[] buildDeps () { return []; }
+		@property override string[] cacheDeps () { return []; }
 
 		struct Config
 		{
@@ -597,6 +617,7 @@ EOS";
 		@property override string submoduleName() { return "phobos"; }
 		@property override string[] sourceDeps() { return []; }
 		@property override string[] buildDeps () { return []; }
+		@property override string[] cacheDeps () { return []; }
 		@property override string configString() { return null; }
 
 		override void performBuild()
@@ -614,7 +635,8 @@ EOS";
 	{
 		@property override string submoduleName() { return "druntime"; }
 		@property override string[] sourceDeps() { return ["phobos"]; }
-		@property override string[] buildDeps () { return ["dmd", "phobos-includes"]; }
+		@property override string[] buildDeps () { return []; }
+		@property override string[] cacheDeps () { return ["dmd", "phobos-includes"]; }
 		@property override string configString() { return null; }
 
 		override void performBuild()
@@ -645,8 +667,9 @@ EOS";
 	final class Phobos : Component
 	{
 		@property override string submoduleName() { return "phobos"; }
-		@property override string[] sourceDeps() { return ["druntime"]; }
-		@property override string[] buildDeps () { return ["dmd", "druntime"]; }
+		@property override string[] sourceDeps() { return []; }
+		@property override string[] buildDeps () { return ["druntime"]; }
+		@property override string[] cacheDeps () { return ["dmd"]; }
 		@property override string configString() { return null; }
 
 		override void performBuild()
@@ -685,7 +708,8 @@ EOS";
 	{
 		@property override string submoduleName() { return "tools"; }
 		@property override string[] sourceDeps() { return []; }
-		@property override string[] buildDeps () { return ["dmd", "druntime", "phobos"]; }
+		@property override string[] buildDeps () { return []; }
+		@property override string[] cacheDeps () { return ["dmd", "druntime", "phobos"]; }
 		@property override string configString() { return null; }
 
 		override void performBuild()
@@ -997,45 +1021,59 @@ EOS";
 			}
 	}
 
+	struct CacheEntry
+	{
+		string path, componentName, commit, id;
+
+		this(string path)
+		{
+			this.path = path;
+
+			auto parts = path.baseName().split("-");
+			if (parts.length < 3 ||
+				parts[$-1].length != 32 ||
+				parts[$-2].length != 40
+			)
+				return;
+
+			componentName = parts[0..$-2].join("-");
+			commit = parts[$-2];
+			id = parts[$-1];
+		}
+	}
+
 	private void optimizeCacheImpl(string componentName, const(string)[] history, bool reverse = false, string onlyRev = null)
 	{
 		if (reverse)
 			history = history.retro.array();
 
-		string[][string] cacheContent;
+		CacheEntry[][string] cacheContent;
 		foreach (de; dirEntries(cacheDir, SpanMode.shallow))
 		{
-			auto parts = de.baseName().split("-");
-			if (parts.length < 3 ||
-				parts[$-1].length != 32 ||
-				parts[$-2].length != 40 ||
-				parts[0..$-2].join("-") != componentName
-			)
-				continue;
-			cacheContent[parts[$-2]] ~= de.name;
+			auto entry = CacheEntry(de.name);
+			if (entry.componentName == componentName)
+				cacheContent[entry.commit] ~= entry;
 		}
 
-		string[string] lastRevisions;
+		CacheEntry[] lastRevisions;
 
 		foreach (rev; history)
 		{
 			auto cacheEntries = cacheContent.get(rev, null);
 			bool optimizeThis = onlyRev is null || onlyRev == rev;
 
-			// Optimize with previous revision
-			foreach (entry; cacheEntries)
+			if (optimizeThis)
 			{
-				auto suffix = entry.baseName()[40..$];
-				if (optimizeThis && suffix in lastRevisions)
-					dedupDirectories(lastRevisions[suffix], entry);
-				lastRevisions[suffix] = entry;
+				auto targetEntries = lastRevisions ~ cacheEntries;
+
+				if (targetEntries.length)
+					foreach (i, entry1; targetEntries[0..$-1])
+						foreach (entry2; targetEntries[i+1..$])
+							dedupDirectories(entry1.path, entry2.path);
 			}
 
-			// Optimize with alternate builds of this revision
-			if (optimizeThis && cacheEntries.length)
-				foreach (i, entry; cacheEntries[0..$-1])
-					foreach (entry2; cacheEntries[i+1..$])
-						dedupDirectories(entry, entry2);
+			if (cacheEntries.length)
+				lastRevisions = cacheEntries;
 		}
 	}
 
