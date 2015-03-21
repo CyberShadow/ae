@@ -512,7 +512,11 @@ class DManager
 					cp(de.name, dst.buildPath(de.name.baseName), true);
 			}
 			else
-				copy(src, dst, PreserveAttributes.yes);
+			{
+				copy(src, dst);
+				version (Posix)
+					dst.setAttributes(src.getAttributes());
+			}
 		}
 	}
 
