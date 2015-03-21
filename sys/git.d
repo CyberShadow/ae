@@ -33,6 +33,7 @@ import ae.utils.text;
 struct Repository
 {
 	string path;
+	string gitDir;
 
 	// TODO: replace this with using the std.process workDir parameter in 2.066
 	string[] argsPrefix;
@@ -41,12 +42,12 @@ struct Repository
 	{
 		path = path.absolutePath();
 		enforce(path.exists, "Repository path does not exist");
-		auto dotGit = path.buildPath(".git");
-		if (dotGit.exists && dotGit.isFile)
-			dotGit = path.buildPath(dotGit.readText().strip()[8..$]);
+		gitDir = path.buildPath(".git");
+		if (gitDir.exists && gitDir.isFile)
+			gitDir = path.buildNormalizedPath(gitDir.readText().strip()[8..$]);
 		//path = path.replace(`\`, `/`);
 		this.path = path;
-		this.argsPrefix = [`git`, `--work-tree=` ~ path, `--git-dir=` ~ dotGit];
+		this.argsPrefix = [`git`, `--work-tree=` ~ path, `--git-dir=` ~ gitDir];
 	}
 
 	invariant()
