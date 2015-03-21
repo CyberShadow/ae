@@ -108,7 +108,7 @@ class DManager
 	{
 		return buildPath(
 			config.local.workDir,
-			config.persistentCache ? "cache" : "temp-cache",
+			usingPersistentCache ? "cache" : "temp-cache",
 			"v%d".format(cacheVersion),
 		);
 	}
@@ -258,7 +258,7 @@ class DManager
 		CommonConfig commonConfig;
 
 		/// Commit in the component's repo from which to build this component.
-		@property string commit() { return getComponentCommit(name); }
+		@property string commit() { return incrementalBuild ? "incremental" : getComponentCommit(name); }
 
 		/// The components the source code of which this component depends on.
 		@property abstract string[] sourceDeps();
@@ -316,7 +316,8 @@ class DManager
 		/// Usually needed by other components.
 		void needSource()
 		{
-			submodule.needHead(commit);
+			if (!incrementalBuild)
+				submodule.needHead(commit);
 		}
 
 		@property string sourceDir() { submodule.needRepo(); return submodule.git.path; }
@@ -799,6 +800,21 @@ EOS";
 	// ****************************** Building *******************************
 
 	private SubmoduleState submoduleState;
+	private bool incrementalBuild;
+
+	@property bool usingPersistentCache()
+	{
+		return config.persistentCache && !incrementalBuild;
+	}
+
+	private string getComponentCommit(string componentName)
+	{
+		auto submoduleName = getComponent(componentName).submoduleName;
+		auto commit = submoduleState.submoduleCommits.get(submoduleName, null);
+		enforce(commit, "Unknown commit to build for component %s (submodule %s)"
+			.format(componentName, submoduleName));
+		return commit;
+	}
 
 	private struct BuildState
 	{
@@ -809,19 +825,20 @@ EOS";
 	static const string[] defaultComponents = ["dmd", "druntime", "phobos-includes", "phobos", "rdmd"];
 
 	/// Build the specified components according to the specified configuration.
-	void build(SubmoduleState submoduleState, Config.Build buildConfig, in string[] components = defaultComponents)
+	void build(SubmoduleState submoduleState, Config.Build buildConfig, in string[] components = defaultComponents, bool incremental = false)
 	{
 		this.buildState = BuildState.init;
 		this.submoduleState = submoduleState;
 		this.config.build = buildConfig;
+		this.incrementalBuild = incremental;
 		prepareEnv();
 
 		if (buildDir.exists)
 			buildDir.removeRecurse();
 		enforce(!buildDir.exists);
 
-		if (!config.persistentCache) removeRecurse(cacheDir);
-		scope(success) if (!config.persistentCache) removeRecurse(cacheDir);
+		if (!usingPersistentCache && cacheDir.exists) removeRecurse(cacheDir);
+		scope(success) if (!usingPersistentCache && cacheDir.exists) removeRecurse(cacheDir);
 
 		foreach (componentName; components)
 			getComponent(componentName).needBuild();
@@ -834,13 +851,10 @@ EOS";
 		build(submoduleState, buildConfig, components);
 	}
 
-	private string getComponentCommit(string componentName)
+	/// Rerun build without cleaning up any files.
+	void rebuild(Config.Build buildConfig, in string[] components = defaultComponents)
 	{
-		auto submoduleName = getComponent(componentName).submoduleName;
-		auto commit = submoduleState.submoduleCommits.get(submoduleName, null);
-		enforce(commit, "Unknown commit to build for component %s (submodule %s)"
-			.format(componentName, submoduleName));
-		return commit;
+		build(SubmoduleState(null), buildConfig, components, true);
 	}
 
 	// **************************** Dependencies *****************************
