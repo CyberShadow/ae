@@ -27,6 +27,7 @@ import ae.sys.d.repo;
 import ae.sys.file;
 import ae.sys.git;
 import ae.utils.digest;
+import ae.utils.json;
 
 version (Windows)
 {
@@ -74,7 +75,10 @@ class DManager
 		/// Whether we persistently cache things.
 		bool persistentCache;
 
-	protected:
+		/// Whether we should cache failed builds.
+		bool cacheFailures = true;
+
+	//protected:
 
 		struct Deps /// Configuration for software dependencies
 		{
@@ -82,7 +86,6 @@ class DManager
 			string vsDir;    /// Where Visual Studio is installed
 			string sdkDir;   /// Where the Windows SDK is installed
 			string hostDC;   /// Host D compiler (for DDMD bootstrapping)
-			string[] paths;  /// Additional PATH entries
 		}
 		Deps deps; /// ditto
 
@@ -114,20 +117,12 @@ class DManager
 
 	class DManagerRepository : ManagedRepository
 	{
-		override void log(string s) { return this.outer.log(s); }
-	}
-
-	class SubmoduleRepository : DManagerRepository
-	{
-		string dir;
-
-		override void needRepo()
+		this()
 		{
-			getMetaRepo().needRepo();
-
-			if (!git.path)
-				git = Repository(dir);
+			this.offline = config.offline;
 		}
+
+		override void log(string s) { return this.outer.log(s); }
 	}
 
 	class MetaRepository : DManagerRepository
@@ -150,7 +145,7 @@ class DManager
 		static void performClone(string url, string target)
 		{
 			import ae.sys.cmd;
-			run(["git", "clone", "--recursive", url, target]);
+			run(["git", "clone", url, target]);
 		}
 
 		override void performCheckout(string hash)
@@ -181,6 +176,19 @@ class DManager
 		}
 	}
 
+	class SubmoduleRepository : DManagerRepository
+	{
+		string dir;
+
+		override void needRepo()
+		{
+			getMetaRepo().needRepo();
+
+			if (!git.path)
+				git = Repository(dir);
+		}
+	}
+
 	/// The meta-repository, which contains the sub-project submodules.
 	private MetaRepository metaRepo;
 
@@ -199,8 +207,18 @@ class DManager
 		if (name !in submodules)
 		{
 			getMetaRepo().needRepo();
+			enforce(name in getMetaRepo().getSubmoduleCommits(getMetaRepo().getRef("origin/master")),
+				"Unknown submodule: " ~ name);
+
 			auto path = buildPath(metaRepo.git.path, name);
-			enforce(path.exists, "Unknown submodule: " ~ name);
+			auto gitPath = buildPath(path, ".git");
+
+			if (!gitPath.exists)
+			{
+				log("Initializing and updating submodule %s...".format(name));
+				getMetaRepo().git.run(["submodule", "update", "--init", name]);
+			}
+
 			submodules[name] = new SubmoduleRepository();
 			submodules[name].dir = path;
 		}
@@ -225,17 +243,18 @@ class DManager
 
 		struct CommonConfig
 		{
+			version (Windows)
+				enum defaultModel = "32";
+			else
+			version (D_LP64)
+				enum defaultModel = "64";
+			else
+				enum defaultModel = "32";
+
 			string model = defaultModel; /// Target model ("32" or "64").
 
 			string[] makeArgs; /// Additional make parameters,
 			                   /// e.g. "-j8" or "HOST_CC=g++48"
-
-			/// Returns a string representation of this build configuration
-			/// usable for a cache directory name. Must reflect all fields.
-			string toString() const
-			{
-				return model;
-			}
 		}
 		CommonConfig commonConfig;
 
@@ -248,21 +267,49 @@ class DManager
 		/// The components the built version of which this component depends on.
 		@property abstract string[] buildDeps();
 
+		/// This metadata is saved to a .json file,
+		/// and is also used to calculate the cache key.
+		struct Metadata
+		{
+			int cacheVersion;
+			string name;
+			string commit;
+			CommonConfig commonConfig;
+			string[] sourceDepCommits;
+			Metadata[] buildDepMetadata;
+		}
+
+		Metadata getMetadata() /// ditto
+		{
+			return Metadata(
+				cacheVersion,
+				name,
+				commit,
+				commonConfig,
+				sourceDeps.map!(
+					dependency => getComponent(dependency).commit
+				).array(),
+				buildDeps.map!(
+					dependency => getComponent(dependency).getMetadata()
+				).array(),
+			);
+		}
+
+		void saveMetaData(string target)
+		{
+			std.file.write(buildPath(target, "digger-metadata.json"), getMetadata().toJson());
+			// Use a separate file to avoid double-encoding JSON
+			std.file.write(buildPath(target, "digger-config.json"), configString);
+		}
+
+		/// Calculates the cache key, which should be unique and immutable
+		/// for the same source, build parameters, and build algorithm.
 		string getBuildID()
 		{
 			return "%s-%s-%s".format(
 				name,
 				commit,
-				getDigestString!MD5(chain(
-					commonConfig.toString().only,
-					configString.only,
-					sourceDeps.map!(
-						dependency => getComponent(dependency).commit
-					),
-					buildDeps.map!(
-						dependency => getComponent(dependency).getBuildID()
-					),
-				).join("\0"))
+				getMetadata().toJson().getDigestString!MD5().toLower(),
 			);
 		}
 
@@ -278,13 +325,14 @@ class DManager
 
 		void needBuild()
 		{
-			auto unbuildableMarker = buildPath(cacheDir, UNBUILDABLE_MARKER);
+			auto unbuildableMarker = buildPath(cacheDir, "unbuildable");
 
 			if (unbuildableMarker.exists)
 				throw new Exception(getBuildID() ~ " was cached as unbuildable");
 
 			void buildTo(string target)
 			{
+				log("Preparing to build " ~ getBuildID());
 				foreach (dependency; sourceDeps)
 					getComponent(dependency).needSource();
 				foreach (dependency; buildDeps)
@@ -293,13 +341,20 @@ class DManager
 				needSource();
 				stageDir = target;
 
+				mkdirRecurse(target);
+				saveMetaData(target);
+
 				scope (failure)
 				{
-					// Create "unbuildable" marker directly
-					unbuildableMarker.ensurePathExists();
-					unbuildableMarker.touch();
+					if (config.cacheFailures)
+					{
+						// Create "unbuildable" marker directly
+						unbuildableMarker.ensurePathExists();
+						unbuildableMarker.touch();
+					}
 				}
 
+				log("Building " ~ getBuildID());
 				performBuild();
 			}
 
@@ -329,15 +384,7 @@ class DManager
 	protected final:
 		// Utility declarations for component implementations
 
-		version (Windows)
-			enum defaultModel = "32";
-		else
-		version (D_LP64)
-			enum defaultModel = "64";
-		else
-			enum defaultModel = "32";
-
-		@property string modelSuffix() { return commonConfig.model == defaultModel ? "" : commonConfig.model; }
+		@property string modelSuffix() { return commonConfig.model == CommonConfig.defaultModel ? "" : commonConfig.model; }
 		version (Windows)
 		{
 			enum string makeFileName = "win32.mak";
@@ -429,18 +476,11 @@ class DManager
 			/// Debug builds are faster to build,
 			/// but run slower. Windows only.
 			bool debugDMD = false;
-
-			/// Returns a string representation of this build configuration
-			/// usable for a cache directory name. Must reflect all fields.
-			string toString() const
-			{
-				return debugDMD ? "debug" : null;
-			}
 		}
 
 		Config buildConfig;
 
-		@property override string configString() { return buildConfig.toString(); }
+		@property override string configString() { return buildConfig.toJson(); }
 
 		override void performBuild()
 		{
@@ -684,35 +724,35 @@ EOS";
 		getMetaRepo().update();
 	}
 
-	struct CustomizationState
+	struct SubmoduleState
 	{
 		string[string] submoduleCommits;
 	}
 
 	/// Begin customization, starting at the specified commit.
-	CustomizationState begin(string commit)
+	SubmoduleState begin(string commit)
 	{
-		return CustomizationState(getMetaRepo().getSubmoduleCommits(commit));
+		return SubmoduleState(getMetaRepo().getSubmoduleCommits(commit));
 	}
 
-	/// Applies a merge onto the given CustomizationState.
-	void addMerge(ref CustomizationState customizationState, string submoduleName, string branch)
+	/// Applies a merge onto the given SubmoduleState.
+	void merge(ref SubmoduleState submoduleState, string submoduleName, string branch)
 	{
-		enforce(submoduleName in customizationState.submoduleCommits, "Unknown submodule: " ~ submoduleName);
+		enforce(submoduleName in submoduleState.submoduleCommits, "Unknown submodule: " ~ submoduleName);
 		auto submodule = getSubmodule(submoduleName);
-		auto head = customizationState.submoduleCommits[submoduleName];
+		auto head = submoduleState.submoduleCommits[submoduleName];
 		auto result = submodule.getMerge(head, branch);
-		customizationState.submoduleCommits[submoduleName] = result;
+		submoduleState.submoduleCommits[submoduleName] = result;
 	}
 
-	/// Removes a merge from the given CustomizationState.
-	void removeMerge(ref CustomizationState customizationState, string submoduleName, string branch)
+	/// Removes a merge from the given SubmoduleState.
+	void unmerge(ref SubmoduleState submoduleState, string submoduleName, string branch)
 	{
-		enforce(submoduleName in customizationState.submoduleCommits, "Unknown submodule: " ~ submoduleName);
+		enforce(submoduleName in submoduleState.submoduleCommits, "Unknown submodule: " ~ submoduleName);
 		auto submodule = getSubmodule(submoduleName);
-		auto head = customizationState.submoduleCommits[submoduleName];
+		auto head = submoduleState.submoduleCommits[submoduleName];
 		auto result = submodule.getUnMerge(head, branch);
-		customizationState.submoduleCommits[submoduleName] = result;
+		submoduleState.submoduleCommits[submoduleName] = result;
 	}
 
 	/// Returns the commit hash for the given pull request #.
@@ -731,11 +771,14 @@ EOS";
 
 	// ****************************** Building *******************************
 
-	CustomizationState customization;
+	private SubmoduleState submoduleState;
 
-	void build(CustomizationState customizationState, Config.Build buildConfig, string[] components)
+	static const string[] defaultComponents = ["dmd", "druntime", "phobos-includes", "phobos", "rdmd"];
+
+	/// Build the specified components according to the specified configuration.
+	void build(SubmoduleState submoduleState, Config.Build buildConfig, in string[] components = defaultComponents)
 	{
-		this.customization = customizationState;
+		this.submoduleState = submoduleState;
 		this.config.build = buildConfig;
 		prepareEnv();
 
@@ -750,13 +793,17 @@ EOS";
 			getComponent(componentName).needBuild();
 	}
 
-	string getComponentCommit(string componentName)
+	/// Shortcut for begin + build
+	void buildRev(string rev, Config.Build buildConfig, in string[] components = defaultComponents)
 	{
-		//  - (not implemented for now) get component-specific hash
-		//  - get the hash for the submodule used by that component, corresponding to the commit in the meta-repo
+		auto submoduleState = begin(rev);
+		build(submoduleState, buildConfig, components);
+	}
 
+	private string getComponentCommit(string componentName)
+	{
 		auto submoduleName = getComponent(componentName).submoduleName;
-		auto commit = customization.submoduleCommits.get(submoduleName, null);
+		auto commit = submoduleState.submoduleCommits.get(submoduleName, null);
 		enforce(commit, "Unknown commit to build for component %s (submodule %s)"
 			.format(componentName, submoduleName));
 		return commit;
@@ -868,8 +915,43 @@ EOS";
 		}
 	}
 
+	// **************************** Miscellaneous ****************************
+
+	struct LogEntry
+	{
+		string message, hash;
+		SysTime time;
+	}
+
+	/// Gets the D merge log (newest first).
+	LogEntry[] getLog()
+	{
+		getMetaRepo().needRepo();
+		auto history = getMetaRepo().git.getHistory();
+		LogEntry[] logs;
+		auto master = history.commits[history.refs["refs/remotes/origin/master"]];
+		for (auto c = master; c; c = c.parents.length ? c.parents[0] : null)
+		{
+			auto title = c.message.length ? c.message[0] : null;
+			auto time = SysTime(c.time.unixTimeToStdTime);
+			logs ~= LogEntry(title, c.hash.toString(), time);
+		}
+		return logs;
+	}
+
+	// ***************************** Integration *****************************
+
 	/// Override to add logging.
 	void log(string line)
 	{
 	}
+
+	/// Override this method with one which returns a command,
+	/// which will invoke the unmergeRebaseEdit function below,
+	/// passing to it any additional parameters.
+	/// Note: Currently unused. Was previously used
+	/// for unmerging things using interactive rebase.
+	abstract string getCallbackCommand();
+
+	void callback(string[] args) { assert(false); }
 }

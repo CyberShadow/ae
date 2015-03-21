@@ -69,7 +69,7 @@ class ManagedRepository
 	private string currentHead = null;
 
 	/// Returns the SHA1 of the given named ref.
-	private string getRef(string name)
+	public string getRef(string name)
 	{
 		return git.query("rev-parse", name);
 	}
@@ -88,7 +88,7 @@ class ManagedRepository
 	{
 		needClean();
 
-		log("Checking out %s...".format(hash));
+		log("Checking out %s commit %s...".format(name, hash));
 
 		if (offline)
 			git.run("checkout", hash);
@@ -111,7 +111,10 @@ class ManagedRepository
 	public void update()
 	{
 		if (!offline)
+		{
+			log("Updating " ~ name ~ "...");
 			git.run("-c", "fetch.recurseSubmodules=false", "remote", "update", "--prune");
+		}
 	}
 
 	// Clean
@@ -125,8 +128,6 @@ class ManagedRepository
 			return;
 
 		needRepo();
-
-		log("Cleaning up...");
 		performCleanup();
 
 		clean = true;
@@ -134,6 +135,7 @@ class ManagedRepository
 
 	private void performCleanup()
 	{
+		log("Cleaning repository %s...".format(name));
 		git.run("reset", "--hard");
 		git.run("clean", "--force", "-x", "-d", "--quiet");
 	}
@@ -275,6 +277,18 @@ class ManagedRepository
 
 	// Branches, forks and customization
 
+	/// Return SHA1 of the given remote ref.
+	/// Fetches the remote first, unless offline mode is on.
+	string getRemoteRef(string remote, string remoteRef, string localRef)
+	{
+		if (!offline)
+		{
+			log("Fetching from %s (%s -> %s) ...".format(remote, remoteRef, localRef));
+			git.run("fetch", remote, "+%s:%s".format(remoteRef, localRef));
+		}
+		return getRef(localRef);
+	}
+
 	private void fetchPull(int pull)
 	{
 		if (offline)
@@ -283,36 +297,18 @@ class ManagedRepository
 		needRepo();
 
 		log("Fetching pull request %d...".format(pull));
-		git.run("fetch", "origin", "+refs/pull/%d/head:refs/remotes/origin/pr/%d".format(pull, pull));
+		git.run("fetch", "origin", "+refs/pull/%d/head:refs/pull/origin/%d/head".format(pull, pull));
 	}
 
 	/// Return SHA1 of the given pull request #.
 	/// Fetches the pull request first, unless offline mode is on.
 	string getPull(int pull)
 	{
-		fetchPull(pull);
-		return getRef("origin/pr/%d".format(pull));
-	}
-
-	/// Return SHA1 of the given remote branch.
-	/// Fetches the remote first, unless offline mode is on.
-	string getRemoteBranch(string remoteName, string repoUrl, string branch)
-	{
-		enforce(remoteName.match(re!`^\w[\w\-]*$`), "Bad remote name");
-		enforce(repoUrl.match(re!`^\w[\w\-]*:[\w/\-\.]+$`), "Bad remote URL");
-		enforce(branch.match(re!`^\w[\w\-\.]*$`), "Bad branch name");
-
-		void rm()
-		{
-			try
-				git.run("remote", "rm", remoteName);
-			catch (Exception e) {}
-		}
-		rm();
-		scope(exit) rm();
-		git.run("remote", "add", "-f", remoteName, repoUrl);
-
-		return getRef("%s/%s".format(remoteName, branch));
+		return getRemoteRef(
+			"origin",
+			"refs/pull/%d/head".format(pull),
+			"refs/digger/pull/%d".format(pull),
+		);
 	}
 
 	/// Return SHA1 of the given GitHub fork.
@@ -320,7 +316,14 @@ class ManagedRepository
 	/// (This is a thin wrapper around getRemoteBranch.)
 	string getFork(string user, string branch)
 	{
-		return getRemoteBranch(user, "https://github.com/%s/%s".format(user, name), branch);
+		enforce(user  .match(re!`^\w[\w\-]*$`), "Bad remote name");
+		enforce(branch.match(re!`^\w[\w\-\.]*$`), "Bad branch name");
+
+		return getRemoteRef(
+			"https://github.com/%s/%s".format(user, branch),
+			"refs/heads/%s".format(branch),
+			"refs/digger/fork/%s/%s".format(user, branch),
+		);
 	}
 
 	// Misc
