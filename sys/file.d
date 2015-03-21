@@ -792,6 +792,16 @@ ubyte[16] mdFile()(string fn)
 	return digest;
 }
 
+ubyte[16] mdFileCached()(string fn)
+{
+	static ubyte[16][ulong] cache;
+	auto id = getFileID(fn);
+	auto phash = id in cache;
+	if (phash)
+		return *phash;
+	return cache[id] = mdFile(fn);
+}
+
 /// Read a File (which might be a stream) into an array
 void[] readFile(File f)
 {
