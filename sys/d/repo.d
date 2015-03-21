@@ -112,6 +112,7 @@ class ManagedRepository
 	{
 		if (!offline)
 		{
+			needRepo();
 			log("Updating " ~ name ~ "...");
 			git.run("-c", "fetch.recurseSubmodules=false", "remote", "update", "--prune");
 		}
@@ -126,16 +127,14 @@ class ManagedRepository
 	{
 		if (clean)
 			return;
-
-		needRepo();
 		performCleanup();
-
 		clean = true;
 	}
 
 	private void performCleanup()
 	{
 		log("Cleaning repository %s...".format(name));
+		needRepo();
 		git.run("reset", "--hard");
 		git.run("clean", "--force", "-x", "-d", "--quiet");
 	}
