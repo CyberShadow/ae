@@ -323,49 +323,78 @@ class DManager
 		@property string sourceDir() { submodule.needRepo(); return submodule.git.path; }
 		@property string cacheDir() { return buildPath(this.outer.cacheDir, getBuildID()); }
 
+		/// Directory to which built files are copied to.
+		/// This will then be atomically added to the cache.
+		protected string stageDir;
+
 		void needBuild()
 		{
-			auto unbuildableMarker = buildPath(cacheDir, "unbuildable");
+			if (name in buildState.componentBuilt) return;
+			scope(success) buildState.componentBuilt[name] = true;
 
-			if (unbuildableMarker.exists)
-				throw new Exception(getBuildID() ~ " was cached as unbuildable");
+			enum unbuildableMarker = "unbuildable";
 
-			void buildTo(string target)
+			log("Preparing build " ~ getBuildID());
+
+			if (cacheDir.exists)
 			{
-				log("Preparing to build " ~ getBuildID());
-				foreach (dependency; sourceDeps)
-					getComponent(dependency).needSource();
-				foreach (dependency; buildDeps)
-					getComponent(dependency).needBuild();
+				log("Cache hit: " ~ cacheDir);
+				if (buildPath(cacheDir, unbuildableMarker).exists)
+					throw new Exception(getBuildID() ~ " was cached as unbuildable");
+			}
+			else
+			{
+				log("Cache miss: " ~ cacheDir);
+
+				if (sourceDeps.length || buildDeps.length)
+				{
+					log("Checking dependencies...");
+
+					foreach (dependency; sourceDeps)
+						getComponent(dependency).needSource();
+					foreach (dependency; buildDeps)
+						getComponent(dependency).needBuild();
+				}
 
 				needSource();
-				stageDir = target;
 
-				mkdirRecurse(target);
-				saveMetaData(target);
+				stageDir = cacheDir ~ ".tmp";
+				if (stageDir.exists)
+					stageDir.removeRecurse();
+				stageDir.mkdirRecurse();
 
+				bool failed = false;
+
+				// Save the results to cache, failed or not
+				scope (exit)
+				{
+					// Don't cache failed build results during delve
+					if (failed && !config.cacheFailures)
+						rmdirRecurse(stageDir);
+					else
+					{
+						saveMetaData(stageDir);
+						rename(stageDir, cacheDir);
+					}
+				}
+
+				// An incomplete build is useless, nuke the directory
+				// and create a new one just for the "unbuildable" marker.
 				scope (failure)
 				{
-					if (config.cacheFailures)
-					{
-						// Create "unbuildable" marker directly
-						unbuildableMarker.ensurePathExists();
-						unbuildableMarker.touch();
-					}
+					failed = true;
+					rmdirRecurse(stageDir);
+					mkdir(stageDir);
+					buildPath(stageDir, unbuildableMarker).touch();
 				}
 
 				log("Building " ~ getBuildID());
 				performBuild();
 			}
 
-			cached!buildTo(cacheDir);
-
 			install();
+			updateEnv();
 		}
-
-		/// Directory to which built files are copied to.
-		/// This will then be atomically added to the cache.
-		protected string stageDir;
 
 		/// Perform build, and place resulting files to stageDir
 		abstract void performBuild();
@@ -378,7 +407,8 @@ class DManager
 		void install()
 		{
 			foreach (de; dirEntries(cacheDir, SpanMode.shallow))
-				cp(de.name, buildPath(buildDir, de.name.baseName));
+				if (!de.baseName.startsWith("digger-"))
+					cp(de.name, buildPath(buildDir, de.baseName));
 		}
 
 	protected final:
@@ -665,7 +695,7 @@ EOS";
 				run(["dmd", "-m" ~ commonConfig.model, "rdmd"]);
 			}
 			cp(
-				buildPath(sourceDir, "tools", "rdmd" ~ binExt),
+				buildPath(sourceDir, "rdmd" ~ binExt),
 				buildPath(stageDir , "bin", "rdmd" ~ binExt),
 			);
 
@@ -773,11 +803,18 @@ EOS";
 
 	private SubmoduleState submoduleState;
 
+	private struct BuildState
+	{
+		bool[string] componentBuilt;
+	}
+	private BuildState buildState;
+
 	static const string[] defaultComponents = ["dmd", "druntime", "phobos-includes", "phobos", "rdmd"];
 
 	/// Build the specified components according to the specified configuration.
 	void build(SubmoduleState submoduleState, Config.Build buildConfig, in string[] components = defaultComponents)
 	{
+		this.buildState = BuildState.init;
 		this.submoduleState = submoduleState;
 		this.config.build = buildConfig;
 		prepareEnv();
