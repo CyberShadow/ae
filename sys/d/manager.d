@@ -689,7 +689,7 @@ EOS";
 				}
 				else
 				{
-					run([make, "-f", makeFileNameModel] ~ config.build.makeArgs ~ platformMakeVars);
+					run([make, "-f", makeFileNameModel] ~ commonConfig.makeArgs ~ platformMakeVars);
 					targets = "generated".dirEntries(SpanMode.depth).filter!(de => de.name.endsWith(".a")).map!(de => de.name).array();
 				}
 			}
