@@ -162,7 +162,6 @@ class DManager
 			if (pcacheEntry)
 				return *pcacheEntry;
 
-			needHead(head);
 			string[string] result;
 			foreach (line; git.query("ls-tree", head).splitLines())
 			{
@@ -745,8 +744,6 @@ EOS";
 	}
 
 	// **************************** Customization ****************************
-
-	// TODO: Push all of this out into a separate class
 
 	/// Fetch latest D history.
 	void update()

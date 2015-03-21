@@ -170,7 +170,7 @@ class ManagedRepository
 	private @property string mergeCachePath()
 	{
 		needRepo();
-		return buildPath(git.path, ".git", "ae-sys-d-mergecache.json");
+		return buildPath(git.gitDir, "ae-sys-d-mergecache.json");
 	}
 
 	// Merge
@@ -281,6 +281,7 @@ class ManagedRepository
 	/// Fetches the remote first, unless offline mode is on.
 	string getRemoteRef(string remote, string remoteRef, string localRef)
 	{
+		needRepo();
 		if (!offline)
 		{
 			log("Fetching from %s (%s -> %s) ...".format(remote, remoteRef, localRef));
@@ -297,7 +298,7 @@ class ManagedRepository
 		needRepo();
 
 		log("Fetching pull request %d...".format(pull));
-		git.run("fetch", "origin", "+refs/pull/%d/head:refs/pull/origin/%d/head".format(pull, pull));
+		git.run("fetch", "--no-tags", "origin", "+refs/pull/%d/head:refs/pull/origin/%d/head".format(pull, pull));
 	}
 
 	/// Return SHA1 of the given pull request #.
@@ -320,7 +321,7 @@ class ManagedRepository
 		enforce(branch.match(re!`^\w[\w\-\.]*$`), "Bad branch name");
 
 		return getRemoteRef(
-			"https://github.com/%s/%s".format(user, branch),
+			"https://github.com/%s/%s".format(user, name),
 			"refs/heads/%s".format(branch),
 			"refs/digger/fork/%s/%s".format(user, branch),
 		);
