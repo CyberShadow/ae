@@ -373,8 +373,11 @@ class DManager
 						rmdirRecurse(stageDir);
 					else
 					{
+						log("Saving to cache: " ~ cacheDir);
 						saveMetaData(stageDir);
 						rename(stageDir, cacheDir);
+						if (usingPersistentCache)
+							optimizeRevision(name, commit);
 					}
 				}
 
@@ -961,6 +964,109 @@ EOS";
 			config.env["TEMP"] = config.env["TMP"] = tmpDir;
 			config.env["SystemRoot"] = winDir;
 		}
+	}
+
+	// ******************************** Cache ********************************
+
+	/// Replace all files that have duplicate subpaths and content
+	/// which exist under both dirA and dirB with hard links.
+	void dedupDirectories(string dirA, string dirB)
+	{
+		foreach (de; dirEntries(dirA, SpanMode.depth))
+			if (de.isFile)
+			{
+				auto pathA = de.name;
+				auto subPath = pathA[dirA.length..$];
+				auto pathB = dirB ~ subPath;
+
+				if (pathB.exists
+				 && pathA.getSize() == pathB.getSize()
+				 && pathA.getFileID() != pathB.getFileID()
+				 && pathA.mdFileCached() == pathB.mdFileCached())
+				{
+					debug log(pathB ~ " = " ~ pathA);
+					pathB.remove();
+					try
+						pathA.hardLink(pathB);
+					catch (FileException e)
+					{
+						log(" -- Hard link failed: " ~ e.msg);
+						pathA.copy(pathB);
+					}
+				}
+			}
+	}
+
+	private void optimizeCacheImpl(string componentName, const(string)[] history, bool reverse = false, string onlyRev = null)
+	{
+		if (reverse)
+			history = history.retro.array();
+
+		string[][string] cacheContent;
+		foreach (de; dirEntries(cacheDir, SpanMode.shallow))
+		{
+			auto parts = de.baseName().split("-");
+			if (parts.length < 3 ||
+				parts[$-1].length != 32 ||
+				parts[$-2].length != 40 ||
+				parts[0..$-2].join("-") != componentName
+			)
+				continue;
+			cacheContent[parts[$-2]] ~= de.name;
+		}
+
+		string[string] lastRevisions;
+
+		foreach (rev; history)
+		{
+			auto cacheEntries = cacheContent.get(rev, null);
+			bool optimizeThis = onlyRev is null || onlyRev == rev;
+
+			// Optimize with previous revision
+			foreach (entry; cacheEntries)
+			{
+				auto suffix = entry.baseName()[40..$];
+				if (optimizeThis && suffix in lastRevisions)
+					dedupDirectories(lastRevisions[suffix], entry);
+				lastRevisions[suffix] = entry;
+			}
+
+			// Optimize with alternate builds of this revision
+			if (optimizeThis && cacheEntries.length)
+				foreach (i, entry; cacheEntries[0..$-1])
+					foreach (entry2; cacheEntries[i+1..$])
+						dedupDirectories(entry, entry2);
+		}
+	}
+
+	private string[] getHistory(string componentName)
+	{
+		auto submodule = getComponent(componentName).submodule;
+		submodule.needRepo();
+		return submodule.git.query("log", "--pretty=format:%H", "--all", "--topo-order").splitLines();
+	}
+
+	/// Optimize entire cache.
+	void optimizeCache()
+	{
+		bool[string] componentNames;
+		foreach (de; dirEntries(cacheDir, SpanMode.shallow))
+		{
+			auto parts = de.baseName().split("-");
+			if (parts.length >= 3)
+				componentNames[parts[0..$-2].join("-")] = true;
+		}
+
+		foreach (componentName; componentNames.byKey)
+			optimizeCacheImpl(componentName, getHistory(componentName));
+	}
+
+	/// Optimize specific revision.
+	void optimizeRevision(string componentName, string revision)
+	{
+		auto history = getHistory(componentName);
+		optimizeCacheImpl(componentName, history, false, revision);
+		optimizeCacheImpl(componentName, history, true , revision);
 	}
 
 	// **************************** Miscellaneous ****************************
