@@ -542,8 +542,7 @@ class DManager
 		override void performBuild()
 		{
 			needDMD(); // Required for bootstrapping.
-			version (Windows)
-				needDMC();
+			needCC(); // Need VC too for VSINSTALLDIR
 
 			{
 				auto owd = pushd(buildPath(sourceDir, "src"));
