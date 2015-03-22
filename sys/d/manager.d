@@ -995,6 +995,8 @@ EOS";
 
 	// ******************************** Cache ********************************
 
+	int dedupedFiles;
+
 	/// Replace all files that have duplicate subpaths and content
 	/// which exist under both dirA and dirB with hard links.
 	void dedupDirectories(string dirA, string dirB)
@@ -1011,10 +1013,13 @@ EOS";
 				 && pathA.getFileID() != pathB.getFileID()
 				 && pathA.mdFileCached() == pathB.mdFileCached())
 				{
-					debug log(pathB ~ " = " ~ pathA);
+					//debug log(pathB ~ " = " ~ pathA);
 					pathB.remove();
 					try
+					{
 						pathA.hardLink(pathB);
+						dedupedFiles++;
+					}
 					catch (FileException e)
 					{
 						log(" -- Hard link failed: " ~ e.msg);
@@ -1098,16 +1103,20 @@ EOS";
 				componentNames[parts[0..$-2].join("-")] = true;
 		}
 
+		log("Optimizing cache..."); dedupedFiles = 0;
 		foreach (componentName; componentNames.byKey)
 			optimizeCacheImpl(componentName, getHistory(componentName));
+		log("Deduplicated %d files.".format(dedupedFiles));
 	}
 
 	/// Optimize specific revision.
 	void optimizeRevision(string componentName, string revision)
 	{
+		log("Optimizing cache..."); dedupedFiles = 0;
 		auto history = getHistory(componentName);
 		optimizeCacheImpl(componentName, history, false, revision);
 		optimizeCacheImpl(componentName, history, true , revision);
+		log("Deduplicated %d files.".format(dedupedFiles));
 	}
 
 	// **************************** Miscellaneous ****************************
