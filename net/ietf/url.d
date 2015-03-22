@@ -73,8 +73,8 @@ template UrlEncoder(alias isCharAllowed, char escape = '%')
 	bool[256] genCharAllowed()
 	{
 		bool[256] result;
-		foreach (char c; 0..256)
-			result[c] = isCharAllowed(c);
+		foreach (c; 0..256)
+			result[c] = isCharAllowed(cast(char)c);
 		return result;
 	}
 
