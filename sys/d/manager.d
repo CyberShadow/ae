@@ -333,18 +333,18 @@ class DManager
 		/// This will then be atomically added to the cache.
 		protected string stageDir;
 
-		void needBuild(bool force = false)
+		void needBuild(BuildState.ComponentState neededState = BuildState.ComponentState.cache)
 		{
-			if (name in buildState.componentBuilt) return;
-			scope(success) buildState.componentBuilt[name] = true;
+			if (buildState.componentStates.get(name, BuildState.ComponentState.none) >= neededState) return;
 
 			enum unbuildableMarker = "unbuildable";
 
 			log("Preparing build " ~ getBuildID());
 
-			if (cacheDir.exists && !force)
+			if (cacheDir.exists && neededState <= BuildState.ComponentState.cache)
 			{
 				log("Cache hit: " ~ cacheDir);
+				buildState.componentStates[name] = BuildState.ComponentState.cache;
 				if (buildPath(cacheDir, unbuildableMarker).exists)
 					throw new Exception(getBuildID() ~ " was cached as unbuildable");
 			}
@@ -359,7 +359,7 @@ class DManager
 					foreach (dependency; sourceDeps)
 						getComponent(dependency).needSource();
 					foreach (dependency; buildDeps)
-						getComponent(dependency).needBuild(true);
+						getComponent(dependency).needBuild(BuildState.ComponentState.build);
 					foreach (dependency; cacheDeps)
 						getComponent(dependency).needBuild();
 				}
@@ -412,6 +412,7 @@ class DManager
 				log("Building " ~ getBuildID());
 				submodule.clean = false;
 				performBuild();
+				buildState.componentStates[name] = BuildState.ComponentState.build;
 			}
 
 			install();
@@ -853,7 +854,8 @@ EOS";
 
 	private struct BuildState
 	{
-		bool[string] componentBuilt;
+		enum ComponentState { none, cache, build }
+		ComponentState[string] componentStates;
 	}
 	private BuildState buildState;
 
