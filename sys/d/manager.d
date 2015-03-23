@@ -908,7 +908,7 @@ EOS";
 			needInstaller();
 			auto dmdInstaller = new DMDInstaller("2.066.1");
 			dmdInstaller.requireLocal(false);
-			config.deps.hostDC = dmdInstaller.exePath("dmd");
+			config.deps.hostDC = dmdInstaller.exePath("dmd").absolutePath();
 			log("hostDC=" ~ config.deps.hostDC);
 		}
 	}
