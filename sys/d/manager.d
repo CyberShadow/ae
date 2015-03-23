@@ -322,8 +322,11 @@ class DManager
 		/// Usually needed by other components.
 		void needSource()
 		{
-			if (!incrementalBuild)
-				submodule.needHead(commit);
+			if (incrementalBuild)
+				return;
+			foreach (component; getSubmoduleComponents(submoduleName))
+				component.buildState = BuildState.none;
+			submodule.needHead(commit);
 		}
 
 		@property string sourceDir() { submodule.needRepo(); return submodule.git.path; }
