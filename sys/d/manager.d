@@ -483,6 +483,8 @@ class DManager
 
 		void run(string[] args, ref string[string] newEnv)
 		{
+			log("Running: " ~ escapeShellCommand(args));
+
 			if (newEnv is null) newEnv = environment.toAA();
 			string oldPath = environment["PATH"];
 			scope (exit) environment["PATH"] = oldPath;
