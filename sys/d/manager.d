@@ -705,6 +705,8 @@ EOS";
 		@property override string[] installDeps() { return []; }
 		@property override string configString() { return null; }
 
+		string[] targets;
+
 		override void performBuild()
 		{
 			needCC();
@@ -716,20 +718,19 @@ EOS";
 					auto lib = "phobos%s.lib".format(modelSuffix);
 					run([make, "-f", makeFileNameModel, lib] ~ commonConfig.makeArgs ~ platformMakeVars);
 					enforce(lib.exists);
+					targets = ["phobos%s.lib".format(modelSuffix)];
 				}
 				else
+				{
 					run([make, "-f", makeFileNameModel] ~ commonConfig.makeArgs ~ platformMakeVars);
+					targets = "generated".dirEntries(SpanMode.depth).filter!(de => de.name.endsWith(".a")).map!(de => de.name).array();
+				}
 			}
 		}
 
 		override void performStage()
 		{
-			string[] targets;
-			version (Windows)
-				targets = ["phobos%s.lib".format(modelSuffix)];
-			else
-				targets = "generated".dirEntries(SpanMode.depth).filter!(de => de.name.endsWith(".a")).map!(de => de.name).array();
-
+			assert(targets.length, "Druntime stage without build");
 			foreach (lib; targets)
 				cp(
 					buildPath(sourceDir, lib),
