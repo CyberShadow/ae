@@ -640,8 +640,8 @@ EOS";
 	{
 		@property override string submoduleName() { return "druntime"; }
 		@property override string[] sourceDeps() { return ["phobos"]; }
-		@property override string[] buildDeps () { return []; }
-		@property override string[] cacheDeps () { return ["dmd", "phobos-includes"]; }
+		@property override string[] buildDeps () { return ["dmd"]; }
+		@property override string[] cacheDeps () { return ["phobos-includes"]; }
 		@property override string configString() { return null; }
 
 		override void performBuild()
@@ -673,8 +673,8 @@ EOS";
 	{
 		@property override string submoduleName() { return "phobos"; }
 		@property override string[] sourceDeps() { return []; }
-		@property override string[] buildDeps () { return ["druntime"]; }
-		@property override string[] cacheDeps () { return ["dmd"]; }
+		@property override string[] buildDeps () { return ["dmd", "druntime"]; }
+		@property override string[] cacheDeps () { return []; }
 		@property override string configString() { return null; }
 
 		override void performBuild()
