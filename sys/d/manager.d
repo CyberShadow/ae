@@ -790,12 +790,14 @@ EOS";
 	/// Begin customization, starting at the specified commit.
 	SubmoduleState begin(string commit)
 	{
+		log("Starting at meta repository commit " ~ commit);
 		return SubmoduleState(getMetaRepo().getSubmoduleCommits(commit));
 	}
 
 	/// Applies a merge onto the given SubmoduleState.
 	void merge(ref SubmoduleState submoduleState, string submoduleName, string branch)
 	{
+		log("Merging %s commit %s".format(submoduleName, branch));
 		enforce(submoduleName in submoduleState.submoduleCommits, "Unknown submodule: " ~ submoduleName);
 		auto submodule = getSubmodule(submoduleName);
 		auto head = submoduleState.submoduleCommits[submoduleName];
@@ -806,6 +808,7 @@ EOS";
 	/// Removes a merge from the given SubmoduleState.
 	void unmerge(ref SubmoduleState submoduleState, string submoduleName, string branch)
 	{
+		log("Unmerging %s commit %s".format(submoduleName, branch));
 		enforce(submoduleName in submoduleState.submoduleCommits, "Unknown submodule: " ~ submoduleName);
 		auto submodule = getSubmodule(submoduleName);
 		auto head = submoduleState.submoduleCommits[submoduleName];
@@ -857,6 +860,8 @@ EOS";
 	/// Build the specified components according to the specified configuration.
 	void build(SubmoduleState submoduleState, Config.Build buildConfig, in string[] components = defaultComponents, bool incremental = false)
 	{
+		log("Building components %-(%s, %)".format(components));
+
 		this.buildState = BuildState.init;
 		this.submoduleState = submoduleState;
 		this.config.build = buildConfig;
