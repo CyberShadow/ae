@@ -266,8 +266,8 @@ class DManager
 		/// The components the just-built (in source directory) version of which this component depends on.
 		@property abstract string[] buildDeps();
 
-		/// The components the built, cached version of which this component depends on.
-		@property abstract string[] cacheDeps();
+		/// The components the built, installed version of which this component depends on.
+		@property abstract string[] installDeps();
 
 		/// This metadata is saved to a .json file,
 		/// and is also used to calculate the cache key.
@@ -294,7 +294,7 @@ class DManager
 				buildDeps.map!(
 					dependency => getComponent(dependency).getMetadata()
 				).array(),
-				cacheDeps.map!(
+				installDeps.map!(
 					dependency => getComponent(dependency).getMetadata()
 				).array(),
 			);
@@ -318,17 +318,6 @@ class DManager
 			);
 		}
 
-		/// Prepare the source checkout for this component.
-		/// Usually needed by other components.
-		void needSource()
-		{
-			if (incrementalBuild)
-				return;
-			foreach (component; getSubmoduleComponents(submoduleName))
-				component.buildState = BuildState.none;
-			submodule.needHead(commit);
-		}
-
 		@property string sourceDir() { submodule.needRepo(); return submodule.git.path; }
 		@property string cacheDir() { return buildPath(this.outer.cacheDir, getBuildID()); }
 
@@ -336,41 +325,70 @@ class DManager
 		/// This will then be atomically added to the cache.
 		protected string stageDir;
 
-		private enum BuildState { none, build, cache }
-		private BuildState buildState;
-
-		void needBuild(BuildState neededState = BuildState.cache)
+		/// Prepare the source checkout for this component.
+		/// Usually needed by other components.
+		void needSource()
 		{
-			if (buildState >= neededState) return;
+			if (incrementalBuild)
+				return;
+			foreach (component; getSubmoduleComponents(submoduleName))
+				component.haveBuild = false;
+			submodule.needHead(commit);
+		}
+
+		private bool haveBuild;
+
+		/// Build the component in-place, as needed,
+		/// without moving the built files anywhere.
+		/// Prepare dependencies as needed.
+		void needBuild()
+		{
+			if (haveBuild) return;
+			scope(success) haveBuild = true;
+
+			log("needBuild: " ~ getBuildID());
+
+			if (sourceDeps.length || buildDeps.length || installDeps.length)
+			{
+				log("Checking dependencies...");
+
+				foreach (dependency; sourceDeps)
+					getComponent(dependency).needSource();
+				foreach (dependency; buildDeps)
+					getComponent(dependency).needBuild();
+				foreach (dependency; installDeps)
+					getComponent(dependency).needInstalled();
+			}
+
+			needSource();
+
+			log("Building " ~ getBuildID());
+			submodule.clean = false;
+			performBuild();
+			log(getBuildID() ~ " built OK!");
+		}
+
+		private bool haveInstalled;
+
+		/// Build and "install" the component to buildDir as necessary.
+		void needInstalled()
+		{
+			if (haveInstalled) return;
+			scope(success) haveInstalled = true;
+
+			log("needInstalled: " ~ getBuildID());
 
 			enum unbuildableMarker = "unbuildable";
 
-			log("Preparing build " ~ getBuildID());
-
-			if (cacheDir.exists && neededState <= BuildState.cache)
+			if (cacheDir.exists)
 			{
 				log("Cache hit: " ~ cacheDir);
-				buildState = BuildState.cache;
 				if (buildPath(cacheDir, unbuildableMarker).exists)
 					throw new Exception(getBuildID() ~ " was cached as unbuildable");
 			}
 			else
 			{
 				log("Cache miss: " ~ cacheDir);
-
-				if (sourceDeps.length || buildDeps.length || cacheDeps.length)
-				{
-					log("Checking dependencies...");
-
-					foreach (dependency; sourceDeps)
-						getComponent(dependency).needSource();
-					foreach (dependency; buildDeps)
-						getComponent(dependency).needBuild(BuildState.build);
-					foreach (dependency; cacheDeps)
-						getComponent(dependency).needBuild();
-				}
-
-				needSource();
 
 				stageDir = cacheDir ~ ".tmp";
 				if (stageDir.exists)
@@ -415,18 +433,20 @@ class DManager
 					buildPath(stageDir, unbuildableMarker).touch();
 				}
 
-				log("Building " ~ getBuildID());
-				submodule.clean = false;
-				performBuild();
-				buildState = BuildState.build;
+				needBuild();
+
+				performStage();
 			}
 
 			install();
 			updateEnv();
 		}
 
-		/// Perform build, and place resulting files to stageDir
-		abstract void performBuild();
+		/// Build the component in-place, without moving the built files anywhere.
+		void performBuild() {}
+
+		/// Place resulting files to stageDir
+		void performStage() {}
 
 		/// Update the environment post-install, to allow
 		/// building components that depend on this one.
@@ -532,9 +552,9 @@ class DManager
 	final class DMD : Component
 	{
 		@property override string submoduleName() { return "dmd"; }
-		@property override string[] sourceDeps() { return []; }
-		@property override string[] buildDeps () { return []; }
-		@property override string[] cacheDeps () { return []; }
+		@property override string[] sourceDeps () { return []; }
+		@property override string[] buildDeps  () { return []; }
+		@property override string[] installDeps() { return []; }
 
 		struct Config
 		{
@@ -563,7 +583,10 @@ class DManager
 					] ~ commonConfig.makeArgs ~ targets,
 				);
 			}
+		}
 
+		override void performStage()
+		{
 			cp(
 				buildPath(sourceDir, "src", "dmd" ~ binExt),
 				buildPath(stageDir , "bin", "dmd" ~ binExt),
@@ -612,8 +635,6 @@ DFLAGS="-I%@P%/../import" "-L-L%@P%/../lib" -L--export-dynamic
 EOS";
 				buildPath(stageDir, "bin", "dmd.conf").write(ini);
 			}
-
-			log("DMD OK!");
 		}
 
 		override void updateEnv()
@@ -627,12 +648,12 @@ EOS";
 	final class PhobosIncludes : Component
 	{
 		@property override string submoduleName() { return "phobos"; }
-		@property override string[] sourceDeps() { return []; }
-		@property override string[] buildDeps () { return []; }
-		@property override string[] cacheDeps () { return []; }
+		@property override string[] sourceDeps () { return []; }
+		@property override string[] buildDeps  () { return []; }
+		@property override string[] installDeps() { return []; }
 		@property override string configString() { return null; }
 
-		override void performBuild()
+		override void performStage()
 		{
 			foreach (f; ["std", "etc", "crc32.d"])
 				if (buildPath(sourceDir, f).exists)
@@ -646,9 +667,9 @@ EOS";
 	final class Druntime : Component
 	{
 		@property override string submoduleName() { return "druntime"; }
-		@property override string[] sourceDeps() { return ["phobos"]; }
-		@property override string[] buildDeps () { return ["dmd"]; }
-		@property override string[] cacheDeps () { return ["phobos-includes"]; }
+		@property override string[] sourceDeps () { return ["phobos"]; }
+		@property override string[] buildDeps  () { return ["dmd"]; }
+		@property override string[] installDeps() { return ["phobos-includes"]; }
 		@property override string configString() { return null; }
 
 		override void performBuild()
@@ -665,30 +686,28 @@ EOS";
 
 				run([make, "-f", makeFileNameModel] ~ commonConfig.makeArgs ~ platformMakeVars);
 			}
+		}
 
+		override void performStage()
+		{
 			cp(
 				buildPath(sourceDir, "import"),
 				buildPath(stageDir , "import"),
 			);
-
-
-			log("Druntime OK!");
 		}
 	}
 
 	final class Phobos : Component
 	{
 		@property override string submoduleName() { return "phobos"; }
-		@property override string[] sourceDeps() { return []; }
-		@property override string[] buildDeps () { return ["dmd", "druntime"]; }
-		@property override string[] cacheDeps () { return []; }
+		@property override string[] sourceDeps () { return []; }
+		@property override string[] buildDeps  () { return ["dmd", "druntime"]; }
+		@property override string[] installDeps() { return []; }
 		@property override string configString() { return null; }
 
 		override void performBuild()
 		{
 			needCC();
-
-			string[] targets;
 
 			{
 				auto owd = pushd(sourceDir);
@@ -697,31 +716,34 @@ EOS";
 					auto lib = "phobos%s.lib".format(modelSuffix);
 					run([make, "-f", makeFileNameModel, lib] ~ commonConfig.makeArgs ~ platformMakeVars);
 					enforce(lib.exists);
-					targets = [lib];
 				}
 				else
-				{
 					run([make, "-f", makeFileNameModel] ~ commonConfig.makeArgs ~ platformMakeVars);
-					targets = "generated".dirEntries(SpanMode.depth).filter!(de => de.name.endsWith(".a")).map!(de => de.name).array();
-				}
 			}
+		}
+
+		override void performStage()
+		{
+			string[] targets;
+			version (Windows)
+				targets = ["phobos%s.lib".format(modelSuffix)];
+			else
+				targets = "generated".dirEntries(SpanMode.depth).filter!(de => de.name.endsWith(".a")).map!(de => de.name).array();
 
 			foreach (lib; targets)
 				cp(
 					buildPath(sourceDir, lib),
 					buildPath(stageDir , "lib", lib.baseName()),
 				);
-
-			log("Phobos OK!");
 		}
 	}
 
 	final class RDMD : Component
 	{
 		@property override string submoduleName() { return "tools"; }
-		@property override string[] sourceDeps() { return []; }
-		@property override string[] buildDeps () { return []; }
-		@property override string[] cacheDeps () { return ["dmd", "druntime", "phobos"]; }
+		@property override string[] sourceDeps () { return []; }
+		@property override string[] buildDeps  () { return []; }
+		@property override string[] installDeps() { return ["dmd", "druntime", "phobos"]; }
 		@property override string configString() { return null; }
 
 		override void performBuild()
@@ -733,12 +755,14 @@ EOS";
 				auto owd = pushd(sourceDir);
 				run(["dmd", "-m" ~ commonConfig.model, "rdmd"]);
 			}
+		}
+
+		override void performStage()
+		{
 			cp(
 				buildPath(sourceDir, "rdmd" ~ binExt),
 				buildPath(stageDir , "bin", "rdmd" ~ binExt),
 			);
-
-			log("RDMD OK!");
 		}
 	}
 
@@ -887,7 +911,7 @@ EOS";
 		scope(success) if (!usingPersistentCache && cacheDir.exists) removeRecurse(cacheDir);
 
 		foreach (componentName; components)
-			getComponent(componentName).needBuild();
+			getComponent(componentName).needInstalled();
 	}
 
 	/// Shortcut for begin + build
