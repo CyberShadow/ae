@@ -333,18 +333,21 @@ class DManager
 		/// This will then be atomically added to the cache.
 		protected string stageDir;
 
-		void needBuild(BuildState.ComponentState neededState = BuildState.ComponentState.cache)
+		private enum BuildState { none, build, cache }
+		private BuildState buildState;
+
+		void needBuild(BuildState neededState = BuildState.cache)
 		{
-			if (buildState.componentStates.get(name, BuildState.ComponentState.none) >= neededState) return;
+			if (buildState >= neededState) return;
 
 			enum unbuildableMarker = "unbuildable";
 
 			log("Preparing build " ~ getBuildID());
 
-			if (cacheDir.exists && neededState <= BuildState.ComponentState.cache)
+			if (cacheDir.exists && neededState <= BuildState.cache)
 			{
 				log("Cache hit: " ~ cacheDir);
-				buildState.componentStates[name] = BuildState.ComponentState.cache;
+				buildState = BuildState.cache;
 				if (buildPath(cacheDir, unbuildableMarker).exists)
 					throw new Exception(getBuildID() ~ " was cached as unbuildable");
 			}
@@ -359,7 +362,7 @@ class DManager
 					foreach (dependency; sourceDeps)
 						getComponent(dependency).needSource();
 					foreach (dependency; buildDeps)
-						getComponent(dependency).needBuild(BuildState.ComponentState.build);
+						getComponent(dependency).needBuild(BuildState.build);
 					foreach (dependency; cacheDeps)
 						getComponent(dependency).needBuild();
 				}
@@ -412,7 +415,7 @@ class DManager
 				log("Building " ~ getBuildID());
 				submodule.clean = false;
 				performBuild();
-				buildState.componentStates[name] = BuildState.ComponentState.build;
+				buildState = BuildState.build;
 			}
 
 			install();
@@ -777,6 +780,14 @@ EOS";
 		return components[name];
 	}
 
+	Component[] getSubmoduleComponents(string submoduleName)
+	{
+		return components
+			.byValue
+			.filter!(component => component.submoduleName == submoduleName)
+			.array();
+	}
+
 	// **************************** Customization ****************************
 
 	/// Fetch latest D history.
@@ -852,13 +863,6 @@ EOS";
 		return commit;
 	}
 
-	private struct BuildState
-	{
-		enum ComponentState { none, cache, build }
-		ComponentState[string] componentStates;
-	}
-	private BuildState buildState;
-
 	static const string[] defaultComponents = ["dmd", "druntime", "phobos-includes", "phobos", "rdmd"];
 
 	/// Build the specified components according to the specified configuration.
@@ -866,7 +870,7 @@ EOS";
 	{
 		log("Building components %-(%s, %)".format(components));
 
-		this.buildState = BuildState.init;
+		this.components = null;
 		this.submoduleState = submoduleState;
 		this.config.build = buildConfig;
 		this.incrementalBuild = incremental;
