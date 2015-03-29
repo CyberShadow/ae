@@ -103,17 +103,25 @@ struct Color(FieldTuple...)
 
 	/// Construct an RGB color from a typical hex string.
 	static if (is(typeof(this.r) == ubyte) && is(typeof(this.g) == ubyte) && is(typeof(this.b) == ubyte))
-	static typeof(this) fromHex(in char[] s)
 	{
-		import std.conv;
-		import std.exception;
+		static typeof(this) fromHex(in char[] s)
+		{
+			import std.conv;
+			import std.exception;
 
-		enforce(s.length == 6, "Invalid color string");
-		typeof(this) c;
-		c.r = s[0..2].to!ubyte(16);
-		c.g = s[2..4].to!ubyte(16);
-		c.b = s[4..6].to!ubyte(16);
-		return c;
+			enforce(s.length == 6, "Invalid color string");
+			typeof(this) c;
+			c.r = s[0..2].to!ubyte(16);
+			c.g = s[2..4].to!ubyte(16);
+			c.b = s[4..6].to!ubyte(16);
+			return c;
+		}
+
+		string toHex() const
+		{
+			import std.string;
+			return format("%02X%02X%02X", r, g, b);
+		}
 	}
 
 	/// Warning: overloaded operators preserve types and may cause overflows
