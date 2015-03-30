@@ -32,7 +32,7 @@ private void init()
 	import core.runtime;
 
 	if (!logDir)
-		logDir = Runtime.args[0].absolutePath().dirName().buildPath("logs");
+		logDir = getcwd().buildPath("logs");
 }
 
 shared static this() { init(); }
