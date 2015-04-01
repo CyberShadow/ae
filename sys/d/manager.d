@@ -496,6 +496,18 @@ class DManager
 			return args;
 		}
 
+		/// Older versions did not use the posix.mak/win32.mak convention.
+		static string findMakeFile(string fn)
+		{
+			version (OSX)
+				if (!fn.exists && "osx.mak".exists)
+					return "osx.mak";
+			version (Posix)
+				if (!fn.exists && "linux.mak".exists)
+					return "linux.mak";
+			return fn;
+		}
+
 		void needCC(string dmcVer = null)
 		{
 			version(Windows)
@@ -585,10 +597,7 @@ class DManager
 			{
 				auto owd = pushd(buildPath(sourceDir, "src"));
 
-				string dmdMakeFileName = makeFileName;
-				version (Posix)
-					if (!dmdMakeFileName.exists && "linux.mak".exists)
-						dmdMakeFileName = "linux.mak";
+				string dmdMakeFileName = findMakeFile(makeFileName);
 
 				string modelFlag = commonConfig.model;
 				if (dmdMakeFileName.readText().canFind("MODEL=-m32"))
@@ -754,16 +763,18 @@ EOS";
 
 			{
 				auto owd = pushd(sourceDir);
+				string phobosMakeFileName = findMakeFile(makeFileNameModel);
+
 				version (Windows)
 				{
 					auto lib = "phobos%s.lib".format(modelSuffix);
-					run([make, "-f", makeFileNameModel, lib] ~ commonConfig.makeArgs ~ platformMakeVars);
+					run([make, "-f", phobosMakeFileName, lib] ~ commonConfig.makeArgs ~ platformMakeVars);
 					enforce(lib.exists);
 					targets = ["phobos%s.lib".format(modelSuffix)];
 				}
 				else
 				{
-					run([make, "-f", makeFileNameModel] ~ commonConfig.makeArgs ~ platformMakeVars);
+					run([make, "-f", phobosMakeFileName] ~ commonConfig.makeArgs ~ platformMakeVars);
 					targets = "generated".dirEntries(SpanMode.depth).filter!(de => de.name.endsWith(".a")).map!(de => de.name).array();
 				}
 			}
