@@ -610,7 +610,7 @@ class DManager
 					auto m = dmdMakeFileName.readText();
 					m = m
 						// Fix hard-coded reference to gcc as linker
-						.replace(`gcc $(MODEL) -lstdc++`, `g++ $(MODEL) -lstdc++`)
+						.replace(`gcc $(MODEL) -lstdc++ -lpthread`, `g++ $(MODEL) -lstdc++ -pthread`)
 					;
 					dmdMakeFileName.write(m);
 				}
