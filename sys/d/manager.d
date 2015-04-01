@@ -619,8 +619,12 @@ class DManager
 					auto m = dmdMakeFileName.readText();
 					m = m
 						// Fix hard-coded reference to gcc as linker
-						.replace(`gcc $(MODEL) -lstdc++ -lpthread`, `g++ $(MODEL) -lstdc++ -pthread`)
+						.replace(`gcc -m32 -lstdc++`, `g++ -m32 -lstdc++`)
+						.replace(`gcc $(MODEL) -lstdc++`, `g++ $(MODEL) -lstdc++`)
 					;
+					// Fix pthread linker error
+					version (linux)
+						m = m.replace(`-lpthread`, `-pthread`);
 					dmdMakeFileName.write(m);
 				}
 
