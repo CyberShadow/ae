@@ -597,9 +597,14 @@ class DManager
 					makeFileName.write(m);
 				}
 
+				string dmdMakeFileName = makeFileName;
+				version (Posix)
+					if (!dmdMakeFileName.exists && "linux.mak".exists)
+						dmdMakeFileName = "linux.mak";
+
 				string[] targets = buildConfig.debugDMD ? [] : ["dmd"];
 				run([make,
-						"-f", makeFileName,
+						"-f", dmdMakeFileName,
 						"MODEL=" ~ commonConfig.model,
 						"HOST_DC=" ~ config.deps.hostDC,
 					] ~ commonConfig.makeArgs ~ targets,
