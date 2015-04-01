@@ -807,24 +807,23 @@ EOS";
 		{
 			needCC();
 
-			bool haveModel;
-
-			if (sourceDir.buildPath("posix.mak").exists)
-				haveModel = true;
-			else
-			{
-				auto dmd = getComponent("dmd").cacheDir.buildPath("bin", "dmd" ~ binExt);
-				log("execute: " ~ dmd);
-				auto result = execute([dmd, "--help"]);
-				enforce(result.status == 0, "Failed to get dmd help text");
-				haveModel = result.output.indexOf("-m32") >= 0;
-			}
-
 			// Just build rdmd
 			{
 				auto owd = pushd(sourceDir);
-				string[] modelFlags = haveModel ? ["-m" ~ commonConfig.model] : null;
-				run(["dmd"] ~ modelFlags ~ ["rdmd"]);
+
+				bool needModel; // Need -mXX switch?
+
+				if (sourceDir.buildPath("posix.mak").exists)
+					needModel = true; // Known to be needed for recent versions
+
+				if (!needModel)
+					try
+						run(["dmd", "rdmd"]);
+					catch (Exception e)
+						needModel = true;
+
+				if (needModel)
+					run(["dmd", "-m" ~ commonConfig.model, "rdmd"]);
 			}
 		}
 
