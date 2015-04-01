@@ -585,18 +585,6 @@ class DManager
 			{
 				auto owd = pushd(buildPath(sourceDir, "src"));
 
-				version (Windows)
-				{
-					// A make argument is insufficient,
-					// because of recursive make invocations
-					auto m = cast(string)makeFileName.read();
-					m = m
-						.replace(`CC=\dm\bin\dmc`, `CC=dmc`)
-						.replace(`SCROOT=$D\dm`, `SCROOT=` ~ scRoot)
-					;
-					makeFileName.write(m);
-				}
-
 				string dmdMakeFileName = makeFileName;
 				version (Posix)
 					if (!dmdMakeFileName.exists && "linux.mak".exists)
@@ -605,6 +593,27 @@ class DManager
 				string modelFlag = commonConfig.model;
 				if (dmdMakeFileName.readText().canFind("MODEL=-m32"))
 					modelFlag = "-m" ~ modelFlag;
+
+				version (Windows)
+				{
+					// A make argument is insufficient,
+					// because of recursive make invocations
+					auto m = dmdMakeFileName.readText();
+					m = m
+						.replace(`CC=\dm\bin\dmc`, `CC=dmc`)
+						.replace(`SCROOT=$D\dm`, `SCROOT=` ~ scRoot)
+					;
+					dmdMakeFileName.write(m);
+				}
+				else
+				{
+					auto m = dmdMakeFileName.readText();
+					m = m
+						// Fix hard-coded reference to gcc as linker
+						.replace(`gcc $(MODEL) -lstdc++`, `g++ $(MODEL) -lstdc++`)
+					;
+					dmdMakeFileName.write(m);
+				}
 
 				string[] targets = buildConfig.debugDMD ? [] : ["dmd"];
 				run([make,
