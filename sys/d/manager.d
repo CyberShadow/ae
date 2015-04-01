@@ -602,10 +602,14 @@ class DManager
 					if (!dmdMakeFileName.exists && "linux.mak".exists)
 						dmdMakeFileName = "linux.mak";
 
+				string modelFlag = commonConfig.model;
+				if (dmdMakeFileName.readText().canFind("MODEL=-m32"))
+					modelFlag = "-m" ~ modelFlag;
+
 				string[] targets = buildConfig.debugDMD ? [] : ["dmd"];
 				run([make,
 						"-f", dmdMakeFileName,
-						"MODEL=" ~ commonConfig.model,
+						"MODEL=" ~ modelFlag,
 						"HOST_DC=" ~ config.deps.hostDC,
 					] ~ commonConfig.makeArgs ~ targets,
 				);
