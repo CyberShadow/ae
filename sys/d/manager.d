@@ -574,8 +574,10 @@ class DManager
 			if (idgen.exists && idgen.readText().indexOf(`{ "alignof" },`) >= 0)
 				dmcVer = "850";
 
-			needDMD(); // Required for bootstrapping.
 			needCC(dmcVer); // Need VC too for VSINSTALLDIR
+
+			if (buildPath(sourceDir, "src", "idgen.d").exists)
+				needDMD(); // Required for bootstrapping.
 
 			version (Windows)
 				auto scRoot = config.deps.dmcDir.absolutePath();
