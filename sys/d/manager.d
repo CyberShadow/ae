@@ -1196,12 +1196,27 @@ EOS";
 		log("Deduplicated %d files.".format(dedupedFiles));
 	}
 
+	static bool shouldPurge(string dir)
+	{
+		if (dir.buildPath(unbuildableMarker).exists)
+			return true;
+
+		auto ce = CacheEntry(dir);
+		if (ce.componentName == "druntime")
+		{
+			if (!dir.buildPath("import", "core").exists)
+				return true;
+		}
+
+		return false;
+	}
+
 	/// Delete cached "unbuildable" build results.
 	void purgeUnbuildable()
 	{
 		auto killList = cacheDir
 			.dirEntries(SpanMode.shallow)
-			.filter!(de => buildPath(de, unbuildableMarker).exists)
+			.filter!shouldPurge
 			.array();
 
 		foreach (de; killList)
