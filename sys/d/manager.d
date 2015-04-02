@@ -378,8 +378,6 @@ class DManager
 
 			log("needInstalled: " ~ getBuildID());
 
-			enum unbuildableMarker = "unbuildable";
-
 			if (cacheDir.exists)
 			{
 				log("Cache hit: " ~ cacheDir);
@@ -1071,6 +1069,8 @@ EOS";
 
 	// ******************************** Cache ********************************
 
+	enum unbuildableMarker = "unbuildable";
+
 	int dedupedFiles;
 
 	/// Replace all files that have duplicate subpaths and content
@@ -1193,6 +1193,21 @@ EOS";
 		optimizeCacheImpl(componentName, history, false, revision);
 		optimizeCacheImpl(componentName, history, true , revision);
 		log("Deduplicated %d files.".format(dedupedFiles));
+	}
+
+	/// Delete cached "unbuildable" build results.
+	void purgeUnbuildable()
+	{
+		auto killList = cacheDir
+			.dirEntries(SpanMode.shallow)
+			.filter!(de => buildPath(de, unbuildableMarker).exists)
+			.array();
+
+		foreach (de; killList)
+		{
+			log("Deleting: " ~ de);
+			de.rmdirRecurse();
+		}
 	}
 
 	// **************************** Miscellaneous ****************************
