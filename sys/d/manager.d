@@ -928,6 +928,18 @@ EOS";
 		build(SubmoduleState(null), buildConfig, components, true);
 	}
 
+	bool isCached(SubmoduleState submoduleState, Config.Build buildConfig, in string[] components = defaultComponents)
+	{
+		this.components = null;
+		this.submoduleState = submoduleState;
+		this.config.build = buildConfig;
+
+		foreach (componentName; components)
+			if (!getComponent(componentName).cacheDir.exists)
+				return false;
+		return true;
+	}
+
 	// **************************** Dependencies *****************************
 
 	private void needInstaller()
