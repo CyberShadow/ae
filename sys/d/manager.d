@@ -1181,12 +1181,12 @@ EOS";
 	}
 
 	/// Gets the D merge log (newest first).
-	LogEntry[] getLog()
+	LogEntry[] getLog(string refName = "refs/remotes/origin/master")
 	{
 		getMetaRepo().needRepo();
 		auto history = getMetaRepo().git.getHistory();
 		LogEntry[] logs;
-		auto master = history.commits[history.refs["refs/remotes/origin/master"]];
+		auto master = history.commits[history.refs[refName]];
 		for (auto c = master; c; c = c.parents.length ? c.parents[0] : null)
 		{
 			auto title = c.message.length ? c.message[0] : null;
