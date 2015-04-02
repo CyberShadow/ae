@@ -26,16 +26,24 @@ import ae.utils.meta : singleton, I;
 
 public import ae.sys.install.common;
 
-class DMCInstaller : Installer
+/// Installs old versions of DMC.
+class LegacyDMCInstaller : Installer
 {
-	@property override string name() { return "DigitalMars C++"; }
-	@property override string subdirectory() { return "dm"; }
+	@property override string name() { return "DigitalMars C++" ~ (ver ? " v" ~ ver[0] ~ "." ~ ver[1..$] : null); }
+	@property override string subdirectory() { return "dm" ~ ver; }
 
 	@property override string[] requiredExecutables() { return ["dmc", "link"]; }
 	@property override string[] binPaths() { return ["bin"]; }
 
-	string dmcURL = "http://ftp.digitalmars.com/dmc.zip";
-	string optlinkURL = "http://ftp.digitalmars.com/optlink.zip";
+	string dmcURL;
+	string ver;
+
+	this(string ver)
+	{
+		ver = ver.replace(".", "");
+		this.ver = ver;
+		dmcURL = "http://ftp.digitalmars.com/Digital_Mars_C++/Patch/dm" ~ ver ~ "c.zip";
+	}
 
 	override void installImpl(string target)
 	{
@@ -47,6 +55,23 @@ class DMCInstaller : Installer
 
 		enforce(buildPath(dmcDir, "dm", "bin", "dmc.exe").exists);
 		rename(buildPath(dmcDir, "dm"), target);
+	}
+}
+
+/// Installs the latest DMC and updates it with the latest OPTLINK.
+class DMCInstaller : LegacyDMCInstaller
+{
+	string optlinkURL = "http://ftp.digitalmars.com/optlink.zip";
+
+	this()
+	{
+		super(null);
+		dmcURL = "http://ftp.digitalmars.com/dmc.zip";
+	}
+
+	override void installImpl(string target)
+	{
+		super.installImpl(target);
 
 		// Get latest OPTLINK
 
