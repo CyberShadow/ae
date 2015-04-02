@@ -1218,7 +1218,8 @@ EOS";
 		auto ce = CacheEntry(dir);
 		if (ce.componentName == "druntime")
 		{
-			if (!dir.buildPath("import", "core").exists)
+			if (!dir.buildPath("import", "core", "memory.d").exists
+			 && !dir.buildPath("import", "core", "memory.di").exists)
 				return true;
 		}
 
