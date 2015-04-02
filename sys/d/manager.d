@@ -704,7 +704,8 @@ EOS";
 
 				setTimes(buildPath("src", "rt", "minit.obj"), Clock.currTime(), Clock.currTime());
 
-				run([make, "-f", makeFileNameModel] ~ commonConfig.makeArgs ~ platformMakeVars);
+				run([make, "-f", makeFileNameModel, "import"] ~ commonConfig.makeArgs ~ platformMakeVars);
+				run([make, "-f", makeFileNameModel          ] ~ commonConfig.makeArgs ~ platformMakeVars);
 			}
 		}
 
