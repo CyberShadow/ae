@@ -498,11 +498,11 @@ class DManager
 			return args;
 		}
 
-		void needCC()
+		void needCC(string dmcVer = null)
 		{
 			version(Windows)
 			{
-				needDMC(); // We need DMC even for 64-bit builds (for DM make)
+				needDMC(dmcVer); // We need DMC even for 64-bit builds (for DM make)
 				if (commonConfig.model == "64")
 					needVC();
 			}
@@ -570,8 +570,14 @@ class DManager
 
 		override void performBuild()
 		{
+			// We need an older DMC for older DMD versions
+			string dmcVer = null;
+			auto idgen = buildPath(sourceDir, "src", "idgen.c");
+			if (idgen.exists && idgen.readText().indexOf(`{ "alignof" },`) >= 0)
+				dmcVer = "850";
+
 			needDMD(); // Required for bootstrapping.
-			needCC(); // Need VC too for VSINSTALLDIR
+			needCC(dmcVer); // Need VC too for VSINSTALLDIR
 
 			version (Windows)
 				auto scRoot = config.deps.dmcDir.absolutePath();
@@ -978,15 +984,16 @@ EOS";
 	}
 
 	version (Windows)
-	void needDMC()
+	void needDMC(string ver = null)
 	{
 		if (!config.deps.dmcDir)
 		{
 			log("Preparing DigitalMars C++");
 			needInstaller();
 
-			dmcInstaller.requireLocal(false);
-			config.deps.dmcDir = dmcInstaller.directory;
+			auto dmc = ver ? new LegacyDMCInstaller(ver) : dmcInstaller;
+			dmc.requireLocal(false);
+			config.deps.dmcDir = dmc.directory;
 
 			auto binPath = buildPath(config.deps.dmcDir, `bin`).absolutePath();
 			log("DMC=" ~ binPath);
