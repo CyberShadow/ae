@@ -772,10 +772,24 @@ EOS";
 		{
 			needCC();
 
+			bool haveModel;
+
+			if (sourceDir.buildPath("posix.mak").exists)
+				haveModel = true;
+			else
+			{
+				auto dmd = getComponent("dmd").cacheDir.buildPath("bin", "dmd" ~ binExt);
+				log("execute: " ~ dmd);
+				auto result = execute([dmd, "--help"]);
+				enforce(result.status == 0, "Failed to get dmd help text");
+				haveModel = result.output.indexOf("-m32") >= 0;
+			}
+
 			// Just build rdmd
 			{
 				auto owd = pushd(sourceDir);
-				run(["dmd", "-m" ~ commonConfig.model, "rdmd"]);
+				string[] modelFlags = haveModel ? ["-m" ~ commonConfig.model] : null;
+				run(["dmd"] ~ modelFlags ~ ["rdmd"]);
 			}
 		}
 
