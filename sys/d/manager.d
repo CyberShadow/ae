@@ -573,8 +573,24 @@ class DManager
 			needDMD(); // Required for bootstrapping.
 			needCC(); // Need VC too for VSINSTALLDIR
 
+			version (Windows)
+				auto scRoot = config.deps.dmcDir.absolutePath();
+
 			{
 				auto owd = pushd(buildPath(sourceDir, "src"));
+
+				version (Windows)
+				{
+					// A make argument is insufficient,
+					// because of recursive make invocations
+					auto m = cast(string)makeFileName.read();
+					m = m
+						.replace(`CC=\dm\bin\dmc`, `CC=dmc`)
+						.replace(`SCROOT=$D\dm`, `SCROOT=` ~ scRoot)
+					;
+					makeFileName.write(m);
+				}
+
 				string[] targets = buildConfig.debugDMD ? [] : ["dmd"];
 				run([make,
 						"-f", makeFileName,
