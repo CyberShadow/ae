@@ -975,7 +975,7 @@ EOS";
 			auto binPath = buildPath(config.deps.dmcDir, `bin`).absolutePath();
 			log("DMC=" ~ binPath);
 			config.env["DMC"] = binPath;
-			config.env["PATH"] ~= pathSeparator ~ binPath;
+			config.env["PATH"] = binPath ~ pathSeparator ~ config.env["PATH"];
 		}
 	}
 
