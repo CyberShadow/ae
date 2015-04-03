@@ -76,7 +76,7 @@ T[] pipe(T)(string[] args, in T[] input)
 {
 	T[] output;
 	invoke!({
-		auto pipes = pipeProcess(args);
+		auto pipes = pipeProcess(args, Redirect.stdin | Redirect.stdout);
 		auto f = pipes.stdin;
 		auto writer = writeFileAsync(f, input);
 		scope(exit) writer.join();
