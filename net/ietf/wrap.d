@@ -16,11 +16,14 @@ module ae.net.ietf.wrap;
 import std.string;
 import std.utf;
 
-import ae.utils.text;
-
 struct Paragraph
 {
 	dstring quotePrefix, text;
+
+	@property length()
+	{
+		return quotePrefix.length + text.length;
+	}
 }
 
 Paragraph[] unwrapText(string text, bool flowed, bool delsp)
@@ -28,10 +31,12 @@ Paragraph[] unwrapText(string text, bool flowed, bool delsp)
 	auto lines = text.toUTF32().splitLines();
 
 	Paragraph[] paragraphs;
+	Paragraph buffer; //For reflowing
 
 	foreach (line; lines)
 	{
 		dstring quotePrefix;
+
 		while (line.startsWith(">"d))
 		{
 			int l = 1;
@@ -48,21 +53,81 @@ Paragraph[] unwrapText(string text, bool flowed, bool delsp)
 		if (flowed && line.startsWith(" "d))
 			line = line[1..$];
 
-		if (paragraphs.length>0
-		 && paragraphs[$-1].quotePrefix==quotePrefix
-		 && paragraphs[$-1].text.endsWith(" "d)
-		 && !line.startsWith(" "d)
-		 && line.length
-		 && line != "-- "
-		 && paragraphs[$-1].text != "-- "d
-		 && (flowed || quotePrefix.length))
+		if (paragraphs.length > 0 &&
+			paragraphs[$-1].quotePrefix==quotePrefix &&
+			paragraphs[$-1].text.endsWith(" "d) &&
+			!line.startsWith(" "d) &&
+			line.length &&
+			line != "-- " &&
+			paragraphs[$-1].text != "-- "d &&
+			(flowed || quotePrefix.length) &&
+			!buffer.text.length) // Can't have buffered text
 		{
 			if (delsp)
 				paragraphs[$-1].text = paragraphs[$-1].text[0..$-1];
 			paragraphs[$-1].text ~= line;
 		}
-		else
+		// Only use the buffer if we're over the limit
+		else if (!flowed && // Not touching it if it's flowed
+			(quotePrefix.length + line.length) >= DEFAULT_WRAP_LENGTH) // Is it over the limit?
+		{
+			if (!buffer.text.length) // First contact; always get a buffer
+			{
+				if(!buffer.quotePrefix.length) // If we're forcing a line break, this holds
+					paragraphs ~= Paragraph(quotePrefix,"");
+				buffer = Paragraph(quotePrefix, line);
+			}
+			else if (buffer.quotePrefix.length != quotePrefix.length) // Indentation level changed
+			{
+				if (paragraphs[$-1].text.length) // So we have to flush the current buffer
+					paragraphs[$-1].text ~= " " ~ buffer.text;
+				else
+					paragraphs[$-1].text ~= buffer.text;
+				buffer = Paragraph(quotePrefix, line);
+				paragraphs ~= Paragraph(quotePrefix,""); // And increment to the next paragraph.
+			}
+			else // Add to current otherwise
+			{
+				if (paragraphs[$-1].text.length)
+					paragraphs[$-1].text ~= " " ~ buffer.text;
+				else
+					paragraphs[$-1].text ~= buffer.text;
+				buffer.text = line;
+			}
+		}
+		else if(buffer.text.length > 0 && // If we have a buffer, but the current line doesn't go over the limit
+			(quotePrefix.length + line.length) <= DEFAULT_WRAP_LENGTH)
+		{
+			if (!paragraphs.length > 0) // Init paragraph; no new buffer
+				paragraphs ~= buffer;
+			else if (paragraphs[$-1].text.length)
+				paragraphs[$-1].text ~= " " ~ buffer.text;
+			else
+				paragraphs[$-1].text ~= buffer.text;
+
+			buffer.clear;
+			paragraphs ~= Paragraph(quotePrefix,line); // This short line might be code, or intentionally short
+		}
+		else // Short line and there's no buffer.  Out it goes.
+		{
+			buffer.quotePrefix = quotePrefix; // Extra break doesn't need forced if we're pitching a bunch of short ones.
 			paragraphs ~= Paragraph(quotePrefix, line);
+		}
+	}
+
+	if(buffer.text.length) // If we still have a buffer, final flush
+	{
+		if(buffer.length >= DEFAULT_WRAP_LENGTH && // Are we continuing a long line?
+			(paragraphs[$-1].length > DEFAULT_WRAP_LENGTH || paragraphs[$-1].text.length == 0)) // ...or using it for the first time?
+		{
+			paragraphs[$-1].text ~=  buffer.text;
+		}
+		else
+		{
+			paragraphs ~= buffer;
+		}
+
+		buffer.text.clear; // Ready for next challenger.
 	}
 
 	return paragraphs;
@@ -130,7 +195,7 @@ unittest
 
 	// Don't rewrap user input
 	assert(wrapText(unwrapText("Line 1 \nLine 2 ", false, false)) == "Line 1\nLine 2");
-	// ...but rewrap quoted text
+	// ...but rewrap quoted text  XXX: Is this really correct for flowed == false?
 	assert(wrapText(unwrapText("> Line 1 \n> Line 2 ", false, false)) == "> Line 1 Line 2");
 	// Wrap long lines
 	import std.array : replicate;
@@ -141,4 +206,42 @@ unittest
 	static assert(str.toUTF32().length < DEFAULT_WRAP_LENGTH);
 	static assert(str.length > DEFAULT_WRAP_LENGTH);
 	assert(wrapText(unwrapText(str, false, false)).split("\n").length == 1);
+
+	// NOTE: wrapText introduces spaces at the ends of lines where it introduces breaks.
+
+	// Long-Short
+	assert(wrapText(unwrapText(
+`> 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890
+> 1234567890`, false, false)) ==
+`> 1234567890 1234567890 1234567890 1234567890 1234567890 
+> 1234567890
+> 1234567890`);
+
+	// Changes of quote level
+	assert(wrapText(unwrapText(
+`> Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod
+>> tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam,
+>>> quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
+> consequat. Duis aute irure dolor in reprehenderit in voluptate`, false, false)) ==
+`> Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed 
+> do eiusmod
+>> tempor incididunt ut labore et dolore magna aliqua. Ut enim ad 
+>> minim veniam,
+>>> quis nostrud exercitation ullamco laboris nisi ut aliquip ex 
+>>> ea commodo
+> consequat. Duis aute irure dolor in reprehenderit in voluptate`);
+
+	// Single really long line (more than twice the DEFAULT_WRAP_LENGTH)
+	assert(wrapText(unwrapText(
+`> 1010101010 2020202020 3030303030 4040404040 5050505050 6060606060 7070707070 8080808080 9090909090 100100100 110110110 120120120 130130130 140140140 150150150`, false, false)) ==
+`> 1010101010 2020202020 3030303030 4040404040 5050505050 
+> 6060606060 7070707070 8080808080 9090909090 100100100 110110110 
+> 120120120 130130130 140140140 150150150`);
+
+/*
+Other potential tests:
+- Normal multiline input (covered by quote level test?)
+- ditto with code sample in the middle
+- Mix flowed/not flowed
+*/
 }
