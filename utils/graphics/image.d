@@ -477,80 +477,83 @@ unittest
 
 // ***************************************************************************
 
-alias int FXPT2DOT30;
-struct CIEXYZ { FXPT2DOT30 ciexyzX, ciexyzY, ciexyzZ; }
-struct CIEXYZTRIPLE { CIEXYZ ciexyzRed, ciexyzGreen, ciexyzBlue; }
-enum { BI_BITFIELDS = 3 }
-
-align(1)
-struct BitmapHeader(uint V)
+private
 {
-	enum VERSION = V;
+	alias int FXPT2DOT30;
+	struct CIEXYZ { FXPT2DOT30 ciexyzX, ciexyzY, ciexyzZ; }
+	struct CIEXYZTRIPLE { CIEXYZ ciexyzRed, ciexyzGreen, ciexyzBlue; }
+	enum { BI_BITFIELDS = 3 }
 
-align(1):
-	// BITMAPFILEHEADER
-	char[2] bfType = "BM";
-	uint    bfSize;
-	ushort  bfReserved1;
-	ushort  bfReserved2;
-	uint    bfOffBits;
-
-	// BITMAPCOREINFO
-	uint   bcSize = this.sizeof - bcSize.offsetof;
-	int    bcWidth;
-	int    bcHeight;
-	ushort bcPlanes;
-	ushort bcBitCount;
-	uint   biCompression;
-	uint   biSizeImage;
-	uint   biXPelsPerMeter;
-	uint   biYPelsPerMeter;
-	uint   biClrUsed;
-	uint   biClrImportant;
-
-	// BITMAPV4HEADER
-	static if (V>=4)
+	align(1)
+	struct BitmapHeader(uint V)
 	{
-		uint         bV4RedMask;
-		uint         bV4GreenMask;
-		uint         bV4BlueMask;
-		uint         bV4AlphaMask;
-		uint         bV4CSType;
-		CIEXYZTRIPLE bV4Endpoints;
-		uint         bV4GammaRed;
-		uint         bV4GammaGreen;
-		uint         bV4GammaBlue;
+		enum VERSION = V;
+
+	align(1):
+		// BITMAPFILEHEADER
+		char[2] bfType = "BM";
+		uint    bfSize;
+		ushort  bfReserved1;
+		ushort  bfReserved2;
+		uint    bfOffBits;
+
+		// BITMAPCOREINFO
+		uint   bcSize = this.sizeof - bcSize.offsetof;
+		int    bcWidth;
+		int    bcHeight;
+		ushort bcPlanes;
+		ushort bcBitCount;
+		uint   biCompression;
+		uint   biSizeImage;
+		uint   biXPelsPerMeter;
+		uint   biYPelsPerMeter;
+		uint   biClrUsed;
+		uint   biClrImportant;
+
+		// BITMAPV4HEADER
+		static if (V>=4)
+		{
+			uint         bV4RedMask;
+			uint         bV4GreenMask;
+			uint         bV4BlueMask;
+			uint         bV4AlphaMask;
+			uint         bV4CSType;
+			CIEXYZTRIPLE bV4Endpoints;
+			uint         bV4GammaRed;
+			uint         bV4GammaGreen;
+			uint         bV4GammaBlue;
+		}
+
+		// BITMAPV5HEADER
+		static if (V>=5)
+		{
+			uint        bV5Intent;
+			uint        bV5ProfileData;
+			uint        bV5ProfileSize;
+			uint        bV5Reserved;
+		}
 	}
 
-	// BITMAPV5HEADER
-	static if (V>=5)
+	template bitmapBitCount(COLOR)
 	{
-		uint        bV5Intent;
-		uint        bV5ProfileData;
-		uint        bV5ProfileSize;
-		uint        bV5Reserved;
+		static if (is(COLOR == BGR))
+			enum bitmapBitCount = 24;
+		else
+		static if (is(COLOR == BGRX) || is(COLOR == BGRA))
+			enum bitmapBitCount = 32;
+		else
+		static if (is(COLOR == L8))
+			enum bitmapBitCount = 8;
+		else
+			static assert(false, "Unsupported BMP color type: " ~ COLOR.stringof);
 	}
-}
 
-template bitmapBitCount(COLOR)
-{
-	static if (is(COLOR == BGR))
-		enum bitmapBitCount = 24;
-	else
-	static if (is(COLOR == BGRX) || is(COLOR == BGRA))
-		enum bitmapBitCount = 32;
-	else
-	static if (is(COLOR == L8))
-		enum bitmapBitCount = 8;
-	else
-		static assert(false, "Unsupported BMP color type: " ~ COLOR.stringof);
-}
-
-@property int bitmapPixelStride(COLOR)(int w)
-{
-	int pixelStride = w * cast(uint)COLOR.sizeof;
-	pixelStride = (pixelStride+3) & ~3;
-	return pixelStride;
+	@property int bitmapPixelStride(COLOR)(int w)
+	{
+		int pixelStride = w * cast(uint)COLOR.sizeof;
+		pixelStride = (pixelStride+3) & ~3;
+		return pixelStride;
+	}
 }
 
 /// Parses a Windows bitmap (.bmp) file.
