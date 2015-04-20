@@ -1,6 +1,6 @@
 ﻿/**
  * Light read-only XML library
- * Soon to be deprecated.
+ * May be deprecated in the future.
  * See other XML modules for better implementations.
  *
  * License:
