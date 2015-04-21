@@ -60,6 +60,7 @@ class XmlNode
 {
 	string tag;
 	string[string] attributes;
+	XmlNode parent;
 	XmlNode[] children;
 	XmlNodeType type;
 	ulong startPos, endPos;
@@ -157,7 +158,7 @@ class XmlNode
 						if (peek(s)=='<' && peek(s, 2)=='/')
 							break;
 						try
-							children ~= new XmlNode(s);
+							addChild(new XmlNode(s));
 						catch (Exception e)
 							throw new Exception("Error while processing child of "~tag, e);
 					}
@@ -188,6 +189,7 @@ class XmlNode
 
 	XmlNode addChild(XmlNode child)
 	{
+		child.parent = this;
 		children ~= child;
 		return this;
 	}
@@ -317,9 +319,9 @@ class XmlNode
 	{
 		auto result = new XmlNode(type, tag);
 		result.attributes = attributes.dup;
-		result.children.length = children.length;
-		foreach (i, child; children)
-			result.children[i] = child.dup;
+		result.children.reserve(children.length);
+		foreach (child; children)
+			result.addChild(child.dup);
 		return result;
 	}
 
@@ -358,7 +360,7 @@ class XmlDocument : XmlNode
 		while (s.position < s.size)
 			try
 			{
-				children ~= new XmlNode(s);
+				addChild(new XmlNode(s));
 				skipWhitespace(s);
 			}
 			catch (Exception e)
