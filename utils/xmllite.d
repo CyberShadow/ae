@@ -53,6 +53,7 @@ enum XmlNodeType
 	Comment,
 	Meta,
 	DocType,
+	CData,
 	Text
 }
 
@@ -106,6 +107,19 @@ class XmlNode
 						s.read(c);
 						tag ~= c;
 					} while (tag.length<3 || tag[$-3..$] != "-->");
+					tag = tag[0..$-3];
+				}
+				else
+				if (c == '[') // CDATA
+				{
+					foreach (x; "CDATA[")
+						expect(s, x);
+					type = XmlNodeType.CData;
+					do
+					{
+						s.read(c);
+						tag ~= c;
+					} while (tag.length<3 || tag[$-3..$] != "]]>");
 					tag = tag[0..$-3];
 				}
 				else // doctype, etc.
@@ -215,7 +229,7 @@ class XmlNode
 				output.addAttribute(key, value);
 		}
 
-		switch(type)
+		final switch (type)
 		{
 			case XmlNodeType.Root:
 				writeChildren();
@@ -240,7 +254,11 @@ class XmlNode
 			case XmlNodeType.Text:
 				output.text(tag);
 				return;
-			default:
+			case XmlNodeType.Comment:
+				// TODO
+				return;
+			case XmlNodeType.CData:
+				output.text(tag);
 				return;
 		}
 	}
@@ -250,6 +268,7 @@ class XmlNode
 		switch(type)
 		{
 			case XmlNodeType.Text:
+			case XmlNodeType.CData:
 				return tag;
 			case XmlNodeType.Node:
 			case XmlNodeType.Root:
