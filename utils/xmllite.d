@@ -48,6 +48,7 @@ private struct StringStream
 
 enum XmlNodeType
 {
+	None,
 	Root,
 	Node,
 	Comment,
@@ -189,7 +190,7 @@ class XmlNode
 		endPos = s.position;
 	}
 
-	this(XmlNodeType type, string tag = null)
+	this(XmlNodeType type = XmlNodeType.None, string tag = null)
 	{
 		this.type = type;
 		this.tag = tag;
@@ -231,6 +232,8 @@ class XmlNode
 
 		final switch (type)
 		{
+			case XmlNodeType.None:
+				assert(false);
 			case XmlNodeType.Root:
 				writeChildren();
 				return;
@@ -265,8 +268,10 @@ class XmlNode
 
 	@property string text()
 	{
-		switch(type)
+		final switch (type)
 		{
+			case XmlNodeType.None:
+				assert(false);
 			case XmlNodeType.Text:
 			case XmlNodeType.CData:
 				return tag;
@@ -276,7 +281,9 @@ class XmlNode
 				foreach (child; children)
 					childrenText ~= child.text();
 				return childrenText;
-			default:
+			case XmlNodeType.Comment:
+			case XmlNodeType.Meta:
+			case XmlNodeType.DocType:
 				return null;
 		}
 	}
