@@ -14,6 +14,7 @@
 module ae.utils.xmlsel;
 
 import std.algorithm;
+import std.conv;
 import std.exception;
 import std.string;
 
@@ -42,6 +43,7 @@ XmlNode[] find(XmlNode[] roots, string selector, bool allowEmpty = true)
 			}
 
 		string tag, id, cls;
+		string[] pss; // pseudo-selectors
 
 		string* tgt = &tag;
 		foreach (c; spec)
@@ -51,14 +53,32 @@ XmlNode[] find(XmlNode[] roots, string selector, bool allowEmpty = true)
 			if (c == '#')
 				tgt = &id;
 			else
+			if (c == ':')
+			{
+				pss ~= null;
+				tgt = &pss[$-1];
+			}
+			else
 				*tgt ~= c;
+
+		int nthChild;
+		foreach (ps; pss)
+			switch (ps.findSplit("(")[0])
+			{
+				case "nth-child":
+					nthChild = ps.findSplit("(")[2].findSplit(")")[0].to!int();
+					break;
+				default:
+					throw new Exception("Unknown pseudo-selector: " ~ ps);
+			}
+
 		if (tag == "*")
 			tag = null;
 
 		XmlNode[] findSpec(XmlNode n)
 		{
 			XmlNode[] result;
-			foreach (c; n.children)
+			foreach (i, c; n.children)
 				if (c.type == XmlNodeType.Node)
 				{
 					if (tag && c.tag != tag)
@@ -66,6 +86,8 @@ XmlNode[] find(XmlNode[] roots, string selector, bool allowEmpty = true)
 					if (id && c.attributes.get("id", null) != id)
 						goto wrong;
 					if (cls && !c.attributes.get("class", null).split().canFind(cls))
+						goto wrong;
+					if (nthChild && (i+1) != nthChild)
 						goto wrong;
 					result ~= c;
 
@@ -107,6 +129,7 @@ unittest
 			`<node class="test3">Test 3</node>`
 		`</doc>`;
 	auto doc = xmlText.xmlParse();
+
 	assert(doc.find("test"  ).text == "Test 1");
 	assert(doc.find("#test2").text == "Test 2");
 	assert(doc.find(".test3").text == "Test 3");
@@ -122,4 +145,8 @@ unittest
 	assert(![doc].find(".foo").length);
 	assert(![doc].find("doc foo").length);
 	assert(![doc].find("foo test").length);
+
+	assert(doc.find("doc > :nth-child(1)").text == "Test 1");
+	assert(doc.find("doc > :nth-child(2)").text == "Test 2");
+	assert(doc.find("doc > :nth-child(3)").text == "Test 3");
 }
