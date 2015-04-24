@@ -320,6 +320,11 @@ unittest
 
 // ***************************************************************************
 
+/// Equivalent of PHP's `list` language construct:
+/// http://php.net/manual/en/function.list.php
+/// Works with arrays and tuples.
+/// Specify `null` as an argument to ignore that index
+/// (equivalent of `list(x, , y)` in PHP).
 auto list(Args...)(auto ref Args args)
 {
 	struct List
@@ -338,6 +343,7 @@ auto list(Args...)(auto ref Args args)
 	return List();
 }
 
+///
 unittest
 {
 	string name, value;
