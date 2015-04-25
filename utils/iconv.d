@@ -26,7 +26,7 @@ import ae.utils.text : ascii;
 ///   data  = text to convert
 ///   cp    = the name of the source character encoding
 ///   force = do not throw on errors; instead, do a best-effort translation
-string toUtf8(in ascii data, string cp, bool force)
+string toUtf8(in ascii data, string cp, bool force = false)
 {
 	cp = toLower(cp).replace("-", "");
 
