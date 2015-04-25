@@ -626,6 +626,7 @@ version (Windows)
 else
 	alias std.file.symlink dirLink;
 
+version(Windows) version(unittest) static import win32.winnt;
 
 unittest
 {
