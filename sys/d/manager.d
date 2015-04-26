@@ -23,6 +23,7 @@ import std.process;
 import std.range;
 import std.string;
 
+import ae.sys.d.cache;
 import ae.sys.d.repo;
 import ae.sys.file;
 import ae.sys.git;
@@ -40,7 +41,7 @@ import ae.sys.install.git;
 
 
 /// Class which manages a D checkout and its dependencies.
-class DManager
+class DManager : ICacheHost
 {
 	// **************************** Configuration ****************************
 
@@ -72,8 +73,8 @@ class DManager
 		/// Don't get latest updates from GitHub.
 		bool offline;
 
-		/// Whether we persistently cache things.
-		bool persistentCache;
+		/// How to cache built files.
+		string cache;
 
 		/// Whether we should cache failed builds.
 		bool cacheFailures = true;
@@ -104,11 +105,16 @@ class DManager
 	/// This number increases with each incompatible change to cached data.
 	enum cacheVersion = 2;
 
-	@property string cacheDir()
+	@property string cacheEngineDir()
 	{
+		// Keep compatibility with old cache paths
+		string engineDirName =
+			cacheEngineName == "directory" || cacheEngineName == "true"  ? "cache"      :
+			cacheEngineName == "none"      || cacheEngineName == "false" ? "temp-cache" :
+			"cache-" ~ cacheEngineName;
 		return buildPath(
 			config.local.workDir,
-			usingPersistentCache ? "cache" : "temp-cache",
+			engineDirName,
 			"v%d".format(cacheVersion),
 		);
 	}
@@ -319,7 +325,6 @@ class DManager
 		}
 
 		@property string sourceDir() { submodule.needRepo(); return submodule.git.path; }
-		@property string cacheDir() { return buildPath(this.outer.cacheDir, getBuildID()); }
 
 		/// Directory to which built files are copied to.
 		/// This will then be atomically added to the cache.
@@ -376,21 +381,24 @@ class DManager
 			if (haveInstalled) return;
 			scope(success) haveInstalled = true;
 
-			log("needInstalled: " ~ getBuildID());
+			auto buildID = getBuildID();
+			log("needInstalled: " ~ buildID);
 
-			if (cacheDir.exists)
+			needCacheEngine();
+			if (cacheEngine.haveEntry(buildID))
 			{
-				log("Cache hit: " ~ cacheDir);
-				if (buildPath(cacheDir, unbuildableMarker).exists)
-					throw new Exception(getBuildID() ~ " was cached as unbuildable");
+				log("Cache hit!");
+				if (cacheEngine.listFiles(buildID).canFind(unbuildableMarker))
+					throw new Exception(buildID ~ " was cached as unbuildable");
 			}
 			else
 			{
-				log("Cache miss: " ~ cacheDir);
+				log("Cache miss.");
 
-				stageDir = cacheDir ~ ".tmp";
-				if (stageDir.exists)
-					stageDir.removeRecurse();
+				auto tempDir = buildPath(config.local.workDir, "temp");
+				if (tempDir.exists)
+					tempDir.removeRecurse();
+				stageDir = buildPath(tempDir, buildID);
 				stageDir.mkdirRecurse();
 
 				bool failed = false;
@@ -402,22 +410,21 @@ class DManager
 					if (failed && !config.cacheFailures)
 					{
 						log("Not caching failed build.");
-						rmdirRecurse(stageDir);
+						rmdirRecurse(tempDir);
 					}
 					else
-					if (cacheDir.exists)
+					if (cacheEngine.haveEntry(buildID))
 					{
 						// Can happen due to force==true
-						log("Already in cache: " ~ cacheDir);
-						rmdirRecurse(stageDir);
+						log("Already in cache.");
+						rmdirRecurse(tempDir);
 					}
 					else
 					{
-						log("Saving to cache: " ~ cacheDir);
+						log("Saving to cache.");
 						saveMetaData(stageDir);
-						rename(stageDir, cacheDir);
-						if (usingPersistentCache)
-							optimizeRevision(name, commit);
+						cacheEngine.add(buildID, stageDir);
+						rmdirRecurse(tempDir);
 					}
 				}
 
@@ -453,9 +460,7 @@ class DManager
 		/// Copy build results from cacheDir to buildDir
 		void install()
 		{
-			foreach (de; dirEntries(cacheDir, SpanMode.shallow))
-				if (!de.baseName.startsWith("digger-"))
-					cp(de.name, buildPath(buildDir, de.baseName));
+			cacheEngine.extract(getBuildID(), buildDir, de => !de.baseName.startsWith("digger-"));
 		}
 
 	protected final:
@@ -535,27 +540,6 @@ class DManager
 		void run(string[] args...)
 		{
 			run(args, config.env);
-		}
-
-		void cp(string src, string dst, bool silent = false)
-		{
-			if (!silent)
-				log("Copy: " ~ src ~ " -> " ~ dst);
-
-			ensurePathExists(dst);
-			if (src.isDir)
-			{
-				if (!dst.exists)
-					dst.mkdir();
-				foreach (de; src.dirEntries(SpanMode.shallow))
-					cp(de.name, dst.buildPath(de.name.baseName), true);
-			}
-			else
-			{
-				copy(src, dst);
-				version (Posix)
-					dst.setAttributes(src.getAttributes());
-			}
 		}
 	}
 
@@ -946,9 +930,12 @@ EOS";
 	private SubmoduleState submoduleState;
 	private bool incrementalBuild;
 
-	@property bool usingPersistentCache()
+	@property string cacheEngineName()
 	{
-		return config.persistentCache && !incrementalBuild;
+		if (incrementalBuild)
+			return "temp";
+		else
+			return config.cache;
 	}
 
 	private string getComponentCommit(string componentName)
@@ -961,6 +948,7 @@ EOS";
 	}
 
 	static const string[] defaultComponents = ["dmd", "druntime", "phobos-includes", "phobos", "rdmd"];
+	static const string[] allComponents = defaultComponents;
 
 	/// Build the specified components according to the specified configuration.
 	void build(SubmoduleState submoduleState, Config.Build buildConfig, in string[] components = defaultComponents, bool incremental = false)
@@ -977,8 +965,7 @@ EOS";
 			buildDir.removeRecurse();
 		enforce(!buildDir.exists);
 
-		if (!usingPersistentCache && cacheDir.exists) removeRecurse(cacheDir);
-		scope(success) if (!usingPersistentCache && cacheDir.exists) removeRecurse(cacheDir);
+		scope(success) if (cacheEngine) cacheEngine.finalize();
 
 		foreach (componentName; components)
 			getComponent(componentName).needInstalled();
@@ -1004,7 +991,7 @@ EOS";
 		this.config.build = buildConfig;
 
 		foreach (componentName; components)
-			if (!getComponent(componentName).cacheDir.exists)
+			if (!cacheEngine.haveEntry(getComponent(componentName).getBuildID()))
 				return false;
 		return true;
 	}
@@ -1120,140 +1107,62 @@ EOS";
 
 	enum unbuildableMarker = "unbuildable";
 
-	int dedupedFiles;
+	DCache cacheEngine;
 
-	/// Replace all files that have duplicate subpaths and content
-	/// which exist under both dirA and dirB with hard links.
-	void dedupDirectories(string dirA, string dirB)
+	DCache needCacheEngine()
 	{
-		foreach (de; dirEntries(dirA, SpanMode.depth))
-			if (de.isFile)
-			{
-				auto pathA = de.name;
-				auto subPath = pathA[dirA.length..$];
-				auto pathB = dirB ~ subPath;
-
-				if (pathB.exists
-				 && pathA.getSize() == pathB.getSize()
-				 && pathA.getFileID() != pathB.getFileID()
-				 && pathA.mdFileCached() == pathB.mdFileCached())
-				{
-					//debug log(pathB ~ " = " ~ pathA);
-					pathB.remove();
-					try
-					{
-						pathA.hardLink(pathB);
-						dedupedFiles++;
-					}
-					catch (FileException e)
-					{
-						log(" -- Hard link failed: " ~ e.msg);
-						pathA.copy(pathB);
-					}
-				}
-			}
+		if (!cacheEngine)
+			cacheEngine = createCache(cacheEngineName, cacheEngineDir, this);
+		return cacheEngine;
 	}
 
-	struct CacheEntry
+	void cp(string src, string dst)
 	{
-		string path, componentName, commit, id;
-
-		this(string path)
-		{
-			this.path = path;
-
-			auto parts = path.baseName().split("-");
-			if (parts.length < 3 ||
-				parts[$-1].length != 32 ||
-				parts[$-2].length != 40
-			)
-				return;
-
-			componentName = parts[0..$-2].join("-");
-			commit = parts[$-2];
-			id = parts[$-1];
-		}
+		needCacheEngine().cp(src, dst);
 	}
 
-	private void optimizeCacheImpl(string componentName, const(string)[] history, bool reverse = false, string onlyRev = null)
-	{
-		if (reverse)
-			history = history.retro.array();
-
-		CacheEntry[][string] cacheContent;
-		foreach (de; dirEntries(cacheDir, SpanMode.shallow))
-		{
-			auto entry = CacheEntry(de.name);
-			if (entry.componentName == componentName)
-				cacheContent[entry.commit] ~= entry;
-		}
-
-		CacheEntry[] lastRevisions;
-
-		foreach (rev; history)
-		{
-			auto cacheEntries = cacheContent.get(rev, null);
-			bool optimizeThis = onlyRev is null || onlyRev == rev;
-
-			if (optimizeThis)
-			{
-				auto targetEntries = lastRevisions ~ cacheEntries;
-
-				if (targetEntries.length)
-					foreach (i, entry1; targetEntries[0..$-1])
-						foreach (entry2; targetEntries[i+1..$])
-							dedupDirectories(entry1.path, entry2.path);
-			}
-
-			if (cacheEntries.length)
-				lastRevisions = cacheEntries;
-		}
-	}
-
-	private string[] getHistory(string componentName)
+	private string[] getComponentKeyOrder(string componentName)
 	{
 		auto submodule = getComponent(componentName).submodule;
 		submodule.needRepo();
-		return submodule.git.query("log", "--pretty=format:%H", "--all", "--topo-order").splitLines();
+		return submodule
+			.git.query("log", "--pretty=format:%H", "--all", "--topo-order")
+			.splitLines()
+			.map!(commit => componentName ~ "-" ~ commit ~ "-*")
+			.array
+		;
+	}
+
+	string componentNameFromKey(string key)
+	{
+		auto parts = key.split("-");
+		return parts[0..$-2].join("-");
+	}
+
+	string[][] getKeyOrder(string key)
+	{
+		if (key !is null)
+			return [getComponentKeyOrder(componentNameFromKey(key))];
+		else
+			return allComponents.map!(componentName => getComponentKeyOrder(componentName)).array;
 	}
 
 	/// Optimize entire cache.
 	void optimizeCache()
 	{
-		bool[string] componentNames;
-		foreach (de; dirEntries(cacheDir, SpanMode.shallow))
-		{
-			auto parts = de.baseName().split("-");
-			if (parts.length >= 3)
-				componentNames[parts[0..$-2].join("-")] = true;
-		}
-
-		log("Optimizing cache..."); dedupedFiles = 0;
-		foreach (componentName; componentNames.byKey)
-			optimizeCacheImpl(componentName, getHistory(componentName));
-		log("Deduplicated %d files.".format(dedupedFiles));
+		needCacheEngine().optimize();
 	}
 
-	/// Optimize specific revision.
-	void optimizeRevision(string componentName, string revision)
+	bool shouldPurge(string key)
 	{
-		log("Optimizing cache..."); dedupedFiles = 0;
-		auto history = getHistory(componentName);
-		optimizeCacheImpl(componentName, history, false, revision);
-		optimizeCacheImpl(componentName, history, true , revision);
-		log("Deduplicated %d files.".format(dedupedFiles));
-	}
-
-	static bool shouldPurge(string dir)
-	{
-		if (dir.buildPath(unbuildableMarker).exists)
+		auto files = cacheEngine.listFiles(key);
+		if (files.canFind(unbuildableMarker))
 			return true;
 
-		auto ce = CacheEntry(dir);
-		if (ce.componentName == "druntime")
+		if (componentNameFromKey(key) == "druntime")
 		{
-			if (!dir.buildPath("import", "core", "memory.d").exists
-			 && !dir.buildPath("import", "core", "memory.di").exists)
+			if (!files.canFind("import/core/memory.d")
+			 && !files.canFind("import/core/memory.di"))
 				return true;
 		}
 
@@ -1263,16 +1172,15 @@ EOS";
 	/// Delete cached "unbuildable" build results.
 	void purgeUnbuildable()
 	{
-		auto killList = cacheDir
-			.dirEntries(SpanMode.shallow)
-			.filter!shouldPurge
-			.array();
-
-		foreach (de; killList)
-		{
-			log("Deleting: " ~ de);
-			de.rmdirRecurse();
-		}
+		needCacheEngine()
+			.getEntries
+			.filter!(key => shouldPurge(key))
+			.each!(key =>
+			{
+				log("Deleting: " ~ key);
+				cacheEngine.remove(key);
+			})
+		;
 	}
 
 	// **************************** Miscellaneous ****************************
