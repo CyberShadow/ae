@@ -277,10 +277,12 @@ class XmlNode
 				return tag;
 			case XmlNodeType.Node:
 			case XmlNodeType.Root:
-				string childrenText;
+				string result;
+				if (tag == "br")
+					result = "\n";
 				foreach (child; children)
-					childrenText ~= child.text();
-				return childrenText;
+					result ~= child.text();
+				return result;
 			case XmlNodeType.Comment:
 			case XmlNodeType.Meta:
 			case XmlNodeType.DocType:
