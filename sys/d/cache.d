@@ -15,10 +15,12 @@ module ae.sys.d.cache;
 
 import std.algorithm;
 import std.array;
+import std.exception;
 import std.file;
 import std.format;
 import std.path;
 import std.range;
+import std.string;
 
 import ae.sys.file;
 import ae.utils.meta;
@@ -68,7 +70,7 @@ abstract class DCache
 	/// is allowed to modify the source directory.
 	abstract void add(string key, string sourcePath);
 
-	/// Extract a cache entry to a target directory, with an optional filter for root files/directories.
+	/// Extract a cache entry to a target directory, with a filter for root files/directories.
 	abstract void extract(string key, string targetPath, bool delegate(string) pathFilter);
 
 	/// Delete a cache entry.
@@ -153,7 +155,7 @@ abstract class DirCacheBase : DCache
 	override void extract(string key, string targetPath, bool delegate(string) pathFilter)
 	{
 		cacheDir.buildPath(key).dirEntries(SpanMode.shallow)
-			.filter!(de => pathFilter ? pathFilter(de.baseName) : true)
+			.filter!(de => pathFilter(de.baseName))
 			.each!(de => cp(de.name, buildPath(targetPath, de.baseName)));
 	}
 
@@ -289,6 +291,97 @@ class DirCache : DirCacheBase
 	}
 }
 
+/// Cache backed by a git repository.
+/// Git's packfiles provide an efficient way to store binary
+/// files with small differences, however adding and extracting
+/// items is a little slower.
+class GitCache : DCache
+{
+	import std.process;
+	import ae.sys.git;
+
+	Repository git;
+	static const refPrefix = "refs/ae-sys-d-cache/";
+
+	override @property string name() const { return "git"; }
+
+	this(string cacheDir, ICacheHost cacheHost)
+	{
+		super(cacheDir, cacheHost);
+		if (!cacheDir.exists)
+		{
+			cacheDir.mkdirRecurse();
+			spawnProcess(["git", "init", cacheDir])
+				.wait()
+				.I!(code => (code==0).enforce("git init failed"))
+			;
+		}
+		git = Repository(cacheDir);
+	}
+
+	override string[] getEntries()
+	{
+		auto chompPrefix(R)(R r, string prefix) { return r.filter!(s => s.startsWith(prefix)).map!(s => s[prefix.length..$]); }
+		try
+			return git
+				.query("show-ref")
+				.splitLines
+				.map!(s => s[41..$])
+				.I!chompPrefix(refPrefix)
+				.array
+			;
+		catch (Exception e)
+			return null; // show-ref will exit with status 1 for an empty repository
+	}
+
+	override bool haveEntry(string key) const
+	{
+		return git.check("show-ref", refPrefix ~ key);
+	}
+
+	override string[] listFiles(string key) const
+	{
+		return git
+			.query("ls-files", "--with-tree", refPrefix ~ key)
+			.splitLines
+		;
+	}
+
+	override void add(string key, string sourcePath)
+	{
+		git.run("symbolic-ref", "HEAD", refPrefix ~ key);
+		git.gitDir.buildPath("index").I!(index => { if (index.exists) index.remove(); }); // kill index
+		git.run("--work-tree", sourcePath, "add", "--all");
+		git.run("--work-tree", sourcePath, "commit", "--message", key);
+	}
+
+	override void extract(string key, string targetPath, bool delegate(string) pathFilter)
+	{
+		if (!targetPath.exists)
+			targetPath.mkdirRecurse();
+		targetPath = targetPath.absolutePath();
+		targetPath = targetPath[$-1].isDirSeparator ? targetPath : targetPath ~ dirSeparator;
+
+		git.run("reset", "--quiet", "--mixed", refPrefix ~ key);
+		git.run(["checkout-index",
+			"--prefix", targetPath,
+			"--"] ~ listFiles(key).filter!(fn => pathFilter(fn.split("/")[0])).array);
+	}
+
+	override void remove(string key)
+	{
+		git.run("update-ref", "-d", refPrefix ~ key);
+	}
+
+	override void finalize() {}
+
+	override void optimize()
+	{
+		git.run("prune");
+		git.run("repack", "-a", "-d");
+	}
+}
+
 /// Create a DCache instance according to the given name.
 DCache createCache(string name, string cacheDir, ICacheHost cacheHost)
 {
@@ -298,6 +391,7 @@ DCache createCache(string name, string cacheDir, ICacheHost cacheHost)
 		case "none":      return new TempCache(cacheDir, cacheHost);
 		case "true":  // compat
 		case "directory": return new DirCache (cacheDir, cacheHost);
+		case "git":       return new GitCache (cacheDir, cacheHost);
 		default: throw new Exception("Unknown cache engine: " ~ name);
 	}
 }
@@ -314,9 +408,9 @@ unittest
 		auto host = new Host;
 
 		auto testDir = "test-cache";
-		if (testDir.exists) testDir.rmdirRecurse();
+		if (testDir.exists) testDir.forceDelete!false(true);
 		testDir.mkdir();
-		scope(exit) if (testDir.exists) testDir.rmdirRecurse();
+		scope(exit) if (testDir.exists) testDir.forceDelete!false(true);
 
 		auto cacheEngine = createCache(name, testDir.buildPath("cache"), host);
 		assert(cacheEngine.getEntries().length == 0);
@@ -335,7 +429,7 @@ unittest
 
 		auto targetDir = testDir.buildPath("target");
 		mkdir(targetDir);
-		cacheEngine.extract("test-key", targetDir, null);
+		cacheEngine.extract("test-key", targetDir, fn => true);
 		assert(targetDir.buildPath("test.txt").readText == "Test");
 		assert(targetDir.buildPath("dir", "test2.txt").readText == "Test 2");
 
@@ -345,9 +439,14 @@ unittest
 		assert(!targetDir.buildPath("test.txt").exists);
 		assert(targetDir.buildPath("dir", "test2.txt").readText == "Test 2");
 
+		cacheEngine.remove("test-key");
+		assert(cacheEngine.getEntries().length == 0);
+		assert(!cacheEngine.haveEntry("test-key"));
+
 		cacheEngine.finalize();
 	}
 
 	testEngine("none");
 	testEngine("directory");
+	testEngine("git");
 }
