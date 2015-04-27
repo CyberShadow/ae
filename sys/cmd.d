@@ -43,6 +43,7 @@ string getTempFileName(string extension)
 private void invoke(alias runner)(string[] args)
 {
 	//debug scope(failure) std.stdio.writeln("[CWD] ", getcwd());
+	debug(CMD) std.stdio.stderr.writeln("invoke: ", args);
 	auto status = runner();
 	enforce(status == 0,
 		"Command %s failed with status %d".format(args, status));
