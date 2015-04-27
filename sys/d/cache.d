@@ -153,7 +153,7 @@ abstract class DirCacheBase : DCache
 	override void extract(string key, string targetPath, bool delegate(string) pathFilter)
 	{
 		cacheDir.buildPath(key).dirEntries(SpanMode.shallow)
-			.filter!(de => pathFilter ? pathFilter(de.name) : true)
+			.filter!(de => pathFilter ? pathFilter(de.baseName) : true)
 			.each!(de => cp(de.name, buildPath(targetPath, de.baseName)));
 	}
 
