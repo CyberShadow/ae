@@ -1192,13 +1192,14 @@ EOS";
 		if (tempDir.exists)
 			tempDir.removeRecurse();
 		foreach (key; sourceEngine.getEntries())
-		{
-			log(key);
-			sourceEngine.extract(key, tempDir, fn => true);
-			targetEngine.add(key, tempDir);
-			if (tempDir.exists)
-				tempDir.removeRecurse();
-		}
+			if (!targetEngine.haveEntry(key))
+			{
+				log(key);
+				sourceEngine.extract(key, tempDir, fn => true);
+				targetEngine.add(key, tempDir);
+				if (tempDir.exists)
+					tempDir.removeRecurse();
+			}
 		targetEngine.optimize();
 	}
 
