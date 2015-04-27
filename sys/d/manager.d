@@ -1198,7 +1198,7 @@ EOS";
 		log("Enumerating source entries...");
 		auto sourceEntries = sourceEngine.getEntries();
 		log("Enumerating target entries...");
-		auto targetEntries = sourceEngine.getEntries().sort();
+		auto targetEntries = targetEngine.getEntries().sort();
 		foreach (key; sourceEntries)
 			if (!targetEntries.canFind(key))
 			{
