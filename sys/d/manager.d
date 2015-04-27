@@ -1195,8 +1195,12 @@ EOS";
 		auto tempDir = buildPath(config.local.workDir, "temp");
 		if (tempDir.exists)
 			tempDir.removeRecurse();
-		foreach (key; sourceEngine.getEntries())
-			if (!targetEngine.haveEntry(key))
+		log("Enumerating source entries...");
+		auto sourceEntries = sourceEngine.getEntries();
+		log("Enumerating target entries...");
+		auto targetEntries = sourceEngine.getEntries().sort();
+		foreach (key; sourceEntries)
+			if (!targetEntries.canFind(key))
 			{
 				log(key);
 				sourceEngine.extract(key, tempDir, fn => true);
