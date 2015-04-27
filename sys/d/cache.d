@@ -238,14 +238,20 @@ class DirCache : DirCacheBase
 
 		string[] lastKeys;
 
+		auto cacheDirEntries = cacheDir
+			.dirEntries(SpanMode.shallow)
+			.map!(de => de.name)
+			.array
+			.sort()
+		;
+
 		foreach (prefix; order)
 		{
-			auto cacheEntries = cacheDir
-				.dirEntries(SpanMode.shallow)
-				.filter!(de => de.baseName.startsWith(prefix))
-				.map!(de => de.name)
+			auto cacheEntries = cacheDirEntries
+				.filter!(name => name.baseName.startsWith(prefix))
 				.array
 			;
+
 			bool optimizeThis = onlyKey is null || onlyKey.startsWith(prefix);
 
 			if (optimizeThis)
