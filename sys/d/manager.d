@@ -1132,7 +1132,7 @@ EOS";
 		return submodule
 			.git.query("log", "--pretty=format:%H", "--all", "--topo-order")
 			.splitLines()
-			.map!(commit => componentName ~ "-" ~ commit ~ "-*")
+			.map!(commit => componentName ~ "-" ~ commit ~ "-")
 			.array
 		;
 	}

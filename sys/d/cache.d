@@ -29,7 +29,7 @@ interface ICacheHost
 {
 	/// An optimization helper which provides a linear order in which keys should be optimized
 	/// (cache entries most likely to have common data should be adjacent in the list).
-	/// Returns: An array of groups, each group is an array of globMatch-compatible masks.
+	/// Returns: An array of groups, each group is an array of key prefixes.
 	/// Params:
 	///   key = If non-null, this function will only return keys relevant to the given key.
 	string[][] getKeyOrder(string key);
@@ -238,10 +238,15 @@ class DirCache : DirCacheBase
 
 		string[] lastKeys;
 
-		foreach (mask; order)
+		foreach (prefix; order)
 		{
-			auto cacheEntries = cacheDir.dirEntries(mask, SpanMode.shallow).map!(de => de.name).array;
-			bool optimizeThis = onlyKey is null || onlyKey.globMatch(mask);
+			auto cacheEntries = cacheDir
+				.dirEntries(SpanMode.shallow)
+				.filter!(de => de.baseName.startsWith(prefix))
+				.map!(de => de.name)
+				.array
+			;
+			bool optimizeThis = onlyKey is null || onlyKey.startsWith(prefix);
 
 			if (optimizeThis)
 			{
