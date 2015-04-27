@@ -105,13 +105,13 @@ class DManager : ICacheHost
 	/// This number increases with each incompatible change to cached data.
 	enum cacheVersion = 2;
 
-	@property string cacheEngineDir()
+	string cacheEngineDir(string engineName)
 	{
 		// Keep compatibility with old cache paths
 		string engineDirName =
-			cacheEngineName == "directory" || cacheEngineName == "true"  ? "cache"      :
-			cacheEngineName == "none"      || cacheEngineName == "false" ? "temp-cache" :
-			"cache-" ~ cacheEngineName;
+			engineName == "directory" || engineName == "true"  ? "cache"      :
+			engineName == "none"      || engineName == "false" ? "temp-cache" :
+			"cache-" ~ engineName;
 		return buildPath(
 			config.local.workDir,
 			engineDirName,
@@ -1112,7 +1112,7 @@ EOS";
 	DCache needCacheEngine()
 	{
 		if (!cacheEngine)
-			cacheEngine = createCache(cacheEngineName, cacheEngineDir, this);
+			cacheEngine = createCache(cacheEngineName, cacheEngineDir(cacheEngineName), this);
 		return cacheEngine;
 	}
 
@@ -1181,6 +1181,25 @@ EOS";
 				cacheEngine.remove(key);
 			})
 		;
+	}
+
+	/// Move cached files from one cache engine to another.
+	void migrateCache(string sourceEngineName, string targetEngineName)
+	{
+		auto sourceEngine = createCache(sourceEngineName, cacheEngineDir(sourceEngineName), this);
+		auto targetEngine = createCache(targetEngineName, cacheEngineDir(targetEngineName), this);
+		auto tempDir = buildPath(config.local.workDir, "temp");
+		if (tempDir.exists)
+			tempDir.removeRecurse();
+		foreach (key; sourceEngine.getEntries())
+		{
+			log(key);
+			sourceEngine.extract(key, tempDir, fn => true);
+			targetEngine.add(key, tempDir);
+			if (tempDir.exists)
+				tempDir.removeRecurse();
+		}
+		targetEngine.optimize();
 	}
 
 	// **************************** Miscellaneous ****************************
