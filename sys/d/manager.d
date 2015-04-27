@@ -1112,7 +1112,11 @@ EOS";
 	DCache needCacheEngine()
 	{
 		if (!cacheEngine)
+		{
+			if (cacheEngineName == "git")
+				needGit();
 			cacheEngine = createCache(cacheEngineName, cacheEngineDir(cacheEngineName), this);
+		}
 		return cacheEngine;
 	}
 
