@@ -57,14 +57,14 @@ struct Repository
 
 	// Have just some primitives here.
 	// Higher-level functionality can be added using UFCS.
-	void   run  (string[] args...) { auto owd = pushd(workPath(args[0])); return .run  (argsPrefix ~ args); }
-	string query(string[] args...) { auto owd = pushd(workPath(args[0])); return .query(argsPrefix ~ args); }
-	bool   check(string[] args...) { auto owd = pushd(workPath(args[0])); return spawnProcess(argsPrefix ~ args).wait() == 0; }
-	auto   pipe (string[] args...) { auto owd = pushd(workPath(args[0])); return pipeProcess(argsPrefix ~ args); }
+	void   run  (string[] args...) const { auto owd = pushd(workPath(args[0])); return .run  (argsPrefix ~ args); }
+	string query(string[] args...) const { auto owd = pushd(workPath(args[0])); return .query(argsPrefix ~ args); }
+	bool   check(string[] args...) const { auto owd = pushd(workPath(args[0])); return spawnProcess(argsPrefix ~ args).wait() == 0; }
+	auto   pipe (string[] args...) const { auto owd = pushd(workPath(args[0])); return pipeProcess(argsPrefix ~ args); }
 
 	/// Certain git commands (notably, bisect) must
 	/// be run in the repository's root directory.
-	private string workPath(string cmd)
+	private string workPath(string cmd) const
 	{
 		switch (cmd)
 		{
