@@ -240,7 +240,7 @@ class DirCache : DirCacheBase
 
 		auto cacheDirEntries = cacheDir
 			.dirEntries(SpanMode.shallow)
-			.map!(de => de.name)
+			.map!(de => de.baseName)
 			.array
 			.sort()
 		;
@@ -248,7 +248,7 @@ class DirCache : DirCacheBase
 		foreach (prefix; order)
 		{
 			auto cacheEntries = cacheDirEntries
-				.filter!(name => name.baseName.startsWith(prefix))
+				.filter!(name => name.startsWith(prefix))
 				.array
 			;
 
@@ -261,7 +261,7 @@ class DirCache : DirCacheBase
 				if (targetEntries.length)
 					foreach (i, entry1; targetEntries[0..$-1])
 						foreach (entry2; targetEntries[i+1..$])
-							dedupDirectories(entry1, entry2);
+							dedupDirectories(buildPath(cacheDir, entry1), buildPath(cacheDir, entry2));
 			}
 
 			if (cacheEntries.length)
