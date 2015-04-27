@@ -378,6 +378,7 @@ class GitCache : DCache
 	override void optimize()
 	{
 		git.run("prune");
+		git.run("pack-refs", "--all");
 		git.run("repack", "-a", "-d");
 	}
 }
@@ -444,6 +445,8 @@ unittest
 		assert(!cacheEngine.haveEntry("test-key"));
 
 		cacheEngine.finalize();
+
+		cacheEngine.optimize();
 	}
 
 	testEngine("none");
