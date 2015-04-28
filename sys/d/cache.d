@@ -399,6 +399,7 @@ DCache createCache(string name, string cacheDir, ICacheHost cacheHost)
 {
 	switch (name)
 	{
+		case "":
 		case "false": // compat
 		case "none":      return new TempCache(cacheDir, cacheHost);
 		case "true":  // compat
