@@ -1103,6 +1103,20 @@ EOS";
 		}
 	}
 
+	final void applyEnv(in string[string] env)
+	{
+		auto oldEnv = environment.toAA();
+		foreach (name, value; this.config.env)
+			oldEnv[name] = value;
+		foreach (name, value; env)
+		{
+			string newValue = value;
+			foreach (oldName, oldValue; oldEnv)
+				newValue = newValue.replace("%" ~ oldName ~ "%", oldValue);
+			config.env[name] = oldEnv[name] = newValue;
+		}
+	}
+
 	// ******************************** Cache ********************************
 
 	enum unbuildableMarker = "unbuildable";
