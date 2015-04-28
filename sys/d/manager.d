@@ -460,6 +460,7 @@ class DManager : ICacheHost
 		/// Copy build results from cacheDir to buildDir
 		void install()
 		{
+			log("Installing " ~ getBuildID());
 			cacheEngine.extract(getBuildID(), buildDir, de => !de.baseName.startsWith("digger-"));
 		}
 
