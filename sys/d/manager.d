@@ -1229,7 +1229,8 @@ EOS";
 
 	struct LogEntry
 	{
-		string message, hash;
+		string hash;
+		string[] message;
 		SysTime time;
 	}
 
@@ -1242,9 +1243,8 @@ EOS";
 		auto master = history.commits[history.refs[refName]];
 		for (auto c = master; c; c = c.parents.length ? c.parents[0] : null)
 		{
-			auto title = c.message.length ? c.message[0] : null;
 			auto time = SysTime(c.time.unixTimeToStdTime);
-			logs ~= LogEntry(title, c.hash.toString(), time);
+			logs ~= LogEntry(c.hash.toString(), c.message, time);
 		}
 		return logs;
 	}
