@@ -1179,7 +1179,7 @@ EOS";
 		needCacheEngine()
 			.getEntries
 			.filter!(key => shouldPurge(key))
-			.each!(key =>
+			.each!((key)
 			{
 				log("Deleting: " ~ key);
 				cacheEngine.remove(key);
