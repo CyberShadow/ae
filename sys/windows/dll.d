@@ -50,12 +50,12 @@ mixin template DynamicLoad(alias F, string DLL, string NAME=__traits(identifier,
 }
 
 /// Ditto
-mixin template DynamicLoad(string DLL, FUNCS...)
+mixin template DynamicLoadMulti(string DLL, FUNCS...)
 {
 	static if (FUNCS.length)
 	{
 		mixin DynamicLoad!(FUNCS[0], DLL);
-		mixin DynamicLoad!(DLL, FUNCS[1..$]);
+		mixin DynamicLoadMulti!(DLL, FUNCS[1..$]);
 	}
 }
 
@@ -68,5 +68,5 @@ unittest
 	GetVersion(); // called via GetProcAddress
 
 	// Multiple imports
-	mixin DynamicLoad!("user32.dll", GetDC, ReleaseDC);
+	mixin DynamicLoadMulti!("user32.dll", GetDC, ReleaseDC);
 }
