@@ -15,20 +15,25 @@ module ae.sys.d.manager;
 
 import std.algorithm;
 import std.array;
+import std.conv;
 import std.datetime;
 import std.exception;
 import std.file;
 import std.path;
 import std.process;
 import std.range;
+import std.regex;
 import std.string;
+import std.typecons;
 
 import ae.sys.d.cache;
 import ae.sys.d.repo;
 import ae.sys.file;
 import ae.sys.git;
+import ae.utils.aa;
 import ae.utils.digest;
 import ae.utils.json;
+import ae.utils.regex;
 
 version (Windows)
 {
@@ -177,6 +182,44 @@ class DManager : ICacheHost
 			}
 			assert(result.length, "No submodules found");
 			submoduleCache[head] = result;
+			return result;
+		}
+
+		/// Get the submodule state for all commits in the history.
+		/// Returns: result[commitHash][submoduleName] == submoduleCommitHash
+		string[string][string] getSubmoduleHistory(string refName)
+		{
+			auto marksFile = buildPath(config.local.workDir, "temp", "marks.txt");
+			scope(exit) if (marksFile.exists) marksFile.remove();
+			log("Running fast-export...");
+			auto fastExportData = git.query(
+				"fast-export",
+				"--full-tree",
+				"--no-data",
+				"--export-marks", marksFile.absolutePath,
+				refName
+			);
+
+			log("Parsing fast-export marks...");
+
+			auto markLines = marksFile.readText.strip.splitLines;
+			auto marks = new string[markLines.length];
+			foreach (line; markLines)
+			{
+				auto parts = line.split(' ');
+				auto markIndex = parts[0][1..$].to!int-1;
+				marks[markIndex] = parts[1];
+			}
+
+			log("Parsing fast-export data...");
+
+			string[string][string] result;
+			foreach (i, commitData; fastExportData.split("deleteall\n")[1..$])
+				result[marks[i]] = commitData
+					.matchAll(re!(`^M 160000 ([0-9a-f]{40}) (\S+)$`, "m"))
+					.map!(m => tuple(m.captures[2], m.captures[1]))
+					.assocArray
+				;
 			return result;
 		}
 	}
@@ -995,6 +1038,42 @@ EOS";
 			if (!cacheEngine.haveEntry(getComponent(componentName).getBuildID()))
 				return false;
 		return true;
+	}
+
+	/// Returns the isCached state for all commits in the history of the given ref.
+	bool[string] getCacheState(string refName, Config.Build buildConfig, in string[] componentNames = defaultComponents)
+	{
+		auto history = getMetaRepo().getSubmoduleHistory(refName);
+
+		log("Enumerating cache entries...");
+		auto cacheEntries = needCacheEngine().getEntries().toSet();
+
+		this.config.build = buildConfig;
+
+		this.components = null;
+		auto components = componentNames.map!(componentName => getComponent(componentName)).array;
+		auto requiredSubmodules = components
+			.map!(component => chain(component.sourceDeps, component.buildDeps, component.installDeps))
+			.joiner
+			.map!(componentName => getComponent(componentName).submoduleName)
+			.array.sort().uniq().array
+		;
+
+		log("Collating cache state...");
+		bool[string] result;
+		foreach (commit, submoduleCommits; history)
+		{
+			this.submoduleState.submoduleCommits = submoduleCommits;
+
+			result[commit] =
+				requiredSubmodules.all!(submoduleName => submoduleName in submoduleCommits) &&
+				componentNames.all!(componentName =>
+					getComponent(componentName).I!(component =>
+						component.getBuildID() in cacheEntries
+					)
+				);
+		}
+		return result;
 	}
 
 	// **************************** Dependencies *****************************
