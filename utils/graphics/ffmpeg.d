@@ -16,6 +16,7 @@ module ae.utils.graphics.ffmpeg;
 import std.exception;
 import std.typecons;
 
+import ae.utils.graphics.bitmap;
 import ae.utils.graphics.color;
 import ae.utils.graphics.image;
 
