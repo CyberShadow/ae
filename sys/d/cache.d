@@ -56,7 +56,7 @@ abstract class DCache
 	abstract @property string name() const;
 
 	/// Get a list of keys for all cached entries.
-	abstract string[] getEntries( const);
+	abstract string[] getEntries() const;
 
 	/// Check if an entry with the given key exists.
 	abstract bool haveEntry(string key) const;
@@ -118,7 +118,7 @@ abstract class DirCacheBase : DCache
 			cacheDir.mkdirRecurse();
 	}
 
-	override string[] getEntries()
+	override string[] getEntries() const
 	{
 		return cacheDir.dirEntries(SpanMode.shallow).filter!(de => de.isDir).map!(de => de.baseName).array;
 	}
@@ -330,7 +330,7 @@ class GitCache : DCache
 		git = Repository(cacheDir);
 	}
 
-	override string[] getEntries()
+	override string[] getEntries() const
 	{
 		auto chompPrefix(R)(R r, string prefix) { return r.filter!(s => s.startsWith(prefix)).map!(s => s[prefix.length..$]); }
 		try
