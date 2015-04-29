@@ -353,7 +353,7 @@ class GitCache : DCache
 	override string[] listFiles(string key) const
 	{
 		return git
-			.query("ls-files", "--with-tree", refPrefix ~ key)
+			.query("ls-tree", "--name-only", "-r", refPrefix ~ key)
 			.splitLines
 		;
 	}
