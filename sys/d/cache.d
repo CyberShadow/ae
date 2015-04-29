@@ -373,7 +373,8 @@ class GitCache : DCache
 		targetPath = targetPath.absolutePath();
 		targetPath = targetPath[$-1].isDirSeparator ? targetPath : targetPath ~ dirSeparator;
 
-		git.run("reset", "--quiet", "--mixed", refPrefix ~ key);
+		git.run("symbolic-ref", "HEAD", refPrefix ~ key);
+		git.run("reset", "--quiet", "--mixed");
 		git.run(["checkout-index",
 			"--prefix", targetPath,
 			"--"] ~ listFiles(key).filter!(fn => pathFilter(fn.split("/")[0])).array);
@@ -440,6 +441,11 @@ unittest
 		assert(cacheEngine.haveEntry("test-key"));
 		assert(cacheEngine.listFiles("test-key").sort().release == ["dir/test2.txt", "test.txt"]);
 
+		if (sourceDir.exists) rmdirRecurse(sourceDir);
+		mkdir(sourceDir);
+		write(sourceDir.buildPath("test3.txt"), "Test 3");
+		cacheEngine.add("test-key-2", sourceDir);
+
 		auto targetDir = testDir.buildPath("target");
 		mkdir(targetDir);
 		cacheEngine.extract("test-key", targetDir, fn => true);
@@ -448,12 +454,17 @@ unittest
 
 		rmdirRecurse(targetDir);
 		mkdir(targetDir);
+		cacheEngine.extract("test-key-2", targetDir, fn => true);
+		assert(targetDir.buildPath("test3.txt").readText == "Test 3");
+
+		rmdirRecurse(targetDir);
+		mkdir(targetDir);
 		cacheEngine.extract("test-key", targetDir, fn => fn=="dir");
 		assert(!targetDir.buildPath("test.txt").exists);
 		assert(targetDir.buildPath("dir", "test2.txt").readText == "Test 2");
 
 		cacheEngine.remove("test-key");
-		assert(cacheEngine.getEntries().length == 0);
+		assert(cacheEngine.getEntries().length == 1);
 		assert(!cacheEngine.haveEntry("test-key"));
 
 		cacheEngine.finalize();
