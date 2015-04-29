@@ -512,6 +512,8 @@ auto funoptDispatch(alias Actions, FunOptConfig config = FunOptConfig.init, alia
 
 	auto fun(string action, string[] actionArguments = [])
 	{
+		action = action.replace("-", "");
+
 		static void descUsageFun(string description)(string usage)
 		{
 			auto lines = usage.split("\n");
@@ -556,12 +558,12 @@ private string genActionList(alias Actions)()
 	size_t longestAction = 0;
 	foreach (m; __traits(allMembers, Actions))
 		static if (hasAttribute!(string, __traits(getMember, Actions, m)))
-			longestAction = max(longestAction, m.length);
+			longestAction = max(longestAction, m.splitByCamelCase.join("-").length);
 
 	foreach (m; __traits(allMembers, Actions))
 		static if (hasAttribute!(string, __traits(getMember, Actions, m)))
 		{
-			enum name = m.toLower();
+			enum name = m.splitByCamelCase.join("-").toLower();
 			//__traits(comment, __traits(getMember, Actions, m)) // https://github.com/D-Programming-Language/dmd/pull/3531
 			result ~= optionWrap(getAttribute!(string, __traits(getMember, Actions, m)), name, longestAction);
 		}
