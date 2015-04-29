@@ -504,7 +504,7 @@ class DManager : ICacheHost
 		void install()
 		{
 			log("Installing " ~ getBuildID());
-			cacheEngine.extract(getBuildID(), buildDir, de => !de.baseName.startsWith("digger-"));
+			needCacheEngine().extract(getBuildID(), buildDir, de => !de.baseName.startsWith("digger-"));
 		}
 
 	protected final:
@@ -1034,6 +1034,7 @@ EOS";
 		this.submoduleState = submoduleState;
 		this.config.build = buildConfig;
 
+		needCacheEngine();
 		foreach (componentName; components)
 			if (!cacheEngine.haveEntry(getComponent(componentName).getBuildID()))
 				return false;
