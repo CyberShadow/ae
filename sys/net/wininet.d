@@ -34,7 +34,7 @@ class WinINetNetwork : Network
 {
 private:
 	// Don't require wininet.lib
-	mixin DynamicLoad!("wininet.dll",
+	mixin DynamicLoadMulti!("wininet.dll",
 		HttpQueryInfoA,
 		HttpOpenRequestA,
 		HttpSendRequestA,
