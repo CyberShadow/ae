@@ -394,6 +394,12 @@ else
 
 deprecated alias IsDebug = isDebug;
 
+/// Is a specific version on?
+template isVersion(string versionName)
+{
+	mixin(`version (` ~ versionName ~ `) enum isVersion = true; else enum isVersion = false;`);
+}
+
 // ************************************************************************
 
 /// Shorter synonym for std.traits.Identity.
