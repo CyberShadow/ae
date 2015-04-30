@@ -25,6 +25,8 @@ import std.string;
 import std.typecons;
 import std.utf;
 
+public import std.typecons : No, Yes;
+
 alias wcscmp = core.stdc.wchar_.wcscmp;
 alias wcslen = core.stdc.wchar_.wcslen;
 
@@ -319,7 +321,7 @@ import ae.utils.text;
 /// (it is first moved/renamed to another location).
 /// On Windows, this will move the file/directory out of the way,
 /// if it is in use and cannot be deleted (but can be renamed).
-void forceDelete(bool atomic=true)(string fn, bool recursive = false)
+void forceDelete(Flag!"atomic" atomic=Yes.atomic)(string fn, Flag!"recursive" recursive = No.recursive)
 {
 	import std.process : environment;
 	version(Windows)
@@ -408,7 +410,7 @@ void forceDelete(bool atomic=true)(string fn, bool recursive = false)
 			if (recursive && (attr & FILE_ATTRIBUTE_REPARSE_POINT) == 0)
 			{
 				foreach (de; fn.dirEntries(SpanMode.shallow))
-					forceDelete!false(de.name, true);
+					forceDelete!(No.atomic)(de.name, Yes.recursive);
 			}
 			// Will fail if !recursive and directory is not empty
 			RemoveDirectoryW(fnW).wenforce("RemoveDirectory");
@@ -426,6 +428,22 @@ void forceDelete(bool atomic=true)(string fn, bool recursive = false)
 			else
 				fn.remove();
 	}
+}
+
+deprecated void forceDelete(bool atomic)(string fn, bool recursive = false) { forceDelete!(cast(Flag!"atomic")atomic)(fn, cast(Flag!"recursive")recursive); }
+deprecated void forceDelete(string fn, bool recursive) { forceDelete!(Yes.atomic)(fn, cast(Flag!"recursive")recursive); }
+
+deprecated unittest
+{
+	mkdir("a"); touch("a/b"); forceDelete!(false     )("a", true);
+	mkdir("a"); touch("a/b"); forceDelete!(true      )("a", true);
+}
+
+unittest
+{
+	mkdir("a"); touch("a/b"); forceDelete             ("a", Yes.recursive);
+	mkdir("a"); touch("a/b"); forceDelete!(No .atomic)("a", Yes.recursive);
+	mkdir("a"); touch("a/b"); forceDelete!(Yes.atomic)("a", Yes.recursive);
 }
 
 /// If fn is a directory, delete it recursively.
