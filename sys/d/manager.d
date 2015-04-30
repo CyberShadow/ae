@@ -190,6 +190,7 @@ class DManager : ICacheHost
 		string[string][string] getSubmoduleHistory(string refName)
 		{
 			auto marksFile = buildPath(config.local.workDir, "temp", "marks.txt");
+			ensurePathExists(marksFile);
 			scope(exit) if (marksFile.exists) marksFile.remove();
 			log("Running fast-export...");
 			auto fastExportData = git.query(
