@@ -181,7 +181,7 @@ class Installer
 	// ----------------------------------------------------
 
 final:
-protected:
+//protected: // https://issues.dlang.org/show_bug.cgi?id=14528
 	static string saveLocation(string url)
 	{
 		return buildPath(installationDirectory, url.fileNameFromURL());
