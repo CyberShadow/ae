@@ -93,7 +93,7 @@ unittest
 //	alias BGR COLOR;
 	alias BGRX COLOR;
 	auto b = GDICanvas!COLOR(100, 100);
-	b.clear(COLOR(255, 255, 255));
+	b.fill(COLOR(255, 255, 255));
 
 	const str = "Hello, world!";
 	auto f = CreateFont(-11, 0, 0, 0, 0, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Tahoma"); scope(exit) DeleteObject(f);
