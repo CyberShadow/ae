@@ -73,7 +73,7 @@ class VisualStudioInstaller : Installer
 		if (installedPackages != wantedPackages)
 		{
 			log("Requested package set differs from previous install - deleting " ~ directory);
-			directory.forceDelete(true);
+			directory.forceDelete(Yes.recursive);
 			return false;
 		}
 

@@ -422,9 +422,9 @@ unittest
 		auto host = new Host;
 
 		auto testDir = "test-cache";
-		if (testDir.exists) testDir.forceDelete!false(true);
+		if (testDir.exists) testDir.forceDelete!(No.atomic)(Yes.recursive);
 		testDir.mkdir();
-		scope(exit) if (testDir.exists) testDir.forceDelete!false(true);
+		scope(exit) if (testDir.exists) testDir.forceDelete!(No.atomic)(Yes.recursive);
 
 		auto cacheEngine = createCache(name, testDir.buildPath("cache"), host);
 		assert(cacheEngine.getEntries().length == 0);
