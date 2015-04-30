@@ -197,7 +197,7 @@ class DManager : ICacheHost
 				"fast-export",
 				"--full-tree",
 				"--no-data",
-				"--export-marks", marksFile.absolutePath,
+				"--export-marks=" ~ marksFile.absolutePath,
 				refName
 			);
 
