@@ -30,16 +30,11 @@ int WinMain(HINSTANCE hInstance,
 {
 	int result;
 
-	void exceptionHandler(Throwable e)
-	{
-		throw e;
-	}
-
 	try
 	{		
-		Runtime.initialize(&exceptionHandler);
+		Runtime.initialize();
 		result = runApplication(getArgs());
-		Runtime.terminate(&exceptionHandler);
+		Runtime.terminate();
 	}
 
 	catch (Throwable o)				// catch any uncaught exceptions
