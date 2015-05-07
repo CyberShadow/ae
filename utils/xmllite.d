@@ -518,7 +518,7 @@ unittest
 
 const dchar[string] entities;
 /*const*/ string[dchar] entityNames;
-static this()
+shared static this()
 {
 	entities =
 	[
