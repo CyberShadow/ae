@@ -13,7 +13,9 @@
 
 module ae.net.ietf.wrap;
 
+import std.range;
 import std.string;
+import std.uni;
 
 import ae.utils.text;
 
@@ -89,7 +91,6 @@ string wrapText(Paragraph[] paragraphs, int margin = DEFAULT_WRAP_LENGTH)
 	foreach (paragraph; paragraphs)
 	{
 		string line = paragraph.text;
-		auto cutPoint = margin - paragraph.quotePrefix.length;
 
 		while (line.length && line[$-1] == ' ')
 			line = line[0..$-1];
@@ -100,23 +101,29 @@ string wrapText(Paragraph[] paragraphs, int margin = DEFAULT_WRAP_LENGTH)
 			continue;
 		}
 
-		while (line.length > cutPoint)
+		while (line.length)
 		{
-			auto i = line[0..cutPoint].lastIndexOf(' ');
-			if (i < 0)
+			size_t lastIndex = 0;
+			size_t lastLength = paragraph.quotePrefix.length;
+			foreach (i, c; line)
+				if (c == ' ' || i == line.length-1)
+				{
+					auto length = lastLength + line[lastIndex..i+1].byGrapheme.walkLength;
+					if (length > margin)
+						break;
+					lastIndex = i+1;
+					lastLength = length;
+				}
+
+			if (lastIndex == 0)
 			{
-				i = cutPoint + line[cutPoint..$].indexOf(' ');
-				if (i < cutPoint)
-					break;
+				// Couldn't wrap. Wrap whole line
+				lastIndex = line.length;
 			}
 
-			i++;
-			addLine(paragraph.quotePrefix, line[0..i]);
-			line = line[i..$];
+			addLine(paragraph.quotePrefix, line[0..lastIndex]);
+			line = line[lastIndex..$];
 		}
-
-		if (line.length)
-			addLine(paragraph.quotePrefix, line);
 	}
 
 	return lines.join("\n");
