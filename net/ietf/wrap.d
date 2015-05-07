@@ -14,30 +14,29 @@
 module ae.net.ietf.wrap;
 
 import std.string;
-import std.utf;
 
 import ae.utils.text;
 
 struct Paragraph
 {
-	dstring quotePrefix, text;
+	string quotePrefix, text;
 }
 
 Paragraph[] unwrapText(string text, bool flowed, bool delsp)
 {
-	auto lines = text.toUTF32().splitLines();
+	auto lines = text.splitLines();
 
 	Paragraph[] paragraphs;
 
 	foreach (line; lines)
 	{
-		dstring quotePrefix;
-		while (line.startsWith(">"d))
+		string quotePrefix;
+		while (line.startsWith(">"))
 		{
 			int l = 1;
 			// This is against standard, but many clients
 			// (incl. Web-News and M$ Outlook) don't give a damn:
-			if (line.startsWith("> "d))
+			if (line.startsWith("> "))
 				l = 2;
 
 			quotePrefix ~= line[0..l];
@@ -45,16 +44,16 @@ Paragraph[] unwrapText(string text, bool flowed, bool delsp)
 		}
 
 		// Remove space-stuffing
-		if (flowed && line.startsWith(" "d))
+		if (flowed && line.startsWith(" "))
 			line = line[1..$];
 
 		if (paragraphs.length>0
 		 && paragraphs[$-1].quotePrefix==quotePrefix
-		 && paragraphs[$-1].text.endsWith(" "d)
-		 && !line.startsWith(" "d)
+		 && paragraphs[$-1].text.endsWith(" ")
+		 && !line.startsWith(" ")
 		 && line.length
 		 && line != "-- "
-		 && paragraphs[$-1].text != "-- "d
+		 && paragraphs[$-1].text != "-- "
 		 && (flowed || quotePrefix.length))
 		{
 			if (delsp)
@@ -72,15 +71,15 @@ enum DEFAULT_WRAP_LENGTH = 66;
 
 string wrapText(Paragraph[] paragraphs, int margin = DEFAULT_WRAP_LENGTH)
 {
-	dstring[] lines;
+	string[] lines;
 
-	void addLine(dstring quotePrefix, dstring line)
+	void addLine(string quotePrefix, string line)
 	{
 		line = quotePrefix ~ line;
 		// Add space-stuffing
-		if (line.startsWith(" "d) ||
-			line.startsWith("From "d) ||
-			(line.startsWith(">"d) && quotePrefix.length==0))
+		if (line.startsWith(" ") ||
+			line.startsWith("From ") ||
+			(line.startsWith(">") && quotePrefix.length==0))
 		{
 			line = " " ~ line;
 		}
@@ -89,7 +88,7 @@ string wrapText(Paragraph[] paragraphs, int margin = DEFAULT_WRAP_LENGTH)
 
 	foreach (paragraph; paragraphs)
 	{
-		dstring line = paragraph.text;
+		string line = paragraph.text;
 		auto cutPoint = margin - paragraph.quotePrefix.length;
 
 		while (line.length && line[$-1] == ' ')
@@ -120,7 +119,7 @@ string wrapText(Paragraph[] paragraphs, int margin = DEFAULT_WRAP_LENGTH)
 			addLine(paragraph.quotePrefix, line);
 	}
 
-	return lines.join("\n"d).toUTF8();
+	return lines.join("\n");
 }
 
 unittest
@@ -138,6 +137,7 @@ unittest
 
 	// Wrap by character count, not UTF-8 code-unit count. TODO: take into account surrogates and composite characters.
 	enum str = "Это очень очень очень очень очень очень очень длинная строка";
+	import std.utf;
 	static assert(str.toUTF32().length < DEFAULT_WRAP_LENGTH);
 	static assert(str.length > DEFAULT_WRAP_LENGTH);
 	assert(wrapText(unwrapText(str, false, false)).split("\n").length == 1);
