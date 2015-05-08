@@ -143,7 +143,7 @@ struct OrderedMap(K, V)
 	V[] values;
 	size_t[K] index;
 
-	ref V opIndex()(auto ref K k)
+	ref inout(V) opIndex()(auto ref K k) inout
 	{
 		return values[index[k]];
 	}
@@ -164,7 +164,7 @@ struct OrderedMap(K, V)
 		return values[$-1];
 	}
 
-	V* opIn_r()(auto ref K k)
+	inout(V)* opIn_r()(auto ref K k) inout
 	{
 		auto p = k in index;
 		return p ? &values[*p] : null;
@@ -178,7 +178,7 @@ struct OrderedMap(K, V)
 		values = values.remove(i);
 	}
 
-	@property size_t length() { return values.length; }
+	@property size_t length() const { return values.length; }
 
 	int opApply(int delegate(ref K k, ref V v) dg)
 	{
