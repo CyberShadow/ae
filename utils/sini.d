@@ -165,6 +165,24 @@ IniTraversingHandler!S makeIniHandler(S = string, U)(ref U v)
 	static if (!is(U == Unqual!U))
 		return makeIniHandler!S(*cast(Unqual!U*)&v);
 	else
+	static if (is(typeof((ref U v){v[S.init] = S.init; *(S.init in v) = S.init;})))
+		return IniTraversingHandler!S
+		(
+			null,
+			(S name)
+			{
+				auto pField = name in v;
+				if (!pField)
+				{
+					v[name] = typeof(v[name]).init;
+					pField = name in v;
+				}
+				else
+					throw new Exception("Duplicate value: " ~ to!string(name));
+				return makeIniHandler!S(*pField);
+			}
+		);
+	else
 	static if (is(U == struct))
 		return IniTraversingHandler!S
 		(
@@ -297,6 +315,23 @@ unittest
 	);
 
 	assert(c == Custom([Custom.Section("one", ["a" : "a"]), Custom.Section("two", ["b" : "b"])]));
+}
+
+version(unittest) static import ae.utils.aa;
+
+unittest
+{
+	import ae.utils.aa;
+
+	auto o = parseIni!(OrderedMap!(string, string))
+	(
+		q"<
+			b=b
+			a=a
+		>".splitLines()
+	);
+
+	assert(o["a"]=="a" && o["b"] == "b");
 }
 
 // ***************************************************************************
