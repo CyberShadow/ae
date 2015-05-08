@@ -143,7 +143,7 @@ struct OrderedMap(K, V)
 	V[] values;
 	size_t[K] index;
 
-	ref V opIndex(ref K k)
+	ref V opIndex()(auto ref K k)
 	{
 		return values[index[k]];
 	}
