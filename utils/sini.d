@@ -165,7 +165,7 @@ IniTraversingHandler!S makeIniHandler(S = string, U)(ref U v)
 	static if (!is(U == Unqual!U))
 		return makeIniHandler!S(*cast(Unqual!U*)&v);
 	else
-	static if (is(typeof((ref U v){v[S.init] = S.init; *(S.init in v) = S.init;})))
+	static if (is(typeof((ref U v){alias V=typeof(v[S.init]); v[S.init] = V.init; *(S.init in v) = V.init;})))
 		return IniTraversingHandler!S
 		(
 			null,
@@ -332,6 +332,24 @@ unittest
 	);
 
 	assert(o["a"]=="a" && o["b"] == "b");
+}
+
+unittest
+{
+	import ae.utils.aa;
+
+	static struct S { string x; }
+
+	auto o = parseIni!(OrderedMap!(string, S))
+	(
+		q"<
+			b.x=b
+			[a]
+			x=a
+		>".splitLines()
+	);
+
+	assert(o["a"].x == "a" && o["b"].x == "b");
 }
 
 // ***************************************************************************
