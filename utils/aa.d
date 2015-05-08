@@ -164,6 +164,12 @@ struct OrderedMap(K, V)
 		return values[$-1];
 	}
 
+	V* opIn_r()(auto ref K k)
+	{
+		auto p = k in index;
+		return p ? &values[*p] : null;
+	}
+
 	void remove()(auto ref K k)
 	{
 		auto i = index[k];
@@ -195,6 +201,8 @@ unittest
 	m["b"] = 2;
 	m["c"] = 3;
 	assert(m.length == 3);
+	assert("a" in m);
+	assert("d" !in m);
 	m.remove("a");
 	assert(m.length == 2);
 }
