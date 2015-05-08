@@ -160,6 +160,8 @@ struct IniTraversingHandler(S)
 	}
 }
 
+enum isNestingType(T) = isAssociativeArray!T || is(T == struct);
+
 IniTraversingHandler!S makeIniHandler(S = string, U)(ref U v)
 {
 	static if (!is(U == Unqual!U))
@@ -178,6 +180,7 @@ IniTraversingHandler!S makeIniHandler(S = string, U)(ref U v)
 					pField = name in v;
 				}
 				else
+				static if (!isNestingType!U)
 					throw new Exception("Duplicate value: " ~ to!string(name));
 				return makeIniHandler!S(*pField);
 			}
@@ -223,6 +226,7 @@ IniTraversingHandler!S makeIniHandler(S = string, U)(ref U v)
 					pField = key in v;
 				}
 				else
+				static if (!isNestingType!U)
 					throw new Exception("Duplicate value: " ~ to!string(name));
 				return makeIniHandler!S(*pField);
 			}
@@ -350,6 +354,22 @@ unittest
 	);
 
 	assert(o["a"].x == "a" && o["b"].x == "b");
+}
+
+unittest
+{
+	static struct S { string x, y; }
+
+	auto r = parseIni!(S[string])
+	(
+		q"<
+			a.x=x
+			[a]
+			y=y
+		>".splitLines()
+	);
+
+	assert(r["a"].x == "x" && r["a"].y == "y");
 }
 
 // ***************************************************************************
