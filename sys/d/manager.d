@@ -463,7 +463,8 @@ class DManager : ICacheHost
 					if (failed && !config.cacheFailures)
 					{
 						log("Not caching failed build.");
-						rmdirRecurse(tempDir);
+						if (tempDir.exists)
+							rmdirRecurse(tempDir);
 					}
 					else
 					if (cacheEngine.haveEntry(buildID))
