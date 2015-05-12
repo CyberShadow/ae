@@ -387,6 +387,8 @@ class DManager : ICacheHost
 		/// Usually needed by other components.
 		void needSource()
 		{
+			tempError++; scope(success) tempError--;
+
 			if (incrementalBuild)
 				return;
 			foreach (component; getSubmoduleComponents(submoduleName))
@@ -455,10 +457,19 @@ class DManager : ICacheHost
 				stageDir.mkdirRecurse();
 
 				bool failed = false;
+				tempError = 0;
 
 				// Save the results to cache, failed or not
 				scope (exit)
 				{
+					// Don't cache failed build results due to temporary/environment problems
+					if (failed && tempError > 0)
+					{
+						log("Not caching build failure due to temporary/environment error.");
+						if (tempDir.exists)
+							rmdirRecurse(tempDir);
+					}
+					else
 					// Don't cache failed build results during delve
 					if (failed && !config.cacheFailures)
 					{
@@ -875,6 +886,8 @@ EOS";
 		}
 	}
 
+	private int tempError;
+
 	private Component[string] components;
 
 	Component getComponent(string name)
@@ -1098,6 +1111,8 @@ EOS";
 
 	void needDMD(string dmdVer)
 	{
+		tempError++; scope(success) tempError--;
+
 		if (!config.deps.hostDC)
 		{
 			log("Preparing DMD");
@@ -1118,8 +1133,6 @@ EOS";
 			log("hostDC=" ~ config.deps.hostDC);
 		}
 	}
-
-
 
 	final void bootstrapDMD(string ver, string target)
 	{
@@ -1152,6 +1165,8 @@ EOS";
 	version (Windows)
 	void needDMC(string ver = null)
 	{
+		tempError++; scope(success) tempError--;
+
 		if (!config.deps.dmcDir)
 		{
 			log("Preparing DigitalMars C++");
@@ -1171,6 +1186,8 @@ EOS";
 	version (Windows)
 	void needVC()
 	{
+		tempError++; scope(success) tempError--;
+
 		if (!config.deps.vsDir)
 		{
 			log("Preparing Visual C++");
@@ -1198,6 +1215,8 @@ EOS";
 
 	private void needGit()
 	{
+		tempError++; scope(success) tempError--;
+
 		needInstaller();
 		gitInstaller.require();
 	}
