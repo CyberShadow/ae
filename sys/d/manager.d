@@ -60,6 +60,10 @@ class DManager : ICacheHost
 				DMD.Config dmd;
 			}
 			Components components;
+
+			/// Instead of downloading a pre-built binary DMD package,
+			/// build it from source starting with the last C++-only version.
+			bool bootstrap;
 		}
 		Build build; /// ditto
 
@@ -123,6 +127,11 @@ class DManager : ICacheHost
 			"v%d".format(cacheVersion),
 		);
 	}
+
+	version (Windows)
+		enum string binExt = ".exe";
+	else
+		enum string binExt = "";
 
 	// **************************** Repositories *****************************
 
@@ -618,7 +627,7 @@ class DManager : ICacheHost
 			needCC(dmcVer); // Need VC too for VSINSTALLDIR
 
 			if (buildPath(sourceDir, "src", "idgen.d").exists)
-				needDMD(); // Required for bootstrapping.
+				needDMD("2.067.1"); // Required for bootstrapping.
 
 			version (Windows)
 				auto scRoot = config.deps.dmcDir.absolutePath();
@@ -1086,17 +1095,57 @@ EOS";
 		Installer.installationDirectory = dlDir;
 	}
 
-	void needDMD()
+	void needDMD(string dmdVer)
 	{
 		if (!config.deps.hostDC)
 		{
 			log("Preparing DMD");
-			needInstaller();
-			auto dmdInstaller = new DMDInstaller("2.066.1");
-			dmdInstaller.requireLocal(false);
-			config.deps.hostDC = dmdInstaller.exePath("dmd").absolutePath();
+			if (config.build.bootstrap)
+			{
+				auto dir = buildPath(config.local.workDir, "bootstrap", "dmd-" ~ dmdVer);
+				void bootstrapDMDProxy(string target) { return bootstrapDMD(dmdVer, target); } // https://issues.dlang.org/show_bug.cgi?id=14580
+				cached!bootstrapDMDProxy(dir);
+				config.deps.hostDC = buildPath(dir, "bin", "dmd" ~ binExt);
+			}
+			else
+			{
+				needInstaller();
+				auto dmdInstaller = new DMDInstaller(dmdVer);
+				dmdInstaller.requireLocal(false);
+				config.deps.hostDC = dmdInstaller.exePath("dmd").absolutePath();
+			}
 			log("hostDC=" ~ config.deps.hostDC);
 		}
+	}
+
+
+
+	final void bootstrapDMD(string ver, string target)
+	{
+		log("Bootstrapping DMD v" ~ ver);
+
+		// Back up and move out of the way the current build directory
+		auto tmpDir = buildDir ~ ".tmp-bootstrap-" ~ ver;
+		if (tmpDir.exists) tmpDir.rmdirRecurse();
+		if (buildDir.exists) buildDir.rename(tmpDir);
+		scope(exit) if (tmpDir.exists) tmpDir.rename(buildDir);
+
+		// Back up and clear component state
+		enum backupTemplate = q{
+			auto VARBackup = this.VAR;
+			scope(exit) this.VAR = VARBackup;
+		};
+		mixin(backupTemplate.replace(q{VAR}, q{components}));
+		mixin(backupTemplate.replace(q{VAR}, q{config}));
+
+		components = null;
+
+		getMetaRepo().needRepo();
+		auto rev = getMetaRepo().getRef("refs/tags/v" ~ ver);
+		log("Resolved v" ~ ver ~ " to " ~ rev);
+		buildRev(rev, config.build);
+		ensurePathExists(target);
+		rename(buildDir, target);
 	}
 
 	version (Windows)
