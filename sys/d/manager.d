@@ -196,18 +196,18 @@ class DManager : ICacheHost
 
 		/// Get the submodule state for all commits in the history.
 		/// Returns: result[commitHash][submoduleName] == submoduleCommitHash
-		string[string][string] getSubmoduleHistory(string refName)
+		string[string][string] getSubmoduleHistory(string[] refs)
 		{
 			auto marksFile = buildPath(config.local.workDir, "temp", "marks.txt");
 			ensurePathExists(marksFile);
 			scope(exit) if (marksFile.exists) marksFile.remove();
 			log("Running fast-export...");
-			auto fastExportData = git.query(
+			auto fastExportData = git.query([
 				"fast-export",
 				"--full-tree",
 				"--no-data",
 				"--export-marks=" ~ marksFile.absolutePath,
-				refName
+				] ~ refs
 			);
 
 			log("Parsing fast-export marks...");
@@ -1066,9 +1066,9 @@ EOS";
 	}
 
 	/// Returns the isCached state for all commits in the history of the given ref.
-	bool[string] getCacheState(string refName, Config.Build buildConfig, in string[] componentNames = defaultComponents)
+	bool[string] getCacheState(string[] refs, Config.Build buildConfig, in string[] componentNames = defaultComponents)
 	{
-		auto history = getMetaRepo().getSubmoduleHistory(refName);
+		auto history = getMetaRepo().getSubmoduleHistory(refs);
 
 		log("Enumerating cache entries...");
 		auto cacheEntries = needCacheEngine().getEntries().toSet();
