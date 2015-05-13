@@ -386,7 +386,7 @@ struct PersistentStringSet
 
 unittest
 {
-	import std.file;
+	import std.file, std.conv;
 
 	enum FN = "test.txt";
 	scope(exit) if (FN.exists) remove(FN);
@@ -408,7 +408,8 @@ unittest
 		assert("foo" !in s);
 		std.file.write(FN, "foo\n");
 		assert("foo" in s);
+		Thread.sleep(10.msecs);
 		std.file.write(FN, "bar\n");
-		assert(s.lines == ["bar"]);
+		assert(s.lines == ["bar"], text(s.lines));
 	}
 }
