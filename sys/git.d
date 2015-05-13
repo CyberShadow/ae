@@ -136,14 +136,11 @@ struct Repository
 		return history;
 	}
 
-	/// Run a batch cat-file query.
-	GitObject[] getObjects(Hash[] hashes)
+	struct ObjectReaderImpl
 	{
-		GitObject[] result;
-		result.reserve(hashes.length);
+		ProcessPipes pipes;
 
-		auto pipes = this.pipe(`cat-file`, `--batch`);
-		foreach (n, hash; hashes)
+		GitObject read(Hash hash)
 		{
 			pipes.stdin.writeln(hash.toString());
 			pipes.stdin.flush();
@@ -166,10 +163,34 @@ struct Repository
 			pipes.stdout.rawRead(lf[]);
 			enforce(lf[0] == '\n', "Terminating newline expected");
 
-			result ~= obj;
+			return obj;
 		}
-		pipes.stdin.close();
-		enforce(pipes.pid.wait() == 0, "git cat-file exited with failure");
+
+		~this()
+		{
+			pipes.stdin.close();
+			enforce(pipes.pid.wait() == 0, "git cat-file exited with failure");
+		}
+	}
+	alias ObjectReader = RefCounted!ObjectReaderImpl;
+
+	/// Spawn a cat-file process which can read git objects by demand.
+	ObjectReader createObjectReader()
+	{
+		auto pipes = this.pipe(`cat-file`, `--batch`);
+		return ObjectReader(pipes);
+	}
+
+	/// Run a batch cat-file query.
+	GitObject[] getObjects(Hash[] hashes)
+	{
+		GitObject[] result;
+		result.reserve(hashes.length);
+		auto reader = createObjectReader();
+
+		foreach (hash; hashes)
+			result ~= reader.read(hash);
+
 		return result;
 	}
 
