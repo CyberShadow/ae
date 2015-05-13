@@ -110,5 +110,8 @@ unittest
 	auto text = svg.text(["x" : "0", "y" : "15", "fill" : "red"]);
 	text = "I love SVG";
 
-	assert(svg.toString() == `<svg xmlns="http://www.w3.org/2000/svg" version="1.1"><text fill="red" x="0" y="15">I love SVG</text></svg>`);
+	auto s = svg.toString();
+	string s1 = `<svg xmlns="http://www.w3.org/2000/svg" version="1.1"><text fill="red" x="0" y="15">I love SVG</text></svg>`;
+	string s2 = `<svg xmlns="http://www.w3.org/2000/svg" version="1.1"><text x="0" y="15" fill="red">I love SVG</text></svg>`;
+	assert(s == s1 || s == s2, s);
 }
