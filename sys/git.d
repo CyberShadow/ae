@@ -304,11 +304,11 @@ struct Repository
 						}
 						break;
 					case octal! 40000: // tree
-						mkdir(entryPath);
+						mkdirRecurse(entryPath);
 						exportSubTree(entry.hash, entrySubPath);
 						break;
 					case octal!160000: // submodule
-						mkdir(entryPath);
+						mkdirRecurse(entryPath);
 						break;
 					default:
 						throw new Exception("Unknown git file mode: %o".format(entry.mode));
