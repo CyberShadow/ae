@@ -28,6 +28,7 @@ import std.utf;
 import ae.sys.cmd;
 import ae.sys.file;
 import ae.utils.aa;
+import ae.utils.meta;
 import ae.utils.text;
 
 struct Repository
@@ -270,6 +271,81 @@ struct Repository
 				if (obj.type == type)
 					obj.hash = writer.write(obj.data);
 		}
+	}
+
+	/// Extract a commit's tree to a given directory
+	void exportCommit(Hash commitHash, string path, ObjectReader reader, bool delegate(string) pathFilter = null)
+	{
+		exportTree(reader.read(commitHash).parseCommit().tree, path, reader, pathFilter);
+	}
+
+	/// Extract a tree to a given directory
+	void exportTree(Hash treeHash, string path, ObjectReader reader, bool delegate(string) pathFilter = null)
+	{
+		void exportSubTree(Hash treeHash, string[] subPath)
+		{
+			auto tree = reader.read(treeHash).parseTree();
+			foreach (entry; tree)
+			{
+				auto entrySubPath = subPath ~ entry.name;
+				if (pathFilter && !pathFilter(entrySubPath.join("/")))
+					continue;
+				auto entryPath = buildPath([path] ~ entrySubPath);
+				switch (entry.mode)
+				{
+					case octal!100644: // file
+					case octal!100755: // executable file
+						std.file.write(entryPath, reader.read(entry.hash).data);
+						version (Posix)
+						{
+							// Make executable
+							if (entry.mode == octal!100755)
+								entryPath.setAttributes((entryPath.getAttributes & octal!444) >> 2);
+						}
+						break;
+					case octal! 40000: // tree
+						mkdir(entryPath);
+						exportSubTree(entry.hash, entrySubPath);
+						break;
+					case octal!160000: // submodule
+						mkdir(entryPath);
+						break;
+					default:
+						throw new Exception("Unknown git file mode: %o".format(entry.mode));
+				}
+			}
+		}
+		exportSubTree(treeHash, null);
+	}
+
+	/// Import a directory tree into the object store, and return the new tree object's hash.
+	Hash importTree(string path, ObjectMultiWriter writer, bool delegate(string) pathFilter = null)
+	{
+		static // Error: variable ae.sys.git.Repository.importTree.writer has scoped destruction, cannot build closure
+		Hash importSubTree(string path, string subPath, ref ObjectMultiWriter writer, bool delegate(string) pathFilter)
+		{
+			auto entries = subPath
+				.dirEntries(SpanMode.shallow)
+				.filter!(de => !pathFilter || pathFilter(de.relativePath(path)))
+				.map!(de =>
+					de.isDir
+					? GitObject.TreeEntry(
+						octal!40000,
+						de.baseName,
+						importSubTree(path, buildPath(subPath, de.baseName), writer, pathFilter)
+					)
+					: GitObject.TreeEntry(
+						isVersion!`Posix` && (de.attributes & octal!111) ? octal!100755 : octal!100644,
+						de.baseName,
+						writer.write(GitObject(Hash.init, "blob", cast(immutable(ubyte)[])read(de.name)))
+					)
+				)
+				.array
+				.sort!((a, b) => a.name < b.name).release
+			;
+			return writer.write(GitObject.createTree(entries));
+		}
+		return importSubTree(path, path, writer, pathFilter);
 	}
 }
 
