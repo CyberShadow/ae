@@ -360,24 +360,20 @@ class GitCache : DCache
 
 	override void add(string key, string sourcePath)
 	{
-		git.run("symbolic-ref", "HEAD", refPrefix ~ key);
-		git.gitDir.buildPath("index").I!(index => { if (index.exists) index.remove(); }); // kill index
-		git.run("--work-tree", sourcePath, "add", "--all");
-		git.run("--work-tree", sourcePath, "commit", "--message", key);
+		auto writer = git.createObjectWriter();
+		auto tree = git.importTree(sourcePath, writer);
+		auto author = "ae.sys.d.cache <ae.sys.d.cache@thecybershadow.net> 0 +0000";
+		auto commit = writer.write(GitObject.createCommit(GitObject.ParsedCommit(tree, null, author, author, [key])));
+		git.run("update-ref", refPrefix ~ key, commit.toString());
 	}
 
 	override void extract(string key, string targetPath, bool delegate(string) pathFilter)
 	{
 		if (!targetPath.exists)
 			targetPath.mkdirRecurse();
-		targetPath = targetPath.absolutePath();
-		targetPath = targetPath[$-1].isDirSeparator ? targetPath : targetPath ~ dirSeparator;
 
-		git.run("symbolic-ref", "HEAD", refPrefix ~ key);
-		git.run("reset", "--quiet", "--mixed");
-		git.run(["checkout-index",
-			"--prefix", targetPath,
-			"--"] ~ listFiles(key).filter!(fn => pathFilter(fn.split("/")[0])).array);
+		auto reader = git.createObjectReader();
+		git.exportCommit(refPrefix ~ key, targetPath, reader, fn => pathFilter(fn.pathSplitter.front.assumeUnique));
 	}
 
 	override void remove(string key)
