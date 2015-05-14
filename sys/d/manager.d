@@ -462,20 +462,22 @@ class DManager : ICacheHost
 				// Save the results to cache, failed or not
 				scope (exit)
 				{
+					// tempDir might be removed by a dependency's build failure.
+					if (!tempDir.exists)
+						log("Not caching dependency build failure.");
+					else
 					// Don't cache failed build results due to temporary/environment problems
 					if (failed && tempError > 0)
 					{
 						log("Not caching build failure due to temporary/environment error.");
-						if (tempDir.exists)
-							rmdirRecurse(tempDir);
+						rmdirRecurse(tempDir);
 					}
 					else
 					// Don't cache failed build results during delve
 					if (failed && !config.cacheFailures)
 					{
 						log("Not caching failed build.");
-						if (tempDir.exists)
-							rmdirRecurse(tempDir);
+						rmdirRecurse(tempDir);
 					}
 					else
 					if (cacheEngine.haveEntry(buildID))
