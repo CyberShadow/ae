@@ -1068,10 +1068,8 @@ EOS";
 	}
 
 	/// Returns the isCached state for all commits in the history of the given ref.
-	bool[string] getCacheState(string[] refs, Config.Build buildConfig, in string[] componentNames = defaultComponents)
+	bool[string] getCacheState(string[string][string] history, Config.Build buildConfig, in string[] componentNames = defaultComponents)
 	{
-		auto history = getMetaRepo().getSubmoduleHistory(refs);
-
 		log("Enumerating cache entries...");
 		auto cacheEntries = needCacheEngine().getEntries().toSet();
 
@@ -1101,6 +1099,13 @@ EOS";
 				);
 		}
 		return result;
+	}
+
+	/// ditto
+	bool[string] getCacheState(string[] refs, Config.Build buildConfig, in string[] componentNames = defaultComponents)
+	{
+		auto history = getMetaRepo().getSubmoduleHistory(refs);
+		return getCacheState(history, buildConfig, componentNames);
 	}
 
 	// **************************** Dependencies *****************************
