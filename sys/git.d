@@ -220,11 +220,42 @@ struct Repository
 	}
 	alias ObjectWriter = RefCounted!ObjectWriterImpl;
 
+	struct ObjectMultiWriterImpl
+	{
+		Repository* repo;
+		ObjectWriter[string] writers;
+
+		Hash write(in GitObject obj)
+		{
+			auto pwriter = obj.type in writers;
+			if (!pwriter)
+			{
+				writers[obj.type] = ObjectWriter(repo.pipe(`hash-object`, `-t`, obj.type, `-w`, `--stdin-paths`));
+				pwriter = obj.type in writers;
+			}
+			return pwriter.write(obj.data);
+		}
+
+		~this()
+		{
+			foreach (type, ref writer; writers)
+				writer = ObjectWriter.init;
+			writers = null;
+		}
+	}
+	alias ObjectMultiWriter = RefCounted!ObjectMultiWriterImpl;
+
 	/// Spawn a hash-object process which can hash and write git objects on the fly.
 	ObjectWriter createObjectWriter(string type)
 	{
 		auto pipes = this.pipe(`hash-object`, `-t`, type, `-w`, `--stdin-paths`);
 		return ObjectWriter(pipes);
+	}
+
+	/// ditto
+	ObjectMultiWriter createObjectWriter()
+	{
+		return ObjectMultiWriter(&this);
 	}
 
 	/// Batch-write the given objects to the database.
