@@ -141,29 +141,39 @@ struct Repository
 	{
 		ProcessPipes pipes;
 
-		GitObject read(Hash hash)
+		GitObject read(string name)
 		{
-			pipes.stdin.writeln(hash.toString());
+			pipes.stdin.writeln(name);
 			pipes.stdin.flush();
 
 			auto headerLine = pipes.stdout.readln().strip();
 			auto header = headerLine.split(" ");
 			enforce(header.length == 3, "Malformed header during cat-file: " ~ headerLine);
-			enforce(header[0].toCommitHash() == hash, "Unexpected object during cat-file");
+			auto hash = header[0].toCommitHash();
 
 			GitObject obj;
 			obj.hash = hash;
 			obj.type = header[1];
 			auto size = to!size_t(header[2]);
-			auto data = new ubyte[size];
-			auto read = pipes.stdout.rawRead(data);
-			enforce(read.length == size, "Unexpected EOF during cat-file");
-			obj.data = data.assumeUnique();
+			if (size)
+			{
+				auto data = new ubyte[size];
+				auto read = pipes.stdout.rawRead(data);
+				enforce(read.length == size, "Unexpected EOF during cat-file");
+				obj.data = data.assumeUnique();
+			}
 
 			char[1] lf;
 			pipes.stdout.rawRead(lf[]);
 			enforce(lf[0] == '\n', "Terminating newline expected");
 
+			return obj;
+		}
+
+		GitObject read(Hash hash)
+		{
+			auto obj = read(hash.toString());
+			enforce(obj.hash == hash, "Unexpected object during cat-file");
 			return obj;
 		}
 
@@ -274,9 +284,9 @@ struct Repository
 	}
 
 	/// Extract a commit's tree to a given directory
-	void exportCommit(Hash commitHash, string path, ObjectReader reader, bool delegate(string) pathFilter = null)
+	void exportCommit(string commit, string path, ObjectReader reader, bool delegate(string) pathFilter = null)
 	{
-		exportTree(reader.read(commitHash).parseCommit().tree, path, reader, pathFilter);
+		exportTree(reader.read(commit).parseCommit().tree, path, reader, pathFilter);
 	}
 
 	/// Extract a tree to a given directory
