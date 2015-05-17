@@ -562,10 +562,16 @@ import ae.utils.textout;
 
 public string encodeEntities(string str)
 {
-	StringBuilder sb;
-	sb.preallocate(str.length * 11 / 10);
-	sb.putEncodedEntities(str);
-	return sb.get();
+	foreach (i, c; str)
+		if (c=='<' || c=='>' || c=='"' || c=='\'' || c=='&')
+		{
+			StringBuilder sb;
+			sb.preallocate(str.length * 11 / 10);
+			sb.put(str[0..i]);
+			sb.putEncodedEntities(str[i..$]);
+			return sb.get();
+		}
+	return str;
 }
 
 public void putEncodedEntities(Sink, S)(ref Sink sink, S str)
@@ -636,7 +642,7 @@ deprecated alias decodeEntities convertEntities;
 
 unittest
 {
-	assert(encodeEntities(`<Smith & Wesson> "lock'n'load"`) == `&lt;Smith &amp; Wesson&gt; &quot;lock&apos;n&apos;load&quot;`);
+	assert(encodeEntities(`The <Smith & Wesson> "lock'n'load"`) == `The &lt;Smith &amp; Wesson&gt; &quot;lock&apos;n&apos;load&quot;`);
 	assert(encodeAllEntities("©,€") == "&copy;,&euro;");
 	assert(decodeEntities("&copy;,&euro;") == "©,€");
 }
