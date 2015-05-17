@@ -629,7 +629,16 @@ class DManager : ICacheHost
 
 		Config buildConfig;
 
-		@property override string configString() { return buildConfig.toJson(); }
+		@property override string configString()
+		{
+			if (buildConfig == Config.init)
+			{
+				// Avoid changing all cache keys by adding new fields
+				return `{"debugDMD":false}`;
+			}
+			else
+				return buildConfig.toJson();
+		}
 
 		override void performBuild()
 		{
