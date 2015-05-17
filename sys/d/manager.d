@@ -183,6 +183,7 @@ class DManager : ICacheHost
 				return *pcacheEntry;
 
 			string[string] result;
+			needRepo();
 			foreach (line; git.query("ls-tree", head).splitLines())
 			{
 				auto parts = line.split();
