@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Utility code related to string and text processing.
  *
  * License:
@@ -404,6 +404,39 @@ void xlat(alias TABLE, T)(T[] buf)
 
 alias xlat!(asciiLower, char) asciiToLower;
 alias xlat!(asciiUpper, char) asciiToUpper;
+
+// ************************************************************************
+
+/// Case-insensitive ASCII string.
+alias CIAsciiString = NormalizedArray!(immutable(char), s => s.byCodeUnit.map!(std.ascii.toLower));
+
+///
+unittest
+{
+	CIAsciiString s = "test";
+	assert(s == "TEST");
+	assert(s >= "Test" && s <= "Test");
+	assert(CIAsciiString("a") == CIAsciiString("A"));
+	assert(CIAsciiString("a") != CIAsciiString("B"));
+	assert(CIAsciiString("a") <  CIAsciiString("B"));
+	assert(CIAsciiString("A") <  CIAsciiString("b"));
+	assert(CIAsciiString("я") != CIAsciiString("Я"));
+}
+
+/// Case-insensitive Unicode string.
+alias CIUniString = NormalizedArray!(immutable(char), s => s.map!(std.uni.toLower));
+
+///
+unittest
+{
+	CIUniString s = "привет";
+	assert(s == "ПРИВЕТ");
+	assert(s >= "Привет" && s <= "Привет");
+	assert(CIUniString("я") == CIUniString("Я"));
+	assert(CIUniString("а") != CIUniString("Б"));
+	assert(CIUniString("а") <  CIUniString("Б"));
+	assert(CIUniString("А") <  CIUniString("б"));
+}
 
 // ************************************************************************
 
