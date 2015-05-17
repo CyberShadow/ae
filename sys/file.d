@@ -648,7 +648,7 @@ version(Windows) version(unittest) static import win32.winnt;
 
 unittest
 {
-	mkdir("a"); scope(exit) rmdir("a");
+	mkdir("a"); scope(exit) rmdir("a"[]);
 	touch("a/f"); scope(exit) remove("a/f");
 	dirLink("a", "b"); scope(exit) version(Windows) rmdir("b"); else remove("b");
 	//symlink("a/f", "c"); scope(exit) remove("c");
