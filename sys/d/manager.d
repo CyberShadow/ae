@@ -60,10 +60,6 @@ class DManager : ICacheHost
 				DMD.Config dmd;
 			}
 			Components components;
-
-			/// Instead of downloading a pre-built binary DMD package,
-			/// build it from source starting with the last C++-only version.
-			bool bootstrap;
 		}
 		Build build; /// ditto
 
@@ -625,6 +621,10 @@ class DManager : ICacheHost
 			/// Debug builds are faster to build,
 			/// but run slower. Windows only.
 			bool debugDMD = false;
+
+			/// Instead of downloading a pre-built binary DMD package,
+			/// build it from source starting with the last C++-only version.
+			bool bootstrap;
 		}
 
 		Config buildConfig;
@@ -642,7 +642,10 @@ class DManager : ICacheHost
 			needCC(dmcVer); // Need VC too for VSINSTALLDIR
 
 			if (buildPath(sourceDir, "src", "idgen.d").exists)
-				needDMD("2.067.1"); // Required for bootstrapping.
+			{
+				// Required for bootstrapping.
+				needDMD("2.067.1", config.build.components.dmd.bootstrap);
+			}
 
 			version (Windows)
 				auto scRoot = config.deps.dmcDir.absolutePath();
@@ -1117,14 +1120,14 @@ EOS";
 		Installer.installationDirectory = dlDir;
 	}
 
-	void needDMD(string dmdVer)
+	void needDMD(string dmdVer, bool bootstrap)
 	{
 		tempError++; scope(success) tempError--;
 
 		if (!config.deps.hostDC)
 		{
 			log("Preparing DMD");
-			if (config.build.bootstrap)
+			if (bootstrap)
 			{
 				auto dir = buildPath(config.local.workDir, "bootstrap", "dmd-" ~ dmdVer);
 				void bootstrapDMDProxy(string target) { return bootstrapDMD(dmdVer, target); } // https://issues.dlang.org/show_bug.cgi?id=14580
