@@ -56,6 +56,17 @@ class DManager : ICacheHost
 		{
 			struct Components
 			{
+				bool[string] enable;
+
+				string[] getEnabledComponentNames()
+				{
+					return allComponents
+						.filter!(componentName =>
+							enable.get(componentName, defaultComponents.canFind(componentName)))
+						.array
+						.dup;
+				}
+
 				Component.CommonConfig common;
 				DMD.Config dmd;
 			}
@@ -1034,7 +1045,7 @@ EOS";
 	static const string[] allComponents = defaultComponents;
 
 	/// Build the specified components according to the specified configuration.
-	void build(SubmoduleState submoduleState, Config.Build buildConfig, in string[] components = defaultComponents, bool incremental = false)
+	void build(SubmoduleState submoduleState, Config.Build buildConfig, bool incremental = false)
 	{
 		log("Building components %-(%s, %)".format(components));
 
@@ -1050,38 +1061,39 @@ EOS";
 
 		scope(success) if (cacheEngine) cacheEngine.finalize();
 
-		foreach (componentName; components)
+		auto componentNames = buildConfig.components.getEnabledComponentNames();
+		foreach (componentName; componentNames)
 			getComponent(componentName).needInstalled();
 	}
 
 	/// Shortcut for begin + build
-	void buildRev(string rev, Config.Build buildConfig, in string[] components = defaultComponents)
+	void buildRev(string rev, Config.Build buildConfig)
 	{
 		auto submoduleState = begin(rev);
-		build(submoduleState, buildConfig, components);
+		build(submoduleState, buildConfig);
 	}
 
 	/// Rerun build without cleaning up any files.
-	void rebuild(Config.Build buildConfig, in string[] components = defaultComponents)
+	void rebuild(Config.Build buildConfig)
 	{
-		build(SubmoduleState(null), buildConfig, components, true);
+		build(SubmoduleState(null), buildConfig, true);
 	}
 
-	bool isCached(SubmoduleState submoduleState, Config.Build buildConfig, in string[] components = defaultComponents)
+	bool isCached(SubmoduleState submoduleState, Config.Build buildConfig)
 	{
 		this.components = null;
 		this.submoduleState = submoduleState;
 		this.config.build = buildConfig;
 
 		needCacheEngine();
-		foreach (componentName; components)
+		foreach (componentName; buildConfig.components.getEnabledComponentNames())
 			if (!cacheEngine.haveEntry(getComponent(componentName).getBuildID()))
 				return false;
 		return true;
 	}
 
 	/// Returns the isCached state for all commits in the history of the given ref.
-	bool[string] getCacheState(string[string][string] history, Config.Build buildConfig, in string[] componentNames = defaultComponents)
+	bool[string] getCacheState(string[string][string] history, Config.Build buildConfig)
 	{
 		log("Enumerating cache entries...");
 		auto cacheEntries = needCacheEngine().getEntries().toSet();
@@ -1089,6 +1101,7 @@ EOS";
 		this.config.build = buildConfig;
 
 		this.components = null;
+		auto componentNames = buildConfig.components.getEnabledComponentNames();
 		auto components = componentNames.map!(componentName => getComponent(componentName)).array;
 		auto requiredSubmodules = components
 			.map!(component => chain(component.sourceDeps, component.buildDeps, component.installDeps))
@@ -1115,10 +1128,10 @@ EOS";
 	}
 
 	/// ditto
-	bool[string] getCacheState(string[] refs, Config.Build buildConfig, in string[] componentNames = defaultComponents)
+	bool[string] getCacheState(string[] refs, Config.Build buildConfig)
 	{
 		auto history = getMetaRepo().getSubmoduleHistory(refs);
-		return getCacheState(history, buildConfig, componentNames);
+		return getCacheState(history, buildConfig);
 	}
 
 	// **************************** Dependencies *****************************
