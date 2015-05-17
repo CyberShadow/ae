@@ -508,9 +508,12 @@ class DManager : ICacheHost
 				scope (failure)
 				{
 					failed = true;
-					rmdirRecurse(stageDir);
-					mkdir(stageDir);
-					buildPath(stageDir, unbuildableMarker).touch();
+					if (stageDir.exists)
+					{
+						rmdirRecurse(stageDir);
+						mkdir(stageDir);
+						buildPath(stageDir, unbuildableMarker).touch();
+					}
 				}
 
 				needBuild();
