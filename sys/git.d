@@ -207,7 +207,14 @@ struct Repository
 
 	struct ObjectWriterImpl
 	{
+		bool initialized;
 		ProcessPipes pipes;
+
+		this(ProcessPipes pipes)
+		{
+			this.pipes = pipes;
+			initialized = true;
+		}
 
 		Hash write(in void[] data)
 		{
@@ -225,8 +232,12 @@ struct Repository
 
 		~this()
 		{
-			pipes.stdin.close();
-			enforce(pipes.pid.wait() == 0, "git hash-object exited with failure");
+			if (initialized)
+			{
+				pipes.stdin.close();
+				enforce(pipes.pid.wait() == 0, "git hash-object exited with failure");
+				initialized = false;
+			}
 		}
 	}
 	alias ObjectWriter = RefCounted!ObjectWriterImpl;
@@ -234,24 +245,21 @@ struct Repository
 	struct ObjectMultiWriterImpl
 	{
 		Repository* repo;
-		ObjectWriter[string] writers;
+		ObjectWriter treeWriter, blobWriter, commitWriter;
 
 		Hash write(in GitObject obj)
 		{
-			auto pwriter = obj.type in writers;
-			if (!pwriter)
+			ObjectWriter* pwriter;
+			switch (obj.type) // https://issues.dlang.org/show_bug.cgi?id=14595
 			{
-				writers[obj.type] = ObjectWriter(repo.pipe(`hash-object`, `-t`, obj.type, `-w`, `--stdin-paths`));
-				pwriter = obj.type in writers;
+				case "tree"  : pwriter = &treeWriter  ; break;
+				case "blob"  : pwriter = &blobWriter  ; break;
+				case "commit": pwriter = &commitWriter; break;
+				default: throw new Exception("Unknown object type: " ~ obj.type);
 			}
+			if (!pwriter.initialized)
+				*pwriter = ObjectWriter(repo.pipe(`hash-object`, `-t`, obj.type, `-w`, `--stdin-paths`));
 			return pwriter.write(obj.data);
-		}
-
-		~this()
-		{
-			foreach (type, ref writer; writers)
-				writer = ObjectWriter.init;
-			writers = null;
 		}
 	}
 	alias ObjectMultiWriter = RefCounted!ObjectMultiWriterImpl;
