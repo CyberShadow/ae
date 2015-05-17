@@ -26,13 +26,14 @@ struct Paragraph
 
 Paragraph[] unwrapText(string text, bool flowed, bool delsp)
 {
-	auto lines = text.splitLines();
+	auto lines = text.splitAsciiLines();
 
 	Paragraph[] paragraphs;
 
 	foreach (line; lines)
 	{
-		string quotePrefix;
+		auto oline = line;
+
 		while (line.startsWith(">"))
 		{
 			int l = 1;
@@ -41,9 +42,10 @@ Paragraph[] unwrapText(string text, bool flowed, bool delsp)
 			if (line.startsWith("> "))
 				l = 2;
 
-			quotePrefix ~= line[0..l];
 			line = line[l..$];
 		}
+
+		string quotePrefix = oline[0..line.ptr - oline.ptr];
 
 		// Remove space-stuffing
 		if (flowed && line.startsWith(" "))
