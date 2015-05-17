@@ -18,31 +18,32 @@ import std.string;
 import std.ascii;
 import std.exception;
 
+import ae.utils.text;
+
 /// AA-like superset structure with the purpose of maintaining
 /// compatibility with the old HTTP string[string] headers field
 struct Headers
 {
 	struct Header { string name, value; }
 
-	// All keys are internally upper-case.
-	private Header[][string] headers;
+	private Header[][CIAsciiString] headers;
 
 	/// If multiple headers with this name are present,
 	/// only the first one is returned.
 	ref inout(string) opIndex(string name) inout
 	{
-		return headers[toUpper(name)][0].value;
+		return headers[CIAsciiString(name)][0].value;
 	}
 
 	string opIndexAssign(string value, string name)
 	{
-		headers[toUpper(name)] = [Header(name, value)];
+		headers[CIAsciiString(name)] = [Header(name, value)];
 		return value;
 	}
 
-	inout(string)* opIn_r(string name) inout
+	inout(string)* opIn_r(string name) inout @nogc
 	{
-		auto pvalues = toUpper(name) in headers;
+		auto pvalues = CIAsciiString(name) in headers;
 		if (pvalues && (*pvalues).length)
 			return &(*pvalues)[0].value;
 		return null;
@@ -50,7 +51,7 @@ struct Headers
 
 	void remove(string name)
 	{
-		headers.remove(toUpper(name));
+		headers.remove(CIAsciiString(name));
 	}
 
 	// D forces these to be "ref"
@@ -85,7 +86,7 @@ struct Headers
 
 	void add(string name, string value)
 	{
-		auto key = toUpper(name);
+		auto key = CIAsciiString(name);
 		if (key !in headers)
 			headers[key] = [Header(name, value)];
 		else
@@ -106,7 +107,7 @@ struct Headers
 	inout(string)[] getAll(string key) inout
 	{
 		inout(string)[] result;
-		foreach (header; headers.get(toUpper(key), null))
+		foreach (header; headers.get(CIAsciiString(key), null))
 			result ~= header.value;
 		return result;
 	}
