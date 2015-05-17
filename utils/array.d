@@ -320,6 +320,41 @@ unittest
 
 // ***************************************************************************
 
+/// Array with normalized comparison and hashing.
+/// Params:
+///   T = array element type to wrap.
+///   normalize = function which should return a range of normalized elements.
+struct NormalizedArray(T, alias normalize)
+{
+	T[] arr;
+
+	this(T[] arr) { this.arr = arr; }
+
+	int opCmp    (in T[]                 other) const { return std.algorithm.cmp(normalize(arr), normalize(other    ))   ; }
+	int opCmp    (    const typeof(this) other) const { return std.algorithm.cmp(normalize(arr), normalize(other.arr))   ; }
+	int opCmp    (ref const typeof(this) other) const { return std.algorithm.cmp(normalize(arr), normalize(other.arr))   ; }
+	bool opEquals(in T[]                 other) const { return std.algorithm.cmp(normalize(arr), normalize(other    ))==0; }
+	bool opEquals(    const typeof(this) other) const { return std.algorithm.cmp(normalize(arr), normalize(other.arr))==0; }
+	bool opEquals(ref const typeof(this) other) const { return std.algorithm.cmp(normalize(arr), normalize(other.arr))==0; }
+
+	hash_t toHashReal() const
+	{
+		import std.digest.crc;
+		CRC32 crc;
+		foreach (c; normalize(arr))
+			crc.put(cast(ubyte[])((&c)[0..1]));
+		static union Result { ubyte[4] crcResult; hash_t hash; }
+		return Result(crc.finish()).hash;
+	}
+
+	hash_t toHash() const nothrow @trusted
+	{
+		return (cast(hash_t delegate() nothrow @safe)&toHashReal)();
+	}
+}
+
+// ***************************************************************************
+
 /// Equivalent of PHP's `list` language construct:
 /// http://php.net/manual/en/function.list.php
 /// Works with arrays and tuples.
