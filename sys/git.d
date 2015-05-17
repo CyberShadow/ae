@@ -318,7 +318,7 @@ struct Repository
 						{
 							// Make executable
 							if (entry.mode == octal!100755)
-								entryPath.setAttributes((entryPath.getAttributes & octal!444) >> 2);
+								entryPath.setAttributes(entryPath.getAttributes | ((entryPath.getAttributes & octal!444) >> 2));
 						}
 						break;
 					case octal! 40000: // tree
