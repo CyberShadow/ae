@@ -325,6 +325,7 @@ class Rfc850Message
 			authorEmail = author[p+1..$-1];
 			author = decodeRfc1522(asciiStrip(author[0..p]));
 		}
+
 		if (author.length>2 && author[0]=='"' && author[$-1]=='"')
 			author = decodeRfc1522(asciiStrip(author[1..$-1]));
 		if ((author == authorEmail || author == "") && authorEmail.indexOf("@") > 0)
@@ -342,11 +343,12 @@ class Rfc850Message
 			}
 		}
 
-		if ("List-ID" in headers && subject.startsWith("[") && !xref.length)
+		if ("List-ID" in headers && !xref.length)
 		{
-			auto p = subject.indexOf("] ");
-			xref = [Xref(subject[1..p])];
-			subject = subject[p+2..$];
+			auto listID = headers["List-ID"];
+			listID = listID.findSplit(" <")[0];
+			listID = listID.replace(`"`, ``);
+			xref = [Xref(listID)];
 		}
 
 		// Decode message ID
