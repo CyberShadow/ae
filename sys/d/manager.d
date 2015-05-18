@@ -1050,7 +1050,8 @@ EOS";
 	/// Build the specified components according to the specified configuration.
 	void build(SubmoduleState submoduleState, Config.Build buildConfig, bool incremental = false)
 	{
-		log("Building components %-(%s, %)".format(components));
+		auto componentNames = buildConfig.components.getEnabledComponentNames();
+		log("Building components %-(%s, %)".format(componentNames));
 
 		this.components = null;
 		this.submoduleState = submoduleState;
@@ -1064,7 +1065,6 @@ EOS";
 
 		scope(success) if (cacheEngine) cacheEngine.finalize();
 
-		auto componentNames = buildConfig.components.getEnabledComponentNames();
 		foreach (componentName; componentNames)
 			getComponent(componentName).needInstalled();
 	}
