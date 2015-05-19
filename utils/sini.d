@@ -20,6 +20,8 @@ import std.range;
 import std.string;
 import std.traits;
 
+import ae.utils.exception;
+
 alias std.string.indexOf indexOf;
 
 /// Represents the user-defined behavior for handling a node in a
@@ -43,6 +45,7 @@ void parseIni(R, H)(R r, H rootHandler)
 	while (!r.empty)
 	{
 		lineNumber++;
+		mixin(exceptionContext(q{"Error while parsing INI line %s:".format(lineNumber)}));
 
 		auto line = r.front.chomp().stripLeft();
 		scope(success) r.popFront();
