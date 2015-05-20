@@ -48,7 +48,7 @@ Paragraph[] unwrapText(string text, bool flowed, bool delsp)
 		string quotePrefix = oline[0..line.ptr - oline.ptr];
 
 		// Remove space-stuffing
-		if (flowed && line.startsWith(" "))
+		if (!quotePrefix.length && flowed && line.startsWith(" "))
 			line = line[1..$];
 
 		if (paragraphs.length>0
