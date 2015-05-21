@@ -242,7 +242,7 @@ public:
 
 		string contentType = headers.get("Content-Type", "");
 
-		switch (contentType)
+		switch (contentType.findSplit(";")[0])
 		{
 			case "application/x-www-form-urlencoded":
 				return decodeUrlParameters(data);
