@@ -417,7 +417,7 @@ class Rfc850Message
 				paragraph.quotePrefix = ">" ~ paragraph.quotePrefix;
 			else
 			{
-				if (paragraph.text == "-- ")
+				if (paragraph.text == "-- " || paragraph.text == "_______________________________________________")
 				{
 					paragraphs = paragraphs[0..i];
 					break;
