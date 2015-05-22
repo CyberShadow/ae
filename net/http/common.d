@@ -470,7 +470,7 @@ public:
 		if (acceptEncoding && "Content-Encoding" !in headers)
 		{
 			auto contentType = headers.get("Content-Type", null);
-			if (contentType.startsWith("text/") || contentType=="application/json")
+			if (contentType.startsWith("text/") || contentType=="application/json" || contentType=="image/vnd.microsoft.icon")
 			{
 				auto supported = parseItemList(acceptEncoding) ~ ["*"];
 				foreach (method; supported)
