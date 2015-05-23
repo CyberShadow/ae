@@ -101,7 +101,7 @@ Paragraph[] unwrapText(string text, bool flowed, bool delsp)
 			// Check if the set of lines can feasibly be the output
 			// of a typical naive line-wrapping algorithm
 			// (and calculate the possible range of line widths).
-			int wrapMin = 1, wrapMax = 1000;
+			size_t wrapMin = 1, wrapMax = 1000;
 			foreach (i, line; lines[0..$-1])
 			{
 				auto lineMin = line.stripRight.length;
