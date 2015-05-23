@@ -13,6 +13,7 @@
 
 module ae.net.ietf.wrap;
 
+import std.algorithm;
 import std.range;
 import std.string;
 import std.uni;
@@ -30,7 +31,7 @@ Paragraph[] unwrapText(string text, bool flowed, bool delsp)
 
 	Paragraph[] paragraphs;
 
-	foreach (line; lines)
+	string stripQuotePrefix(ref string line)
 	{
 		auto oline = line;
 
@@ -45,27 +46,136 @@ Paragraph[] unwrapText(string text, bool flowed, bool delsp)
 			line = line[l..$];
 		}
 
-		string quotePrefix = oline[0..line.ptr - oline.ptr];
+		return oline[0..line.ptr - oline.ptr];
+	}
 
-		// Remove space-stuffing
-		if (!quotePrefix.length && flowed && line.startsWith(" "))
-			line = line[1..$];
-
-		if (paragraphs.length>0
-		 && paragraphs[$-1].quotePrefix==quotePrefix
-		 && paragraphs[$-1].text.endsWith(" ")
-		 && !line.startsWith(" ")
-		 && line.length
-		 && line != "-- "
-		 && paragraphs[$-1].text != "-- "
-		 && (flowed || quotePrefix.length))
+	if (flowed)
+	{
+		foreach (line; lines)
 		{
-			if (delsp)
-				paragraphs[$-1].text = paragraphs[$-1].text[0..$-1];
-			paragraphs[$-1].text ~= line;
+			string quotePrefix = stripQuotePrefix(line);
+
+			// Remove space-stuffing
+			if (!quotePrefix.length && line.startsWith(" "))
+				line = line[1..$];
+
+			if (paragraphs.length>0
+			 && paragraphs[$-1].quotePrefix==quotePrefix
+			 && paragraphs[$-1].text.endsWith(" ")
+			 && !line.startsWith(" ")
+			 && line.length
+			 && line != "-- "
+			 && paragraphs[$-1].text != "-- ")
+			{
+				if (delsp)
+					paragraphs[$-1].text = paragraphs[$-1].text[0..$-1];
+				paragraphs[$-1].text ~= line;
+			}
+			else
+				paragraphs ~= Paragraph(quotePrefix, line);
 		}
-		else
-			paragraphs ~= Paragraph(quotePrefix, line);
+	}
+	else
+	{
+		// Use heuristics for non-format=flowed text.
+
+		static bool isWrapped(in string[] lines)
+		{
+			assert(lines.all!(line => line.length));
+
+			// Heuristic checks (from most to least confidence):
+
+			// Zero or one line - as-is
+			if (lines.length < 2)
+				return false;
+
+			// If any line starts with whitespace or contains a tab,
+			// consider pre-wrapped (code, likely).
+			if (lines.any!(line => isWhite(line[0]) || line.canFind('\t')))
+				return false;
+
+			// Detect implicit format=flowed (trailing space)
+			if (lines[0..$-1].all!(line => line[$-1] == ' '))
+				return true;
+
+			// Check if the set of lines can feasibly be the output
+			// of a typical naive line-wrapping algorithm
+			// (and calculate the possible range of line widths).
+			int wrapMin = 1, wrapMax = 1000;
+			foreach (i, line; lines[0..$-1])
+			{
+				auto lineMin = line.stripRight.length;
+				auto nextWord = lines[i+1].findSplit(" ")[0];
+				auto lineMax = lineMin + 1 + nextWord.length;
+				// Are we outside of our current range?
+				if (lineMin > wrapMax || lineMax < wrapMin)
+					return false; // pre-wrapped
+				// Now, narrow down the range accordingly
+				wrapMin = max(wrapMin, lineMin);
+				wrapMax = min(wrapMax, lineMax);
+			}
+			// Finally, test last line
+			if (lines[$-1].length > wrapMax)
+				return false;
+			// Sanity checks.
+			if (wrapMax < 60 || wrapMin > 120)
+				return false;
+
+			// Character frequency check.
+
+			size_t[256] count;
+			size_t total;
+			foreach (line; lines)
+				foreach (c; line)
+					count[c]++, total++;
+
+			// D code tends to contain a lot of parens.
+			auto parenFreq = (count['('] + count[')']) * 100 / total;
+
+			return parenFreq < 2;
+		}
+
+		void handleParagraph(string quotePrefix, in string[] lines)
+		{
+			if (isWrapped(lines))
+				paragraphs ~= Paragraph(quotePrefix, lines.map!stripRight.join(" "));
+			else
+				paragraphs ~= lines.map!(line => Paragraph(quotePrefix, line.stripRight())).array;
+		}
+
+		sizediff_t start = -1;
+		string lastQuotePrefix;
+
+		foreach (i, ref line; lines)
+		{
+			auto oline = line;
+			string quotePrefix = stripQuotePrefix(line);
+
+			bool isDelim = !line.length
+				|| line.strip() == "--" // signature
+				|| line.startsWith("---") // Bugzilla
+			;
+
+			if (isDelim || quotePrefix != lastQuotePrefix)
+			{
+				if (start >= 0)
+				{
+					handleParagraph(lastQuotePrefix, lines[start..i]);
+					start = -1;
+				}
+			}
+
+			if (isDelim)
+				paragraphs ~= Paragraph(quotePrefix, line);
+			else
+			if (start < 0)
+				start = i;
+
+			lastQuotePrefix = quotePrefix;
+		}
+
+		if (start >= 0)
+			handleParagraph(lastQuotePrefix, lines[start..$]);
 	}
 
 	return paragraphs;
