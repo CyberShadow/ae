@@ -202,7 +202,7 @@ struct Color(FieldTuple...)
 	}
 
 	/// Sum of all channels
-	ExpandNumericType!(ChannelType, ilog2(nextPowerOfTwo(channels))) sum()
+	ExpandIntegerType!(ChannelType, ilog2(nextPowerOfTwo(channels))) sum()
 	{
 		typeof(return) result;
 		foreach (i, f; this.tupleof)
@@ -282,6 +282,11 @@ unittest
 	assert(r ==  LA(100, 255), text(r));
 }
 
+unittest
+{
+	Color!(real, "r", "g", "b") c;
+}
+
 /// Obtains the type of each channel for homogenous colors.
 template ChannelType(T)
 {
@@ -308,6 +313,15 @@ template ChangeChannelType(COLOR, T)
 
 static assert(is(ChangeChannelType!(RGB, ushort) == RGB16));
 static assert(is(ChangeChannelType!(int, ushort) == ushort));
+
+/// Wrapper around ExpandNumericType to only expand numeric types.
+template ExpandIntegerType(T, size_t bits)
+{
+	static if (is(T:real))
+		alias ExpandIntegerType = T;
+	else
+		alias ExpandIntegerType = ExpandNumericType!(T, bits);
+}
 
 alias ExpandChannelType(COLOR, int BYTES) =
 	ChangeChannelType!(COLOR,
