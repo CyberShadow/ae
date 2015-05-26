@@ -44,8 +44,7 @@ void main(string[] args)
 			sw.start();
 		}
 		sw.stop();
-		if (interactive || rows.length == 0)
-			stderr.writeln("Query executed in ", dur!"hnsecs"(sw.peek().hnsecs).toString().replace("μ", "u"));
+		stderr.writeln("Query executed in ", dur!"hnsecs"(sw.peek().hnsecs).toString().replace("μ", "u"));
 
 		if (rows.length == 0)
 			return;
