@@ -434,7 +434,7 @@ template valueBits(T)
 }
 
 static assert(valueBits!uint == 32);
-static assert(valueBits!real == 64);
+static assert(valueBits!double == 53);
 
 /// Expand to a built-in numeric type of the same kind
 /// (signed integer / unsigned integer / floating-point)
