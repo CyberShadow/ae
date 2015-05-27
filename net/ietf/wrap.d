@@ -247,7 +247,7 @@ unittest
 	assert(wrapText(unwrapText(" Hello", false, false)) == "  Hello");
 
 	// Don't rewrap user input
-	assert(wrapText(unwrapText("Line 1 \nLine 2 ", false, false)) == "Line 1\nLine 2");
+	assert(wrapText(unwrapText("Line 1\nLine 2 ", false, false)) == "Line 1\nLine 2");
 	// ...but rewrap quoted text
 	assert(wrapText(unwrapText("> Line 1 \n> Line 2 ", false, false)) == "> Line 1 Line 2");
 	// Wrap long lines
