@@ -133,7 +133,7 @@ import ae.utils.aa : MultiAA;
 
 alias UrlParameters = MultiAA!(string, string);
 
-string encodeUrlParameters(string[string] dic)
+string encodeUrlParameters(UrlParameters dic)
 {
 	string[] segs;
 	foreach (name, value; dic)
@@ -160,17 +160,17 @@ string decodeUrlParameter(bool plusToSpace=true, char escape = '%')(string encod
 	return s;
 }
 
-string[string] decodeUrlParameters(string qs)
+UrlParameters decodeUrlParameters(string qs)
 {
 	string[] segs = split(qs, "&");
-	string[string] dic;
+	UrlParameters dic;
 	foreach (pair; segs)
 	{
 		auto p = pair.indexOf('=');
 		if (p < 0)
-			dic[decodeUrlParameter(pair)] = null;
+			dic.add(decodeUrlParameter(pair), null);
 		else
-			dic[decodeUrlParameter(pair[0..p])] = decodeUrlParameter(pair[p+1..$]);
+			dic.add(decodeUrlParameter(pair[0..p]), decodeUrlParameter(pair[p+1..$]));
 	}
 	return dic;
 }

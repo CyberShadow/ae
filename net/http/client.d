@@ -296,7 +296,7 @@ void httpGet(string url, void delegate(string) resultHandler, void delegate(stri
 }
 
 /// ditto
-void httpPost(string url, string[string] vars, void delegate(string) resultHandler, void delegate(string) errorHandler)
+void httpPost(string url, UrlParameters vars, void delegate(string) resultHandler, void delegate(string) errorHandler)
 {
 	auto request = new HttpRequest;
 	request.resource = url;

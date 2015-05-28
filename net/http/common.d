@@ -188,7 +188,7 @@ public:
 	}
 
 	/// AA of query string parameters
-	@property string[string] urlParameters()
+	@property UrlParameters urlParameters()
 	{
 		return decodeUrlParameters(queryString);
 	}
@@ -234,11 +234,11 @@ public:
 	}
 
 	/// Decodes submitted form data, and returns an AA of values.
-	string[string] decodePostData()
+	UrlParameters decodePostData()
 	{
 		auto data = cast(string)data.joinToHeap();
 		if (data.length is 0)
-			return null;
+			return UrlParameters(null);
 
 		string contentType = headers.get("Content-Type", "");
 
@@ -614,7 +614,7 @@ string httpEscape(string str)
 	return result;
 }
 
-public import ae.net.ietf.url : encodeUrlParameter, encodeUrlParameters, decodeUrlParameter, decodeUrlParameters;
+public import ae.net.ietf.url : UrlParameters, encodeUrlParameter, encodeUrlParameters, decodeUrlParameter, decodeUrlParameters;
 
 struct MultipartPart
 {
