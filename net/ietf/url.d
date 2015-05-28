@@ -129,6 +129,10 @@ unittest
 	assert(encodeUrlParameter("abc?123") == "abc%3F123");
 }
 
+import ae.utils.aa : MultiAA;
+
+alias UrlParameters = MultiAA!(string, string);
+
 string encodeUrlParameters(string[string] dic)
 {
 	string[] segs;
