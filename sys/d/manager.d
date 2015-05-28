@@ -561,7 +561,7 @@ class DManager : ICacheHost
 
 		@property string make()
 		{
-			return config.env.get("MAKE", environment.get("MAKE", "make"));
+			return config.env.get("MAKE", "make");
 		}
 
 		@property string[] platformMakeVars()
