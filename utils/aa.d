@@ -20,7 +20,8 @@ import std.typecons;
 // ***************************************************************************
 
 /// Get a value from an AA, and throw an exception (not an error) if not found
-ref V aaGet(K, V)(V[K] aa, K key)
+ref auto aaGet(AA, K)(AA aa, K key)
+	if (is(typeof(key in aa)))
 {
 	import std.conv;
 
@@ -285,4 +286,157 @@ unittest
 	auto set = [1, 2, 3].toSet();
 	assert(2 in set);
 	assert(4 !in set);
+}
+
+// ***************************************************************************
+
+/// An object which acts mostly as an associative array,
+/// with the added property of being able to hold keys with
+/// multiple values. These are only exposed explicitly and
+/// through iteration
+struct MultiAA(K, V)
+{
+	V[][K] items;
+
+	/// If multiple items with this name are present,
+	/// only the first one is returned.
+	ref inout(V) opIndex(K key) inout
+	{
+		return items[key][0];
+	}
+
+	V opIndexAssign(V value, K key)
+	{
+		items[key] = [value];
+		return value;
+	}
+
+	inout(V)* opIn_r(K key) inout @nogc
+	{
+		auto pvalues = key in items;
+		if (pvalues && (*pvalues).length)
+			return &(*pvalues)[0];
+		return null;
+	}
+
+	void remove(K key)
+	{
+		items.remove(key);
+	}
+
+	// D forces these to be "ref"
+	int opApply(int delegate(ref K key, ref V value) dg)
+	{
+		int ret;
+		outer:
+		foreach (key, values; items)
+			foreach (ref value; values)
+			{
+				ret = dg(key, value);
+				if (ret)
+					break outer;
+			}
+		return ret;
+	}
+
+	// Copy-paste because of https://issues.dlang.org/show_bug.cgi?id=7543
+	int opApply(int delegate(ref const(K) key, ref const(V) value) dg) const
+	{
+		int ret;
+		outer:
+		foreach (key, values; items)
+			foreach (ref value; values)
+			{
+				ret = dg(key, value);
+				if (ret)
+					break outer;
+			}
+		return ret;
+	}
+
+	void add(K key, V value)
+	{
+		if (key !in items)
+			items[key] = [value];
+		else
+			items[key] ~= value;
+	}
+
+	V get(K key, lazy V def) const
+	{
+		auto pvalue = key in this;
+		return pvalue ? *pvalue : def;
+	}
+
+	inout(V)[] getAll(K key) inout
+	{
+		inout(V)[] result;
+		foreach (ref value; items.get(key, null))
+			result ~= value;
+		return result;
+	}
+
+	this(typeof(null) Null)
+	{
+	}
+
+	this(V[K] aa)
+	{
+		foreach (ref key, ref value; aa)
+			add(key, value);
+	}
+
+	this(V[][K] aa)
+	{
+		foreach (ref key, values; aa)
+			foreach (ref value; values)
+				add(key, value);
+	}
+
+	@property auto keys() inout { return items.keys; }
+
+	// https://issues.dlang.org/show_bug.cgi?id=14626
+
+	@property V[] values()
+	{
+		return items.byValue.join;
+	}
+
+	@property const(V)[] values() const
+	{
+		return items.byValue.join;
+	}
+
+	auto byKey() { return items.byKey(); }
+	auto byValue() { return items.byValue().joiner(); }
+
+	bool opCast(T)() inout
+		if (is(T == bool))
+	{
+		return !!items;
+	}
+
+	/// Warning: discards repeating items
+	V[K] opCast(T)() const
+		if (is(T == V[K]))
+	{
+		V[K] result;
+		foreach (key, value; this)
+			result[key] = value;
+		return result;
+	}
+
+	V[][K] opCast(T)() inout
+		if (is(T == V[][K]))
+	{
+		V[][K] result;
+		foreach (k, v; this)
+			result[k] ~= v;
+		return result;
+	}
+}
+
+unittest
+{
+	MultiAA!(string, string) aa;
 }
