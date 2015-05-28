@@ -31,6 +31,7 @@ import ae.sys.d.repo;
 import ae.sys.file;
 import ae.sys.git;
 import ae.utils.aa;
+import ae.utils.array;
 import ae.utils.digest;
 import ae.utils.json;
 import ae.utils.regex;
@@ -125,8 +126,8 @@ class DManager : ICacheHost
 	{
 		// Keep compatibility with old cache paths
 		string engineDirName =
-			engineName == "directory" || engineName == "true"  ? "cache"      :
-			engineName == "none"      || engineName == "false" ? "temp-cache" :
+			engineName.isOneOf("directory", "true") ? "cache"      :
+			engineName.isOneOf("", "none", "false") ? "temp-cache" :
 			"cache-" ~ engineName;
 		return buildPath(
 			config.local.workDir,
