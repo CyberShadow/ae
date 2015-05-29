@@ -343,6 +343,7 @@ class Rfc850Message
 			}
 		}
 
+		/*
 		if ("List-ID" in headers && !xref.length)
 		{
 			auto listID = headers["List-ID"];
@@ -350,6 +351,10 @@ class Rfc850Message
 			listID = listID.replace(`"`, ``);
 			xref = [Xref(listID)];
 		}
+		*/
+
+		if ("List-Unsubscribe" in headers && !xref.length)
+			xref = headers["List-Unsubscribe"].split(", ").filter!(s => s.canFind("/options/")).map!(s => Xref(s.split("/")[$-1].stripRight('>'))).array();
 
 		// Decode message ID
 
