@@ -407,6 +407,8 @@ struct MultiAA(K, V)
 		return items.byValue.join;
 	}
 
+	@property size_t length() const { return items.byValue.map!(item => item.length).sum(); }
+
 	auto byKey() { return items.byKey(); }
 	auto byValue() { return items.byValue().joiner(); }
 
