@@ -141,6 +141,8 @@ string encodeUrlParameters(UrlParameters dic)
 	return join(segs, "&");
 }
 
+string encodeUrlParameters(string[string] dic) { return encodeUrlParameters(UrlParameters(dic)); }
+
 import ae.utils.text;
 
 string decodeUrlParameter(bool plusToSpace=true, char escape = '%')(string encoded)
