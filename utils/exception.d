@@ -51,6 +51,8 @@ unittest
 		assert(e.classinfo.name.indexOf("Cheese") > 0);
 }
 
+// --------------------------------------------------------------------------
+
 /// This exception can never be thrown.
 /// Useful for a temporary or aliased catch block exception type.
 class NoException : Exception
@@ -60,6 +62,13 @@ class NoException : Exception
 		super(null);
 	}
 }
+
+/// Allows toggling catch blocks with -debug=NO_CATCH.
+/// To use, catch CaughtException instead of Exception in catch blocks.
+debug(NO_CATCH)
+	alias CaughtException = NoException;
+else
+	alias CaughtException = Exception;
 
 // --------------------------------------------------------------------------
 
