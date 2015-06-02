@@ -28,6 +28,7 @@ import ae.net.ietf.headers;
 import ae.sys.data;
 import ae.sys.log;
 import ae.utils.container.listnode;
+import ae.utils.exception;
 import ae.utils.text;
 import ae.utils.textout;
 
@@ -201,7 +202,7 @@ private:
 			else
 				processRequest(null);
 		}
-		catch (Exception e)
+		catch (CaughtException e)
 		{
 			debug (HTTP) debugLog("Exception onNewRequest: %s", e);
 			HttpResponse response;
