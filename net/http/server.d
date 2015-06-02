@@ -383,7 +383,7 @@ unittest
 	replies = null;
 	closeAfter = 1;
 	auto port = s.listen(0, "localhost");
-	httpPost("http://localhost:" ~ to!string(port) ~ "/?" ~ encodeUrlParameters(["a":"2"]), ["b":"3"], (string s) { assert(s=="5"); }, null);
+	httpPost("http://localhost:" ~ to!string(port) ~ "/?" ~ encodeUrlParameters(["a":"2"]), UrlParameters(["b":"3"]), (string s) { assert(s=="5"); }, null);
 	socketManager.loop();
 
 	// Test pipelining, protocol errors
