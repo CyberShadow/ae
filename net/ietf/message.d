@@ -371,7 +371,7 @@ class Rfc850Message
 		if ("Date" in headers)
 		{
 			auto str = headers["Date"].strip();
-			str = str.replace(re!`([+\-]\d\d\d\d) \(\w\w\w\)$`, "$1");
+			str = str.replace(re!`([+\-]\d\d\d\d) \(.*\)$`, "$1");
 			try
 				time = parseTime!(TimeFormats.RFC850)(str);
 			catch (Exception e)
