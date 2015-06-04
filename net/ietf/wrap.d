@@ -25,7 +25,7 @@ struct Paragraph
 	string quotePrefix, text;
 }
 
-Paragraph[] unwrapText(string text, bool flowed, bool delsp)
+Paragraph[] unwrapText(string text, bool flowed, bool delsp, bool heuristics = true)
 {
 	auto lines = text.splitAsciiLines();
 
@@ -137,7 +137,13 @@ Paragraph[] unwrapText(string text, bool flowed, bool delsp)
 
 		void handleParagraph(string quotePrefix, in string[] lines)
 		{
-			if (isWrapped(lines))
+			bool wrapped;
+			if (!heuristics && !quotePrefix.length)
+				wrapped = false;
+			else
+				wrapped = isWrapped(lines);
+
+			if (wrapped)
 				paragraphs ~= Paragraph(quotePrefix, lines.map!stripRight.join(" "));
 			else
 				paragraphs ~= lines.map!(line => Paragraph(quotePrefix, line.stripRight())).array;
@@ -247,7 +253,7 @@ unittest
 	assert(wrapText(unwrapText(" Hello", false, false)) == "  Hello");
 
 	// Don't rewrap user input
-	assert(wrapText(unwrapText("Line 1\nLine 2 ", false, false)) == "Line 1\nLine 2");
+	assert(wrapText(unwrapText("Line 1 \nLine 2 ", false, false, false)) == "Line 1\nLine 2");
 	// ...but rewrap quoted text
 	assert(wrapText(unwrapText("> Line 1 \n> Line 2 ", false, false)) == "> Line 1 Line 2");
 	// Wrap long lines

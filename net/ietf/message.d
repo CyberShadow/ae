@@ -448,7 +448,7 @@ class Rfc850Message
 	/// Rewraps as necessary.
 	void setText(string text)
 	{
-		this.content = wrapText(unwrapText(text, false, false));
+		this.content = wrapText(unwrapText(text, false, false, false));
 		this.flowed = true;
 		this.delsp = false;
 	}
