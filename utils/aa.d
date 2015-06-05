@@ -407,6 +407,16 @@ struct MultiAA(K, V)
 		return items.byValue.join;
 	}
 
+	@property typeof(V[K].init.pairs) pairs()
+	{
+		alias Pair = typeof(V[K].init.pairs[0]);
+		Pair[] result;
+		result.reserve(length);
+		foreach (ref k, ref v; this)
+			result ~= Pair(k, v);
+		return result;
+	}
+
 	@property size_t length() const { return items.byValue.map!(item => item.length).sum(); }
 
 	auto byKey() { return items.byKey(); }
