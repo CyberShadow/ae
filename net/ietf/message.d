@@ -405,6 +405,11 @@ class Rfc850Message
 		return post;
 	}
 
+	@property WrapFormat wrapFormat()
+	{
+		return flowed ? delsp ? WrapFormat.flowedDelSp : WrapFormat.flowed : WrapFormat.heuristics;
+	}
+
 	/// Create a template Rfc850Message for a reply to this message.
 	Rfc850Message replyTemplate()
 	{
@@ -416,7 +421,7 @@ class Rfc850Message
 		if (!post.subject.startsWith("Re:"))
 			post.subject = "Re: " ~ post.subject;
 
-		auto paragraphs = unwrapText(this.content, this.flowed, this.delsp);
+		auto paragraphs = unwrapText(this.content, this.wrapFormat);
 		foreach (i, ref paragraph; paragraphs)
 			if (paragraph.quotePrefix.length)
 				paragraph.quotePrefix = ">" ~ paragraph.quotePrefix;
@@ -448,7 +453,7 @@ class Rfc850Message
 	/// Rewraps as necessary.
 	void setText(string text)
 	{
-		this.content = wrapText(unwrapText(text, false, false, false));
+		this.content = wrapText(unwrapText(text, WrapFormat.input));
 		this.flowed = true;
 		this.delsp = false;
 	}
