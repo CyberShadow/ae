@@ -188,7 +188,7 @@ class DManager : ICacheHost
 		{
 			auto pcacheEntry = head in submoduleCache;
 			if (pcacheEntry)
-				return *pcacheEntry;
+				return (*pcacheEntry).dup;
 
 			string[string] result;
 			needRepo();
@@ -200,7 +200,7 @@ class DManager : ICacheHost
 			}
 			assert(result.length, "No submodules found");
 			submoduleCache[head] = result;
-			return result;
+			return result.dup;
 		}
 
 		/// Get the submodule state for all commits in the history.
