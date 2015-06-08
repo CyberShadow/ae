@@ -921,6 +921,26 @@ EOS";
 		@property override string[] installDeps() { return ["rdmd"]; }
 		@property override string configString() { return null; }
 
+		/// Get the latest version of DMD at the time.
+		/// Needed for the makefile's "LATEST" parameter.
+		string getLatest()
+		{
+			auto dmd = getComponent("dmd").submodule;
+
+			auto t = dmd.git.query(["log", "-1", "--pretty=format:%ct"]).strip.to!int;
+
+			foreach (line; dmd.git.query(["log", "--decorate=full", "--tags", "--pretty=format:%ct%d"]).splitLines())
+				if (line.length > 10 && line[0..10].to!int < t)
+					if (line[10..$].startsWith(" (") && line.endsWith(")"))
+					{
+						foreach (r; line[12..$-1].split(", "))
+							if (r.skipOver("tag: refs/tags/"))
+								if (r.match(re!`^v\d\.\d\d\d(\.\d)?$`))
+									return r[1..$];
+					}
+			throw new Exception("Can't find any DMD version tags at this point!");
+		}
+
 		override void performBuild()
 		{
 			version (Windows)
@@ -933,9 +953,13 @@ EOS";
 				auto makeFullName = sourceDir.buildPath(makeFileName);
 				makeFullName.readText().replace(": modlist.d", ": modlist.d $(DMD)").toFile(makeFullName);
 
+				auto latest = getLatest;
+				log("LATEST=" ~ latest);
+
 				run([make,
 					"-f", makeFileName,
-					"all", "kindle", "pdf", "verbatim"
+					"all", "kindle", "pdf", "verbatim",
+					"LATEST=" ~ latest,
 				], sourceDir);
 			}
 		}
