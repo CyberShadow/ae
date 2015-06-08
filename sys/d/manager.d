@@ -584,13 +584,13 @@ class DManager : ICacheHost
 		}
 
 		/// Older versions did not use the posix.mak/win32.mak convention.
-		static string findMakeFile(string fn)
+		static string findMakeFile(string dir, string fn)
 		{
 			version (OSX)
-				if (!fn.exists && "osx.mak".exists)
+				if (!dir.buildPath(fn).exists && dir.buildPath("osx.mak").exists)
 					return "osx.mak";
 			version (Posix)
-				if (!fn.exists && "linux.mak".exists)
+				if (!dir.buildPath(fn).exists && dir.buildPath("linux.mak").exists)
 					return "linux.mak";
 			return fn;
 		}
@@ -605,7 +605,7 @@ class DManager : ICacheHost
 			}
 		}
 
-		void run(string[] args, ref string[string] newEnv)
+		void run(string[] args, ref string[string] newEnv, string dir)
 		{
 			log("Running: " ~ escapeShellCommand(args));
 
@@ -615,13 +615,13 @@ class DManager : ICacheHost
 			environment["PATH"] = newEnv["PATH"];
 			log("PATH=" ~ newEnv["PATH"]);
 
-			auto status = spawnProcess(args, newEnv, std.process.Config.newEnv).wait();
+			auto status = spawnProcess(args, newEnv, std.process.Config.newEnv, dir).wait();
 			enforce(status == 0, "Command %s failed with status %d".format(args, status));
 		}
 
-		void run(string[] args...)
+		void run(string[] args, string dir)
 		{
-			run(args, config.env);
+			run(args, config.env, dir);
 		}
 	}
 
@@ -676,48 +676,48 @@ class DManager : ICacheHost
 			version (Windows)
 				auto scRoot = config.deps.dmcDir.absolutePath();
 
+			auto srcDir = buildPath(sourceDir, "src");
+
+			string dmdMakeFileName = findMakeFile(srcDir, makeFileName);
+			string dmdMakeFullName = srcDir.buildPath(dmdMakeFileName);
+
+			string modelFlag = commonConfig.model;
+			if (dmdMakeFullName.readText().canFind("MODEL=-m32"))
+				modelFlag = "-m" ~ modelFlag;
+
+			version (Windows)
 			{
-				auto owd = pushd(buildPath(sourceDir, "src"));
-
-				string dmdMakeFileName = findMakeFile(makeFileName);
-
-				string modelFlag = commonConfig.model;
-				if (dmdMakeFileName.readText().canFind("MODEL=-m32"))
-					modelFlag = "-m" ~ modelFlag;
-
-				version (Windows)
-				{
-					// A make argument is insufficient,
-					// because of recursive make invocations
-					auto m = dmdMakeFileName.readText();
-					m = m
-						.replace(`CC=\dm\bin\dmc`, `CC=dmc`)
-						.replace(`SCROOT=$D\dm`, `SCROOT=` ~ scRoot)
-					;
-					dmdMakeFileName.write(m);
-				}
-				else
-				{
-					auto m = dmdMakeFileName.readText();
-					m = m
-						// Fix hard-coded reference to gcc as linker
-						.replace(`gcc -m32 -lstdc++`, `g++ -m32 -lstdc++`)
-						.replace(`gcc $(MODEL) -lstdc++`, `g++ $(MODEL) -lstdc++`)
-					;
-					// Fix pthread linker error
-					version (linux)
-						m = m.replace(`-lpthread`, `-pthread`);
-					dmdMakeFileName.write(m);
-				}
-
-				string[] targets = buildConfig.debugDMD ? [] : ["dmd"];
-				run([make,
-						"-f", dmdMakeFileName,
-						"MODEL=" ~ modelFlag,
-						"HOST_DC=" ~ config.deps.hostDC,
-					] ~ commonConfig.makeArgs ~ targets,
-				);
+				// A make argument is insufficient,
+				// because of recursive make invocations
+				auto m = dmdMakeFullName.readText();
+				m = m
+					.replace(`CC=\dm\bin\dmc`, `CC=dmc`)
+					.replace(`SCROOT=$D\dm`, `SCROOT=` ~ scRoot)
+				;
+				dmdMakeFullName.write(m);
 			}
+			else
+			{
+				auto m = dmdMakeFullName.readText();
+				m = m
+					// Fix hard-coded reference to gcc as linker
+					.replace(`gcc -m32 -lstdc++`, `g++ -m32 -lstdc++`)
+					.replace(`gcc $(MODEL) -lstdc++`, `g++ $(MODEL) -lstdc++`)
+				;
+				// Fix pthread linker error
+				version (linux)
+					m = m.replace(`-lpthread`, `-pthread`);
+				dmdMakeFullName.write(m);
+			}
+
+			string[] targets = buildConfig.debugDMD ? [] : ["dmd"];
+			run([make,
+					"-f", dmdMakeFileName,
+					"MODEL=" ~ modelFlag,
+					"HOST_DC=" ~ config.deps.hostDC,
+				] ~ commonConfig.makeArgs ~ targets,
+				srcDir
+			);
 		}
 
 		override void performStage()
@@ -811,17 +811,13 @@ EOS";
 		{
 			needCC();
 
-			{
-				auto owd = pushd(sourceDir);
+			mkdirRecurse(sourceDir.buildPath("import"));
+			mkdirRecurse(sourceDir.buildPath("lib"));
 
-				mkdirRecurse("import");
-				mkdirRecurse("lib");
+			setTimes(sourceDir.buildPath("src", "rt", "minit.obj"), Clock.currTime(), Clock.currTime());
 
-				setTimes(buildPath("src", "rt", "minit.obj"), Clock.currTime(), Clock.currTime());
-
-				run([make, "-f", makeFileNameModel, "import"] ~ commonConfig.makeArgs ~ platformMakeVars);
-				run([make, "-f", makeFileNameModel          ] ~ commonConfig.makeArgs ~ platformMakeVars);
-			}
+			run([make, "-f", makeFileNameModel, "import"] ~ commonConfig.makeArgs ~ platformMakeVars, sourceDir);
+			run([make, "-f", makeFileNameModel          ] ~ commonConfig.makeArgs ~ platformMakeVars, sourceDir);
 		}
 
 		override void performStage()
@@ -847,22 +843,25 @@ EOS";
 		{
 			needCC();
 
-			{
-				auto owd = pushd(sourceDir);
-				string phobosMakeFileName = findMakeFile(makeFileNameModel);
+			string phobosMakeFileName = findMakeFile(sourceDir, makeFileNameModel);
 
-				version (Windows)
-				{
-					auto lib = "phobos%s.lib".format(modelSuffix);
-					run([make, "-f", phobosMakeFileName, lib] ~ commonConfig.makeArgs ~ platformMakeVars);
-					enforce(lib.exists);
-					targets = ["phobos%s.lib".format(modelSuffix)];
-				}
-				else
-				{
-					run([make, "-f", phobosMakeFileName] ~ commonConfig.makeArgs ~ platformMakeVars);
-					targets = "generated".dirEntries(SpanMode.depth).filter!(de => de.name.endsWith(".a")).map!(de => de.name).array();
-				}
+			version (Windows)
+			{
+				auto lib = "phobos%s.lib".format(modelSuffix);
+				run([make, "-f", phobosMakeFileName, lib] ~ commonConfig.makeArgs ~ platformMakeVars, sourceDir);
+				enforce(sourceDir.buildPath(lib).exists);
+				targets = ["phobos%s.lib".format(modelSuffix)];
+			}
+			else
+			{
+				run([make, "-f", phobosMakeFileName] ~ commonConfig.makeArgs ~ platformMakeVars, sourceDir);
+				targets = sourceDir
+					.buildPath("generated")
+					.dirEntries(SpanMode.depth)
+					.filter!(de => de.name.endsWith(".a"))
+					.map!(de => de.name.relativePath(sourceDir))
+					.array()
+				;
 			}
 		}
 
@@ -890,23 +889,19 @@ EOS";
 			needCC();
 
 			// Just build rdmd
-			{
-				auto owd = pushd(sourceDir);
+			bool needModel; // Need -mXX switch?
 
-				bool needModel; // Need -mXX switch?
+			if (sourceDir.buildPath("posix.mak").exists)
+				needModel = true; // Known to be needed for recent versions
 
-				if (sourceDir.buildPath("posix.mak").exists)
-					needModel = true; // Known to be needed for recent versions
+			if (!needModel)
+				try
+					run(["dmd", "rdmd"], sourceDir);
+				catch (Exception e)
+					needModel = true;
 
-				if (!needModel)
-					try
-						run(["dmd", "rdmd"]);
-					catch (Exception e)
-						needModel = true;
-
-				if (needModel)
-					run(["dmd", "-m" ~ commonConfig.model, "rdmd"]);
-			}
+			if (needModel)
+				run(["dmd", "-m" ~ commonConfig.model, "rdmd"], sourceDir);
 		}
 
 		override void performStage()
@@ -935,14 +930,13 @@ EOS";
 				foreach (dep; sourceDeps)
 					getComponent(dep).submodule.clean = false;
 
-				auto owd = pushd(sourceDir);
-
-				makeFileName.readText().replace(": modlist.d", ": modlist.d $(DMD)").toFile(makeFileName);
+				auto makeFullName = sourceDir.buildPath(makeFileName);
+				makeFullName.readText().replace(": modlist.d", ": modlist.d $(DMD)").toFile(makeFullName);
 
 				run([make,
 					"-f", makeFileName,
 					"all", "kindle", "pdf", "verbatim"
-				]);
+				], sourceDir);
 			}
 		}
 
