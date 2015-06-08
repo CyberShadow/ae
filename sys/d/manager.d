@@ -61,6 +61,8 @@ class DManager : ICacheHost
 
 				string[] getEnabledComponentNames()
 				{
+					foreach (componentName; enable.byKey)
+						enforce(allComponents.canFind(componentName), "Unknown component: " ~ componentName);
 					return allComponents
 						.filter!(componentName =>
 							enable.get(componentName, defaultComponents.canFind(componentName)))
