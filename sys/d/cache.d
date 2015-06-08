@@ -170,7 +170,12 @@ abstract class DirCacheBase : DCache
 /// as soon as it's no longer immediately needed.
 class TempCache : DirCacheBase
 {
-	mixin GenerateContructorProxies;
+	this(string cacheDir, ICacheHost cacheHost)
+	{
+		super(cacheDir, cacheHost);
+		finalize();
+	}
+
 	alias cacheHost this; // https://issues.dlang.org/show_bug.cgi?id=5973
 
 	override @property string name() const { return "none"; }
