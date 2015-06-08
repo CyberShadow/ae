@@ -668,7 +668,7 @@ class DManager : ICacheHost
 			if (buildPath(sourceDir, "src", "idgen.d").exists)
 			{
 				// Required for bootstrapping.
-				needDMD("2.067.1", config.build.components.dmd.bootstrap);
+				needDMD();
 			}
 
 			version (Windows)
@@ -916,6 +916,43 @@ EOS";
 		}
 	}
 
+	final class Website : Component
+	{
+		@property override string submoduleName() { return "dlang.org"; }
+		@property override string[] sourceDeps () { return ["druntime", "phobos"]; }
+		@property override string[] buildDeps  () { return ["dmd"]; }
+		@property override string[] installDeps() { return ["rdmd"]; }
+		@property override string configString() { return null; }
+
+		override void performBuild()
+		{
+			version (Windows)
+				throw new Exception("The dlang.org website is only buildable on POSIX platforms.");
+			else
+			{
+				foreach (dep; sourceDeps)
+					getComponent(dep).submodule.clean = false;
+
+				auto owd = pushd(sourceDir);
+
+				makeFileName.readText().replace(": modlist.d", ": modlist.d $(DMD)").toFile(makeFileName);
+
+				run([make,
+					"-f", makeFileName,
+					"all", "kindle", "pdf", "verbatim"
+				]);
+			}
+		}
+
+		override void performStage()
+		{
+			cp(
+				buildPath(sourceDir, "web"),
+				buildPath(stageDir , "web"),
+			);
+		}
+	}
+
 	private int tempError;
 
 	private Component[string] components;
@@ -946,6 +983,9 @@ EOS";
 					break;
 				case "rdmd":
 					c = new RDMD();
+					break;
+				case "website":
+					c = new Website();
 					break;
 				default:
 					throw new Exception("Unknown component: " ~ name);
@@ -1046,7 +1086,7 @@ EOS";
 	}
 
 	static const string[] defaultComponents = ["dmd", "druntime", "phobos-includes", "phobos", "rdmd"];
-	static const string[] allComponents = defaultComponents;
+	static const string[] allComponents = defaultComponents ~ ["website"];
 
 	/// Build the specified components according to the specified configuration.
 	void build(SubmoduleState submoduleState, Config.Build buildConfig, bool incremental = false)
@@ -1144,6 +1184,11 @@ EOS";
 	{
 		Installer.logger = &log;
 		Installer.installationDirectory = dlDir;
+	}
+
+	void needDMD()
+	{
+		needDMD("2.067.1", config.build.components.dmd.bootstrap);
 	}
 
 	void needDMD(string dmdVer, bool bootstrap)
