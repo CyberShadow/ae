@@ -951,7 +951,14 @@ EOS";
 					getComponent(dep).submodule.clean = false;
 
 				auto makeFullName = sourceDir.buildPath(makeFileName);
-				makeFullName.readText().replace(": modlist.d", ": modlist.d $(DMD)").toFile(makeFullName);
+				makeFullName
+					.readText()
+					// https://github.com/D-Programming-Language/dlang.org/pull/1011
+					.replace(": modlist.d", ": modlist.d $(DMD)")
+					// https://github.com/D-Programming-Language/dlang.org/pull/1017
+					.replace("dpl-docs: ${DUB} ${STABLE_DMD}\n\tDFLAGS=", "dpl-docs: ${DUB} ${STABLE_DMD}\n\t${DUB} upgrade --missing-only --root=${DPL_DOCS_PATH}\n\tDFLAGS=")
+					.toFile(makeFullName)
+				;
 
 				auto latest = getLatest;
 				log("LATEST=" ~ latest);
