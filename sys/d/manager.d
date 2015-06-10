@@ -1113,7 +1113,8 @@ EOS";
 	}
 
 	static const string[] defaultComponents = ["dmd", "druntime", "phobos-includes", "phobos", "rdmd"];
-	static const string[] allComponents = defaultComponents ~ ["website"];
+	static const string[] additionalComponents = ["website"];
+	static const string[] allComponents = defaultComponents ~ additionalComponents;
 
 	/// Build the specified components according to the specified configuration.
 	void build(SubmoduleState submoduleState, Config.Build buildConfig, bool incremental = false)
