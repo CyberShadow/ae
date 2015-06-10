@@ -1132,7 +1132,7 @@ EOS";
 			buildDir.removeRecurse();
 		enforce(!buildDir.exists);
 
-		scope(success) if (cacheEngine) cacheEngine.finalize();
+		scope(exit) if (cacheEngine) cacheEngine.finalize();
 
 		foreach (componentName; componentNames)
 			getComponent(componentName).needInstalled();
