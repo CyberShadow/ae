@@ -1362,6 +1362,8 @@ EOS";
 			config.env["TEMP"] = config.env["TMP"] = tmpDir;
 			config.env["SystemRoot"] = winDir;
 		}
+		else
+			config.env["HOME"] = environment["HOME"];
 	}
 
 	final void applyEnv(in string[string] env)
