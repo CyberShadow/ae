@@ -120,7 +120,8 @@ abstract class DirCacheBase : DCache
 
 	override string[] getEntries() const
 	{
-		return cacheDir.dirEntries(SpanMode.shallow).filter!(de => de.isDir).map!(de => de.baseName).array;
+		return !cacheDir.exists ? null :
+			cacheDir.dirEntries(SpanMode.shallow).filter!(de => de.isDir).map!(de => de.baseName).array;
 	}
 
 	override bool haveEntry(string key) const
