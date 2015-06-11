@@ -644,17 +644,15 @@ class DManager : ICacheHost
 			bool bootstrap;
 		}
 
-		Config buildConfig;
-
 		@property override string configString()
 		{
-			if (buildConfig == Config.init)
+			if (config.build.components.dmd == Config.init)
 			{
 				// Avoid changing all cache keys by adding new fields
 				return `{"debugDMD":false}`;
 			}
 			else
-				return buildConfig.toJson();
+				return config.build.components.dmd.toJson();
 		}
 
 		override void performBuild()
@@ -710,7 +708,7 @@ class DManager : ICacheHost
 				dmdMakeFullName.write(m);
 			}
 
-			string[] targets = buildConfig.debugDMD ? [] : ["dmd"];
+			string[] targets = config.build.components.dmd.debugDMD ? [] : ["dmd"];
 			run([make,
 					"-f", dmdMakeFileName,
 					"MODEL=" ~ modelFlag,
@@ -993,12 +991,8 @@ EOS";
 			switch (name)
 			{
 				case "dmd":
-				{
-					auto cc = new DMD();
-					cc.buildConfig = config.build.components.dmd;
-					c = cc;
+					c = new DMD();
 					break;
-				}
 				case "phobos-includes":
 					c = new PhobosIncludes();
 					break;
