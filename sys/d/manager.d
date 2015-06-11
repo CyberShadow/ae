@@ -1179,7 +1179,7 @@ EOS";
 		auto componentNames = buildConfig.components.getEnabledComponentNames();
 		auto components = componentNames.map!(componentName => getComponent(componentName)).array;
 		auto requiredSubmodules = components
-			.map!(component => chain(component.sourceDeps, component.buildDeps, component.installDeps))
+			.map!(component => chain(component.name.only, component.sourceDeps, component.buildDeps, component.installDeps))
 			.joiner
 			.map!(componentName => getComponent(componentName).submoduleName)
 			.array.sort().uniq().array
