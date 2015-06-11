@@ -32,7 +32,7 @@ import ae.utils.meta;
 mixin template DeclareException(string NAME, BASE = Exception)
 {
 	mixin(mixin(X!q{
-		class @(NAME) : Exception
+		class @(NAME) : BASE
 		{
 			this(string s, string fn = __FILE__, size_t ln = __LINE__)
 			{
