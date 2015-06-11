@@ -916,9 +916,9 @@ EOS";
 	final class Website : Component
 	{
 		@property override string submoduleName() { return "dlang.org"; }
-		@property override string[] sourceDeps () { return ["druntime", "phobos"]; }
-		@property override string[] buildDeps  () { return ["dmd"]; }
-		@property override string[] installDeps() { return ["rdmd"]; }
+		@property override string[] sourceDeps () { return ["dmd", "druntime", "phobos", "rdmd"]; }
+		@property override string[] buildDeps  () { return []; }
+		@property override string[] installDeps() { return []; }
 		@property override string configString() { return null; }
 
 		/// Get the latest version of DMD at the time.
@@ -947,7 +947,7 @@ EOS";
 				throw new Exception("The dlang.org website is only buildable on POSIX platforms.");
 			else
 			{
-				foreach (dep; sourceDeps)
+				foreach (dep; chain(sourceDeps, buildDeps, installDeps))
 					getComponent(dep).submodule.clean = false;
 
 				auto makeFullName = sourceDir.buildPath(makeFileName);
