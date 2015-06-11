@@ -972,8 +972,8 @@ EOS";
 				run([make,
 					"-f", makeFileName,
 					"all", "kindle", "pdf", "verbatim",
+					] ~ (config.build.components.website.noDateTime ? ["NODATETIME=nodatetime.ddoc"] : []) ~ [ // Can't be last due to https://issues.dlang.org/show_bug.cgi?id=14682
 					"LATEST=" ~ latest,
-					] ~ (config.build.components.website.noDateTime ? ["NODATETIME=nodatetime.ddoc"] : []) ~ [
 				], sourceDir);
 			}
 		}
