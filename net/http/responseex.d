@@ -227,7 +227,7 @@ public:
 		dictionary["code"] = to!string(cast(int)code);
 		dictionary["message"] = encodeEntities(getStatusMessage(code));
 		dictionary["explanation"] = encodeEntities(getStatusExplanation(code));
-		dictionary["details"] = details ? "Error details:<br/><strong>" ~ encodeEntities(details) ~ "</strong>"  : "";
+		dictionary["details"] = details ? "Error details:<br/><pre>" ~ encodeEntities(details) ~ "</pre>"  : "";
 		string title = to!string(cast(int)code) ~ " - " ~ getStatusMessage(code);
 		string html = parseTemplate(errorTemplate, dictionary);
 
