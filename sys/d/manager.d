@@ -933,7 +933,7 @@ EOS";
 		{
 			auto dmd = getComponent("dmd").submodule;
 
-			auto t = dmd.git.query(["log", "-1", "--pretty=format:%ct"]).strip.to!int;
+			auto t = dmd.git.query(["log", "--pretty=format:%ct"]).splitLines.map!(to!int).filter!(n => n > 0).front;
 
 			foreach (line; dmd.git.query(["log", "--decorate=full", "--tags", "--pretty=format:%ct%d"]).splitLines())
 				if (line.length > 10 && line[0..10].to!int < t)
