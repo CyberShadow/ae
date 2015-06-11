@@ -72,6 +72,7 @@ class DManager : ICacheHost
 
 				Component.CommonConfig common;
 				DMD.Config dmd;
+				Website.Config website;
 			}
 			Components components;
 		}
@@ -919,6 +920,13 @@ EOS";
 		@property override string[] installDeps() { return []; }
 		@property override string configString() { return null; }
 
+		struct Config
+		{
+			/// Do not include a timestamp in generated .ddoc files.
+			/// Improves cache efficiency and allows meaningful diffs.
+			bool noDateTime = false;
+		}
+
 		/// Get the latest version of DMD at the time.
 		/// Needed for the makefile's "LATEST" parameter.
 		string getLatest()
@@ -965,6 +973,7 @@ EOS";
 					"-f", makeFileName,
 					"all", "kindle", "pdf", "verbatim",
 					"LATEST=" ~ latest,
+					] ~ (config.build.components.website.noDateTime ? ["NODATETIME=nodatetime.ddoc"] : []) ~ [
 				], sourceDir);
 			}
 		}
