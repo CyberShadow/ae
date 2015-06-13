@@ -61,7 +61,9 @@ struct Repository
 	void   run  (string[] args...) const { auto owd = pushd(workPath(args[0])); return .run  (argsPrefix ~ args); }
 	string query(string[] args...) const { auto owd = pushd(workPath(args[0])); return .query(argsPrefix ~ args); }
 	bool   check(string[] args...) const { auto owd = pushd(workPath(args[0])); return spawnProcess(argsPrefix ~ args).wait() == 0; }
-	auto   pipe (string[] args...) const { auto owd = pushd(workPath(args[0])); return pipeProcess(argsPrefix ~ args); }
+	auto   pipe (string[] args, Redirect redirect)
+	                               const { auto owd = pushd(workPath(args[0])); return pipeProcess(argsPrefix ~ args, redirect); }
+	auto   pipe (string[] args...) const { return pipe(args, Redirect.stdin | Redirect.stdout); }
 
 	/// Certain git commands (notably, bisect) must
 	/// be run in the repository's root directory.
