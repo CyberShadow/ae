@@ -130,6 +130,14 @@ struct Headers
 			result[k] ~= v;
 		return result;
 	}
+
+	@property Headers dup()
+	{
+		Headers c;
+		foreach (k, v; this)
+			c.add(k, v);
+		return c;
+	}
 }
 
 unittest
