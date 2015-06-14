@@ -148,7 +148,7 @@ struct Repository
 			pipes.stdin.writeln(name);
 			pipes.stdin.flush();
 
-			auto headerLine = pipes.stdout.readln().strip();
+			auto headerLine = pipes.stdout.safeReadln().strip();
 			auto header = headerLine.split(" ");
 			enforce(header.length == 3, "Malformed header during cat-file: " ~ headerLine);
 			auto hash = header[0].toCommitHash();
@@ -229,7 +229,7 @@ struct Repository
 			f.flush();
 			f.close();
 
-			return pipes.stdout.readln().strip().toCommitHash();
+			return pipes.stdout.safeReadln().strip().toCommitHash();
 		}
 
 		~this()
@@ -302,9 +302,6 @@ struct Repository
 	/// Extract a tree to a given directory
 	void exportTree(Hash treeHash, string path, ObjectReader reader, bool delegate(string) pathFilter = null)
 	{
-		// Work around memory corruption heisenbug
-		import core.memory; GC.disable(); scope(exit) { GC.enable(); GC.collect(); }
-
 		void exportSubTree(Hash treeHash, string[] subPath)
 		{
 			auto tree = reader.read(treeHash).parseTree();
@@ -344,8 +341,6 @@ struct Repository
 	/// Import a directory tree into the object store, and return the new tree object's hash.
 	Hash importTree(string path, ObjectMultiWriter writer, bool delegate(string) pathFilter = null)
 	{
-		import core.memory; GC.disable(); scope(exit) { GC.enable(); GC.collect(); }
-
 		static // Error: variable ae.sys.git.Repository.importTree.writer has scoped destruction, cannot build closure
 		Hash importSubTree(string path, string subPath, ref ObjectMultiWriter writer, bool delegate(string) pathFilter)
 		{
