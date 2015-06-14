@@ -970,6 +970,24 @@ private:
 }
 alias NamedPipe = RefCounted!NamedPipeImpl;
 
+/// Avoid std.stdio.File.readln's memory corruption bug
+/// https://issues.dlang.org/show_bug.cgi?id=13856
+string safeReadln(File f)
+{
+	auto buf = appender!string;
+	char[1] arr;
+	while (true)
+	{
+		auto result = f.rawRead(arr[]);
+		if (!result.length)
+			break;
+		buf.put(result);
+		if (result[0] == '\x0A')
+			break;
+	}
+	return buf.data;
+}
+
 // ****************************************************************************
 
 /// Change the current directory to the given directory. Does nothing if dir is null.
