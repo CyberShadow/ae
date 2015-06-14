@@ -970,11 +970,13 @@ private:
 }
 alias NamedPipe = RefCounted!NamedPipeImpl;
 
+import ae.utils.textout : StringBuilder;
+
 /// Avoid std.stdio.File.readln's memory corruption bug
 /// https://issues.dlang.org/show_bug.cgi?id=13856
 string safeReadln(File f)
 {
-	auto buf = appender!string;
+	StringBuilder buf;
 	char[1] arr;
 	while (true)
 	{
@@ -985,7 +987,7 @@ string safeReadln(File f)
 		if (result[0] == '\x0A')
 			break;
 	}
-	return buf.data;
+	return buf.get();
 }
 
 // ****************************************************************************
