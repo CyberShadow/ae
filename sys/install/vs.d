@@ -201,7 +201,7 @@ protected:
 				seenPackage[packages.countUntil(node.attributes["Id"])] = true;
 			}
 
-		enforce(seenPackage.all, "Unknown package(s): %s".format(packages.length.iota.filter!(i => seenPackage[i]).map!(i => packages[i])));
+		enforce(seenPackage.all, "Unknown package(s): %s".format(packages.length.iota.filter!(i => !seenPackage[i]).map!(i => packages[i])));
 
 		string[][string] files;
 		foreach (node; manifest.findChildren("Payload"))
