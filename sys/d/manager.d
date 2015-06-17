@@ -1120,14 +1120,13 @@ EOS";
 	static const string[] allComponents = defaultComponents ~ additionalComponents;
 
 	/// Build the specified components according to the specified configuration.
-	void build(SubmoduleState submoduleState, Config.Build buildConfig, bool incremental = false)
+	void build(SubmoduleState submoduleState, bool incremental = false)
 	{
-		auto componentNames = buildConfig.components.getEnabledComponentNames();
+		auto componentNames = config.build.components.getEnabledComponentNames();
 		log("Building components %-(%s, %)".format(componentNames));
 
 		this.components = null;
 		this.submoduleState = submoduleState;
-		this.config.build = buildConfig;
 		this.incrementalBuild = incremental;
 		prepareEnv();
 
@@ -1142,16 +1141,16 @@ EOS";
 	}
 
 	/// Shortcut for begin + build
-	void buildRev(string rev, Config.Build buildConfig)
+	void buildRev(string rev)
 	{
 		auto submoduleState = begin(rev);
-		build(submoduleState, buildConfig);
+		build(submoduleState);
 	}
 
 	/// Rerun build without cleaning up any files.
-	void rebuild(Config.Build buildConfig)
+	void rebuild()
 	{
-		build(SubmoduleState(null), buildConfig, true);
+		build(SubmoduleState(null), true);
 	}
 
 	bool isCached(SubmoduleState submoduleState, Config.Build buildConfig)
@@ -1270,7 +1269,7 @@ EOS";
 		getMetaRepo().needRepo();
 		auto rev = getMetaRepo().getRef("refs/tags/v" ~ ver);
 		log("Resolved v" ~ ver ~ " to " ~ rev);
-		buildRev(rev, config.build);
+		buildRev(rev);
 		ensurePathExists(target);
 		rename(buildDir, target);
 	}
