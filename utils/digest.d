@@ -267,3 +267,62 @@ unittest
 {
 	assert(getDigestString!MD5("abc") == "900150983CD24FB0D6963F7D28E17F72");
 }
+
+// ************************************************************************
+
+/// HMAC digest with a hash algorithm.
+/// Params:
+///   Algorithm = std.digest-compatible hash type
+///   blockSize = Algorithm block size, in bytes
+///   key       = Secret key bytes
+///   message   = Message data
+template HMAC(alias Algorithm, size_t blockSize)
+{
+	alias Digest = typeof(Algorithm.init.finish());
+
+	Digest HMAC(in ubyte[] key, in ubyte[] message)
+	{
+		ubyte[blockSize] keyBlock = 0;
+		if (key.length > blockSize)
+			keyBlock[0..Digest.length] = digest!Algorithm(key)[];
+		else
+			keyBlock[0..key.length] = key[];
+
+		ubyte[blockSize] oKeyPad = 0x5C; oKeyPad[] ^= keyBlock[];
+		ubyte[blockSize] iKeyPad = 0x36; iKeyPad[] ^= keyBlock[];
+
+		Algorithm oHash;
+		oHash.start();
+		oHash.put(oKeyPad[]);
+
+		Algorithm iHash;
+		iHash.start();
+		iHash.put(iKeyPad[]);
+		iHash.put(message);
+		auto iDigest = iHash.finish();
+
+		oHash.put(iDigest[]);
+		auto oDigest = oHash.finish();
+
+		return oDigest;
+	}
+}
+
+auto HMAC_MD5    ()(in ubyte[] key, in ubyte[] message) { import std.digest.md ; return HMAC!(MD5   , 64)(key, message); }
+auto HMAC_SHA1   ()(in ubyte[] key, in ubyte[] message) { import std.digest.sha; return HMAC!(SHA1  , 64)(key, message); }
+auto HMAC_SHA256 ()(in ubyte[] key, in ubyte[] message) { import std.digest.sha; return HMAC!(SHA256, 64)(key, message); }
+
+unittest
+{
+	import std.string : representation;
+
+	assert(HMAC_MD5([], []) == x"74e6f7298a9c2d168935f58c001bad88".representation);
+	assert(HMAC_SHA1([], []) == x"fbdb1d1b18aa6c08324b7d64b71fb76370690e1d".representation);
+	assert(HMAC_SHA256([], []) == x"b613679a0814d9ec772f95d778c35fc5ff1697c493715653c6c712144292c5ad".representation);
+
+	auto message = "The quick brown fox jumps over the lazy dog".representation;
+	auto key = "key".representation;
+	assert(HMAC_MD5   (key, message) == x"80070713463e7749b90c2dc24911e275".representation);
+	assert(HMAC_SHA1  (key, message) == x"de7c9b85b8b78aa6bc8a7a36f70a90701c9db4d9".representation);
+	assert(HMAC_SHA256(key, message) == x"f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8".representation);
+}
