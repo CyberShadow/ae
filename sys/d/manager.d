@@ -473,8 +473,13 @@ class DManager : ICacheHost
 				tempError = 0;
 
 				// Save the results to cache, failed or not
-				scope (exit)
+				void saveToCache()
 				{
+					// Use a separate function to work around
+					// "cannot put scope(success) statement inside scope(exit)"
+
+					tempError++; scope(success) tempError--;
+
 					// tempDir might be removed by a dependency's build failure.
 					if (!tempDir.exists)
 						log("Not caching dependency build failure.");
@@ -507,6 +512,9 @@ class DManager : ICacheHost
 						rmdirRecurse(tempDir);
 					}
 				}
+
+				scope (exit)
+					saveToCache();
 
 				// An incomplete build is useless, nuke the directory
 				// and create a new one just for the "unbuildable" marker.
