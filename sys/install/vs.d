@@ -55,6 +55,7 @@ class VisualStudioInstaller : Installer
 		return [
 			`windows\system32`,
 			`Program Files (x86)\Microsoft Visual Studio ` ~ versionName ~ `\VC\bin`,
+			`Program Files (x86)\MSBuild\` ~ versionName ~ `\Bin`,
 		];
 	}
 
