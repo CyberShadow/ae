@@ -1188,29 +1188,26 @@ EOS";
 		build(SubmoduleState(null), true);
 	}
 
-	bool isCached(SubmoduleState submoduleState, Config.Build buildConfig)
+	bool isCached(SubmoduleState submoduleState)
 	{
 		this.components = null;
 		this.submoduleState = submoduleState;
-		this.config.build = buildConfig;
 
 		needCacheEngine();
-		foreach (componentName; buildConfig.components.getEnabledComponentNames())
+		foreach (componentName; config.build.components.getEnabledComponentNames())
 			if (!cacheEngine.haveEntry(getComponent(componentName).getBuildID()))
 				return false;
 		return true;
 	}
 
 	/// Returns the isCached state for all commits in the history of the given ref.
-	bool[string] getCacheState(string[string][string] history, Config.Build buildConfig)
+	bool[string] getCacheState(string[string][string] history)
 	{
 		log("Enumerating cache entries...");
 		auto cacheEntries = needCacheEngine().getEntries().toSet();
 
-		this.config.build = buildConfig;
-
 		this.components = null;
-		auto componentNames = buildConfig.components.getEnabledComponentNames();
+		auto componentNames = config.build.components.getEnabledComponentNames();
 		auto components = componentNames.map!(componentName => getComponent(componentName)).array;
 		auto requiredSubmodules = components
 			.map!(component => chain(component.name.only, component.sourceDeps, component.buildDeps, component.installDeps))
@@ -1237,10 +1234,10 @@ EOS";
 	}
 
 	/// ditto
-	bool[string] getCacheState(string[] refs, Config.Build buildConfig)
+	bool[string] getCacheState(string[] refs)
 	{
 		auto history = getMetaRepo().getSubmoduleHistory(refs);
-		return getCacheState(history, buildConfig);
+		return getCacheState(history);
 	}
 
 	// **************************** Dependencies *****************************
