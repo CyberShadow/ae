@@ -269,14 +269,65 @@ enum HAVE_UDA = __traits(compiles, __traits(getAttributes, Object));
 
 static if (HAVE_UDA)
 {
+	/*
 	template hasAttribute(T, alias D)
 	{
 		enum bool hasAttribute = isValueOfTypeInTuple!(T, __traits(getAttributes, D));
+	}
+	*/
+
+	/// Detects types and values of the given type
+	template hasAttribute(Args...)
+		if (Args.length == 2)
+	{
+	//	alias attribute = Args[0];
+	//	alias symbol = Args[1];
+
+		import std.typetuple : staticIndexOf;
+		import std.traits : staticMap;
+
+		static if (is(Args[0]))
+		{
+			template isTypeOrValueInTuple(T, Args...)
+			{
+				static if (!Args.length)
+					enum isTypeOrValueInTuple = false;
+				else
+				static if (is(Args[0] == T))
+					enum isTypeOrValueInTuple = true;
+				else
+				static if (is(typeof(Args[0]) == T))
+					enum isTypeOrValueInTuple = true;
+				else
+					enum isTypeOrValueInTuple = isTypeOrValueInTuple!(T, Args[1..$]);
+			}
+
+			enum bool hasAttribute = isTypeOrValueInTuple!(Args[0], __traits(getAttributes, Args[1]));
+		}
+		else
+			enum bool hasAttribute = staticIndexOf!(Args[0], __traits(getAttributes, Args[1])) != -1;
 	}
 
 	template getAttribute(T, alias D)
 	{
 		enum T getAttribute = findValueOfTypeInTuple!(T, __traits(getAttributes, D));
+	}
+
+	unittest
+	{
+		struct Attr { int i; }
+
+		struct S
+		{
+			@Attr int a;
+			@Attr(5) int b;
+			@("test") int c;
+		}
+
+		static assert(hasAttribute!(Attr, S.a));
+		static assert(hasAttribute!(Attr, S.b));
+		static assert(hasAttribute!(string, S.c));
+		static assert(hasAttribute!("test", S.c));
 	}
 }
 else
