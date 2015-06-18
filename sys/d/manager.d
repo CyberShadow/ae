@@ -382,10 +382,11 @@ class DManager : ICacheHost
 		/// for the same source, build parameters, and build algorithm.
 		string getBuildID()
 		{
+			auto configBlob = getMetadata().toJson() ~ configString;
 			return "%s-%s-%s".format(
 				name,
 				commit,
-				getMetadata().toJson().getDigestString!MD5().toLower(),
+				configBlob.getDigestString!MD5().toLower(),
 			);
 		}
 
@@ -638,24 +639,24 @@ class DManager : ICacheHost
 			/// Whether to build a debug DMD.
 			/// Debug builds are faster to build,
 			/// but run slower. Windows only.
-			bool debugDMD = false;
+			@JSONOptional bool debugDMD = false;
 
 			/// Instead of downloading a pre-built binary DMD package,
 			/// build it from source starting with the last C++-only version.
-			bool bootstrap;
+			@JSONOptional bool bootstrap;
 
 			/// Use Visual C++ to build DMD instead of DMC.
 			/// Currently, this is a hack, as msbuild will consult the system
 			/// registry and use the system-wide installation of Visual Studio.
-			bool useVC;
+			@JSONOptional bool useVC;
 		}
 
 		@property override string configString()
 		{
 			if (config.build.components.dmd == Config.init)
 			{
-				// Avoid changing all cache keys by adding new fields
-				return `{"debugDMD":false}`;
+				// Avoid changing all cache keys
+				return null;
 			}
 			else
 				return config.build.components.dmd.toJson();
