@@ -220,7 +220,8 @@ struct Repository
 
 		Hash write(in void[] data)
 		{
-			auto p = NamedPipe("ae-sys-git-writeObjects");
+			import std.random;
+			auto p = NamedPipe("ae-sys-git-writeObjects-%d".format(uniform!ulong));
 			pipes.stdin.writeln(p.fileName);
 			pipes.stdin.flush();
 
