@@ -110,6 +110,9 @@ struct CustomJsonWriter(WRITER)
 			{
 				static if (!doSkipSerialize!(T, v.tupleof[i].stringof[2..$]))
 				{
+					static if (hasAttribute!(JSONOptional, v.tupleof[i]))
+						if (v.tupleof[i] == T.init.tupleof[i])
+							continue;
 					if (!first)
 						output.put(',');
 					else
@@ -681,4 +684,16 @@ private template getJsonName(S, string FIELD)
 		enum getJsonName = getAttribute!(JSONName, __traits(getMember, S, FIELD)).name;
 	else
 		enum getJsonName = FIELD;
+}
+
+// ************************************************************************
+
+/// User-defined attribute - only serialize this field if its value is different from its .init value.
+struct JSONOptional {}
+
+unittest
+{
+	static struct S { @JSONOptional bool a=true, b=false; }
+	assert(S().toJson == `{}`, S().toJson);
+	assert(S(false, true).toJson == `{"a":false,"b":true}`);
 }
