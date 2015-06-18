@@ -643,6 +643,11 @@ class DManager : ICacheHost
 			/// Instead of downloading a pre-built binary DMD package,
 			/// build it from source starting with the last C++-only version.
 			bool bootstrap;
+
+			/// Use Visual C++ to build DMD instead of DMC.
+			/// Currently, this is a hack, as msbuild will consult the system
+			/// registry and use the system-wide installation of Visual Studio.
+			bool useVC;
 		}
 
 		@property override string configString()
@@ -655,6 +660,9 @@ class DManager : ICacheHost
 			else
 				return config.build.components.dmd.toJson();
 		}
+
+		@property string vsConfiguration() { return config.build.components.dmd.debugDMD ? "Debug" : "Release"; }
+		@property string vsPlatform     () { return commonConfig.model == "64" ? "x64" : "Win32"; }
 
 		override void performBuild()
 		{
@@ -672,10 +680,25 @@ class DManager : ICacheHost
 				needDMD();
 			}
 
+			auto srcDir = buildPath(sourceDir, "src");
+
+			if (config.build.components.dmd.useVC)
+			{
+				version(Windows)
+				{
+					needVC();
+
+					auto env = config.env.dup;
+					env["PATH"] = env["PATH"] ~ pathSeparator ~ config.deps.hostDC.dirName;
+
+					return run(["msbuild", "/p:Configuration=" ~ vsConfiguration, "/p:Platform=" ~ vsPlatform, "dmd_msc_vs10.sln"], env, srcDir);
+				}
+				else
+					throw new Exception("Can only use Visual Studio on Windows");
+			}
+
 			version (Windows)
 				auto scRoot = config.deps.dmcDir.absolutePath();
-
-			auto srcDir = buildPath(sourceDir, "src");
 
 			string dmdMakeFileName = findMakeFile(srcDir, makeFileName);
 			string dmdMakeFullName = srcDir.buildPath(dmdMakeFileName);
@@ -721,10 +744,21 @@ class DManager : ICacheHost
 
 		override void performStage()
 		{
-			cp(
-				buildPath(sourceDir, "src", "dmd" ~ binExt),
-				buildPath(stageDir , "bin", "dmd" ~ binExt),
-			);
+			if (config.build.components.dmd.useVC)
+			{
+				foreach (ext; [".exe", ".pdb"])
+					cp(
+						buildPath(sourceDir, "src", "vcbuild", vsPlatform, vsConfiguration, "dmd_msc" ~ ext),
+						buildPath(stageDir , "bin", "dmd" ~ ext),
+					);
+			}
+			else
+			{
+				cp(
+					buildPath(sourceDir, "src", "dmd" ~ binExt),
+					buildPath(stageDir , "bin", "dmd" ~ binExt),
+				);
+			}
 
 			version (Windows)
 			{
@@ -1306,23 +1340,26 @@ EOS";
 			log("Preparing Visual C++");
 			needInstaller();
 
+			auto packages =
+			[
+				"vcRuntimeMinimum_x86",
+				"vc_compilercore86",
+				"vc_compilercore86res",
+				"vc_compilerx64nat",
+				"vc_compilerx64natres",
+				"vc_librarycore86",
+				"vc_libraryDesktop_x64",
+				"win_xpsupport",
+			];
+			if (config.build.components.dmd.useVC)
+				packages ~= "Msi_BuildTools_MSBuild_x86";
+
 			auto vs = vs2013community;
-			vs.requirePackages(
-				[
-					"vcRuntimeMinimum_x86",
-					"vc_compilercore86",
-					"vc_compilercore86res",
-					"vc_compilerx64nat",
-					"vc_compilerx64natres",
-					"vc_librarycore86",
-					"vc_libraryDesktop_x64",
-					"win_xpsupport",
-				],
-			);
+			vs.requirePackages(packages);
 			vs.requireLocal(false);
 			config.deps.vsDir  = vs.directory.buildPath("Program Files (x86)", "Microsoft Visual Studio 12.0").absolutePath();
 			config.deps.sdkDir = vs.directory.buildPath("Program Files", "Microsoft SDKs", "Windows", "v7.1A").absolutePath();
-			config.env["PATH"] ~= pathSeparator ~ vs.directory.buildPath("Windows", "system32").absolutePath();
+			config.env["PATH"] ~= pathSeparator ~ vs.binPaths.map!(path => vs.directory.buildPath(path).absolutePath()).join(pathSeparator);
 		}
 	}
 
@@ -1363,6 +1400,7 @@ EOS";
 		version (Windows)
 		{
 			config.env["TEMP"] = config.env["TMP"] = tmpDir;
+			config.env["SystemDrive"] = winDir.driveName;
 			config.env["SystemRoot"] = winDir;
 		}
 		else
