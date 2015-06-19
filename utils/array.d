@@ -141,7 +141,7 @@ ref T get(T)(T[] arr, size_t index)
 /// default value on out-of-bounds.
 auto get(T)(T[] arr, size_t index, auto ref T defaultValue)
 {
-	if (index >= arr)
+	if (index >= arr.length)
 		return defaultValue;
 	return arr[index];
 }
