@@ -209,8 +209,16 @@ final:
 		return target;
 	}
 
+	static string stripArchiveExtension(string fn)
+	{
+		fn = fn.stripExtension();
+		if (fn.extension == ".tar")
+			fn = fn.stripExtension();
+		return fn;
+	}
+
 	alias unpackTo = cachedAction!(ae.sys.archive.unpack, "Unpacking %s to %s...");
-	alias unpack = withTarget!(stripExtension, unpackTo);
+	alias unpack = withTarget!(stripArchiveExtension, unpackTo);
 
 	static string resolveRedirectImpl(string url)
 	{
