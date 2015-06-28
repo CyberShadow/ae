@@ -57,6 +57,13 @@ void unpack(string archive, string target)
 	if (archive.toLower().endsWith(".zip"))
 		archive.unzip(target);
 	else
+	if (Installer.haveExecutable("tar") && (archive.toLower().endsWith(".tar.gz") || archive.toLower().endsWith(".tgz")))
+	{
+		target.mkdirRecurse();
+		auto pid = spawnProcess(["tar", "zxf", archive, "--directory", target]);
+		enforce(pid.wait() == 0, "Extraction failed");
+	}
+	else
 	{
 		sevenZip.require();
 		target.mkdirRecurse();
