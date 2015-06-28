@@ -44,6 +44,7 @@ version (Windows)
 
 import ae.sys.install.dmd;
 import ae.sys.install.git;
+import ae.sys.install.kindlegen;
 
 
 /// Class which manages a D checkout and its dependencies.
@@ -996,6 +997,8 @@ EOS";
 				throw new Exception("The dlang.org website is only buildable on POSIX platforms.");
 			else
 			{
+				needKindleGen();
+
 				foreach (dep; chain(sourceDeps, buildDeps, installDeps))
 					getComponent(dep).submodule.clean = false;
 
@@ -1285,6 +1288,13 @@ EOS";
 			}
 			log("hostDC=" ~ config.deps.hostDC);
 		}
+	}
+
+	void needKindleGen()
+	{
+		needInstaller();
+		kindleGenInstaller.requireLocal(false);
+		config.env["PATH"] = kindleGenInstaller.directory ~ pathSeparator ~ config.env["PATH"];
 	}
 
 	final void bootstrapDMD(string ver, string target)
