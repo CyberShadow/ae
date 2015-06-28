@@ -1123,8 +1123,12 @@ deprecated alias obtainUsing = cached;
 /// atomically.
 /// Note: Consider using atomic!syncWrite or
 /// atomic!syncUpdate instead.
-alias atomic!(std.file.write) atomicWrite;
+alias atomic!writeProxy atomicWrite;
 deprecated alias safeWrite = atomicWrite;
+void writeProxy(string target, in void[] data)
+{
+	std.file.write(target, data);
+}
 
 // Work around for https://github.com/D-Programming-Language/phobos/pull/2784#issuecomment-68117241
 private void copy2(string source, string target) { std.file.copy(source, target); }
@@ -1143,7 +1147,7 @@ unittest
 
 	std.file.write(fn, "test");
 
-	cachedDg!0(&std.file.write, fn, "test2");
+	cachedDg!0(&writeProxy, fn, "test2");
 	assert(fn.readText() == "test");
 }
 
