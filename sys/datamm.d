@@ -14,6 +14,7 @@
 module ae.sys.datamm;
 
 import std.mmfile;
+import std.typecons;
 debug import std.stdio;
 
 import ae.sys.data;
@@ -24,13 +25,21 @@ alias MmMode = MmFile.Mode;
 
 class MappedDataWrapper : DataWrapper
 {
-	MmFile mmFile;
+	typeof(scoped!MmFile(null)) mmFile;
 	void[] mappedData;
 
-	debug(DATA_REFCOUNT)
-	this()
+	this(string name, MmMode mode, size_t from, size_t to)
 	{
-		writefln("? -> %s: Created MappedDataWrapper", cast(void*)this);
+		mmFile = scoped!MmFile(name, mode, 0, null);
+		mappedData = (from || to) ? mmFile.Scoped_payload[from..(to ? to : mmFile.length)] : mmFile.Scoped_payload[];
+
+		debug(DATA_REFCOUNT) writefln("? -> %s: Created MappedDataWrapper", cast(void*)this);
+	}
+
+	debug(DATA_REFCOUNT)
+	~this()
+	{
+		writefln("? -> %s: Deleted MappedDataWrapper", cast(void*)this);
 	}
 
 	override @property inout(void)[] contents() inout { return mappedData; }
@@ -41,8 +50,6 @@ class MappedDataWrapper : DataWrapper
 
 auto mapFile(string name, MmMode mode, size_t from = 0, size_t to = 0)
 {
-	auto wrapper = new MappedDataWrapper;
-	wrapper.mmFile = new MmFile(name, mode, 0, null);
-	wrapper.mappedData = (from || to) ? wrapper.mmFile[from..(to ? to : wrapper.mmFile.length)] : wrapper.mmFile[];
+	auto wrapper = new MappedDataWrapper(name, mode, from, to);
 	return Data(wrapper, mode != MmMode.read);
 }
