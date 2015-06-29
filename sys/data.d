@@ -169,10 +169,10 @@ public:
 		if (wrapper)
 		{
 			wrapper.references++;
-			debug (DATA_REFCOUNT) debugLog(format("%s -> %s: Incrementing refcount to %d", cast(void*)&this, cast(void*)wrapper, wrapper.references));
+			debug (DATA_REFCOUNT) debugLog("%p -> %p: Incrementing refcount to %d", cast(void*)&this, cast(void*)wrapper, wrapper.references);
 		}
 		else
-			debug (DATA_REFCOUNT) debugLog(format("%s -> %s: this(this) with no wrapper", cast(void*)&this, cast(void*)wrapper));
+			debug (DATA_REFCOUNT) debugLog("%p -> %p: this(this) with no wrapper", cast(void*)&this, cast(void*)wrapper);
 	}
 
 	~this() pure
@@ -310,7 +310,10 @@ public:
 		return Data(contents, true);
 	}
 
-	/// UNSAFE! Use only when you know there is only one reference to the data.
+	/// This used to be an unsafe method which deleted the wrapped data.
+	/// Now that Data is refcounted, this simply calls clear() and
+	/// additionally asserts that this Data is the only Data holding
+	/// a reference to the wrapper.
 	void deleteContents()
 	out
 	{
@@ -318,8 +321,11 @@ public:
 	}
 	body
 	{
-		delete wrapper;
-		contents = null;
+		if (wrapper)
+		{
+			assert(wrapper.references == 1, "Attempting to call deleteContents with ");
+			clear();
+		}
 	}
 
 	void clear()
@@ -328,12 +334,13 @@ public:
 		{
 			assert(wrapper.references > 0, "Dangling pointer to wrapper");
 			wrapper.references--;
-			debug (DATA_REFCOUNT) debugLog(format("%s -> %s: Decrementing refcount to %d", cast(void*)&this, cast(void*)wrapper, wrapper.references));
+			debug (DATA_REFCOUNT) debugLog("%p -> %p: Decrementing refcount to %d", cast(void*)&this, cast(void*)wrapper, wrapper.references);
 			if (wrapper.references == 0)
-				destroy(wrapper);
+				delete wrapper;
+
+			wrapper = null;
 		}
 
-		wrapper = null;
 		contents = null;
 	}
 
@@ -473,6 +480,36 @@ abstract class DataWrapper
 	abstract @property size_t size() const;
 	abstract void setSize(size_t newSize);
 	abstract @property size_t capacity() const;
+
+	new(size_t sz)
+	{
+		void* p = core.stdc.stdlib.malloc(sz);
+
+		debug(DATA_REFCOUNT) debugLog("? -> %p: Allocating via malloc", p);
+
+		if (!p)
+			throw new OutOfMemoryError();
+
+		//GC.addRange(p, sz);
+		return p;
+	}
+
+	debug ~this()
+	{
+		debug(DATA_REFCOUNT) debugLog("%.*s.~this, references==%d", this.classinfo.name.length, this.classinfo.name.ptr, references);
+		assert(references == 0, "Deleting DataWrapper with non-zero reference count");
+	}
+
+	@nogc delete(void* p)
+	{
+		if (p)
+		{
+			debug(DATA_REFCOUNT) debugLog("? -> %p: Deleting via free", p);
+
+			//GC.removeRange(p);
+			core.stdc.stdlib.free(p);
+		}
+	}
 }
 
 private:
@@ -661,11 +698,23 @@ version(Windows)
 	extern(Windows) VOID GetSystemInfo(LPSYSTEM_INFO);
 }
 
-debug(DATA_REFCOUNT) import ae.utils.exception;
+debug(DATA_REFCOUNT) import ae.utils.exception, ae.sys.memory;
 
-debug(DATA_REFCOUNT) void debugLog(string s)
+debug(DATA_REFCOUNT) void debugLog(Args...)(const char* s, Args args) @nogc
 {
-	writeln(s);
-	foreach (line; getStackTrace())
-		writeln("\t", line);
+	printf(s, args);
+	printf("\n");
+	if (inCollect())
+		printf("\t(in GC collect)\n");
+	else
+		(cast(void function() @nogc)&debugStackTrace)();
+}
+
+debug(DATA_REFCOUNT) void debugStackTrace()
+{
+	try
+		foreach (line; getStackTrace())
+			writeln("\t", line);
+	catch (Throwable e)
+		writeln("\t(stacktrace error: ", e.msg, ")");
 }
