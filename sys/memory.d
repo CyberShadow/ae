@@ -13,6 +13,10 @@
 
 module ae.sys.memory;
 
+import core.exception;
+import core.memory;
+import core.thread;
+
 /// Did the GC run since this function's last call on this thread?
 /// Not 100% reliable (due to false pointers).
 bool gcRan()
@@ -45,8 +49,6 @@ bool gcRan()
 	return result;
 }
 
-import core.thread;
-
 /// Is the given pointer located on the stack of the current thread?
 /// Useful to assert on before taking the address of e.g. a struct member.
 bool onStack(const(void)* p)
@@ -66,4 +68,41 @@ unittest
 	assert(!ps.onStack());
 	assert(!pg.onStack());
 	assert(!ph.onStack());
+}
+
+/// Checks if we are inside a GC collection cycle.
+/// This is currently done in a dumb and expensive way, so use sparingly.
+bool inCollect() @nogc
+{
+	// Gcx.free exits early on a null pointer, so use a non-null one.
+	// freeNoSync then does the reentrance check,
+	// and exits silently if the pointer is not in a GC pool.
+	void *p = cast(void*)1;
+
+	try
+		(cast(void function(void*) @nogc)&GC.free)(p);
+	catch (InvalidMemoryOperationError)
+		return true;
+	return false;
+}
+
+unittest
+{
+	assert(!inCollect());
+
+	class C
+	{
+		static bool tested;
+
+		~this()
+		{
+			assert(inCollect());
+			tested = true;
+		}
+	}
+
+	foreach (n; 0..128)
+		new C;
+	GC.collect();
+	assert(C.tested);
 }
