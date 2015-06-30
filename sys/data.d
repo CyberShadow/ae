@@ -475,7 +475,7 @@ static /*thread-local*/ uint   dataCount, allocCount;
 // Abstract wrapper.
 abstract class DataWrapper
 {
-	size_t references = 1;
+	sizediff_t references = 1;
 	abstract @property inout(void)[] contents() inout;
 	abstract @property size_t size() const;
 	abstract void setSize(size_t newSize);
