@@ -818,7 +818,7 @@ EOS";
 		override void updateEnv()
 		{
 			// Add the DMD we built for Phobos/Druntime/Tools
-			config.env["PATH"] ~= pathSeparator ~ buildPath(buildDir, "bin").absolutePath();
+			config.env["PATH"] = buildPath(buildDir, "bin").absolutePath() ~ pathSeparator ~ config.env["PATH"];
 		}
 	}
 
