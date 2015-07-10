@@ -708,6 +708,7 @@ debug(DATA_REFCOUNT) void debugLog(Args...)(const char* s, Args args) @nogc
 		printf("\t(in GC collect)\n");
 	else
 		(cast(void function() @nogc)&debugStackTrace)();
+	fflush(core.stdc.stdio.stdout);
 }
 
 debug(DATA_REFCOUNT) void debugStackTrace()
