@@ -85,6 +85,7 @@ private:
 	void onDisconnect(string reason, DisconnectType type)
 	{
 		log("* Disconnected (" ~ reason ~ ")");
+		connected = false;
 		foreach (command; queuedCommands ~ sentCommands)
 			if (command.handleError)
 				command.handleError("Disconnected from server (" ~ reason ~ ")");
@@ -226,6 +227,7 @@ public:
 		// (server automatically sends a greeting when a client connects).
 		sentCommands ~= Command(null, false, [
 			200:Reply({
+				connected = true;
 				if (handleConnect)
 					handleConnect();
 			}),
@@ -239,6 +241,8 @@ public:
 	{
 		conn.disconnect();
 	}
+
+	bool connected;
 
 	void listGroups(void delegate(GroupInfo[] groups) handleGroups, void delegate(string) handleError=null)
 	{
