@@ -394,34 +394,31 @@ class Rfc850Message
 		}
 	}
 
-	private this() {} // for attachments and templates
+	private this() {} // for attachments
 
 	/// Create a template Rfc850Message for a new posting to the specified groups.
-	static Rfc850Message newPostTemplate(string groups)
+	this(Xref[] groups)
 	{
-		auto post = new Rfc850Message();
-		foreach (group; groups.split(","))
-			post.xref ~= Xref(group);
-		return post;
+		this.xref = xref;
 	}
 
-	@property WrapFormat wrapFormat()
+	/// ditto
+	deprecated static Rfc850Message newPostTemplate(string groups)
 	{
-		return flowed ? delsp ? WrapFormat.flowedDelSp : WrapFormat.flowed : WrapFormat.heuristics;
+		return new Rfc850Message(groups.split(",").map!(group => Xref(group)).array());
 	}
 
-	/// Create a template Rfc850Message for a reply to this message.
-	Rfc850Message replyTemplate()
+	/// Create a template Rfc850Message for a reply to the given message.
+	this(Rfc850Message op)
 	{
-		auto post = new Rfc850Message();
-		post.reply = true;
-		post.xref = this.xref;
-		post.references = this.references ~ this.id;
-		post.subject = this.rawSubject;
-		if (!post.subject.startsWith("Re:"))
-			post.subject = "Re: " ~ post.subject;
+		this.reply = true;
+		this.xref = op.xref;
+		this.references = op.references ~ op.id;
+		this.subject = op.rawSubject;
+		if (!this.subject.startsWith("Re:"))
+			this.subject = "Re: " ~ this.subject;
 
-		auto paragraphs = unwrapText(this.content, this.wrapFormat);
+		auto paragraphs = unwrapText(op.content, op.wrapFormat);
 		foreach (i, ref paragraph; paragraphs)
 			if (paragraph.quotePrefix.length)
 				paragraph.quotePrefix = ">" ~ paragraph.quotePrefix;
@@ -437,16 +434,20 @@ class Rfc850Message
 		while (paragraphs.length && paragraphs[$-1].text.length==0)
 			paragraphs = paragraphs[0..$-1];
 
-		auto replyTime = time;
+		auto replyTime = op.time;
 		replyTime.timezone = UTC();
-		post.content =
-			"On " ~ replyTime.formatTime!`l, j F Y \a\t H:i:s e`() ~ ", " ~ this.author ~ " wrote:\n" ~
+		this.content =
+			"On " ~ replyTime.formatTime!`l, j F Y \a\t H:i:s e`() ~ ", " ~ op.author ~ " wrote:\n" ~
 			wrapText(paragraphs) ~
 			"\n\n";
-		post.flowed = true;
-		post.delsp = false;
+		this.flowed = true;
+		this.delsp = false;
+	}
 
-		return post;
+	/// Create a template Rfc850Message for a reply to this message.
+	deprecated Rfc850Message replyTemplate()
+	{
+		return new Rfc850Message(this);
 	}
 
 	/// Set the message text.
@@ -516,6 +517,11 @@ class Rfc850Message
 			lines.join("\r\n") ~
 			"\r\n\r\n" ~
 			splitAsciiLines(content).join("\r\n");
+	}
+
+	@property WrapFormat wrapFormat()
+	{
+		return flowed ? delsp ? WrapFormat.flowedDelSp : WrapFormat.flowed : WrapFormat.heuristics;
 	}
 
 	/// Get the Message-ID that this message is in reply to.
