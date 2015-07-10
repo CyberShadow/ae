@@ -237,9 +237,9 @@ public:
 		tcp.connect(server, 119);
 	}
 
-	void disconnect()
+	void disconnect(string reason = IConnection.defaultDisconnectReason)
 	{
-		conn.disconnect();
+		conn.disconnect(reason);
 	}
 
 	bool connected;
