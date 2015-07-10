@@ -458,8 +458,8 @@ class Rfc850Message
 		this.delsp = false;
 	}
 
-	/// Construct the headers and message fields.
-	void compile()
+	/// Write this Message instance's fields to their appropriate headers.
+	void compileHeaders()
 	{
 		assert(id);
 
@@ -478,6 +478,12 @@ class Rfc850Message
 			time = Clock.currTime();
 		headers["Date"] = time.formatTime!(TimeFormats.RFC2822);
 		headers["User-Agent"] = "ae.net.ietf.message";
+	}
+
+	/// Construct the headers and message fields.
+	void compile()
+	{
+		compileHeaders();
 
 		string[] lines;
 		foreach (name, value; headers)
