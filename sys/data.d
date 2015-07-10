@@ -50,6 +50,8 @@ debug import std.string;
 public import ae.sys.dataset;
 import ae.utils.math;
 
+debug(DATA) import core.stdc.stdio;
+
 // ideas/todo:
 // * templatize (and forbid using aliased types)?
 // * use heap (malloc/Windows heap API) for small objects?
@@ -698,7 +700,7 @@ version(Windows)
 	extern(Windows) VOID GetSystemInfo(LPSYSTEM_INFO);
 }
 
-debug(DATA_REFCOUNT) import ae.utils.exception, ae.sys.memory;
+debug(DATA_REFCOUNT) import ae.utils.exception, ae.sys.memory, std.stdio;
 
 debug(DATA_REFCOUNT) void debugLog(Args...)(const char* s, Args args) @nogc
 {
