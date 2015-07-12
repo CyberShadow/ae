@@ -160,8 +160,8 @@ class Rfc850Message
 		if ("Content-Disposition" in headers)
 			contentDisposition = decodeTokenHeader(headers["Content-Disposition"]);
 		mimeType = toLower(contentType.value);
-		flowed = contentType.properties.get("format", "fixed") == "flowed";
-		delsp = contentType.properties.get("delsp", "no") == "yes";
+		flowed = contentType.properties.get("format", "fixed").icmp("flowed")==0;
+		delsp = contentType.properties.get("delsp", "no").icmp("yes") == 0;
 
 		if (rawContent)
 		{
@@ -731,7 +731,7 @@ TokenHeader decodeTokenHeader(string s)
 
 	while (s.length)
 	{
-		string name = take('=');
+		string name = take('=').toLower();
 		string value;
 		if (s.length && s[0] == '"')
 		{
