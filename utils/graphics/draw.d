@@ -155,6 +155,7 @@ void hline(bool CHECKED=true, V, COLOR)(auto ref V v, int x1, int x2, int y, COL
 }
 
 void vline(bool CHECKED=true, V, COLOR)(auto ref V v, int x, int y1, int y2, COLOR c)
+	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
 	mixin(CheckVLine);
 	foreach (y; y1..y2) // TODO: optimize
