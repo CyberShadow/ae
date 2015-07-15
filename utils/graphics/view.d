@@ -52,6 +52,12 @@ mixin template DirectView()
 		return scanline(y)[x];
 	}
 
+	/// Allows array-like view[y][x] access.
+	auto opIndex(int y)
+	{
+		return scanline(y);
+	}
+
 	/// Implements the view[x, y] = c operator.
 	COLOR opIndexAssign(COLOR value, int x, int y)
 	{
