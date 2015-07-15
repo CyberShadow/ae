@@ -680,9 +680,44 @@ template colorMap(alias pred)
 	}
 }
 
+/// Two-way colorMap which allows writing to the returned view.
+template colorMap(alias getPred, alias setPred)
+{
+	alias getFun = unaryFun!(getPred, false, "c");
+	alias setFun = unaryFun!(setPred, false, "c");
+
+	auto colorMap(V)(auto ref V src)
+		if (isView!V)
+	{
+		alias OLDCOLOR = ViewColor!V;
+		alias NEWCOLOR = typeof(getFun(OLDCOLOR.init));
+
+		struct Map
+		{
+			V src;
+
+			@property int w() { return src.w; }
+			@property int h() { return src.h; }
+
+			NEWCOLOR opIndex(int x, int y)
+			{
+				return getFun(src[x, y]);
+			}
+
+			static if (isWritableView!V)
+			NEWCOLOR opIndexAssign(NEWCOLOR c, int x, int y)
+			{
+				return src[x, y] = setFun(c);
+			}
+		}
+
+		return Map(src);
+	}
+}
+
 /// Returns a view which inverts all channels.
 // TODO: skip alpha and padding
-alias invert = colorMap!q{~c};
+alias invert = colorMap!(q{~c}, q{~c});
 
 unittest
 {
