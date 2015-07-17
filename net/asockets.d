@@ -865,7 +865,7 @@ public:
 	/// Default constructor
 	this()
 	{
-		debug (ASOCKETS) writefln("New TcpConnection @ %s", this);
+		debug (ASOCKETS) writefln("New TcpConnection @ %s", cast(void*)this);
 	}
 
 	/// Start establishing a connection.
@@ -922,7 +922,7 @@ public:
 				discardQueues();
 		}
 
-		debug (ASOCKETS) writefln("Disconnecting @ %s: %s", this, reason);
+		debug (ASOCKETS) writefln("Disconnecting @ %s: %s", cast(void*)this, reason);
 		if (conn)
 		{
 			socketManager.unregister(this);
@@ -1034,7 +1034,7 @@ private:
 	{
 		this(Socket conn)
 		{
-			debug (ASOCKETS) writefln("New Listener @ %s", this);
+			debug (ASOCKETS) writefln("New Listener @ %s", cast(void*)this);
 			this.conn = conn;
 			socketManager.register(this);
 		}
@@ -1042,7 +1042,7 @@ private:
 		/// Called when a socket is readable.
 		override void onReadable()
 		{
-			debug (ASOCKETS) writefln("Accepting connection from listener @ %s", this);
+			debug (ASOCKETS) writefln("Accepting connection from listener @ %s", cast(void*)this);
 			Socket acceptSocket = conn.accept();
 			acceptSocket.blocking = false;
 			if (handleAccept)
@@ -1321,11 +1321,13 @@ class TimeoutAdapter : ConnectionAdapter
 {
 	this(IConnection next)
 	{
+		debug (ASOCKETS) writefln("New TimeoutAdapter @ %s", cast(void*)this);
 		super(next);
 	}
 
 	void cancelIdleTimeout()
 	{
+		debug (ASOCKETS) writefln("TimeoutAdapter.cancelIdleTimeout @ %s", cast(void*)this);
 		assert(idleTask !is null);
 		assert(idleTask.isWaiting());
 		idleTask.cancel();
@@ -1333,6 +1335,7 @@ class TimeoutAdapter : ConnectionAdapter
 
 	void resumeIdleTimeout()
 	{
+		debug (ASOCKETS) writefln("TimeoutAdapter.resumeIdleTimeout @ %s", cast(void*)this);
 		assert(connected);
 		assert(idleTask !is null);
 		assert(!idleTask.isWaiting());
@@ -1341,6 +1344,7 @@ class TimeoutAdapter : ConnectionAdapter
 
 	final void setIdleTimeout(Duration duration)
 	{
+		debug (ASOCKETS) writefln("TimeoutAdapter.setIdleTimeout @ %s", cast(void*)this);
 		assert(duration > Duration.zero);
 		if (idleTask is null)
 		{
@@ -1359,6 +1363,7 @@ class TimeoutAdapter : ConnectionAdapter
 
 	void markNonIdle()
 	{
+		debug (ASOCKETS) writefln("TimeoutAdapter.markNonIdle @ %s", cast(void*)this);
 		assert(idleTask !is null);
 		if (handleNonIdle)
 			handleNonIdle();
@@ -1377,6 +1382,7 @@ class TimeoutAdapter : ConnectionAdapter
 protected:
 	override void onConnect()
 	{
+		debug (ASOCKETS) writefln("TimeoutAdapter.onConnect @ %s", cast(void*)this);
 		super.onConnect();
 		if (idleTask)
 			resumeIdleTimeout();
@@ -1384,6 +1390,7 @@ protected:
 
 	override void onReadData(Data data)
 	{
+		debug (ASOCKETS) writefln("TimeoutAdapter.onReadData @ %s", cast(void*)this);
 		markNonIdle();
 		super.onReadData(data);
 	}
