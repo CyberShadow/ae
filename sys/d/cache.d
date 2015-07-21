@@ -25,6 +25,8 @@ import std.string;
 import ae.sys.file;
 import ae.utils.meta;
 
+alias copy = std.file.copy; // https://issues.dlang.org/show_bug.cgi?id=14817
+
 interface ICacheHost
 {
 	/// An optimization helper which provides a linear order in which keys should be optimized
