@@ -50,16 +50,25 @@ class DMDInstaller : Installer
 		enum modelString = "32";
 
 	version (Windows)
+	{
 		enum platformDir = "windows";
-	else
-	version (linux)
+		enum platformSuffix = "windows";
+	}
+	else version (linux)
+	{
 		enum platformDir = "linux";
-	else
-	version (FreeBSD)
+		enum platformSuffix = "linux";
+	}
+	else	version (FreeBSD)
+	{
 		enum platformDir = "freebsd";
-	else
-	version (OSX)
+		enum platformSuffix = "freebsd-"~modelString;
+	}
+	else	version (OSX)
+	{
 		enum platformDir = "osx";
+		enum platformSuffix = "osx";
+	}
 	else
 		static assert(false, "Unknown platform");
 
@@ -69,7 +78,8 @@ class DMDInstaller : Installer
 	@property override string[] requiredExecutables() { return ["dmd"]; }
 	@property override string[] binPaths() { return ["dmd2/" ~ platformDir ~ "/bin" ~ modelString]; }
 
-	@property string url() { return "http://downloads.dlang.org/releases/%s.x/%s/dmd.%s.zip".format(dmdVersion[0], dmdVersion, dmdVersion); }
+	@property string url() { return "http://downloads.dlang.org/releases/%s.x/%s/dmd.%s.%s.zip".format(
+		dmdVersion[0], dmdVersion, dmdVersion, platformSuffix); }
 
 	override void installImpl(string target)
 	{
