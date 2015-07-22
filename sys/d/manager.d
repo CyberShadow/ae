@@ -626,7 +626,19 @@ class DManager : ICacheHost
 			environment["PATH"] = newEnv["PATH"];
 			log("PATH=" ~ newEnv["PATH"]);
 
-			auto status = spawnProcess(args, newEnv, std.process.Config.newEnv, dir).wait();
+			// TODO: provide an option to set log file from config.build.
+			string file_out="/dev/null";
+			version(Windows){
+				// http://stackoverflow.com/questions/313111/dev-null-in-windows
+				file_out="nul";
+			}
+			else{
+				file_out="/dev/null";
+			}
+			auto file_out2 = File(file_out, "w+");
+			auto status = spawnProcess(args, std.stdio.stdin, file_out2, file_out2, newEnv, std.process.Config.newEnv, dir).wait();
+			file_out2.close;
+
 			enforce(status == 0, "Command %s failed with status %d".format(args, status));
 		}
 
