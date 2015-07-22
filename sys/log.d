@@ -207,6 +207,7 @@ class ConsoleLogger : Logger
 
 	override void log(in char[] str)
 	{
+		// TODO:use std.experimental.logger
 		stderr.write(name, ": ", str, "\n");
 		stderr.flush();
 	}
