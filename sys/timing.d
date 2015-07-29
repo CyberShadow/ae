@@ -58,6 +58,7 @@ unittest
 // TODO: allow customization of timing mechanism (alternatives to TickDuration)?
 
 debug(TIMER) import std.stdio;
+debug(TIMER_TRACK) import ae.utils.exception;
 
 static this()
 {
@@ -74,6 +75,8 @@ private:
 
 	void add(TimerTask task, TimerTask start)
 	{
+		debug(TIMER_TRACK) task.additionStackTrace = getStackTrace();
+
 		auto now = MonoTime.currTime();
 
 		if (start !is null)
@@ -126,7 +129,7 @@ private:
 	/// Unschedule a task.
 	void remove(TimerTask task)
 	{
-		debug (TIMER_VERBOSE) writefln("Removing a task which waits for %d ticks.", task.delay);
+		debug (TIMER_VERBOSE) writefln("Removing a task which waits for %s.", task.delay);
 		assert(task.owner is this);
 		if (task is head)
 		{
@@ -134,7 +137,7 @@ private:
 			{
 				head = head.next;
 				head.prev = null;
-				debug (TIMER_VERBOSE) writefln("Removed current task, next task is waiting for %d ticks (next at %d).", head.delay, head.when);
+				debug (TIMER_VERBOSE) writefln("Removed current task, next task is waiting for %s (next at %s).", head.delay, head.when);
 			}
 			else
 			{
@@ -172,7 +175,7 @@ private:
 
 		assert(task.owner !is null, "This TimerTask is not active");
 		assert(task.owner is this, "This TimerTask is not owned by this Timer");
-		debug (TIMER_VERBOSE) writefln("Restarting a task which waits for %d ticks.", task.delay);
+		debug (TIMER_VERBOSE) writefln("Restarting a task which waits for %s.", task.delay);
 
 		// Store current position, as the new position must be after it
 		tmp = task.next !is null ? task.next : task.prev;
@@ -219,7 +222,7 @@ public:
 	/// Add a new task to the timer.
 	void add(TimerTask task)
 	{
-		debug (TIMER_VERBOSE) writefln("Adding a task which waits for %d ticks.", task.delay);
+		debug (TIMER_VERBOSE) writefln("Adding a task which waits for %s.", task.delay);
 		assert(task.owner is null, "This TimerTask is already active");
 		add(task, null);
 		assert(task.owner is this);
@@ -245,6 +248,10 @@ public:
 			return Duration.max;
 
 		auto now = MonoTime.currTime();
+
+		debug(TIMER_TRACK) writefln("First timer due to fire in %s:\n\tCreated:\n\t\t%-(%s\n\t\t%)\n\tAdded:\n\t\t%-(%s\n\t\t%)",
+			head.when - now, head.creationStackTrace, head.additionStackTrace);
+
 		if (now < head.when) // "when" is in the future
 			return head.when - now;
 		else
@@ -289,6 +296,8 @@ private:
 	MonoTime when;
 	Duration _delay;
 
+	debug(TIMER_TRACK) string[] creationStackTrace, additionStackTrace;
+
 	alias void delegate(Timer timer, TimerTask task) Handler;
 
 public:
@@ -297,6 +306,7 @@ public:
 		assert(delay >= Duration.zero, "Creating TimerTask with a negative Duration");
 		_delay = delay;
 		handleTask = handler;
+		debug(TIMER_TRACK) creationStackTrace = getStackTrace();
 	}
 
 	/// Return whether the task is scheduled to run on a Timer.
