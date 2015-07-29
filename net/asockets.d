@@ -566,6 +566,17 @@ public:
 			return cachedRemoteAddress = conn.remoteAddress();
 	}
 
+	final @property string remoteAddressStr() nothrow
+	{
+		try
+		{
+			auto a = remoteAddress;
+			return a is null ? "[null address]" : a.toString();
+		}
+		catch (Exception e)
+			return "[error: " ~ e.msg ~ "]";
+	}
+
 	final void setKeepAlive(bool enabled=true, int time=10, int interval=5)
 	{
 		assert(conn, "Attempting to set keep-alive on an uninitialized socket");
