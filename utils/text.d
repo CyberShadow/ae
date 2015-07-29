@@ -841,23 +841,31 @@ float stringSimilarity(string string1, string string2)
 }
 
 /// Select best match from a list of items.
-/// Returns null if none are above the threshold.
-string selectBestFrom(in string[] items, string target, float threshold = 0.7)
+/// Returns -1 if none are above the threshold.
+sizediff_t findBestMatch(in string[] items, string target, float threshold = 0.7)
 {
-	string found = null;
+	sizediff_t found = -1;
 	float best = 0;
 
-	foreach (item; items)
+	foreach (i, item; items)
 	{
 		float match = stringSimilarity(toLower(item),toLower(target));
 		if (match>threshold && match>=best)
 		{
 			best = match;
-			found = item;
+			found = i;
 		}
 	}
 
 	return found;
+}
+
+/// Select best match from a list of items.
+/// Returns null if none are above the threshold.
+string selectBestFrom(in string[] items, string target, float threshold = 0.7)
+{
+	auto index = findBestMatch(items, target, threshold);
+	return index < 0 ? null : items[index];
 }
 
 // ************************************************************************
