@@ -1397,6 +1397,7 @@ protected:
 
 	override void onDisconnect(string reason, DisconnectType type)
 	{
+		debug (ASOCKETS) writefln("TimeoutAdapter.onDisconnect @ %s", cast(void*)this);
 		super.onDisconnect(reason, type);
 		if (idleTask && idleTask.isWaiting())
 			idleTask.cancel();
