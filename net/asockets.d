@@ -704,7 +704,7 @@ protected:
 		else
 			notifyWrite = writePending;
 
-		notifyRead = connected && readDataHandler;
+		notifyRead = connected && !disconnecting && readDataHandler;
 	}
 
 	/// Called when a socket is readable.
