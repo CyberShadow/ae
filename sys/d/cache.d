@@ -87,6 +87,9 @@ abstract class DCache
 	/// This operation can be very slow (and should display progress).
 	abstract void optimize();
 
+	/// Verify cache integrity.
+	abstract void verify();
+
 	/// Utility function (copy file or directory)
 	final void cp(string src, string dst, bool silent = false)
 	{
@@ -194,6 +197,8 @@ class TempCache : DirCacheBase
 
 	override void optimize() { finalize(); }
 	override void optimizeKey(string key) {}
+
+	override void verify() {}
 }
 
 /// Store cached builds in subdirectories.
@@ -308,6 +313,8 @@ class DirCache : DirCacheBase
 		}
 		log("Deduplicated %d files.".format(dedupedFiles));
 	}
+
+	override void verify() {}
 }
 
 /// Cache backed by a git repository.
@@ -397,6 +404,11 @@ class GitCache : DCache
 		git.run("pack-refs", "--all");
 		git.run("repack", "-a", "-d");
 	}
+
+	override void verify()
+	{
+		git.run("fsck", "--full", "--strict");
+	}
 }
 
 /// Create a DCache instance according to the given name.
@@ -448,6 +460,8 @@ unittest
 		if (sourceDir.exists) rmdirRecurse(sourceDir);
 		mkdir(sourceDir);
 		write(sourceDir.buildPath("test3.txt"), "Test 3");
+		mkdir(sourceDir.buildPath("test3"));
+		write(sourceDir.buildPath("test3", "test.txt"), "Test 3 subdir");
 		cacheEngine.add("test-key-2", sourceDir);
 
 		auto targetDir = testDir.buildPath("target");
@@ -472,6 +486,7 @@ unittest
 		assert(!cacheEngine.haveEntry("test-key"));
 
 		cacheEngine.finalize();
+		cacheEngine.verify();
 
 		cacheEngine.optimize();
 	}
