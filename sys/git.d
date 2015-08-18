@@ -362,7 +362,7 @@ struct Repository
 					)
 				)
 				.array
-				.sort!((a, b) => a.name < b.name).release
+				.sort!((a, b) => a.sortName < b.sortName).release
 			;
 			return writer.write(GitObject.createTree(entries));
 		}
@@ -437,6 +437,8 @@ struct GitObject
 		uint mode;
 		string name;
 		Hash hash;
+
+		@property string sortName() { return (mode & octal!40000) ? name ~ "/" : name; }
 	}
 
 	TreeEntry[] parseTree()
