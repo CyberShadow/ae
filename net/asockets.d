@@ -836,7 +836,10 @@ protected:
 		if (handleBufferFlushed)
 			handleBufferFlushed();
 		if (disconnecting)
-			disconnect("Delayed disconnect - buffer flushed", DisconnectType.requested);
+		{
+			debug (ASOCKETS) writefln("Closing @ %s (Delayed disconnect - buffer flushed)", cast(void*)this);
+			close();
+		}
 	}
 
 	/// Called when an error occurs on the socket.
@@ -916,6 +919,7 @@ public:
 	void disconnect(string reason = defaultDisconnectReason, DisconnectType type = DisconnectType.requested)
 	{
 		scope(success) updateFlags();
+		assert(connected, "Attempting to disconnect on a disconnected socket");
 
 		if (writePending)
 		{
@@ -924,9 +928,12 @@ public:
 				assert(conn, "Attempting to disconnect on an uninitialized socket");
 				// queue disconnect after all data is sent
 				debug (ASOCKETS) writefln("[%s] Queueing disconnect: %s", remoteAddress, reason);
-				assert(!disconnecting, "Attempting to disconnect on a disconnecting socket");
+				assert(!disconnecting, "Invalid socket state (connected && disconnecting)");
+				connected = false;
 				disconnecting = true;
 				//setIdleTimeout(30.seconds);
+				if (disconnectHandler)
+					disconnectHandler(reason, type);
 				return;
 			}
 			else
@@ -934,20 +941,19 @@ public:
 		}
 
 		debug (ASOCKETS) writefln("Disconnecting @ %s: %s", cast(void*)this, reason);
-		if (conn)
-		{
-			socketManager.unregister(this);
-			conn.close();
-			conn = null;
-			outQueue[] = null;
-			connected = disconnecting = false;
-		}
-		else
-		{
-			assert(!connected);
-		}
+		close();
 		if (disconnectHandler)
 			disconnectHandler(reason, type);
+	}
+
+	private final void close()
+	{
+		assert(conn, "Attempting to close an unregistered socket");
+		socketManager.unregister(this);
+		conn.close();
+		conn = null;
+		outQueue[] = null;
+		connected = disconnecting = false;
 	}
 
 	/// Append data to the send buffer.
