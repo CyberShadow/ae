@@ -673,6 +673,8 @@ private:
 	bool _disconnecting;
 	final @property bool disconnecting(bool value) { return _disconnecting = value; }
 
+	bool connecting; /// Connection in progress
+
 public:
 	/// Whether the socket is connected.
 	override @property bool connected() { return _connected; }
@@ -775,6 +777,9 @@ protected:
 		if (!connected)
 		{
 			connected = true;
+			assert(connecting);
+			connecting = false;
+
 			//debug writefln("[%s] Connected", remoteAddress);
 			try
 				setKeepAlive();
@@ -858,6 +863,7 @@ protected:
 
 	final void tryNextAddress()
 	{
+		assert(connecting);
 		auto address = addressQueue[0];
 		addressQueue = addressQueue[1..$];
 
@@ -891,6 +897,7 @@ public:
 		debug (ASOCKETS) writefln("Connecting to %s:%s", host, port);
 		if (conn || connected)
 			throw new Exception("Socket object is already connected");
+		assert(!connecting, "Socket object is already connecting");
 
 		try
 		{
@@ -911,6 +918,7 @@ public:
 		catch (SocketException e)
 			return onError("Lookup error: " ~ e.msg);
 
+		connecting = true;
 		tryNextAddress();
 	}
 
@@ -919,7 +927,7 @@ public:
 	void disconnect(string reason = defaultDisconnectReason, DisconnectType type = DisconnectType.requested)
 	{
 		scope(success) updateFlags();
-		assert(connected, "Attempting to disconnect on a disconnected socket");
+		assert(connecting || connected, "Attempting to disconnect on a disconnected socket");
 
 		if (writePending)
 		{
