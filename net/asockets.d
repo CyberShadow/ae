@@ -868,6 +868,14 @@ protected:
 
 			return tryNextAddress();
 		}
+
+		if (state == ConnectionState.disconnecting)
+		{
+			debug (ASOCKETS) writefln("Socket error while disconnecting @ %s: %s".format(cast(void*)this, reason));
+			return close();
+		}
+
+		assert(state == ConnectionState.connected);
 		disconnect("Socket error: " ~ reason, DisconnectType.error);
 	}
 
