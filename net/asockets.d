@@ -908,6 +908,8 @@ public:
 		assert(state == ConnectionState.disconnected, "Attempting to connect on a %s socket".format(state));
 		assert(!conn);
 
+		state = ConnectionState.connecting;
+
 		try
 		{
 			addressQueue = getAddress(host, port);
@@ -927,7 +929,6 @@ public:
 		catch (SocketException e)
 			return onError("Lookup error: " ~ e.msg);
 
-		state = ConnectionState.connecting;
 		tryNextAddress();
 	}
 
