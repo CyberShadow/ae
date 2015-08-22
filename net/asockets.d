@@ -22,6 +22,7 @@ public import ae.sys.data;
 
 import std.exception;
 import std.socket;
+import std.string : format;
 public import std.socket : Address, Socket;
 
 debug(ASOCKETS) import std.stdio;
@@ -607,6 +608,22 @@ enum DisconnectType
 	error      // abnormal network condition
 }
 
+enum ConnectionState
+{
+	/// The initial state, or the state after a disconnect was fully processed.
+	disconnected,
+
+	/// A connection attempt is in progress.
+	connecting,
+
+	/// A connection is established.
+	connected,
+
+	/// Disconnecting in progress. No data can be sent or received at this point.
+	/// We are waiting for queued data to be actually sent before disconnecting.
+	disconnecting,
+}
+
 /// Common interface for connections and adapters.
 interface IConnection
 {
@@ -615,11 +632,14 @@ interface IConnection
 
 	static const defaultDisconnectReason = "Software closed the connection";
 
+	/// Get connection state.
+	@property ConnectionState state();
+
 	/// Has a connection been established?
-	@property bool connected();
+	deprecated final @property bool connected() { return state == ConnectionState.connected; }
 
 	/// Are we in the process of disconnecting? (Waiting for data to be flushed)
-	@property bool disconnecting();
+	deprecated final @property bool disconnecting() { return state == ConnectionState.disconnecting; }
 
 	/// Queue Data for sending.
 	void send(Data[] data, int priority = DEFAULT_PRIORITY);
@@ -667,20 +687,12 @@ private:
 	/// Queue of addresses to try connecting to.
 	Address[] addressQueue;
 
-	bool _connected;
-	final @property bool connected(bool value) { return _connected = value; }
-
-	bool _disconnecting;
-	final @property bool disconnecting(bool value) { return _disconnecting = value; }
-
-	bool connecting; /// Connection in progress
+	ConnectionState _state;
+	final @property ConnectionState state(ConnectionState value) { return _state = value; }
 
 public:
-	/// Whether the socket is connected.
-	override @property bool connected() { return _connected; }
-
-	/// Whether a disconnect is pending after all data is sent
-	override @property bool disconnecting() { return _disconnecting; }
+	/// Get connection state.
+	override @property ConnectionState state() { return _state; }
 
 protected:
 	/// The send buffers.
@@ -693,20 +705,20 @@ protected:
 	{
 		this();
 		this.conn = conn;
-		connected = !(conn is null);
-		if (connected)
+		state = conn is null ? ConnectionState.disconnected : ConnectionState.connected;
+		if (conn)
 			socketManager.register(this);
 		updateFlags();
 	}
 
 	final void updateFlags()
 	{
-		if (!connected)
+		if (state == ConnectionState.connecting)
 			notifyWrite = true;
 		else
 			notifyWrite = writePending;
 
-		notifyRead = connected && !disconnecting && readDataHandler;
+		notifyRead = state == ConnectionState.connected && readDataHandler;
 	}
 
 	/// Called when a socket is readable.
@@ -738,7 +750,7 @@ protected:
 				std.stdio.stdout.flush();
 			}
 
-			if (disconnecting)
+			if (state == ConnectionState.disconnecting)
 			{
 				debug (ASOCKETS) writefln("\t\t%s: Discarding received data because we are disconnecting", this);
 			}
@@ -774,11 +786,9 @@ protected:
 	{
 		scope(success) updateFlags();
 
-		if (!connected)
+		if (state == ConnectionState.connecting)
 		{
-			connected = true;
-			assert(connecting);
-			connecting = false;
+			state = ConnectionState.connected;
 
 			//debug writefln("[%s] Connected", remoteAddress);
 			try
@@ -840,7 +850,7 @@ protected:
 		// outQueue is now empty
 		if (handleBufferFlushed)
 			handleBufferFlushed();
-		if (disconnecting)
+		if (state == ConnectionState.disconnecting)
 		{
 			debug (ASOCKETS) writefln("Closing @ %s (Delayed disconnect - buffer flushed)", cast(void*)this);
 			close();
@@ -850,7 +860,7 @@ protected:
 	/// Called when an error occurs on the socket.
 	override void onError(string reason)
 	{
-		if (!connected && addressQueue.length)
+		if (state == ConnectionState.connecting && addressQueue.length)
 		{
 			socketManager.unregister(this);
 			conn.close();
@@ -863,7 +873,7 @@ protected:
 
 	final void tryNextAddress()
 	{
-		assert(connecting);
+		assert(state == ConnectionState.connecting);
 		auto address = addressQueue[0];
 		addressQueue = addressQueue[1..$];
 
@@ -895,9 +905,8 @@ public:
 		assert(port, "No port specified");
 
 		debug (ASOCKETS) writefln("Connecting to %s:%s", host, port);
-		if (conn || connected)
-			throw new Exception("Socket object is already connected");
-		assert(!connecting, "Socket object is already connecting");
+		assert(state == ConnectionState.disconnected, "Attempting to connect on a %s socket".format(state));
+		assert(!conn);
 
 		try
 		{
@@ -918,7 +927,7 @@ public:
 		catch (SocketException e)
 			return onError("Lookup error: " ~ e.msg);
 
-		connecting = true;
+		state = ConnectionState.connecting;
 		tryNextAddress();
 	}
 
@@ -927,7 +936,7 @@ public:
 	void disconnect(string reason = defaultDisconnectReason, DisconnectType type = DisconnectType.requested)
 	{
 		scope(success) updateFlags();
-		assert(connecting || connected, "Attempting to disconnect on a disconnected socket");
+		assert(state == ConnectionState.connecting || state == ConnectionState.connected, "Attempting to disconnect on a disconnected socket");
 
 		if (writePending)
 		{
@@ -936,9 +945,7 @@ public:
 				assert(conn, "Attempting to disconnect on an uninitialized socket");
 				// queue disconnect after all data is sent
 				debug (ASOCKETS) writefln("[%s] Queueing disconnect: %s", remoteAddress, reason);
-				assert(!disconnecting, "Invalid socket state (connected && disconnecting)");
-				connected = false;
-				disconnecting = true;
+				state = ConnectionState.disconnecting;
 				//setIdleTimeout(30.seconds);
 				if (disconnectHandler)
 					disconnectHandler(reason, type);
@@ -961,14 +968,13 @@ public:
 		conn.close();
 		conn = null;
 		outQueue[] = null;
-		connected = disconnecting = false;
+		state = ConnectionState.disconnected;
 	}
 
 	/// Append data to the send buffer.
 	void send(Data[] data, int priority = DEFAULT_PRIORITY)
 	{
-		assert(connected, "Attempting to send on a disconnected socket");
-		assert(!disconnecting, "Attempting to send on a disconnecting socket");
+		assert(state == ConnectionState.connected, "Attempting to send on a %s socket".format(state));
 		outQueue[priority] ~= data;
 		notifyWrite = true; // Fast updateFlags()
 
@@ -1212,8 +1218,7 @@ class ConnectionAdapter : IConnection
 		next.handleDisconnect = &onDisconnect;
 	}
 
-	@property bool connected() { return next.connected; }
-	@property bool disconnecting() { return next.disconnecting; }
+	@property ConnectionState state() { return next.state; }
 
 	/// Queue Data for sending.
 	void send(Data[] data, int priority)
@@ -1361,7 +1366,7 @@ class TimeoutAdapter : ConnectionAdapter
 	void resumeIdleTimeout()
 	{
 		debug (ASOCKETS) writefln("TimeoutAdapter.resumeIdleTimeout @ %s", cast(void*)this);
-		assert(connected);
+		assert(state == ConnectionState.connected);
 		assert(idleTask !is null);
 		assert(!idleTask.isWaiting());
 		mainTimer.add(idleTask);
@@ -1382,7 +1387,7 @@ class TimeoutAdapter : ConnectionAdapter
 				idleTask.cancel();
 			idleTask.delay = duration;
 		}
-		if (connected)
+		if (state == ConnectionState.connected)
 			mainTimer.add(idleTask);
 	}
 
@@ -1433,16 +1438,16 @@ private:
 
 	final void onTask_Idle(Timer timer, TimerTask task)
 	{
-		if (!connected)
-			return;
-
-		if (disconnecting)
+		if (state == ConnectionState.disconnecting)
 			return disconnect("Delayed disconnect - time-out", DisconnectType.error);
+
+		if (state != ConnectionState.connected)
+			return;
 
 		if (handleIdleTimeout)
 		{
 			handleIdleTimeout();
-			if (connected && !disconnecting)
+			if (state == ConnectionState.connected)
 			{
 				assert(!idleTask.isWaiting());
 				mainTimer.add(idleTask);

@@ -21,9 +21,7 @@ import ae.net.asockets;
 class IrcClientLogSource : IConnection
 {
 	bool isConnected;
-	@property bool connected() { return isConnected; }
-
-	@property bool disconnecting() { return false; }
+	@property ConnectionState state() { return isConnected ? ConnectionState.connected : ConnectionState.disconnected; }
 
 	void send(Data[] data, int priority) {}
 	alias send = IConnection.send;

@@ -87,7 +87,7 @@ public:
 
 		// Close idle connections
 		foreach (connection; connections.iterator.array)
-			if (connection.idle && connection.conn.connected && !connection.conn.disconnecting)
+			if (connection.idle && connection.conn.state == ConnectionState.connected)
 				connection.conn.disconnect("HTTP server shutting down");
 	}
 
