@@ -936,7 +936,7 @@ public:
 	void disconnect(string reason = defaultDisconnectReason, DisconnectType type = DisconnectType.requested)
 	{
 		scope(success) updateFlags();
-		assert(state == ConnectionState.connecting || state == ConnectionState.connected, "Attempting to disconnect on a disconnected socket");
+		assert(state == ConnectionState.connecting || state == ConnectionState.connected, "Attempting to disconnect on a %s socket".format(state));
 
 		if (writePending)
 		{
