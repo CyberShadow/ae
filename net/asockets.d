@@ -875,7 +875,7 @@ protected:
 			return close();
 		}
 
-		assert(state == ConnectionState.connected);
+		assert(state == ConnectionState.connecting || state == ConnectionState.connected);
 		disconnect("Socket error: " ~ reason, DisconnectType.error);
 	}
 
