@@ -613,6 +613,9 @@ enum ConnectionState
 	/// The initial state, or the state after a disconnect was fully processed.
 	disconnected,
 
+	/// Name resolution. Currently done synchronously.
+	resolving,
+
 	/// A connection attempt is in progress.
 	connecting,
 
@@ -875,7 +878,7 @@ protected:
 			return close();
 		}
 
-		assert(state == ConnectionState.connecting || state == ConnectionState.connected);
+		assert(state == ConnectionState.resolving || state == ConnectionState.connecting || state == ConnectionState.connected);
 		disconnect("Socket error: " ~ reason, DisconnectType.error);
 	}
 
@@ -916,7 +919,7 @@ public:
 		assert(state == ConnectionState.disconnected, "Attempting to connect on a %s socket".format(state));
 		assert(!conn);
 
-		state = ConnectionState.connecting;
+		state = ConnectionState.resolving;
 
 		try
 		{
@@ -928,6 +931,8 @@ public:
 				foreach (address; addressQueue)
 					writefln("- %s", address.toString());
 			}
+
+			state = ConnectionState.connecting;
 			if (addressQueue.length > 1)
 			{
 				import std.random : randomShuffle;
@@ -945,7 +950,7 @@ public:
 	void disconnect(string reason = defaultDisconnectReason, DisconnectType type = DisconnectType.requested)
 	{
 		scope(success) updateFlags();
-		assert(state == ConnectionState.connecting || state == ConnectionState.connected, "Attempting to disconnect on a %s socket".format(state));
+		assert(state == ConnectionState.resolving || state == ConnectionState.connecting || state == ConnectionState.connected, "Attempting to disconnect on a %s socket".format(state));
 
 		if (writePending)
 		{
@@ -965,7 +970,12 @@ public:
 		}
 
 		debug (ASOCKETS) writefln("Disconnecting @ %s: %s", cast(void*)this, reason);
-		close();
+
+		if (state == ConnectionState.connecting || state == ConnectionState.connected)
+			close();
+		else
+			assert(conn is null, "Registered but %s socket".format(state));
+
 		if (disconnectHandler)
 			disconnectHandler(reason, type);
 	}
