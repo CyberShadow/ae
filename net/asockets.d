@@ -357,6 +357,8 @@ else // Use select
 					break;
 				}
 
+				debug (ASOCKETS) { stdout.flush(); stderr.flush(); }
+
 				int events;
 				if (idleHandlers.length)
 				{
