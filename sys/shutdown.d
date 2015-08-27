@@ -50,8 +50,8 @@ void syncShutdown() nothrow @system
 	catch (Throwable e)
 	{
 		import core.stdc.stdio;
-		string s = e.msg;
-		fprintf(stderr, "Unhandled error while shutting down:\r\n%.*s", s.length, s.ptr);
+		fprintf(stderr, "Unhandled error while shutting down:\r\n");
+		_d_print_throwable(e);
 	}
 }
 
@@ -61,6 +61,8 @@ version(Posix)
 else
 version(Windows)
 	import core.sys.windows.windows;
+
+extern (C) void _d_print_throwable(Throwable t) nothrow;
 
 void register()
 {
@@ -99,7 +101,8 @@ void register()
 				catch (Throwable e)
 				{
 					win32write("Unhandled error while shutting down:\r\n");
-					win32write(e.msg);
+				//	win32write(e.msg);
+					_d_print_throwable(e);
 				}
 			}
 			return FALSE;
