@@ -142,20 +142,20 @@ protected:
 
 	void onDisconnect(string reason, DisconnectType type)
 	{
+		auto response = currentResponse;
 		if (type == DisconnectType.error)
-			currentResponse = null;
-		else
-		if (currentResponse)
-			currentResponse.data = inBuffer;
-
-		if (handleResponse)
-			handleResponse(currentResponse, reason);
+			response = null;
+		if (response)
+			response.data = inBuffer;
 
 		currentRequest = null;
 		currentResponse = null;
 		inBuffer.destroy();
 		expect = -1;
 		conn.handleReadData = null;
+
+		if (handleResponse)
+			handleResponse(response, reason);
 	}
 
 	IConnection adaptConnection(IConnection conn)
@@ -311,4 +311,33 @@ void httpPost(string url, UrlParameters vars, void delegate(string) resultHandle
 			resultHandler(result);
 		},
 		errorHandler);
+}
+
+unittest
+{
+	import ae.net.http.server;
+	import ae.net.http.responseex;
+
+	auto s = new HttpServer;
+	s.handleRequest = (HttpRequest request, HttpServerConnection conn) {
+		auto response = new HttpResponseEx;
+		conn.sendResponse(response.serveText("Hello!"));
+	};
+	auto port = s.listen(0, "localhost");
+
+	auto c = new HttpClient;
+	auto r = new HttpRequest("http://localhost:" ~ to!string(port));
+	int count;
+	c.handleResponse =
+		(HttpResponse response, string disconnectReason)
+		{
+			assert(cast(string)response.getContent.toHeap == "Hello!");
+			if (count++ == 3)
+				s.close();
+			else
+				c.request(r);
+		};
+	c.request(r);
+
+	socketManager.loop();
 }
