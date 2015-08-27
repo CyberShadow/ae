@@ -181,19 +181,26 @@ static this()
 class OpenSSLAdapter : SSLAdapter
 {
 	SSL* sslHandle;
+	OpenSSLContext context;
 
 	this(OpenSSLContext context, IConnection next)
 	{
+		this.context = context;
 		super(next);
 
 		sslHandle = sslEnforce(SSL_new(context.sslCtx));
 		SSL_set_bio(sslHandle, r.bio, w.bio);
+	}
 
+	override void onConnect()
+	{
 		final switch (context.kind)
 		{
 			case OpenSSLContext.Kind.client: SSL_connect(sslHandle).sslEnforce(); break;
 			case OpenSSLContext.Kind.server: SSL_accept (sslHandle).sslEnforce(); break;
 		}
+
+		super.onConnect();
 	}
 
 	MemoryBIO r, w;
@@ -247,6 +254,21 @@ class OpenSSLAdapter : SSLAdapter
 			queue ~= data;
 
 		flushQueue();
+	}
+
+	override void disconnect(string reason, DisconnectType type)
+	{
+		SSL_shutdown(sslHandle);
+		flushWritten();
+		super.disconnect(reason, type);
+	}
+
+	override void onDisconnect(string reason, DisconnectType type)
+	{
+		SSL_shutdown(sslHandle);
+		r.clear();
+		w.clear();
+		super.onDisconnect(reason, type);
 	}
 
 	alias send = super.send;
