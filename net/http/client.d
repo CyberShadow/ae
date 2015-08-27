@@ -57,7 +57,7 @@ protected:
 		}
 		reqMessage ~= currentRequest.resource ~ " HTTP/1.0\r\n";
 
-		if (!("User-Agent" in currentRequest.headers))
+		if ("User-Agent" !in currentRequest.headers && agent)
 			currentRequest.headers["User-Agent"] = agent;
 		if (!compat) {
 			if (!("Accept-Encoding" in currentRequest.headers))
