@@ -49,26 +49,34 @@ private:
 protected:
 	void onConnect()
 	{
-		string reqMessage = currentRequest.method ~ " ";
-		if (currentRequest.proxy !is null) {
-			reqMessage ~= "http://" ~ currentRequest.host;
-			if (compat || currentRequest.port != 80)
-				reqMessage ~= format(":%d", currentRequest.port);
-		}
-		reqMessage ~= currentRequest.resource ~ " HTTP/1.0\r\n";
+		sendRequest(currentRequest);
+	}
 
-		if ("User-Agent" !in currentRequest.headers && agent)
-			currentRequest.headers["User-Agent"] = agent;
-		if (!compat) {
-			if (!("Accept-Encoding" in currentRequest.headers))
-				currentRequest.headers["Accept-Encoding"] = "gzip, deflate, *;q=0";
-			if (currentRequest.data)
-				currentRequest.headers["Content-Length"] = to!string(currentRequest.data.bytes.length);
-		} else {
-			if (!("Pragma" in currentRequest.headers))
-				currentRequest.headers["Pragma"] = "No-Cache";
+	void sendRequest(HttpRequest request)
+	{
+		string reqMessage = request.method ~ " ";
+		if (request.proxy !is null) {
+			reqMessage ~= "http://" ~ request.host;
+			if (compat || request.port != 80)
+				reqMessage ~= format(":%d", request.port);
 		}
-		foreach (string header, string value; currentRequest.headers)
+		reqMessage ~= request.resource ~ " HTTP/1.0\r\n";
+
+		if ("User-Agent" !in request.headers && agent)
+			request.headers["User-Agent"] = agent;
+		if (!compat) {
+			if ("Accept-Encoding" !in request.headers)
+				request.headers["Accept-Encoding"] = "gzip, deflate, *;q=0";
+			if (request.data)
+				request.headers["Content-Length"] = to!string(request.data.bytes.length);
+		} else {
+			if ("Pragma" !in request.headers)
+				request.headers["Pragma"] = "No-Cache";
+		}
+		if (keepAlive && "Connection" !in request.headers)
+			request.headers["Connection"] = "keep-alive";
+
+		foreach (string header, string value; request.headers)
 			reqMessage ~= header ~ ": " ~ value ~ "\r\n";
 
 		reqMessage ~= "\r\n";
@@ -77,12 +85,12 @@ protected:
 			stderr.writefln("Sending request:");
 			foreach (line; reqMessage.split("\r\n"))
 				stderr.writeln("> ", line);
-			if (currentRequest.data)
-				stderr.writefln("} (%d bytes data follow)", currentRequest.data.bytes.length);
+			if (request.data)
+				stderr.writefln("} (%d bytes data follow)", request.data.bytes.length);
 		}
 
 		conn.send(Data(reqMessage));
-		conn.send(currentRequest.data);
+		conn.send(request.data);
 	}
 
 	void onNewResponse(Data data)
@@ -121,7 +129,7 @@ protected:
 			else
 			{
 				currentResponse.data = inBuffer.bytes[0 .. expect];
-				conn.disconnect("All data read");
+				onDone();
 			}
 		}
 		catch (Exception e)
@@ -136,15 +144,21 @@ protected:
 		if (expect!=size_t.max && inBuffer.length >= expect)
 		{
 			currentResponse.data = inBuffer[0 .. expect];
-			conn.disconnect("All data read");
+			onDone();
 		}
 	}
 
-	void onDisconnect(string reason, DisconnectType type)
+	void onDone()
+	{
+		if (keepAlive)
+			processResponse();
+		else
+			conn.disconnect("All data read");
+	}
+
+	void processResponse(string reason = "All data read")
 	{
 		auto response = currentResponse;
-		if (type == DisconnectType.error)
-			response = null;
 		if (response)
 			response.data = inBuffer;
 
@@ -158,6 +172,17 @@ protected:
 			handleResponse(response, reason);
 	}
 
+	void onDisconnect(string reason, DisconnectType type)
+	{
+		if (type == DisconnectType.error)
+			currentResponse = null;
+		if (currentResponse)
+			currentResponse.data = inBuffer;
+
+		if (currentRequest)
+			processResponse(reason);
+	}
+
 	IConnection adaptConnection(IConnection conn)
 	{
 		return conn;
@@ -166,6 +191,7 @@ protected:
 public:
 	string agent = "ae.net.http.client (+https://github.com/CyberShadow/ae)";
 	bool compat = false;
+	bool keepAlive = false;
 	string[] cookies;
 
 public:
@@ -193,15 +219,34 @@ public:
 		currentResponse = null;
 		conn.handleReadData = &onNewResponse;
 		expect = 0;
-		if (request.proxy !is null)
-			tcp.connect(request.proxyHost, request.proxyPort);
+
+		if (conn.state != ConnectionState.disconnected)
+		{
+			assert(conn.state == ConnectionState.connected, "Attempting a HTTP request on a %s connection".format(conn.state));
+			assert(keepAlive, "Attempting a second HTTP request on a connected non-keepalive connection");
+			sendRequest(request);
+		}
 		else
-			tcp.connect(request.host, request.port);
+		{
+			if (request.proxy !is null)
+				tcp.connect(request.proxyHost, request.proxyPort);
+			else
+				tcp.connect(request.host, request.port);
+		}
 	}
 
 	bool connected()
 	{
-		return currentRequest !is null;
+		if (currentRequest !is null)
+			return true;
+		if (keepAlive && conn.state == ConnectionState.connected)
+			return true;
+		return false;
+	}
+
+	void disconnect(string reason = IConnection.defaultDisconnectReason)
+	{
+		conn.disconnect(reason);
 	}
 
 public:
@@ -318,26 +363,40 @@ unittest
 	import ae.net.http.server;
 	import ae.net.http.responseex;
 
-	auto s = new HttpServer;
-	s.handleRequest = (HttpRequest request, HttpServerConnection conn) {
-		auto response = new HttpResponseEx;
-		conn.sendResponse(response.serveText("Hello!"));
-	};
-	auto port = s.listen(0, "localhost");
-
-	auto c = new HttpClient;
-	auto r = new HttpRequest("http://localhost:" ~ to!string(port));
-	int count;
-	c.handleResponse =
-		(HttpResponse response, string disconnectReason)
-		{
-			assert(cast(string)response.getContent.toHeap == "Hello!");
-			if (count++ == 3)
-				s.close();
-			else
-				c.request(r);
+	void test(bool keepAlive)
+	{
+		auto s = new HttpServer;
+		s.handleRequest = (HttpRequest request, HttpServerConnection conn) {
+			auto response = new HttpResponseEx;
+			conn.sendResponse(response.serveText("Hello!"));
 		};
-	c.request(r);
+		auto port = s.listen(0, "localhost");
 
-	socketManager.loop();
+		auto c = new HttpClient;
+		c.keepAlive = keepAlive;
+		auto r = new HttpRequest("http://localhost:" ~ to!string(port));
+		int count;
+		c.handleResponse =
+			(HttpResponse response, string disconnectReason)
+			{
+				assert(response, "HTTP server error");
+				assert(cast(string)response.getContent.toHeap == "Hello!");
+				if (++count == 5)
+				{
+					s.close();
+					if (c.connected)
+						c.disconnect();
+				}
+				else
+					c.request(r);
+			};
+		c.request(r);
+
+		socketManager.loop();
+
+		assert(count == 5);
+	}
+
+	test(false);
+	test(true);
 }
