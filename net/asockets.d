@@ -789,8 +789,14 @@ protected:
 	/// Called when a socket is writable.
 	override void onWritable()
 	{
-		scope(success) updateFlags();
+		//scope(success) updateFlags();
+		onWritableImpl();
+		updateFlags();
+	}
 
+	// Work around scope(success) breaking debugger stack traces
+	final private void onWritableImpl()
+	{
 		if (state == ConnectionState.connecting)
 		{
 			state = ConnectionState.connected;
