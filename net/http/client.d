@@ -73,8 +73,8 @@ protected:
 			if ("Pragma" !in request.headers)
 				request.headers["Pragma"] = "No-Cache";
 		}
-		if (keepAlive && "Connection" !in request.headers)
-			request.headers["Connection"] = "keep-alive";
+		if ("Connection" !in request.headers)
+			request.headers["Connection"] = keepAlive ? "keep-alive" : "close";
 
 		foreach (string header, string value; request.headers)
 			reqMessage ~= header ~ ": " ~ value ~ "\r\n";
