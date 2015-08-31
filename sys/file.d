@@ -789,36 +789,56 @@ File openFile()(string fn, string mode = "rb")
 	return f;
 }
 
-ubyte[16] mdFile()(string fn)
+auto fileDigest(Digest)(string fn)
 {
-	import std.digest.md;
-
-	MD5 context;
+	import std.range.primitives;
+	Digest context;
 	context.start();
-
-	auto f = openFile(fn, "rb");
-	static ubyte[64 * 1024] buffer = void;
-	while (true)
-	{
-		auto readBuffer = f.rawRead(buffer);
-		if (!readBuffer.length)
-			break;
-		context.put(cast(ubyte[])readBuffer);
-	}
-	f.close();
-
-	ubyte[16] digest = context.finish();
+	put(context, openFile(fn, "rb").byChunk(64 * 1024));
+	auto digest = context.finish();
 	return digest;
 }
 
-ubyte[16] mdFileCached()(string fn)
+template mdFile()
 {
-	static ubyte[16][ulong] cache;
+	import std.digest.md;
+	alias mdFile = fileDigest!MD5;
+}
+
+version (HAVE_WIN32)
+unittest
+{
+	import std.digest.digest : toHexString;
+	write("test.txt", "Hello, world!");
+	scope(exit) remove("test.txt");
+	assert(mdFile("test.txt").toHexString() == "6CD3556DEB0DA54BCA060B4C39479839");
+}
+
+auto fileDigestCached(Digest)(string fn)
+{
+	static typeof(Digest.init.finish())[ulong] cache;
 	auto id = getFileID(fn);
 	auto phash = id in cache;
 	if (phash)
 		return *phash;
-	return cache[id] = mdFile(fn);
+	return cache[id] = fileDigest!Digest(fn);
+}
+
+template mdFileCached()
+{
+	import std.digest.md;
+	alias mdFileCached = fileDigestCached!MD5;
+}
+
+version (HAVE_WIN32)
+unittest
+{
+	import std.digest.digest : toHexString;
+	write("test.txt", "Hello, world!");
+	scope(exit) remove("test.txt");
+	assert(mdFileCached("test.txt").toHexString() == "6CD3556DEB0DA54BCA060B4C39479839");
+	write("test.txt", "Something else");
+	assert(mdFileCached("test.txt").toHexString() == "6CD3556DEB0DA54BCA060B4C39479839");
 }
 
 /// Read a File (which might be a stream) into an array
