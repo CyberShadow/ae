@@ -31,6 +31,8 @@ import ae.utils.meta;
 
 mixin template DeclareException(string NAME, BASE = Exception)
 {
+	import ae.utils.meta.x;
+
 	mixin(mixin(X!q{
 		class @(NAME) : BASE
 		{
