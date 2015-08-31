@@ -844,16 +844,18 @@ unittest
 /// Read a File (which might be a stream) into an array
 void[] readFile(File f)
 {
-	ubyte[] result;
-	static ubyte[64 * 1024] buffer = void;
-	while (true)
-	{
-		auto readBuffer = f.rawRead(buffer);
-		if (!readBuffer.length)
-			break;
-		result ~= readBuffer;
-	}
-	return result;
+	import std.range.primitives;
+	auto result = appender!(ubyte[]);
+	put(result, f.byChunk(64*1024));
+	return result.data;
+}
+
+unittest
+{
+	auto s = "0123456789".replicate(10_000);
+	write("test.txt", s);
+	scope(exit) remove("test.txt");
+	assert(readFile(File("test.txt")) == s);
 }
 
 /// Like std.file.readText for non-UTF8
