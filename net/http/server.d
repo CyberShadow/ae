@@ -54,7 +54,15 @@ private:
 
 	void onAccept(TcpConnection incoming)
 	{
-		new HttpServerConnection(this, incoming);
+		try
+			new HttpServerConnection(this, incoming);
+		catch (Exception e)
+		{
+			if (log)
+				log("Error accepting connection: " ~ e.msg);
+			if (incoming.state == ConnectionState.connected)
+				incoming.disconnect();
+		}
 	}
 
 public:
