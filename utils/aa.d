@@ -165,6 +165,42 @@ struct OrderedMap(K, V)
 		return values[$-1];
 	}
 
+	ref V getOrAdd()(auto ref K k)
+	{
+		auto pi = k in index;
+		V* pv;
+		if (pi)
+			pv = &values[*pi];
+		else
+		{
+			index[k] = values.length;
+			keys ~= k;
+			values ~= V.init;
+			pv = &values[$-1];
+		}
+		return *pv;
+	}
+
+	ref V opIndexUnary(string op)(auto ref K k)
+	{
+		auto pv = &getOrAdd(k);
+		mixin("(*pv) " ~ op ~ ";");
+		return *pv;
+	}
+
+	ref V opIndexOpAssign(string op)(auto ref V v, auto ref K k)
+	{
+		auto pv = &getOrAdd(k);
+		mixin("(*pv) " ~ op ~ "= v;");
+		return *pv;
+	}
+
+	inout(V) get()(auto ref K k, inout(V) defaultValue) inout
+	{
+		auto p = k in index;
+		return p ? values[*p] : defaultValue;
+	}
+
 	inout(V)* opIn_r()(auto ref K k) inout
 	{
 		auto p = k in index;
@@ -206,6 +242,10 @@ unittest
 	assert("d" !in m);
 	m.remove("a");
 	assert(m.length == 2);
+	m["x"] -= 1;
+	assert(m["x"] == -1);
+	++m["y"];
+	assert(m["y"] == 1);
 }
 
 // ***************************************************************************
