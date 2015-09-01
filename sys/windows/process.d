@@ -51,8 +51,13 @@ struct CreatedProcessImpl
 alias RefCounted!CreatedProcessImpl CreatedProcess;
 CreatedProcess createProcess(string applicationName, string commandLine, STARTUPINFOW si = STARTUPINFOW.init)
 {
+	return createProcess(applicationName, commandLine, null, si);
+}
+
+CreatedProcess createProcess(string applicationName, string commandLine, string currentDirectory, STARTUPINFOW si = STARTUPINFOW.init)
+{
 	CreatedProcess result;
-	wenforce(CreateProcessW(toWStringz(applicationName), cast(LPWSTR)toWStringz(commandLine), null, null, false, 0, null, null, &si, &result.pi), "CreateProcess");
+	wenforce(CreateProcessW(toWStringz(applicationName), cast(LPWSTR)toWStringz(commandLine), null, null, false, 0, null, toWStringz(currentDirectory), &si, &result.pi), "CreateProcess");
 	AllowSetForegroundWindow(result.dwProcessId);
 	AttachThreadInput(GetCurrentThreadId(), result.dwThreadId, TRUE);
 	AllowSetForegroundWindow(result.dwProcessId);
