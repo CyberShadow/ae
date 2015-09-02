@@ -957,7 +957,7 @@ public:
 	/// The disconnect handler will be called when all data has been flushed.
 	void disconnect(string reason = defaultDisconnectReason, DisconnectType type = DisconnectType.requested)
 	{
-		scope(success) updateFlags();
+		//scope(success) updateFlags(); // Work around scope(success) breaking debugger stack traces
 		assert(state == ConnectionState.resolving || state == ConnectionState.connecting || state == ConnectionState.connected, "Attempting to disconnect on a %s socket".format(state));
 
 		if (writePending)
@@ -971,6 +971,7 @@ public:
 				//setIdleTimeout(30.seconds);
 				if (disconnectHandler)
 					disconnectHandler(reason, type);
+				updateFlags();
 				return;
 			}
 			else
@@ -986,6 +987,7 @@ public:
 
 		if (disconnectHandler)
 			disconnectHandler(reason, type);
+		updateFlags();
 	}
 
 	private final void close()
