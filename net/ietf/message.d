@@ -302,34 +302,42 @@ class Rfc850Message
 
 		// Decode author
 
-		author = authorEmail = "From" in headers ? decodeRfc1522(headers["From"]) : null;
-		if ((author.indexOf('@') < 0 && author.indexOf(" at ") >= 0)
-		 || (author.indexOf("<") < 0 && author.indexOf(">") < 0 && author.indexOf(" (") > 0 && author.endsWith(")")))
+		void decodeAuthor(string header)
 		{
-			// Mailing list archive format
-			assert(author == authorEmail);
-			if (author.indexOf(" (") > 0 && author.endsWith(")"))
+			author = authorEmail = header;
+			if ((author.indexOf('@') < 0 && author.indexOf(" at ") >= 0)
+			 || (author.indexOf("<") < 0 && author.indexOf(">") < 0 && author.indexOf(" (") > 0 && author.endsWith(")")))
 			{
-				authorEmail = author[0 .. author.lastIndexOf(" (")].replace(" at ", "@");
-				author      = author[author.lastIndexOf(" (")+2 .. $-1].decodeRfc1522();
+				// Mailing list archive format
+				assert(author == authorEmail);
+				if (author.indexOf(" (") > 0 && author.endsWith(")"))
+				{
+					authorEmail = author[0 .. author.lastIndexOf(" (")].replace(" at ", "@");
+					author      = author[author.lastIndexOf(" (")+2 .. $-1].decodeRfc1522();
+				}
+				else
+				{
+					authorEmail = author.replace(" at ", "@");
+					author = author[0 .. author.lastIndexOf(" at ")];
+				}
 			}
-			else
+			if (author.indexOf('<')>=0 && author.endsWith('>'))
 			{
-				authorEmail = author.replace(" at ", "@");
-				author = author[0 .. author.lastIndexOf(" at ")];
+				auto p = author.indexOf('<');
+				authorEmail = author[p+1..$-1];
+				author = decodeRfc1522(asciiStrip(author[0..p]));
 			}
-		}
-		if (author.indexOf('<')>=0 && author.endsWith('>'))
-		{
-			auto p = author.indexOf('<');
-			authorEmail = author[p+1..$-1];
-			author = decodeRfc1522(asciiStrip(author[0..p]));
+
+			if (author.length>2 && author[0]=='"' && author[$-1]=='"')
+				author = decodeRfc1522(asciiStrip(author[1..$-1]));
+			if ((author == authorEmail || author == "") && authorEmail.indexOf("@") > 0)
+				author = authorEmail[0..authorEmail.indexOf("@")];
 		}
 
-		if (author.length>2 && author[0]=='"' && author[$-1]=='"')
-			author = decodeRfc1522(asciiStrip(author[1..$-1]));
-		if ((author == authorEmail || author == "") && authorEmail.indexOf("@") > 0)
-			author = authorEmail[0..authorEmail.indexOf("@")];
+		decodeAuthor("From" in headers ? decodeRfc1522(headers["From"]) : null);
+
+		if (headers.get("List-Post", null) == "<mailto:" ~ authorEmail ~ ">" && "Reply-To" in headers)
+			decodeAuthor(decodeRfc1522(headers["Reply-To"].findSplit(", ")[0]));
 
 		// Decode cross-references
 
