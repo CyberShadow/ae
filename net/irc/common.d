@@ -75,6 +75,17 @@ unittest
 	assert(rfc1459toUpper("{}|[]\\") == "[]\\[]\\");
 }
 
+int rfc1459cmp(in char[] a, in char[] b)
+{
+	return cmp(a.byChar.map!rfc1459toUpper, b.byChar.map!rfc1459toUpper);
+}
+
+unittest
+{
+	assert(rfc1459cmp("{}|[]\\", "[]\\[]\\") == 0);
+	assert(rfc1459cmp("a", "b") == -1);
+}
+
 final class IrcConnection
 {
 private:
