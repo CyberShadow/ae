@@ -17,7 +17,12 @@
 module ae.net.irc.common;
 
 import core.time;
+import std.algorithm.comparison;
+import std.algorithm.iteration;
+import std.array;
+import std.exception;
 import std.string;
+import std.utf;
 
 import ae.net.asockets;
 
@@ -39,14 +44,29 @@ static assert(toLower("}") == "}" && toUpper("}") == "}");
 static assert(toLower("|") == "|" && toUpper("|") == "|");
 static assert(toLower("\\") == "\\" && toUpper("\\") == "\\");
 
+char rfc1459toLower(char c)
+{
+	if (c >= 'A' && c <= ']')
+		c += ('a' - 'A');
+	return c;
+}
+
+char rfc1459toUpper(char c)
+{
+	if (c >= 'a' && c <= '}')
+		c -= ('a' - 'A');
+	return c;
+}
+
 string rfc1459toLower(string name)
 {
-	return toLower(name).tr("[]\\","{}|");
+	return name.byChar.map!rfc1459toLower.array.assumeUnique;
 }
+
 
 string rfc1459toUpper(string name)
 {
-	return toUpper(name).tr("{}|","[]\\");
+	return name.byChar.map!rfc1459toUpper.array.assumeUnique;
 }
 
 unittest
