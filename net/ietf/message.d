@@ -302,8 +302,9 @@ class Rfc850Message
 
 		// Decode author
 
-		void decodeAuthor(string header)
+		static string[2] decodeAuthor(string header)
 		{
+			string author, authorEmail;
 			author = authorEmail = header;
 			if ((author.indexOf('@') < 0 && author.indexOf(" at ") >= 0)
 			 || (author.indexOf("<") < 0 && author.indexOf(">") < 0 && author.indexOf(" (") > 0 && author.endsWith(")")))
@@ -332,12 +333,13 @@ class Rfc850Message
 				author = decodeRfc1522(asciiStrip(author[1..$-1]));
 			if ((author == authorEmail || author == "") && authorEmail.indexOf("@") > 0)
 				author = authorEmail[0..authorEmail.indexOf("@")];
+			return [author, authorEmail];
 		}
 
-		decodeAuthor("From" in headers ? decodeRfc1522(headers["From"]) : null);
+		list(author, authorEmail) = decodeAuthor("From" in headers ? decodeRfc1522(headers["From"]) : null);
 
 		if (headers.get("List-Post", null) == "<mailto:" ~ authorEmail ~ ">" && "Reply-To" in headers)
-			decodeAuthor(decodeRfc1522(headers["Reply-To"].findSplit(", ")[0]));
+			list(null, authorEmail) = decodeAuthor(decodeRfc1522(headers["Reply-To"].findSplit(", ")[0]));
 
 		// Decode cross-references
 
