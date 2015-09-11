@@ -1148,7 +1148,7 @@ EOS";
 	@property string cacheEngineName()
 	{
 		if (incrementalBuild)
-			return "temp";
+			return "none";
 		else
 			return config.cache;
 	}
