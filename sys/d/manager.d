@@ -647,7 +647,7 @@ class DManager : ICacheHost
 		{
 			/// Whether to build a debug DMD.
 			/// Debug builds are faster to build,
-			/// but run slower. Windows only.
+			/// but run slower.
 			@JSONOptional bool debugDMD = false;
 
 			/// Instead of downloading a pre-built binary DMD package,
@@ -742,12 +742,18 @@ class DManager : ICacheHost
 				dmdMakeFullName.write(m);
 			}
 
+			string[] extraArgs;
+			version (posix)
+				if (config.build.components.dmd.debugDMD)
+					extraArgs ~= "DEBUG=1";
+
 			string[] targets = config.build.components.dmd.debugDMD ? [] : ["dmd"];
+
 			run([make,
 					"-f", dmdMakeFileName,
 					"MODEL=" ~ modelFlag,
 					"HOST_DC=" ~ config.deps.hostDC,
-				] ~ commonConfig.makeArgs ~ targets,
+				] ~ commonConfig.makeArgs ~ extraArgs ~ targets,
 				srcDir
 			);
 		}
