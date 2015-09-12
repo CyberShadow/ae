@@ -477,7 +477,7 @@ class Rfc850Message
 		assert(id);
 
 		headers["Message-ID"] = id;
-		headers["From"] = format(`"%s" <%s>`, author, authorEmail);
+		headers["From"] = format(`%s <%s>`, author, authorEmail);
 		headers["Subject"] = subject;
 		headers["Newsgroups"] = xref.map!(x => x.group)().join(",");
 		headers["Content-Type"] = format("text/plain; charset=utf-8; format=%s; delsp=%s", flowed ? "flowed" : "fixed", delsp ? "yes" : "no");
