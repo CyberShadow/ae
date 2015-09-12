@@ -363,6 +363,9 @@ class Rfc850Message
 		}
 		*/
 
+		if (headers.get("Sender", null).canFind("-bounces@"))
+			xref ~= Xref(headers["Sender"].findSplit(" <")[0].replace(`"`, ``));
+
 		if ("List-Unsubscribe" in headers && !xref.length)
 			xref = headers["List-Unsubscribe"].split(", ").filter!(s => s.canFind("/options/")).map!(s => Xref(s.split("/")[$-1].stripRight('>'))).array();
 
