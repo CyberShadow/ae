@@ -558,6 +558,17 @@ public:
 			return cachedLocalAddress = conn.localAddress();
 	}
 
+	final @property string localAddressStr() nothrow
+	{
+		try
+		{
+			auto a = localAddress;
+			return a is null ? "[null address]" : a.toString();
+		}
+		catch (Exception e)
+			return "[error: " ~ e.msg ~ "]";
+	}
+
 	final @property Address remoteAddress()
 	{
 		if (cachedRemoteAddress !is null)
