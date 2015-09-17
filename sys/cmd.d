@@ -30,12 +30,28 @@ string getTempFileName(string extension)
 	import std.path : buildPath;
 
 	static int counter;
-	return buildPath(tempDir(), format("run-%d-%d-%d.%s",
+	return buildPath(tempDir(), format("run-%d-%d-%d-%d.%s",
 		getpid(),
+		getCurrentThreadID(),
 		uniform!uint(),
 		counter++,
 		extension
 	));
+}
+
+ulong getCurrentThreadID()
+{
+	version (Windows)
+	{
+		import core.sys.windows.windows;
+		return GetCurrentThreadId();
+	}
+	else
+	version (Posix)
+	{
+		import core.sys.posix.pthread;
+		return cast(ulong)pthread_self();
+	}
 }
 
 // ************************************************************************
