@@ -210,6 +210,27 @@ struct Color(FieldTuple...)
 				result += this.tupleof[i];
 		return result;
 	}
+
+	static @property Color min()
+	{
+		Color result;
+		foreach (ref v; result.tupleof)
+			static if (is(typeof(typeof(v).min)))
+				v = typeof(v).min;
+			else
+			static if (is(typeof(typeof(v).max)))
+				v = -typeof(v).max;
+		return result;
+	}
+
+	static @property Color max()
+	{
+		Color result;
+		foreach (ref v; result.tupleof)
+			static if (is(typeof(typeof(v).max)))
+				v = typeof(v).max;
+		return result;
+	}
 }
 
 // The "x" has the special meaning of "padding" and is ignored in some circumstances
@@ -252,6 +273,9 @@ unittest
 	c += c;
 	assert(c == RGB(4, 4, 4));
 }
+
+static assert(RGB.min == RGB(  0,   0,   0));
+static assert(RGB.max == RGB(255, 255, 255));
 
 unittest
 {
