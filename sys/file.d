@@ -967,8 +967,18 @@ struct NamedPipeImpl
 		version(Windows)
 		{
 			import win32.winbase;
+			import win32.windef;
 
-			ConnectNamedPipe(f.windowsHandle, null).wenforce("ConnectNamedPipe");
+			BOOL bSuccess = ConnectNamedPipe(f.windowsHandle, null);
+
+			// "If a client connects before the function is called, the function returns zero
+			// and GetLastError returns ERROR_PIPE_CONNECTED. This can happen if a client
+			// connects in the interval between the call to CreateNamedPipe and the call to
+			// ConnectNamedPipe. In this situation, there is a good connection between client
+			// and server, even though the function returns zero."
+			if (!bSuccess)
+				wenforce(GetLastError() != ERROR_PIPE_CONNECTED, "ConnectNamedPipe");
+
 			return f;
 		}
 		else
