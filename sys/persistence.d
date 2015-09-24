@@ -188,9 +188,10 @@ version(unittest) import core.thread;
 unittest
 {
 	import std.file;
+	static void[] readProxy(string fn) { return std.file.read(fn); }
 
 	enum FN = "test.txt";
-	auto cachedData = FileCache!read(FN);
+	auto cachedData = FileCache!readProxy(FN);
 
 	std.file.write(FN, "One");
 	scope(exit) remove(FN);
