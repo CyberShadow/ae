@@ -146,6 +146,14 @@ auto get(T)(T[] arr, size_t index, auto ref T defaultValue)
 	return arr[index];
 }
 
+/// Expand the array if index is out-of-bounds.
+ref T getExpand(T)(ref T[] arr, size_t index)
+{
+	if (index >= arr.length)
+		arr.length = index + 1;
+	return arr[index];
+}
+
 /// Slices an array. Throws an Exception (not an Error)
 /// on out-of-bounds, even in release builds.
 T[] slice(T)(T[] arr, size_t p0, size_t p1)
