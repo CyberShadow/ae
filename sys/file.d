@@ -545,6 +545,9 @@ string longPath(string s)
 
 version (Windows)
 {
+	static if (__traits(compiles, { import win32.winnt; }))
+		static import win32.winnt;
+
 	void createReparsePoint(string reparseBufferName, string extraInitialization, string reparseTagName)(in char[] target, in char[] print, in char[] link)
 	{
 		import win32.winbase;
