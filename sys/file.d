@@ -306,12 +306,19 @@ void move(string src, string dst)
 	}
 }
 
-/// Make sure that the path exists (and create directories as necessary).
+/// Make sure that the given directory exists
+/// (and create parent directories as necessary).
+void ensureDirExists(string path)
+{
+	if (!path.exists)
+		path.mkdirRecurse();
+}
+
+/// Make sure that the path to the given file name
+/// exists (and create directories as necessary).
 void ensurePathExists(string fn)
 {
-	auto path = dirName(fn);
-	if (!exists(path))
-		mkdirRecurse(path);
+	fn.dirName.ensureDirExists();
 }
 
 import ae.utils.text;
