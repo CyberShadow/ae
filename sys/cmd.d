@@ -158,3 +158,18 @@ void setEnvironment(string[string] env)
 		if (k.length && k !in env)
 			environment.remove(k);
 }
+
+int waitTimeout(Pid pid, Duration time)
+{
+	bool ok = false;
+	auto t = new Thread({
+		Thread.sleep(time);
+		if (!ok)
+			try
+				pid.kill();
+			catch {} // Ignore race condition
+	}).start();
+	auto result = pid.wait();
+	ok = true;
+	return result;
+}
