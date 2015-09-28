@@ -258,7 +258,7 @@ class FileAndConsoleLogger : MultiLogger
 
 bool quiet;
 
-static this()
+shared static this()
 {
 	import core.runtime;
 	foreach (arg; Runtime.args[1..$])
