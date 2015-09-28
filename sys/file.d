@@ -25,6 +25,8 @@ import std.string;
 import std.typecons;
 import std.utf;
 
+import ae.sys.cmd : getCurrentThreadID;
+
 public import std.typecons : No, Yes;
 
 alias wcscmp = core.stdc.wchar_.wcscmp;
@@ -1104,7 +1106,7 @@ auto atomic(alias impl, size_t targetIndex)(staticMap!(Unqual, ParameterTypeTupl
 {
 	// idup for https://d.puremagic.com/issues/show_bug.cgi?id=12503
 	auto target = args[targetIndex].idup;
-	auto temp = "%s.%s.temp".format(target, thisProcessID);
+	auto temp = "%s.%s.%s.temp".format(target, thisProcessID, getCurrentThreadID);
 	if (temp.exists) temp.removeRecurse();
 	scope(success) rename(temp, target);
 	scope(failure) if (temp.exists) temp.removeRecurse();
