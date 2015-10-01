@@ -30,22 +30,22 @@ bool logData, record;
 
 class Connection
 {
-	ClientSocket outer, inner;
+	TcpConnection outer, inner;
 	static int counter;
 	int index;
 
-	this(ClientSocket outer, string host, ushort port)
+	this(TcpConnection outer, string host, ushort port)
 	{
 		index = counter++;
 		this.outer = outer;
-		inner = new ClientSocket;
+		inner = new TcpConnection;
 		inner.handleConnect = &onInnerConnect;
 		inner.handleReadData = &onInnerData;
 		inner.handleDisconnect = &onInnerDisconnect;
 		inner.connect(host, port);
 	}
 
-	void onInnerConnect(ClientSocket sender)
+	void onInnerConnect()
 	{
 		log("Connected to " ~ inner.remoteAddress().toString());
 		if (record) recordLog(format("%d C %d %s", Clock.currStdTime(), index, inner.remoteAddress()));
@@ -53,33 +53,33 @@ class Connection
 		outer.handleDisconnect = &onOuterDisconnect;
 	}
 
-	void onOuterData(ClientSocket sender, Data data)
+	void onOuterData(Data data)
 	{
 		if (logData) log(format("Outer connection from %s sent %d bytes:\n%s", outer.remoteAddress(), data.length, hexDump(data.contents)));
 		if (record) recordLog(format("%d < %d %s", Clock.currStdTime(), index, hexEscape(data.contents)));
 		inner.send(data);
 	}
 
-	void onOuterDisconnect(ClientSocket sender, string reason, DisconnectType type)
+	void onOuterDisconnect(string reason, DisconnectType type)
 	{
 		log("Outer connection from " ~ outer.remoteAddress().toString() ~ " disconnected: " ~ reason);
 		if (record) recordLog(format("%d [ %d %s", Clock.currStdTime(), index, reason));
-		if (type != DisconnectType.Requested)
+		if (type != DisconnectType.requested)
 			inner.disconnect();
 	}
 
-	void onInnerData(ClientSocket sender, Data data)
+	void onInnerData(Data data)
 	{
 		if (logData) log(format("Inner connection to %s sent %d bytes:\n%s", inner.remoteAddress(), data.length, hexDump(data.contents)));
 		if (record) recordLog(format("%d > %d %s", Clock.currStdTime(), index, hexEscape(data.contents)));
 		outer.send(data);
 	}
 
-	void onInnerDisconnect(ClientSocket sender, string reason, DisconnectType type)
+	void onInnerDisconnect(string reason, DisconnectType type)
 	{
 		log("Inner connection to " ~ inner.remoteAddress().toString() ~ " disconnected: " ~ reason);
 		if (record) recordLog(format("%d ] %d %s", Clock.currStdTime(), index, reason));
-		if (type != DisconnectType.Requested)
+		if (type != DisconnectType.requested)
 			outer.disconnect();
 	}
 }
@@ -96,14 +96,14 @@ class PortForwarder
 		this.remoteHost = remoteHost;
 		this.remotePort = remotePort;
 
-		auto listener = new ServerSocket();
+		auto listener = new TcpServer();
 		listener.handleAccept = &onAccept;
 		listener.listen(localPort, localHost);
 		log(format("Created forwarder: %s:%d -> %s:%d", localHost ? localHost : "*", localPort, remoteHost, remotePort));
 		if (record) recordLog(format("%d L %d", Clock.currStdTime(), localPort));
 	}
 
-	void onAccept(ClientSocket incoming)
+	void onAccept(TcpConnection incoming)
 	{
 		log(format("Accepted connection from %s on port %d, forwarding to %s:%d", incoming.remoteAddress(), localPort, remoteHost, remotePort));
 		if (record) recordLog(format("%d A %d %d", Clock.currStdTime(), Connection.counter, localPort));

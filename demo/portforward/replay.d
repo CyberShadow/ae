@@ -30,7 +30,7 @@ private:
 	/// Consume and return next space-delimited word from line.
 	string getWord()
 	{
-		int p = line.indexOf(' ');
+		auto p = line.indexOf(' ');
 		string word;
 		if (p<0)
 			word = line,
@@ -84,7 +84,7 @@ protected:
 		{
 			uint index = to!uint(getWord());
 			string addr = getWord();
-			int p = addr.lastIndexOf(':');
+			auto p = addr.lastIndexOf(':');
 			proceed = handleConnect(recordTime, index, addr[0..p], to!ushort(addr[p+1..$]));
 			break;
 		}

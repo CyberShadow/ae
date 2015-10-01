@@ -41,12 +41,12 @@ protected:
 
 	override bool handleAccept(SysTime time, uint index, ushort port)
 	{
-		listeners[port].s.handleAccept = (ClientSocket s) { onSocketAccept(s, time, index); };
+		listeners[port].s.handleAccept = (TcpConnection s) { onSocketAccept(s, time, index); };
 		log(format("Waiting for connection %d on port %d", index, port));
 		return false;
 	}
 
-	private void onSocketAccept(ClientSocket s, SysTime time, uint index)
+	private void onSocketAccept(TcpConnection s, SysTime time, uint index)
 	{
 		log(format("Accepted connection %d from %s", index, s.remoteAddress()));
 		auto c = new Connection;
@@ -67,7 +67,7 @@ protected:
 
 	private void sendData(uint index, void[] data)
 	{
-		connections[index].s.send(data);
+		connections[index].s.send(Data(data));
 		nextLine();
 	}
 
@@ -88,11 +88,11 @@ private:
 
 	class Listener
 	{
-		ServerSocket s;
+		TcpServer s;
 
 		this(ushort port)
 		{
-			s = new ServerSocket();
+			s = new TcpServer();
 			s.listen(port);
 		}
 	}
@@ -101,7 +101,7 @@ private:
 
 	class Connection
 	{
-		ClientSocket s;
+		TcpConnection s;
 		SysTime recordStart, playStart;
 
 		void at(SysTime recordTime, void delegate() fn)
