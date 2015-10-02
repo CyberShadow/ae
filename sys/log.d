@@ -38,7 +38,7 @@ private void init()
 shared static this() { init(); }
 static this() { init(); }
 
-enum TIME_FORMAT = "Y-m-d H:i:s.E";
+enum TIME_FORMAT = "Y-m-d H:i:s.u";
 
 private SysTime getLogTime()
 {
