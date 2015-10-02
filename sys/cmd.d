@@ -141,10 +141,8 @@ unittest
 
 // ************************************************************************
 
-version (Windows)
-	enum NULL_FILE = "nul";
-else
-	enum NULL_FILE = "/dev/null";
+import ae.utils.path;
+deprecated alias NULL_FILE = nullFileName;
 
 // ************************************************************************
 
