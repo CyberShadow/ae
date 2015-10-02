@@ -19,3 +19,10 @@ string rebasePath(string path, string oldBase, string newBase)
 {
 	return buildPath(newBase, path.absolutePath.relativePath(oldBase.absolutePath));
 }
+
+// ************************************************************************
+
+version (Windows)
+	enum nullFileName = "nul";
+else
+	enum nullFileName = "/dev/null";
