@@ -13,6 +13,11 @@
 
 module ae.utils.array;
 
+import std.algorithm.iteration;
+import std.algorithm.mutation;
+import std.algorithm.searching;
+import std.algorithm.sorting;
+import std.array;
 import std.exception;
 import std.format;
 import std.traits;
@@ -107,6 +112,24 @@ T[] repeatOne(T)(T c, size_t l)
 	T[] result = new T[l];
 	result[] = c;
 	return result;
+}
+
+/// Complement to std.string.indexOf which works with arrays
+/// of non-character types.
+/// Unlike std.algorithm.countUntil, it does not auto-decode,
+/// and returns an index usable for array indexing/slicing.
+sizediff_t indexOf(T, D)(in T[] arr, in D val)
+//	if (!isSomeChar!T)
+	if (!isSomeChar!T && is(typeof(arr.countUntil(val))) && is(typeof(arr[0]==val)))
+{
+	//assert(arr[0]==val);
+	return arr.countUntil(val);
+}
+
+sizediff_t indexOf(T)(in T[] arr, in T[] val) /// ditto
+	if (!isSomeChar!T && is(typeof(arr.countUntil(val))))
+{
+	return arr.countUntil(val);
 }
 
 bool contains(T, V)(T[] arr, V val)
@@ -324,9 +347,6 @@ unittest
 }
 
 // ***************************************************************************
-
-import std.algorithm;
-import std.array;
 
 // Equivalents of array(xxx(...)), but less parens and UFCS-able.
 auto amap(alias pred, T)(T[] arr) { return array(map!pred(arr)); }
