@@ -118,6 +118,20 @@ bool contains(T, V)(T[] arr, V val)
 	return false;
 }
 
+/// Like startsWith, but with an offset.
+bool containsAt(T)(in T[] haystack, in T[] needle, size_t offset)
+{
+	return haystack.length >= offset + needle.length
+		&& haystack[offset..offset+needle.length] == needle;
+}
+
+unittest
+{
+	assert( "abracadabra".containsAt("ada", 5));
+	assert(!"abracadabra".containsAt("ada", 6));
+	assert(!"abracadabra".containsAt("ada", 99));
+}
+
 bool isIn(T)(T val, in T[] arr)
 {
 	return arr.contains(val);
