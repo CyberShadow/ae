@@ -311,13 +311,25 @@ template eatUntil(OnEof onEof = OnEof.throwException)
 {
 	T[] eatUntil(T, D)(ref T[] source, D delim)
 	{
-		auto parts = source.findSplit(delim);
-		if (!parts[1].length)
+		enum bool isSlice = is(typeof(source[0..1]==delim));
+		enum bool isElem  = is(typeof(source[0]   ==delim));
+		static assert(isSlice || isElem, "Can't eat " ~ T.stringof ~ " until " ~ D.stringof);
+		static assert(isSlice != isElem, "Ambiguous types for eatUntil: " ~ T.stringof ~ " and " ~ D.stringof);
+		static if (isSlice)
+			auto delimLength = delim.length;
+		else
+			enum delimLength = 1;
+
+		// bring in all overloads at the same level
+		import std.string, ae.utils.array;
+
+		auto i = source.indexOf(delim);
+		if (i < 0)
 		{
-			if (onEof == OnEof.returnNull)
+			static if (onEof == OnEof.returnNull)
 				return null;
 			else
-			if (onEof == OnEof.returnRemainder)
+			static if (onEof == OnEof.returnRemainder)
 			{
 				auto result = source;
 				source = null;
@@ -327,8 +339,9 @@ template eatUntil(OnEof onEof = OnEof.throwException)
 				//throw new Exception("%s not found in %s".format(delim, source));
 				throw new Exception("Delimiter not found in source");
 		}
-		source = parts[2];
-		return parts[0];
+		auto result = source[0..i];
+		source = source[i+delimLength..$];
+		return result;
 	}
 }
 
@@ -339,11 +352,15 @@ unittest
 	s = "Mary had a little lamb";
 	assert(s.eatUntil(" ") == "Mary");
 	assert(s.eatUntil(" ") == "had");
-	assert(s.eatUntil(" ") == "a");
+	assert(s.eatUntil(' ') == "a");
 
 	assertThrown!Exception(s.eatUntil("#"));
 	assert(s.eatUntil!(OnEof.returnNull)("#") is null);
 	assert(s.eatUntil!(OnEof.returnRemainder)("#") == "little lamb");
+
+	ubyte[] bytes = [1, 2, 0, 3, 4, 0, 0];
+	assert(bytes.eatUntil(0) == [1, 2]);
+	assert(bytes.eatUntil([ubyte(0), ubyte(0)]) == [3, 4]);
 }
 
 // ***************************************************************************
