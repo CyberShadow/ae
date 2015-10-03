@@ -22,7 +22,7 @@ import ae.utils.graphics.image;
 
 private struct VideoStreamImpl
 {
-	@property ref Image!BGR front()
+	@property ref Image!BGR front() return
 	{
 		return frame;
 	}
@@ -101,7 +101,7 @@ struct VideoStream
 {
 	RefCounted!VideoStreamImpl impl;
 	this(string fn) { impl.initialize(fn); }
-	@property ref Image!BGR front() { return impl.front; }
+	@property ref Image!BGR front() return { return impl.front; }
 	@property bool empty() { return impl.empty; }
 	void popFront() { impl.popFront(); }
 }
