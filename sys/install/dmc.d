@@ -79,7 +79,7 @@ class DMCInstaller : LegacyDMCInstaller
 			optlinkURL
 			.I!save()
 			.I!unpack();
-		scope(success) rmdir(optlinkDir);
+		scope(success) rmdirRecurse(optlinkDir);
 
 		rename(buildPath(optlinkDir, "link.exe"), buildPath(target, "bin", "link.exe"));
 	}
