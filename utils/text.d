@@ -55,7 +55,12 @@ string formatAs(T)(auto ref T obj, string fmt)
 /// Consume a LF or CRLF terminated line from s.
 /// Sets s to null and returns the remainder
 /// if there is no line terminator in s.
-template eatLine(OnEof onEof = OnEof.returnRemainder)
+T[] eatLine(T)(ref T[] s, bool eatIncompleteLines = true)
+{
+	return s.skipUntil([T('\n')], eatIncompleteLines).chomp();
+}
+
+deprecated template eatLine(OnEof onEof)
 {
 	T[] eatLine(T)(ref T[] s)
 	{
