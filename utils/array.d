@@ -295,6 +295,7 @@ void unshift(T)(ref T[] arr, T value) { arr.insertInPlace(0, value); }
 
 /// If arr starts with prefix, slice it off and return true.
 /// Otherwise leave arr unchaned and return false.
+deprecated("Use std.algorithm.skipOver instead")
 bool eat(T)(ref T[] arr, T[] prefix)
 {
 	if (arr.startsWith(prefix))
@@ -305,47 +306,63 @@ bool eat(T)(ref T[] arr, T[] prefix)
 	return false;
 }
 
+/// Returns the slice of source up to the first occurrence of delim,
+/// and fast-forwards source to the point after delim.
+/// If delim is not found, the behavior depends on orUntilEnd:
+/// - If orUntilEnd is false (default), it returns null
+///   and leaves source unchanged.
+/// - If orUntilEnd is true, it returns source,
+///   and then sets source to null.
+T[] skipUntil(T, D)(ref T[] source, D delim, bool orUntilEnd = false)
+{
+	enum bool isSlice = is(typeof(source[0..1]==delim));
+	enum bool isElem  = is(typeof(source[0]   ==delim));
+	static assert(isSlice || isElem, "Can't skip " ~ T.stringof ~ " until " ~ D.stringof);
+	static assert(isSlice != isElem, "Ambiguous types for skipUntil: " ~ T.stringof ~ " and " ~ D.stringof);
+	static if (isSlice)
+		auto delimLength = delim.length;
+	else
+		enum delimLength = 1;
+
+	// bring in all overloads at the same level
+	import std.string, ae.utils.array;
+
+	auto i = source.indexOf(delim);
+	if (i < 0)
+	{
+		if (orUntilEnd)
+		{
+			auto result = source;
+			source = null;
+			return result;
+		}
+		else
+			return null;
+	}
+	auto result = source[0..i];
+	source = source[i+delimLength..$];
+	return result;
+}
+
+deprecated("Use skipUntil instead")
 enum OnEof { returnNull, returnRemainder, throwException }
 
+deprecated("Use skipUntil instead")
 template eatUntil(OnEof onEof = OnEof.throwException)
 {
 	T[] eatUntil(T, D)(ref T[] source, D delim)
 	{
-		enum bool isSlice = is(typeof(source[0..1]==delim));
-		enum bool isElem  = is(typeof(source[0]   ==delim));
-		static assert(isSlice || isElem, "Can't eat " ~ T.stringof ~ " until " ~ D.stringof);
-		static assert(isSlice != isElem, "Ambiguous types for eatUntil: " ~ T.stringof ~ " and " ~ D.stringof);
-		static if (isSlice)
-			auto delimLength = delim.length;
+		static if (onEof == OnEof.returnNull)
+			return skipUntil(source, delim, false);
 		else
-			enum delimLength = 1;
-
-		// bring in all overloads at the same level
-		import std.string, ae.utils.array;
-
-		auto i = source.indexOf(delim);
-		if (i < 0)
-		{
-			static if (onEof == OnEof.returnNull)
-				return null;
-			else
-			static if (onEof == OnEof.returnRemainder)
-			{
-				auto result = source;
-				source = null;
-				return result;
-			}
-			else
-				//throw new Exception("%s not found in %s".format(delim, source));
-				throw new Exception("Delimiter not found in source");
-		}
-		auto result = source[0..i];
-		source = source[i+delimLength..$];
-		return result;
+		static if (onEof == OnEof.returnRemainder)
+			return skipUntil(source, delim, true);
+		else
+			return skipUntil(source, delim, false).enforce("Delimiter not found in source");
 	}
 }
 
-unittest
+deprecated unittest
 {
 	string s;
 
