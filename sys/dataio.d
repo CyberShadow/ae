@@ -17,22 +17,19 @@ import ae.sys.data;
 
 // ************************************************************************
 
-static import std.stream;
-
-Data readStreamData(std.stream.Stream s)
+deprecated("std.stream is deprecated, use readFileData")
+template readStreamData()
 {
-	auto size = s.size - s.position;
-	assert(size < size_t.max);
-	auto data = Data(cast(size_t)size);
-	s.readExact(data.mptr, data.length);
-	return data;
-}
+	static import std.stream;
 
-Data readData(string filename)
-{
-	scope file = new std.stream.File(filename);
-	scope(exit) file.close();
-	return readStreamData(file);
+	Data readStreamData(std.stream.Stream s)
+	{
+		auto size = s.size - s.position;
+		assert(size < size_t.max);
+		auto data = Data(cast(size_t)size);
+		s.readExact(data.mptr, data.length);
+		return data;
+	}
 }
 
 // ************************************************************************
@@ -47,6 +44,12 @@ Data readFileData(ref std.stdio.File f)
 		result ~= f.rawRead(cast(ubyte[])buf.mcontents);
 	buf.deleteContents();
 	return result;
+}
+
+Data readData(string filename)
+{
+	auto f = std.stdio.File(filename, "rb");
+	return readFileData(f);
 }
 
 // ************************************************************************
