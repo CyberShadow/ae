@@ -18,7 +18,6 @@ module ae.utils.xmllite;
 
 // TODO: better/safer handling of malformed XML
 
-import std.stream;
 import std.string;
 import std.ascii;
 import std.exception;
@@ -27,7 +26,7 @@ import ae.utils.xmlwriter;
 
 // ************************************************************************
 
-/// Stream-like type with bonus speed
+/// std.stream.Stream-like type with bonus speed
 private struct StringStream
 {
 	string s;
@@ -67,11 +66,10 @@ class XmlNode
 	XmlNodeType type;
 	ulong startPos, endPos;
 
-	this(Stream        s) { parse(s); }
 	this(StringStream* s) { parse(s); }
 	this(string s) { this(new StringStream(s)); }
 
-	private final void parse(S)(S s)
+	private final void parse(StringStream* s)
 	{
 		startPos = s.position;
 		char c;
@@ -378,7 +376,6 @@ class XmlDocument : XmlNode
 		tag = "<Root>";
 	}
 
-	this(Stream        s) { this(); parse(s); }
 	this(StringStream* s) { this(); parse(s); }
 	this(string s) { this(new StringStream(s)); }
 
@@ -400,31 +397,9 @@ XmlDocument xmlParse(T)(T source) { return new XmlDocument(source); }
 
 private:
 
-char peek(Stream s, int n=1)
-{
-	char c;
-	for (int i=0; i<n; i++)
-		s.read(c);
-	s.seekCur(-n);
-	return c;
-}
-
 char peek(StringStream* s, int n=1)
 {
 	return s.s[s.position + n - 1];
-}
-
-void skipWhitespace(Stream s)
-{
-	char c;
-	do
-	{
-		if (s.position==s.size)
-			return;
-		s.read(c);
-	}
-	while (isWhiteChar[c]);
-	s.seekCur(-1);
 }
 
 void skipWhitespace(StringStream* s)
@@ -442,21 +417,6 @@ shared static this()
 		isWhiteChar[c] = isWhite(c);
 		isWordChar[c] = c=='-' || c=='_' || c==':' || isAlphaNum(c);
 	}
-}
-
-string readWord(Stream s)
-{
-	char c;
-	string result;
-	while (true)
-	{
-		s.read(c);
-		if (!isWordChar[c])
-			break;
-		result ~= c;
-	}
-	s.seekCur(-1);
-	return result;
 }
 
 string readWord(StringStream* stream)
@@ -478,19 +438,6 @@ void expect(S)(S s, char c)
 	enforce(c==c2, "Expected " ~ c ~ ", got " ~ c2);
 }
 
-string readUntil(Stream s, char until)
-{
-	string value;
-	while (true)
-	{
-		char c;
-		s.read(c);
-		if (c==until)
-			return value;
-		value ~= c;
-	}
-}
-
 string readUntil(StringStream* s, char until)
 {
 	auto start = s.s.ptr + s.position;
@@ -510,9 +457,7 @@ unittest
 				`When someone says, &quot;I want a programming language in which I need only say what I want done,&quot; give him a lollipop.`
 			`</quote>`
 		`</quotes>`;
-	auto doc = new XmlDocument(new MemoryStream(xmlText.dup));
-	assert(doc.toString() == xmlText);
-	doc = new XmlDocument(xmlText);
+	auto doc = new XmlDocument(xmlText);
 	assert(doc.toString() == xmlText);
 }
 
