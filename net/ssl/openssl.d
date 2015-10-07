@@ -190,17 +190,24 @@ class OpenSSLAdapter : SSLAdapter
 
 		sslHandle = sslEnforce(SSL_new(context.sslCtx));
 		SSL_set_bio(sslHandle, r.bio, w.bio);
+
+		if (next.state == ConnectionState.connected)
+			initialize();
 	}
 
 	override void onConnect()
+	{
+		initialize();
+		super.onConnect();
+	}
+
+	private final void initialize()
 	{
 		final switch (context.kind)
 		{
 			case OpenSSLContext.Kind.client: SSL_connect(sslHandle).sslEnforce(); break;
 			case OpenSSLContext.Kind.server: SSL_accept (sslHandle).sslEnforce(); break;
 		}
-
-		super.onConnect();
 	}
 
 	MemoryBIO r, w;
@@ -408,7 +415,7 @@ unittest
 		auto ctx = ssl.createContext(SSLContext.Kind.client);
 		auto s = ssl.createAdapter(ctx, c);
 
-		c.handleConnect =
+		s.handleConnect =
 		{
 			debug(OPENSSL) stderr.writeln("Connected!");
 			s.send(Data("GET / HTTP/1.0\r\n\r\n"));
