@@ -131,7 +131,7 @@ class IrcServer
 						{
 							auto newNick = parameters[0];
 							if (!newNick.match(server.nicknameValidationPattern))
-								return sendReply(Reply.ERR_ERRONEUSNICKNAME, newNick, "Erroneus nickname");
+								return sendReply(Reply.ERR_ERRONEUSNICKNAME, newNick, "Erroneous nickname");
 							if (newNick.normalized in server.nicknames)
 								return sendReply(Reply.ERR_NICKNAMEINUSE, newNick, "Nickname is already in use");
 
@@ -470,7 +470,7 @@ class IrcServer
 				if (!nickname.match(server.nicknameValidationPattern))
 				{
 					scope(exit) nickname = null;
-					return sendReply(Reply.ERR_ERRONEUSNICKNAME, nickname, "Erroneus nickname");
+					return sendReply(Reply.ERR_ERRONEUSNICKNAME, nickname, "Erroneous nickname");
 				}
 				if (!username.match(`[a-zA-Z]+`))
 					return disconnect("Invalid username");
