@@ -38,7 +38,7 @@ class IrcServer
 
 	/// Server configuration
 	string hostname, password, network;
-	string nicknameValidationPattern = "^[a-zA-Z][a-zA-Z0-9\\-`\\|]{0,14}$";
+	string nicknameValidationPattern = "^[a-zA-Z][a-zA-Z0-9\\-`\\|\\[\\]\\{\\}_^]{0,14}$";
 	string serverVersion = "ae.net.irc.server";
 	string[] motd;
 	string chanTypes = "#&";
