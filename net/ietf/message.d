@@ -507,7 +507,7 @@ class Rfc850Message
 			auto lineStart = name.length + 2;
 
 			foreach (c; line)
-				enforce(c >= 32, "Control characters in headers");
+				enforce(c >= 32, "Control characters in header: %(%s%)".format([line]));
 
 			while (line.length >= 80)
 			{
