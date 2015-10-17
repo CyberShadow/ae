@@ -22,6 +22,7 @@ import std.string;
 import std.ascii;
 import std.exception;
 
+import ae.utils.exception;
 import ae.utils.xmlwriter;
 
 // ************************************************************************
@@ -44,6 +45,8 @@ private struct StringStream
 }
 
 // ************************************************************************
+
+mixin DeclareException!q{XmlParseException};
 
 enum XmlNodeType
 {
@@ -136,7 +139,7 @@ class XmlNode
 			{
 				type = XmlNodeType.Meta;
 				tag = readWord(s);
-				if (tag.length==0) throw new Exception("Invalid tag");
+				if (tag.length==0) throw new XmlParseException("Invalid tag");
 				while (true)
 				{
 					skipWhitespace(s);
@@ -149,7 +152,7 @@ class XmlNode
 			}
 			else
 			if (c=='/')
-				throw new Exception("Unexpected close tag");
+				throw new XmlParseException("Unexpected close tag");
 			else
 			{
 				type = XmlNodeType.Node;
@@ -172,8 +175,8 @@ class XmlNode
 							break;
 						try
 							addChild(new XmlNode(s));
-						catch (Exception e)
-							throw new Exception("Error while processing child of "~tag, e);
+						catch (XmlParseException e)
+							throw new XmlParseException("Error while processing child of "~tag, e);
 					}
 					expect(s, '<');
 					expect(s, '/');
@@ -309,7 +312,7 @@ class XmlNode
 	{
 		auto node = findChild(tag);
 		if (node is null)
-			throw new Exception("No such child: " ~ tag);
+			throw new XmlParseException("No such child: " ~ tag);
 		return node;
 	}
 
@@ -317,7 +320,7 @@ class XmlNode
 	{
 		auto nodes = findChildren(tag);
 		if (index >= nodes.length)
-			throw new Exception(format("Can't get node with tag %s and index %d, there are only %d children with that tag", tag, index, nodes.length));
+			throw new XmlParseException(format("Can't get node with tag %s and index %d, there are only %d children with that tag", tag, index, nodes.length));
 		return nodes[index];
 	}
 
@@ -355,14 +358,14 @@ private:
 	final void readAttribute(S)(S s)
 	{
 		string name = readWord(s);
-		if (name.length==0) throw new Exception("Invalid attribute");
+		if (name.length==0) throw new XmlParseException("Invalid attribute");
 		skipWhitespace(s);
 		expect(s, '=');
 		skipWhitespace(s);
 		char delim;
 		s.read(delim);
 		if (delim != '\'' && delim != '"')
-			throw new Exception("Expected ' or \"");
+			throw new XmlParseException("Expected ' or \"");
 		string value = readUntil(s, delim);
 		attributes[name] = decodeEntities(value);
 	}
@@ -379,7 +382,7 @@ class XmlDocument : XmlNode
 	this(StringStream* s) { this(); parse(s); }
 	this(string s) { this(new StringStream(s)); }
 
-	final void parse(S)(S s)
+	final void parse(StringStream* s)
 	{
 		skipWhitespace(s);
 		while (s.position < s.size)
@@ -388,8 +391,8 @@ class XmlDocument : XmlNode
 				addChild(new XmlNode(s));
 				skipWhitespace(s);
 			}
-			catch (Exception e)
-				throw new Exception(format("Error at %d", s.position), e);
+			catch (XmlParseException e)
+				throw new XmlParseException(format("Error at %d", s.position), e);
 	}
 }
 
@@ -435,7 +438,7 @@ void expect(S)(S s, char c)
 {
 	char c2;
 	s.read(c2);
-	enforce(c==c2, "Expected " ~ c ~ ", got " ~ c2);
+	enforce!XmlParseException(c==c2, "Expected " ~ c ~ ", got " ~ c2);
 }
 
 string readUntil(StringStream* s, char until)
@@ -559,7 +562,7 @@ public string decodeEntities(string str)
 	foreach (n, fragment; fragments[1..$])
 	{
 		auto p = fragment.indexOf(';');
-		enforce(p>0, "Invalid entity (unescaped ampersand?)");
+		enforce!XmlParseException(p>0, "Invalid entity (unescaped ampersand?)");
 
 		dchar c;
 		if (fragment[0]=='#')
@@ -572,7 +575,7 @@ public string decodeEntities(string str)
 		else
 		{
 			auto pentity = fragment[0..p] in entities;
-			enforce(pentity, "Unknown entity: " ~ fragment[0..p]);
+			enforce!XmlParseException(pentity, "Unknown entity: " ~ fragment[0..p]);
 			c = *pentity;
 		}
 
