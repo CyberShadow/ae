@@ -392,7 +392,15 @@ class XmlDocument : XmlNode
 				skipWhitespace(s);
 			}
 			catch (XmlParseException e)
-				throw new XmlParseException(format("Error at %d", s.position), e);
+			{
+				import std.algorithm.searching;
+				import std.range : retro;
+				throw new XmlParseException("Error at %d (%d:%d)".format(
+					s.position,
+					s.s[0..s.position].representation.count('\n') + 1,
+					s.s[0..s.position].representation.retro.countUntil('\n'),
+				), e);
+			}
 	}
 }
 
