@@ -40,6 +40,11 @@ mixin template DeclareException(string NAME, BASE = Exception)
 			{
 				super(s, fn, ln);
 			}
+
+			this(string s, Throwable next, string fn = __FILE__, size_t ln = __LINE__)
+			{
+				super(s, next, fn, ln);
+			}
 		}
 	}));
 }
