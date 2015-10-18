@@ -180,8 +180,8 @@ class XmlNode
 					}
 					expect(s, '<');
 					expect(s, '/');
-					foreach (tc; tag)
-						expect(s, tc);
+					auto word = readWord(s);
+					enforce!XmlParseException(word == tag, "Expected </%s>, not </%s>".format(tag, word));
 					expect(s, '>');
 				}
 				else
