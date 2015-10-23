@@ -167,7 +167,6 @@ class DManager : ICacheHost
 			{
 				log("Cloning initial repository...");
 				atomic!performClone(config.local.repoUrl, repoDir);
-				return;
 			}
 
 			if (!git.path)
