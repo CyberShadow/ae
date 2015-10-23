@@ -42,7 +42,6 @@ private struct StringStream
 	}
 
 	char read() { return s[position++]; }
-	void seekCur(sizediff_t offset) { position += offset; }
 	@property size_t size() { return s.length; }
 }
 
@@ -303,7 +302,7 @@ void parse(XmlNode node, ref StringStream s)
 			text ~= c;
 			c = s.read();
 		}
-		s.seekCur(-1); // rewind to '<'
+		s.position--; // rewind to '<'
 		node.tag = decodeEntities(text);
 		//tag = tag.strip();
 	}
