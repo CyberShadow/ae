@@ -41,7 +41,7 @@ private struct StringStream
 		this.s = (s ~ ditch)[0..$-ditch.length];
 	}
 
-	void read(out char c) { c = s[position++]; }
+	char read() { return s[position++]; }
 	void seekCur(sizediff_t offset) { position += offset; }
 	@property size_t size() { return s.length; }
 }
@@ -290,7 +290,7 @@ void parse(XmlNode node, ref StringStream s)
 	node.startPos = s.position;
 	char c;
 	do
-		s.read(c);
+		c = s.read();
 	while (isWhiteChar[c]);
 
 	if (c!='<')  // text node
@@ -301,7 +301,7 @@ void parse(XmlNode node, ref StringStream s)
 		{
 			// TODO: check for EOF
 			text ~= c;
-			s.read(c);
+			c = s.read();
 		}
 		s.seekCur(-1); // rewind to '<'
 		node.tag = decodeEntities(text);
@@ -309,10 +309,10 @@ void parse(XmlNode node, ref StringStream s)
 	}
 	else
 	{
-		s.read(c);
+		c = s.read();
 		if (c=='!')
 		{
-			s.read(c);
+			c = s.read();
 			if (c == '-') // comment
 			{
 				expect(s, '-');
@@ -320,7 +320,7 @@ void parse(XmlNode node, ref StringStream s)
 				string tag;
 				do
 				{
-					s.read(c);
+					c = s.read();
 					tag ~= c;
 				} while (tag.length<3 || tag[$-3..$] != "-->");
 				tag = tag[0..$-3];
@@ -335,7 +335,7 @@ void parse(XmlNode node, ref StringStream s)
 				string tag;
 				do
 				{
-					s.read(c);
+					c = s.read();
 					tag ~= c;
 				} while (tag.length<3 || tag[$-3..$] != "]]>");
 				tag = tag[0..$-3];
@@ -347,7 +347,7 @@ void parse(XmlNode node, ref StringStream s)
 				while (c != '>')
 				{
 					node.tag ~= c;
-					s.read(c);
+					c = s.read();
 				}
 			}
 		}
@@ -364,7 +364,7 @@ void parse(XmlNode node, ref StringStream s)
 					break;
 				readAttribute(node, s);
 			}
-			s.read(c);
+			c = s.read();
 			expect(s, '>');
 		}
 		else
@@ -382,7 +382,7 @@ void parse(XmlNode node, ref StringStream s)
 					break;
 				readAttribute(node, s);
 			}
-			s.read(c);
+			c = s.read();
 			if (c=='>')
 			{
 				while (true)
@@ -418,7 +418,7 @@ void readAttribute(XmlNode node, ref StringStream s)
 	expect(s, '=');
 	skipWhitespace(s);
 	char delim;
-	s.read(delim);
+	delim = s.read();
 	if (delim != '\'' && delim != '"')
 		throw new XmlParseException("Expected ' or \"");
 	string value = readUntil(s, delim);
@@ -462,7 +462,7 @@ string readWord(ref StringStream stream)
 void expect(ref StringStream s, char c)
 {
 	char c2;
-	s.read(c2);
+	c2 = s.read();
 	enforce!XmlParseException(c==c2, "Expected " ~ c ~ ", got " ~ c2);
 }
 
