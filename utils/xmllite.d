@@ -69,127 +69,8 @@ class XmlNode
 	XmlNodeType type;
 	ulong startPos, endPos;
 
-	this(StringStream* s) { parse(s); }
+	this(StringStream* s) { parse(this, s); }
 	this(string s) { this(new StringStream(s)); }
-
-	private final void parse(StringStream* s)
-	{
-		startPos = s.position;
-		char c;
-		do
-			s.read(c);
-		while (isWhiteChar[c]);
-
-		if (c!='<')  // text node
-		{
-			type = XmlNodeType.Text;
-			string text;
-			while (c!='<')
-			{
-				// TODO: check for EOF
-				text ~= c;
-				s.read(c);
-			}
-			s.seekCur(-1); // rewind to '<'
-			tag = decodeEntities(text);
-			//tag = tag.strip();
-		}
-		else
-		{
-			s.read(c);
-			if (c=='!')
-			{
-				s.read(c);
-				if (c == '-') // comment
-				{
-					expect(s, '-');
-					type = XmlNodeType.Comment;
-					do
-					{
-						s.read(c);
-						tag ~= c;
-					} while (tag.length<3 || tag[$-3..$] != "-->");
-					tag = tag[0..$-3];
-				}
-				else
-				if (c == '[') // CDATA
-				{
-					foreach (x; "CDATA[")
-						expect(s, x);
-					type = XmlNodeType.CData;
-					do
-					{
-						s.read(c);
-						tag ~= c;
-					} while (tag.length<3 || tag[$-3..$] != "]]>");
-					tag = tag[0..$-3];
-				}
-				else // doctype, etc.
-				{
-					type = XmlNodeType.DocType;
-					while (c != '>')
-					{
-						tag ~= c;
-						s.read(c);
-					}
-				}
-			}
-			else
-			if (c=='?')
-			{
-				type = XmlNodeType.Meta;
-				tag = readWord(s);
-				if (tag.length==0) throw new XmlParseException("Invalid tag");
-				while (true)
-				{
-					skipWhitespace(s);
-					if (peek(s)=='?')
-						break;
-					readAttribute(s);
-				}
-				s.read(c);
-				expect(s, '>');
-			}
-			else
-			if (c=='/')
-				throw new XmlParseException("Unexpected close tag");
-			else
-			{
-				type = XmlNodeType.Node;
-				tag = c~readWord(s);
-				while (true)
-				{
-					skipWhitespace(s);
-					c = peek(s);
-					if (c=='>' || c=='/')
-						break;
-					readAttribute(s);
-				}
-				s.read(c);
-				if (c=='>')
-				{
-					while (true)
-					{
-						skipWhitespace(s);
-						if (peek(s)=='<' && peek(s, 2)=='/')
-							break;
-						try
-							addChild(new XmlNode(s));
-						catch (XmlParseException e)
-							throw new XmlParseException("Error while processing child of "~tag, e);
-					}
-					expect(s, '<');
-					expect(s, '/');
-					auto word = readWord(s);
-					enforce!XmlParseException(word == tag, "Expected </%s>, not </%s>".format(tag, word));
-					expect(s, '>');
-				}
-				else
-					expect(s, '>');
-			}
-		}
-		endPos = s.position;
-	}
 
 	this(XmlNodeType type = XmlNodeType.None, string tag = null)
 	{
@@ -353,22 +234,6 @@ class XmlNode
 			result.addChild(child.dup);
 		return result;
 	}
-
-private:
-	final void readAttribute(S)(S s)
-	{
-		string name = readWord(s);
-		if (name.length==0) throw new XmlParseException("Invalid attribute");
-		skipWhitespace(s);
-		expect(s, '=');
-		skipWhitespace(s);
-		char delim;
-		s.read(delim);
-		if (delim != '\'' && delim != '"')
-			throw new XmlParseException("Expected ' or \"");
-		string value = readUntil(s, delim);
-		attributes[name] = decodeEntities(value);
-	}
 }
 
 class XmlDocument : XmlNode
@@ -407,6 +272,144 @@ class XmlDocument : XmlNode
 XmlDocument xmlParse(T)(T source) { return new XmlDocument(source); }
 
 private:
+
+void parse(XmlNode node, StringStream* s)
+{
+	node.startPos = s.position;
+	char c;
+	do
+		s.read(c);
+	while (isWhiteChar[c]);
+
+	if (c!='<')  // text node
+	{
+		node.type = XmlNodeType.Text;
+		string text;
+		while (c!='<')
+		{
+			// TODO: check for EOF
+			text ~= c;
+			s.read(c);
+		}
+		s.seekCur(-1); // rewind to '<'
+		node.tag = decodeEntities(text);
+		//tag = tag.strip();
+	}
+	else
+	{
+		s.read(c);
+		if (c=='!')
+		{
+			s.read(c);
+			if (c == '-') // comment
+			{
+				expect(s, '-');
+				node.type = XmlNodeType.Comment;
+				string tag;
+				do
+				{
+					s.read(c);
+					tag ~= c;
+				} while (tag.length<3 || tag[$-3..$] != "-->");
+				tag = tag[0..$-3];
+				node.tag = tag;
+			}
+			else
+			if (c == '[') // CDATA
+			{
+				foreach (x; "CDATA[")
+					expect(s, x);
+				node.type = XmlNodeType.CData;
+				string tag;
+				do
+				{
+					s.read(c);
+					tag ~= c;
+				} while (tag.length<3 || tag[$-3..$] != "]]>");
+				tag = tag[0..$-3];
+				node.tag = tag;
+			}
+			else // doctype, etc.
+			{
+				node.type = XmlNodeType.DocType;
+				while (c != '>')
+				{
+					node.tag ~= c;
+					s.read(c);
+				}
+			}
+		}
+		else
+		if (c=='?')
+		{
+			node.type = XmlNodeType.Meta;
+			node.tag = readWord(s);
+			if (node.tag.length==0) throw new XmlParseException("Invalid tag");
+			while (true)
+			{
+				skipWhitespace(s);
+				if (peek(s)=='?')
+					break;
+				readAttribute(node, s);
+			}
+			s.read(c);
+			expect(s, '>');
+		}
+		else
+		if (c=='/')
+			throw new XmlParseException("Unexpected close tag");
+		else
+		{
+			node.type = XmlNodeType.Node;
+			node.tag = c~readWord(s);
+			while (true)
+			{
+				skipWhitespace(s);
+				c = peek(s);
+				if (c=='>' || c=='/')
+					break;
+				readAttribute(node, s);
+			}
+			s.read(c);
+			if (c=='>')
+			{
+				while (true)
+				{
+					skipWhitespace(s);
+					if (peek(s)=='<' && peek(s, 2)=='/')
+						break;
+					try
+						node.addChild(new XmlNode(s));
+					catch (XmlParseException e)
+						throw new XmlParseException("Error while processing child of "~node.tag, e);
+				}
+				expect(s, '<');
+				expect(s, '/');
+				auto word = readWord(s);
+				enforce!XmlParseException(word == node.tag, "Expected </%s>, not </%s>".format(node.tag, word));
+				expect(s, '>');
+			}
+			else
+				expect(s, '>');
+		}
+	}
+	node.endPos = s.position;
+}
+
+void readAttribute(XmlNode node, StringStream* s)
+{
+	string name = readWord(s);
+	if (name.length==0) throw new XmlParseException("Invalid attribute");
+	skipWhitespace(s);
+	expect(s, '=');
+	skipWhitespace(s);
+	char delim;
+	s.read(delim);
+	if (delim != '\'' && delim != '"')
+		throw new XmlParseException("Expected ' or \"");
+	string value = readUntil(s, delim);
+	node.attributes[name] = decodeEntities(value);
+}
 
 char peek(StringStream* s, int n=1)
 {
