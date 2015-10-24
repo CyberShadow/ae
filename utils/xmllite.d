@@ -419,7 +419,7 @@ void readAttribute(XmlNode node, ref StringStream s)
 	char delim;
 	delim = s.read();
 	if (delim != '\'' && delim != '"')
-		throw new XmlParseException("Expected ' or \"");
+		throw new XmlParseException("Expected ' or \", not %s".format(delim));
 	string value = readUntil(s, delim);
 	node.attributes[name] = decodeEntities(value);
 }
