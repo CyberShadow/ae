@@ -71,7 +71,7 @@ class XmlNode
 	XmlNodeType type;
 	ulong startPos, endPos;
 
-	this(ref StringStream s) { parse!XmlParseConfig(this, s); }
+	this(ref StringStream s) { parseInto!XmlParseConfig(this, s); }
 	this(string s) { auto ss = StringStream(s); this(ss); }
 
 	this(XmlNodeType type = XmlNodeType.None, string tag = null)
@@ -246,7 +246,7 @@ class XmlDocument : XmlNode
 		tag = "<Root>";
 	}
 
-	this(ref StringStream s) { this(); parseDocument(this, s); }
+	this(ref StringStream s) { this(); parseDocumentInto!XmlParseConfig(this, s); }
 	this(string s) { auto ss = StringStream(s); this(ss); }
 }
 
@@ -317,7 +317,7 @@ XmlNode parse(Config)(string s)
 {
 	auto n = new XmlNode;
 	auto ss = StringStream(s);
-	parse!Config(n, ss);
+	parseInto!Config(n, ss);
 	return n;
 }
 
@@ -326,7 +326,7 @@ XmlNode parseDocument(Config)(string s)
 {
 	auto d = new XmlDocument();
 	auto ss = StringStream(s);
-	parseDocument(d, ss);
+	parseDocumentInto!Config(d, ss);
 	return d;
 }
 
@@ -335,13 +335,15 @@ alias xmlParse = parseDocument!XmlParseConfig;
 private:
 
 /// Parse an SGML-ish StringStream into an XmlDocument
-void parseDocument(XmlDocument d, ref StringStream s)
+void parseDocumentInto(Config)(XmlDocument d, ref StringStream s)
 {
 	skipWhitespace(s);
 	while (s.position < s.size)
 		try
 		{
-			d.addChild(new XmlNode(s));
+			auto n = new XmlNode;
+			parseInto!Config(n, s);
+			d.addChild(n);
 			skipWhitespace(s);
 		}
 		catch (XmlParseException e)
@@ -363,7 +365,7 @@ void parseDocument(XmlDocument d, ref StringStream s)
 }
 
 /// Parse an SGML-ish StringStream into an XmlNode
-void parse(Config)(XmlNode node, ref StringStream s)
+void parseInto(Config)(XmlNode node, ref StringStream s)
 {
 	node.startPos = s.position;
 	char c;
