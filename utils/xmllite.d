@@ -246,38 +246,9 @@ class XmlDocument : XmlNode
 		tag = "<Root>";
 	}
 
-	this(ref StringStream s) { this(); parse(s); }
+	this(ref StringStream s) { this(); parseDocument(this, s); }
 	this(string s) { auto ss = StringStream(s); this(ss); }
-
-	private final void parse(ref StringStream s)
-	{
-		skipWhitespace(s);
-		while (s.position < s.size)
-			try
-			{
-				addChild(new XmlNode(s));
-				skipWhitespace(s);
-			}
-			catch (XmlParseException e)
-			{
-				import std.algorithm.searching;
-				import std.range : retro;
-
-				auto head = s.s[0..s.position];
-				auto row    = head.representation.count('\n');
-				auto column = head.representation.retro.countUntil('\n');
-				if (column < 0)
-					column = head.length;
-				throw new XmlParseException("Error at %d:%d (offset %d)".format(
-					1 + row,
-					1 + column,
-					head.length,
-				), e);
-			}
-	}
 }
-
-XmlDocument xmlParse(T)(T source) { return new XmlDocument(source); }
 
 /// The logic for how to handle a node's closing tags.
 enum NodeCloseMode
@@ -350,7 +321,46 @@ XmlNode parse(Config)(string s)
 	return n;
 }
 
+/// Parse an SGML-ish StringStream into an XmlDocument
+XmlNode parseDocument(Config)(string s)
+{
+	auto d = new XmlDocument();
+	auto ss = StringStream(s);
+	parseDocument(d, ss);
+	return d;
+}
+
+alias xmlParse = parseDocument!XmlParseConfig;
+
 private:
+
+/// Parse an SGML-ish StringStream into an XmlDocument
+void parseDocument(XmlDocument d, ref StringStream s)
+{
+	skipWhitespace(s);
+	while (s.position < s.size)
+		try
+		{
+			d.addChild(new XmlNode(s));
+			skipWhitespace(s);
+		}
+		catch (XmlParseException e)
+		{
+			import std.algorithm.searching;
+			import std.range : retro;
+
+			auto head = s.s[0..s.position];
+			auto row    = head.representation.count('\n');
+			auto column = head.representation.retro.countUntil('\n');
+			if (column < 0)
+				column = head.length;
+			throw new XmlParseException("Error at %d:%d (offset %d)".format(
+				1 + row,
+				1 + column,
+				head.length,
+			), e);
+		}
+}
 
 /// Parse an SGML-ish StringStream into an XmlNode
 void parse(Config)(XmlNode node, ref StringStream s)
