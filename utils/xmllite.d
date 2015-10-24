@@ -246,7 +246,7 @@ class XmlDocument : XmlNode
 		tag = "<Root>";
 	}
 
-	this(ref StringStream s) { this(); parseDocumentInto!XmlParseConfig(this, s); }
+	this(ref StringStream s) { this(); parseInto!XmlParseConfig(this, s); }
 	this(string s) { auto ss = StringStream(s); this(ss); }
 }
 
@@ -316,29 +316,40 @@ static:
 }
 
 /// Parse an SGML-ish string into an XmlNode
-XmlNode parse(Config)(string s)
-{
-	auto n = new XmlNode;
-	auto ss = StringStream(s);
-	parseInto!Config(n, ss);
-	return n;
-}
+alias parse = parseString!XmlNode;
 
 /// Parse an SGML-ish StringStream into an XmlDocument
-XmlNode parseDocument(Config)(string s)
-{
-	auto d = new XmlDocument();
-	auto ss = StringStream(s);
-	parseDocumentInto!Config(d, ss);
-	return d;
-}
+alias parseDocument = parseString!XmlDocument;
 
 alias xmlParse = parseDocument!XmlParseConfig;
 
 private:
 
+public // alias
+template parseString(Node)
+{
+	Node parseString(Config)(string s)
+	{
+		auto ss = StringStream(s);
+		alias f = parseStream!Node;
+		return f!Config(ss);
+	}
+}
+
+template parseStream(Node)
+{
+	Node parseStream(Config)(ref StringStream s)
+	{
+		auto n = new Node;
+		parseInto!Config(n, s);
+		return n;
+	}
+}
+
+alias parseNode = parseStream!XmlNode;
+
 /// Parse an SGML-ish StringStream into an XmlDocument
-void parseDocumentInto(Config)(XmlDocument d, ref StringStream s)
+void parseInto(Config)(XmlDocument d, ref StringStream s)
 {
 	skipWhitespace(s);
 	while (s.position < s.size)
