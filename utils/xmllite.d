@@ -287,6 +287,7 @@ struct XmlParseConfig
 {
 static:
 	NodeCloseMode nodeCloseMode(string tag) { return NodeCloseMode.always; }
+	enum optionalParameterValues = false;
 }
 
 /// Configuration for strict parsing of HTML5.
@@ -310,6 +311,8 @@ static:
 			: NodeCloseMode.always
 		;
 	}
+
+	enum optionalParameterValues = true;
 }
 
 /// Parse an SGML-ish string into an XmlNode
@@ -442,7 +445,7 @@ void parseInto(Config)(XmlNode node, ref StringStream s)
 				skipWhitespace(s);
 				if (peek(s)=='?')
 					break;
-				readAttribute(node, s);
+				readAttribute!Config(node, s);
 			}
 			c = s.read();
 			expect(s, '>');
@@ -460,7 +463,7 @@ void parseInto(Config)(XmlNode node, ref StringStream s)
 				c = peek(s);
 				if (c=='>' || c=='/')
 					break;
-				readAttribute(node, s);
+				readAttribute!Config(node, s);
 			}
 			c = s.read();
 
@@ -496,11 +499,21 @@ void parseInto(Config)(XmlNode node, ref StringStream s)
 
 private:
 
-void readAttribute(XmlNode node, ref StringStream s)
+void readAttribute(Config)(XmlNode node, ref StringStream s)
 {
 	string name = readWord(s);
 	if (name.length==0) throw new XmlParseException("Invalid attribute");
 	skipWhitespace(s);
+
+	static if (Config.optionalParameterValues)
+	{
+		if (peek(s) != '=')
+		{
+			node.attributes[name] = null;
+			return;
+		}
+	}
+
 	expect(s, '=');
 	skipWhitespace(s);
 	char delim;
