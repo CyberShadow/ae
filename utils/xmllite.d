@@ -22,6 +22,7 @@ import std.string;
 import std.ascii;
 import std.exception;
 
+import ae.utils.array;
 import ae.utils.exception;
 import ae.utils.xmlwriter;
 
@@ -70,7 +71,7 @@ class XmlNode
 	XmlNodeType type;
 	ulong startPos, endPos;
 
-	this(ref StringStream s) { parse(this, s); }
+	this(ref StringStream s) { parse!XmlParseConfig(this, s); }
 	this(string s) { auto ss = StringStream(s); this(ss); }
 
 	this(XmlNodeType type = XmlNodeType.None, string tag = null)
@@ -278,19 +279,81 @@ class XmlDocument : XmlNode
 
 XmlDocument xmlParse(T)(T source) { return new XmlDocument(source); }
 
-private:
+/// The logic for how to handle a node's closing tags.
+enum NodeCloseMode
+{
+	/// This element must always have an explicit closing tag
+	/// (or a self-closing tag). An unclosed tag will lead to
+	/// a parse error.
+	/// In XML, all tags are "always".
+	always,
+/*
+	/// Close tags are optional. When an element with a tag is
+	/// encountered directly under an element with the same tag,
+	/// it is assumed that the first element is closed before
+	/// the second, so the two are siblings, not parent/child.
+	/// Thus, `<p>a<p>b</p>` is parsed as `<p>a</p><p>b</p>`,
+	/// not `<p>a<p>b</p></p>`, however `<p>a<div><p>b</div>` is
+	/// still parsed as `<p>a<div><p>b</p></div></p>`.
+	/// This mode can be used for relaxed HTML parsing.
+	optional,
+
+	/// Close tags are optional, but are implied when absent.
+	/// As a result, these elements cannot have any content,
+	/// and any close tags must be adjacent to the open tag.
+	implicit,
+*/
+	/// This element is void and must never have a closing tag.
+	/// It is always implicitly closed right after opening.
+	/// A close tag is always an error.
+	/// This mode can be used for strict parsing of HTML5 void
+	/// elements.
+	never,
+}
+
+/// Configuration for parsing XML.
+struct XmlParseConfig
+{
+static:
+	NodeCloseMode nodeCloseMode(string tag) { return NodeCloseMode.always; }
+}
+
+/// Configuration for strict parsing of HTML5.
+/// All void tags must never be closed, and all
+/// non-void tags must always be explicitly closed.
+/// Attributes must still be quoted like in XML.
+struct Html5StrictParseConfig
+{
+static:
+	immutable voidElements = [
+		"area"   , "base"  , "br"   , "col" ,
+		"command", "embed" , "hr"   , "img" ,
+		"input"  , "keygen", "link" , "meta",
+		"param"  , "source", "track", "wbr" ,
+	];
+
+	NodeCloseMode nodeCloseMode(string tag)
+	{
+		return tag.isOneOf(voidElements)
+			? NodeCloseMode.never
+			: NodeCloseMode.always
+		;
+	}
+}
 
 /// Parse an SGML-ish string into an XmlNode
-XmlNode parse(string s)
+XmlNode parse(Config)(string s)
 {
 	auto n = new XmlNode;
 	auto ss = StringStream(s);
-	parse(n, ss);
+	parse!Config(n, ss);
 	return n;
 }
 
+private:
+
 /// Parse an SGML-ish StringStream into an XmlNode
-void parse(XmlNode node, ref StringStream s)
+void parse(Config)(XmlNode node, ref StringStream s)
 {
 	node.startPos = s.position;
 	char c;
@@ -388,26 +451,32 @@ void parse(XmlNode node, ref StringStream s)
 				readAttribute(node, s);
 			}
 			c = s.read();
-			if (c=='>')
-			{
-				while (true)
-				{
-					skipWhitespace(s);
-					if (peek(s)=='<' && peek(s, 2)=='/')
-						break;
-					try
-						node.addChild(new XmlNode(s));
-					catch (XmlParseException e)
-						throw new XmlParseException("Error while processing child of "~node.tag, e);
-				}
-				expect(s, '<');
-				expect(s, '/');
-				auto word = readWord(s);
-				enforce!XmlParseException(word == node.tag, "Expected </%s>, not </%s>".format(node.tag, word));
-				expect(s, '>');
-			}
+
+			if (Config.nodeCloseMode(node.tag) == NodeCloseMode.never)
+				enforce!XmlParseException(c=='>', "Self-closing void tag <%s>".format(node.tag));
 			else
-				expect(s, '>');
+			{
+				if (c=='>')
+				{
+					while (true)
+					{
+						skipWhitespace(s);
+						if (peek(s)=='<' && peek(s, 2)=='/')
+							break;
+						try
+							node.addChild(new XmlNode(s));
+						catch (XmlParseException e)
+							throw new XmlParseException("Error while processing child of "~node.tag, e);
+					}
+					expect(s, '<');
+					expect(s, '/');
+					auto word = readWord(s);
+					enforce!XmlParseException(word == node.tag, "Expected </%s>, not </%s>".format(node.tag, word));
+					expect(s, '>');
+				}
+				else // '/'
+					expect(s, '>');
+			}
 		}
 	}
 	node.endPos = s.position;
