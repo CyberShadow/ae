@@ -490,7 +490,7 @@ void parseInto(Config)(XmlNode node, ref StringStream s)
 						if (peek(s)=='<' && peek(s, 2)=='/')
 							break;
 						try
-							node.addChild(new XmlNode(s));
+							node.addChild(parseNode!Config(s));
 						catch (XmlParseException e)
 							throw new XmlParseException("Error while processing child of "~node.tag, e);
 					}
