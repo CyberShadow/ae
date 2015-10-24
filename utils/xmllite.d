@@ -261,10 +261,16 @@ class XmlDocument : XmlNode
 			{
 				import std.algorithm.searching;
 				import std.range : retro;
-				throw new XmlParseException("Error at %d (%d:%d)".format(
-					s.position,
-					s.s[0..s.position].representation.count('\n') + 1,
-					s.s[0..s.position].representation.retro.countUntil('\n'),
+
+				auto head = s.s[0..s.position];
+				auto row    = head.representation.count('\n');
+				auto column = head.representation.retro.countUntil('\n');
+				if (column < 0)
+					column = head.length;
+				throw new XmlParseException("Error at %d:%d (offset %d)".format(
+					1 + row,
+					1 + column,
+					head.length,
 				), e);
 			}
 	}
