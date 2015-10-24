@@ -33,6 +33,8 @@ private struct StringStream
 	string s;
 	size_t position;
 
+	@disable this();
+	@disable this(this);
 	this(string s)
 	{
 		enum ditch = "'\">\0\0\0\0\0"; // Dirty precaution
@@ -69,8 +71,8 @@ class XmlNode
 	XmlNodeType type;
 	ulong startPos, endPos;
 
-	this(StringStream* s) { parse(this, s); }
-	this(string s) { this(new StringStream(s)); }
+	this(ref StringStream s) { parse(this, s); }
+	this(string s) { auto ss = StringStream(s); this(ss); }
 
 	this(XmlNodeType type = XmlNodeType.None, string tag = null)
 	{
@@ -244,10 +246,10 @@ class XmlDocument : XmlNode
 		tag = "<Root>";
 	}
 
-	this(StringStream* s) { this(); parse(s); }
-	this(string s) { this(new StringStream(s)); }
+	this(ref StringStream s) { this(); parse(s); }
+	this(string s) { auto ss = StringStream(s); this(ss); }
 
-	final void parse(StringStream* s)
+	private final void parse(ref StringStream s)
 	{
 		skipWhitespace(s);
 		while (s.position < s.size)
@@ -273,7 +275,17 @@ XmlDocument xmlParse(T)(T source) { return new XmlDocument(source); }
 
 private:
 
-void parse(XmlNode node, StringStream* s)
+/// Parse an SGML-ish string into an XmlNode
+XmlNode parse(string s)
+{
+	auto n = new XmlNode;
+	auto ss = StringStream(s);
+	parse(n, ss);
+	return n;
+}
+
+/// Parse an SGML-ish StringStream into an XmlNode
+void parse(XmlNode node, ref StringStream s)
 {
 	node.startPos = s.position;
 	char c;
@@ -396,7 +408,9 @@ void parse(XmlNode node, StringStream* s)
 	node.endPos = s.position;
 }
 
-void readAttribute(XmlNode node, StringStream* s)
+private:
+
+void readAttribute(XmlNode node, ref StringStream s)
 {
 	string name = readWord(s);
 	if (name.length==0) throw new XmlParseException("Invalid attribute");
@@ -411,12 +425,12 @@ void readAttribute(XmlNode node, StringStream* s)
 	node.attributes[name] = decodeEntities(value);
 }
 
-char peek(StringStream* s, int n=1)
+char peek(ref StringStream s, int n=1)
 {
 	return s.s[s.position + n - 1];
 }
 
-void skipWhitespace(StringStream* s)
+void skipWhitespace(ref StringStream s)
 {
 	while (isWhiteChar[s.s.ptr[s.position]])
 		s.position++;
@@ -433,7 +447,7 @@ shared static this()
 	}
 }
 
-string readWord(StringStream* stream)
+string readWord(ref StringStream stream)
 {
 	auto start = stream.s.ptr + stream.position;
 	auto end = stream.s.ptr + stream.s.length;
@@ -445,14 +459,14 @@ string readWord(StringStream* stream)
 	return start[0..len];
 }
 
-void expect(S)(S s, char c)
+void expect(ref StringStream s, char c)
 {
 	char c2;
 	s.read(c2);
 	enforce!XmlParseException(c==c2, "Expected " ~ c ~ ", got " ~ c2);
 }
 
-string readUntil(StringStream* s, char until)
+string readUntil(ref StringStream s, char until)
 {
 	auto start = s.s.ptr + s.position;
 	auto p = start;
