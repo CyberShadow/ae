@@ -268,12 +268,12 @@ enum NodeCloseMode
 	/// still parsed as `<p>a<div><p>b</p></div></p>`.
 	/// This mode can be used for relaxed HTML parsing.
 	optional,
-
+*/
 	/// Close tags are optional, but are implied when absent.
 	/// As a result, these elements cannot have any content,
 	/// and any close tags must be adjacent to the open tag.
 	implicit,
-*/
+
 	/// This element is void and must never have a closing tag.
 	/// It is always implicitly closed right after opening.
 	/// A close tag is always an error.
@@ -478,27 +478,51 @@ void parseInto(Config)(XmlNode node, ref StringStream s)
 			}
 			c = s.read();
 
-			if (Config.nodeCloseMode(node.tag) == NodeCloseMode.never)
+			auto closeMode = Config.nodeCloseMode(node.tag);
+			if (closeMode == NodeCloseMode.never)
 				enforce!XmlParseException(c=='>', "Self-closing void tag <%s>".format(node.tag));
+			else
+			if (closeMode == NodeCloseMode.implicit)
+			{
+				if (c == '/')
+					expect(s, '>');
+			}
 			else
 			{
 				if (c=='>')
 				{
 					while (true)
 					{
-						skipWhitespace(s);
-						if (peek(s)=='<' && peek(s, 2)=='/')
-							break;
-						try
-							node.addChild(parseNode!Config(s));
-						catch (XmlParseException e)
-							throw new XmlParseException("Error while processing child of "~node.tag, e);
+						while (true)
+						{
+							skipWhitespace(s);
+							if (peek(s)=='<' && peek(s, 2)=='/')
+								break;
+							try
+								node.addChild(parseNode!Config(s));
+							catch (XmlParseException e)
+								throw new XmlParseException("Error while processing child of "~node.tag, e);
+						}
+						expect(s, '<');
+						expect(s, '/');
+						auto word = readWord(s);
+						if (word != node.tag)
+						{
+							auto closeMode2 = Config.nodeCloseMode(word);
+							if (closeMode2 == NodeCloseMode.implicit)
+							{
+								auto parent = node.parent;
+								enforce!XmlParseException(parent, "Top-level close tag for implicitly-closed node </%s>".format(word));
+								enforce!XmlParseException(parent.children.length, "First-child close tag for implicitly-closed node </%s>".format(word));
+								enforce!XmlParseException(parent.children[$-1].tag == word, "Non-empty implicitly-closed node <%s>".format(word));
+								continue;
+							}
+							else
+								enforce!XmlParseException(word == node.tag, "Expected </%s>, not </%s>".format(node.tag, word));
+						}
+						expect(s, '>');
+						break;
 					}
-					expect(s, '<');
-					expect(s, '/');
-					auto word = readWord(s);
-					enforce!XmlParseException(word == node.tag, "Expected </%s>, not </%s>".format(node.tag, word));
-					expect(s, '>');
 				}
 				else // '/'
 					expect(s, '>');
