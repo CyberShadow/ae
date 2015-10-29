@@ -441,7 +441,7 @@ void forceDelete(Flag!"atomic" atomic=Yes.atomic)(string fn, Flag!"recursive" re
 
 
 deprecated void forceDelete(bool atomic)(string fn, bool recursive = false) { forceDelete!(cast(Flag!"atomic")atomic)(fn, cast(Flag!"recursive")recursive); }
-deprecated void forceDelete()(string fn, bool recursive) { forceDelete!(Yes.atomic)(fn, cast(Flag!"recursive")recursive); }
+//deprecated void forceDelete()(string fn, bool recursive) { forceDelete!(Yes.atomic)(fn, cast(Flag!"recursive")recursive); }
 
 deprecated unittest
 {
