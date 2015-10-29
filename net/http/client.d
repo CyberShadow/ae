@@ -133,7 +133,12 @@ protected:
 			}
 		}
 		catch (Exception e)
-			conn.disconnect(e.msg, DisconnectType.error);
+		{
+			if (conn.state == ConnectionState.connected)
+				conn.disconnect(e.msg, DisconnectType.error);
+			else
+				throw new Exception("Unhandled exception after connection was closed", e);
+		}
 	}
 
 	void onContinuation(Data data)
