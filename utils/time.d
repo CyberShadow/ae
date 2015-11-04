@@ -759,6 +759,8 @@ unittest
 
 // ***************************************************************************
 
+alias StdTime = typeof(SysTime.init.stdTime); // long
+
 @property bool empty(Duration d)
 {
 	return !d.total!"hnsecs"();
