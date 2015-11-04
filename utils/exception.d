@@ -122,3 +122,23 @@ string[] getStackTrace(string until = __FUNCTION__, string since = "_d_run_main"
 	if (end   < 0) end   = lines.length;
 	return lines[start+1..end];
 }
+
+// --------------------------------------------------------------------------
+
+import core.exception;
+import std.exception;
+
+template assertOp(string op)
+{
+	void assertOp(A, B)(auto ref A a, auto ref B b, string file=__FILE__, int line=__LINE__)
+	{
+		if (!(mixin("a " ~ op ~ " b")))
+			throw new AssertError("Assertion failed: %s %s %s".format(a, op, b), file, line);
+	}
+}
+alias assertEqual = assertOp!"==";
+
+unittest
+{
+	assertThrown!AssertError(assertEqual(1, 2));
+}
