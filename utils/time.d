@@ -681,10 +681,11 @@ private void parseToken(alias c, alias context)()
 
 import ae.utils.meta;
 
-private SysTime parseTimeImpl(alias fmt, bool checked, C)(C[] t)
+private SysTime parseTimeImpl(alias fmt, bool checked, C)(C[] t, immutable TimeZone defaultTZ = null)
 {
 	ParseContext!(C, checked) context;
 	context.t = t;
+	context.tz = defaultTZ;
 
 	foreach (c; CTIterate!fmt)
 		parseToken!(c, context)();
@@ -718,14 +719,14 @@ private SysTime parseTimeImpl(alias fmt, bool checked, C)(C[] t)
 
 /// Parse the given string into a SysTime, using the format spec fmt.
 /// This version generates specialized code for the given fmt.
-SysTime parseTime(string fmt, C)(C[] t)
+SysTime parseTime(string fmt, C)(C[] t, immutable TimeZone tz = null)
 {
 	// Omit length checks if we know the input string is long enough
 	enum maxLength = timeFormatSize(fmt);
 	if (t.length < maxLength)
-		return parseTimeImpl!(fmt, true )(t);
+		return parseTimeImpl!(fmt, true )(t, tz);
 	else
-		return parseTimeImpl!(fmt, false)(t);
+		return parseTimeImpl!(fmt, false)(t, tz);
 }
 
 /// Parse the given string into a SysTime, using the format spec fmt.
