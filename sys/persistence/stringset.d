@@ -1,0 +1,100 @@
+/**
+ * ae.sys.persistence.stringset
+ *
+ * License:
+ *   This Source Code Form is subject to the terms of
+ *   the Mozilla Public License, v. 2.0. If a copy of
+ *   the MPL was not distributed with this file, You
+ *   can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * Authors:
+ *   Vladimir Panteleev <vladimir@thecybershadow.net>
+ */
+
+module ae.sys.persistence.stringset;
+
+import ae.sys.persistence.core;
+
+// ****************************************************************************
+
+// http://d.puremagic.com/issues/show_bug.cgi?id=7016
+static import ae.sys.file;
+
+/// A string hashset, stored one line per entry.
+struct PersistentStringSet
+{
+	import ae.utils.aa : HashSet;
+
+	static HashSet!string load(string fileName)
+	{
+		import std.file : readText;
+		import std.string : splitLines;
+
+		return HashSet!string(fileName.readText().splitLines());
+	}
+
+	static void save(string fileName, HashSet!string data)
+	{
+		import std.array : join;
+		import ae.sys.file : atomicWrite;
+
+		atomicWrite(fileName, data.keys.join("\n"));
+	}
+
+	alias Cache = FileCache!(load, save, FlushPolicy.manual);
+	Cache cache;
+
+	this(string fileName) { cache = Cache(fileName); }
+
+	auto opIn_r(string key)
+	{
+		return key in cache;
+	}
+
+	void add(string key)
+	{
+		assert(key !in cache);
+		cache.add(key);
+		cache.save();
+	}
+
+	void remove(string key)
+	{
+		assert(key in cache);
+		cache.remove(key);
+		cache.save();
+	}
+
+	@property string[] lines() { return cache.keys; }
+	@property size_t length() { return cache.length; }
+}
+
+unittest
+{
+	import std.file, std.conv, core.thread;
+
+	enum FN = "test.txt";
+	scope(exit) if (FN.exists) remove(FN);
+
+	{
+		auto s = PersistentStringSet(FN);
+		assert("foo" !in s);
+		assert(s.length == 0);
+		s.add("foo");
+	}
+	{
+		auto s = PersistentStringSet(FN);
+		assert("foo" in s);
+		assert(s.length == 1);
+		s.remove("foo");
+	}
+	{
+		auto s = PersistentStringSet(FN);
+		assert("foo" !in s);
+		std.file.write(FN, "foo\n");
+		assert("foo" in s);
+		Thread.sleep(10.msecs);
+		std.file.write(FN, "bar\n");
+		assert(s.lines == ["bar"], text(s.lines));
+	}
+}
