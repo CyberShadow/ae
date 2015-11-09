@@ -182,6 +182,15 @@ final class SQLite
 				while (stmt.step())
 				{
 					scope(failure) stmt.reset();
+					static if (U.length == 1 && is(U[0] V : V[]) && !is(U[0] : string))
+					{
+						U[0] result;
+						result.length = stmt.columnCount();
+						foreach (int c, ref r; result)
+							r = stmt.column!V(c);
+						res = dg(result);
+					}
+					else
 					static if (U.length == 1 && is(U[0] V : V[string]))
 					{
 						U[0] result;
