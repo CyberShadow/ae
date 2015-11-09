@@ -56,6 +56,8 @@ template RangeTuple(size_t N)
 	alias RangeTupleImpl!(N, ValueTuple!()) RangeTuple;
 }
 
+/// Expand an array to a tuple.
+/// The array value must be known during compilation.
 template ArrayToTuple(alias arr, Elements...)
 {
 	static if (arr.length)
@@ -69,6 +71,27 @@ unittest
 	alias X = ArrayToTuple!"abc";
 	static assert(X[0] == 'a' && X[2] == 'c');
 	static assert([X] == "abc");
+}
+
+/// Expand a static array to a tuple.
+/// Unlike ArrayToTuple, the array may be a runtime variable.
+template expand(alias arr, size_t offset = 0)
+	if (isStaticArray!(typeof(arr)))
+{
+	static if (arr.length == offset)
+		alias expand = AliasSeq!();
+	else
+	{
+		@property ref getValue() { return arr[offset]; }
+		alias expand = AliasSeq!(getValue, expand!(arr, offset+1));
+	}
+}
+
+unittest
+{
+	int[3] arr = [1, 2, 3];
+	void test(int a, int b, int c) {}
+	test(expand!arr);
 }
 
 /// Return something to foreach over optimally.
