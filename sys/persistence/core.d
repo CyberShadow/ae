@@ -207,3 +207,6 @@ unittest
 	FN.setTimes(mtime, mtime);
 	assert(cachedData == "Two");
 }
+
+// http://d.puremagic.com/issues/show_bug.cgi?id=7016
+static import ae.sys.memory;
