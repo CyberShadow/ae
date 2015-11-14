@@ -18,7 +18,6 @@ import std.math;
 
 import ae.utils.container;
 import ae.utils.math;
-import ae.utils.meta.misc;
 import ae.utils.geometry;
 import ae.utils.graphics.color;
 import ae.utils.graphics.draw;

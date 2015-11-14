@@ -85,7 +85,7 @@ final class MyApplication : Application
 
 		auto canvasSize = min(screenCanvas.w, screenCanvas.h);
 		canvas.size(canvasSize, canvasSize);
-		canvas.clear(canvas.COLOR.init);
+		canvas.fill(canvas.COLOR.init);
 		foreach (ref plane; planes)
 			foreach (obj; plane)
 				obj.render();
