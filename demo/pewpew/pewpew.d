@@ -143,8 +143,8 @@ final class MyApplication : Application
 
 	override bool needJoystick() { return true; }
 
-	int axisInitial[2];
-	bool axisCalibrated[2];
+	int[2] axisInitial;
+	bool[2] axisCalibrated;
 
 	override void handleJoyAxisMotion(int axis, short svalue)
 	{
