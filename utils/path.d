@@ -15,6 +15,8 @@ module ae.utils.path;
 
 import std.path;
 
+/// Modify a path under oldBase to a new path with the same subpath under newBase.
+/// E.g.: `/foo/bar`.rebasePath(`/foo`, `/quux`) == `/quux/bar`
 string rebasePath(string path, string oldBase, string newBase)
 {
 	return buildPath(newBase, path.absolutePath.relativePath(oldBase.absolutePath));
@@ -38,6 +40,8 @@ string excludeTrailingPathSeparator(string path)
 
 // ************************************************************************
 
+/// The file name for the null device
+/// (which discards all writes).
 version (Windows)
 	enum nullFileName = "nul";
 else
