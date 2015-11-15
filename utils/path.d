@@ -20,6 +20,22 @@ string rebasePath(string path, string oldBase, string newBase)
 	return buildPath(newBase, path.absolutePath.relativePath(oldBase.absolutePath));
 }
 
+/// Like Pascal's IncludeTrailingPathDelimiter
+string includeTrailingPathSeparator(string path)
+{
+	if (path.length && !path[$-1].isDirSeparator())
+		path ~= dirSeparator;
+	return path;
+}
+
+/// Like Pascal's ExcludeTrailingPathDelimiter
+string excludeTrailingPathSeparator(string path)
+{
+	if (path.length && path[$-1].isDirSeparator())
+		path = path[0..$-1];
+	return path;
+}
+
 // ************************************************************************
 
 version (Windows)
