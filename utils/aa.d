@@ -77,10 +77,10 @@ KeyValuePair!(K, V)[] sortedPairs(K, V)(V[K] aa)
 }
 
 /// Get values from AA, sorted by keys
-V[] sortedValues(K, V)(V[K] aa)
+V[] sortedValues(K, V)(in V[K] aa)
 {
 	V[] result;
-	foreach (key; aa.keys.sort)
+	foreach (key; aa.keys.sort())
 		result ~= aa[key];
 	return result;
 }
