@@ -445,15 +445,15 @@ deprecated void forceDelete(bool atomic)(string fn, bool recursive = false) { fo
 
 deprecated unittest
 {
-	mkdir("a"); touch("a/b"); forceDelete!(false     )("a", true);
-	mkdir("a"); touch("a/b"); forceDelete!(true      )("a", true);
+	mkdir("testdir"); touch("testdir/b"); forceDelete!(false     )("testdir", true);
+	mkdir("testdir"); touch("testdir/b"); forceDelete!(true      )("testdir", true);
 }
 
 unittest
 {
-	mkdir("a"); touch("a/b"); forceDelete             ("a", Yes.recursive);
-	mkdir("a"); touch("a/b"); forceDelete!(No .atomic)("a", Yes.recursive);
-	mkdir("a"); touch("a/b"); forceDelete!(Yes.atomic)("a", Yes.recursive);
+	mkdir("testdir"); touch("testdir/b"); forceDelete             ("testdir", Yes.recursive);
+	mkdir("testdir"); touch("testdir/b"); forceDelete!(No .atomic)("testdir", Yes.recursive);
+	mkdir("testdir"); touch("testdir/b"); forceDelete!(Yes.atomic)("testdir", Yes.recursive);
 }
 
 /// If fn is a directory, delete it recursively.
