@@ -199,6 +199,17 @@ T[] slice(T)(T[] arr, size_t p0, size_t p1)
 	return arr[p0..p1];
 }
 
+/// Given an array and its slice, returns the
+/// start index of the slice inside the array.
+size_t sliceIndex(T)(in T[] arr, in T[] slice)
+{
+	auto a = arr.ptr;
+	auto b = a + arr.length;
+	auto p = slice.ptr;
+	assert(a <= p && p <= b, "Out-of-bounds array slice");
+	return p - a;
+}
+
 import std.random;
 
 /// Select and return a random element from the array.
