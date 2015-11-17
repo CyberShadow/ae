@@ -157,6 +157,36 @@ void setEnvironment(string[string] env)
 			environment.remove(k);
 }
 
+import ae.utils.array;
+import ae.utils.regex;
+import std.regex;
+
+string expandEnvVars(alias RE)(string s, string[string] env = std.process.environment.toAA)
+{
+	string result;
+	size_t last = 0;
+	foreach (c; s.matchAll(RE))
+	{
+		result ~= s[last..s.sliceIndex(c[1])];
+		auto var = c[2];
+		string value = env.get(var, c[1]);
+		result ~= value;
+		last = s.sliceIndex(c[1]) + c[1].length;
+	}
+	result ~= s[last..$];
+	return result;
+}
+
+alias expandWindowsEnvVars = expandEnvVars!(re!`(%(.*?)%)`);
+
+unittest
+{
+	std.process.environment[`FOOTEST`] = `bar`;
+	assert("a%FOOTEST%b".expandWindowsEnvVars() == "abarb");
+}
+
+// ************************************************************************
+
 int waitTimeout(Pid pid, Duration time)
 {
 	bool ok = false;
