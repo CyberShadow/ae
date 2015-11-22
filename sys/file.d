@@ -990,7 +990,7 @@ struct NamedPipeImpl
 			// ConnectNamedPipe. In this situation, there is a good connection between client
 			// and server, even though the function returns zero."
 			if (!bSuccess)
-				wenforce(GetLastError() != ERROR_PIPE_CONNECTED, "ConnectNamedPipe");
+				wenforce(GetLastError() == ERROR_PIPE_CONNECTED, "ConnectNamedPipe");
 
 			return f;
 		}
