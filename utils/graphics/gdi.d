@@ -18,9 +18,18 @@ version(Windows):
 import std.exception;
 import std.typecons;
 
-public import win32.wingdi;
-import win32.winuser;
-import win32.windef;
+static if (is(typeof({import core.sys.windows.wingdi;})))
+{
+	public import core.sys.windows.wingdi;
+	import core.sys.windows.winuser;
+	import core.sys.windows.windef;
+}
+else
+{
+	public import win32.wingdi;
+	import win32.winuser;
+	import win32.windef;
+}
 
 import ae.utils.graphics.color;
 import ae.utils.graphics.draw;
@@ -36,7 +45,7 @@ struct GDICanvas(COLOR)
 
 		@disable this(this);
 
-		~this()
+		~this() nothrow @nogc
 		{
 			DeleteDC(hdc);     hdc = null;
 			DeleteObject(hbm); hbm = null;
