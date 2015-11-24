@@ -237,7 +237,6 @@ unittest
 }
 
 /// Present a resized view using nearest-neighbor interpolation.
-/// Use big=true for images over 32k width/height.
 auto nearestNeighbor(V)(auto ref V src, int w, int h)
 	if (isView!V)
 {
