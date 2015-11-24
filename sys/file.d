@@ -483,7 +483,7 @@ void removeRecurse(string fn)
 void recreateEmptyDirectory()(string dir)
 {
 	if (dir.exists)
-		dir.forceDelete(true);
+		dir.forceDelete(Yes.recursive);
 	mkdir(dir);
 }
 
