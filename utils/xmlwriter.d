@@ -66,7 +66,7 @@ struct CustomXmlWriter(WRITER, bool PRETTY)
 
 	deprecated alias text putText;
 
-	void text(string s)
+	void text(in char[] s)
 	{
 		// https://gist.github.com/2192846
 
