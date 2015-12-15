@@ -506,6 +506,15 @@ public:
 	{
 		if (status == HttpStatusCode.OK)
 		{
+			if ("If-Modified-Since" in requestHeaders &&
+				"Last-Modified" in headers &&
+				headers["Last-Modified"].parseTime!(TimeFormats.RFC2822) <= requestHeaders["If-Modified-Since"].parseTime!(TimeFormats.RFC2822))
+			{
+				setStatus(HttpStatusCode.NotModified);
+				data = null;
+				return;
+			}
+
 			headers["Accept-Ranges"] = "bytes";
 			auto prange = "Range" in requestHeaders;
 			if (prange && (*prange).startsWith("bytes="))
