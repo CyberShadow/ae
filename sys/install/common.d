@@ -19,6 +19,7 @@ import ae.sys.file;
 import ae.sys.net;
 import ae.sys.persistence;
 import ae.utils.meta;
+import ae.utils.path;
 
 import std.algorithm;
 import std.array;
@@ -54,7 +55,8 @@ class Installer
 	/// As above, but expanded to full absolute directory paths.
 	@property final string[] binDirs() { return binPaths.map!(binPath => buildPath(directory, binPath)).array; }
 
-	@property static string[] pathDirs() { return environment["PATH"].split(pathSeparator); }
+	deprecated("Please use ae.utils.path.pathDirs")
+	@property static string[] pathDirs() { return ae.utils.path.pathDirs; }
 
 	/// The full installation directory.
 	@property final string directory()
@@ -67,35 +69,16 @@ class Installer
 	/// available on the system.
 	@property string[] requiredExecutables() { return null; }
 
-	/*protected*/ static bool haveExecutable(string name)
-	{
-		return findExecutable(name, pathDirs) !is null;
-	}
+	deprecated("Please use ae.utils.path.haveExecutable")
+	/*protected*/ static bool haveExecutable(string name) { return ae.utils.path.haveExecutable(name); }
 
-	/// Helper function. Find an executable with the given name
-	/// (no extension) in the given directories.
-	static string findExecutable(string name, string[] dirs)
-	{
-		version(Windows)
-			enum executableSuffixes = [".exe", ".bat", ".cmd"];
-		else
-			enum executableSuffixes = [""];
-
-		foreach (dir; dirs)
-			foreach (suffix; executableSuffixes)
-			{
-				auto fn = buildPath(dir, name) ~ suffix;
-				if (fn.exists)
-					return fn;
-			}
-
-		return null;
-	}
+	deprecated("Please use ae.utils.path.findExecutable")
+	static string findExecutable(string name, string[] dirs) { return ae.utils.path.findExecutable(name, dirs); }
 
 	/// Get the full path to an executable.
 	string exePath(string name)
 	{
-		return findExecutable(name, installedLocally ? binDirs : pathDirs);
+		return .findExecutable(name, installedLocally ? binDirs : .pathDirs);
 	}
 
 	/// Whether the component is installed locally.
@@ -113,7 +96,7 @@ class Installer
 		if (requiredExecutables is null)
 			return false;
 
-		return requiredExecutables.all!haveExecutable();
+		return requiredExecutables.all!(.haveExecutable)();
 	}
 
 	/// Whether the component is installed, locally or
