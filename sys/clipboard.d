@@ -122,3 +122,49 @@ version (Windows)
 		}
 	}
 }
+else
+version (Posix)
+{
+	import std.process;
+	import std.exception;
+
+	import ae.utils.path;
+
+	void setClipboardText(string s)
+	{
+		string[] cmdLine;
+		if (haveExecutable("xclip"))
+			cmdLine = ["xclip", "-in", "-selection", "clipboard"];
+		else
+		if (haveExecutable("xsel"))
+			cmdLine = ["xsel", "--input", "--clipboard"];
+		else
+		if (haveExecutable("pbcopy"))
+			cmdLine = ["pbcopy"];
+		else
+			throw new Exception("No clipboard management programs detected");
+		auto p = pipe();
+		auto pid = spawnProcess(cmdLine, p.readEnd);
+		p.writeEnd.rawWrite(s);
+		p.writeEnd.close();
+		enforce(pid.wait() == 0, cmdLine[0] ~ " failed");
+	}
+
+	string getClipboardText()
+	{
+		string[] cmdLine;
+		if (haveExecutable("xclip"))
+			cmdLine = ["xclip", "-out", "-selection", "clipboard"];
+		else
+		if (haveExecutable("xsel"))
+			cmdLine = ["xsel", "--output", "--clipboard"];
+		else
+		if (haveExecutable("pbpaste"))
+			cmdLine = ["pbpaste"];
+		else
+			throw new Exception("No clipboard management programs detected");
+		auto result = execute(cmdLine);
+		enforce(result.status == 0, cmdLine[0] ~ " failed");
+		return result.output;
+	}
+}
