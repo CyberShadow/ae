@@ -40,6 +40,45 @@ string excludeTrailingPathSeparator(string path)
 
 // ************************************************************************
 
+import std.process : environment;
+import std.string : split;
+
+@property string[] pathDirs()
+{
+	return environment["PATH"].split(pathSeparator);
+}
+
+bool haveExecutable(string name)
+{
+	return findExecutable(name, pathDirs) !is null;
+}
+
+/// Find an executable with the given name
+/// (no extension) in the given directories.
+/// Returns null if not found.
+string findExecutable(string name, string[] dirs)
+{
+	import std.file : exists;
+
+	version (Windows)
+		enum executableSuffixes = [".exe", ".bat", ".cmd"];
+	else
+		enum executableSuffixes = [""];
+
+	foreach (dir; dirs)
+		foreach (suffix; executableSuffixes)
+			{
+				auto fn = buildPath(dir, name) ~ suffix;
+				if (fn.exists)
+					return fn;
+			}
+
+	return null;
+}
+
+
+// ************************************************************************
+
 /// The file name for the null device
 /// (which discards all writes).
 version (Windows)
