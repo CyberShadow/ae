@@ -30,14 +30,15 @@ version (Windows)
 	}
 }
 else
-version (Linux)
+version (Posix)
 {
 	import std.stdio;
+	import std.exception;
 
 	void genRandom(ubyte[] buf)
 	{
-		auto f = File("/dev/random");
+		auto f = File("/dev/urandom");
 		auto result = f.rawRead(buf);
-		enforce(result == buf.length, "Couldn't read enough random bytes");
+		enforce(result.length == buf.length, "Couldn't read enough random bytes");
 	}
 }
