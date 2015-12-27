@@ -138,6 +138,11 @@ struct Headers
 			c.add(k, v);
 		return c;
 	}
+
+	@property size_t length() const
+	{
+		return headers.length;
+	}
 }
 
 unittest
