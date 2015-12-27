@@ -126,6 +126,12 @@ struct DataSetBytes
 			result += d.length;
 		return result;
 	}
+
+	size_t opDollar(size_t pos)()
+	{
+		static assert(pos == 0);
+		return length;
+	}
 }
 
 unittest
