@@ -351,7 +351,7 @@ enum HttpStatusCode : ushort
 class HttpResponse : HttpMessage
 {
 public:
-	ushort status;
+	HttpStatusCode status;
 	string statusMessage;
 
 	int compressionLevel = 1;
