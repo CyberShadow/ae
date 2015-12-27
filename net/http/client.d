@@ -27,6 +27,7 @@ import ae.net.ietf.headers;
 import ae.net.ietf.headerparse;
 import ae.net.ietf.url;
 import ae.net.ssl;
+import ae.utils.array : toArray;
 import ae.sys.data;
 debug(HTTP) import std.stdio : stderr;
 
@@ -41,12 +42,12 @@ private:
 
 	Data[] inBuffer;
 
+protected:
 	HttpRequest currentRequest;
 
 	HttpResponse currentResponse;
 	size_t expect;
 
-protected:
 	void onConnect()
 	{
 		sendRequest(currentRequest);
@@ -120,17 +121,7 @@ protected:
 			currentResponse.parseStatusLine(statusLine);
 			currentResponse.headers = headers;
 
-			expect = size_t.max;
-			if ("Content-Length" in currentResponse.headers)
-				expect = to!size_t(strip(currentResponse.headers["Content-Length"]));
-
-			if (expect > inBuffer.bytes.length)
-				conn.handleReadData = &onContinuation;
-			else
-			{
-				currentResponse.data = inBuffer.bytes[0 .. expect];
-				onDone();
-			}
+			onHeadersReceived();
 		}
 		catch (Exception e)
 		{
@@ -141,14 +132,41 @@ protected:
 		}
 	}
 
+	void onHeadersReceived()
+	{
+		expect = size_t.max;
+		if ("Content-Length" in currentResponse.headers)
+			expect = to!size_t(strip(currentResponse.headers["Content-Length"]));
+
+		if (inBuffer.bytes.length < expect)
+		{
+			onData(inBuffer);
+			conn.handleReadData = &onContinuation;
+		}
+		else
+		{
+			onData(inBuffer.bytes[0 .. expect]); // TODO: pipelining
+			onDone();
+		}
+
+		inBuffer.destroy();
+	}
+
+	void onData(Data[] data)
+	{
+		currentResponse.data ~= data;
+	}
+
 	void onContinuation(Data data)
 	{
-		inBuffer ~= data;
+		onData(data.toArray);
 		timer.markNonIdle();
 
-		if (expect!=size_t.max && inBuffer.length >= expect)
+		auto received = currentResponse.data.bytes.length;
+		if (expect!=size_t.max && received >= expect)
 		{
-			currentResponse.data = inBuffer[0 .. expect];
+			inBuffer = currentResponse.data.bytes[expect..received];
+			currentResponse.data = currentResponse.data.bytes[0..expect];
 			onDone();
 		}
 	}
@@ -164,12 +182,9 @@ protected:
 	void processResponse(string reason = "All data read")
 	{
 		auto response = currentResponse;
-		if (response)
-			response.data = inBuffer;
 
 		currentRequest = null;
 		currentResponse = null;
-		inBuffer.destroy();
 		expect = -1;
 		conn.handleReadData = null;
 
@@ -181,8 +196,6 @@ protected:
 	{
 		if (type == DisconnectType.error)
 			currentResponse = null;
-		if (currentResponse)
-			currentResponse.data = inBuffer;
 
 		if (currentRequest)
 			processResponse(reason);
