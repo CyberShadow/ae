@@ -257,8 +257,9 @@ class OpenSSLAdapter : SSLAdapter
 
 	override void send(Data[] data, int priority = DEFAULT_PRIORITY)
 	{
-		if (data.length)
-			queue ~= data;
+		foreach (datum; data)
+			if (datum.length)
+				queue ~= datum;
 
 		flushQueue();
 	}
