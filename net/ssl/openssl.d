@@ -19,7 +19,7 @@ import ae.utils.meta : enumLength;
 import ae.utils.text;
 
 import std.conv : to;
-import std.exception : enforce;
+import std.exception : enforce, errnoEnforce;
 import std.functional;
 import std.socket;
 import std.string;
@@ -231,7 +231,7 @@ class OpenSSLAdapter : SSLAdapter
 					super.onReadData(Data(buf[0..result]));
 				else
 				{
-					sslError(result);
+					sslError(result, "SSL_read");
 					break;
 				}
 			}
@@ -294,14 +294,14 @@ class OpenSSLAdapter : SSLAdapter
 			}
 			else
 			{
-				sslError(result);
+				sslError(result, "SSL_write");
 				break;
 			}
 		}
 		flushWritten();
 	}
 
-	void sslError(int ret)
+	void sslError(int ret, string msg)
 	{
 		auto err = SSL_get_error(sslHandle, ret);
 		switch (err)
@@ -309,8 +309,11 @@ class OpenSSLAdapter : SSLAdapter
 			case SSL_ERROR_WANT_READ:
 			case SSL_ERROR_ZERO_RETURN:
 				return;
+			case SSL_ERROR_SYSCALL:
+				errnoEnforce(false, msg ~ " failed");
+				assert(false);
 			default:
-				sslEnforce(false);
+				sslEnforce(false, "%s failed - error code %s".format(msg, err));
 		}
 	}
 
