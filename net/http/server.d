@@ -155,6 +155,8 @@ public:
 
 	mixin DListLink;
 
+	bool connected = true;
+
 private:
 	Data[] inBuffer;
 	sizediff_t expect;
@@ -263,6 +265,7 @@ private:
 	void onDisconnect(string reason, DisconnectType type)
 	{
 		debug (HTTP) debugLog("Disconnect: %s", reason);
+		connected = false;
 		server.connections.remove(this);
 	}
 
@@ -280,6 +283,7 @@ private:
 
 	void processRequest(Data[] data)
 	{
+		debug (HTTP) debugLog("processRequest (%d bytes)", data.bytes.length);
 		currentRequest.data = data;
 		timeoutActive = false;
 		timer.cancelIdleTimeout();
@@ -326,13 +330,49 @@ private:
 	}
 
 public:
+	void sendHeaders(Headers headers, HttpStatusCode status, string statusMessage = null)
+	{
+		assert(status, "Unset status code");
+
+		if (!statusMessage)
+			statusMessage = HttpResponse.getStatusMessage(status);
+
+		StringBuilder respMessage;
+		respMessage.put("HTTP/", currentRequest.protocolVersion, " ");
+
+		if ("X-Powered-By" !in headers)
+			headers["X-Powered-By"] = "ae.net.http.server (+https://github.com/CyberShadow/ae)";
+
+		headers["Date"] = httpTime(Clock.currTime());
+		if (persistent && currentRequest.protocolVersion=="1.0")
+			headers["Connection"] = "Keep-Alive";
+		else
+		if (!persistent && currentRequest.protocolVersion=="1.1")
+			headers["Connection"] = "close";
+		else
+			headers.remove("Connection");
+
+		respMessage.put("%d %s\r\n".format(status, statusMessage));
+		foreach (string header, string value; headers)
+			respMessage.put(header, ": ", value, "\r\n");
+
+		debug (HTTP) debugLog("Response headers:\n> %s", respMessage.get().chomp().replace("\r\n", "\n> "));
+
+		respMessage.put("\r\n");
+		conn.send(Data(respMessage.get()));
+	}
+
+	void sendHeaders(HttpResponse response)
+	{
+		sendHeaders(response.headers, response.status, response.statusMessage);
+	}
+
 	void sendResponse(HttpResponse response)
 	{
 		requestProcessing = false;
-		StringBuilder respMessage;
-		respMessage.put("HTTP/", currentRequest.protocolVersion, " ");
 		if (!response)
 		{
+			debug (HTTP) debugLog("sendResponse(null) - generating dummy response");
 			response = new HttpResponse();
 			response.status = HttpStatusCode.InternalServerError;
 			response.statusMessage = HttpResponse.getStatusMessage(HttpStatusCode.InternalServerError);
@@ -341,30 +381,30 @@ public:
 
 		response.optimizeData(currentRequest.headers);
 		response.sliceData(currentRequest.headers);
-		response.headers["Content-Length"] = response ? to!string(response.data.bytes.length) : "0";
-		response.headers["X-Powered-By"] = "ae.net.http.server (+https://github.com/CyberShadow/ae)";
-		response.headers["Date"] = httpTime(Clock.currTime());
-		if (persistent && currentRequest.protocolVersion=="1.0")
-			response.headers["Connection"] = "Keep-Alive";
-		else
-		if (!persistent && currentRequest.protocolVersion=="1.1")
-			response.headers["Connection"] = "close";
 
-		respMessage.put(to!string(response.status), " ", response.statusMessage, "\r\n");
-		foreach (string header, string value; response.headers)
-			respMessage.put(header, ": ", value, "\r\n");
+		if ("Content-Length" !in response.headers)
+			response.headers["Content-Length"] = text(response.data.bytes.length);
 
-		debug (HTTP) debugLog("Response headers:\n> %s", respMessage.get().chomp().replace("\r\n", "\n> "));
+		sendHeaders(response);
 
-		respMessage.put("\r\n");
-
-		conn.send(Data(respMessage.get()));
 		if (response && response.data.length && currentRequest.method != "HEAD")
-			conn.send(response.data);
+			sendData(response.data);
 
-		debug (HTTP) debugLog("Sent response (%d bytes headers, %d bytes data)",
-			respMessage.length, response ? response.data.bytes.length : 0);
+		debug (HTTP) debugLog("Sent response (%d bytes data)",
+			response ? response.data.bytes.length : 0);
 
+		closeResponse();
+
+		logRequest(currentRequest, response);
+	}
+
+	void sendData(Data[] data)
+	{
+		conn.send(data);
+	}
+
+	void closeResponse()
+	{
 		if (persistent && server.conn.isListening)
 		{
 			// reset for next request
@@ -387,8 +427,6 @@ public:
 			debug (HTTP) debugLog("  Closing connection (%s).", reason);
 			conn.disconnect(reason);
 		}
-
-		logRequest(currentRequest, response);
 	}
 }
 
