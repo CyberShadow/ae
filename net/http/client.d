@@ -126,7 +126,7 @@ protected:
 		catch (Exception e)
 		{
 			if (conn.state == ConnectionState.connected)
-				conn.disconnect(e.msg, DisconnectType.error);
+				conn.disconnect(e.msg.length ? e.msg : e.classinfo.name, DisconnectType.error);
 			else
 				throw new Exception("Unhandled exception after connection was closed", e);
 		}
