@@ -25,6 +25,7 @@ import std.uri;
 import ae.net.asockets;
 import ae.net.ietf.headerparse;
 import ae.net.ietf.headers;
+import ae.net.ssl;
 import ae.sys.data;
 import ae.sys.log;
 import ae.utils.container.listnode;
@@ -36,35 +37,8 @@ public import ae.net.http.common;
 
 debug(HTTP) import std.stdio : stderr;
 
-final class HttpServer
+class HttpServer
 {
-public:
-	Logger log;
-
-private:
-	TcpServer conn;
-	Duration timeout;
-
-private:
-	void onClose()
-	{
-		if (handleClose)
-			handleClose();
-	}
-
-	void onAccept(TcpConnection incoming)
-	{
-		try
-			new HttpServerConnection(this, incoming);
-		catch (Exception e)
-		{
-			if (log)
-				log("Error accepting connection: " ~ e.msg);
-			if (incoming.state == ConnectionState.connected)
-				incoming.disconnect();
-		}
-	}
-
 public:
 	this(Duration timeout = 30.seconds)
 	{
@@ -81,7 +55,7 @@ public:
 		port = conn.listen(port, addr);
 		if (log)
 			foreach (address; conn.localAddresses)
-				log("Listening on " ~ formatAddress(address) ~ " [" ~ to!string(address.addressFamily) ~ "]");
+				log("Listening on " ~ formatAddress(protocol, address) ~ " [" ~ to!string(address.addressFamily) ~ "]");
 		return port;
 	}
 
@@ -99,7 +73,8 @@ public:
 				connection.conn.disconnect("HTTP server shutting down");
 	}
 
-public:
+	Logger log;
+
 	/// Single-ended doubly-linked list of active connections
 	SEDListContainer!HttpServerConnection connections;
 
@@ -107,6 +82,63 @@ public:
 	void delegate() handleClose;
 	/// Callback for an incoming request.
 	void delegate(HttpRequest request, HttpServerConnection conn) handleRequest;
+
+protected:
+	TcpServer conn;
+	Duration timeout;
+
+	void onClose()
+	{
+		if (handleClose)
+			handleClose();
+	}
+
+	IConnection createConnection(TcpConnection tcp)
+	{
+		return tcp;
+	}
+
+	@property string protocol() { return "http"; }
+
+	void onAccept(TcpConnection incoming)
+	{
+		try
+			new HttpServerConnection(this, incoming, createConnection(incoming), protocol);
+		catch (Exception e)
+		{
+			if (log)
+				log("Error accepting connection: " ~ e.msg);
+			if (incoming.state == ConnectionState.connected)
+				incoming.disconnect();
+		}
+	}
+}
+
+/// HTTPS server. Set SSL parameters on ctx after instantiation.
+/// Example:
+/// ---
+///	auto s = new HttpsServer();
+///	s.ctx.enableDH(4096);
+///	s.ctx.enableECDH();
+///	s.ctx.setCertificate("server.crt");
+///	s.ctx.setPrivateKey("server.key");
+/// ---
+class HttpsServer : HttpServer
+{
+	SSLContext ctx;
+
+	this()
+	{
+		ctx = ssl.createContext(SSLContext.Kind.server);
+	}
+
+protected:
+	override @property string protocol() { return "https"; }
+
+	override IConnection createConnection(TcpConnection tcp)
+	{
+		return ssl.createAdapter(ctx, tcp);
+	}
 }
 
 final class HttpServerConnection
@@ -128,12 +160,14 @@ private:
 	sizediff_t expect;
 	bool requestProcessing; // user code is asynchronously processing current request
 	bool timeoutActive;
+	string protocol;
 
-	this(HttpServer server, TcpConnection incoming)
+	this(HttpServer server, TcpConnection tcp, IConnection c, string protocol = "http")
 	{
-		debug (HTTP) debugLog("New connection from %s", incoming.remoteAddress);
+		debug (HTTP) debugLog("New connection from %s", tcp.remoteAddress);
 		this.server = server;
-		IConnection c = tcp = incoming;
+		this.tcp = tcp;
+		this.protocol = protocol;
 
 		timer = new TimeoutAdapter(c);
 		timer.setIdleTimeout(server.timeout);
@@ -273,7 +307,7 @@ private:
 			response ? text(response.status) : "-",
 			format("%9.2f ms", request.age.total!"usecs" / 1000f),
 			request.method,
-			formatAddress(localAddress, request.host) ~ request.resource,
+			formatAddress(protocol, localAddress, request.host) ~ request.resource,
 			response ? response.headers.get("Content-Type", "-") : "-",
 		] ~ (DEBUG ? [] : [
 			request.headers.get("Referer", "-"),
@@ -358,11 +392,11 @@ public:
 	}
 }
 
-string formatAddress(Address address, string vhost = null)
+string formatAddress(string protocol, Address address, string vhost = null)
 {
 	string addr = address.toAddrString();
 	string port = address.toPortString();
-	return "http://" ~
+	return protocol ~ "://" ~
 		(vhost ? vhost : addr == "0.0.0.0" || addr == "::" ? "*" : addr.contains(":") ? "[" ~ addr ~ "]" : addr) ~
 		(port == "80" ? "" : ":" ~ port);
 }
