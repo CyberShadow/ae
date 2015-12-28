@@ -67,11 +67,11 @@ string findExecutable(string name, string[] dirs)
 
 	foreach (dir; dirs)
 		foreach (suffix; executableSuffixes)
-			{
-				auto fn = buildPath(dir, name) ~ suffix;
-				if (fn.exists)
-					return fn;
-			}
+		{
+			auto fn = buildPath(dir, name) ~ suffix;
+			if (fn.exists)
+				return fn;
+		}
 
 	return null;
 }
