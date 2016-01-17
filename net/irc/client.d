@@ -18,6 +18,7 @@ module ae.net.irc.client;
 
 import std.conv;
 import std.datetime;
+import std.exception;
 import std.random;
 import std.string;
 
@@ -616,7 +617,7 @@ public:
 	void sendRaw(in char[] message)
 	{
 		debug (IRC) std.stdio.writefln("> %s", message);
-		assert(!message.contains("\n"), "Newline in outgoing IRC line: " ~ message);
+		enforce(!message.contains("\n"), "Newline in outgoing IRC line: " ~ message);
 		if (log) log("> " ~ message);
 		conn.send(encoder(message));
 	}
