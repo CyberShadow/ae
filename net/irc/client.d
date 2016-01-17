@@ -393,6 +393,14 @@ private:
 			onNick(nick, params[0]);
 			break;
 
+		case "INVITE":
+			if (params.length != 2)
+				return;
+
+			if (handleInvite)
+				handleInvite(params[0], params[1]);
+			break;
+
 		default:
 			break;
 		}
@@ -690,6 +698,8 @@ public:
 	void delegate(string channel, string nick, string op, string reason) handleKick;
 	/// Callback for when someone has quit from the network.
 	void delegate(string nick, string reason, string[] channels) handleQuit;
+	/// Callback for an INVITE command.
+	void delegate(string nick, string channel) handleInvite;
 	/// Callback for when the channel list was retreived
 	void delegate(string[] channelList) handleChannelList;
 	/// Callback for a WHO result line
