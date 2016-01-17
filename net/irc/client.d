@@ -613,7 +613,7 @@ public:
 	}
 
 	/// Send raw string to server.
-	void sendRaw(string message)
+	void sendRaw(in char[] message)
 	{
 		debug (IRC) std.stdio.writefln("> %s", message);
 		assert(!message.contains("\n"), "Newline in outgoing IRC line: " ~ message);
