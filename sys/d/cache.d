@@ -362,7 +362,7 @@ class GitCache : DCache
 
 	override bool haveEntry(string key) const
 	{
-		return git.check("show-ref", refPrefix ~ key);
+		return git.check("show-ref", "--verify", refPrefix ~ key);
 	}
 
 	override string[] listFiles(string key) const
