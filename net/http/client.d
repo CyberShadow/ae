@@ -346,13 +346,13 @@ void httpGet(string url, void delegate(string) resultHandler, void delegate(stri
 }
 
 /// ditto
-void httpPost(string url, UrlParameters vars, void delegate(string) resultHandler, void delegate(string) errorHandler)
+void httpPost(string url, Data[] postData, string contentType, void delegate(string) resultHandler, void delegate(string) errorHandler)
 {
 	auto request = new HttpRequest;
 	request.resource = url;
 	request.method = "POST";
-	request.headers["Content-Type"] = "application/x-www-form-urlencoded";
-	request.data = [Data(encodeUrlParameters(vars))];
+	request.headers["Content-Type"] = contentType;
+	request.data = postData;
 	httpRequest(request,
 		(Data data)
 		{
@@ -361,6 +361,12 @@ void httpPost(string url, UrlParameters vars, void delegate(string) resultHandle
 			resultHandler(result);
 		},
 		errorHandler);
+}
+
+/// ditto
+void httpPost(string url, UrlParameters vars, void delegate(string) resultHandler, void delegate(string) errorHandler)
+{
+	return httpPost(url, [Data(encodeUrlParameters(vars))], "application/x-www-form-urlencoded", resultHandler, errorHandler);
 }
 
 unittest
