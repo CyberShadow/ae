@@ -62,6 +62,12 @@ struct Color(FieldTuple...)
 		return r;
 	}
 
+	static if (is(ChannelType:uint))
+	{
+		enum typeof(this) black = monochrome(0);
+		enum typeof(this) white = monochrome(ChannelType.max);
+	}
+
 	/// Interpolate between two colors.
 	static typeof(this) itpl(P)(typeof(this) c0, typeof(this) c1, P p, P p0, P p1)
 	{
