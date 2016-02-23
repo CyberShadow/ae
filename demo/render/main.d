@@ -109,7 +109,7 @@ final class MyApplication : Application
 		{
 			enum W = 96, H = 96;
 
-			foreach (i, ref img; imgs)
+			foreach (int i, ref img; imgs)
 			{
 				img = new ImageTextureSource;
 				img.image.size(W, H);
