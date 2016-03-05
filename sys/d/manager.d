@@ -748,10 +748,21 @@ class DManager : ICacheHost
 
 			string[] targets = config.build.components.dmd.debugDMD ? [] : ["dmd"];
 
+			// Avoid HOST_DC reading ~/dmd.conf
+			string hostDC = config.deps.hostDC;
+			version (Posix)
+			if (hostDC && exists(environment.get("HOME", null).buildPath("dmd.conf")))
+			{
+				auto dcProxy = buildPath(config.local.workDir, "host-dc-proxy.sh");
+				std.file.write(dcProxy, escapeShellCommand(["exec", hostDC, "-conf=" ~ buildPath(dirName(hostDC), "dmd.conf")]) ~ ` "$@"`);
+				setAttributes(dcProxy, octal!755);
+				hostDC = dcProxy;
+			}
+
 			run([make,
 					"-f", dmdMakeFileName,
 					"MODEL=" ~ modelFlag,
-					"HOST_DC=" ~ config.deps.hostDC,
+					"HOST_DC=" ~ hostDC,
 				] ~ commonConfig.makeArgs ~ extraArgs ~ targets,
 				srcDir
 			);
