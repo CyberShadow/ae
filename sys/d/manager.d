@@ -141,9 +141,15 @@ class DManager : ICacheHost
 	}
 
 	version (Windows)
+	{
 		enum string binExt = ".exe";
+		enum configFileName = "sc.ini";
+	}
 	else
+	{
 		enum string binExt = "";
+		enum configFileName = "dmd.conf";
+	}
 
 	// **************************** Repositories *****************************
 
@@ -751,10 +757,10 @@ class DManager : ICacheHost
 			// Avoid HOST_DC reading ~/dmd.conf
 			string hostDC = config.deps.hostDC;
 			version (Posix)
-			if (hostDC && exists(environment.get("HOME", null).buildPath("dmd.conf")))
+			if (hostDC && exists(environment.get("HOME", null).buildPath(configFileName)))
 			{
 				auto dcProxy = buildPath(config.local.workDir, "host-dc-proxy.sh");
-				std.file.write(dcProxy, escapeShellCommand(["exec", hostDC, "-conf=" ~ buildPath(dirName(hostDC), "dmd.conf")]) ~ ` "$@"`);
+				std.file.write(dcProxy, escapeShellCommand(["exec", hostDC, "-conf=" ~ buildPath(dirName(hostDC), configFileName)]) ~ ` "$@"`);
 				setAttributes(dcProxy, octal!755);
 				hostDC = dcProxy;
 			}
@@ -811,7 +817,7 @@ EOS";
 				ini = ini.replace("__VS__" , config.deps.vsDir .absolutePath());
 				ini = ini.replace("__SDK__", config.deps.sdkDir.absolutePath());
 
-				buildPath(stageDir, "bin", "sc.ini").write(ini);
+				buildPath(stageDir, "bin", configFileName).write(ini);
 			}
 			else version (OSX)
 			{
@@ -819,7 +825,7 @@ EOS";
 [Environment]
 DFLAGS="-I%@P%/../import" "-L-L%@P%/../lib"
 EOS";
-				buildPath(stageDir, "bin", "dmd.conf").write(ini);
+				buildPath(stageDir, "bin", configFileName).write(ini);
 			}
 			else
 			{
@@ -827,7 +833,7 @@ EOS";
 [Environment]
 DFLAGS="-I%@P%/../import" "-L-L%@P%/../lib" -L--export-dynamic
 EOS";
-				buildPath(stageDir, "bin", "dmd.conf").write(ini);
+				buildPath(stageDir, "bin", configFileName).write(ini);
 			}
 		}
 
