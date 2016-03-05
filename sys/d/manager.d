@@ -959,14 +959,16 @@ EOS";
 			if (sourceDir.buildPath("posix.mak").exists)
 				needModel = true; // Known to be needed for recent versions
 
+			string[] args = ["-conf=" ~ buildPath(buildDir , "bin", configFileName), "rdmd"];
+
 			if (!needModel)
 				try
-					run(["dmd", "rdmd"], sourceDir);
+					run(["dmd"] ~ args, sourceDir);
 				catch (Exception e)
 					needModel = true;
 
 			if (needModel)
-				run(["dmd", "-m" ~ commonConfig.model, "rdmd"], sourceDir);
+				run(["dmd", "-m" ~ commonConfig.model] ~ args, sourceDir);
 		}
 
 		override void performStage()
