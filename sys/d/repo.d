@@ -23,6 +23,7 @@ import std.string;
 import std.path;
 
 import ae.sys.git;
+import ae.utils.exception;
 import ae.utils.json;
 import ae.utils.regex;
 
@@ -136,8 +137,13 @@ class ManagedRepository
 	{
 		log("Cleaning repository %s...".format(name));
 		needRepo();
-		git.run("reset", "--hard");
-		git.run("clean", "--force", "-x", "-d", "--quiet");
+		try
+		{
+			git.run("reset", "--hard");
+			git.run("clean", "--force", "-x", "-d", "--quiet");
+		}
+		catch (Exception e)
+			throw new RepositoryCleanException(e.msg, e);
 	}
 
 	// Merge cache
@@ -332,3 +338,7 @@ class ManagedRepository
 	/// Override to add logging.
 	protected abstract void log(string line);
 }
+
+/// Used to communicate that a "reset --hard" failed.
+/// Generally this indicates git repository corruption.
+mixin DeclareException!q{RepositoryCleanException};

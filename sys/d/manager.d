@@ -263,6 +263,30 @@ class DManager : ICacheHost
 			if (!git.path)
 				git = Repository(dir);
 		}
+
+		override void needHead(string hash)
+		{
+			try
+				super.needHead(hash);
+			catch (RepositoryCleanException e)
+			{
+				log("Error during repository cleanup.");
+
+				log("Nuking %s...".format(dir));
+				rmdirRecurse(dir);
+
+				auto name = baseName(dir);
+				auto gitDir = buildPath(dirName(dir), ".git", "modules", name);
+				log("Nuking %s...".format(gitDir));
+				rmdirRecurse(gitDir);
+
+				log("Updating submodule...");
+				getMetaRepo().git.run(["submodule", "update", name]);
+
+				log("Trying again...");
+				super.needHead(hash);
+			}
+		}
 	}
 
 	/// The meta-repository, which contains the sub-project submodules.
@@ -412,6 +436,7 @@ class DManager : ICacheHost
 				return;
 			foreach (component; getSubmoduleComponents(submoduleName))
 				component.haveBuild = false;
+
 			submodule.needHead(commit);
 		}
 
