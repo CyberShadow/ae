@@ -29,7 +29,7 @@ struct HashTable(K, V, uint SIZE, alias ALLOCATOR, alias HASHFUNC="k")
 	import std.functional;
 	import std.exception;
 
-	alias unaryFun!(HASHFUNC, false, "k") hashFunc;
+	alias unaryFun!(HASHFUNC, "k") hashFunc;
 
 	// hashFunc returns a hash, get its type
 	alias typeof(hashFunc(K.init)) H;
