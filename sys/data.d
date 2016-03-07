@@ -133,7 +133,7 @@ public:
 	}
 
 	/// Create a new instance with given size/capacity. Capacity defaults to size.
-	this(size_t size = 0, size_t capacity = 0)
+	this(size_t size, size_t capacity = 0)
 	in
 	{
 		assert(capacity == 0 || size <= capacity);
