@@ -22,6 +22,7 @@ import std.string;
 
 import ae.sys.file;
 import ae.sys.install.sevenzip;
+import ae.utils.path : haveExecutable;
 
 /// Unzips a .zip file to the target directory.
 void unzip(string zip, string target)
@@ -57,7 +58,7 @@ void unpack(string archive, string target)
 	if (archive.toLower().endsWith(".zip"))
 		archive.unzip(target);
 	else
-	if (Installer.haveExecutable("tar") && (archive.toLower().endsWith(".tar.gz") || archive.toLower().endsWith(".tgz")))
+	if (haveExecutable("tar") && (archive.toLower().endsWith(".tar.gz") || archive.toLower().endsWith(".tgz")))
 	{
 		target.mkdirRecurse();
 		auto pid = spawnProcess(["tar", "zxf", archive, "--directory", target]);
