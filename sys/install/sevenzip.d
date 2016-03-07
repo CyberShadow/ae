@@ -34,6 +34,8 @@ class SevenZipInstaller : Installer
 
 	@property override string[] requiredExecutables() { assert(false); }
 
+	import ae.utils.path : haveExecutable;
+
 	override void installImpl(string target)
 	{
 		windowsOnly();
