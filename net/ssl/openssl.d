@@ -15,6 +15,7 @@ module ae.net.ssl.openssl;
 
 import ae.net.asockets;
 import ae.net.ssl;
+import ae.utils.exception : CaughtException;
 import ae.utils.meta : enumLength;
 import ae.utils.text;
 
@@ -237,7 +238,7 @@ class OpenSSLAdapter : SSLAdapter
 			}
 			enforce(r.data.length == 0, "SSL did not consume all read data");
 		}
-		catch (Exception e)
+		catch (CaughtException e)
 		{
 			debug(OPENSSL) stderr.writeln("Error while processing incoming data: " ~ e.msg);
 			disconnect(e.msg, DisconnectType.error);
