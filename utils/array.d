@@ -335,10 +335,13 @@ T[] skipUntil(T, D)(ref T[] source, D delim, bool orUntilEnd = false)
 	else
 		enum delimLength = 1;
 
-	// bring in all overloads at the same level
-	import std.string, ae.utils.array;
+	static if (is(typeof(ae.utils.array.indexOf(source, delim))))
+		alias indexOf = ae.utils.array.indexOf;
+	else
+	static if (is(typeof(std.string.indexOf(source, delim))))
+		alias indexOf = std.string.indexOf;
 
-	auto i = source.indexOf(delim);
+	auto i = indexOf(source, delim);
 	if (i < 0)
 	{
 		if (orUntilEnd)
