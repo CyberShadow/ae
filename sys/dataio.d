@@ -141,6 +141,7 @@ public:
 			debug(SwappedData) log(fileName ~ " - Deleting");
 			remove(fileName);
 		}*/
-		core.stdc.stdio.remove(cFileName);
+		import core.stdc.stdio : remove;
+		remove(cFileName);
 	}
 }
