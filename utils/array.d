@@ -65,8 +65,8 @@ unittest
 
 int memcmp(in ubyte[] a, in ubyte[] b)
 {
-	import core.stdc.string;
 	assert(a.length == b.length);
+	import core.stdc.string : memcmp;
 	return memcmp(a.ptr, b.ptr, a.length);
 }
 
@@ -74,8 +74,8 @@ int memcmp(in ubyte[] a, in ubyte[] b)
 /// https://issues.dlang.org/show_bug.cgi?id=13650
 void memmove(T)(T[] dst, in T[] src)
 {
-	import core.stdc.string;
 	assert(src.length == dst.length);
+	import core.stdc.string : memmove;
 	memmove(dst.ptr, src.ptr, dst.length * T.sizeof);
 }
 
