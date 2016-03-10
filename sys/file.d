@@ -693,6 +693,123 @@ version (Posix)
 	}
 }
 
+// ****************************************************************************
+
+version (linux)
+{
+	import core.sys.linux.sys.xattr;
+	import core.stdc.errno;
+	alias ENOATTR = ENODATA;
+
+	/// AA-like object for accessing a file's extended attributes.
+	struct XAttrs(Obj, string funPrefix)
+	{
+		Obj obj;
+
+		mixin("alias getFun = " ~ funPrefix ~ "getxattr;");
+		mixin("alias setFun = " ~ funPrefix ~ "setxattr;");
+		mixin("alias removeFun = " ~ funPrefix ~ "removexattr;");
+		mixin("alias listFun = " ~ funPrefix ~ "listxattr;");
+
+		void[] opIndex(string key)
+		{
+			auto cKey = key.toStringz();
+			auto size = getFun(obj, cKey, null, 0);
+			errnoEnforce(size >= 0);
+			auto result = new void[size];
+			// TODO: race condition, retry
+			size = getFun(obj, cKey, result.ptr, result.length);
+			errnoEnforce(size == result.length);
+			return result;
+		}
+
+		bool opIn_r(string key)
+		{
+			auto cKey = key.toStringz();
+			auto size = getFun(obj, cKey, null, 0);
+			if (size >= 0)
+				return true;
+			else
+			if (errno == ENOATTR)
+				return false;
+			else
+				errnoEnforce(false);
+			assert(false);
+		}
+
+		void opIndexAssign(in void[] value, string key)
+		{
+			auto ret = setFun(obj, key.toStringz(), value.ptr, value.length, 0);
+			errnoEnforce(ret == 0);
+		}
+
+		void remove(string key)
+		{
+			auto ret = removeFun(obj, key.toStringz());
+			errnoEnforce(ret == 0);
+		}
+
+		string[] keys()
+		{
+			auto size = listFun(obj, null, 0);
+			errnoEnforce(size >= 0);
+			auto buf = new char[size];
+			// TODO: race condition, retry
+			size = listFun(obj, buf.ptr, buf.length);
+			errnoEnforce(size == buf.length);
+
+			char[][] result;
+			size_t start;
+			foreach (p, c; buf)
+				if (!c)
+				{
+					result ~= buf[start..p];
+					start = p+1;
+				}
+
+			return cast(string[])result;
+		}
+	}
+
+	auto xAttrs(string path)
+	{
+		return XAttrs!(const(char)*, "")(path.toStringz());
+	}
+
+	auto linkXAttrs(string path)
+	{
+		return XAttrs!(const(char)*, "l")(path.toStringz());
+	}
+
+	auto xAttrs(in ref File f)
+	{
+		return XAttrs!(int, "f")(f.fileno);
+	}
+
+	unittest
+	{
+		enum fn = "test.txt";
+		std.file.write(fn, "test");
+		scope(exit) remove(fn);
+
+		auto attrs = xAttrs(fn);
+		enum key = "user.foo";
+		assert(key !in attrs);
+		assert(attrs.keys == []);
+
+		attrs[key] = "bar";
+		assert(key in attrs);
+		assert(attrs[key] == "bar");
+		assert(attrs.keys == [key]);
+
+		attrs.remove(key);
+		assert(key !in attrs);
+		assert(attrs.keys == []);
+	}
+}
+
+// ****************************************************************************
+
 version (Windows)
 {
 	/// Enumerate all hard links to the specified file.
