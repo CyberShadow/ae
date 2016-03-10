@@ -426,6 +426,7 @@ static assert(timeFormatSize(TimeFormats.STD_DATE) == "Tue Jun 07 13:23:19 GMT+0
 
 import std.exception : enforce;
 import std.conv : to;
+static import std.conv;
 import std.ascii : isDigit, isWhite;
 
 private struct ParseContext(Char, bool checked)
