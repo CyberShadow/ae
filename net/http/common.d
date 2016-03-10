@@ -260,7 +260,7 @@ public:
 	string[] remoteHosts(string remoteHost = null)
 	{
 		return
-			(headers.get("X-Forwarded-For", null).split(",").amap!strip() ~
+			(headers.get("X-Forwarded-For", null).split(",").amap!(std.string.strip)() ~
 			 headers.get("X-Forwarded-Host", null) ~
 			 remoteHost)
 			.afilter!`a && a != "unknown"`()
