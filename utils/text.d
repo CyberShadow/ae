@@ -592,7 +592,7 @@ ubyte[] arrayFromHex(in char[] hex, ubyte[] buf = null)
 	return buf;
 }
 
-string toHex()(in ubyte[] data, char[] buf = null)
+string toHex(alias digits = hexDigits)(in ubyte[] data, char[] buf = null)
 {
 	if (buf is null)
 		buf = new char[data.length*2];
@@ -600,11 +600,13 @@ string toHex()(in ubyte[] data, char[] buf = null)
 		assert(buf.length == data.length*2);
 	foreach (i, b; data)
 	{
-		buf[i*2  ] = hexDigits[b>>4];
-		buf[i*2+1] = hexDigits[b&15];
+		buf[i*2  ] = digits[b>>4];
+		buf[i*2+1] = digits[b&15];
 	}
 	return assumeUnique(buf);
 }
+
+alias toLowerHex = toHex!lowerHexDigits;
 
 void toHex(T : ulong, size_t U = T.sizeof*2)(T n, ref char[U] buf)
 {
