@@ -846,19 +846,45 @@ version (Windows)
 	}
 }
 
-version(Windows)
+uint hardLinkCount(string fn)
+{
+	version (Windows)
+	{
+		import core.sys.windows.stat;
+
+		struct_stat s;
+		errnoEnforce(_wstat(fn.toWStringz(), &s) == 0, "_wstat");
+		return s.st_nlink;
+	}
+	else
+	{
+		import core.sys.posix.sys.stat;
+
+		stat_t s;
+		errnoEnforce(stat(fn.toStringz(), &s) == 0, "stat");
+		return s.st_nlink.to!uint;
+	}
+}
+
 unittest
 {
 	touch("a.test");
 	scope(exit) remove("a.test");
+	assert("a.test".hardLinkCount() == 1);
+
 	hardLink("a.test", "b.test");
 	scope(exit) remove("b.test");
+	assert("a.test".hardLinkCount() == 2);
+	assert("b.test".hardLinkCount() == 2);
 
-	auto paths = enumerateHardLinks("a.test");
-	assert(paths.length == 2);
-	paths.sort();
-	assert(paths[0].endsWith(`\a.test`), paths[0]);
-	assert(paths[1].endsWith(`\b.test`));
+	version(Windows)
+	{
+		auto paths = enumerateHardLinks("a.test");
+		assert(paths.length == 2);
+		paths.sort();
+		assert(paths[0].endsWith(`\a.test`), paths[0]);
+		assert(paths[1].endsWith(`\b.test`));
+	}
 }
 
 void toFile(in void[] data, in char[] name)
