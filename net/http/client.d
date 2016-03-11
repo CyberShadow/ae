@@ -28,6 +28,7 @@ import ae.net.ietf.headerparse;
 import ae.net.ietf.url;
 import ae.net.ssl;
 import ae.utils.array : toArray;
+import ae.utils.exception : CaughtException;
 import ae.sys.data;
 debug(HTTP) import std.stdio : stderr;
 
@@ -123,7 +124,7 @@ protected:
 
 			onHeadersReceived();
 		}
-		catch (Exception e)
+		catch (CaughtException e)
 		{
 			if (conn.state == ConnectionState.connected)
 				conn.disconnect(e.msg.length ? e.msg : e.classinfo.name, DisconnectType.error);
