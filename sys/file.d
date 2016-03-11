@@ -114,7 +114,7 @@ version (Posix)
 
 					static if (!symlinks)
 					{
-						if (fdata.d_type & DT_LNK)
+						if (fdata.d_type == DT_LNK)
 							continue;
 					}
 
