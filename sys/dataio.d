@@ -38,11 +38,21 @@ static import std.stdio;
 
 Data readFileData(ref std.stdio.File f)
 {
-	Data buf = Data(1024*1024);
 	Data result;
-	while (!f.eof())
-		result ~= f.rawRead(cast(ubyte[])buf.mcontents);
-	buf.deleteContents();
+	auto size = f.size;
+	if (size == ulong.max)
+	{
+		Data buf = Data(1024*1024);
+		while (!f.eof())
+			result ~= f.rawRead(cast(ubyte[])buf.mcontents);
+		buf.deleteContents();
+	}
+	else
+	{
+		auto pos = f.tell;
+		result = Data(size - pos);
+		result.length = f.rawRead(cast(ubyte[])result.mcontents).length;
+	}
 	return result;
 }
 
