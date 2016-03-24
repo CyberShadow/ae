@@ -46,5 +46,5 @@ auto whiteNoise(T)()
 {
 	import std.random;
 	return iota(size_t.max)
-		.map!(n => uniform!T);
+		.map!(n => cast(T)Xorshift(cast(uint)n).front);
 }
