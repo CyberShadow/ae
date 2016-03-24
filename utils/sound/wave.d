@@ -41,3 +41,10 @@ auto sineWave(T)(real interval)
 	return iota(size_t.max)
 		.map!(n => (sin(n * 2 * PI / interval) * T.max).to!T);
 }
+
+auto whiteNoise(T)()
+{
+	import std.random;
+	return iota(size_t.max)
+		.map!(n => uniform!T);
+}
