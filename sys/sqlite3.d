@@ -129,7 +129,7 @@ final class SQLite
 			sqlite3_bind_null(stmt, idx);
 		}
 
-		void bind(int idx, in ubyte[] v)
+		void bind(int idx, in void[] v)
 		{
 			sqlite3_bind_blob(stmt, idx, v.ptr, to!int(v.length), SQLITE_TRANSIENT);
 		}
@@ -182,7 +182,7 @@ final class SQLite
 				while (stmt.step())
 				{
 					scope(failure) stmt.reset();
-					static if (U.length == 1 && is(U[0] V : V[]) && !is(U[0] : string))
+					static if (U.length == 1 && is(U[0] V : V[]) && !is(U[0] : string) && !is(V == void))
 					{
 						U[0] result;
 						result.length = stmt.columnCount();
@@ -225,6 +225,9 @@ final class SQLite
 		{
 			static if (is(T == string))
 				return (cast(char*)sqlite3_column_blob(stmt, idx))[0..sqlite3_column_bytes(stmt, idx)].idup;
+			else
+			static if (is(T == void[]))
+				return (cast(void*)sqlite3_column_blob(stmt, idx))[0..sqlite3_column_bytes(stmt, idx)].dup;
 			else
 			static if (is(T == int))
 				return sqlite3_column_int(stmt, idx);
