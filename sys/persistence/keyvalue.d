@@ -14,6 +14,7 @@
 module ae.sys.persistence.keyvalue;
 
 import std.exception;
+import std.traits;
 
 import ae.sys.persistence.core;
 import ae.sys.sqlite3;
@@ -43,7 +44,7 @@ struct KeyValueStore(K, V)
 	V opIndex()(auto ref K k)
 	{
 		checkInitialized();
-		foreach (string s; sqlGet.iterate(toStr(k)))
+		foreach (void[] s; sqlGet.iterate(toSqlType(k)))
 			return fromStr!V(s);
 		throw new Exception("Value not in KeyValueStore");
 	}
@@ -51,15 +52,15 @@ struct KeyValueStore(K, V)
 	V get()(auto ref K k, auto ref V defaultValue)
 	{
 		checkInitialized();
-		foreach (string s; sqlGet.iterate(toStr(k)))
-			return fromStr!V(s);
+		foreach (void[] s; sqlGet.iterate(toSqlType(k)))
+			return fromSqlType!V(s);
 		return defaultValue;
 	}
 
 	bool opIn_r()(auto ref K k)
 	{
 		checkInitialized();
-		foreach (int count; sqlExists.iterate(toStr(k)))
+		foreach (int count; sqlExists.iterate(toSqlType(k)))
 			return count > 0;
 		assert(false);
 	}
@@ -67,13 +68,13 @@ struct KeyValueStore(K, V)
 	void opIndexAssign()(auto ref V v, auto ref K k)
 	{
 		checkInitialized();
-		sqlSet.exec(toStr(k), toStr(v));
+		sqlSet.exec(toSqlType(k), toSqlType(v));
 	}
 
 	void remove()(auto ref K k)
 	{
 		checkInitialized();
-		sqlDelete.exec(toStr(k));
+		sqlDelete.exec(toSqlType(k));
 	}
 
 	@property int length()
@@ -85,28 +86,62 @@ struct KeyValueStore(K, V)
 	}
 
 private:
-	static string toStr(T)(auto ref T v)
+	static SqlType!T toSqlType(T)(auto ref T v)
 	{
-		static if (is(T == string))
+		alias S = SqlType!T;
+		static if (is(T : long)) // long
+			return v;
+		else
+		static if (is(T : const(char)[])) // string
+			return cast(S) v;
+		else
+		static if (is(T U : U[]) && !hasIndirections!U) // void[]
 			return v;
 		else
 			return toJson(v);
 	}
 
-	static T fromStr(T)(string s)
+	static T fromSqlType(T)(SqlType!T v)
 	{
-		static if (is(T == string))
-			return s;
+		static if (is(T : long)) // long
+			return cast(T) v;
 		else
-			return jsonParse(s);
+		static if (is(T : const(char)[])) // string
+			return cast(T) v;
+		else
+		static if (is(T U : U[]) && !hasIndirections!U) // void[]
+			return cast(T) v;
+		else
+			return jsonParse!T(cast(string) v);
 	}
 
-	template sqlType(T)
+	template SqlType(T)
 	{
 		static if (is(T : long))
-			enum sqlType = "INTEGER";
+			alias SqlType = long;
 		else
-			enum sqlType = "BLOB";
+		static if (is(T : const(char)[]))
+			alias SqlType = string;
+		else
+		static if (is(T U : U[]) && !hasIndirections!U)
+			alias SqlType = void[];
+		else
+			alias SqlType = string; // JSON-encoded
+	}
+
+	template sqlTypeName(T)
+	{
+		alias S = SqlType!T;
+		static if (is(S == long))
+			enum sqlTypeName = "INTEGER";
+		else
+		static if (is(S == string))
+			enum sqlTypeName = "TEXT";
+		else
+		static if (is(S == void[]))
+			enum sqlTypeName = "BLOB";
+		else
+			enum sqlTypeName = "TEXT"; // JSON
 	}
 
 	bool initialized;
@@ -118,7 +153,8 @@ private:
 		if (!initialized)
 		{
 			assert(db, "KeyValueStore database not set");
-			db.exec("CREATE TABLE IF NOT EXISTS [" ~ tableName ~ "] ([key] " ~ sqlType!K ~ " PRIMARY KEY, [value] " ~ sqlType!V ~ ")");
+			db.exec("CREATE TABLE IF NOT EXISTS [" ~ tableName ~ "] ([key] " ~ sqlTypeName!K ~ " PRIMARY KEY, [value] " ~ sqlTypeName!V ~ ")");
+			db.exec("PRAGMA SYNCHRONOUS=OFF");
 			sqlGet = db.prepare("SELECT [value] FROM [" ~ tableName ~ "] WHERE [key]=?");
 			sqlSet = db.prepare("INSERT OR REPLACE INTO [" ~ tableName ~ "] VALUES (?, ?)");
 			sqlDelete = db.prepare("DELETE FROM [" ~ tableName ~ "] WHERE [key]=?");
