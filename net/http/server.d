@@ -308,7 +308,7 @@ private:
 		if (server.log) server.log(([
 			"", // align IP to tab
 			request.remoteHosts(remoteAddress.toAddrString())[0],
-			response ? text(response.status) : "-",
+			response ? text(cast(ushort)response.status) : "-",
 			format("%9.2f ms", request.age.total!"usecs" / 1000f),
 			request.method,
 			formatAddress(protocol, localAddress, request.host) ~ request.resource,
