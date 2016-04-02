@@ -311,7 +311,7 @@ private:
 			response ? text(cast(ushort)response.status) : "-",
 			format("%9.2f ms", request.age.total!"usecs" / 1000f),
 			request.method,
-			formatAddress(protocol, localAddress, request.host) ~ request.resource,
+			formatAddress(protocol, localAddress, request.host, request.port) ~ request.resource,
 			response ? response.headers.get("Content-Type", "-") : "-",
 		] ~ (DEBUG ? [] : [
 			request.headers.get("Referer", "-"),
@@ -430,10 +430,10 @@ public:
 	}
 }
 
-string formatAddress(string protocol, Address address, string vhost = null)
+string formatAddress(string protocol, Address address, string vhost = null, ushort logPort = 0)
 {
 	string addr = address.toAddrString();
-	string port = address.toPortString();
+	string port = logPort ? text(logPort) : address.toPortString();
 	return protocol ~ "://" ~
 		(vhost ? vhost : addr == "0.0.0.0" || addr == "::" ? "*" : addr.contains(":") ? "[" ~ addr ~ "]" : addr) ~
 		(port == "80" ? "" : ":" ~ port);
