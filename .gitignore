@@ -12,7 +12,8 @@
 *.dll
 
 .dub
-dub.selections.json
+/dub.selections.json
 
 # demos
-demo/http/ae-http-demo
+/demo/http/ae-http-demo
+/demo/pewpew/pewpew
