@@ -15,6 +15,7 @@ module ae.net.sync;
 
 import core.thread;
 
+import std.exception;
 import std.socket;
 
 import ae.net.asockets;
