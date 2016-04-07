@@ -1398,6 +1398,13 @@ EOS";
 	}
 
 	version (Windows)
+	auto getVSInstaller()
+	{
+		needInstaller();
+		return vs2013community;
+	}
+
+	version (Windows)
 	void needVC()
 	{
 		tempError++; scope(success) tempError--;
@@ -1405,7 +1412,6 @@ EOS";
 		if (!config.deps.vsDir)
 		{
 			log("Preparing Visual C++");
-			needInstaller();
 
 			auto packages =
 			[
@@ -1421,7 +1427,7 @@ EOS";
 			if (config.build.components.dmd.useVC)
 				packages ~= "Msi_BuildTools_MSBuild_x86";
 
-			auto vs = vs2013community;
+			auto vs = getVSInstaller();
 			vs.requirePackages(packages);
 			vs.requireLocal(false);
 			config.deps.vsDir  = vs.directory.buildPath("Program Files (x86)", "Microsoft Visual Studio 12.0").absolutePath();
