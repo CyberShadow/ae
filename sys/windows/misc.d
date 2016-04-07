@@ -92,3 +92,19 @@ void hideOwnConsoleWindow()
 	if (pid == GetCurrentProcessId())
 		ShowWindow(w, SW_HIDE);
 }
+
+// ***************************************************************************
+
+/// Returns Wine version, or null if not running under Wine.
+string getWineVersion()
+{
+	auto ntdll = GetModuleHandle("ntdll.dll");
+	if (!ntdll)
+		return null;
+	alias wine_get_version_t = extern(C) const(char*) function();
+	auto wine_get_version = cast(wine_get_version_t)GetProcAddress(ntdll, "wine_get_version");
+	if (!wine_get_version)
+		return null;
+	import std.conv : to;
+	return wine_get_version().to!string();
+}
