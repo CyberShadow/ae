@@ -19,6 +19,8 @@ import ae.net.http.client;
 import ae.net.ietf.url;
 import ae.sys.net;
 
+static import std.file;
+
 class AENetwork : Network
 {
 	private Data getData(string url)
