@@ -851,9 +851,11 @@ uint hardLinkCount(string fn)
 	version (Windows)
 	{
 		import core.sys.windows.stat;
+		import ae.sys.windows.text;
 
 		struct_stat s;
-		errnoEnforce(_wstat(fn.toWStringz(), &s) == 0, "_wstat");
+		// https://github.com/D-Programming-Language/druntime/pull/1535
+		errnoEnforce(_wstat(cast(wchar*)fn.toWStringz(), &s) == 0, "_wstat");
 		return s.st_nlink;
 	}
 	else
