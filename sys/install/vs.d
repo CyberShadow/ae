@@ -135,6 +135,9 @@ private:
 						case "SystemFolder":
 							dir = dir.buildPath("windows", "system32");
 							break;
+						case "System64Folder":
+							dir = dir.buildPath("windows", "system64");
+							break;
 						default:
 							if ("Name" in node.attributes)
 								dir = dir.buildPath(node.attributes["Name"]);
