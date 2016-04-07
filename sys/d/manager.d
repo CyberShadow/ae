@@ -151,6 +151,8 @@ class DManager : ICacheHost
 		enum configFileName = "dmd.conf";
 	}
 
+	static bool needConfSwitch() { return exists(environment.get("HOME", null).buildPath(configFileName)); }
+
 	// **************************** Repositories *****************************
 
 	class DManagerRepository : ManagedRepository
@@ -782,7 +784,7 @@ class DManager : ICacheHost
 			// Avoid HOST_DC reading ~/dmd.conf
 			string hostDC = config.deps.hostDC;
 			version (Posix)
-			if (hostDC && exists(environment.get("HOME", null).buildPath(configFileName)))
+			if (hostDC && needConfSwitch())
 			{
 				auto dcProxy = buildPath(config.local.workDir, "host-dc-proxy.sh");
 				std.file.write(dcProxy, escapeShellCommand(["exec", hostDC, "-conf=" ~ buildPath(dirName(hostDC), configFileName)]) ~ ` "$@"`);
