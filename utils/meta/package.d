@@ -476,9 +476,14 @@ template isVersion(string versionName)
 
 // ************************************************************************
 
+/// Identity function.
+auto ref T identity(T)(auto ref T value) { return value; }
+
 /// Shorter synonym for std.traits.Identity.
 /// Can be used to UFCS-chain static methods and nested functions.
 alias I(alias A) = A;
+
+// ************************************************************************
 
 /// Get f's ancestor which represents its "this" pointer.
 /// Skips template and mixin ancestors until it finds a struct or class.
