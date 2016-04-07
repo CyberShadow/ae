@@ -20,7 +20,7 @@ import std.datetime;
 import std.exception;
 import std.file;
 import std.path;
-import std.process;
+import std.process : spawnProcess, wait, escapeShellCommand;
 import std.range;
 import std.regex;
 import std.string;
@@ -46,6 +46,7 @@ import ae.sys.install.dmd;
 import ae.sys.install.git;
 import ae.sys.install.kindlegen;
 
+static import std.process;
 
 /// Class which manages a D checkout and its dependencies.
 class DManager : ICacheHost
@@ -100,8 +101,15 @@ class DManager : ICacheHost
 		/// Whether we should cache failed builds.
 		bool cacheFailures = true;
 
-	//protected:
+		/// Additional environment variables.
+		/// Supports %VAR% expansion - see applyEnv.
+		string[string] environment;
+	}
+	Config config; /// ditto
 
+	/// Current build environment.
+	struct Environment
+	{
 		struct Deps /// Configuration for software dependencies
 		{
 			string dmcDir;   /// Where dmc.zip is unpacked.
@@ -112,9 +120,8 @@ class DManager : ICacheHost
 		Deps deps; /// ditto
 
 		/// Calculated local environment, incl. dependencies
-		string[string] env;
+		string[string] vars;
 	}
-	Config config; /// ditto
 
 	/// Get a specific subdirectory of the work directory.
 	@property string subDir(string name)() { return buildPath(config.local.workDir, name); }
@@ -151,7 +158,7 @@ class DManager : ICacheHost
 		enum configFileName = "dmd.conf";
 	}
 
-	static bool needConfSwitch() { return exists(environment.get("HOME", null).buildPath(configFileName)); }
+	static bool needConfSwitch() { return exists(std.process.environment.get("HOME", null).buildPath(configFileName)); }
 
 	// **************************** Repositories *****************************
 
@@ -568,7 +575,6 @@ class DManager : ICacheHost
 			}
 
 			install();
-			updateEnv();
 		}
 
 		/// Build the component in-place, without moving the built files anywhere.
@@ -579,7 +585,7 @@ class DManager : ICacheHost
 
 		/// Update the environment post-install, to allow
 		/// building components that depend on this one.
-		void updateEnv() {}
+		void updateEnv(ref Environment env) {}
 
 		/// Copy build results from cacheDir to buildDir
 		void install()
@@ -605,12 +611,13 @@ class DManager : ICacheHost
 			enum string binExt = "";
 		}
 
-		@property string make()
+		/// Returns the command for the make utility.
+		string[] getMake(in ref Environment env)
 		{
-			return config.env.get("MAKE", "make");
+			return [env.vars.get("MAKE", "make")];
 		}
 
-		@property string[] platformMakeVars()
+		string[] getPlatformMakeVars(in ref Environment env)
 		{
 			string[] args;
 
@@ -619,8 +626,8 @@ class DManager : ICacheHost
 			version (Windows)
 				if (commonConfig.model == "64")
 				{
-					args ~= "VCDIR="  ~ config.deps.vsDir .absolutePath() ~ `\VC`;
-					args ~= "SDKDIR=" ~ config.deps.sdkDir.absolutePath();
+					args ~= "VCDIR="  ~ env.deps.vsDir .absolutePath() ~ `\VC`;
+					args ~= "SDKDIR=" ~ env.deps.sdkDir.absolutePath();
 				}
 
 			return args;
@@ -638,33 +645,32 @@ class DManager : ICacheHost
 			return fn;
 		}
 
-		void needCC(string dmcVer = null)
+		void needCC(ref Environment env, string dmcVer = null)
 		{
-			version(Windows)
+			version (Windows)
 			{
-				needDMC(dmcVer); // We need DMC even for 64-bit builds (for DM make)
+				needDMC(env, dmcVer); // We need DMC even for 64-bit builds (for DM make)
 				if (commonConfig.model == "64")
-					needVC();
+					needVC(env);
 			}
 		}
 
-		void run(string[] args, ref string[string] newEnv, string dir)
+		void run(in string[] args, in string[string] newEnv, string dir)
 		{
 			log("Running: " ~ escapeShellCommand(args));
 
-			if (newEnv is null) newEnv = environment.toAA();
-			string oldPath = environment["PATH"];
-			scope (exit) environment["PATH"] = oldPath;
-			environment["PATH"] = newEnv["PATH"];
-			log("PATH=" ~ newEnv["PATH"]);
+			// Apply user environment
+			auto env = applyEnv(newEnv, config.environment);
 
-			auto status = spawnProcess(args, newEnv, std.process.Config.newEnv, dir).wait();
+			// Temporarily apply PATH from newEnv to our process,
+			// so process creation lookup can use it.
+			string oldPath = std.process.environment["PATH"];
+			scope (exit) std.process.environment["PATH"] = oldPath;
+			std.process.environment["PATH"] = env["PATH"];
+			log("PATH=" ~ env["PATH"]);
+
+			auto status = spawnProcess(args, env, std.process.Config.newEnv, dir).wait();
 			enforce(status == 0, "Command %s failed with status %d".format(args, status));
-		}
-
-		void run(string[] args, string dir)
-		{
-			run(args, config.env, dir);
 		}
 	}
 
@@ -714,33 +720,33 @@ class DManager : ICacheHost
 			if (idgen.exists && idgen.readText().indexOf(`{ "alignof" },`) >= 0)
 				dmcVer = "850";
 
-			needCC(dmcVer); // Need VC too for VSINSTALLDIR
+			auto env = baseEnvironment;
+			needCC(env, dmcVer); // Need VC too for VSINSTALLDIR
 
 			if (buildPath(sourceDir, "src", "idgen.d").exists)
 			{
 				// Required for bootstrapping.
-				needDMD();
+				needDMD(env);
 			}
 
 			auto srcDir = buildPath(sourceDir, "src");
 
 			if (config.build.components.dmd.useVC)
 			{
-				version(Windows)
+				version (Windows)
 				{
-					needVC();
+					needVC(env);
 
-					auto env = config.env.dup;
-					env["PATH"] = env["PATH"] ~ pathSeparator ~ config.deps.hostDC.dirName;
+					env.vars["PATH"] = env.vars["PATH"] ~ pathSeparator ~ env.deps.hostDC.dirName;
 
-					return run(["msbuild", "/p:Configuration=" ~ vsConfiguration, "/p:Platform=" ~ vsPlatform, "dmd_msc_vs10.sln"], env, srcDir);
+					return run(["msbuild", "/p:Configuration=" ~ vsConfiguration, "/p:Platform=" ~ vsPlatform, "dmd_msc_vs10.sln"], env.vars, srcDir);
 				}
 				else
 					throw new Exception("Can only use Visual Studio on Windows");
 			}
 
 			version (Windows)
-				auto scRoot = config.deps.dmcDir.absolutePath();
+				auto scRoot = env.deps.dmcDir.absolutePath();
 
 			string dmdMakeFileName = findMakeFile(srcDir, makeFileName);
 			string dmdMakeFullName = srcDir.buildPath(dmdMakeFileName);
@@ -782,7 +788,7 @@ class DManager : ICacheHost
 			string[] targets = config.build.components.dmd.debugDMD ? [] : ["dmd"];
 
 			// Avoid HOST_DC reading ~/dmd.conf
-			string hostDC = config.deps.hostDC;
+			string hostDC = env.deps.hostDC;
 			version (Posix)
 			if (hostDC && needConfSwitch())
 			{
@@ -792,12 +798,12 @@ class DManager : ICacheHost
 				hostDC = dcProxy;
 			}
 
-			run([make,
+			run(getMake(env) ~ [
 					"-f", dmdMakeFileName,
 					"MODEL=" ~ modelFlag,
 					"HOST_DC=" ~ hostDC,
 				] ~ commonConfig.makeArgs ~ extraArgs ~ targets,
-				srcDir
+				env.vars, srcDir
 			);
 		}
 
@@ -840,9 +846,13 @@ LIB=%LIB%;"%WindowsSdkDir%\Lib\winv6.3\um\x64"
 LIB=%LIB%;"%WindowsSdkDir%\Lib\win8\um\x64"
 LIB=%LIB%;"%WindowsSdkDir%\Lib\x64"
 EOS";
-				ini = ini.replace("__DMC__", config.deps.dmcDir.buildPath(`bin`).absolutePath());
-				ini = ini.replace("__VS__" , config.deps.vsDir .absolutePath());
-				ini = ini.replace("__SDK__", config.deps.sdkDir.absolutePath());
+
+				auto env = baseEnvironment;
+				needCC(env);
+
+				ini = ini.replace("__DMC__", env.deps.dmcDir.buildPath(`bin`).absolutePath());
+				ini = ini.replace("__VS__" , env.deps.vsDir .absolutePath());
+				ini = ini.replace("__SDK__", env.deps.sdkDir.absolutePath());
 
 				buildPath(stageDir, "bin", configFileName).write(ini);
 			}
@@ -864,10 +874,10 @@ EOS";
 			}
 		}
 
-		override void updateEnv()
+		override void updateEnv(ref Environment env)
 		{
 			// Add the DMD we built for Phobos/Druntime/Tools
-			config.env["PATH"] = buildPath(buildDir, "bin").absolutePath() ~ pathSeparator ~ config.env["PATH"];
+			env.vars["PATH"] = buildPath(buildDir, "bin").absolutePath() ~ pathSeparator ~ env.vars["PATH"];
 		}
 	}
 
@@ -901,15 +911,17 @@ EOS";
 
 		override void performBuild()
 		{
-			needCC();
+			auto env = baseEnvironment;
+			needCC(env);
+			getComponent("dmd").updateEnv(env);
 
 			mkdirRecurse(sourceDir.buildPath("import"));
 			mkdirRecurse(sourceDir.buildPath("lib"));
 
 			setTimes(sourceDir.buildPath("src", "rt", "minit.obj"), Clock.currTime(), Clock.currTime());
 
-			run([make, "-f", makeFileNameModel, "import"] ~ commonConfig.makeArgs ~ platformMakeVars, sourceDir);
-			run([make, "-f", makeFileNameModel          ] ~ commonConfig.makeArgs ~ platformMakeVars, sourceDir);
+			run(getMake(env) ~ ["-f", makeFileNameModel, "import"] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
+			run(getMake(env) ~ ["-f", makeFileNameModel          ] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
 		}
 
 		override void performStage()
@@ -933,20 +945,21 @@ EOS";
 
 		override void performBuild()
 		{
-			needCC();
+			auto env = baseEnvironment;
+			needCC(env);
 
 			string phobosMakeFileName = findMakeFile(sourceDir, makeFileNameModel);
 
 			version (Windows)
 			{
 				auto lib = "phobos%s.lib".format(modelSuffix);
-				run([make, "-f", phobosMakeFileName, lib] ~ commonConfig.makeArgs ~ platformMakeVars, sourceDir);
+				run(getMake(env) ~ ["-f", phobosMakeFileName, lib] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
 				enforce(sourceDir.buildPath(lib).exists);
 				targets = ["phobos%s.lib".format(modelSuffix)];
 			}
 			else
 			{
-				run([make, "-f", phobosMakeFileName] ~ commonConfig.makeArgs ~ platformMakeVars, sourceDir);
+				run(getMake(env) ~ ["-f", phobosMakeFileName] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
 				targets = sourceDir
 					.buildPath("generated")
 					.dirEntries(SpanMode.depth)
@@ -978,7 +991,8 @@ EOS";
 
 		override void performBuild()
 		{
-			needCC();
+			auto env = baseEnvironment;
+			needCC(env);
 
 			// Just build rdmd
 			bool needModel; // Need -mXX switch?
@@ -990,12 +1004,12 @@ EOS";
 
 			if (!needModel)
 				try
-					run(["dmd"] ~ args, sourceDir);
+					run(["dmd"] ~ args, env.vars, sourceDir);
 				catch (Exception e)
 					needModel = true;
 
 			if (needModel)
-				run(["dmd", "-m" ~ commonConfig.model] ~ args, sourceDir);
+				run(["dmd", "-m" ~ commonConfig.model] ~ args, env.vars, sourceDir);
 		}
 
 		override void performStage()
@@ -1044,11 +1058,13 @@ EOS";
 
 		override void performBuild()
 		{
+			auto env = baseEnvironment;
+
 			version (Windows)
 				throw new Exception("The dlang.org website is only buildable on POSIX platforms.");
 			else
 			{
-				needKindleGen();
+				needKindleGen(env);
 
 				foreach (dep; chain(sourceDeps, buildDeps, installDeps))
 					getComponent(dep).submodule.clean = false;
@@ -1066,12 +1082,12 @@ EOS";
 				auto latest = getLatest;
 				log("LATEST=" ~ latest);
 
-				run([make,
+				run(getMake(env) ~ [
 					"-f", makeFileName,
 					"all", "kindle", "pdf", "verbatim",
 					] ~ (config.build.components.website.noDateTime ? ["NODATETIME=nodatetime.ddoc"] : []) ~ [ // Can't be last due to https://issues.dlang.org/show_bug.cgi?id=14682
 					"LATEST=" ~ latest,
-				], sourceDir);
+				], env.vars, sourceDir);
 			}
 		}
 
@@ -1226,7 +1242,6 @@ EOS";
 		this.components = null;
 		this.submoduleState = submoduleState;
 		this.incrementalBuild = incremental;
-		prepareEnv();
 
 		if (buildDir.exists)
 			buildDir.removeRecurse();
@@ -1311,41 +1326,42 @@ EOS";
 		Installer.installationDirectory = dlDir;
 	}
 
-	void needDMD()
+	void needDMD(ref Environment env)
 	{
-		needDMD("2.067.1", config.build.components.dmd.bootstrap);
+		needDMD(env, "2.067.1", config.build.components.dmd.bootstrap);
 	}
 
-	void needDMD(string dmdVer, bool bootstrap)
+	void needDMD(ref Environment env, string dmdVer, bool bootstrap)
 	{
 		tempError++; scope(success) tempError--;
 
-		if (!config.deps.hostDC)
+		if (!env.deps.hostDC)
 		{
-			log("Preparing DMD");
 			if (bootstrap)
 			{
+				log("Bootstrapping DMD " ~ dmdVer);
 				auto dir = buildPath(config.local.workDir, "bootstrap", "dmd-" ~ dmdVer);
 				void bootstrapDMDProxy(string target) { return bootstrapDMD(dmdVer, target); } // https://issues.dlang.org/show_bug.cgi?id=14580
 				cached!bootstrapDMDProxy(dir);
-				config.deps.hostDC = buildPath(dir, "bin", "dmd" ~ binExt);
+				env.deps.hostDC = buildPath(dir, "bin", "dmd" ~ binExt);
 			}
 			else
 			{
+				log("Preparing DMD " ~ dmdVer);
 				needInstaller();
 				auto dmdInstaller = new DMDInstaller(dmdVer);
 				dmdInstaller.requireLocal(false);
-				config.deps.hostDC = dmdInstaller.exePath("dmd").absolutePath();
+				env.deps.hostDC = dmdInstaller.exePath("dmd").absolutePath();
 			}
-			log("hostDC=" ~ config.deps.hostDC);
+			log("hostDC=" ~ env.deps.hostDC);
 		}
 	}
 
-	void needKindleGen()
+	void needKindleGen(ref Environment env)
 	{
 		needInstaller();
 		kindleGenInstaller.requireLocal(false);
-		config.env["PATH"] = kindleGenInstaller.directory ~ pathSeparator ~ config.env["PATH"];
+		env.vars["PATH"] = kindleGenInstaller.directory ~ pathSeparator ~ env.vars["PATH"];
 	}
 
 	final void bootstrapDMD(string ver, string target)
@@ -1377,24 +1393,22 @@ EOS";
 	}
 
 	version (Windows)
-	void needDMC(string ver = null)
+	void needDMC(ref Environment env, string ver = null)
 	{
 		tempError++; scope(success) tempError--;
 
-		if (!config.deps.dmcDir)
-		{
-			log("Preparing DigitalMars C++");
-			needInstaller();
+		needInstaller();
 
-			auto dmc = ver ? new LegacyDMCInstaller(ver) : dmcInstaller;
-			dmc.requireLocal(false);
-			config.deps.dmcDir = dmc.directory;
+		auto dmc = ver ? new LegacyDMCInstaller(ver) : dmcInstaller;
+		if (!dmc.installedLocally)
+			log("Preparing DigitalMars C++ " ~ ver);
+		dmc.requireLocal(false);
+		env.deps.dmcDir = dmc.directory;
 
-			auto binPath = buildPath(config.deps.dmcDir, `bin`).absolutePath();
-			log("DMC=" ~ binPath);
-			config.env["DMC"] = binPath;
-			config.env["PATH"] = binPath ~ pathSeparator ~ config.env["PATH"];
-		}
+		auto binPath = buildPath(env.deps.dmcDir, `bin`).absolutePath();
+		log("DMC=" ~ binPath);
+		env.vars["DMC"] = binPath;
+		env.vars["PATH"] = binPath ~ pathSeparator ~ env.vars["PATH"];
 	}
 
 	version (Windows)
@@ -1405,35 +1419,34 @@ EOS";
 	}
 
 	version (Windows)
-	void needVC()
+	void needVC(ref Environment env)
 	{
 		tempError++; scope(success) tempError--;
 
-		if (!config.deps.vsDir)
-		{
+		auto packages =
+		[
+			"vcRuntimeMinimum_x86",
+			"vcRuntimeMinimum_x64",
+			"vc_compilercore86",
+			"vc_compilercore86res",
+			"vc_compilerx64nat",
+			"vc_compilerx64natres",
+			"vc_librarycore86",
+			"vc_libraryDesktop_x64",
+			"win_xpsupport",
+		];
+		if (config.build.components.dmd.useVC)
+			packages ~= "Msi_BuildTools_MSBuild_x86";
+
+		auto vs = getVSInstaller();
+		vs.requirePackages(packages);
+		if (!vs.installedLocally)
 			log("Preparing Visual C++");
+		vs.requireLocal(false);
 
-			auto packages =
-			[
-				"vcRuntimeMinimum_x86",
-				"vc_compilercore86",
-				"vc_compilercore86res",
-				"vc_compilerx64nat",
-				"vc_compilerx64natres",
-				"vc_librarycore86",
-				"vc_libraryDesktop_x64",
-				"win_xpsupport",
-			];
-			if (config.build.components.dmd.useVC)
-				packages ~= "Msi_BuildTools_MSBuild_x86";
-
-			auto vs = getVSInstaller();
-			vs.requirePackages(packages);
-			vs.requireLocal(false);
-			config.deps.vsDir  = vs.directory.buildPath("Program Files (x86)", "Microsoft Visual Studio 12.0").absolutePath();
-			config.deps.sdkDir = vs.directory.buildPath("Program Files", "Microsoft SDKs", "Windows", "v7.1A").absolutePath();
-			config.env["PATH"] ~= pathSeparator ~ vs.binPaths.map!(path => vs.directory.buildPath(path).absolutePath()).join(pathSeparator);
-		}
+		env.deps.vsDir  = vs.directory.buildPath("Program Files (x86)", "Microsoft Visual Studio 12.0").absolutePath();
+		env.deps.sdkDir = vs.directory.buildPath("Program Files", "Microsoft SDKs", "Windows", "v7.1A").absolutePath();
+		env.vars["PATH"] ~= pathSeparator ~ vs.binPaths.map!(path => vs.directory.buildPath(path).absolutePath()).join(pathSeparator);
 	}
 
 	private void needGit()
@@ -1444,11 +1457,10 @@ EOS";
 		gitInstaller.require();
 	}
 
-	/// Prepare the build environment (dEnv).
-	protected void prepareEnv()
+	/// Create a build environment base.
+	protected @property Environment baseEnvironment()
 	{
-		config.env = null;
-		config.deps = config.deps.init;
+		Environment env;
 
 		// Build a new environment from scratch, to avoid tainting the build with the current environment.
 		string[] newPaths;
@@ -1460,38 +1472,60 @@ EOS";
 			import win32.winnt;
 
 			TCHAR[1024] buf;
+			// Needed for DLLs
 			auto winDir = buf[0..GetWindowsDirectory(buf.ptr, buf.length)].toUTF8();
 			auto sysDir = buf[0..GetSystemDirectory (buf.ptr, buf.length)].toUTF8();
-			auto tmpDir = buf[0..GetTempPath(buf.length, buf.ptr)].toUTF8()[0..$-1];
+			//auto tmpDir = buf[0..GetTempPath(buf.length, buf.ptr)].toUTF8()[0..$-1];
 			newPaths ~= [sysDir, winDir];
 		}
 		else
+		{
+			// Needed for coreutils, make, gcc, git etc.
 			newPaths = ["/bin", "/usr/bin"];
+		}
 
-		config.env["PATH"] = newPaths.join(pathSeparator);
+		env.vars["PATH"] = newPaths.join(pathSeparator);
 
 		version (Windows)
 		{
-			config.env["TEMP"] = config.env["TMP"] = tmpDir;
-			config.env["SystemDrive"] = winDir.driveName;
-			config.env["SystemRoot"] = winDir;
+			auto tmpDir = buildPath(config.local.workDir, "tmp");
+			tmpDir.recreateEmptyDirectory();
+			env.vars["TEMP"] = env.vars["TMP"] = tmpDir;
+			env.vars["SystemDrive"] = winDir.driveName;
+			env.vars["SystemRoot"] = winDir;
 		}
 		else
-			config.env["HOME"] = environment["HOME"];
+		{
+			auto home = buildPath(config.local.workDir, "home");
+			ensureDirExists(home);
+			env.vars["HOME"] = home;
+		}
+
+		return env;
 	}
 
-	final void applyEnv(in string[string] env)
+	/// Apply user modifications onto an environment.
+	/// Supports Windows-style %VAR% expansions.
+	static string[string] applyEnv(in string[string] target, in string[string] source)
 	{
-		auto oldEnv = environment.toAA();
-		foreach (name, value; this.config.env)
+		// The source of variable expansions is variables in the target environment,
+		// if they exist, and the host environment otherwise, so e.g.
+		// `PATH=C:\...;%PATH%` and `MAKE=%MAKE%` work as expected.
+		auto oldEnv = std.process.environment.toAA();
+		foreach (name, value; target)
 			oldEnv[name] = value;
-		foreach (name, value; env)
+
+		string[string] result;
+		foreach (name, value; target)
+			result[name] = value;
+		foreach (name, value; source)
 		{
 			string newValue = value;
 			foreach (oldName, oldValue; oldEnv)
 				newValue = newValue.replace("%" ~ oldName ~ "%", oldValue);
-			config.env[name] = oldEnv[name] = newValue;
+			result[name] = oldEnv[name] = newValue;
 		}
+		return result;
 	}
 
 	// ******************************** Cache ********************************
