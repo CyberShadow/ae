@@ -44,7 +44,9 @@ class VisualStudioInstaller : Installer
 
 	void requirePackages(string[] packages)
 	{
-		this.packages ~= packages;
+		foreach (p; packages)
+			if (!this.packages.canFind(p))
+				this.packages ~= p;
 	}
 
 	@property override string name() { return "Visual Studio %d %s (%-(%s, %))".format(year, edition, packages); }
