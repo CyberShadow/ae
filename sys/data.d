@@ -545,7 +545,7 @@ final class MemoryDataWrapper : DataWrapper
 		data = malloc(/*ref*/ capacity);
 		if (data is null)
 		{
-			debug(DATA) printf("Garbage collect triggered by failed Data allocation... ");
+			debug(DATA) printf("Garbage collect triggered by failed Data allocation of %llu bytes... ", cast(ulong)capacity);
 			GC.collect();
 			debug(DATA) printf("Done\n");
 			data = malloc(/*ref*/ capacity);
