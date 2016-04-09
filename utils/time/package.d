@@ -15,6 +15,7 @@ module ae.utils.time;
 
 public import ae.utils.time.common;
 public import ae.utils.time.format;
+public import ae.utils.time.fpdur;
 public import ae.utils.time.parse;
 public import ae.utils.time.parsedur;
 
@@ -58,3 +59,8 @@ static if (!is(typeof(Duration.init.split!())))
 	}
 	return result;
 }
+
+// ***************************************************************************
+
+// fpdur conflict test
+static assert(1.5.seconds == 1500.msecs);
