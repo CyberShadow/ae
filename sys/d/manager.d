@@ -947,6 +947,7 @@ EOS";
 		{
 			auto env = baseEnvironment;
 			needCC(env);
+			getComponent("dmd").updateEnv(env);
 
 			string phobosMakeFileName = findMakeFile(sourceDir, makeFileNameModel);
 
@@ -993,6 +994,7 @@ EOS";
 		{
 			auto env = baseEnvironment;
 			needCC(env);
+			getComponent("dmd").updateEnv(env);
 
 			// Just build rdmd
 			bool needModel; // Need -mXX switch?
