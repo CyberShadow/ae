@@ -155,7 +155,7 @@ private:
 
 	void skipWhile(alias COND)()
 	{
-		alias unaryFun!(COND, false, "c") cond;
+		alias unaryFun!(COND, "c") cond;
 		while (!input.empty && cond(input.front))
 			input.popFront();
 	}

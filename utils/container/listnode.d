@@ -13,7 +13,6 @@
 
 module ae.utils.container.listnode;
 
-import std.range : isInputRange;
 import ae.utils.meta.reference;
 
 struct ListCommon
@@ -129,6 +128,7 @@ struct ListCommon
 		}
 
 		alias Iterator!true ForwardIterator;
+		import std.range : isInputRange;
 		static assert(isInputRange!ForwardIterator);
 
 		static if (HASPREV)

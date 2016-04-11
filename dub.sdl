@@ -12,14 +12,31 @@ targetType "sourceLibrary"
 sourcePaths "sys" "utils" "net"
 importPaths "sys" "utils" "net"
 
-excludedSourceFiles \
-	"utils/graphics/sdlimage.d" \
-	"utils/graphics/sdl2image.d" \
-	"net/ssl/openssl.d" \
-	"sys/net/system.d" \
-	"sys/sqlite3.d" \
-	"sys/persistence/keyvalue.d" \
-	""
+# In ae:sqlite
+excludedSourceFiles "sys/sqlite3.d"
+excludedSourceFiles "sys/persistence/keyvalue.d"
+
+# In ae:openssl
+excludedSourceFiles "net/ssl/openssl.d"
+excludedSourceFiles "sys/net/system.d"
+
+# Needs SDL
+excludedSourceFiles "utils/graphics/sdlimage.d"
+
+# In ae:sdl2
+excludedSourceFiles "utils/graphics/sdl2image.d"
+
+# Deprecated
+excludedSourceFiles "sys/vfs_curl.d"
+excludedSourceFiles "utils/meta/misc.d"
+
+# Requires non-standard compiler features
+excludedSourceFiles "utils/alloc.d"
+excludedSourceFiles "utils/container/hashtable.d"
+excludedSourceFiles "utils/container/list.d"
+excludedSourceFiles "utils/container/package.d"
+excludedSourceFiles "utils/serialization/*.d"
+excludedSourceFiles "utils/xmldom.d"
 
 ---------------------------
 
