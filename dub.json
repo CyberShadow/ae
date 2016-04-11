@@ -64,17 +64,13 @@
 		}
 	],
 
-	"sourcePaths": [ "." ],
-	"importPaths": [ "." ],
+	"sourcePaths": [ "net", "sys", "utils" ],
+	"importPaths": [ "net", "sys", "utils" ],
 
 	"excludedSourceFiles": [
-		"demo/*",
-		"*sdl*",
-		"sys/vfs_curl.d",
-		"sys/net/wininet.d",
-		"sys/windows/*",
-		"ui/app/windows/*",
-		"sys/benchmark.d",
-		"*/main.d"
+		"utils/graphics/sdlimage.d",
+		"utils/graphics/sdl2image.d",
+		"net/ssl/openssl.d",
+		"sys/net/system.d",
 	]
 }
