@@ -91,9 +91,10 @@ unittest
 	{
 		auto s = PersistentStringSet(FN);
 		assert("foo" !in s);
+		Thread.sleep(filesystemTimestampGranularity);
 		std.file.write(FN, "foo\n");
 		assert("foo" in s);
-		Thread.sleep(10.msecs);
+		Thread.sleep(filesystemTimestampGranularity);
 		std.file.write(FN, "bar\n");
 		assert(s.lines == ["bar"], text(s.lines));
 	}

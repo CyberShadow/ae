@@ -185,6 +185,14 @@ struct FileCache(alias DataGetter, alias DataPutter = None, FlushPolicy flushPol
 // Sleep between writes to make sure timestamps differ
 version(unittest) import core.thread;
 
+version (Windows)
+	enum filesystemTimestampGranularity = 10.msecs;
+else
+{
+	// https://issues.dlang.org/show_bug.cgi?id=15803
+	enum filesystemTimestampGranularity = 1.seconds;
+}
+
 unittest
 {
 	import std.file;
@@ -197,12 +205,12 @@ unittest
 	scope(exit) remove(FN);
 	assert(cachedData == "One");
 
-	Thread.sleep(10.msecs);
+	Thread.sleep(filesystemTimestampGranularity);
 	std.file.write(FN, "Two");
 	assert(cachedData == "Two");
 	auto mtime = FN.timeLastModified();
 
-	Thread.sleep(10.msecs);
+	Thread.sleep(filesystemTimestampGranularity);
 	std.file.write(FN, "Three");
 	FN.setTimes(mtime, mtime);
 	assert(cachedData == "Two");
