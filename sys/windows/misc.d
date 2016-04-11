@@ -12,6 +12,7 @@
  */
 
 module ae.sys.windows.misc;
+version (Windows):
 
 import std.string;
 

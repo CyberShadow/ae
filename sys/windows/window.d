@@ -12,6 +12,7 @@
  */
 
 module ae.sys.windows.window;
+version (Windows):
 
 import std.range;
 import std.utf;

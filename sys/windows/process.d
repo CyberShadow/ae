@@ -12,6 +12,7 @@
  */
 
 module ae.sys.windows.process;
+version (Windows):
 
 import std.exception;
 import std.typecons;

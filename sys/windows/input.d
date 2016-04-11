@@ -12,6 +12,7 @@
  */
 
 module ae.sys.windows.input;
+version (Windows):
 
 import win32.winbase;
 import win32.windef;

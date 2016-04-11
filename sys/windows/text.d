@@ -12,6 +12,7 @@
  */
 
 module ae.sys.windows.text;
+version (Windows):
 
 import core.sys.windows.windows;
 

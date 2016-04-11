@@ -12,6 +12,7 @@
  */
 
 module ae.sys.windows;
+version (Windows):
 
 public import ae.sys.windows.exception;
 public import ae.sys.windows.dll;
