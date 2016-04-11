@@ -12,6 +12,7 @@
  */
 
 module ae.sys.windows.exception;
+version (Windows):
 
 import core.sys.windows.windows;
 

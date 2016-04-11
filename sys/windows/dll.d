@@ -12,6 +12,7 @@
  */
 
 module ae.sys.windows.dll;
+version (Windows):
 
 
 import win32.winbase;
