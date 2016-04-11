@@ -1,80 +1,80 @@
 {
-  "name": "ae",
-  "description": "CyberShadow's ArmageddonEngine utilites for almost everything",
-  "homepage": "https://github.com/CyberShadow/ae",
-  "license": "MPL-2.0",
+	"name": "ae",
+	"description": "CyberShadow's ArmageddonEngine utilites for almost everything",
+	"homepage": "https://github.com/CyberShadow/ae",
+	"license": "MPL-2.0",
 
-  "targetType": "sourceLibrary",
+	"targetType": "sourceLibrary",
 
-  "authors": [
-    "CyberShadow (Vladimir Panteleev)"
-  ],
+	"authors": [
+		"CyberShadow (Vladimir Panteleev)"
+	],
 
-  "systemDependencies": "curl, sqlite3",
-  "libs-posix" : ["curl", "sqlite3"],
+	"systemDependencies": "curl, sqlite3",
+	"libs-posix" : ["curl", "sqlite3"],
 
-  "dependencies": {
-    "openssl": {
-      "version": ">=1.1.3+1.0.1g",
-      "optional": true
-    }
-  },
+	"dependencies": {
+		"openssl": {
+			"version": ">=1.1.3+1.0.1g",
+			"optional": true
+		}
+	},
 
-  "subPackages": [
-    {
-      "name": "net-http-server",
-      "targetType": "sourceLibrary",
-      "sourceFiles": [
-        "net/http/server.d",
-        "net/http/server.d",
-        "net/http/common.d",
-        "net/asockets.d",
-        "net/ietf/url.d",
-        "net/ietf/headers.d",
-        "net/ietf/headerparse.d",
-        "sys/data.d",
-        "sys/log.d",
-        "sys/file.d",
-        "sys/timing.d",
-        "sys/dataset.d",
-        "sys/signals.d",
-        "utils/aa.d",
-        "utils/appender.d",
-        "utils/meta/package.d",
-        "utils/meta/misc.d",
-        "utils/meta/reference.d",
-        "utils/meta/x.d",
-        "utils/meta/proxy.d",
-        "utils/meta/binding_v1.d",
-        "utils/meta/binding.d",
-        "utils/meta/caps.d",
-        "utils/regex.d",
-        "utils/math.d",
-        "utils/container.d",
-        "utils/text.d",
-        "utils/textout.d",
-        "utils/array.d",
-        "utils/time.d",
-        "utils/zlib.d",
-        "utils/gzip.d",
-        "utils/alloc.d",
-        "net/shutdown.d",
-        "sys/shutdown.d"
-      ],
-    }
-  ],
+	"subPackages": [
+		{
+			"name": "net-http-server",
+			"targetType": "sourceLibrary",
+			"sourceFiles": [
+				"net/http/server.d",
+				"net/http/server.d",
+				"net/http/common.d",
+				"net/asockets.d",
+				"net/ietf/url.d",
+				"net/ietf/headers.d",
+				"net/ietf/headerparse.d",
+				"sys/data.d",
+				"sys/log.d",
+				"sys/file.d",
+				"sys/timing.d",
+				"sys/dataset.d",
+				"sys/signals.d",
+				"utils/aa.d",
+				"utils/appender.d",
+				"utils/meta/package.d",
+				"utils/meta/misc.d",
+				"utils/meta/reference.d",
+				"utils/meta/x.d",
+				"utils/meta/proxy.d",
+				"utils/meta/binding_v1.d",
+				"utils/meta/binding.d",
+				"utils/meta/caps.d",
+				"utils/regex.d",
+				"utils/math.d",
+				"utils/container.d",
+				"utils/text.d",
+				"utils/textout.d",
+				"utils/array.d",
+				"utils/time.d",
+				"utils/zlib.d",
+				"utils/gzip.d",
+				"utils/alloc.d",
+				"net/shutdown.d",
+				"sys/shutdown.d"
+			],
+		}
+	],
 
-  "sourcePaths": [ "." ],
-  "importPaths": [ "." ],
+	"sourcePaths": [ "." ],
+	"importPaths": [ "." ],
 
-  "excludedSourceFiles": [
-    "demo/*",
-    "*sdl*",
-    "sys/vfs_curl.d",
-    "sys/net/wininet.d",
-    "sys/windows/*",
-    "ui/app/windows/*",
-    "sys/benchmark.d",
-    "*/main.d"
-  ]
+	"excludedSourceFiles": [
+		"demo/*",
+		"*sdl*",
+		"sys/vfs_curl.d",
+		"sys/net/wininet.d",
+		"sys/windows/*",
+		"ui/app/windows/*",
+		"sys/benchmark.d",
+		"*/main.d"
+	]
 }
