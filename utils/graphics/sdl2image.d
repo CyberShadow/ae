@@ -21,6 +21,7 @@ import derelict.sdl2.image;
 
 import std.exception;
 import std.string : toStringz, format;
+static import std.string;
 
 static this()
 {
@@ -84,7 +85,7 @@ void depalettize(int BITS)(ubyte* src, RGBX* dst, SDL_Palette *palette, uint w, 
 void rgbTransform(ubyte* src, RGBX* dst, SDL_PixelFormat *format, uint w, uint h, int pitch)
 {
 	auto bpp = format.BitsPerPixel;
-	enforce(bpp%8 == 0 && bpp >= 8 && bpp <= 32, format("Don't know how to process unpalettized image with %d bits per pixel", bpp));
+	enforce(bpp%8 == 0 && bpp >= 8 && bpp <= 32, std.string.format("Don't know how to process unpalettized image with %d bits per pixel", bpp));
 
 	if (bpp == 32
 	 && format.Rmask == 0x00_00_00_FF && format.Rshift== 0

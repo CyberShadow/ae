@@ -1,0 +1,8 @@
+name "ae-demo-turtle"
+mainSourceFile "main.d"
+sourceFiles "turtle.d"
+targetType "executable"
+
+dependency "ae" version="*" path="../../"
+dependency "ae:sdl2" version="*" path="../../"
+dependency "ae:app-main" version="*" path="../../"

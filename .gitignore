@@ -12,8 +12,20 @@
 *.dll
 
 .dub
-/dub.selections.json
+dub.selections.json
 
-# demos
-/demo/http/ae-http-demo
+# demos - rdmd binaries
+/demo/http/httpserve
 /demo/pewpew/pewpew
+
+# demos - dub binaries
+/demo/canvas/ae-demo-canvas
+/demo/colorcube/ae-demo-colorcube
+/demo/drawsprite/ae-demo-drawsprite
+/demo/http/ae-http-demo
+/demo/pewpew/ae-demo-pewpew
+/demo/portforward/ae-demo-portforward
+/demo/render/ae-demo-render
+/demo/sqlite/ae-demo-sqlite
+/demo/turtle/ae-demo-turtle
+/demo/ui/ae-demo-ui

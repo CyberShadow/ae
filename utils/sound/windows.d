@@ -12,6 +12,7 @@
  */
 
 module ae.utils.sound.windows;
+version (Windows):
 
 import ae.utils.sound.riff;
 

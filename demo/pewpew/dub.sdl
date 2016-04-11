@@ -1,0 +1,8 @@
+name "ae-demo-pewpew"
+mainSourceFile "pewpew.d"
+sourceFiles "objects.d"
+targetType "executable"
+
+dependency "ae" version="*" path="../../"
+dependency "ae:sdl2" version="*" path="../../"
+dependency "ae:app-main" version="*" path="../../"
