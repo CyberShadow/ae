@@ -13,6 +13,7 @@
  */
 
 module ae.sys.net.wininet;
+version(Windows):
 
 import std.array;
 import std.exception;
