@@ -74,13 +74,11 @@ unittest
 /// This is currently done in a dumb and expensive way, so use sparingly.
 bool inCollect() @nogc
 {
-	// Gcx.free exits early on a null pointer, so use a non-null one.
-	// freeNoSync then does the reentrance check,
-	// and exits silently if the pointer is not in a GC pool.
-	void *p = cast(void*)1;
-
+	// Call GC.extend with dummy data.
+	// It will normally exit silently if given a null pointer,
+	// but not before the reentrance check.
 	try
-		(cast(void function(void*) @nogc)&GC.free)(p);
+		(cast(void function(void*, size_t, size_t, const TypeInfo) @nogc)&GC.extend)(null, 0, 0, null);
 	catch (InvalidMemoryOperationError)
 		return true;
 	return false;
