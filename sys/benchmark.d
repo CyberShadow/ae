@@ -12,6 +12,7 @@
  */
 
 module ae.sys.benchmark;
+version(Windows):
 
 import win32.windows;
 import std.exception;
