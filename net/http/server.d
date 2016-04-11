@@ -463,14 +463,14 @@ unittest
 	// Test server, client, parameter encoding
 	replies = null;
 	closeAfter = 1;
-	auto port = s.listen(0, "localhost");
-	httpPost("http://localhost:" ~ to!string(port) ~ "/?" ~ encodeUrlParameters(["a":"2"]), UrlParameters(["b":"3"]), (string s) { assert(s=="5"); }, null);
+	auto port = s.listen(0, "127.0.0.1");
+	httpPost("http://127.0.0.1:" ~ to!string(port) ~ "/?" ~ encodeUrlParameters(["a":"2"]), UrlParameters(["b":"3"]), (string s) { assert(s=="5"); }, null);
 	socketManager.loop();
 
 	// Test pipelining, protocol errors
 	replies = null;
 	closeAfter = 2;
-	port = s.listen(0, "localhost");
+	port = s.listen(0, "127.0.0.1");
 	TcpConnection c = new TcpConnection;
 	c.handleConnect = {
 		c.send(Data(
@@ -490,7 +490,7 @@ Content-type: application/x-www-form-urlencoded
 b=7654321"));
 		c.disconnect();
 	};
-	c.connect("localhost", port);
+	c.connect("127.0.0.1", port);
 
 	socketManager.loop();
 
@@ -506,9 +506,9 @@ b=7654321"));
 			if (--closeAfter == 0)
 				s.close();
 		};
-		port = s.listen(0, "localhost");
+		port = s.listen(0, "127.0.0.1");
 		closeAfter = 1;
-		httpGet("http://localhost:" ~ to!string(port) ~ "/" ~ fn, (string s) { assert(s=="42"); }, null);
+		httpGet("http://127.0.0.1:" ~ to!string(port) ~ "/" ~ fn, (string s) { assert(s=="42"); }, null);
 		socketManager.loop();
 		std.file.remove(fn);
 	}

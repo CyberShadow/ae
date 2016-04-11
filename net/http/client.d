@@ -395,11 +395,11 @@ unittest
 			auto response = new HttpResponseEx;
 			conn.sendResponse(response.serveText("Hello!"));
 		};
-		auto port = s.listen(0, "localhost");
+		auto port = s.listen(0, "127.0.0.1");
 
 		auto c = new HttpClient;
 		c.keepAlive = keepAlive;
-		auto r = new HttpRequest("http://localhost:" ~ to!string(port));
+		auto r = new HttpRequest("http://127.0.0.1:" ~ to!string(port));
 		int count;
 		c.handleResponse =
 			(HttpResponse response, string disconnectReason)

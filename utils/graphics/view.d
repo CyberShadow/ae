@@ -787,7 +787,7 @@ template parallel(alias fun)
 		auto processSegment(R)(R rows)
 		{
 			auto y0 = rows[0];
-			auto y1 = y0 + rows.length;
+			auto y1 = y0 + cast(typeof(y0))rows.length;
 			auto segment = src.crop(0, y0, src.w, y1);
 			return fun(segment);
 		}
