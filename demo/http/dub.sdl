@@ -1,0 +1,5 @@
+name "ae-demo-http"
+mainSourceFile "httpserve.d"
+targetType "executable"
+
+dependency "ae" version="*" path="../../"

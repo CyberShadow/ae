@@ -1,0 +1,6 @@
+name "ae-demo-sqlite"
+mainSourceFile "exec.d"
+targetType "executable"
+
+dependency "ae" version="*" path="../../"
+dependency "ae:sqlite" version="*" path="../../"

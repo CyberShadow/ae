@@ -43,13 +43,14 @@ class FileServer
 	void onRequest(HttpRequest request, HttpServerConnection conn)
 	{
 		auto response = new HttpResponseEx();
+		response.status = HttpStatusCode.OK;
 
 		try
 			response.serveFile(
 				decodeUrlParameter(request.resource[1..$]),
 				"",
 				true,
-				formatAddress(conn.localAddress, request.host) ~ "/");
+				formatAddress("http", conn.localAddress, request.host, request.port) ~ "/");
 		catch (Exception e)
 			response.writeError(HttpStatusCode.InternalServerError, e.msg);
 		conn.sendResponse(response);

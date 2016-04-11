@@ -1,0 +1,7 @@
+name "ae-demo-render"
+mainSourceFile "main.d"
+targetType "executable"
+
+dependency "ae" version="*" path="../../"
+dependency "ae:sdl2" version="*" path="../../"
+dependency "ae:app-main-posix" version="*" path="../../"
