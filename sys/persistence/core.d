@@ -13,6 +13,8 @@
 
 module ae.sys.persistence.core;
 
+import core.time;
+
 import std.traits;
 
 enum FlushPolicy
