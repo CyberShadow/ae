@@ -95,6 +95,10 @@ class DManager : ICacheHost
 		/// Don't get latest updates from GitHub.
 		bool offline;
 
+		/// Automatically re-clone the repository in case
+		/// "git reset --hard" fails.
+		bool autoClean;
+
 		/// How to cache built files.
 		string cache;
 
@@ -275,6 +279,9 @@ class DManager : ICacheHost
 
 		override void needHead(string hash)
 		{
+			if (!config.autoClean)
+				super.needHead(hash);
+			else
 			try
 				super.needHead(hash);
 			catch (RepositoryCleanException e)
