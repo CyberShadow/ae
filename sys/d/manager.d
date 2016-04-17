@@ -1202,6 +1202,19 @@ EOS";
 		submoduleState.submoduleCommits[submoduleName] = result;
 	}
 
+	/// Reverts a commit from the given SubmoduleState.
+	/// parent is the 1-based mainline index (as per `man git-revert`),
+	/// or 0 if commit is not a merge commit.
+	void revert(ref SubmoduleState submoduleState, string submoduleName, string commit, int parent)
+	{
+		log("Reverting %s commit %s".format(submoduleName, commit));
+		enforce(submoduleName in submoduleState.submoduleCommits, "Unknown submodule: " ~ submoduleName);
+		auto submodule = getSubmodule(submoduleName);
+		auto head = submoduleState.submoduleCommits[submoduleName];
+		auto result = submodule.getRevert(head, commit, parent);
+		submoduleState.submoduleCommits[submoduleName] = result;
+	}
+
 	/// Returns the commit hash for the given pull request #.
 	/// The result can then be used with addMerge/removeMerge.
 	string getPull(string submoduleName, int pullNumber)
@@ -1214,6 +1227,13 @@ EOS";
 	string getFork(string submoduleName, string user, string branch)
 	{
 		return getSubmodule(submoduleName).getFork(user, branch);
+	}
+
+	/// Find the child of a commit, and, if the commit was a merge,
+	/// the mainline index of said commit for the child.
+	void getChild(string submoduleName, string commit, out string child, out int mainline)
+	{
+		return getSubmodule(submoduleName).getChild(commit, child, mainline);
 	}
 
 	// ****************************** Building *******************************

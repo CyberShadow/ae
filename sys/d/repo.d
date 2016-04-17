@@ -14,6 +14,7 @@
 module ae.sys.d.repo;
 
 import std.algorithm;
+import std.conv : text;
 import std.exception;
 import std.file;
 import std.process : environment;
@@ -62,7 +63,7 @@ class ManagedRepository
 			// Might be a GC-ed merge. Try to recreate the merge
 			auto hit = mergeCache.find!(entry => entry.result == hash)();
 			enforce(!hit.empty, "Unknown hash %s".format(hash));
-			performMerge(hit.front.base, hit.front.branch);
+			performMerge(hit.front.base, hit.front.branch, hit.front.revert, hit.front.mainline);
 			enforce(getHead() == hash, "Unexpected merge result: expected %s, got %s".format(hash, getHead()));
 		}
 	}
@@ -150,7 +151,10 @@ class ManagedRepository
 
 	private static struct MergeInfo
 	{
-		string base, branch, result;
+		string base, branch;
+		bool revert = false;
+		int mainline = 0;
+		string result;
 	}
 	private alias MergeCache = MergeInfo[];
 	private MergeCache mergeCacheData;
@@ -199,36 +203,75 @@ class ManagedRepository
 	/// Performs the merge if necessary. Caches the result.
 	public string getMerge(string base, string branch)
 	{
-		auto hit = mergeCache.find!(entry => entry.base == base && entry.branch == branch)();
+		return getMergeImpl(base, branch, false, 0);
+	}
+
+	/// Returns the resulting hash when reverting the branch from the base commit.
+	/// Performs the revert if necessary. Caches the result.
+	/// mainline is the 1-based mainline index (as per `man git-revert`),
+	/// or 0 if commit is not a merge commit.
+	public string getRevert(string base, string branch, int mainline)
+	{
+		return getMergeImpl(base, branch, true, mainline);
+	}
+
+	private string getMergeImpl(string base, string branch, bool revert, int mainline)
+	{
+		auto hit = mergeCache.find!(entry =>
+			entry.base == base &&
+			entry.branch == branch &&
+			entry.revert == revert &&
+			entry.mainline == mainline)();
 		if (!hit.empty)
 			return hit.front.result;
 
-		performMerge(base, branch);
+		performMerge(base, branch, revert, mainline);
 
 		auto head = getHead();
-		mergeCache ~= MergeInfo(base, branch, head);
+		mergeCache ~= MergeInfo(base, branch, revert, mainline, head);
 		saveMergeCache();
 		return head;
 	}
 
-	private void performMerge(string base, string branch, string mergeCommitMessage = "ae.sys.d merge")
+	private static const string mergeCommitMessage = "ae.sys.d merge";
+	private static const string revertCommitMessage = "ae.sys.d revert";
+
+	// Performs a merge or revert.
+	private void performMerge(string base, string branch, bool revert, int mainline)
 	{
 		needHead(base);
 		currentHead = null;
 
-		log("Merging %s into %s.".format(branch, base));
+		log("%s %s into %s.".format(revert ? "Reverting" : "Merging", branch, base));
 
-		scope(failure)
+		scope (failure)
 		{
-			log("Aborting merge...");
-			git.run("merge", "--abort");
+			if (!revert)
+			{
+				log("Aborting merge...");
+				git.run("merge", "--abort");
+			}
+			else
+			{
+				log("Aborting revert...");
+				git.run("revert", "--abort");
+			}
 			clean = false;
 		}
 
 		void doMerge()
 		{
 			setupGitEnv();
-			git.run("merge", "--no-ff", "-m", mergeCommitMessage, branch);
+			if (!revert)
+				git.run("merge", "--no-ff", "-m", mergeCommitMessage, branch);
+			else
+			{
+				string[] args = ["revert", "--no-edit"];
+				if (mainline)
+					args ~= ["--mainline", text(mainline)];
+				args ~= [branch];
+				git.run(args);
+			}
 		}
 
 		if (git.path.baseName() == "dmd")
@@ -240,7 +283,10 @@ class ManagedRepository
 				log("Merge failed. Attempting conflict resolution...");
 				git.run("checkout", "--theirs", "test");
 				git.run("add", "test");
-				git.run("-c", "rerere.enabled=false", "commit", "-m", mergeCommitMessage);
+				if (!revert)
+					git.run("-c", "rerere.enabled=false", "commit", "-m", mergeCommitMessage);
+				else
+					git.run("revert", "--continue");
 			}
 		}
 		else
@@ -253,7 +299,7 @@ class ManagedRepository
 	/// Queries the git repository if necessary. Caches the result.
 	public MergeInfo getMergeInfo(string merge)
 	{
-		auto hit = mergeCache.find!(entry => entry.result == merge)();
+		auto hit = mergeCache.find!(entry => entry.result == merge && !entry.revert)();
 		if (!hit.empty)
 			return hit.front;
 
@@ -261,7 +307,7 @@ class ManagedRepository
 		enforce(parents.length > 1, "Not a merge: " ~ merge);
 		enforce(parents.length == 2, "Too many parents: " ~ merge);
 
-		auto info = MergeInfo(parents[0], parents[1], merge);
+		auto info = MergeInfo(parents[0], parents[1], false, 0, merge);
 		mergeCache ~= info;
 		return info;
 	}
@@ -331,6 +377,55 @@ class ManagedRepository
 			"refs/heads/%s".format(branch),
 			"refs/digger/fork/%s/%s".format(user, branch),
 		);
+	}
+
+	/// Find the child of a commit, and, if the commit was a merge,
+	/// the mainline index of said commit for the child.
+	void getChild(string commit, out string child, out int mainline)
+	{
+		auto hit = mergeCache.find!(entry => entry.base == commit && !entry.revert)();
+		if (!hit.empty)
+		{
+			child = hit.front.result;
+			mainline = 2;
+			return;
+		}
+
+		hit = mergeCache.find!(entry => entry.branch == commit && !entry.revert)();
+		if (!hit.empty)
+		{
+			child = hit.front.result;
+			mainline = 1;
+			return;
+		}
+
+		log("Querying history for commit children...");
+		auto history = git.getHistory();
+		auto commitHash = commit.toCommitHash();
+		auto pCommit = commitHash in history.commits;
+		enforce(pCommit, "Can't find commit in history");
+		auto children = (*pCommit).children;
+		enforce(children.length, "Commit has no children");
+		enforce(children.length == 1, "Commit has more than one child");
+		auto childCommit = children[0];
+		child = childCommit.hash.toString();
+
+		if (childCommit.parents.length == 1)
+			mainline = 0;
+		else
+		{
+			enforce(childCommit.parents.length == 2, "Can't get mainline of multiple-branch merges");
+			if (childCommit.parents[0] is *pCommit)
+				mainline = 2;
+			else
+				mainline = 1;
+
+			mergeCache ~= MergeInfo(
+				childCommit.parents[0].hash.toString(),
+				childCommit.parents[0].hash.toString(),
+				true, mainline, commit);
+			saveMergeCache();
+		}
 	}
 
 	// Misc
