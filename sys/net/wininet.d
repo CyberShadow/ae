@@ -20,16 +20,17 @@ import std.exception;
 import std.string;
 import std.typecons : RefCounted;
 
-import win32.winbase;
-import win32.windef;
-import win32.wininet;
-
 import ae.net.http.common : HttpRequest;
 import ae.net.ietf.url;
 import ae.sys.net;
 import ae.sys.windows.dll;
 import ae.sys.windows.exception;
 import ae.utils.meta;
+
+import ae.sys.windows.imports;
+mixin importWin32!q{winbase};
+mixin importWin32!q{windef};
+mixin importWin32!q{wininet};
 
 class WinINetNetwork : Network
 {

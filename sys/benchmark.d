@@ -14,9 +14,11 @@
 module ae.sys.benchmark;
 version(Windows):
 
-import win32.windows;
 import std.exception;
 import core.memory;
+
+import ae.sys.windows.imports;
+mixin importWin32!q{windows};
 
 ulong rdtsc() { asm { rdtsc; } }
 

@@ -16,8 +16,9 @@ module ae.ui.app.windows.main;
 import core.runtime;
 import std.utf;
 
-import win32.windef;
-import win32.winuser;
+import ae.sys.windows.imports;
+mixin importWin32!q{windef};
+mixin importWin32!q{winuser};
 
 import ae.ui.app.application;
 import ae.utils.exception;
@@ -53,9 +54,9 @@ private:
 import core.stdc.wchar_;
 import core.stdc.stdlib;
 
-import win32.winbase;
-import win32.shellapi;
-import win32.winnls;
+mixin importWin32!q{winbase};
+mixin importWin32!q{shellapi};
+mixin importWin32!q{winnls};
 
 string[] getArgs()
 {

@@ -21,8 +21,9 @@ import core.time;
 import std.algorithm;
 import std.range;
 
-import win32.mmsystem;
-import win32.winnt;
+import ae.sys.windows.imports;
+mixin importWin32!q{mmsystem};
+mixin importWin32!q{winnt};
 
 public import win32.mmsystem : SND_ASYNC, SND_LOOP, SND_NOSTOP;
 
