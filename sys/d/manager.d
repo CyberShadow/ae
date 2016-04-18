@@ -377,14 +377,23 @@ class DManager : ICacheHost
 		/// Commit in the component's repo from which to build this component.
 		@property string commit() { return incrementalBuild ? "incremental" : getComponentCommit(name); }
 
-		/// The components the source code of which this component depends on.
+		/// The components the source code of which this component depends on for building.
 		@property abstract string[] sourceDeps();
 
-		/// The components the just-built (in source directory) version of which this component depends on.
+		/// The components the just-built (in source directory) version of which this component depends on for building.
 		@property abstract string[] buildDeps();
 
-		/// The components the built, installed version of which this component depends on.
+		/// The components the built, installed version of which this component depends on for building.
 		@property abstract string[] installDeps();
+
+		/// The components the source code of which this component depends on for testing.
+		@property string[] testSourceDeps() { return []; }
+
+		/// The components the just-built (in source directory) version of which this component depends on for testing.
+		@property string[] testBuildDeps() { return []; }
+
+		/// The components the built, installed version of which this component depends on for testing.
+		@property string[] testInstallDeps() { return []; }
 
 		/// This metadata is saved to a .json file,
 		/// and is also used to calculate the cache key.
@@ -601,6 +610,33 @@ class DManager : ICacheHost
 			needCacheEngine().extract(getBuildID(), buildDir, de => !de.baseName.startsWith("digger-"));
 		}
 
+		/// Prepare the dependencies then run the component's tests.
+		void test()
+		{
+			log("Testing " ~ getBuildID());
+
+			if (testSourceDeps.length || testBuildDeps.length || testInstallDeps.length)
+			{
+				log("Checking dependencies...");
+
+				foreach (dependency; testSourceDeps)
+					getComponent(dependency).needSource();
+				foreach (dependency; testBuildDeps)
+					getComponent(dependency).needBuild();
+				foreach (dependency; testInstallDeps)
+					getComponent(dependency).needInstalled();
+			}
+
+			needSource();
+
+			submodule.clean = false;
+			performTest();
+			log(getBuildID() ~ " tests OK!");
+		}
+
+		/// Run the component's tests.
+		void performTest() {}
+
 	protected final:
 		// Utility declarations for component implementations
 
@@ -683,10 +719,11 @@ class DManager : ICacheHost
 
 	final class DMD : Component
 	{
-		@property override string submoduleName() { return "dmd"; }
-		@property override string[] sourceDeps () { return []; }
-		@property override string[] buildDeps  () { return []; }
-		@property override string[] installDeps() { return []; }
+		@property override string submoduleName  () { return "dmd"; }
+		@property override string[] sourceDeps   () { return []; }
+		@property override string[] buildDeps    () { return []; }
+		@property override string[] installDeps  () { return []; }
+		@property override string[] testBuildDeps() { return ["dmd", "druntime", "phobos"]; }
 
 		struct Config
 		{
@@ -887,6 +924,15 @@ EOS";
 			// Add the DMD we built for Phobos/Druntime/Tools
 			env.vars["PATH"] = buildPath(buildDir, "bin").absolutePath() ~ pathSeparator ~ env.vars["PATH"];
 		}
+
+		override void performTest()
+		{
+			auto env = baseEnvironment;
+
+			run(getMake(env) ~ commonConfig.makeArgs,
+				env.vars, sourceDir.buildPath("test")
+			);
+		}
 	}
 
 	// In older versions of D, Druntime depended on Phobos modules.
@@ -911,10 +957,11 @@ EOS";
 
 	final class Druntime : Component
 	{
-		@property override string submoduleName() { return "druntime"; }
-		@property override string[] sourceDeps () { return ["phobos"]; }
-		@property override string[] buildDeps  () { return ["dmd"]; }
-		@property override string[] installDeps() { return ["phobos-includes"]; }
+		@property override string submoduleName  () { return "druntime"; }
+		@property override string[] sourceDeps   () { return ["phobos"]; }
+		@property override string[] buildDeps    () { return ["dmd"]; }
+		@property override string[] installDeps  () { return ["phobos-includes"]; }
+		@property override string[] testBuildDeps() { return ["dmd", "druntime"]; }
 		@property override string configString() { return null; }
 
 		override void performBuild()
@@ -940,14 +987,21 @@ EOS";
 				buildPath(stageDir , "import"),
 			);
 		}
+
+		override void performTest()
+		{
+			auto env = baseEnvironment;
+			run(getMake(env) ~ ["-f", makeFileNameModel, "unittest"] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
+		}
 	}
 
 	final class Phobos : Component
 	{
-		@property override string submoduleName() { return "phobos"; }
-		@property override string[] sourceDeps () { return []; }
-		@property override string[] buildDeps  () { return ["dmd", "druntime"]; }
-		@property override string[] installDeps() { return []; }
+		@property override string submoduleName  () { return "phobos"; }
+		@property override string[] sourceDeps   () { return []; }
+		@property override string[] buildDeps    () { return ["dmd", "druntime"]; }
+		@property override string[] installDeps  () { return []; }
+		@property override string[] testBuildDeps() { return ["dmd", "druntime", "phobos"]; }
 		@property override string configString() { return null; }
 
 		string[] targets;
@@ -989,6 +1043,12 @@ EOS";
 					buildPath(stageDir , "lib", lib.baseName()),
 				);
 		}
+
+		override void performTest()
+		{
+			auto env = baseEnvironment;
+			run(getMake(env) ~ ["-f", makeFileNameModel, "unittest"] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
+		}
 	}
 
 	final class RDMD : Component
@@ -997,6 +1057,7 @@ EOS";
 		@property override string[] sourceDeps () { return []; }
 		@property override string[] buildDeps  () { return []; }
 		@property override string[] installDeps() { return ["dmd", "druntime", "phobos"]; }
+		@property override string[] testInstallDeps() { return ["dmd", "druntime", "phobos"]; }
 		@property override string configString() { return null; }
 
 		override void performBuild()
@@ -1029,6 +1090,13 @@ EOS";
 				buildPath(sourceDir, "rdmd" ~ binExt),
 				buildPath(stageDir , "bin", "rdmd" ~ binExt),
 			);
+		}
+
+		override void performTest()
+		{
+			auto env = baseEnvironment;
+			getComponent("dmd").updateEnv(env);
+			run(["dmd", "-run", "rdmd_test.d"], env.vars, sourceDir);
 		}
 	}
 
@@ -1297,6 +1365,20 @@ EOS";
 	void rebuild()
 	{
 		build(SubmoduleState(null), true);
+	}
+
+	/// Run all tests for the current checkout (like rebuild).
+	void test()
+	{
+		auto componentNames = config.build.components.getEnabledComponentNames();
+		log("Testing components %-(%s, %)".format(componentNames));
+
+		this.components = null;
+		this.submoduleState = SubmoduleState(null);
+		this.incrementalBuild = true;
+
+		foreach (componentName; componentNames)
+			getComponent(componentName).test();
 	}
 
 	bool isCached(SubmoduleState submoduleState)
