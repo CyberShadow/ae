@@ -19,9 +19,9 @@ import std.exception;
 import std.typecons;
 
 import ae.sys.windows.imports;
-mixin importWin32!(q{wingdi}, q{public});
-mixin importWin32!q{winuser};
-mixin importWin32!q{windef};
+mixin(importWin32!(q{wingdi}, q{public}));
+mixin(importWin32!q{winuser});
+mixin(importWin32!q{windef});
 
 import ae.utils.graphics.color;
 import ae.utils.graphics.draw;

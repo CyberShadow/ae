@@ -20,8 +20,8 @@ version (Windows)
 	import ae.sys.windows;
 
 	import ae.sys.windows.imports;
-	mixin importWin32!q{wincrypt};
-	mixin importWin32!q{windef};
+	mixin(importWin32!q{wincrypt});
+	mixin(importWin32!q{windef});
 
 	void genRandom(ubyte[] buf)
 	{

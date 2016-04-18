@@ -18,7 +18,7 @@ module ae.sys.desktop;
 version (Windows)
 {
 	import ae.sys.windows.imports;
-	mixin importWin32!q{winuser};
+	mixin(importWin32!q{winuser});
 
 	void getDesktopResolution(out uint x, out uint y)
 	{

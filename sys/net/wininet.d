@@ -28,9 +28,9 @@ import ae.sys.windows.exception;
 import ae.utils.meta;
 
 import ae.sys.windows.imports;
-mixin importWin32!q{winbase};
-mixin importWin32!q{windef};
-mixin importWin32!q{wininet};
+mixin(importWin32!q{winbase});
+mixin(importWin32!q{windef});
+mixin(importWin32!q{wininet});
 
 class WinINetNetwork : Network
 {

@@ -17,10 +17,10 @@ version (Windows):
 import std.string;
 
 import ae.sys.windows.imports;
-mixin importWin32!q{winbase};
-mixin importWin32!q{wincon};
-mixin importWin32!q{winnt};
-mixin importWin32!q{winuser};
+mixin(importWin32!q{winbase});
+mixin(importWin32!q{wincon});
+mixin(importWin32!q{winnt});
+mixin(importWin32!q{winuser});
 
 import ae.sys.windows.exception;
 import ae.sys.windows.text;
