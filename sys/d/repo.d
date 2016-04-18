@@ -27,6 +27,7 @@ import ae.sys.git;
 import ae.utils.exception;
 import ae.utils.json;
 import ae.utils.regex;
+import ae.utils.time : StdTime;
 
 /// Base class for a managed repository.
 class ManagedRepository
@@ -106,6 +107,7 @@ class ManagedRepository
 			}
 		}
 
+		saveState();
 		currentHead = hash;
 	}
 
@@ -136,6 +138,9 @@ class ManagedRepository
 
 	private void performCleanup()
 	{
+		checkState();
+		clearState();
+
 		log("Cleaning repository %s...".format(name));
 		needRepo();
 		try
@@ -145,6 +150,7 @@ class ManagedRepository
 		}
 		catch (Exception e)
 			throw new RepositoryCleanException(e.msg, e);
+		saveState();
 	}
 
 	// Merge cache
@@ -292,6 +298,7 @@ class ManagedRepository
 		else
 			doMerge();
 
+		saveState();
 		log("Merge successful.");
 	}
 
@@ -421,6 +428,90 @@ class ManagedRepository
 				saveMergeCache();
 			}
 		}
+	}
+
+	// State saving and checking
+
+	struct FileState
+	{
+		ulong size;
+		StdTime modificationTime;
+	}
+
+	FileState getFileState(string file)
+	{
+		auto path = git.path.buildPath(file);
+		auto de = DirEntry(path);
+		return FileState(de.size, de.timeLastModified.stdTime);
+	}
+
+	alias RepositoryState = FileState[string];
+
+	/// Return the working tree "state".
+	/// This returns a file list, along with size and modification time.
+	RepositoryState getState()
+	{
+		needRepo();
+		auto files = git.query(["ls-files"]).splitLines();
+		RepositoryState state;
+		foreach (file; files)
+			state[file] = getFileState(file);
+		return state;
+	}
+
+	private @property string workTreeStatePath()
+	{
+		needRepo();
+		return buildPath(git.gitDir, "ae-sys-d-worktree.json");
+	}
+
+	/// Save the state of the working tree for versioned files
+	/// to a .json file, which can later be verified with checkState.
+	/// This should be called after any git command which mutates the git state.
+	void saveState()
+	{
+		std.file.write(workTreeStatePath, getState().toJson());
+	}
+
+	/// Save the state of just one file.
+	/// This should be called after automatic edits to repository files during a build.
+	/// The file parameter should be relative to the directory root, and use forward slashes.
+	void saveFileState(string file)
+	{
+		if (!workTreeStatePath.exists)
+			return;
+		auto state = workTreeStatePath.readText.jsonParse!RepositoryState();
+		state[file] = getFileState(file);
+		std.file.write(workTreeStatePath, state.toJson());
+	}
+
+	/// Verify that the state of the working tree matches the one
+	/// when saveState was last called. Throw an exception otherwise.
+	/// This and clearState should be called before any git command
+	/// which destroys working directory changes.
+	void checkState()
+	{
+		if (!workTreeStatePath.exists)
+			return;
+		auto savedState = workTreeStatePath.readText.jsonParse!RepositoryState();
+		auto currentState = getState();
+		try
+		{
+			foreach (file, fileState; currentState)
+			{
+				enforce(file in savedState, "New file: " ~ file);
+				enforce(savedState[file] == fileState, "File modified: " ~ file);
+			}
+		}
+		catch (Exception e)
+			throw new Exception(e.msg ~ "\n" ~ "Save / commit your changes, then delete " ~ workTreeStatePath);
+	}
+
+	/// Delete the saved working tree state, if any.
+	void clearState()
+	{
+		if (workTreeStatePath.exists)
+			workTreeStatePath.remove();
 	}
 
 	// Misc

@@ -786,6 +786,7 @@ class DManager : ICacheHost
 					m = m.replace(`-lpthread`, `-pthread`);
 				dmdMakeFullName.write(m);
 			}
+			submodule.saveFileState("src/" ~ dmdMakeFileName);
 
 			string[] extraArgs;
 			version (posix)
@@ -925,7 +926,8 @@ EOS";
 			mkdirRecurse(sourceDir.buildPath("import"));
 			mkdirRecurse(sourceDir.buildPath("lib"));
 
-			setTimes(sourceDir.buildPath("src", "rt", "minit.obj"), Clock.currTime(), Clock.currTime());
+			setTimes(sourceDir.buildPath("src", "rt", "minit.obj"), Clock.currTime(), Clock.currTime()); // Don't rebuild
+			submodule.saveFileState("src/rt/minit.obj");
 
 			run(getMake(env) ~ ["-f", makeFileNameModel, "import"] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
 			run(getMake(env) ~ ["-f", makeFileNameModel          ] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
