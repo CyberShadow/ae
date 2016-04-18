@@ -54,7 +54,8 @@ void cloneRange(
 
 unittest
 {
-	// TODO: skip tests on non-BTRFS filesystems
+	if (!checkBtrfs())
+		return;
 	import std.range, std.random, std.algorithm, std.file;
 	enum blockSize = 16*1024; // TODO: detect
 	auto data = blockSize.iota.map!(n => uniform!ubyte).array();

@@ -18,3 +18,20 @@ version(linux):
 package:
 	
 enum BTRFS_IOCTL_MAGIC = 0x94;
+
+version (unittest)
+{
+	import ae.sys.file;
+	import std.stdio : stderr;
+
+	bool checkBtrfs(string moduleName = __MODULE__)()
+	{
+		auto fs = getPathFilesystem(".");
+		if (fs != "btrfs")
+		{
+			stderr.writefln("Current filesystem is %s, not btrfs, skipping %s test.", fs, moduleName);
+			return false;
+		}
+		return true;
+	}
+}
