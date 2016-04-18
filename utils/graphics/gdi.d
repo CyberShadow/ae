@@ -39,8 +39,12 @@ struct GDICanvas(COLOR)
 
 		~this() nothrow @nogc
 		{
-			DeleteDC(hdc);     hdc = null;
-			DeleteObject(hbm); hbm = null;
+			alias DeleteDC_t     = extern(Windows) void function(HDC    ) nothrow @nogc;
+			alias DeleteObject_t = extern(Windows) void function(HBITMAP) nothrow @nogc;
+			auto pDeleteDC     = cast(DeleteDC_t    )&DeleteDC;
+			auto pDeleteObject = cast(DeleteObject_t)&DeleteObject;
+			pDeleteDC(hdc);     hdc = null;
+			pDeleteObject(hbm); hbm = null;
 		}
 	}
 
