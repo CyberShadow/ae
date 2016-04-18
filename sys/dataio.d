@@ -13,6 +13,8 @@
 
 module ae.sys.dataio;
 
+import std.exception : enforce;
+
 import ae.sys.data;
 
 // ************************************************************************
@@ -50,7 +52,9 @@ Data readFileData(ref std.stdio.File f)
 	else
 	{
 		auto pos = f.tell;
-		result = Data(size - pos);
+		ulong remaining = size - pos;
+		enforce(remaining <= ulong(size_t.max), "File does not fit in memory");
+		result = Data(cast(size_t)remaining);
 		result.length = f.rawRead(cast(ubyte[])result.mcontents).length;
 	}
 	return result;
