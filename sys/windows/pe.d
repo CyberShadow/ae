@@ -17,7 +17,8 @@ version (Windows):
 import std.exception;
 import std.string;
 
-import win32.winnt;
+import ae.sys.windows.imports;
+mixin importWin32!q{winnt};
 
 struct PE
 {

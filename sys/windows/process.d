@@ -17,10 +17,11 @@ version (Windows):
 import std.exception;
 import std.typecons;
 
-import win32.w32api;
-import win32.winbase;
-import win32.windef;
-import win32.winuser;
+import ae.sys.windows.imports;
+mixin importWin32!q{w32api};
+mixin importWin32!q{winbase};
+mixin importWin32!q{windef};
+mixin importWin32!q{winuser};
 
 import ae.sys.windows.exception;
 import ae.sys.windows.text;
@@ -148,7 +149,7 @@ CreatedProcess createDesktopUserProcess(string applicationName, string commandLi
 
 // --------------------------------------------------------------------------
 
-import win32.tlhelp32;
+mixin importWin32!q{tlhelp32};
 
 struct ToolhelpSnapshotImpl
 {

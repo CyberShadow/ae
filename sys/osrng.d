@@ -17,9 +17,11 @@ import std.conv : to;
 
 version (Windows)
 {
-	import win32.wincrypt;
-	import win32.windef;
 	import ae.sys.windows;
+
+	import ae.sys.windows.imports;
+	mixin importWin32!q{wincrypt};
+	mixin importWin32!q{windef};
 
 	void genRandom(ubyte[] buf)
 	{

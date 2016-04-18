@@ -25,8 +25,9 @@ class Config
 		import std.utf;
 		import std.array;
 
-		import win32.windef;
-		import win32.winreg;
+		import ae.sys.windows.imports;
+		mixin importWin32!q{windef};
+		mixin importWin32!q{winreg};
 
 		// On Windows, just keep the registry key open and read/write values directly.
 		this(string appName = null, string companyName = null)

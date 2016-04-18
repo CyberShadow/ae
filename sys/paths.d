@@ -23,10 +23,11 @@ version (Windows)
 	import std.file;
 	import std.utf;
 
-	import win32.shlobj;
-	import win32.objidl;
-	import win32.windef;
-	import win32.winbase;
+	import ae.sys.windows.imports;
+	mixin importWin32!q{shlobj};
+	mixin importWin32!q{objidl};
+	mixin importWin32!q{windef};
+	mixin importWin32!q{winbase};
 
 	string getExecutableName()
 	{

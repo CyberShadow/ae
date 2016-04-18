@@ -14,9 +14,10 @@
 module ae.sys.windows.input;
 version (Windows):
 
-import win32.winbase;
-import win32.windef;
-import win32.winuser;
+import ae.sys.windows.imports;
+mixin importWin32!q{winbase};
+mixin importWin32!q{windef};
+mixin importWin32!q{winuser};
 
 void sendCopyData(HWND hWnd, DWORD n, in void[] buf)
 {

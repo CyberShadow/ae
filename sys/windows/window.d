@@ -17,9 +17,10 @@ version (Windows):
 import std.range;
 import std.utf;
 
-import win32.winbase;
-import win32.winnt;
-import win32.winuser;
+import ae.sys.windows.imports;
+mixin importWin32!q{winbase};
+mixin importWin32!q{winnt};
+mixin importWin32!q{winuser};
 
 import ae.sys.windows.exception;
 import ae.sys.windows.text;

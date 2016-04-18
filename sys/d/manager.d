@@ -1583,8 +1583,9 @@ EOS";
 		version (Windows)
 		{
 			import std.utf;
-			import win32.winbase;
-			import win32.winnt;
+			import ae.sys.windows.imports;
+			mixin importWin32!q{winbase};
+			mixin importWin32!q{winnt};
 
 			TCHAR[1024] buf;
 			// Needed for DLLs

@@ -15,13 +15,16 @@ module ae.sys.clipboard;
 
 version (Windows)
 {
-	import win32.winbase;
-	import win32.windef;
-	import win32.winnls;
-	import win32.winuser;
-	import ae.sys.windows.exception;
 	import std.utf;
 	import std.conv;
+
+	import ae.sys.windows.exception;
+
+	import ae.sys.windows.imports;
+	mixin importWin32!q{winbase};
+	mixin importWin32!q{windef};
+	mixin importWin32!q{winnls};
+	mixin importWin32!q{winuser};
 
 	void setClipboardText(string s)
 	{
