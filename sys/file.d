@@ -693,6 +693,101 @@ version (Posix)
 	}
 }
 
+version (Posix)
+{
+	string realPath(string path)
+	{
+		// TODO: Windows version
+		import core.sys.posix.stdlib;
+		auto p = realpath(toUTFz!(const char*)(path), null);
+		errnoEnforce(p, "realpath");
+		string result = fromStringz(p).idup;
+		free(p);
+		return result;
+	}
+}
+
+// /proc/self/mounts parsing
+version (linux)
+{
+	struct MountInfo
+	{
+		string spec; /// device path
+		string file; /// mount path
+		string vfstype; /// file system
+		string mntops; /// options
+		int freq; /// dump flag
+		int passno; /// fsck order
+	}
+
+	string unescapeMountString(in char[] s)
+	{
+		string result;
+
+		size_t p = 0;
+		for (size_t i=0; i+3<s.length;)
+		{
+			auto c = s[i];
+			if (c == '\\')
+			{
+				result ~= s[p..i];
+				result ~= to!int(s[i+1..i+4], 8);
+				i += 4;
+				p = i;
+			}
+			else
+				i++;
+		}
+		result ~= s[p..$];
+		return result;
+	}
+
+	unittest
+	{
+		assert(unescapeMountString(`a\040b\040c`) == "a b c");
+		assert(unescapeMountString(`\040`) == " ");
+	}
+
+	MountInfo parseMountInfo(in char[] line)
+	{
+		const(char)[][6] parts;
+		copy(line.splitter(" "), parts[]);
+		return MountInfo(
+			unescapeMountString(parts[0]),
+			unescapeMountString(parts[1]),
+			unescapeMountString(parts[2]),
+			unescapeMountString(parts[3]),
+			parts[4].to!int,
+			parts[5].to!int,
+		);
+	}
+
+	/// Returns an iterator of MountInfo structs.
+	auto getMounts()
+	{
+		return File("/proc/self/mounts", "rb").byLine().map!parseMountInfo();
+	}
+
+	/// Get the name of the filesystem that the given path is mounted under.
+	string getPathFilesystem(string path)
+	{
+		path = realPath(path);
+		size_t bestLength; string bestFS;
+		foreach (ref info; getMounts())
+		{
+			if (path.startsWith(info.file) && (path.length == info.file.length || path[info.file.length] == '/'))
+			{
+				if (bestLength < info.file.length)
+				{
+					bestLength = info.file.length;
+					bestFS = info.vfstype;
+				}
+			}
+		}
+		return bestFS;
+	}
+}
+
 // ****************************************************************************
 
 version (linux)
