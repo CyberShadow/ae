@@ -1229,11 +1229,13 @@ EOS";
 		return getSubmodule(submoduleName).getFork(user, branch);
 	}
 
-	/// Find the child of a commit, and, if the commit was a merge,
-	/// the mainline index of said commit for the child.
-	void getChild(string submoduleName, string commit, out string child, out int mainline)
+	/// Find the child of a commit (starting with the current submodule state),
+	/// and, if the commit was a merge, the mainline index of said commit for the child.
+	void getChild(ref SubmoduleState submoduleState, string submoduleName, string commit, out string child, out int mainline)
 	{
-		return getSubmodule(submoduleName).getChild(commit, child, mainline);
+		enforce(submoduleName in submoduleState.submoduleCommits, "Unknown submodule: " ~ submoduleName);
+		auto head = submoduleState.submoduleCommits[submoduleName];
+		return getSubmodule(submoduleName).getChild(head, commit, child, mainline);
 	}
 
 	// ****************************** Building *******************************

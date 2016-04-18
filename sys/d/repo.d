@@ -381,31 +381,33 @@ class ManagedRepository
 
 	/// Find the child of a commit, and, if the commit was a merge,
 	/// the mainline index of said commit for the child.
-	void getChild(string commit, out string child, out int mainline)
+	void getChild(string branch, string commit, out string child, out int mainline)
 	{
-		auto hit = mergeCache.find!(entry => entry.base == commit && !entry.revert)();
-		if (!hit.empty)
-		{
-			child = hit.front.result;
-			mainline = 2;
-			return;
-		}
-
-		hit = mergeCache.find!(entry => entry.branch == commit && !entry.revert)();
-		if (!hit.empty)
-		{
-			child = hit.front.result;
-			mainline = 1;
-			return;
-		}
-
 		log("Querying history for commit children...");
 		auto history = git.getHistory();
+
+		bool[Hash] seen;
+		void visit(Commit* commit)
+		{
+			if (commit.hash !in seen)
+			{
+				seen[commit.hash] = true;
+				foreach (parent; commit.parents)
+					visit(parent);
+			}
+		}
+		auto branchHash = branch.toCommitHash();
+		auto pBranchCommit = branchHash in history.commits;
+		enforce(pBranchCommit, "Can't find commit in history");
+		visit(*pBranchCommit);
+
 		auto commitHash = commit.toCommitHash();
 		auto pCommit = commitHash in history.commits;
 		enforce(pCommit, "Can't find commit in history");
 		auto children = (*pCommit).children;
 		enforce(children.length, "Commit has no children");
+		children = children.filter!(child => child.hash in seen).array();
+		enforce(children.length, "Commit has no children under specified branch");
 		enforce(children.length == 1, "Commit has more than one child");
 		auto childCommit = children[0];
 		child = childCommit.hash.toString();
@@ -420,11 +422,15 @@ class ManagedRepository
 			else
 				mainline = 1;
 
-			mergeCache ~= MergeInfo(
+			auto mergeInfo = MergeInfo(
 				childCommit.parents[0].hash.toString(),
 				childCommit.parents[1].hash.toString(),
 				true, mainline, commit);
-			saveMergeCache();
+			if (!mergeCache.canFind(mergeInfo))
+			{
+				mergeCache ~= mergeInfo;
+				saveMergeCache();
+			}
 		}
 	}
 
