@@ -422,7 +422,7 @@ class ManagedRepository
 
 			mergeCache ~= MergeInfo(
 				childCommit.parents[0].hash.toString(),
-				childCommit.parents[0].hash.toString(),
+				childCommit.parents[1].hash.toString(),
 				true, mainline, commit);
 			saveMergeCache();
 		}
