@@ -12,6 +12,7 @@
  */
 
 module ae.sys.signals;
+version(Posix):
 
 import std.exception;
 
