@@ -14,10 +14,15 @@
 module ae.sys.windows.imports;
 version (Windows):
 
-mixin template importWin32(string moduleName, string access = "")
+mixin template importWin32(string moduleName, string access = null, string selective = null)
 {
-	static if (__VERSION__ >= 2070)
-		mixin(access ~ " import core.sys.windows." ~ moduleName ~ ";");
-	else
-		mixin(access ~ " import win32." ~ moduleName ~ ";");
+	mixin(access ~
+		" import " ~
+		(__VERSION__ >= 2070 ? "core.sys.windows" : "win32") ~
+		"." ~
+		moduleName ~
+		" " ~
+		(selective ? ":" : "") ~
+		selective ~
+		";");
 }
