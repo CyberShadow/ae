@@ -20,15 +20,21 @@ excludedSourceFiles "sys/persistence/keyvalue.d"
 excludedSourceFiles "net/ssl/openssl.d"
 excludedSourceFiles "sys/net/system.d"
 
+# In ae:sdl2
+excludedSourceFiles "utils/graphics/sdl2image.d"
+
 # Needs SDL
 excludedSourceFiles "utils/graphics/sdlimage.d"
 
-# In ae:sdl2
-excludedSourceFiles "utils/graphics/sdl2image.d"
+# Triggers on import
+excludedSourceFiles "sys/benchmark.d"
 
 # Deprecated
 excludedSourceFiles "sys/vfs_curl.d"
 excludedSourceFiles "utils/meta/misc.d"
+
+# Triggers on import
+excludedSourceFiles "sys/benchmak.d"
 
 # Requires non-standard compiler features
 excludedSourceFiles "utils/alloc.d"
