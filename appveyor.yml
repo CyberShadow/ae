@@ -1,0 +1,11 @@
+install:
+  # cinst dmd --version=2.071.0
+  - ps: Start-FileDownload 'http://downloads.dlang.org/releases/2.x/2.071.0/dmd.2.071.0.windows.zip' -FileName 'dmd2.7z'
+  - 7z x dmd2.7z > nul
+  - set PATH=%CD%\dmd2\windows\bin;%CD%\dmd2\windows\bin64;%PATH%
+  - dmd.exe --version
+  # Dub
+  - cinst dub
+build_script:
+  - dub test --arch=x86
+  - dub test --arch=x86_64
