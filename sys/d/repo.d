@@ -342,17 +342,6 @@ class ManagedRepository
 		return getRef(localRef);
 	}
 
-	private void fetchPull(int pull)
-	{
-		if (offline)
-			return;
-
-		needRepo();
-
-		log("Fetching pull request %d...".format(pull));
-		git.run("fetch", "--no-tags", "origin", "+refs/pull/%d/head:refs/pull/origin/%d/head".format(pull, pull));
-	}
-
 	/// Return SHA1 of the given pull request #.
 	/// Fetches the pull request first, unless offline mode is on.
 	string getPull(int pull)
