@@ -27,6 +27,8 @@ import ae.utils.graphics.color;
 import ae.utils.graphics.draw;
 import ae.utils.graphics.view;
 
+pragma(lib, "gdi32");
+
 /// A canvas with added GDI functionality.
 struct GDICanvas(COLOR)
 {
