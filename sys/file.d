@@ -910,6 +910,7 @@ version (linux)
 version (Windows)
 {
 	/// Enumerate all hard links to the specified file.
+	// TODO: Return a range
 	string[] enumerateHardLinks()(string fn)
 	{
 		mixin importWin32!q{winnt};
@@ -947,13 +948,8 @@ uint hardLinkCount(string fn)
 {
 	version (Windows)
 	{
-		import core.sys.windows.stat;
-		import ae.sys.windows.text;
-
-		struct_stat s;
-		// https://github.com/D-Programming-Language/druntime/pull/1535
-		errnoEnforce(_wstat(cast(wchar*)fn.toWStringz(), &s) == 0, "_wstat");
-		return s.st_nlink;
+		// TODO: Optimize (don't transform strings)
+		return cast(uint)fn.enumerateHardLinks.length;
 	}
 	else
 	{
