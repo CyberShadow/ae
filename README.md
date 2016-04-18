@@ -1,4 +1,6 @@
-﻿About this library
+﻿[![Build Status](https://travis-ci.org/CyberShadow/ae.svg?branch=master)](https://travis-ci.org/CyberShadow/ae)
+
+About this library
 ==================
 
 *ae* (fully named *ArmageddonEngine*) was initially intended to be the open-source part of an ambitious D rewrite of the 1999 video game "Worms Armageddon", of which I am a [maintainer](http://worms2d.info/CyberShadow).
