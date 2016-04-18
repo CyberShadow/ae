@@ -15,8 +15,8 @@ module ae.sys.windows.dll;
 version (Windows):
 
 import ae.sys.windows.imports;
-mixin importWin32!q{winbase};
-mixin importWin32!q{windef};
+mixin(importWin32!q{winbase});
+mixin(importWin32!q{windef});
 
 import ae.sys.windows.exception;
 
@@ -60,7 +60,7 @@ mixin template DynamicLoadMulti(string DLL, FUNCS...)
 	}
 }
 
-version(unittest) mixin importWin32!q{winuser};
+version(unittest) mixin(importWin32!q{winuser});
 
 ///
 unittest

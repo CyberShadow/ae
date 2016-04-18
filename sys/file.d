@@ -337,8 +337,8 @@ void forceDelete(Flag!"atomic" atomic=Yes.atomic)(string fn, Flag!"recursive" re
 	import std.process : environment;
 	version(Windows)
 	{
-		mixin importWin32!q{winnt};
-		mixin importWin32!q{winbase};
+		mixin(importWin32!q{winnt});
+		mixin(importWin32!q{winbase});
 	}
 
 	auto name = fn.baseName();
@@ -495,7 +495,7 @@ bool isHidden()(string fn)
 		return true;
 	version (Windows)
 	{
-		mixin importWin32!q{winnt};
+		mixin(importWin32!q{winnt});
 		if (getAttributes(fn) & FILE_ATTRIBUTE_HIDDEN)
 			return true;
 	}
@@ -507,8 +507,8 @@ ulong getFileID()(string fn)
 {
 	version (Windows)
 	{
-		mixin importWin32!q{winnt};
-		mixin importWin32!q{winbase};
+		mixin(importWin32!q{winnt});
+		mixin(importWin32!q{winbase});
 
 		auto fnW = toUTF16z(fn);
 		auto h = CreateFileW(fnW, FILE_READ_ATTRIBUTES, 0, null, OPEN_EXISTING, 0, HANDLE.init);
@@ -558,13 +558,13 @@ string longPath(string s)
 version (Windows)
 {
 	static if (__traits(compiles, { mixin importWin32!q{winnt}; }))
-		static mixin importWin32!q{winnt};
+		static mixin(importWin32!q{winnt});
 
 	void createReparsePoint(string reparseBufferName, string extraInitialization, string reparseTagName)(in char[] target, in char[] print, in char[] link)
 	{
-		mixin importWin32!q{winbase};
-		mixin importWin32!q{windef};
-		mixin importWin32!q{winioctl};
+		mixin(importWin32!q{winbase});
+		mixin(importWin32!q{windef});
+		mixin(importWin32!q{winioctl});
 
 		enum SYMLINK_FLAG_RELATIVE = 1;
 
@@ -613,8 +613,8 @@ version (Windows)
 
 	void acquirePrivilege(S)(S name)
 	{
-		mixin importWin32!q{winbase};
-		mixin importWin32!q{windef};
+		mixin(importWin32!q{winbase});
+		mixin(importWin32!q{windef});
 
 		import ae.sys.windows;
 
@@ -646,7 +646,7 @@ version (Windows)
 
 	void symlink()(in char[] original, in char[] link)
 	{
-		mixin importWin32!q{winnt};
+		mixin(importWin32!q{winnt});
 
 		acquirePrivilege(SE_CREATE_SYMBOLIC_LINK_NAME);
 
@@ -659,7 +659,7 @@ version (Windows)
 else
 	alias std.file.symlink dirLink;
 
-version(Windows) version(unittest) static mixin importWin32!q{winnt};
+version(Windows) version(unittest) static mixin(importWin32!q{winnt});
 
 unittest
 {
@@ -676,12 +676,12 @@ version (Windows)
 {
 	void hardLink()(string src, string dst)
 	{
-		mixin importWin32!q{w32api};
+		mixin(importWin32!q{w32api});
 
 		static assert(_WIN32_WINNT >= 0x501, "CreateHardLinkW not available for target Windows platform. Specify -version=WindowsXP");
 
-		mixin importWin32!q{winnt};
-		mixin importWin32!q{winbase};
+		mixin(importWin32!q{winnt});
+		mixin(importWin32!q{winbase});
 
 		wenforce(CreateHardLinkW(toUTF16z(dst), toUTF16z(src), null), "CreateHardLink failed: " ~ src ~ " -> " ~ dst);
 	}
@@ -913,8 +913,8 @@ version (Windows)
 	// TODO: Return a range
 	string[] enumerateHardLinks()(string fn)
 	{
-		mixin importWin32!q{winnt};
-		mixin importWin32!q{winbase};
+		mixin(importWin32!q{winnt});
+		mixin(importWin32!q{winbase});
 
 		alias extern(System) HANDLE function(LPCWSTR lpFileName, DWORD dwFlags, LPDWORD StringLength, PWCHAR LinkName) TFindFirstFileNameW;
 		alias extern(System) BOOL function(HANDLE hFindStream, LPDWORD StringLength, PWCHAR LinkName) TFindNextFileNameW;
@@ -1166,7 +1166,7 @@ void syncWrite()(string target, in void[] data)
 	f.rawWrite(data);
 	version (Windows)
 	{
-		mixin importWin32!q{windows};
+		mixin(importWin32!q{windows});
 		FlushFileBuffers(f.windowsHandle);
 	}
 	else
@@ -1197,7 +1197,7 @@ struct NamedPipeImpl
 	{
 		version(Windows)
 		{
-			mixin importWin32!q{winbase};
+			mixin(importWin32!q{winbase});
 
 			fileName = `\\.\pipe\` ~ name;
 			auto h = CreateNamedPipeW(fileName.toUTF16z, PIPE_ACCESS_OUTBOUND, PIPE_TYPE_BYTE, 10, 4096, 4096, 0, null).wenforce("CreateNamedPipeW");
@@ -1217,8 +1217,8 @@ struct NamedPipeImpl
 	{
 		version(Windows)
 		{
-			mixin importWin32!q{winbase};
-			mixin importWin32!q{windef};
+			mixin(importWin32!q{winbase});
+			mixin(importWin32!q{windef});
 
 			BOOL bSuccess = ConnectNamedPipe(f.windowsHandle, null);
 

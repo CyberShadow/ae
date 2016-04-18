@@ -14,9 +14,10 @@
 module ae.sys.windows.imports;
 version (Windows):
 
-mixin template importWin32(string moduleName, string access = null, string selective = null)
-{
-	mixin(access ~
+// Using a string mixin instead of a mixin template due to
+// https://issues.dlang.org/show_bug.cgi?id=15925
+enum importWin32(string moduleName, string access = null, string selective = null) =
+	access ~
 		" import " ~
 		(__VERSION__ >= 2070 ? "core.sys.windows" : "win32") ~
 		"." ~
@@ -24,5 +25,4 @@ mixin template importWin32(string moduleName, string access = null, string selec
 		" " ~
 		(selective ? ":" : "") ~
 		selective ~
-		";");
-}
+		";";

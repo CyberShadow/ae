@@ -1584,8 +1584,8 @@ EOS";
 		{
 			import std.utf;
 			import ae.sys.windows.imports;
-			mixin importWin32!q{winbase};
-			mixin importWin32!q{winnt};
+			mixin(importWin32!q{winbase});
+			mixin(importWin32!q{winnt});
 
 			TCHAR[1024] buf;
 			// Needed for DLLs

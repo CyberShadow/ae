@@ -21,10 +21,10 @@ version (Windows)
 	import ae.sys.windows.exception;
 
 	import ae.sys.windows.imports;
-	mixin importWin32!q{winbase};
-	mixin importWin32!q{windef};
-	mixin importWin32!q{winnls};
-	mixin importWin32!q{winuser};
+	mixin(importWin32!q{winbase});
+	mixin(importWin32!q{windef});
+	mixin(importWin32!q{winnls});
+	mixin(importWin32!q{winuser});
 
 	void setClipboardText(string s)
 	{

@@ -18,15 +18,17 @@ import std.exception;
 import std.typecons;
 
 import ae.sys.windows.imports;
-mixin importWin32!q{w32api};
-mixin importWin32!q{winbase};
-mixin importWin32!q{windef};
-mixin importWin32!q{winuser};
+mixin(importWin32!q{w32api});
+mixin(importWin32!q{winbase});
+mixin(importWin32!q{windef});
+mixin(importWin32!q{winuser});
 
 import ae.sys.windows.exception;
 import ae.sys.windows.text;
 
 alias wenforce = ae.sys.windows.exception.wenforce;
+
+pragma(lib, "user32");
 
 static if (_WIN32_WINNT >= 0x500) {
 
@@ -149,7 +151,7 @@ CreatedProcess createDesktopUserProcess(string applicationName, string commandLi
 
 // --------------------------------------------------------------------------
 
-mixin importWin32!q{tlhelp32};
+mixin(importWin32!q{tlhelp32});
 
 struct ToolhelpSnapshotImpl
 {

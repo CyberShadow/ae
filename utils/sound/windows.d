@@ -22,10 +22,10 @@ import std.algorithm;
 import std.range;
 
 import ae.sys.windows.imports;
-mixin importWin32!q{mmsystem};
-mixin importWin32!q{winnt};
+mixin(importWin32!q{mmsystem});
+mixin(importWin32!q{winnt});
 
-mixin importWin32!(q{mmsystem}, q{public}, q{SND_ASYNC, SND_LOOP, SND_NOSTOP});
+mixin(importWin32!(q{mmsystem}, q{public}, q{SND_ASYNC, SND_LOOP, SND_NOSTOP}));
 
 void playWave(Wave)(Wave wave, Duration duration, uint flags = 0)
 {
