@@ -601,6 +601,10 @@ class DManager : ICacheHost
 		/// Place resulting files to stageDir
 		void performStage() {}
 
+		/// Update the environment post-install, to allow
+		/// building components that depend on this one.
+		void updateEnv(ref Environment env) {}
+
 		/// Copy build results from cacheDir to buildDir
 		void install()
 		{
@@ -920,6 +924,12 @@ EOS";
 			}
 		}
 
+		override void updateEnv(ref Environment env)
+		{
+			// Add the DMD we built for Phobos/Druntime/Tools
+			env.vars["PATH"] = buildPath(buildDir, "bin").absolutePath() ~ pathSeparator ~ env.vars["PATH"];
+		}
+
 		override void performTest()
 		{
 			auto env = baseEnvironment;
@@ -1089,7 +1099,8 @@ EOS";
 		override void performTest()
 		{
 			auto env = baseEnvironment;
-			run([dmd, "-run", "rdmd_test.d", "--compiler", dmd], env.vars, sourceDir);
+			getComponent("dmd").updateEnv(env);
+			run(["dmd", "-run", "rdmd_test.d"], env.vars, sourceDir);
 		}
 	}
 
