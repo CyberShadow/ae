@@ -299,6 +299,8 @@ class DManager : ICacheHost
 				log("Updating submodule...");
 				getMetaRepo().git.run(["submodule", "update", name]);
 
+				reset();
+
 				log("Trying again...");
 				super.needHead(hash);
 			}

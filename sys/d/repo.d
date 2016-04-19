@@ -516,6 +516,15 @@ class ManagedRepository
 
 	// Misc
 
+	/// Reset internal state.
+	protected void reset()
+	{
+		currentHead = null;
+		clean = false;
+		haveMergeCache = false;
+		mergeCacheData = null;
+	}
+
 	/// Override to add logging.
 	protected abstract void log(string line);
 }
