@@ -1089,7 +1089,7 @@ EOS";
 		override void performTest()
 		{
 			auto env = baseEnvironment;
-			run([dmd, "-run", "rdmd_test.d"], env.vars, sourceDir);
+			run([dmd, "-run", "rdmd_test.d", "--compiler", dmd], env.vars, sourceDir);
 		}
 	}
 
