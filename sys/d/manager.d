@@ -601,10 +601,6 @@ class DManager : ICacheHost
 		/// Place resulting files to stageDir
 		void performStage() {}
 
-		/// Update the environment post-install, to allow
-		/// building components that depend on this one.
-		void updateEnv(ref Environment env) {}
-
 		/// Copy build results from cacheDir to buildDir
 		void install()
 		{
@@ -661,6 +657,9 @@ class DManager : ICacheHost
 		{
 			return [env.vars.get("MAKE", "make")];
 		}
+
+		/// Returns the path to the built dmd executable.
+		@property string dmd() { return buildPath(buildDir, "bin", "dmd" ~ binExt).absolutePath(); }
 
 		string[] getPlatformMakeVars(in ref Environment env)
 		{
@@ -921,12 +920,6 @@ EOS";
 			}
 		}
 
-		override void updateEnv(ref Environment env)
-		{
-			// Add the DMD we built for Phobos/Druntime/Tools
-			env.vars["PATH"] = buildPath(buildDir, "bin").absolutePath() ~ pathSeparator ~ env.vars["PATH"];
-		}
-
 		override void performTest()
 		{
 			auto env = baseEnvironment;
@@ -959,18 +952,18 @@ EOS";
 
 	final class Druntime : Component
 	{
-		@property override string submoduleName  () { return "druntime"; }
-		@property override string[] sourceDeps   () { return ["phobos"]; }
-		@property override string[] buildDeps    () { return ["dmd"]; }
-		@property override string[] installDeps  () { return ["phobos-includes"]; }
-		@property override string[] testBuildDeps() { return ["dmd", "druntime"]; }
+		@property override string submoduleName    () { return "druntime"; }
+		@property override string[] sourceDeps     () { return ["phobos"]; }
+		@property override string[] buildDeps      () { return []; }
+		@property override string[] installDeps    () { return ["dmd", "phobos-includes"]; }
+		@property override string[] testBuildDeps  () { return ["druntime"]; }
+		@property override string[] testInstallDeps() { return ["dmd"]; }
 		@property override string configString() { return null; }
 
 		override void performBuild()
 		{
 			auto env = baseEnvironment;
 			needCC(env);
-			getComponent("dmd").updateEnv(env);
 
 			mkdirRecurse(sourceDir.buildPath("import"));
 			mkdirRecurse(sourceDir.buildPath("lib"));
@@ -978,8 +971,8 @@ EOS";
 			setTimes(sourceDir.buildPath("src", "rt", "minit.obj"), Clock.currTime(), Clock.currTime()); // Don't rebuild
 			submodule.saveFileState("src/rt/minit.obj");
 
-			run(getMake(env) ~ ["-f", makeFileNameModel, "import"] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
-			run(getMake(env) ~ ["-f", makeFileNameModel          ] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
+			run(getMake(env) ~ ["-f", makeFileNameModel, "import", "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
+			run(getMake(env) ~ ["-f", makeFileNameModel          , "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
 		}
 
 		override void performStage()
@@ -999,11 +992,12 @@ EOS";
 
 	final class Phobos : Component
 	{
-		@property override string submoduleName  () { return "phobos"; }
-		@property override string[] sourceDeps   () { return []; }
-		@property override string[] buildDeps    () { return ["dmd", "druntime"]; }
-		@property override string[] installDeps  () { return []; }
-		@property override string[] testBuildDeps() { return ["dmd", "druntime", "phobos"]; }
+		@property override string submoduleName    () { return "phobos"; }
+		@property override string[] sourceDeps     () { return []; }
+		@property override string[] buildDeps      () { return ["druntime"]; }
+		@property override string[] installDeps    () { return ["dmd"]; }
+		@property override string[] testBuildDeps  () { return ["druntime", "phobos"]; }
+		@property override string[] testInstallDeps() { return ["dmd"]; }
 		@property override string configString() { return null; }
 
 		string[] targets;
@@ -1012,20 +1006,19 @@ EOS";
 		{
 			auto env = baseEnvironment;
 			needCC(env);
-			getComponent("dmd").updateEnv(env);
 
 			string phobosMakeFileName = findMakeFile(sourceDir, makeFileNameModel);
 
 			version (Windows)
 			{
 				auto lib = "phobos%s.lib".format(modelSuffix);
-				run(getMake(env) ~ ["-f", phobosMakeFileName, lib] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
+				run(getMake(env) ~ ["-f", phobosMakeFileName, lib, "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
 				enforce(sourceDir.buildPath(lib).exists);
 				targets = ["phobos%s.lib".format(modelSuffix)];
 			}
 			else
 			{
-				run(getMake(env) ~ ["-f", phobosMakeFileName] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
+				run(getMake(env) ~ ["-f", phobosMakeFileName,      "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
 				targets = sourceDir
 					.buildPath("generated")
 					.dirEntries(SpanMode.depth)
@@ -1049,7 +1042,7 @@ EOS";
 		override void performTest()
 		{
 			auto env = baseEnvironment;
-			run(getMake(env) ~ ["-f", makeFileNameModel, "unittest"] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
+			run(getMake(env) ~ ["-f", makeFileNameModel, "unittest", "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
 		}
 	}
 
@@ -1066,7 +1059,6 @@ EOS";
 		{
 			auto env = baseEnvironment;
 			needCC(env);
-			getComponent("dmd").updateEnv(env);
 
 			// Just build rdmd
 			bool needModel; // Need -mXX switch?
@@ -1078,12 +1070,12 @@ EOS";
 
 			if (!needModel)
 				try
-					run(["dmd"] ~ args, env.vars, sourceDir);
+					run([dmd] ~ args, env.vars, sourceDir);
 				catch (Exception e)
 					needModel = true;
 
 			if (needModel)
-				run(["dmd", "-m" ~ commonConfig.model] ~ args, env.vars, sourceDir);
+				run([dmd, "-m" ~ commonConfig.model] ~ args, env.vars, sourceDir);
 		}
 
 		override void performStage()
@@ -1097,8 +1089,7 @@ EOS";
 		override void performTest()
 		{
 			auto env = baseEnvironment;
-			getComponent("dmd").updateEnv(env);
-			run(["dmd", "-run", "rdmd_test.d"], env.vars, sourceDir);
+			run([dmd, "-run", "rdmd_test.d"], env.vars, sourceDir);
 		}
 	}
 
