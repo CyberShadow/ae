@@ -149,11 +149,15 @@ class Installer
 		mkdirRecurse(installationDirectory);
 
 		log("Installing " ~ name ~ " to " ~ directory ~ "...");
+		atomicInstallImpl();
+		log("Done installing " ~ name ~ ".");
+	}
 
+	/// Install to `directory` atomically.
+	protected void atomicInstallImpl()
+	{
 		void installProxy(string target) { installImpl(target); }
 		safeUpdate!installProxy(directory);
-
-		log("Done installing " ~ name ~ ".");
 	}
 
 	protected void installImpl(string target)
