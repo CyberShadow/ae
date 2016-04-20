@@ -60,5 +60,6 @@ struct MSYS
 	alias bash       = singleton!(MSYSComponent, "bash"      , "bin/bash.exe"          , "https://sourceforge.net/projects/mingw/files/MSYS/Base/bash/bash-3.1.23-1/bash-3.1.23-1-msys-1.0.18-bin.tar.xz");
 	alias make       = singleton!(MSYSComponent, "make"      , "bin/make.exe"          , "https://sourceforge.net/projects/mingw/files/MSYS/Base/make/make-3.81-3/make-3.81-3-msys-1.0.13-bin.tar.lzma");
 	alias grep       = singleton!(MSYSComponent, "grep"      , "bin/grep.exe"          , "https://sourceforge.net/projects/mingw/files/MSYS/Base/grep/grep-2.5.4-2/grep-2.5.4-2-msys-1.0.13-bin.tar.lzma");
+	alias sed        = singleton!(MSYSComponent, "sed"       , "bin/sed.exe"           , "https://sourceforge.net/projects/mingw/files/MSYS/Base/sed/sed-4.2.1-2/sed-4.2.1-2-msys-1.0.13-bin.tar.lzma");
 	alias diffutils  = singleton!(MSYSComponent, "diffutils" , "bin/diff.exe"          , "https://sourceforge.net/projects/mingw/files/MSYS/Base/diffutils/diffutils-2.8.7.20071206cvs-3/diffutils-2.8.7.20071206cvs-3-msys-1.0.13-bin.tar.lzma");
 }
