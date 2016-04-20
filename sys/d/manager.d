@@ -325,6 +325,7 @@ class DManager : ICacheHost
 
 	ManagedRepository getSubmodule(string name) /// ditto
 	{
+		assert(name, "This component is not associated with a submodule");
 		if (name !in submodules)
 		{
 			getMetaRepo().needRepo();
@@ -464,6 +465,8 @@ class DManager : ICacheHost
 
 			if (incrementalBuild)
 				return;
+			if (!submoduleName)
+				return;
 			foreach (component; getSubmoduleComponents(submoduleName))
 				component.haveBuild = false;
 
@@ -497,7 +500,8 @@ class DManager : ICacheHost
 			needSource();
 
 			log("Building " ~ getBuildID());
-			submodule.clean = false;
+			if (submoduleName)
+				submodule.clean = false;
 			performBuild();
 			log(getBuildID() ~ " built OK!");
 		}
