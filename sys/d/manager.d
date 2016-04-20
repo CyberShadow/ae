@@ -39,6 +39,7 @@ import ae.utils.regex;
 version (Windows)
 {
 	import ae.sys.install.dmc;
+	import ae.sys.install.gnuwin32;
 	import ae.sys.install.vs;
 }
 
@@ -933,10 +934,14 @@ EOS";
 		override void performTest()
 		{
 			auto env = baseEnvironment;
+			version (Windows)
+				needGnuWin32(env);
 
-			run(getMake(env) ~ commonConfig.makeArgs,
-				env.vars, sourceDir.buildPath("test")
-			);
+			auto makeArgs = getMake(env) ~ commonConfig.makeArgs ~ getPlatformMakeVars(env);
+			version (Windows)
+				makeArgs ~= ["OS=windows", "SHELL=bash"];
+
+			run(makeArgs, env.vars, sourceDir.buildPath("test"));
 		}
 	}
 
@@ -1481,6 +1486,15 @@ EOS";
 		needInstaller();
 		kindleGenInstaller.requireLocal(false);
 		env.vars["PATH"] = kindleGenInstaller.directory ~ pathSeparator ~ env.vars["PATH"];
+	}
+
+	version (Windows)
+	void needGnuWin32(ref Environment env)
+	{
+		needInstaller();
+		GnuWin32.make.requireLocal(false);
+		GnuWin32.coreutils.requireLocal(false);
+		env.vars["PATH"] = GnuWin32.make.directory.buildPath("bin") ~ pathSeparator ~ env.vars["PATH"];
 	}
 
 	final void bootstrapDMD(string ver, string target)
