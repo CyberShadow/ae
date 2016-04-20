@@ -943,7 +943,7 @@ EOS";
 
 			auto makeArgs = getMake(env) ~ commonConfig.makeArgs ~ getPlatformMakeVars(env);
 			version (Windows)
-				makeArgs ~= ["OS=windows", "SHELL=bash"];
+				makeArgs ~= ["OS=win" ~ commonConfig.model, "SHELL=bash"];
 
 			run(makeArgs, env.vars, sourceDir.buildPath("test"));
 		}
