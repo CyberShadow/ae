@@ -1032,7 +1032,7 @@ EOS";
 		@property override string[] buildDeps      () { return ["druntime"]; }
 		@property override string[] installDeps    () { return ["dmd"]; }
 		@property override string[] testBuildDeps  () { return ["druntime", "phobos"]; }
-		@property override string[] testInstallDeps() { return ["dmd"]; }
+		@property override string[] testInstallDeps() { return ["dmd", "extras"]; }
 		@property override string configString() { return null; }
 
 		string[] targets;
