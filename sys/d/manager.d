@@ -1016,6 +1016,7 @@ EOS";
 		override void performTest()
 		{
 			auto env = baseEnvironment;
+			needCC(env);
 			run(getMake(env) ~ ["-f", makeFileNameModel, "unittest"] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
 		}
 	}
@@ -1072,6 +1073,7 @@ EOS";
 		override void performTest()
 		{
 			auto env = baseEnvironment;
+			needCC(env);
 			run(getMake(env) ~ ["-f", makeFileNameModel, "unittest", "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
 		}
 	}
