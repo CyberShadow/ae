@@ -236,3 +236,37 @@ final:
 		throw new Exception("Please install " ~ name ~ " and make sure it is on your PATH.");
 	}
 }
+
+/// Move a directory and its contents into another directory recursively,
+/// overwriting any existing files.
+package void moveInto(string source, string target)
+{
+	foreach (de; source.dirEntries(SpanMode.shallow))
+	{
+		auto targetPath = target.buildPath(de.baseName);
+		if (de.isDir && targetPath.exists)
+			de.moveInto(targetPath);
+		else
+			de.name.rename(targetPath);
+	}
+	source.rmdir();
+}
+
+/// As above, but do not leave behind partially-merged
+/// directories. In case of failure, both source and target
+/// are deleted.
+package void atomicMoveInto(string source, string target)
+{
+	auto tmpSource = source ~ ".tmp";
+	auto tmpTarget = target ~ ".tmp";
+	if (tmpSource.exists) tmpSource.rmdirRecurse();
+	if (tmpTarget.exists) tmpTarget.rmdirRecurse();
+	source.rename(tmpSource);
+	target.rename(tmpTarget);
+	{
+		scope(failure) tmpSource.rmdirRecurse();
+		scope(failure) tmpTarget.rmdirRecurse();
+		tmpSource.moveInto(tmpTarget);
+	}
+	tmpTarget.rename(target);
+}

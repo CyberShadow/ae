@@ -57,33 +57,6 @@ final class GnuWin32Component : Installer
 	}
 }
 
-/// Move a directory and its contents into another directory recursively,
-/// overwritig any existing files.
-private void moveInto(string source, string target)
-{
-	foreach (de; source.dirEntries(SpanMode.shallow))
-	{
-		auto targetPath = target.buildPath(de.baseName);
-		if (de.isDir && targetPath.exists)
-			de.moveInto(targetPath);
-		else
-			de.name.rename(targetPath);
-	}
-	source.rmdir();
-}
-
-private void atomicMoveInto(string source, string target)
-{
-	auto tmpSource = source ~ ".tmp";
-	auto tmpTarget = target ~ ".tmp";
-	if (tmpSource.exists) tmpSource.rmdirRecurse();
-	if (tmpTarget.exists) tmpTarget.rmdirRecurse();
-	source.rename(tmpSource);
-	target.rename(tmpTarget);
-	tmpSource.moveInto(tmpTarget);
-	tmpTarget.rename(target);
-}
-
 struct GnuWin32
 {
 	static GnuWin32Component opDispatch(string name)()
