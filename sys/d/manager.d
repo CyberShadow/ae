@@ -41,6 +41,8 @@ version (Windows)
 	import ae.sys.install.dmc;
 	import ae.sys.install.msys;
 	import ae.sys.install.vs;
+
+	extern(Windows) void SetErrorMode(int);
 }
 
 import ae.sys.install.dmd;
@@ -1608,11 +1610,7 @@ EOS";
 	version (Windows)
 	static void disableCrashDialog()
 	{
-		import std.process;
-
-		extern(Windows) void SetErrorMode(int);
 		enum : uint { SEM_FAILCRITICALERRORS = 1, SEM_NOGPFAULTERRORBOX = 2 }
-
 		SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
 	}
 
