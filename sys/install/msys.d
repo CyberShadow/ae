@@ -56,8 +56,9 @@ struct MSYS
 	alias libtermcap = singleton!(MSYSComponent, "libtermcap", "bin/msys-termcap-0.dll", "https://sourceforge.net/projects/mingw/files/MSYS/Base/termcap/termcap-0.20050421_1-2/libtermcap-0.20050421_1-2-msys-1.0.13-dll-0.tar.lzma");
 	alias libregex   = singleton!(MSYSComponent, "libregex"  , "bin/msys-regex-1.dll"  , "https://sourceforge.net/projects/mingw/files/MSYS/Base/regex/regex-1.20090805-2/libregex-1.20090805-2-msys-1.0.13-dll-1.tar.lzma");
 
+	alias coreutils  = singleton!(MSYSComponent, "coreutils" , "bin/true.exe"          , "https://sourceforge.net/projects/mingw/files/MSYS/Base/coreutils/coreutils-5.97-3/coreutils-5.97-3-msys-1.0.13-bin.tar.lzma");
 	alias bash       = singleton!(MSYSComponent, "bash"      , "bin/bash.exe"          , "https://sourceforge.net/projects/mingw/files/MSYS/Base/bash/bash-3.1.23-1/bash-3.1.23-1-msys-1.0.18-bin.tar.xz");
 	alias make       = singleton!(MSYSComponent, "make"      , "bin/make.exe"          , "https://sourceforge.net/projects/mingw/files/MSYS/Base/make/make-3.81-3/make-3.81-3-msys-1.0.13-bin.tar.lzma");
-	alias coreutils  = singleton!(MSYSComponent, "coreutils" , "bin/true.exe"          , "https://sourceforge.net/projects/mingw/files/MSYS/Base/coreutils/coreutils-5.97-3/coreutils-5.97-3-msys-1.0.13-bin.tar.lzma");
+	alias grep       = singleton!(MSYSComponent, "grep"      , "bin/grep.exe"          , "https://sourceforge.net/projects/mingw/files/MSYS/Base/grep/grep-2.5.4-2/grep-2.5.4-2-msys-1.0.13-bin.tar.lzma");
 	alias diffutils  = singleton!(MSYSComponent, "diffutils" , "bin/diff.exe"          , "https://sourceforge.net/projects/mingw/files/MSYS/Base/diffutils/diffutils-2.8.7.20071206cvs-3/diffutils-2.8.7.20071206cvs-3-msys-1.0.13-bin.tar.lzma");
 }
