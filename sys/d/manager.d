@@ -376,7 +376,9 @@ class DManager : ICacheHost
 			string model = defaultModel; /// Target model ("32" or "64").
 
 			string[] makeArgs; /// Additional make parameters,
-			                   /// e.g. "-j8" or "HOST_CC=g++48"
+			                   /// e.g. "HOST_CC=g++48"
+
+			string makeJobs; /// If non-null, passed to make via -j parameter.
 		}
 		CommonConfig commonConfig;
 
@@ -688,6 +690,22 @@ class DManager : ICacheHost
 			return args;
 		}
 
+		@property string[] gnuMakeArgs()
+		{
+			string[] args;
+			if (commonConfig.makeJobs !is null)
+				args ~= "-j" ~ commonConfig.makeJobs;
+			return args;
+		}
+
+		@property string[] dMakeArgs()
+		{
+			version (Windows)
+				return null;
+			else
+				return gnuMakeArgs;
+		}
+
 		/// Older versions did not use the posix.mak/win32.mak convention.
 		static string findMakeFile(string dir, string fn)
 		{
@@ -859,7 +877,7 @@ class DManager : ICacheHost
 					"-f", dmdMakeFileName,
 					"MODEL=" ~ modelFlag,
 					"HOST_DC=" ~ hostDC,
-				] ~ commonConfig.makeArgs ~ extraArgs ~ targets,
+				] ~ commonConfig.makeArgs ~ dMakeArgs ~ extraArgs ~ targets,
 				env.vars, srcDir
 			);
 		}
@@ -945,10 +963,11 @@ EOS";
 				// In this order so it uses the MSYS make
 				needCC(env);
 				needMSYS(env);
+
 				disableCrashDialog();
 			}
 
-			auto makeArgs = getMake(env) ~ commonConfig.makeArgs ~ getPlatformMakeVars(env);
+			auto makeArgs = getMake(env) ~ commonConfig.makeArgs ~ getPlatformMakeVars(env) ~ gnuMakeArgs;
 			version (Windows)
 			{
 				makeArgs ~= ["OS=win" ~ commonConfig.model, "SHELL=bash"];
@@ -1005,8 +1024,8 @@ EOS";
 			setTimes(sourceDir.buildPath("src", "rt", "minit.obj"), Clock.currTime(), Clock.currTime()); // Don't rebuild
 			submodule.saveFileState("src/rt/minit.obj");
 
-			run(getMake(env) ~ ["-f", makeFileNameModel, "import", "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
-			run(getMake(env) ~ ["-f", makeFileNameModel          , "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
+			run(getMake(env) ~ ["-f", makeFileNameModel, "import", "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
+			run(getMake(env) ~ ["-f", makeFileNameModel          , "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
 		}
 
 		override void performStage()
@@ -1021,7 +1040,7 @@ EOS";
 		{
 			auto env = baseEnvironment;
 			needCC(env);
-			run(getMake(env) ~ ["-f", makeFileNameModel, "unittest", "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
+			run(getMake(env) ~ ["-f", makeFileNameModel, "unittest", "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
 		}
 	}
 
@@ -1047,13 +1066,13 @@ EOS";
 			version (Windows)
 			{
 				auto lib = "phobos%s.lib".format(modelSuffix);
-				run(getMake(env) ~ ["-f", phobosMakeFileName, lib, "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
+				run(getMake(env) ~ ["-f", phobosMakeFileName, lib, "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
 				enforce(sourceDir.buildPath(lib).exists);
 				targets = ["phobos%s.lib".format(modelSuffix)];
 			}
 			else
 			{
-				run(getMake(env) ~ ["-f", phobosMakeFileName,      "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
+				run(getMake(env) ~ ["-f", phobosMakeFileName,      "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
 				targets = sourceDir
 					.buildPath("generated")
 					.dirEntries(SpanMode.depth)
@@ -1078,7 +1097,7 @@ EOS";
 		{
 			auto env = baseEnvironment;
 			needCC(env);
-			run(getMake(env) ~ ["-f", makeFileNameModel, "unittest", "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env), env.vars, sourceDir);
+			run(getMake(env) ~ ["-f", makeFileNameModel, "unittest", "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
 		}
 	}
 
@@ -1196,7 +1215,7 @@ EOS";
 					"all", "kindle", "pdf", "verbatim",
 					] ~ (config.build.components.website.noDateTime ? ["NODATETIME=nodatetime.ddoc"] : []) ~ [ // Can't be last due to https://issues.dlang.org/show_bug.cgi?id=14682
 					"LATEST=" ~ latest,
-				], env.vars, sourceDir);
+				] ~ gnuMakeArgs, env.vars, sourceDir);
 			}
 		}
 
