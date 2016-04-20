@@ -1063,7 +1063,7 @@ EOS";
 		@property override string[] buildDeps      () { return ["druntime"]; }
 		@property override string[] installDeps    () { return ["dmd"]; }
 		@property override string[] testBuildDeps  () { return ["druntime", "phobos"]; }
-		@property override string[] testInstallDeps() { return ["dmd", "extras"]; }
+		@property override string[] testInstallDeps() { return ["dmd"]; }
 		@property override string configString() { return null; }
 
 		string[] targets;
@@ -1109,6 +1109,11 @@ EOS";
 		{
 			auto env = baseEnvironment;
 			needCC(env);
+			version (Windows)
+			{
+				if (commonConfig.model == "32")
+					getComponent("extras").needInstalled();
+			}
 			run(getMake(env) ~ ["-f", makeFileNameModel, "unittest", "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
 		}
 	}
