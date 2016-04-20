@@ -939,6 +939,7 @@ EOS";
 				// In this order so it uses the MSYS make
 				needCC(env);
 				needMSYS(env);
+				disableCrashDialog();
 			}
 
 			auto makeArgs = getMake(env) ~ commonConfig.makeArgs ~ getPlatformMakeVars(env);
@@ -1600,6 +1601,19 @@ EOS";
 
 		needInstaller();
 		gitInstaller.require();
+	}
+
+	/// Disable the "<program> has stopped working"
+	/// standard Windows dialog.
+	version (Windows)
+	static void disableCrashDialog()
+	{
+		import std.process;
+
+		extern(Windows) void SetErrorMode(int);
+		enum : uint { SEM_FAILCRITICALERRORS = 1, SEM_NOGPFAULTERRORBOX = 2 }
+
+		SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
 	}
 
 	/// Create a build environment base.
