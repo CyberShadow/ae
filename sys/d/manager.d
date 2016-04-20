@@ -1573,6 +1573,8 @@ EOS";
 
 	string needExtras()
 	{
+		import ae.utils.meta : I, singleton;
+
 		static class DExtrasInstaller : Installer
 		{
 			string url = "http://semitwist.com/download/app/dmd-localextras.7z";
