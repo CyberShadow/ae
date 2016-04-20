@@ -1564,6 +1564,7 @@ EOS";
 		MSYS.bash.requireLocal(false);
 		MSYS.make.requireLocal(false);
 		MSYS.grep.requireLocal(false);
+		MSYS.sed.requireLocal(false);
 		MSYS.diffutils.requireLocal(false);
 		env.vars["PATH"] = MSYS.bash.directory.buildPath("bin") ~ pathSeparator ~ env.vars["PATH"];
 	}
