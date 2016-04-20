@@ -50,25 +50,54 @@ void unzip(string zip, string target)
 	}
 }
 
+/// Unpacks a file with 7-Zip to the specified directory,
+/// installing it locally if necessary.
+void un7z(string archive, string target)
+{
+	sevenZip.require();
+	target.mkdirRecurse();
+	auto pid = spawnProcess([sevenZip.exe, "x", "-o" ~ target, archive]);
+	enforce(pid.wait() == 0, "Extraction failed");
+}
+
 /// Unpacks an archive to the specified directory.
-/// Uses std.zip for .zip files, and invokes 7-Zip for
-/// other file types (installing it locally if necessary).
+/// Uses std.zip for .zip files, and invokes tar (if available)
+/// or 7-Zip (installing it locally if necessary) for other file types.
+/// Always unpacks compressed tar archives in one go.
 void unpack(string archive, string target)
 {
+	bool untar(string longExtension, string shortExtension, string tarSwitch)
+	{
+		if (archive.toLower().endsWith(longExtension) || archive.toLower().endsWith(shortExtension))
+		{
+			target.mkdirRecurse();
+			auto pid = spawnProcess(["tar", "xf", archive, tarSwitch, "--directory", target]);
+			enforce(pid.wait() == 0, "Extraction failed");
+			return true;
+		}
+		return false;
+	}
+
 	if (archive.toLower().endsWith(".zip"))
 		archive.unzip(target);
 	else
-	if (haveExecutable("tar") && (archive.toLower().endsWith(".tar.gz") || archive.toLower().endsWith(".tgz")))
-	{
-		target.mkdirRecurse();
-		auto pid = spawnProcess(["tar", "zxf", archive, "--directory", target]);
-		enforce(pid.wait() == 0, "Extraction failed");
-	}
+	if (haveExecutable("tar") && (
+		untar(".tar.gz", ".tgz", "--gzip") ||
+		untar(".tar.bz2", ".tbz", "--bzip2") ||
+		untar(".tar.lzma", ".tlz", "--lzma") ||
+		untar(".tar.xz", ".txz", "--xz")))
+		{}
 	else
 	{
-		sevenZip.require();
-		target.mkdirRecurse();
-		auto pid = spawnProcess([sevenZip.exe, "x", "-o" ~ target, archive]);
-		enforce(pid.wait() == 0, "Extraction failed");
+		auto tar = archive.stripExtension;
+		if (tar.extension.toLower == ".tar")
+		{
+			un7z(archive, archive.dirName);
+			enforce(tar.exists, "Expected to unpack " ~ archive ~ " to " ~ tar);
+			scope(exit) tar.remove();
+			un7z(tar, target);
+		}
+		else
+			un7z(archive, target);
 	}
 }
