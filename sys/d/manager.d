@@ -946,7 +946,15 @@ EOS";
 
 			auto makeArgs = getMake(env) ~ commonConfig.makeArgs ~ getPlatformMakeVars(env);
 			version (Windows)
+			{
 				makeArgs ~= ["OS=win" ~ commonConfig.model, "SHELL=bash"];
+				if (commonConfig.model == "32")
+				{
+					auto extrasDir = needExtras();
+					// The autotester seems to pass this via environment. Why does that work there???
+					makeArgs ~= "LIB=" ~ extrasDir.buildPath("localextras-windows", "dmd2", "windows", "lib") ~ `;..\..\phobos`;
+				}
+			}
 
 			run(makeArgs, env.vars, sourceDir.buildPath("test"));
 		}
@@ -1204,24 +1212,9 @@ EOS";
 		@property override string[] installDeps() { return []; }
 		@property override string configString() { return null; }
 
-		static class DExtrasInstaller : Installer
-		{
-			string url = "http://semitwist.com/download/app/dmd-localextras.7z";
-
-			override void installImpl(string target)
-			{
-				url
-					.I!save()
-					.I!unpackTo(target);
-			}
-		}
-
-		alias extrasInstaller = singleton!DExtrasInstaller;
-
 		override void performBuild()
 		{
-			needInstaller();
-			extrasInstaller.requireLocal();
+			needExtras();
 		}
 
 		override void performStage()
@@ -1240,9 +1233,11 @@ EOS";
 			else
 				static assert(false);
 
+			auto extrasDir = needExtras();
+
 			void copyDir(string source, string target)
 			{
-				source = buildPath(extrasInstaller.directory, "localextras-" ~ platform, "dmd2", platform, source);
+				source = buildPath(extrasDir, "localextras-" ~ platform, "dmd2", platform, source);
 				target = buildPath(stageDir, target);
 				if (source.exists)
 					cp(source, target);
@@ -1571,6 +1566,27 @@ EOS";
 		MSYS.grep.requireLocal(false);
 		MSYS.diffutils.requireLocal(false);
 		env.vars["PATH"] = MSYS.bash.directory.buildPath("bin") ~ pathSeparator ~ env.vars["PATH"];
+	}
+
+	string needExtras()
+	{
+		static class DExtrasInstaller : Installer
+		{
+			string url = "http://semitwist.com/download/app/dmd-localextras.7z";
+
+			override void installImpl(string target)
+			{
+				url
+					.I!save()
+					.I!unpackTo(target);
+			}
+		}
+
+		alias extrasInstaller = singleton!DExtrasInstaller;
+
+		needInstaller();
+		extrasInstaller.requireLocal();
+		return extrasInstaller.directory;
 	}
 
 	final void bootstrapDMD(string ver, string target)
