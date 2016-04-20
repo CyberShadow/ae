@@ -1196,6 +1196,64 @@ EOS";
 		}
 	}
 
+	final class Extras : Component
+	{
+		@property override string submoduleName() { return null; }
+		@property override string[] sourceDeps () { return []; }
+		@property override string[] buildDeps  () { return []; }
+		@property override string[] installDeps() { return []; }
+		@property override string configString() { return null; }
+
+		static class DExtrasInstaller : Installer
+		{
+			string url = "http://semitwist.com/download/app/dmd-localextras.7z";
+
+			override void installImpl(string target)
+			{
+				url
+					.I!save()
+					.I!unpackTo(target);
+			}
+		}
+
+		alias extrasInstaller = singleton!DExtrasInstaller;
+
+		override void performBuild()
+		{
+			needInstaller();
+			extrasInstaller.requireLocal();
+		}
+
+		override void performStage()
+		{
+			version (Windows)
+				enum platform = "windows";
+			else
+			version (linux)
+				enum platform = "linux";
+			else
+			version (OSX)
+				enum platform = "osx";
+			else
+			version (FreeBSD)
+				enum platform = "freebsd";
+			else
+				static assert(false);
+
+			void copyDir(string source, string target)
+			{
+				source = buildPath(extrasInstaller.directory, "localextras-" ~ platform, "dmd2", platform, source);
+				target = buildPath(stageDir, target);
+				if (source.exists)
+					cp(source, target);
+			}
+
+			copyDir("bin", "bin");
+			copyDir("bin" ~ commonConfig.model, "bin");
+			copyDir("lib", "lib");
+		}
+	}
+
 	private int tempError;
 
 	private Component[string] components;
@@ -1225,6 +1283,9 @@ EOS";
 					break;
 				case "website":
 					c = new Website();
+					break;
+				case "extras":
+					c = new Extras();
 					break;
 				default:
 					throw new Exception("Unknown component: " ~ name);
@@ -1347,7 +1408,7 @@ EOS";
 	}
 
 	static const string[] defaultComponents = ["dmd", "druntime", "phobos-includes", "phobos", "rdmd"];
-	static const string[] additionalComponents = ["website"];
+	static const string[] additionalComponents = ["website", "extras"];
 	static const string[] allComponents = defaultComponents ~ additionalComponents;
 
 	/// Build the specified components according to the specified configuration.
