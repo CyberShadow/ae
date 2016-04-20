@@ -39,7 +39,7 @@ import ae.utils.regex;
 version (Windows)
 {
 	import ae.sys.install.dmc;
-	import ae.sys.install.gnuwin32;
+	import ae.sys.install.msys;
 	import ae.sys.install.vs;
 }
 
@@ -935,7 +935,11 @@ EOS";
 		{
 			auto env = baseEnvironment;
 			version (Windows)
-				needGnuWin32(env);
+			{
+				// In this order so it uses the MSYS make
+				needCC(env);
+				needMSYS(env);
+			}
 
 			auto makeArgs = getMake(env) ~ commonConfig.makeArgs ~ getPlatformMakeVars(env);
 			version (Windows)
@@ -1489,12 +1493,19 @@ EOS";
 	}
 
 	version (Windows)
-	void needGnuWin32(ref Environment env)
+	void needMSYS(ref Environment env)
 	{
 		needInstaller();
-		GnuWin32.make.requireLocal(false);
-		GnuWin32.coreutils.requireLocal(false);
-		env.vars["PATH"] = GnuWin32.make.directory.buildPath("bin") ~ pathSeparator ~ env.vars["PATH"];
+		MSYS.msysCORE.requireLocal(false);
+		MSYS.libintl.requireLocal(false);
+		MSYS.libiconv.requireLocal(false);
+		MSYS.libtermcap.requireLocal(false);
+		MSYS.libregex.requireLocal(false);
+		MSYS.bash.requireLocal(false);
+		MSYS.make.requireLocal(false);
+		MSYS.coreutils.requireLocal(false);
+		MSYS.diffutils.requireLocal(false);
+		env.vars["PATH"] = MSYS.bash.directory.buildPath("bin") ~ pathSeparator ~ env.vars["PATH"];
 	}
 
 	final void bootstrapDMD(string ver, string target)
