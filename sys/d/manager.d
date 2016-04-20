@@ -378,7 +378,8 @@ class DManager : ICacheHost
 			string[] makeArgs; /// Additional make parameters,
 			                   /// e.g. "HOST_CC=g++48"
 
-			string makeJobs; /// If non-null, passed to make via -j parameter.
+			string makeJobs; /// If present, passed to make via -j parameter.
+			                 /// Can also be "auto" or "unlimited".
 		}
 		CommonConfig commonConfig;
 
@@ -693,8 +694,19 @@ class DManager : ICacheHost
 		@property string[] gnuMakeArgs()
 		{
 			string[] args;
-			if (commonConfig.makeJobs !is null)
-				args ~= "-j" ~ commonConfig.makeJobs;
+			if (commonConfig.makeJobs)
+			{
+				if (commonConfig.makeJobs == "auto")
+				{
+					import std.parallelism, std.conv;
+					args ~= "-j" ~ text(totalCPUs);
+				}
+				else
+				if (commonConfig.makeJobs == "unlimited")
+					args ~= "-j";
+				else
+					args ~= "-j" ~ commonConfig.makeJobs;
+			}
 			return args;
 		}
 
