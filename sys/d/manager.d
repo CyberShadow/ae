@@ -474,18 +474,6 @@ class DManager : ICacheHost
 
 			log("needBuild: " ~ getBuildID());
 
-			// if (sourceDeps.length || buildDeps.length || installDeps.length)
-			// {
-			// 	log("Checking dependencies...");
-
-			// 	foreach (dependency; sourceDeps)
-			// 		getComponent(dependency).needSource();
-			// 	foreach (dependency; buildDeps)
-			// 		getComponent(dependency).needBuild();
-			// 	foreach (dependency; installDeps)
-			// 		getComponent(dependency).needInstalled();
-			// }
-
 			needSource();
 
 			log("Building " ~ getBuildID());
@@ -612,18 +600,6 @@ class DManager : ICacheHost
 		void test()
 		{
 			log("Testing " ~ getBuildID());
-
-			// if (testSourceDeps.length || testBuildDeps.length || testInstallDeps.length)
-			// {
-			// 	log("Checking dependencies...");
-
-			// 	foreach (dependency; testSourceDeps)
-			// 		getComponent(dependency).needSource();
-			// 	foreach (dependency; testBuildDeps)
-			// 		getComponent(dependency).needBuild();
-			// 	foreach (dependency; testInstallDeps)
-			// 		getComponent(dependency).needInstalled();
-			// }
 
 			needSource();
 
