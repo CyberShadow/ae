@@ -1084,6 +1084,21 @@ EOS";
 				getComponent("curl").needInstalled();
 				getComponent("curl").updateEnv(env);
 
+				// Patch out std.datetime unittest to work around Digger test
+				// suite failure on AppVeyor due to Windows time zone changes
+				auto stdDateTime = buildPath(sourceDir, "std", "datetime.d");
+				if (stdDateTime.exists && !stdDateTime.readText().canFind("Altai Standard Time"))
+				{
+					string phobosMakeFileName = findMakeFile(sourceDir, makeFileNameModel);
+					auto makeFullName = buildPath(sourceDir, phobosMakeFileName);
+					auto m = makeFullName.readText();
+					m = m
+						.replace(`		unittest3b.obj \`, `	\`)
+					;
+					makeFullName.write(m);
+					submodule.saveFileState(phobosMakeFileName);
+				}
+
 				if (commonConfig.model == "32")
 					getComponent("extras").needInstalled();
 			}
