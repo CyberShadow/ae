@@ -1686,7 +1686,7 @@ EOS";
 		alias extrasInstaller = singleton!DExtrasInstaller;
 
 		needInstaller();
-		extrasInstaller.requireLocal();
+		extrasInstaller.requireLocal(false);
 		return extrasInstaller.directory;
 	}
 
@@ -1713,7 +1713,7 @@ EOS";
 		alias curlInstaller = singleton!DCurlInstaller;
 
 		needInstaller();
-		curlInstaller.requireLocal();
+		curlInstaller.requireLocal(false);
 		return curlInstaller.directory;
 	}
 
