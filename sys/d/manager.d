@@ -386,7 +386,11 @@ class DManager : ICacheHost
 		/// Commit in the component's repo from which to build this component.
 		@property string commit() { return incrementalBuild ? "incremental" : getComponentCommit(name); }
 
-		/// The components the state of which this component depends on.
+		/// The components the source code of which this component depends on.
+		/// Used for calculating the cache key.
+		@property abstract string[] sourceDependencies();
+
+		/// The components the state and configuration of which this component depends on.
 		/// Used for calculating the cache key.
 		@property abstract string[] dependencies();
 
@@ -398,6 +402,7 @@ class DManager : ICacheHost
 			string name;
 			string commit;
 			CommonConfig commonConfig;
+			string[] sourceDepCommits;
 			Metadata[] dependencyMetadata;
 		}
 
@@ -408,6 +413,9 @@ class DManager : ICacheHost
 				name,
 				commit,
 				commonConfig,
+				sourceDependencies.map!(
+					dependency => getComponent(dependency).commit
+				).array(),
 				dependencies.map!(
 					dependency => getComponent(dependency).getMetadata()
 				).array(),
@@ -740,6 +748,7 @@ class DManager : ICacheHost
 	final class DMD : Component
 	{
 		@property override string submoduleName  () { return "dmd"; }
+		@property override string[] sourceDependencies() { return []; }
 		@property override string[] dependencies() { return []; }
 
 		struct Config
@@ -977,6 +986,7 @@ EOS";
 	final class PhobosIncludes : Component
 	{
 		@property override string submoduleName() { return "phobos"; }
+		@property override string[] sourceDependencies() { return []; }
 		@property override string[] dependencies() { return []; }
 		@property override string configString() { return null; }
 
@@ -994,7 +1004,8 @@ EOS";
 	final class Druntime : Component
 	{
 		@property override string submoduleName    () { return "druntime"; }
-		@property override string[] dependencies() { return ["phobos", "phobos-includes", "dmd"]; }
+		@property override string[] sourceDependencies() { return ["phobos", "phobos-includes"]; }
+		@property override string[] dependencies() { return ["dmd"]; }
 		@property override string configString() { return null; }
 
 		override void performBuild()
@@ -1038,6 +1049,7 @@ EOS";
 	final class Phobos : Component
 	{
 		@property override string submoduleName    () { return "phobos"; }
+		@property override string[] sourceDependencies() { return []; }
 		@property override string[] dependencies() { return ["druntime", "dmd"]; }
 		@property override string configString() { return null; }
 
@@ -1100,6 +1112,7 @@ EOS";
 	final class RDMD : Component
 	{
 		@property override string submoduleName() { return "tools"; }
+		@property override string[] sourceDependencies() { return []; }
 		@property override string[] dependencies() { return ["dmd", "druntime", "phobos"]; }
 		@property override string configString() { return null; }
 
@@ -1151,6 +1164,7 @@ EOS";
 	final class Website : Component
 	{
 		@property override string submoduleName() { return "dlang.org"; }
+		@property override string[] sourceDependencies() { return []; }
 		@property override string[] dependencies() { return ["dmd", "druntime", "phobos", "rdmd"]; }
 		@property override string configString() { return null; }
 
@@ -1229,6 +1243,7 @@ EOS";
 	final class Extras : Component
 	{
 		@property override string submoduleName() { return null; }
+		@property override string[] sourceDependencies() { return []; }
 		@property override string[] dependencies() { return []; }
 		@property override string configString() { return null; }
 
@@ -1272,6 +1287,7 @@ EOS";
 	final class Curl : Component
 	{
 		@property override string submoduleName() { return null; }
+		@property override string[] sourceDependencies() { return []; }
 		@property override string[] dependencies() { return []; }
 		@property override string configString() { return null; }
 
@@ -1534,7 +1550,7 @@ EOS";
 		auto componentNames = config.build.components.getEnabledComponentNames();
 		auto components = componentNames.map!(componentName => getComponent(componentName)).array;
 		auto requiredSubmodules = components
-			.map!(component => chain(component.name.only, component.dependencies))
+			.map!(component => chain(component.name.only, component.sourceDependencies, component.dependencies))
 			.joiner
 			.map!(componentName => getComponent(componentName).submoduleName)
 			.array.sort().uniq().array
