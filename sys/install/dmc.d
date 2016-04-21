@@ -58,15 +58,17 @@ class LegacyDMCInstaller : Installer
 	}
 }
 
-/// Installs the latest DMC and updates it with the latest OPTLINK.
+/// Installs DMC and updates it with the latest OPTLINK and snn.lib.
 class DMCInstaller : LegacyDMCInstaller
 {
 	string optlinkURL = "http://ftp.digitalmars.com/optlink.zip";
+	string dmdURL = "http://downloads.dlang.org/releases/2.x/2.071.0/dmd.2.071.0.windows.7z";
+
+	@property override string subdirectory() { return super.subdirectory ~ "-snn2071"; }
 
 	this()
 	{
-		super(null);
-		dmcURL = "http://ftp.digitalmars.com/dmc.zip";
+		super("857");
 	}
 
 	override void installImpl(string target)
@@ -82,6 +84,16 @@ class DMCInstaller : LegacyDMCInstaller
 		scope(success) rmdirRecurse(optlinkDir);
 
 		rename(buildPath(optlinkDir, "link.exe"), buildPath(target, "bin", "link.exe"));
+
+		// Get latest snn.lib
+
+		auto dmdDir =
+			dmdURL
+			.I!save()
+			.I!unpack();
+		scope(success) rmdirRecurse(dmdDir);
+
+		rename(buildPath(dmdDir, "dmd2", "windows", "lib", "snn.lib"), buildPath(target, "lib", "snn.lib"));
 	}
 }
 
