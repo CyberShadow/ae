@@ -1287,6 +1287,15 @@ EOS";
 			copyDir("bin", "bin");
 			copyDir("bin" ~ commonConfig.model, "bin");
 			copyDir("lib", "lib");
+
+			version (Windows)
+				if (commonConfig.model == "32")
+				{
+					// The version of snn.lib bundled with DMC will be newer.
+					Environment env;
+					needDMC(env);
+					cp(buildPath(env.deps.dmcDir, "lib", "snn.lib"), buildPath(stageDir, "lib", "snn.lib"));
+				}
 		}
 	}
 
@@ -1752,7 +1761,7 @@ EOS";
 		auto binPath = buildPath(env.deps.dmcDir, `bin`).absolutePath();
 		log("DMC=" ~ binPath);
 		env.vars["DMC"] = binPath;
-		env.vars["PATH"] = binPath ~ pathSeparator ~ env.vars["PATH"];
+		env.vars["PATH"] = binPath ~ pathSeparator ~ env.vars.get("PATH", null);
 	}
 
 	version (Windows)
