@@ -1519,6 +1519,20 @@ EOS";
 		build(submoduleState);
 	}
 
+	/// Simply check out the source code for the given submodules.
+	void checkout(SubmoduleState submoduleState)
+	{
+		auto componentNames = config.build.components.getEnabledComponentNames();
+		log("Checking out components %-(%s, %)".format(componentNames));
+
+		this.components = null;
+		this.submoduleState = submoduleState;
+		this.incrementalBuild = false;
+
+		foreach (componentName; componentNames)
+			getComponent(componentName).needSource();
+	}
+
 	/// Rerun build without cleaning up any files.
 	void rebuild()
 	{
