@@ -381,7 +381,7 @@ class DManager : ICacheHost
 			string makeJobs; /// If present, passed to make via -j parameter.
 			                 /// Can also be "auto" or "unlimited".
 		}
-		CommonConfig commonConfig;
+		CommonConfig commonConfig; // TODO: This is always a copy of config.build.components.common. DRY or allow per-component customization
 
 		/// Commit in the component's repo from which to build this component.
 		@property string commit() { return incrementalBuild ? "incremental" : getComponentCommit(name); }
@@ -630,7 +630,7 @@ class DManager : ICacheHost
 	protected final:
 		// Utility declarations for component implementations
 
-		@property string modelSuffix() { return commonConfig.model == CommonConfig.defaultModel ? "" : commonConfig.model; }
+		@property string modelSuffix() { return commonConfig.model == "32" ? "" : commonConfig.model; }
 		version (Windows)
 		{
 			enum string makeFileName = "win32.mak";
@@ -1269,6 +1269,42 @@ EOS";
 		}
 	}
 
+	final class Curl : Component
+	{
+		@property override string submoduleName() { return null; }
+		@property override string[] dependencies() { return []; }
+		@property override string configString() { return null; }
+
+		override void performBuild()
+		{
+			version (Windows)
+				needCurl();
+			else
+				log("Not on Windows, skipping libcurl download");
+		}
+
+		override void performStage()
+		{
+			version (Windows)
+			{
+				auto curlDir = needCurl();
+
+				void copyDir(string source, string target)
+				{
+					source = buildPath(curlDir, "dmd2", "windows", source);
+					target = buildPath(stageDir, target);
+					if (source.exists)
+						cp(source, target);
+				}
+
+				copyDir("bin" ~ modelSuffix, "bin");
+				copyDir("lib" ~ modelSuffix, "lib");
+			}
+			else
+				log("Not on Windows, skipping libcurl install");
+		}
+	}
+
 	private int tempError;
 
 	private Component[string] components;
@@ -1301,6 +1337,9 @@ EOS";
 					break;
 				case "extras":
 					c = new Extras();
+					break;
+				case "curl":
+					c = new Curl();
 					break;
 				default:
 					throw new Exception("Unknown component: " ~ name);
@@ -1423,7 +1462,7 @@ EOS";
 	}
 
 	static const string[] defaultComponents = ["dmd", "druntime", "phobos-includes", "phobos", "rdmd"];
-	static const string[] additionalComponents = ["website", "extras"];
+	static const string[] additionalComponents = ["website", "extras", "curl"];
 	static const string[] allComponents = defaultComponents ~ additionalComponents;
 
 	/// Build the specified components according to the specified configuration.
@@ -1589,12 +1628,15 @@ EOS";
 		env.vars["PATH"] = MSYS.bash.directory.buildPath("bin") ~ pathSeparator ~ env.vars["PATH"];
 	}
 
+	/// Get DMD unbuildable extras
+	/// (proprietary DigitalMars utilities, 32-bit import libraries)
 	string needExtras()
 	{
 		import ae.utils.meta : I, singleton;
 
 		static class DExtrasInstaller : Installer
 		{
+			@property override string name() { return "dmd-localextras"; }
 			string url = "http://semitwist.com/download/app/dmd-localextras.7z";
 
 			override void installImpl(string target)
@@ -1610,6 +1652,33 @@ EOS";
 		needInstaller();
 		extrasInstaller.requireLocal();
 		return extrasInstaller.directory;
+	}
+
+	/// Get libcurl for Windows (DLL and import libraries)
+	version (Windows)
+	string needCurl()
+	{
+		import ae.utils.meta : I, singleton;
+
+		static class DCurlInstaller : Installer
+		{
+			@property override string name() { return "libcurl-" ~ curlVersion; }
+			string curlVersion = "7.47.1";
+			@property string url() { return "http://downloads.dlang.org/other/libcurl-" ~ curlVersion ~ "-WinSSL-zlib-x86-x64.zip"; }
+
+			override void installImpl(string target)
+			{
+				url
+					.I!save()
+					.I!unpackTo(target);
+			}
+		}
+
+		alias curlInstaller = singleton!DCurlInstaller;
+
+		needInstaller();
+		curlInstaller.requireLocal();
+		return curlInstaller.directory;
 	}
 
 	final void bootstrapDMD(string ver, string target)
