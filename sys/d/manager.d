@@ -138,7 +138,7 @@ class DManager : ICacheHost
 	alias dlDir      = subDir!"dl";          /// The directory for downloaded software.
 
 	/// This number increases with each incompatible change to cached data.
-	enum cacheVersion = 2;
+	enum cacheVersion = 3;
 
 	string cacheEngineDir(string engineName)
 	{
@@ -386,23 +386,9 @@ class DManager : ICacheHost
 		/// Commit in the component's repo from which to build this component.
 		@property string commit() { return incrementalBuild ? "incremental" : getComponentCommit(name); }
 
-		/// The components the source code of which this component depends on for building.
-		@property abstract string[] sourceDeps();
-
-		/// The components the just-built (in source directory) version of which this component depends on for building.
-		@property abstract string[] buildDeps();
-
-		/// The components the built, installed version of which this component depends on for building.
-		@property abstract string[] installDeps();
-
-		/// The components the source code of which this component depends on for testing.
-		@property string[] testSourceDeps() { return []; }
-
-		/// The components the just-built (in source directory) version of which this component depends on for testing.
-		@property string[] testBuildDeps() { return []; }
-
-		/// The components the built, installed version of which this component depends on for testing.
-		@property string[] testInstallDeps() { return []; }
+		/// The components the state of which this component depends on.
+		/// Used for calculating the cache key.
+		@property abstract string[] dependencies();
 
 		/// This metadata is saved to a .json file,
 		/// and is also used to calculate the cache key.
@@ -412,8 +398,7 @@ class DManager : ICacheHost
 			string name;
 			string commit;
 			CommonConfig commonConfig;
-			string[] sourceDepCommits;
-			Metadata[] buildDepMetadata, cacheDepMetadata;
+			Metadata[] dependencyMetadata;
 		}
 
 		Metadata getMetadata() /// ditto
@@ -423,13 +408,7 @@ class DManager : ICacheHost
 				name,
 				commit,
 				commonConfig,
-				sourceDeps.map!(
-					dependency => getComponent(dependency).commit
-				).array(),
-				buildDeps.map!(
-					dependency => getComponent(dependency).getMetadata()
-				).array(),
-				installDeps.map!(
+				dependencies.map!(
 					dependency => getComponent(dependency).getMetadata()
 				).array(),
 			);
@@ -480,7 +459,6 @@ class DManager : ICacheHost
 
 		/// Build the component in-place, as needed,
 		/// without moving the built files anywhere.
-		/// Prepare dependencies as needed.
 		void needBuild()
 		{
 			if (haveBuild) return;
@@ -488,17 +466,17 @@ class DManager : ICacheHost
 
 			log("needBuild: " ~ getBuildID());
 
-			if (sourceDeps.length || buildDeps.length || installDeps.length)
-			{
-				log("Checking dependencies...");
+			// if (sourceDeps.length || buildDeps.length || installDeps.length)
+			// {
+			// 	log("Checking dependencies...");
 
-				foreach (dependency; sourceDeps)
-					getComponent(dependency).needSource();
-				foreach (dependency; buildDeps)
-					getComponent(dependency).needBuild();
-				foreach (dependency; installDeps)
-					getComponent(dependency).needInstalled();
-			}
+			// 	foreach (dependency; sourceDeps)
+			// 		getComponent(dependency).needSource();
+			// 	foreach (dependency; buildDeps)
+			// 		getComponent(dependency).needBuild();
+			// 	foreach (dependency; installDeps)
+			// 		getComponent(dependency).needInstalled();
+			// }
 
 			needSource();
 
@@ -627,17 +605,17 @@ class DManager : ICacheHost
 		{
 			log("Testing " ~ getBuildID());
 
-			if (testSourceDeps.length || testBuildDeps.length || testInstallDeps.length)
-			{
-				log("Checking dependencies...");
+			// if (testSourceDeps.length || testBuildDeps.length || testInstallDeps.length)
+			// {
+			// 	log("Checking dependencies...");
 
-				foreach (dependency; testSourceDeps)
-					getComponent(dependency).needSource();
-				foreach (dependency; testBuildDeps)
-					getComponent(dependency).needBuild();
-				foreach (dependency; testInstallDeps)
-					getComponent(dependency).needInstalled();
-			}
+			// 	foreach (dependency; testSourceDeps)
+			// 		getComponent(dependency).needSource();
+			// 	foreach (dependency; testBuildDeps)
+			// 		getComponent(dependency).needBuild();
+			// 	foreach (dependency; testInstallDeps)
+			// 		getComponent(dependency).needInstalled();
+			// }
 
 			needSource();
 
@@ -762,10 +740,7 @@ class DManager : ICacheHost
 	final class DMD : Component
 	{
 		@property override string submoduleName  () { return "dmd"; }
-		@property override string[] sourceDeps   () { return []; }
-		@property override string[] buildDeps    () { return []; }
-		@property override string[] installDeps  () { return []; }
-		@property override string[] testBuildDeps() { return ["dmd", "druntime", "phobos"]; }
+		@property override string[] dependencies() { return []; }
 
 		struct Config
 		{
@@ -969,6 +944,9 @@ EOS";
 
 		override void performTest()
 		{
+			foreach (dep; ["dmd", "druntime", "phobos"])
+				getComponent(dep).needBuild();
+
 			auto env = baseEnvironment;
 			version (Windows)
 			{
@@ -999,9 +977,7 @@ EOS";
 	final class PhobosIncludes : Component
 	{
 		@property override string submoduleName() { return "phobos"; }
-		@property override string[] sourceDeps () { return []; }
-		@property override string[] buildDeps  () { return []; }
-		@property override string[] installDeps() { return []; }
+		@property override string[] dependencies() { return []; }
 		@property override string configString() { return null; }
 
 		override void performStage()
@@ -1018,15 +994,15 @@ EOS";
 	final class Druntime : Component
 	{
 		@property override string submoduleName    () { return "druntime"; }
-		@property override string[] sourceDeps     () { return ["phobos"]; }
-		@property override string[] buildDeps      () { return []; }
-		@property override string[] installDeps    () { return ["dmd", "phobos-includes"]; }
-		@property override string[] testBuildDeps  () { return ["druntime"]; }
-		@property override string[] testInstallDeps() { return ["dmd"]; }
+		@property override string[] dependencies() { return ["phobos", "phobos-includes", "dmd"]; }
 		@property override string configString() { return null; }
 
 		override void performBuild()
 		{
+			getComponent("phobos").needSource();
+			getComponent("dmd").needInstalled();
+			getComponent("phobos-includes").needInstalled();
+
 			auto env = baseEnvironment;
 			needCC(env);
 
@@ -1050,6 +1026,9 @@ EOS";
 
 		override void performTest()
 		{
+			getComponent("druntime").needBuild();
+			getComponent("dmd").needInstalled();
+
 			auto env = baseEnvironment;
 			needCC(env);
 			run(getMake(env) ~ ["-f", makeFileNameModel, "unittest", "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
@@ -1059,11 +1038,7 @@ EOS";
 	final class Phobos : Component
 	{
 		@property override string submoduleName    () { return "phobos"; }
-		@property override string[] sourceDeps     () { return []; }
-		@property override string[] buildDeps      () { return ["druntime"]; }
-		@property override string[] installDeps    () { return ["dmd"]; }
-		@property override string[] testBuildDeps  () { return ["druntime", "phobos"]; }
-		@property override string[] testInstallDeps() { return ["dmd"]; }
+		@property override string[] dependencies() { return ["druntime", "dmd"]; }
 		@property override string configString() { return null; }
 
 		string[] targets;
@@ -1107,6 +1082,10 @@ EOS";
 
 		override void performTest()
 		{
+			getComponent("druntime").needBuild();
+			getComponent("phobos").needBuild();
+			getComponent("dmd").needInstalled();
+
 			auto env = baseEnvironment;
 			needCC(env);
 			version (Windows)
@@ -1121,14 +1100,14 @@ EOS";
 	final class RDMD : Component
 	{
 		@property override string submoduleName() { return "tools"; }
-		@property override string[] sourceDeps () { return []; }
-		@property override string[] buildDeps  () { return []; }
-		@property override string[] installDeps() { return ["dmd", "druntime", "phobos"]; }
-		@property override string[] testInstallDeps() { return ["dmd", "druntime", "phobos"]; }
+		@property override string[] dependencies() { return ["dmd", "druntime", "phobos"]; }
 		@property override string configString() { return null; }
 
 		override void performBuild()
 		{
+			foreach (dep; ["dmd", "druntime", "phobos"])
+				getComponent(dep).needInstalled();
+
 			auto env = baseEnvironment;
 			needCC(env);
 
@@ -1160,6 +1139,9 @@ EOS";
 
 		override void performTest()
 		{
+			foreach (dep; ["dmd", "druntime", "phobos"])
+				getComponent(dep).needInstalled();
+
 			auto env = baseEnvironment;
 			getComponent("dmd").updateEnv(env);
 			run(["dmd", "-run", "rdmd_test.d"], env.vars, sourceDir);
@@ -1169,9 +1151,7 @@ EOS";
 	final class Website : Component
 	{
 		@property override string submoduleName() { return "dlang.org"; }
-		@property override string[] sourceDeps () { return ["dmd", "druntime", "phobos", "rdmd"]; }
-		@property override string[] buildDeps  () { return []; }
-		@property override string[] installDeps() { return []; }
+		@property override string[] dependencies() { return ["dmd", "druntime", "phobos", "rdmd"]; }
 		@property override string configString() { return null; }
 
 		struct Config
@@ -1211,7 +1191,7 @@ EOS";
 			{
 				needKindleGen(env);
 
-				foreach (dep; chain(sourceDeps, buildDeps, installDeps))
+				foreach (dep; dependencies)
 					getComponent(dep).submodule.clean = false;
 
 				auto makeFullName = sourceDir.buildPath(makeFileName);
@@ -1249,9 +1229,7 @@ EOS";
 	final class Extras : Component
 	{
 		@property override string submoduleName() { return null; }
-		@property override string[] sourceDeps () { return []; }
-		@property override string[] buildDeps  () { return []; }
-		@property override string[] installDeps() { return []; }
+		@property override string[] dependencies() { return []; }
 		@property override string configString() { return null; }
 
 		override void performBuild()
@@ -1517,7 +1495,7 @@ EOS";
 		auto componentNames = config.build.components.getEnabledComponentNames();
 		auto components = componentNames.map!(componentName => getComponent(componentName)).array;
 		auto requiredSubmodules = components
-			.map!(component => chain(component.name.only, component.sourceDeps, component.buildDeps, component.installDeps))
+			.map!(component => chain(component.name.only, component.dependencies))
 			.joiner
 			.map!(componentName => getComponent(componentName).submoduleName)
 			.array.sort().uniq().array
