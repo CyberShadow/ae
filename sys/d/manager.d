@@ -1057,6 +1057,9 @@ EOS";
 
 		override void performBuild()
 		{
+			getComponent("dmd").needInstalled();
+			getComponent("druntime").needBuild();
+
 			auto env = baseEnvironment;
 			needCC(env);
 
