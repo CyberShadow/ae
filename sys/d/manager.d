@@ -1105,6 +1105,9 @@ EOS";
 			needCC(env);
 			version (Windows)
 			{
+				getComponent("curl").needInstalled();
+				getComponent("curl").updateEnv(env);
+
 				if (commonConfig.model == "32")
 					getComponent("extras").needInstalled();
 			}
@@ -1321,6 +1324,11 @@ EOS";
 			}
 			else
 				log("Not on Windows, skipping libcurl install");
+		}
+
+		override void updateEnv(ref Environment env)
+		{
+			env.vars["PATH"] = buildPath(buildDir, "bin").absolutePath() ~ pathSeparator ~ env.vars["PATH"];
 		}
 	}
 
