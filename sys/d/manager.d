@@ -927,6 +927,18 @@ EOS";
 			env.vars["PATH"] = buildPath(buildDir, "bin").absolutePath() ~ pathSeparator ~ env.vars["PATH"];
 		}
 
+		/// Escape a path for d_do_test's very "special" criteria.
+		/// Spaces must be escaped, but there must be no double-quote at the end.
+		private static string dDoTestEscape(string str)
+		{
+			return str.replaceAll(re!`\\([^\\ ]*? [^\\]*)(?=\\)`, `\"$1"`);
+		}
+
+		unittest
+		{
+			assert(dDoTestEscape(`C:\Foo boo bar\baz quuz\derp.exe`) == `C:\"Foo boo bar"\"baz quuz"\derp.exe`);
+		}
+
 		override void performTest()
 		{
 			foreach (dep; ["dmd", "druntime", "phobos"])
@@ -940,6 +952,13 @@ EOS";
 				needMSYS(env);
 
 				disableCrashDialog();
+
+				if (commonConfig.model != "32")
+				{
+					// Used by d_do_test (default is the system VS2010 install)
+					auto cl = env.deps.vsDir.buildPath("VC", "bin", "x86_amd64", "cl.exe");
+					env.vars["CC"] = dDoTestEscape(cl);
+				}
 			}
 
 			auto makeArgs = getMake(env) ~ commonConfig.makeArgs ~ getPlatformMakeVars(env) ~ gnuMakeArgs;
@@ -1804,7 +1823,12 @@ EOS";
 
 		env.deps.vsDir  = vs.directory.buildPath("Program Files (x86)", "Microsoft Visual Studio 12.0").absolutePath();
 		env.deps.sdkDir = vs.directory.buildPath("Program Files", "Microsoft SDKs", "Windows", "v7.1A").absolutePath();
+
 		env.vars["PATH"] ~= pathSeparator ~ vs.binPaths.map!(path => vs.directory.buildPath(path).absolutePath()).join(pathSeparator);
+		env.vars["VCINSTALLDIR"] = env.deps.vsDir.buildPath("VC") ~ dirSeparator;
+		env.vars["INCLUDE"] = env.deps.vsDir.buildPath("VC", "include");
+		env.vars["WindowsSdkDir"] = env.deps.sdkDir ~ dirSeparator;
+		env.vars["LINKCMD64"] = env.deps.vsDir.buildPath("VC", "bin", "x86_amd64", "link.exe"); // Used by dmd
 	}
 
 	private void needGit()
