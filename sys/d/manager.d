@@ -1109,14 +1109,12 @@ EOS";
 				auto stdDateTime = buildPath(sourceDir, "std", "datetime.d");
 				if (stdDateTime.exists && !stdDateTime.readText().canFind("Altai Standard Time"))
 				{
-					string phobosMakeFileName = findMakeFile(sourceDir, makeFileNameModel);
-					auto makeFullName = buildPath(sourceDir, phobosMakeFileName);
-					auto m = makeFullName.readText();
+					auto m = stdDateTime.readText();
 					m = m
-						.replace(`		unittest3b.obj \`, `	\`)
+						.replace(`assert(tzName !is null, format("TZName which is missing: %s", winName));`, ``)
 					;
-					makeFullName.write(m);
-					submodule.saveFileState(phobosMakeFileName);
+					stdDateTime.write(m);
+					submodule.saveFileState("std/datetime");
 				}
 
 				if (commonConfig.model == "32")
