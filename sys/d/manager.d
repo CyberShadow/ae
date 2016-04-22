@@ -1112,7 +1112,7 @@ EOS";
 					auto m = stdDateTime.readText();
 					m = m
 						.replace(`assert(tzName !is null, format("TZName which is missing: %s", winName));`, ``)
-						.replace(`assert(tzDatabaseNameToWindowsTZName(tzName) !is null, format("TZName which failed: %s", tzName));`, ``)
+						.replace(`assert(tzDatabaseNameToWindowsTZName(tzName) !is null, format("TZName which failed: %s", tzName));`, `{}`)
 					;
 					stdDateTime.write(m);
 					submodule.saveFileState("std/datetime.d");
