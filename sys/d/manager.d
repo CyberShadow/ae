@@ -742,6 +742,7 @@ class DManager : ICacheHost
 			/// Use Visual C++ to build DMD instead of DMC.
 			/// Currently, this is a hack, as msbuild will consult the system
 			/// registry and use the system-wide installation of Visual Studio.
+			/// Only relevant for older versions, as newer versions are written in D.
 			@JSONOptional bool useVC;
 		}
 
