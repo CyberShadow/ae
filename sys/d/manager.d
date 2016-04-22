@@ -80,10 +80,16 @@ class DManager : ICacheHost
 				Website.Config website;
 			}
 			Components components;
+
+			/// Additional environment variables.
+			/// Supports %VAR% expansion - see applyEnv.
+			string[string] environment;
 		}
 		Build build; /// ditto
 
-		struct Local /// Machine-local configuration
+		/// Machine-local configuration
+		/// These settings should not affect the build output.
+		struct Local
 		{
 			/// URL of D git repository hosting D components.
 			/// Defaults to (and must have the layout of) D.git:
@@ -92,31 +98,29 @@ class DManager : ICacheHost
 
 			/// Location for the checkout, temporary files, etc.
 			string workDir;
+
+			/// If present, passed to GNU make via -j parameter.
+			/// Can also be "auto" or "unlimited".
+			string makeJobs;
+
+			/// Don't get latest updates from GitHub.
+			bool offline;
+
+			/// How to cache built files.
+			string cache;
 		}
 		Local local; /// ditto
-
-		/// If present, passed to make via -j parameter.
-		/// Can also be "auto" or "unlimited".
-		string makeJobs;
-
-		/// Don't get latest updates from GitHub.
-		bool offline;
-
-		/// Automatically re-clone the repository in case
-		/// "git reset --hard" fails.
-		bool autoClean;
-
-		/// How to cache built files.
-		string cache;
-
-		/// Whether we should cache failed builds.
-		bool cacheFailures = true;
-
-		/// Additional environment variables.
-		/// Supports %VAR% expansion - see applyEnv.
-		string[string] environment;
 	}
 	Config config; /// ditto
+
+	// Behavior options that generally depend on the host program.
+
+	/// Automatically re-clone the repository in case
+	/// "git reset --hard" fails.
+	bool autoClean;
+
+	/// Whether we should cache failed builds.
+	bool cacheFailures = true;
 
 	/// Current build environment.
 	struct Environment
@@ -177,7 +181,7 @@ class DManager : ICacheHost
 	{
 		this()
 		{
-			this.offline = config.offline;
+			this.offline = config.local.offline;
 		}
 
 		override void log(string s) { return this.outer.log(s); }
@@ -286,7 +290,7 @@ class DManager : ICacheHost
 
 		override void needHead(string hash)
 		{
-			if (!config.autoClean)
+			if (!autoClean)
 				super.needHead(hash);
 			else
 			try
@@ -364,9 +368,9 @@ class DManager : ICacheHost
 		@property abstract string submoduleName();
 		@property ManagedRepository submodule() { return getSubmodule(submoduleName); }
 
-		/// A string description of this component's configuration.
-		abstract @property string configString();
-
+		/// Configuration applicable to multiple (not all) components.
+		/// Note: don't serialize this structure whole!
+		/// Only serialize used fields.
 		struct CommonConfig
 		{
 			version (Windows)
@@ -382,7 +386,9 @@ class DManager : ICacheHost
 			string[] makeArgs; /// Additional make parameters,
 			                   /// e.g. "HOST_CC=g++48"
 		}
-		CommonConfig commonConfig; // TODO: This is always a copy of config.build.components.common. DRY or allow per-component customization
+
+		/// A string description of this component's configuration.
+		abstract @property string configString();
 
 		/// Commit in the component's repo from which to build this component.
 		@property string commit() { return incrementalBuild ? "incremental" : getComponentCommit(name); }
@@ -402,7 +408,7 @@ class DManager : ICacheHost
 			int cacheVersion;
 			string name;
 			string commit;
-			CommonConfig commonConfig;
+			string configString;
 			string[] sourceDepCommits;
 			Metadata[] dependencyMetadata;
 		}
@@ -413,7 +419,7 @@ class DManager : ICacheHost
 				cacheVersion,
 				name,
 				commit,
-				commonConfig,
+				configString,
 				sourceDependencies.map!(
 					dependency => getComponent(dependency).commit
 				).array(),
@@ -535,7 +541,7 @@ class DManager : ICacheHost
 					}
 					else
 					// Don't cache failed build results during delve
-					if (failed && !config.cacheFailures)
+					if (failed && !cacheFailures)
 					{
 						log("Not caching failed build.");
 						rmdirRecurse(tempDir);
@@ -615,7 +621,7 @@ class DManager : ICacheHost
 	protected final:
 		// Utility declarations for component implementations
 
-		@property string modelSuffix() { return commonConfig.model == "32" ? "" : commonConfig.model; }
+		@property string modelSuffix() { return config.build.components.common.model == "32" ? "" : config.build.components.common.model; }
 		version (Windows)
 		{
 			enum string makeFileName = "win32.mak";
@@ -642,7 +648,7 @@ class DManager : ICacheHost
 		{
 			string[] args;
 
-			args ~= "MODEL=" ~ commonConfig.model;
+			args ~= "MODEL=" ~ config.build.components.common.model;
 
 			version (Windows)
 				if (commonConfig.model == "64")
@@ -657,18 +663,18 @@ class DManager : ICacheHost
 		@property string[] gnuMakeArgs()
 		{
 			string[] args;
-			if (config.makeJobs)
+			if (config.local.makeJobs)
 			{
-				if (config.makeJobs == "auto")
+				if (config.local.makeJobs == "auto")
 				{
 					import std.parallelism, std.conv;
 					args ~= "-j" ~ text(totalCPUs);
 				}
 				else
-				if (config.makeJobs == "unlimited")
+				if (config.local.makeJobs == "unlimited")
 					args ~= "-j";
 				else
-					args ~= "-j" ~ config.makeJobs;
+					args ~= "-j" ~ config.local.makeJobs;
 			}
 			return args;
 		}
@@ -708,7 +714,7 @@ class DManager : ICacheHost
 			log("Running: " ~ escapeShellCommand(args));
 
 			// Apply user environment
-			auto env = applyEnv(newEnv, config.environment);
+			auto env = applyEnv(newEnv, config.build.environment);
 
 			// Temporarily apply PATH from newEnv to our process,
 			// so process creation lookup can use it.
@@ -748,17 +754,20 @@ class DManager : ICacheHost
 
 		@property override string configString()
 		{
-			if (config.build.components.dmd == Config.init)
+			static struct FullConfig
 			{
-				// Avoid changing all cache keys
-				return null;
+				Config config;
+				string[] makeArgs;
 			}
-			else
-				return config.build.components.dmd.toJson();
+
+			return FullConfig(
+				config.build.components.dmd,
+				config.build.components.common.makeArgs,
+			).toJson();
 		}
 
 		@property string vsConfiguration() { return config.build.components.dmd.debugDMD ? "Debug" : "Release"; }
-		@property string vsPlatform     () { return commonConfig.model == "64" ? "x64" : "Win32"; }
+		@property string vsPlatform     () { return config.build.components.common.model == "64" ? "x64" : "Win32"; }
 
 		override void performBuild()
 		{
@@ -799,7 +808,7 @@ class DManager : ICacheHost
 			string dmdMakeFileName = findMakeFile(srcDir, makeFileName);
 			string dmdMakeFullName = srcDir.buildPath(dmdMakeFileName);
 
-			string modelFlag = commonConfig.model;
+			string modelFlag = config.build.components.common.model;
 			if (dmdMakeFullName.readText().canFind("MODEL=-m32"))
 				modelFlag = "-m" ~ modelFlag;
 
@@ -851,7 +860,7 @@ class DManager : ICacheHost
 					"-f", dmdMakeFileName,
 					"MODEL=" ~ modelFlag,
 					"HOST_DC=" ~ hostDC,
-				] ~ commonConfig.makeArgs ~ dMakeArgs ~ extraArgs ~ targets,
+				] ~ config.build.components.common.makeArgs ~ dMakeArgs ~ extraArgs ~ targets,
 				env.vars, srcDir
 			);
 		}
@@ -963,7 +972,7 @@ EOS";
 				}
 			}
 
-			auto makeArgs = getMake(env) ~ commonConfig.makeArgs ~ getPlatformMakeVars(env) ~ gnuMakeArgs;
+			auto makeArgs = getMake(env) ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env) ~ gnuMakeArgs;
 			version (Windows)
 			{
 				makeArgs ~= ["OS=win" ~ commonConfig.model, "SHELL=bash"];
@@ -1003,7 +1012,20 @@ EOS";
 		@property override string submoduleName    () { return "druntime"; }
 		@property override string[] sourceDependencies() { return ["phobos", "phobos-includes"]; }
 		@property override string[] dependencies() { return ["dmd"]; }
-		@property override string configString() { return null; }
+
+		@property override string configString()
+		{
+			static struct FullConfig
+			{
+				string model;
+				string[] makeArgs;
+			}
+
+			return FullConfig(
+				config.build.components.common.model,
+				config.build.components.common.makeArgs,
+			).toJson();
+		}
 
 		override void performBuild()
 		{
@@ -1020,8 +1042,8 @@ EOS";
 			setTimes(sourceDir.buildPath("src", "rt", "minit.obj"), Clock.currTime(), Clock.currTime()); // Don't rebuild
 			submodule.saveFileState("src/rt/minit.obj");
 
-			run(getMake(env) ~ ["-f", makeFileNameModel, "import", "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
-			run(getMake(env) ~ ["-f", makeFileNameModel          , "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
+			run(getMake(env) ~ ["-f", makeFileNameModel, "import", "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
+			run(getMake(env) ~ ["-f", makeFileNameModel          , "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
 		}
 
 		override void performStage()
@@ -1039,7 +1061,7 @@ EOS";
 
 			auto env = baseEnvironment;
 			needCC(env);
-			run(getMake(env) ~ ["-f", makeFileNameModel, "unittest", "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
+			run(getMake(env) ~ ["-f", makeFileNameModel, "unittest", "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
 		}
 	}
 
@@ -1048,7 +1070,20 @@ EOS";
 		@property override string submoduleName    () { return "phobos"; }
 		@property override string[] sourceDependencies() { return []; }
 		@property override string[] dependencies() { return ["druntime", "dmd"]; }
-		@property override string configString() { return null; }
+
+		@property override string configString()
+		{
+			static struct FullConfig
+			{
+				string model;
+				string[] makeArgs;
+			}
+
+			return FullConfig(
+				config.build.components.common.model,
+				config.build.components.common.makeArgs,
+			).toJson();
+		}
 
 		string[] targets;
 
@@ -1065,13 +1100,13 @@ EOS";
 			version (Windows)
 			{
 				auto lib = "phobos%s.lib".format(modelSuffix);
-				run(getMake(env) ~ ["-f", phobosMakeFileName, lib, "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
+				run(getMake(env) ~ ["-f", phobosMakeFileName, lib, "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
 				enforce(sourceDir.buildPath(lib).exists);
 				targets = ["phobos%s.lib".format(modelSuffix)];
 			}
 			else
 			{
-				run(getMake(env) ~ ["-f", phobosMakeFileName,      "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
+				run(getMake(env) ~ ["-f", phobosMakeFileName,      "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
 				targets = sourceDir
 					.buildPath("generated")
 					.dirEntries(SpanMode.depth)
@@ -1123,7 +1158,7 @@ EOS";
 				if (commonConfig.model == "32")
 					getComponent("extras").needInstalled();
 			}
-			run(getMake(env) ~ ["-f", makeFileNameModel, "unittest", "DMD=" ~ dmd] ~ commonConfig.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
+			run(getMake(env) ~ ["-f", makeFileNameModel, "unittest", "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
 		}
 	}
 
@@ -1132,7 +1167,18 @@ EOS";
 		@property override string submoduleName() { return "tools"; }
 		@property override string[] sourceDependencies() { return []; }
 		@property override string[] dependencies() { return ["dmd", "druntime", "phobos"]; }
-		@property override string configString() { return null; }
+
+		@property override string configString()
+		{
+			static struct FullConfig
+			{
+				string model;
+			}
+
+			return FullConfig(
+				config.build.components.common.model,
+			).toJson();
+		}
 
 		override void performBuild()
 		{
@@ -1157,7 +1203,7 @@ EOS";
 					needModel = true;
 
 			if (needModel)
-				run([dmd, "-m" ~ commonConfig.model] ~ args, env.vars, sourceDir);
+				run([dmd, "-m" ~ config.build.components.common.model] ~ args, env.vars, sourceDir);
 		}
 
 		override void performStage()
@@ -1307,7 +1353,7 @@ EOS";
 			}
 
 			copyDir("bin", "bin");
-			copyDir("bin" ~ commonConfig.model, "bin");
+			copyDir("bin" ~ config.build.components.common.model, "bin");
 			copyDir("lib", "lib");
 
 			version (Windows)
@@ -1404,7 +1450,6 @@ EOS";
 			}
 
 			c.name = name;
-			c.commonConfig = config.build.components.common;
 			return components[name] = c;
 		}
 
@@ -1507,7 +1552,7 @@ EOS";
 		if (incrementalBuild)
 			return "none";
 		else
-			return config.cache;
+			return config.local.cache;
 	}
 
 	private string getComponentCommit(string componentName)
