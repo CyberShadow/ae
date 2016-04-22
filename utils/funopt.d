@@ -386,7 +386,7 @@ string getUsageFormatString(alias FUN)()
 			string switchText = "--" ~ names[i].splitByCamelCase().join("-").toLower();
 			static if (is(Param == OptionImpl!Args, Args...))
 				static if (Param.type == OptionType.option)
-					switchText ~= "=" ~ optionPlaceholder!Param;
+					switchText ~= (optionPlaceholder!Param.canFind('=') ? ' ' : '=') ~ optionPlaceholder!Param;
 			return switchText;
 		}
 	}
