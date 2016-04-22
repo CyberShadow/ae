@@ -1749,7 +1749,7 @@ EOS";
 
 			static this()
 			{
-				urlDigests["http://downloads.dlang.org/other/libcurl-7.47.1-WinSSL-zlib-x86-x64.zip"] = "ab02cdfb59219900eedc09c7d501ad200305efa6";
+				urlDigests["http://downloads.dlang.org/other/libcurl-7.47.1-WinSSL-zlib-x86-x64.zip"] = "4b8a7bb237efab25a96588093ae51994c821e097";
 			}
 		}
 
