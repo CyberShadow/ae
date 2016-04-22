@@ -380,6 +380,7 @@ class DManager : ICacheHost
 
 			string makeJobs; /// If present, passed to make via -j parameter.
 			                 /// Can also be "auto" or "unlimited".
+			mixin NonSerialized!(makeJobs);
 		}
 		CommonConfig commonConfig; // TODO: This is always a copy of config.build.components.common. DRY or allow per-component customization
 
