@@ -1169,6 +1169,16 @@ EOS";
 
 		override void performTest()
 		{
+			version (Windows)
+				if (commonConfig.model != "32")
+				{
+					// Can't test rdmd on non-32-bit Windows until compiler model matches Phobos model.
+					// rdmd_test does not use -m when building rdmd, thus linking will fail
+					// (because of model mismatch with the phobos we built).
+					log("Can't test rdmd with model " ~ commonConfig.model ~ ", skipping");
+					return;
+				}
+
 			foreach (dep; ["dmd", "druntime", "phobos"])
 				getComponent(dep).needInstalled();
 
