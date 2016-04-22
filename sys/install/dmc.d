@@ -51,9 +51,9 @@ class LegacyDMCInstaller : Installer
 	static this()
 	{
 		urlDigests["http://ftp.digitalmars.com/Digital_Mars_C++/Patch/dm850c.zip"] = "de1d27c337f028f4d001aec903474b85275c7118";
-		urlDigests["http:///downloads.dlang.org/other/dm855c.zip"				 ] = "5a177e50495f0062f107cba0c9231f780ebc56e1";
-		urlDigests["http:///downloads.dlang.org/other/dm856c.zip"				 ] = "c46302e645f9ce649fe8b80c0dec513f1622ccc0";
-		urlDigests["http:///downloads.dlang.org/other/dm857c.zip"				 ] = "c6bbaf8b872bfb1c82e611ef5e249dd19eab5272";
+		urlDigests["http://downloads.dlang.org/other/dm855c.zip"				 ] = "5a177e50495f0062f107cba0c9231f780ebc56e1";
+		urlDigests["http://downloads.dlang.org/other/dm856c.zip"				 ] = "c46302e645f9ce649fe8b80c0dec513f1622ccc0";
+		urlDigests["http://downloads.dlang.org/other/dm857c.zip"				 ] = "c6bbaf8b872bfb1c82e611ef5e249dd19eab5272";
 	}
 
 	override void installImpl(string target)
