@@ -625,7 +625,7 @@ class DManager : ICacheHost
 		version (Windows)
 		{
 			enum string makeFileName = "win32.mak";
-			@property string makeFileNameModel() { return "win"~commonConfig.model~".mak"; }
+			@property string makeFileNameModel() { return "win"~config.build.components.common.model~".mak"; }
 			enum string binExt = ".exe";
 		}
 		else
@@ -651,7 +651,7 @@ class DManager : ICacheHost
 			args ~= "MODEL=" ~ config.build.components.common.model;
 
 			version (Windows)
-				if (commonConfig.model == "64")
+				if (config.build.components.common.model == "64")
 				{
 					args ~= "VCDIR="  ~ env.deps.vsDir .absolutePath() ~ `\VC`;
 					args ~= "SDKDIR=" ~ env.deps.sdkDir.absolutePath();
@@ -704,7 +704,7 @@ class DManager : ICacheHost
 			version (Windows)
 			{
 				needDMC(env, dmcVer); // We need DMC even for 64-bit builds (for DM make)
-				if (commonConfig.model == "64")
+				if (config.build.components.common.model == "64")
 					needVC(env);
 			}
 		}
@@ -964,7 +964,7 @@ EOS";
 
 				disableCrashDialog();
 
-				if (commonConfig.model != "32")
+				if (config.build.components.common.model != "32")
 				{
 					// Used by d_do_test (default is the system VS2010 install)
 					auto cl = env.deps.vsDir.buildPath("VC", "bin", "x86_amd64", "cl.exe");
@@ -975,8 +975,8 @@ EOS";
 			auto makeArgs = getMake(env) ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env) ~ gnuMakeArgs;
 			version (Windows)
 			{
-				makeArgs ~= ["OS=win" ~ commonConfig.model, "SHELL=bash"];
-				if (commonConfig.model == "32")
+				makeArgs ~= ["OS=win" ~ config.build.components.common.model, "SHELL=bash"];
+				if (config.build.components.common.model == "32")
 				{
 					auto extrasDir = needExtras();
 					// The autotester seems to pass this via environment. Why does that work there???
@@ -1155,7 +1155,7 @@ EOS";
 					submodule.saveFileState("std/datetime.d");
 				}
 
-				if (commonConfig.model == "32")
+				if (config.build.components.common.model == "32")
 					getComponent("extras").needInstalled();
 			}
 			run(getMake(env) ~ ["-f", makeFileNameModel, "unittest", "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
@@ -1217,12 +1217,12 @@ EOS";
 		override void performTest()
 		{
 			version (Windows)
-				if (commonConfig.model != "32")
+				if (config.build.components.common.model != "32")
 				{
 					// Can't test rdmd on non-32-bit Windows until compiler model matches Phobos model.
 					// rdmd_test does not use -m when building rdmd, thus linking will fail
 					// (because of model mismatch with the phobos we built).
-					log("Can't test rdmd with model " ~ commonConfig.model ~ ", skipping");
+					log("Can't test rdmd with model " ~ config.build.components.common.model ~ ", skipping");
 					return;
 				}
 
@@ -1357,7 +1357,7 @@ EOS";
 			copyDir("lib", "lib");
 
 			version (Windows)
-				if (commonConfig.model == "32")
+				if (config.build.components.common.model == "32")
 				{
 					// The version of snn.lib bundled with DMC will be newer.
 					Environment env;
