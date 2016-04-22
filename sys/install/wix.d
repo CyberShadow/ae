@@ -37,13 +37,21 @@ class WixInstaller : Installer
 		// CodePlex does not have direct download URLs. Scrape it!
 		"http://wix.codeplex.com/downloads/get/%d"
 			.format(downloadId)
+			.I!verify(null)
 			.I!saveAs("wix-%d.html".format(downloadId))
 			.readText()
 			.match(regex(`<li>Version \d+\.\d+\.\d+\.(\d+)</li>`)).front[1]
 			.to!int
 			.I!buildZipUrl()
+			.I!verify("82fb51e636df7e497fc224152759b9a6b95f19bc")
 			.I!saveAs("wix-%d.zip".format(downloadId))
 			.I!unpackTo(target);
+	}
+
+	static string verify(string url, string hash)
+	{
+		urlDigests[url] = hash;
+		return url;
 	}
 
 	string buildZipUrl(int build)

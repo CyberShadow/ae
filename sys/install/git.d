@@ -39,6 +39,11 @@ class GitInstaller : Installer
 			.I!save()
 			.I!unpackTo(target);
 	}
+
+	static this()
+	{
+		urlDigests["https://github.com/msysgit/msysgit/releases/download/Git-1.9.4-preview20140815/PortableGit-1.9.4-preview20140815.7z"] = "4deafc5fede624437c68d101a660a78bdb56f899";
+	}
 }
 
 alias gitInstaller = singleton!GitInstaller;

@@ -218,10 +218,9 @@ protected:
 					.attributes["FilePath"]
 					.prependPath("%s-payloads".format(subdirectory));
 
-				files[path.extension.toLower()] ~=
-					node
-					.attributes["DownloadUrl"]
-					.I!saveAs(path);
+				auto url = node.attributes["DownloadUrl"];
+				urlDigests[url] = node.attributes["Hash"].toLower();
+				files[path.extension.toLower()] ~= url.I!saveAs(path);
 			}
 
 		foreach (cab; files[".cab"])
@@ -255,11 +254,21 @@ protected:
 				.prependPath("%s-payloads".format(subdirectory));
 
 			if (path.extension.toLower() == ".msi")
-				node
-				.attributes["DownloadUrl"]
+			{
+				auto url = node.attributes["DownloadUrl"];
+				urlDigests[url] = node.attributes["Hash"].toLower();
+
+				url
 				.I!saveAs(path)
 				.I!decompileMSI();
+			}
 		}
+	}
+
+	static this()
+	{
+		urlDigests["http://download.microsoft.com/download/7/2/E/72E0F986-D247-4289-B9DC-C4FB07374894/wdexpress_full.exe"] = "8a4c07fa11b20b85126988e7eaf792924b319ae0";
+		urlDigests["http://download.microsoft.com/download/7/1/B/71BA74D8-B9A0-4E6C-9159-A8335D54437E/vs_community.exe"  ] = "51e5f04fc4648bde3c8276703bf7251216e4ceaf";
 	}
 }
 
