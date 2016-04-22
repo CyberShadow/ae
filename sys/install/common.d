@@ -188,7 +188,7 @@ final:
 
 	static string[string] urlDigests;
 
-	void saveFile(string url, string target)
+	static void saveFile(string url, string target)
 	{
 		downloadFile(url, target);
 		auto pDigest = url in urlDigests;
