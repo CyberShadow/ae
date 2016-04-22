@@ -48,6 +48,11 @@ class SevenZipInstaller : Installer
 		else
 			return "7z";
 	}
+
+	static this()
+	{
+		urlDigests["http://downloads.sourceforge.net/sevenzip/7za920.zip"] = "9ce9ce89ebc070fea5d679936f21f9dde25faae0";
+	}
 }
 
 alias sevenZip = singleton!SevenZipInstaller;

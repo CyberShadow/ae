@@ -42,7 +42,18 @@ class LegacyDMCInstaller : Installer
 	{
 		ver = ver.replace(".", "");
 		this.ver = ver;
-		dmcURL = "http://ftp.digitalmars.com/Digital_Mars_C++/Patch/dm" ~ ver ~ "c.zip";
+		if (ver >= "855")
+			dmcURL = "http://downloads.dlang.org/other/dm" ~ ver ~ "c.zip";
+		else
+			dmcURL = "http://ftp.digitalmars.com/Digital_Mars_C++/Patch/dm" ~ ver ~ "c.zip";
+	}
+
+	static this()
+	{
+		urlDigests["http://ftp.digitalmars.com/Digital_Mars_C++/Patch/dm850c.zip"] = "de1d27c337f028f4d001aec903474b85275c7118";
+		urlDigests["http:///downloads.dlang.org/other/dm855c.zip"				 ] = "5a177e50495f0062f107cba0c9231f780ebc56e1";
+		urlDigests["http:///downloads.dlang.org/other/dm856c.zip"				 ] = "c46302e645f9ce649fe8b80c0dec513f1622ccc0";
+		urlDigests["http:///downloads.dlang.org/other/dm857c.zip"				 ] = "c6bbaf8b872bfb1c82e611ef5e249dd19eab5272";
 	}
 
 	override void installImpl(string target)
@@ -61,7 +72,7 @@ class LegacyDMCInstaller : Installer
 /// Installs DMC and updates it with the latest OPTLINK and snn.lib.
 class DMCInstaller : LegacyDMCInstaller
 {
-	string optlinkURL = "http://ftp.digitalmars.com/optlink.zip";
+	string optlinkURL = "http://downloads.dlang.org/other/optlink-8.00.15.zip";
 	string dmdURL = "http://downloads.dlang.org/releases/2.x/2.071.0/dmd.2.071.0.windows.7z";
 
 	@property override string subdirectory() { return super.subdirectory ~ "-snn2071"; }
@@ -69,6 +80,12 @@ class DMCInstaller : LegacyDMCInstaller
 	this()
 	{
 		super("857");
+	}
+
+	static this()
+	{
+		urlDigests["http://downloads.dlang.org/other/optlink-8.00.15.zip"                  ] = "f5a161029d795063e57523824be7408282cbdb81";
+		urlDigests["http://downloads.dlang.org/releases/2.x/2.071.0/dmd.2.071.0.windows.7z"] = "c1bc880e54ff25ba8ee938abb2a1436ff6a9dec8";
 	}
 
 	override void installImpl(string target)

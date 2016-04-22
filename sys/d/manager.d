@@ -1714,6 +1714,11 @@ EOS";
 					.I!save()
 					.I!unpackTo(target);
 			}
+
+			static this()
+			{
+				urlDigests["http://semitwist.com/download/app/dmd-localextras.7z"] = "ef367c2d25d4f19f45ade56ab6991c726b07d3d9";
+			}
 		}
 
 		alias extrasInstaller = singleton!DExtrasInstaller;
@@ -1740,6 +1745,11 @@ EOS";
 				url
 					.I!save()
 					.I!unpackTo(target);
+			}
+
+			static this()
+			{
+				urlDigests["http://downloads.dlang.org/other/libcurl-7.47.1-WinSSL-zlib-x86-x64.zip"] = "ab02cdfb59219900eedc09c7d501ad200305efa6";
 			}
 		}
 
