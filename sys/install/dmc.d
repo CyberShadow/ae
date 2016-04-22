@@ -84,6 +84,7 @@ class DMCInstaller : LegacyDMCInstaller
 		scope(success) rmdirRecurse(optlinkDir);
 
 		rename(buildPath(optlinkDir, "link.exe"), buildPath(target, "bin", "link.exe"));
+		hardLink(buildPath(target, "bin", "link.exe"), buildPath(target, "bin", "optlink.exe"));
 
 		// Get latest snn.lib
 
