@@ -13,6 +13,14 @@
 
 module ae.sys.install.common;
 
+import std.algorithm;
+import std.array;
+import std.exception;
+import std.file;
+import std.path;
+import std.process : environment;
+import std.string;
+
 import ae.net.ietf.url;
 import ae.sys.archive;
 import ae.sys.file;
@@ -20,13 +28,6 @@ import ae.sys.net;
 import ae.sys.persistence;
 import ae.utils.meta;
 import ae.utils.path;
-
-import std.algorithm;
-import std.array;
-import std.file;
-import std.path;
-import std.process : environment;
-import std.string;
 
 class Installer
 {
@@ -194,6 +195,27 @@ final:
 		ensurePathExists(target);
 		url.I!saveTo(target);
 		return target;
+	}
+
+	/// Verify integrity of a file. digest is SHA-1 (hex lowercase).
+	/// Pass null to just log a warning.
+	string verify(string fn, string digest)
+	{
+		if (digest)
+		{
+			log("Verifying " ~ fn.baseName() ~ "...");
+
+			import std.digest.sha, std.digest.digest, std.stdio;
+			SHA1 sha;
+			sha.start();
+			foreach (chunk; File(fn, "rb").byChunk(0x10000))
+				sha.put(chunk[]);
+			auto hash = sha.finish();
+			enforce(hash.toHexString!(LetterCase.lower) == digest, "Could not verify integrity of " ~ fn);
+		}
+		else
+			log("WARNING: Not verifying integrity of " ~ fn.baseName() ~ ".");
+		return fn;
 	}
 
 	static string stripArchiveExtension(string fn)
