@@ -1114,7 +1114,7 @@ EOS";
 						.replace(`assert(tzName !is null, format("TZName which is missing: %s", winName));`, ``)
 					;
 					stdDateTime.write(m);
-					submodule.saveFileState("std/datetime");
+					submodule.saveFileState("std/datetime.d");
 				}
 
 				if (commonConfig.model == "32")
