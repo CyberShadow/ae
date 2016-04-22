@@ -244,6 +244,14 @@ IniTraversingHandler!S makeIniHandler(S = string, U)(ref U v)
 			}
 		);
 	else
+	static if (is(U V : V*))
+	{
+		static if (is(typeof(v = new V)))
+			if (!v)
+				v = new V;
+		return makeIniHandler!S(*v);
+	}
+	else
 		static assert(false, "Can't parse " ~ U.stringof);
 }
 
@@ -373,6 +381,25 @@ unittest
 	);
 
 	assert(r["a"].x == "x" && r["a"].y == "y");
+}
+
+unittest
+{
+	static struct S { string x, y; }
+	static struct T { S* s; }
+
+	{
+		T t;
+		parseIniInto(["s.x=v"], t);
+		assert(t.s.x == "v");
+	}
+
+	{
+		S s = {"x"}; T t = {&s};
+		parseIniInto(["s.y=v"], t);
+		assert(s.x == "x");
+		assert(s.y == "v");
+	}
 }
 
 // ***************************************************************************
