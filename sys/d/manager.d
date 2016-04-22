@@ -95,6 +95,10 @@ class DManager : ICacheHost
 		}
 		Local local; /// ditto
 
+		/// If present, passed to make via -j parameter.
+		/// Can also be "auto" or "unlimited".
+		string makeJobs;
+
 		/// Don't get latest updates from GitHub.
 		bool offline;
 
@@ -377,9 +381,6 @@ class DManager : ICacheHost
 
 			string[] makeArgs; /// Additional make parameters,
 			                   /// e.g. "HOST_CC=g++48"
-
-			string makeJobs; /// If present, passed to make via -j parameter.
-			                 /// Can also be "auto" or "unlimited".
 		}
 		CommonConfig commonConfig; // TODO: This is always a copy of config.build.components.common. DRY or allow per-component customization
 
@@ -656,18 +657,18 @@ class DManager : ICacheHost
 		@property string[] gnuMakeArgs()
 		{
 			string[] args;
-			if (commonConfig.makeJobs)
+			if (config.makeJobs)
 			{
-				if (commonConfig.makeJobs == "auto")
+				if (config.makeJobs == "auto")
 				{
 					import std.parallelism, std.conv;
 					args ~= "-j" ~ text(totalCPUs);
 				}
 				else
-				if (commonConfig.makeJobs == "unlimited")
+				if (config.makeJobs == "unlimited")
 					args ~= "-j";
 				else
-					args ~= "-j" ~ commonConfig.makeJobs;
+					args ~= "-j" ~ config.makeJobs;
 			}
 			return args;
 		}
@@ -675,7 +676,7 @@ class DManager : ICacheHost
 		@property string[] dMakeArgs()
 		{
 			version (Windows)
-				return null;
+				return null; // On Windows, DigitalMars make is used for all makefiles except the dmd test suite
 			else
 				return gnuMakeArgs;
 		}
