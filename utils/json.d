@@ -624,10 +624,11 @@ unittest
  */
 template NonSerialized(fields...)
 {
+	import ae.utils.meta : stringofArray;
 	mixin(NonSerializedFields(stringofArray!fields()));
 }
 
-private string NonSerializedFields(string[] fields)
+string NonSerializedFields(string[] fields)
 {
 	string result;
 	foreach (field; fields)
