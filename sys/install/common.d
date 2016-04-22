@@ -186,7 +186,32 @@ final:
 		}
 	}
 
-	alias saveTo = cachedAction!(downloadFile, "Downloading %s to %s...");
+	static string[string] urlDigests;
+
+	void saveFile(string url, string target)
+	{
+		downloadFile(url, target);
+		auto pDigest = url in urlDigests;
+		if (pDigest)
+		{
+			auto digest = *pDigest;
+			if (!digest)
+				return;
+			log("Verifying " ~ target.baseName() ~ "...");
+
+			import std.digest.sha, std.digest.digest, std.stdio;
+			SHA1 sha;
+			sha.start();
+			foreach (chunk; File(target, "rb").byChunk(0x10000))
+				sha.put(chunk[]);
+			auto hash = sha.finish();
+			enforce(hash.toHexString!(LetterCase.lower) == digest, "Could not verify integrity of " ~ target);
+		}
+		else
+			log("WARNING: Not verifying integrity of " ~ url ~ ".");
+	}
+
+	alias saveTo = cachedAction!(saveFile, "Downloading %s to %s...");
 	alias save = withTarget!(saveLocation, saveTo);
 
 	static auto saveAs(string url, string fn)
@@ -195,27 +220,6 @@ final:
 		ensurePathExists(target);
 		url.I!saveTo(target);
 		return target;
-	}
-
-	/// Verify integrity of a file. digest is SHA-1 (hex lowercase).
-	/// Pass null to just log a warning.
-	string verify(string fn, string digest)
-	{
-		if (digest)
-		{
-			log("Verifying " ~ fn.baseName() ~ "...");
-
-			import std.digest.sha, std.digest.digest, std.stdio;
-			SHA1 sha;
-			sha.start();
-			foreach (chunk; File(fn, "rb").byChunk(0x10000))
-				sha.put(chunk[]);
-			auto hash = sha.finish();
-			enforce(hash.toHexString!(LetterCase.lower) == digest, "Could not verify integrity of " ~ fn);
-		}
-		else
-			log("WARNING: Not verifying integrity of " ~ fn.baseName() ~ ".");
-		return fn;
 	}
 
 	static string stripArchiveExtension(string fn)
