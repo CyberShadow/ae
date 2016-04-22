@@ -625,7 +625,13 @@ class DManager : ICacheHost
 		version (Windows)
 		{
 			enum string makeFileName = "win32.mak";
-			@property string makeFileNameModel() { return "win"~config.build.components.common.model~".mak"; }
+			@property string makeFileNameModel()
+			{
+				string model = config.build.components.common.model;
+				if (model == "32mscoff")
+					model = "64";
+				return "win"~model~".mak";
+			}
 			enum string binExt = ".exe";
 		}
 		else
@@ -651,10 +657,13 @@ class DManager : ICacheHost
 			args ~= "MODEL=" ~ config.build.components.common.model;
 
 			version (Windows)
-				if (config.build.components.common.model == "64")
+				if (config.build.components.common.model != "32")
 				{
-					args ~= "VCDIR="  ~ env.deps.vsDir .absolutePath() ~ `\VC`;
+					args ~= "VCDIR="  ~ env.deps.vsDir.buildPath("VC").absolutePath();
 					args ~= "SDKDIR=" ~ env.deps.sdkDir.absolutePath();
+					args ~= "CC=\"" ~ env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(), "cl.exe").absolutePath() ~ '"';
+					args ~= "LD=\"" ~ env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(), "link.exe").absolutePath() ~ '"';
+					args ~= "AR=\"" ~ env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(), "lib.exe").absolutePath() ~ '"';
 				}
 
 			return args;
@@ -704,7 +713,7 @@ class DManager : ICacheHost
 			version (Windows)
 			{
 				needDMC(env, dmcVer); // We need DMC even for 64-bit builds (for DM make)
-				if (config.build.components.common.model == "64")
+				if (config.build.components.common.model != "32")
 					needVC(env);
 			}
 		}
@@ -891,6 +900,7 @@ LIB="%@P%\..\lib"
 DFLAGS="-I%@P%\..\import"
 DMC=__DMC__
 LINKCMD=%DMC%\link.exe
+
 [Environment64]
 LIB="%@P%\..\lib"
 DFLAGS=%DFLAGS% -L/OPT:NOICF
@@ -900,9 +910,18 @@ PATH=%PATH%;%VCINSTALLDIR%\bin\amd64
 WindowsSdkDir=__SDK__
 LINKCMD=%VCINSTALLDIR%\bin\amd64\link.exe
 LIB=%LIB%;"%VCINSTALLDIR%\lib\amd64"
-LIB=%LIB%;"%WindowsSdkDir%\Lib\winv6.3\um\x64"
-LIB=%LIB%;"%WindowsSdkDir%\Lib\win8\um\x64"
 LIB=%LIB%;"%WindowsSdkDir%\Lib\x64"
+
+[Environment32mscoff]
+LIB="%@P%\..\lib"
+DFLAGS=%DFLAGS% -L/OPT:NOICF
+VSINSTALLDIR=__VS__\
+VCINSTALLDIR=%VSINSTALLDIR%VC\
+PATH=%PATH%;%VCINSTALLDIR%\bin
+WindowsSdkDir=__SDK__
+LINKCMD=%VCINSTALLDIR%\bin\link.exe
+LIB=%LIB%;"%VCINSTALLDIR%\lib"
+LIB=%LIB%;"%WindowsSdkDir%\Lib"
 EOS";
 
 				auto env = baseEnvironment;
@@ -1194,7 +1213,10 @@ EOS";
 			if (sourceDir.buildPath("posix.mak").exists)
 				needModel = true; // Known to be needed for recent versions
 
-			string[] args = ["-conf=" ~ buildPath(buildDir , "bin", configFileName), "rdmd"];
+			string[] args;
+			if (needConfSwitch())
+				args ~= ["-conf=" ~ buildPath(buildDir , "bin", configFileName)];
+			args ~= ["rdmd"];
 
 			if (!needModel)
 				try
@@ -1863,6 +1885,22 @@ EOS";
 	}
 
 	version (Windows)
+	string msvcModelDir()
+	{
+		switch (config.build.components.common.model)
+		{
+			case "32":
+				throw new Exception("Shouldn't need VC for 32-bit builds");
+			case "64":
+				return "x86_amd64";
+			case "32mscoff":
+				return null;
+			default:
+				throw new Exception("Unknown model: " ~ config.build.components.common.model);
+		}
+	}
+
+	version (Windows)
 	void needVC(ref Environment env)
 	{
 		tempError++; scope(success) tempError--;
@@ -1876,6 +1914,7 @@ EOS";
 			"vc_compilerx64nat",
 			"vc_compilerx64natres",
 			"vc_librarycore86",
+			"vc_libraryDesktop_x86",
 			"vc_libraryDesktop_x64",
 			"win_xpsupport",
 		];
@@ -1895,7 +1934,7 @@ EOS";
 		env.vars["VCINSTALLDIR"] = env.deps.vsDir.buildPath("VC") ~ dirSeparator;
 		env.vars["INCLUDE"] = env.deps.vsDir.buildPath("VC", "include");
 		env.vars["WindowsSdkDir"] = env.deps.sdkDir ~ dirSeparator;
-		env.vars["LINKCMD64"] = env.deps.vsDir.buildPath("VC", "bin", "x86_amd64", "link.exe"); // Used by dmd
+		env.vars["LINKCMD64"] = env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(), "link.exe"); // Used by dmd
 	}
 
 	private void needGit()
