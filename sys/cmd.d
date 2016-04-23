@@ -56,30 +56,63 @@ ulong getCurrentThreadID()
 
 // ************************************************************************
 
+struct ProcessParams
+{
+	const(string[string]) environment = null;
+	std.process.Config config = std.process.Config.none;
+	size_t maxOutput = size_t.max;
+	string workDir = null;
+
+	this(Params...)(Params params)
+	{
+		foreach (arg; params)
+		{
+			static if (is(typeof(arg) == string))
+				workDir = arg;
+			else
+			static if (is(typeof(arg) : const(string[string])))
+				environment = arg;
+			else
+			static if (is(typeof(arg) == size_t))
+				maxOutput = arg;
+			else
+			static if (is(typeof(arg) == std.process.Config))
+				config = arg;
+			else
+				static assert(false, "Unknown type for process invocation parameter: " ~ typeof(arg).stringof);
+		}
+	}
+}
+
 private void invoke(alias runner)(string[] args)
 {
 	//debug scope(failure) std.stdio.writeln("[CWD] ", getcwd());
 	debug(CMD) std.stdio.stderr.writeln("invoke: ", args);
 	auto status = runner();
 	enforce(status == 0,
-		"Command %s failed with status %d".format(args, status));
+		"Command `%s` failed with status %d".format(escapeShellCommand(args), status));
 }
 
 /// std.process helper.
 /// Run a command, and throw if it exited with a non-zero status.
-void run(string[] args)
+void run(Params...)(string[] args, Params params)
 {
-	invoke!({ return spawnProcess(args).wait(); })(args);
+	auto parsed = ProcessParams(params);
+	invoke!({ return spawnProcess(
+				args, stdin, stdout, stderr,
+				parsed.environment, parsed.config, parsed.workDir
+			).wait(); })(args);
 }
 
 /// std.process helper.
 /// Run a command and collect its output.
 /// Throw if it exited with a non-zero status.
-string query(string[] args)
+string query(Params...)(string[] args, Params params)
 {
+	auto parsed = ProcessParams(params);
 	string output;
 	invoke!({
-		auto result = execute(args);
+		auto result = execute(args, parsed.environment, parsed.config, parsed.maxOutput, parsed.workDir);
 		output = result.output.stripRight();
 		return result.status;
 	})(args);
@@ -89,11 +122,13 @@ string query(string[] args)
 /// std.process helper.
 /// Run a command, feed it the given input, and collect its output.
 /// Throw if it exited with non-zero status. Return output.
-T[] pipe(T)(string[] args, in T[] input)
+T[] pipe(T, Params...)(string[] args, in T[] input, Params params)
 {
+	auto parsed = ProcessParams(params);
 	T[] output;
 	invoke!({
-		auto pipes = pipeProcess(args, Redirect.stdin | Redirect.stdout);
+		auto pipes = pipeProcess(args, Redirect.stdin | Redirect.stdout,
+			parsed.environment, parsed.config, parsed.workDir);
 		auto f = pipes.stdin;
 		auto writer = writeFileAsync(f, input);
 		scope(exit) writer.join();
