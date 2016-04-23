@@ -55,7 +55,7 @@ version (Windows)
 		return toUTF8(path);
 	}
 
-	private string getAppDir(string appName, int csidl)
+	/*private*/ string getAppDir(int csidl, string appName = null)
 	{
 		string dir = getShellPath(csidl) ~ `\` ~ (appName ? appName : getExecutableName());
 		if (!exists(dir))
@@ -63,7 +63,7 @@ version (Windows)
 		return dir;
 	}
 
-	private string[] getAppDirs(string appName, int csidl)
+	/*private*/ string[] getAppDirs(int csidl, string appName = null)
 	{
 		return [thisExePath.dirName(), getAppDir(appName, csidl)];
 	}
