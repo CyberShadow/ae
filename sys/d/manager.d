@@ -1287,6 +1287,47 @@ EOS";
 		}
 	}
 
+	final class Tools : Component
+	{
+		@property override string submoduleName() { return "tools"; }
+		@property override string[] sourceDependencies() { return []; }
+		@property override string[] dependencies() { return ["dmd", "druntime", "phobos"]; }
+
+		@property override string configString()
+		{
+			static struct FullConfig
+			{
+				string model;
+				string[] makeArgs;
+			}
+
+			return FullConfig(
+				config.build.components.common.model,
+				config.build.components.common.makeArgs,
+			).toJson();
+		}
+
+		override void performBuild()
+		{
+			foreach (dep; ["dmd", "druntime", "phobos"])
+				getComponent(dep).needInstalled();
+
+			auto env = baseEnvironment;
+			needCC(env);
+
+			run(getMake(env) ~ ["-f", makeFileName, "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
+		}
+
+		override void performStage()
+		{
+			foreach (os; buildPath(sourceDir, "generated").dirEntries(SpanMode.shallow))
+			{
+				auto dir = os.buildPath(config.build.components.common.model);
+				cp(dir, buildPath(stageDir , "bin"));
+			}
+		}
+	}
+
 	final class Website : Component
 	{
 		@property override string submoduleName() { return "dlang.org"; }
@@ -1489,6 +1530,9 @@ EOS";
 				case "rdmd":
 					c = new RDMD();
 					break;
+				case "tools":
+					c = new Tools();
+					break;
 				case "website":
 					c = new Website();
 					break;
@@ -1618,7 +1662,7 @@ EOS";
 	}
 
 	static const string[] defaultComponents = ["dmd", "druntime", "phobos-includes", "phobos", "rdmd"];
-	static const string[] additionalComponents = ["website", "extras", "curl"];
+	static const string[] additionalComponents = ["tools", "website", "extras", "curl"];
 	static const string[] allComponents = defaultComponents ~ additionalComponents;
 
 	/// Build the specified components according to the specified configuration.
