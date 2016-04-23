@@ -29,13 +29,6 @@ version (Windows)
 	mixin(importWin32!q{windef});
 	mixin(importWin32!q{winbase});
 
-	string getExecutableName()
-	{
-		auto path = new char[MAX_PATH];
-		path.length = enforce(GetModuleFileNameA(null, path.ptr, cast(uint)path.length));
-		return baseName(assumeUnique(path));
-	}
-
 	private string getShellPath(int csidl)
 	{
 		LPITEMIDLIST pidl;
@@ -74,12 +67,6 @@ else // POSIX
 
 	alias toLower = std.ascii.toLower;
 
-	string getExecutableName()
-	{
-		// TODO: is this valid with OS X app bundles?
-		return baseName(readLink("/proc/self/exe"));
-	}
-
 	private string getPosixAppName(string appName)
 	{
 		string s = appName ? appName : getExecutableName();
@@ -103,4 +90,11 @@ else // POSIX
 
 	alias getAppProfile getLocalAppProfile;
 	alias getAppProfile getRoamingAppProfile;
+}
+
+// Get the base name of the current executable.
+string getExecutableName()
+{
+	import std.file;
+	return thisExePath().baseName();
 }
