@@ -143,7 +143,7 @@ class Config
 		// Cache values from memory, and save them to disk when the program exits.
 		this(string appName = null, string companyName = null)
 		{
-			fileName = getRoamingAppProfile(appName) ~ "/config";
+			fileName = getConfigDir(appName) ~ "/config";
 			if (!exists(fileName))
 				return;
 			foreach (line; File(fileName, "rt").byLine())
