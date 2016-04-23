@@ -860,7 +860,7 @@ class DManager : ICacheHost
 			submodule.saveFileState("src/" ~ dmdMakeFileName);
 
 			string[] extraArgs, targets;
-			version (posix)
+			version (Posix)
 			{
 				if (config.build.components.dmd.debugDMD)
 					extraArgs ~= "DEBUG=1";
