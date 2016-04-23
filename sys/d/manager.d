@@ -859,12 +859,19 @@ class DManager : ICacheHost
 			}
 			submodule.saveFileState("src/" ~ dmdMakeFileName);
 
-			string[] extraArgs;
+			string[] extraArgs, targets;
 			version (posix)
+			{
 				if (config.build.components.dmd.debugDMD)
 					extraArgs ~= "DEBUG=1";
-
-			string[] targets = config.build.components.dmd.debugDMD ? [] : ["dmd"];
+				else
+					extraArgs ~= "ENABLE_RELEASE=1";
+			}
+			else
+			{
+				if (!config.build.components.dmd.debugDMD)
+					targets ~= [dmdMakeFullName.readText().canFind("reldmd") ? "reldmd" : "dmd"];
+			}
 
 			// Avoid HOST_DC reading ~/dmd.conf
 			string hostDC = env.deps.hostDC;
