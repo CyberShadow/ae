@@ -1,6 +1,10 @@
 /**
  * OS-specific paths.
  *
+ * getConfigDir - roaming, for configuration
+ * getDataDir - roaming, for user data
+ * getCacheDir - local
+ *
  * License:
  *   This Source Code Form is subject to the terms of
  *   the Mozilla Public License, v. 2.0. If a copy of
@@ -56,14 +60,25 @@ version (Windows)
 		return dir;
 	}
 
-	string getLocalAppProfile  (string appName = null) { return getAppDir(appName, CSIDL_LOCAL_APPDATA); }
-	string getRoamingAppProfile(string appName = null) { return getAppDir(appName, CSIDL_APPDATA); }
+	/*private*/ string getAppDir(int csidl)(string appName = null)
+	{
+		return getAppDir(appName, csidl);
+	}
+
+	alias getLocalAppProfile   = getAppDir!CSIDL_LOCAL_APPDATA;
+	alias getRoamingAppProfile = getAppDir!CSIDL_APPDATA;
+
+	alias getConfigDir = getLocalAppProfile;
+	alias getDataDir   = getLocalAppProfile;
+	alias getCacheDir  = getRoamingAppProfile;
 }
 else // POSIX
 {
 	import std.string;
 	import std.ascii;
+	import std.conv : octal;
 	import std.file;
+	import std.process;
 
 	alias toLower = std.ascii.toLower;
 
@@ -80,21 +95,34 @@ else // POSIX
 		return s2;
 	}
 
-	string getAppProfile(string appName = null)
+	private string getXdgDir(string varName, string defaultValue, string appName)
 	{
-		string path = expandTilde("~/." ~ getPosixAppName(appName));
+		string path = environment.get(varName, defaultValue.expandTilde());
+		if (!exists(path))
+		{
+			mkdir(path);
+			setAttributes(path, octal!700);
+		}
+		path = path.buildPath(getPosixAppName(appName));
 		if (!exists(path))
 			mkdir(path);
 		return path;
 	}
 
-	alias getAppProfile getLocalAppProfile;
-	alias getAppProfile getRoamingAppProfile;
+	/*private*/ string getXdgDir(string varName, string defaultValue)(string appName = null)
+	{
+		return getXdgDir(varName, defaultValue, appName);
+	}
+
+	alias getDataDir    = getXdgDir!("XDG_DATA_HOME"  , "~/.local/share");
+	alias getConfigDir  = getXdgDir!("XDG_CONFIG_HOME", "~/.config");
+	alias getCacheDir   = getXdgDir!("XDG_CACHE_HOME" , "~/.cache");
 }
 
-// Get the base name of the current executable.
+/// Get the base name of the current executable.
 string getExecutableName()
 {
 	import std.file;
 	return thisExePath().baseName();
 }
+
