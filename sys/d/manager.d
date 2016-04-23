@@ -673,9 +673,9 @@ class DManager : ICacheHost
 				{
 					args ~= "VCDIR="  ~ env.deps.vsDir.buildPath("VC").absolutePath();
 					args ~= "SDKDIR=" ~ env.deps.sdkDir.absolutePath();
-					args ~= "CC=" ~ dDoTestEscape(env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(), "cl.exe").absolutePath());
-					args ~= "LD=" ~ dDoTestEscape(env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(), "link.exe").absolutePath());
-					args ~= "AR=" ~ dDoTestEscape(env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(), "lib.exe").absolutePath());
+					args ~= "CC=" ~ '"' ~ env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(), "cl.exe").absolutePath() ~ '"';
+					args ~= "LD=" ~ '"' ~ env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(), "link.exe").absolutePath() ~ '"';
+					args ~= "AR=" ~ '"' ~ env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(), "lib.exe").absolutePath() ~ '"';
 				}
 
 			return args;
@@ -993,6 +993,15 @@ EOS";
 					auto extrasDir = needExtras();
 					// The autotester seems to pass this via environment. Why does that work there???
 					makeArgs ~= "LIB=" ~ extrasDir.buildPath("localextras-windows", "dmd2", "windows", "lib") ~ `;..\..\phobos`;
+				}
+				else
+				{
+					// Fix path for d_do_test and its special escaping (default is the system VS2010 install)
+					// We can't use the same syntax in getPlatformMakeVars because win64.mak uses "CC=\$(CC32)"\""
+					auto cl = env.deps.vsDir.buildPath("VC", "bin", "x86_amd64", "cl.exe");
+					foreach (ref arg; makeArgs)
+						if (arg.startsWith("CC="))
+							arg = "CC=" ~ dDoTestEscape(cl);
 				}
 			}
 
@@ -1411,8 +1420,9 @@ EOS";
 						cp(source, target);
 				}
 
-				copyDir("bin" ~ modelSuffix, "bin");
-				copyDir("lib" ~ modelSuffix, "lib");
+				auto suffix = config.build.components.common.model == "64" ? "64" : "";
+				copyDir("bin" ~ suffix, "bin");
+				copyDir("lib" ~ suffix, "lib");
 			}
 			else
 				log("Not on Windows, skipping libcurl install");
