@@ -66,9 +66,9 @@ void un7z(string archive, string target)
 /// Always unpacks compressed tar archives in one go.
 void unpack(string archive, string target)
 {
-	bool untar(string longExtension, string shortExtension, string tarSwitch)
+	bool untar(string longExtension, string shortExtension, string tarSwitch, string unpacker)
 	{
-		if (archive.toLower().endsWith(longExtension) || archive.toLower().endsWith(shortExtension))
+		if ((archive.toLower().endsWith(longExtension) || archive.toLower().endsWith(shortExtension)) && haveExecutable(unpacker))
 		{
 			target.mkdirRecurse();
 			auto pid = spawnProcess(["tar", "xf", archive, tarSwitch, "--directory", target]);
@@ -82,10 +82,10 @@ void unpack(string archive, string target)
 		archive.unzip(target);
 	else
 	if (haveExecutable("tar") && (
-		untar(".tar.gz", ".tgz", "--gzip") ||
-		untar(".tar.bz2", ".tbz", "--bzip2") ||
-		untar(".tar.lzma", ".tlz", "--lzma") ||
-		untar(".tar.xz", ".txz", "--xz")))
+		untar(".tar.gz", ".tgz", "--gzip", "gzip") ||
+		untar(".tar.bz2", ".tbz", "--bzip2", "bzip2") ||
+		untar(".tar.lzma", ".tlz", "--lzma", "lzma") ||
+		untar(".tar.xz", ".txz", "--xz", "xz")))
 		{}
 	else
 	{
