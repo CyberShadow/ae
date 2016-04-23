@@ -65,7 +65,7 @@ version (Windows)
 
 	/*private*/ string[] getAppDirs(int csidl, string appName = null)
 	{
-		return [thisExePath.dirName(), getAppDir(appName, csidl)];
+		return [thisExePath.dirName(), getAppDir(csidl, appName)];
 	}
 
 	alias getLocalAppProfile   = bindArgs!(getAppDir, CSIDL_LOCAL_APPDATA);
