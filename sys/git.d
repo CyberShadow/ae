@@ -47,7 +47,8 @@ struct Repository
 			gitDir = path.buildNormalizedPath(gitDir.readText().strip()[8..$]);
 		//path = path.replace(`\`, `/`);
 		this.path = path;
-		this.environment["GIT_CONFIG_NOSYSTEM"] = "1";
+		version (Windows) {} else
+			this.environment["GIT_CONFIG_NOSYSTEM"] = "1";
 		this.environment["HOME"] = gitDir;
 		this.environment["XDG_CONFIG_HOME"] = gitDir;
 	}
