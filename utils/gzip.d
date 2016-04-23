@@ -24,7 +24,7 @@ debug import std.stdio, std.file;
 import ae.sys.data;
 
 static import zlib = ae.utils.zlib;
-import ae.utils.zlib : ZlibOptions, ZlibMode;
+public import ae.utils.zlib : ZlibOptions, ZlibMode;
 import std.digest.crc;
 
 private enum
