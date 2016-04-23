@@ -650,6 +650,18 @@ class DManager : ICacheHost
 		/// Returns the path to the built dmd executable.
 		@property string dmd() { return buildPath(buildDir, "bin", "dmd" ~ binExt).absolutePath(); }
 
+		/// Escape a path for d_do_test's very "special" criteria.
+		/// Spaces must be escaped, but there must be no double-quote at the end.
+		private static string dDoTestEscape(string str)
+		{
+			return str.replaceAll(re!`\\([^\\ ]*? [^\\]*)(?=\\)`, `\"$1"`);
+		}
+
+		unittest
+		{
+			assert(dDoTestEscape(`C:\Foo boo bar\baz quuz\derp.exe`) == `C:\"Foo boo bar"\"baz quuz"\derp.exe`);
+		}
+
 		string[] getPlatformMakeVars(in ref Environment env)
 		{
 			string[] args;
@@ -661,9 +673,9 @@ class DManager : ICacheHost
 				{
 					args ~= "VCDIR="  ~ env.deps.vsDir.buildPath("VC").absolutePath();
 					args ~= "SDKDIR=" ~ env.deps.sdkDir.absolutePath();
-					args ~= "CC=\"" ~ env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(), "cl.exe").absolutePath() ~ '"';
-					args ~= "LD=\"" ~ env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(), "link.exe").absolutePath() ~ '"';
-					args ~= "AR=\"" ~ env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(), "lib.exe").absolutePath() ~ '"';
+					args ~= "CC=" ~ dDoTestEscape(env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(), "cl.exe").absolutePath());
+					args ~= "LD=" ~ dDoTestEscape(env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(), "link.exe").absolutePath());
+					args ~= "AR=" ~ dDoTestEscape(env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(), "lib.exe").absolutePath());
 				}
 
 			return args;
@@ -957,18 +969,6 @@ EOS";
 			env.vars["PATH"] = buildPath(buildDir, "bin").absolutePath() ~ pathSeparator ~ env.vars["PATH"];
 		}
 
-		/// Escape a path for d_do_test's very "special" criteria.
-		/// Spaces must be escaped, but there must be no double-quote at the end.
-		private static string dDoTestEscape(string str)
-		{
-			return str.replaceAll(re!`\\([^\\ ]*? [^\\]*)(?=\\)`, `\"$1"`);
-		}
-
-		unittest
-		{
-			assert(dDoTestEscape(`C:\Foo boo bar\baz quuz\derp.exe`) == `C:\"Foo boo bar"\"baz quuz"\derp.exe`);
-		}
-
 		override void performTest()
 		{
 			foreach (dep; ["dmd", "druntime", "phobos"])
@@ -982,13 +982,6 @@ EOS";
 				needMSYS(env);
 
 				disableCrashDialog();
-
-				if (config.build.components.common.model != "32")
-				{
-					// Used by d_do_test (default is the system VS2010 install)
-					auto cl = env.deps.vsDir.buildPath("VC", "bin", "x86_amd64", "cl.exe");
-					env.vars["CC"] = dDoTestEscape(cl);
-				}
 			}
 
 			auto makeArgs = getMake(env) ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env) ~ gnuMakeArgs;
