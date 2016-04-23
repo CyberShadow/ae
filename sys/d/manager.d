@@ -762,6 +762,10 @@ class DManager : ICacheHost
 			/// but run slower.
 			@JSONOptional bool debugDMD = false;
 
+			/// Whether to build a release DMD.
+			/// Mutually exclusive with debugDMD.
+			@JSONOptional bool releaseDMD = false;
+
 			/// Instead of downloading a pre-built binary DMD package,
 			/// build it from source starting with the last C++-only version.
 			@JSONOptional bool bootstrap;
@@ -864,13 +868,18 @@ class DManager : ICacheHost
 			{
 				if (config.build.components.dmd.debugDMD)
 					extraArgs ~= "DEBUG=1";
-				else
+				if (config.build.components.dmd.releaseDMD)
 					extraArgs ~= "ENABLE_RELEASE=1";
 			}
 			else
 			{
-				if (!config.build.components.dmd.debugDMD)
-					targets ~= [dmdMakeFullName.readText().canFind("reldmd") ? "reldmd" : "dmd"];
+				if (config.build.components.dmd.debugDMD)
+					targets ~= [];
+				else
+				if (config.build.components.dmd.releaseDMD && dmdMakeFullName.readText().canFind("reldmd"))
+					targets ~= ["reldmd"];
+				else
+					targets ~= ["dmd"];
 			}
 
 			// Avoid HOST_DC reading ~/dmd.conf
