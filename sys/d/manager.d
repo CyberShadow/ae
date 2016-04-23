@@ -987,7 +987,7 @@ EOS";
 			auto makeArgs = getMake(env) ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env) ~ gnuMakeArgs;
 			version (Windows)
 			{
-				makeArgs ~= ["OS=win" ~ config.build.components.common.model, "SHELL=bash"];
+				makeArgs ~= ["OS=win" ~ config.build.components.common.model[0..2], "SHELL=bash"];
 				if (config.build.components.common.model == "32")
 				{
 					auto extrasDir = needExtras();
@@ -998,7 +998,7 @@ EOS";
 				{
 					// Fix path for d_do_test and its special escaping (default is the system VS2010 install)
 					// We can't use the same syntax in getPlatformMakeVars because win64.mak uses "CC=\$(CC32)"\""
-					auto cl = env.deps.vsDir.buildPath("VC", "bin", "x86_amd64", "cl.exe");
+					auto cl = env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(), "cl.exe");
 					foreach (ref arg; makeArgs)
 						if (arg.startsWith("CC="))
 							arg = "CC=" ~ dDoTestEscape(cl);
