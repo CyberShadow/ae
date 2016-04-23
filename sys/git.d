@@ -36,8 +36,7 @@ struct Repository
 	string path;
 	string gitDir;
 
-	// TODO: replace this with using the std.process workDir parameter in 2.066
-	string[] argsPrefix;
+	string[string] environment;
 
 	this(string path)
 	{
@@ -48,21 +47,23 @@ struct Repository
 			gitDir = path.buildNormalizedPath(gitDir.readText().strip()[8..$]);
 		//path = path.replace(`\`, `/`);
 		this.path = path;
-		this.argsPrefix = [`git`, `--work-tree=` ~ path, `--git-dir=` ~ gitDir];
+		this.environment["GIT_CONFIG_NOSYSTEM"] = "1";
+		this.environment["HOME"] = gitDir;
+		this.environment["XDG_CONFIG_HOME"] = gitDir;
 	}
 
 	invariant()
 	{
-		assert(argsPrefix.length, "Not initialized");
+		assert(environment !is null, "Not initialized");
 	}
 
 	// Have just some primitives here.
 	// Higher-level functionality can be added using UFCS.
-	void   run  (string[] args...) const { auto owd = pushd(workPath(args[0])); return .run  (argsPrefix ~ args); }
-	string query(string[] args...) const { auto owd = pushd(workPath(args[0])); return .query(argsPrefix ~ args); }
-	bool   check(string[] args...) const { auto owd = pushd(workPath(args[0])); return spawnProcess(argsPrefix ~ args).wait() == 0; }
+	void   run  (string[] args...) const { auto owd = pushd(workPath(args[0])); return .run  (["git"] ~ args, environment, path); }
+	string query(string[] args...) const { auto owd = pushd(workPath(args[0])); return .query(["git"]  ~ args, environment, path); }
+	bool   check(string[] args...) const { auto owd = pushd(workPath(args[0])); return spawnProcess(["git"]  ~ args, environment, Config.none, path).wait() == 0; }
 	auto   pipe (string[] args, Redirect redirect)
-	                               const { auto owd = pushd(workPath(args[0])); return pipeProcess(argsPrefix ~ args, redirect); }
+	                               const { auto owd = pushd(workPath(args[0])); return pipeProcess(["git"]  ~ args, redirect, environment, Config.none, path); }
 	auto   pipe (string[] args...) const { return pipe(args, Redirect.stdin | Redirect.stdout); }
 
 	/// Certain git commands (notably, bisect) must
