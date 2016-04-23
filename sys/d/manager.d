@@ -1005,6 +1005,18 @@ EOS";
 				}
 			}
 
+			version (test)
+			{
+				// Only try a few tests during CI runs, to check for
+				// platform integration and correct invocation.
+				// For this purpose, the C++ ABI tests will do nicely.
+				makeArgs ~= [
+				//	"test_results/runnable/cppa.d.out", // https://github.com/dlang/dmd/pull/5686
+					"test_results/runnable/cpp_abi_tests.d.out",
+					"test_results/runnable/cabi1.d.out",
+				];
+			}
+
 			run(makeArgs, env.vars, sourceDir.buildPath("test"));
 		}
 	}
