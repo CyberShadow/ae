@@ -13,6 +13,9 @@
  *
  * Authors:
  *   Vladimir Panteleev <vladimir@thecybershadow.net>
+ *
+ * References:
+ *   https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
  */
 
 module ae.sys.paths;
@@ -60,25 +63,30 @@ version (Windows)
 		return dir;
 	}
 
-	/*private*/ string getAppDir(int csidl)(string appName = null)
+	private string[] getAppDirs(string appName, int csidl)
 	{
-		return getAppDir(appName, csidl);
+		return [thisExePath.dirName(), getAppDir(appName, csidl)];
 	}
 
-	alias getLocalAppProfile   = getAppDir!CSIDL_LOCAL_APPDATA;
-	alias getRoamingAppProfile = getAppDir!CSIDL_APPDATA;
+	alias getLocalAppProfile   = bindArgs!(getAppDir, CSIDL_LOCAL_APPDATA);
+	alias getRoamingAppProfile = bindArgs!(getAppDir, CSIDL_APPDATA);
 
-	alias getConfigDir = getLocalAppProfile;
-	alias getDataDir   = getLocalAppProfile;
-	alias getCacheDir  = getRoamingAppProfile;
+	alias getConfigDir  = getRoamingAppProfile;
+	alias getDataDir    = getRoamingAppProfile;
+	alias getCacheDir   = getLocalAppProfile;
+
+	alias getConfigDirs = bindArgs!(getAppDir, CSIDL_LOCAL_APPDATA);;
+	alias getDataDirs   = bindArgs!(getAppDir, CSIDL_LOCAL_APPDATA);;
 }
 else // POSIX
 {
-	import std.string;
+	import std.algorithm.iteration;
+	import std.array;
 	import std.ascii;
 	import std.conv : octal;
 	import std.file;
 	import std.process;
+	import std.string;
 
 	alias toLower = std.ascii.toLower;
 
@@ -95,28 +103,68 @@ else // POSIX
 		return s2;
 	}
 
-	private string getXdgDir(string varName, string defaultValue, string appName)
+	struct XdgDir
 	{
-		string path = environment.get(varName, defaultValue.expandTilde());
-		if (!exists(path))
+		string homeVarName;
+		string homeDefaultValue;
+		string dirsVarName;
+		string dirsDefaultValue;
+
+		string getHome() const
 		{
-			mkdir(path);
-			setAttributes(path, octal!700);
+			string path = environment.get(homeVarName, homeDefaultValue.expandTilde());
+			if (!exists(path))
+			{
+				mkdir(path);
+				setAttributes(path, octal!700);
+			}
+			return path;
 		}
-		path = path.buildPath(getPosixAppName(appName));
-		if (!exists(path))
-			mkdir(path);
-		return path;
+
+		string getAppHome(string appName) const
+		{
+			string path = getHome();
+			path = path.buildPath(getPosixAppName(appName));
+			if (!exists(path))
+				mkdir(path);
+			return path;
+		}
+
+		string[] getDirs() const
+		{
+			string paths = environment.get(dirsVarName, dirsDefaultValue);
+			return [getHome()] ~ paths.split(pathSeparator);
+		}
+
+		string[] getAppDirs(string appName) const
+		{
+			return getDirs()
+				.map!(dir => dir.buildPath(getPosixAppName(appName)))
+				.array();
+		}
+
 	}
 
-	/*private*/ string getXdgDir(string varName, string defaultValue)(string appName = null)
+	immutable XdgDir xdgData   = XdgDir("XDG_DATA_HOME"  , "~/.local/share", "XDG_DATA_DIRS"  , "/usr/local/share/:/usr/share/");
+	immutable XdgDir xdgConfig = XdgDir("XDG_CONFIG_HOME", "~/.config"     , "XDG_CONFIG_DIRS", "/etc/xdg");
+	immutable XdgDir xdgCache  = XdgDir("XDG_CACHE_HOME" , "~/.cache"      );
+
+	/*private*/ string getXdgAppDir(alias xdgDir)(string appName = null)
 	{
-		return getXdgDir(varName, defaultValue, appName);
+		return xdgDir.getAppHome(appName);
 	}
 
-	alias getDataDir    = getXdgDir!("XDG_DATA_HOME"  , "~/.local/share");
-	alias getConfigDir  = getXdgDir!("XDG_CONFIG_HOME", "~/.config");
-	alias getCacheDir   = getXdgDir!("XDG_CACHE_HOME" , "~/.cache");
+	/*private*/ string[] getXdgAppDirs(alias xdgDir)(string appName = null)
+	{
+		return xdgDir.getAppDirs(appName);
+	}
+
+	alias getDataDir    = getXdgAppDir!xdgData;
+	alias getConfigDir  = getXdgAppDir!xdgConfig;
+	alias getCacheDir   = getXdgAppDir!xdgCache;
+
+	alias getDataDirs   = getXdgAppDirs!xdgData;
+	alias getConfigDirs = getXdgAppDirs!xdgConfig;
 }
 
 /// Get the base name of the current executable.
@@ -126,3 +174,10 @@ string getExecutableName()
 	return thisExePath().baseName();
 }
 
+/*private*/ template bindArgs(alias fun, CTArgs...)
+{
+	auto bindArgs(RTArgs...)(auto ref RTArgs rtArgs)
+	{
+		return fun(CTArgs, rtArgs);
+	}
+}
