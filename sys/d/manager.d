@@ -664,18 +664,19 @@ class DManager : ICacheHost
 
 		string[] getPlatformMakeVars(in ref Environment env)
 		{
+			string model = config.build.components.common.model;
 			string[] args;
 
-			args ~= "MODEL=" ~ config.build.components.common.model;
+			args ~= "MODEL=" ~ model;
 
 			version (Windows)
-				if (config.build.components.common.model != "32")
+				if (model != "32")
 				{
 					args ~= "VCDIR="  ~ env.deps.vsDir.buildPath("VC").absolutePath();
 					args ~= "SDKDIR=" ~ env.deps.sdkDir.absolutePath();
-					args ~= "CC=" ~ '"' ~ env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(), "cl.exe").absolutePath() ~ '"';
-					args ~= "LD=" ~ '"' ~ env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(), "link.exe").absolutePath() ~ '"';
-					args ~= "AR=" ~ '"' ~ env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(), "lib.exe").absolutePath() ~ '"';
+					args ~= "CC=" ~ '"' ~ env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(model), "cl.exe").absolutePath() ~ '"';
+					args ~= "LD=" ~ '"' ~ env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(model), "link.exe").absolutePath() ~ '"';
+					args ~= "AR=" ~ '"' ~ env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(model), "lib.exe").absolutePath() ~ '"';
 				}
 
 			return args;
@@ -720,13 +721,13 @@ class DManager : ICacheHost
 			return fn;
 		}
 
-		void needCC(ref Environment env, string dmcVer = null)
+		void needCC(ref Environment env, string model, string dmcVer = null)
 		{
 			version (Windows)
 			{
 				needDMC(env, dmcVer); // We need DMC even for 64-bit builds (for DM make)
-				if (config.build.components.common.model != "32")
-					needVC(env);
+				if (model != "32")
+					needVC(env, model);
 			}
 		}
 
@@ -766,6 +767,11 @@ class DManager : ICacheHost
 			/// Mutually exclusive with debugDMD.
 			@JSONOptional bool releaseDMD = false;
 
+			/// Model for building DMD itself (on Windows).
+			/// Can be used to build a 64-bit DMD, to avoid 4GB limit.
+			/// Currently only implemented on Windows, for DMD 2.072 or later.
+			@JSONOptional string dmdModel = CommonConfig.defaultModel;
+
 			/// Instead of downloading a pre-built binary DMD package,
 			/// build it from source starting with the last C++-only version.
 			@JSONOptional bool bootstrap;
@@ -803,21 +809,25 @@ class DManager : ICacheHost
 				dmcVer = "850";
 
 			auto env = baseEnvironment;
-			needCC(env, dmcVer); // Need VC too for VSINSTALLDIR
+			needCC(env, config.build.components.dmd.dmdModel, dmcVer); // Need VC too for VSINSTALLDIR
 
 			if (buildPath(sourceDir, "src", "idgen.d").exists)
 			{
 				// Required for bootstrapping.
-				needDMD(env);
+				auto dmdVersion = defaultDMDVersion;
+				version (Windows)
+					if (config.build.components.dmd.dmdModel != CommonConfig.defaultModel)
+						dmdVersion = "2.068.2"; // dmd/src/builtin.d needs core.stdc.math.fabsl
+				needDMD(env, dmdVersion);
 			}
 
 			auto srcDir = buildPath(sourceDir, "src");
 
-			if (config.build.components.dmd.useVC)
+			if (config.build.components.dmd.useVC) // Mostly obsolete, see useVC ddoc
 			{
 				version (Windows)
 				{
-					needVC(env);
+					needVC(env, config.build.components.dmd.dmdModel);
 
 					env.vars["PATH"] = env.vars["PATH"] ~ pathSeparator ~ env.deps.hostDC.dirName;
 
@@ -880,6 +890,19 @@ class DManager : ICacheHost
 					targets ~= ["reldmd"];
 				else
 					targets ~= ["dmd"];
+			}
+
+			if (config.build.components.dmd.dmdModel != CommonConfig.defaultModel)
+			{
+				version (Windows)
+				{
+					dmdMakeFileName = "win64.mak";
+					dmdMakeFullName = srcDir.buildPath(dmdMakeFileName);
+					enforce(dmdMakeFullName.exists, "dmdModel not supported for this DMD version");
+					extraArgs ~= "DMODEL=-m" ~ config.build.components.dmd.dmdModel;
+				}
+				else
+					throw new Exception("dmdModel is only supported on Windows");
 			}
 
 			// Avoid HOST_DC reading ~/dmd.conf
@@ -953,7 +976,7 @@ LIB=%LIB%;"%WindowsSdkDir%\Lib"
 EOS";
 
 				auto env = baseEnvironment;
-				needCC(env);
+				needCC(env, config.build.components.common.model);
 
 				ini = ini.replace("__DMC__", env.deps.dmcDir.buildPath(`bin`).absolutePath());
 				ini = ini.replace("__VS__" , env.deps.vsDir .absolutePath());
@@ -994,7 +1017,7 @@ EOS";
 			version (Windows)
 			{
 				// In this order so it uses the MSYS make
-				needCC(env);
+				needCC(env, config.build.components.common.model);
 				needMSYS(env);
 
 				disableCrashDialog();
@@ -1014,7 +1037,7 @@ EOS";
 				{
 					// Fix path for d_do_test and its special escaping (default is the system VS2010 install)
 					// We can't use the same syntax in getPlatformMakeVars because win64.mak uses "CC=\$(CC32)"\""
-					auto cl = env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(), "cl.exe");
+					auto cl = env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(config.build.components.common.model), "cl.exe");
 					foreach (ref arg; makeArgs)
 						if (arg.startsWith("CC="))
 							arg = "CC=" ~ dDoTestEscape(cl);
@@ -1083,7 +1106,7 @@ EOS";
 			getComponent("phobos-includes").needInstalled();
 
 			auto env = baseEnvironment;
-			needCC(env);
+			needCC(env, config.build.components.common.model);
 
 			mkdirRecurse(sourceDir.buildPath("import"));
 			mkdirRecurse(sourceDir.buildPath("lib"));
@@ -1109,7 +1132,7 @@ EOS";
 			getComponent("dmd").needInstalled();
 
 			auto env = baseEnvironment;
-			needCC(env);
+			needCC(env, config.build.components.common.model);
 			run(getMake(env) ~ ["-f", makeFileNameModel, "unittest", "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
 		}
 	}
@@ -1142,7 +1165,7 @@ EOS";
 			getComponent("druntime").needBuild();
 
 			auto env = baseEnvironment;
-			needCC(env);
+			needCC(env, config.build.components.common.model);
 
 			string phobosMakeFileName = findMakeFile(sourceDir, makeFileNameModel);
 
@@ -1183,7 +1206,7 @@ EOS";
 			getComponent("dmd").needInstalled();
 
 			auto env = baseEnvironment;
-			needCC(env);
+			needCC(env, config.build.components.common.model);
 			version (Windows)
 			{
 				getComponent("curl").needInstalled();
@@ -1235,7 +1258,7 @@ EOS";
 				getComponent(dep).needInstalled();
 
 			auto env = baseEnvironment;
-			needCC(env);
+			needCC(env, config.build.components.common.model);
 
 			// Just build rdmd
 			bool needModel; // Need -mXX switch?
@@ -1313,7 +1336,7 @@ EOS";
 				getComponent(dep).needInstalled();
 
 			auto env = baseEnvironment;
-			needCC(env);
+			needCC(env, config.build.components.common.model);
 
 			run(getMake(env) ~ ["-f", makeFileName, "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
 		}
@@ -1786,9 +1809,11 @@ EOS";
 		Installer.installationDirectory = dlDir;
 	}
 
-	void needDMD(ref Environment env)
+	enum defaultDMDVersion = "2.067.1";
+
+	void needDMD(ref Environment env, string dmdVer = defaultDMDVersion)
 	{
-		needDMD(env, "2.067.1", config.build.components.dmd.bootstrap);
+		needDMD(env, dmdVer, config.build.components.dmd.bootstrap);
 	}
 
 	void needDMD(ref Environment env, string dmdVer, bool bootstrap)
@@ -1960,23 +1985,23 @@ EOS";
 	}
 
 	version (Windows)
-	string msvcModelDir()
+	static string msvcModelDir(string model, string dir64 = "x86_amd64")
 	{
-		switch (config.build.components.common.model)
+		switch (model)
 		{
 			case "32":
 				throw new Exception("Shouldn't need VC for 32-bit builds");
 			case "64":
-				return "x86_amd64";
+				return dir64;
 			case "32mscoff":
 				return null;
 			default:
-				throw new Exception("Unknown model: " ~ config.build.components.common.model);
+				throw new Exception("Unknown model: " ~ model);
 		}
 	}
 
 	version (Windows)
-	void needVC(ref Environment env)
+	void needVC(ref Environment env, string model)
 	{
 		tempError++; scope(success) tempError--;
 
@@ -2005,11 +2030,16 @@ EOS";
 		env.deps.vsDir  = vs.directory.buildPath("Program Files (x86)", "Microsoft Visual Studio 12.0").absolutePath();
 		env.deps.sdkDir = vs.directory.buildPath("Program Files", "Microsoft SDKs", "Windows", "v7.1A").absolutePath();
 
-		env.vars["PATH"] ~= pathSeparator ~ vs.binPaths.map!(path => vs.directory.buildPath(path).absolutePath()).join(pathSeparator);
+		env.vars["PATH"] ~= pathSeparator ~ vs.modelBinPaths(msvcModelDir(model)).map!(path => vs.directory.buildPath(path).absolutePath()).join(pathSeparator);
 		env.vars["VCINSTALLDIR"] = env.deps.vsDir.buildPath("VC") ~ dirSeparator;
-		env.vars["INCLUDE"] = env.deps.vsDir.buildPath("VC", "include");
+		env.vars["INCLUDE"] = env.deps.vsDir.buildPath("VC", "include") ~ ";" ~ env.deps.sdkDir.buildPath("Include");
+		env.vars["LIB"] = env.deps.vsDir.buildPath("VC", "lib", msvcModelDir(model, "amd64")) ~ ";" ~ env.deps.sdkDir.buildPath("Lib", msvcModelDir(model, "x64"));
 		env.vars["WindowsSdkDir"] = env.deps.sdkDir ~ dirSeparator;
-		env.vars["LINKCMD64"] = env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(), "link.exe"); // Used by dmd
+		env.vars["Platform"] = "x64";
+		env.vars["LINKCMD64"] = env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(model), "link.exe"); // Used by dmd
+		env.vars["MSVC_CC"] = env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(model), "cl.exe"); // For the msvc-dmc wrapper
+		env.vars["MSVC_AR"] = env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(model), "lib.exe"); // For the msvc-lib wrapper
+		env.vars["CL"] = "-D_USING_V110_SDK71_"; // Work around __userHeader macro redifinition VS bug
 	}
 
 	private void needGit()
