@@ -817,7 +817,7 @@ class DManager : ICacheHost
 				auto dmdVersion = defaultDMDVersion;
 				version (Windows)
 					if (config.build.components.dmd.dmdModel != CommonConfig.defaultModel)
-						dmdVersion = "2.068.2"; // dmd/src/builtin.d needs core.stdc.math.fabsl
+						dmdVersion = "2.070.2"; // dmd/src/builtin.d needs core.stdc.math.fabsl. 2.068.2 generates a dmd which crashes on building Phobos
 				needDMD(env, dmdVersion);
 			}
 
