@@ -52,13 +52,41 @@ class VisualStudioInstaller : Installer
 	@property override string name() { return "Visual Studio %d %s (%-(%s, %))".format(year, edition, packages); }
 	@property override string subdirectory() { return "vs%s-%s".format(year, edition.toLower()); }
 
-	@property override string[] binPaths()
+	@property override string[] binPaths() { return modelBinPaths(null); }
+
+	/// Model is x86 (null), amd64, or x86_amd64
+	string[] modelBinPaths(string model)
 	{
-		return [
+		string[] result = [
 			`windows\system32`,
-			`Program Files (x86)\Microsoft Visual Studio ` ~ versionName ~ `\VC\bin`,
 			`Program Files (x86)\MSBuild\` ~ versionName ~ `\Bin`,
 		];
+
+		if (!model || model == "x86")
+		{
+			result ~= [
+				`Program Files (x86)\Microsoft Visual Studio ` ~ versionName ~ `\VC\bin`,
+			];
+		}
+		else
+		if (model == "amd64")
+		{
+			result ~= [
+				`Program Files (x86)\Microsoft Visual Studio ` ~ versionName ~ `\VC\bin\amd64`,
+			];
+		}
+		else
+		if (model == "x86_amd64")
+		{
+			// Binaries which target amd64 are under x86_amd64, but there is only one copy of DLLs
+			// under bin. Therefore, add the bin directory too, after the x86_amd64 directory.
+			result ~= [
+				`Program Files (x86)\Microsoft Visual Studio ` ~ versionName ~ `\VC\bin\x86_amd64`,
+				`Program Files (x86)\Microsoft Visual Studio ` ~ versionName ~ `\VC\bin`,
+			];
+		}
+
+		return result;
 	}
 
 	@property override bool installedLocally()
