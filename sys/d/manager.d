@@ -831,7 +831,13 @@ class DManager : ICacheHost
 
 					env.vars["PATH"] = env.vars["PATH"] ~ pathSeparator ~ env.deps.hostDC.dirName;
 
-					return run(["msbuild", "/p:Configuration=" ~ vsConfiguration, "/p:Platform=" ~ vsPlatform, "dmd_msc_vs10.sln"], env.vars, srcDir);
+					auto solutionFile = `dmd_msc_vs10.sln`;
+					if (!exists(srcDir.buildPath(solutionFile)))
+						solutionFile = `vcbuild\dmd.sln`;
+					if (!exists(srcDir.buildPath(solutionFile)))
+						throw new Exception("Can't find Visual Studio solution file");
+
+					return run(["msbuild", "/p:Configuration=" ~ vsConfiguration, "/p:Platform=" ~ vsPlatform, solutionFile], env.vars, srcDir);
 				}
 				else
 					throw new Exception("Can only use Visual Studio on Windows");
