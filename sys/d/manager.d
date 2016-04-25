@@ -773,9 +773,30 @@ class DManager : ICacheHost
 			/// Currently only implemented on Windows, for DMD 2.072 or later.
 			@JSONOptional string dmdModel = CommonConfig.defaultModel;
 
-			/// Instead of downloading a pre-built binary DMD package,
-			/// build it from source starting with the last C++-only version.
-			@JSONOptional bool bootstrap;
+			/// How to build DMD versions written in D.
+			/// We can either download a pre-built binary DMD
+			/// package, or build an  earlier version from source
+			/// (e.g. starting with the last C++-only version.)
+			struct Bootstrap
+			{
+				/// Whether to download a pre-built D version,
+				/// or build one from source. If set, then build
+				/// from source according to the value of ver,
+				@JSONOptional bool fromSource = false;
+
+				/// Version specification.
+				/// When building from source, syntax can be defined
+				/// by outer application (see parseSpec method);
+				/// By default, it is understood as a version number,
+				/// such as "v2.070.2", which also doubles as a tag name.
+				@JSONOptional string ver = null;
+
+				/// Build configuration for the compiler used for bootstrapping.
+				/// If not set, then use the same build configuration as for the
+				/// target build. Used when fromSource is set.
+				@JSONOptional DManager.Config.Build* build;
+			}
+			@JSONOptional Bootstrap bootstrap; /// ditto
 
 			/// Use Visual C++ to build DMD instead of DMC.
 			/// Currently, this is a hack, as msbuild will consult the system
@@ -815,11 +836,9 @@ class DManager : ICacheHost
 			if (buildPath(sourceDir, "src", "idgen.d").exists)
 			{
 				// Required for bootstrapping.
-				auto dmdVersion = defaultDMDVersion;
-				version (Windows)
-					if (config.build.components.dmd.dmdModel != CommonConfig.defaultModel)
-						dmdVersion = "2.070.2"; // dmd/src/builtin.d needs core.stdc.math.fabsl. 2.068.2 generates a dmd which crashes on building Phobos
-				needDMD(env, dmdVersion);
+				needDMD(env);
+				// Go back to our commit.
+				needSource();
 			}
 
 			auto srcDir = buildPath(sourceDir, "src");
@@ -1831,37 +1850,58 @@ EOS";
 		Installer.installationDirectory = dlDir;
 	}
 
-	enum defaultDMDVersion = "2.067.1";
-
-	void needDMD(ref Environment env, string dmdVer = defaultDMDVersion)
-	{
-		needDMD(env, dmdVer, config.build.components.dmd.bootstrap);
-	}
-
-	void needDMD(ref Environment env, string dmdVer, bool bootstrap)
+	/// Pull in a built DMD as configured.
+	/// Note that this function invalidates the current repository state.
+	void needDMD(ref Environment env)
 	{
 		tempError++; scope(success) tempError--;
 
-		if (!env.deps.hostDC)
+		auto dmdVer = config.build.components.dmd.bootstrap.ver;
+		if (!dmdVer)
 		{
-			if (bootstrap)
-			{
-				log("Bootstrapping DMD " ~ dmdVer);
-				auto dir = buildPath(config.local.workDir, "bootstrap", "dmd-" ~ dmdVer);
-				void bootstrapDMDProxy(string target) { return bootstrapDMD(dmdVer, target); } // https://issues.dlang.org/show_bug.cgi?id=14580
-				cached!bootstrapDMDProxy(dir);
-				env.deps.hostDC = buildPath(dir, "bin", "dmd" ~ binExt);
-			}
-			else
-			{
-				log("Preparing DMD " ~ dmdVer);
-				needInstaller();
-				auto dmdInstaller = new DMDInstaller(dmdVer);
-				dmdInstaller.requireLocal(false);
-				env.deps.hostDC = dmdInstaller.exePath("dmd").absolutePath();
-			}
-			log("hostDC=" ~ env.deps.hostDC);
+			dmdVer = "v2.067.1";
+			version (Windows)
+				if (config.build.components.dmd.dmdModel != CommonConfig.defaultModel)
+					dmdVer = "v2.070.2"; // dmd/src/builtin.d needs core.stdc.math.fabsl. 2.068.2 generates a dmd which crashes on building Phobos
 		}
+
+		if (config.build.components.dmd.bootstrap.fromSource)
+		{
+			log("Bootstrapping DMD " ~ dmdVer);
+
+			// Back up and clear component state
+			enum backupTemplate = q{
+				auto VARBackup = this.VAR;
+				scope(exit) this.VAR = VARBackup;
+			};
+			mixin(backupTemplate.replace(q{VAR}, q{components}));
+			mixin(backupTemplate.replace(q{VAR}, q{config}));
+			mixin(backupTemplate.replace(q{VAR}, q{submoduleState}));
+
+			components = null;
+			if (config.build.components.dmd.bootstrap.build)
+				config.build = *config.build.components.dmd.bootstrap.build;
+			build(parseSpec(dmdVer));
+
+			auto bootstrapDir = buildPath(config.local.workDir, "bootstrap");
+			if (bootstrapDir.exists)
+				bootstrapDir.removeRecurse();
+			ensurePathExists(bootstrapDir);
+			rename(buildDir, bootstrapDir);
+
+			env.deps.hostDC = buildPath(bootstrapDir, "bin", "dmd" ~ binExt);
+		}
+		else
+		{
+			log("Preparing DMD " ~ dmdVer);
+			enforce(dmdVer.startsWith("v"), "Invalid DMD version spec for binary bootstrap. Did you forget to enable fromSource?");
+			needInstaller();
+			auto dmdInstaller = new DMDInstaller(dmdVer[1..$]);
+			dmdInstaller.requireLocal(false);
+			env.deps.hostDC = dmdInstaller.exePath("dmd").absolutePath();
+		}
+
+		log("hostDC=" ~ env.deps.hostDC);
 	}
 
 	void needKindleGen(ref Environment env)
@@ -1950,34 +1990,6 @@ EOS";
 		needInstaller();
 		curlInstaller.requireLocal(false);
 		return curlInstaller.directory;
-	}
-
-	final void bootstrapDMD(string ver, string target)
-	{
-		log("Bootstrapping DMD v" ~ ver);
-
-		// Back up and move out of the way the current build directory
-		auto tmpDir = buildDir ~ ".tmp-bootstrap-" ~ ver;
-		if (tmpDir.exists) tmpDir.rmdirRecurse();
-		if (buildDir.exists) buildDir.rename(tmpDir);
-		scope(exit) if (tmpDir.exists) tmpDir.rename(buildDir);
-
-		// Back up and clear component state
-		enum backupTemplate = q{
-			auto VARBackup = this.VAR;
-			scope(exit) this.VAR = VARBackup;
-		};
-		mixin(backupTemplate.replace(q{VAR}, q{components}));
-		mixin(backupTemplate.replace(q{VAR}, q{config}));
-
-		components = null;
-
-		getMetaRepo().needRepo();
-		auto rev = getMetaRepo().getRef("refs/tags/v" ~ ver);
-		log("Resolved v" ~ ver ~ " to " ~ rev);
-		buildRev(rev);
-		ensurePathExists(target);
-		rename(buildDir, target);
 	}
 
 	version (Windows)
@@ -2296,6 +2308,18 @@ EOS";
 	/// Override to add logging.
 	void log(string line)
 	{
+	}
+
+	/// Bootstrap description resolution.
+	/// See DMD.Config.Bootstrap.spec.
+	/// This is essentially a hack to allow the entire
+	/// Config structure to be parsed from an .ini file.
+	SubmoduleState parseSpec(string spec)
+	{
+		getMetaRepo().needRepo();
+		auto rev = getMetaRepo().getRef("refs/tags/" ~ spec);
+		log("Resolved " ~ spec ~ " to " ~ rev);
+		return begin(rev);
 	}
 
 	/// Override this method with one which returns a command,
