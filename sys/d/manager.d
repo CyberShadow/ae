@@ -906,6 +906,12 @@ class DManager : ICacheHost
 					dmdMakeFullName = srcDir.buildPath(dmdMakeFileName);
 					enforce(dmdMakeFullName.exists, "dmdModel not supported for this DMD version");
 					extraArgs ~= "DMODEL=-m" ~ config.build.components.dmd.dmdModel;
+					if (config.build.components.dmd.dmdModel == "32mscoff")
+					{
+						auto objFiles = dmdMakeFullName.readText().splitLines().filter!(line => line.startsWith("OBJ_MSVC="));
+						enforce(!objFiles.empty, "Can't find OBJ_MSVC in win64.mak");
+						extraArgs ~= "OBJ_MSVC=" ~ objFiles.front.findSplit("=")[2].split().filter!(obj => obj != "ldfpu.obj").join(" ");
+					}
 				}
 				else
 					throw new Exception("dmdModel is only supported on Windows");
