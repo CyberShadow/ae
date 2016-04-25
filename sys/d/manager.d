@@ -1861,7 +1861,7 @@ EOS";
 		{
 			dmdVer = "v2.067.1";
 			version (Windows)
-				if (config.build.components.dmd.dmdModel != CommonConfig.defaultModel)
+				if (config.build.components.dmd.dmdModel != Component.CommonConfig.defaultModel)
 					dmdVer = "v2.070.2"; // dmd/src/builtin.d needs core.stdc.math.fabsl. 2.068.2 generates a dmd which crashes on building Phobos
 		}
 
