@@ -475,7 +475,7 @@ void removeRecurse(string fn)
 	}
 	else
 	if (attr.attrIsDir)
-		fn.rmdirRecurse();
+		fn.forceDelete!(No.atomic)(Yes.recursive);
 	else
 		fn.remove();
 }
