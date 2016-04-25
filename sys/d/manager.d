@@ -1991,19 +1991,25 @@ EOS";
 	}
 
 	version (Windows)
-	static string msvcModelDir(string model, string dir64 = "x86_amd64")
+	static string msvcModelStr(string model, string str32, string str64)
 	{
 		switch (model)
 		{
 			case "32":
 				throw new Exception("Shouldn't need VC for 32-bit builds");
 			case "64":
-				return dir64;
+				return str64;
 			case "32mscoff":
-				return null;
+				return str32;
 			default:
 				throw new Exception("Unknown model: " ~ model);
 		}
+	}
+
+	version (Windows)
+	static string msvcModelDir(string model, string dir64 = "x86_amd64")
+	{
+		return msvcModelStr(model, null, dir64);
 	}
 
 	version (Windows)
@@ -2011,27 +2017,27 @@ EOS";
 	{
 		tempError++; scope(success) tempError--;
 
-		auto packages =
-		[
-			"vcRuntimeMinimum_x86",
-			"vcRuntimeMinimum_x64",
-			"vc_compilercore86",
-			"vc_compilercore86res",
-			"vc_compilerx64nat",
-			"vc_compilerx64natres",
-			"vc_librarycore86",
-			"vc_libraryDesktop_x86",
-			"vc_libraryDesktop_x64",
-			"win_xpsupport",
-		];
-		if (config.build.components.dmd.useVC)
-			packages ~= "Msi_BuildTools_MSBuild_x86";
-
 		auto vs = getVSInstaller();
-		vs.requirePackages(packages);
-		if (!vs.installedLocally)
-			log("Preparing Visual C++");
-		vs.requireLocal(false);
+
+		// At minimum, we want the C compiler (cl.exe) and linker (link.exe).
+		vs["vc_compilercore86"].requireLocal(false); // Contains both x86 and x86_amd64 cl.exe
+		vs["vc_compilercore86res"].requireLocal(false); // Contains clui.dll needed by cl.exe
+
+		// Include files. Needed when using VS to build either DMD or Druntime.
+		vs["vc_librarycore86"].requireLocal(false); // Contains include files, e.g. errno.h needed by Druntime
+
+		// C runtime. Needed for all programs built with VC.
+		vs[msvcModelStr(model, "vc_libraryDesktop_x86", "vc_libraryDesktop_x64")].requireLocal(false); // libcmt.lib
+
+		// XP-compatible import libraries.
+		vs["win_xpsupport"].requireLocal(false); // shell32.lib
+
+		// MSBuild, for the useVC option
+		if (config.build.components.dmd.useVC)
+			vs["Msi_BuildTools_MSBuild_x86"].requireLocal(false); // msbuild.exe
+
+		// These packages were previously pulled it, but it's not clear why:
+		// "vcRuntimeMinimum_x86", "vcRuntimeMinimum_x64", "vc_compilerx64nat", "vc_compilerx64natres"
 
 		env.deps.vsDir  = vs.directory.buildPath("Program Files (x86)", "Microsoft Visual Studio 12.0").absolutePath();
 		env.deps.sdkDir = vs.directory.buildPath("Program Files", "Microsoft SDKs", "Windows", "v7.1A").absolutePath();
