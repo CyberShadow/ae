@@ -1395,7 +1395,6 @@ EOS";
 		@property override string submoduleName() { return "dlang.org"; }
 		@property override string[] sourceDependencies() { return []; }
 		@property override string[] dependencies() { return ["dmd", "druntime", "phobos", "rdmd"]; }
-		@property override string configString() { return null; }
 
 		struct Config
 		{
@@ -1404,11 +1403,24 @@ EOS";
 			bool noDateTime = false;
 		}
 
+		@property override string configString()
+		{
+			static struct FullConfig
+			{
+				Config config;
+			}
+
+			return FullConfig(
+				config.build.components.website,
+			).toJson();
+		}
+
 		/// Get the latest version of DMD at the time.
 		/// Needed for the makefile's "LATEST" parameter.
 		string getLatest()
 		{
 			auto dmd = getComponent("dmd").submodule;
+			dmd.needRepo();
 
 			auto t = dmd.git.query(["log", "--pretty=format:%ct"]).splitLines.map!(to!int).filter!(n => n > 0).front;
 
@@ -1446,6 +1458,7 @@ EOS";
 					.replace("dpl-docs: ${DUB} ${STABLE_DMD}\n\tDFLAGS=", "dpl-docs: ${DUB} ${STABLE_DMD}\n\t${DUB} upgrade --missing-only --root=${DPL_DOCS_PATH}\n\tDFLAGS=")
 					.toFile(makeFullName)
 				;
+				submodule.saveFileState(makeFileName);
 
 				auto latest = getLatest;
 				log("LATEST=" ~ latest);
