@@ -475,7 +475,10 @@ void removeRecurse(string fn)
 	}
 	else
 	if (attr.attrIsDir)
-		fn.forceDelete!(No.atomic)(Yes.recursive);
+		version (Windows)
+			fn.forceDelete!(No.atomic)(Yes.recursive); // For read-only files
+		else
+			fn.rmdirRecurse();
 	else
 		fn.remove();
 }
