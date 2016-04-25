@@ -750,6 +750,7 @@ class DManager : ICacheHost
 		}
 	}
 
+	/// The dmd executable
 	final class DMD : Component
 	{
 		@property override string submoduleName  () { return "dmd"; }
@@ -1072,7 +1073,8 @@ EOS";
 		}
 	}
 
-	// In older versions of D, Druntime depended on Phobos modules.
+	/// Phobos import files.
+	/// In older versions of D, Druntime depended on Phobos modules.
 	final class PhobosIncludes : Component
 	{
 		@property override string submoduleName() { return "phobos"; }
@@ -1091,6 +1093,7 @@ EOS";
 		}
 	}
 
+	/// Druntime. Installs only import files, but builds the library too.
 	final class Druntime : Component
 	{
 		@property override string submoduleName    () { return "druntime"; }
@@ -1149,6 +1152,7 @@ EOS";
 		}
 	}
 
+	/// Phobos library and imports.
 	final class Phobos : Component
 	{
 		@property override string submoduleName    () { return "phobos"; }
@@ -1246,6 +1250,8 @@ EOS";
 		}
 	}
 
+	/// The rdmd build tool by itself.
+	/// It predates the tools package.
 	final class RDMD : Component
 	{
 		@property override string submoduleName() { return "tools"; }
@@ -1322,6 +1328,7 @@ EOS";
 		}
 	}
 
+	/// Tools package with all its components, including rdmd.
 	final class Tools : Component
 	{
 		@property override string submoduleName() { return "tools"; }
@@ -1363,6 +1370,7 @@ EOS";
 		}
 	}
 
+	/// Website (dlang.org). Only buildable on POSIX.
 	final class Website : Component
 	{
 		@property override string submoduleName() { return "dlang.org"; }
@@ -1442,6 +1450,7 @@ EOS";
 		}
 	}
 
+	/// Extras not built from source (DigitalMars and third-party tools and libraries)
 	final class Extras : Component
 	{
 		@property override string submoduleName() { return null; }
@@ -1495,6 +1504,7 @@ EOS";
 		}
 	}
 
+	/// libcurl DLL and import library for Windows.
 	final class Curl : Component
 	{
 		@property override string submoduleName() { return null; }
