@@ -17,6 +17,7 @@ dub.selections.json
 # demos - rdmd binaries
 /demo/http/httpserve
 /demo/pewpew/pewpew
+/demo/sqlite/exec
 
 # demos - dub binaries
 /demo/canvas/ae-demo-canvas
