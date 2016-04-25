@@ -248,7 +248,7 @@ class VisualStudioInstaller
 		{
 			windowsOnly();
 			auto target = directory ~ "." ~ packageName;
-			void installPackageImplProxy(string target) { installPackageImpl(target); }
+			void installPackageImplProxy(string target) { installPackageImpl(target); } // https://issues.dlang.org/show_bug.cgi?id=14580
 			atomic!installPackageImplProxy(target);
 			if (!directory.exists)
 				directory.mkdir();
