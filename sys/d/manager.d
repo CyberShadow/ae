@@ -839,6 +839,7 @@ class DManager : ICacheHost
 				needDMD(env);
 				// Go back to our commit.
 				needSource();
+				submodule.clean = false;
 			}
 
 			auto srcDir = buildPath(sourceDir, "src");
