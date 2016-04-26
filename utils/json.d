@@ -650,6 +650,7 @@ unittest
 unittest
 {
 	enum En { one, two }
+	assert(En.one.toJson() == `"one"`);
 	struct S { int i1, i2; S[] arr1, arr2; string[string] dic; En en; mixin NonSerialized!(i2, arr2); }
 	S s = S(42, 5, [S(1), S(2)], [S(3), S(4)], ["apple":"fruit", "pizza":"vegetable"], En.two);
 	auto s2 = jsonParse!S(toJson(s));
