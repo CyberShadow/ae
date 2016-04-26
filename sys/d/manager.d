@@ -1459,6 +1459,7 @@ EOS";
 					.toFile(makeFullName)
 				;
 				submodule.saveFileState(makeFileName);
+				scope(exit) submodule.saveFileState("dpl-docs/dub.selections.json");
 
 				auto latest = getLatest;
 				log("LATEST=" ~ latest);
