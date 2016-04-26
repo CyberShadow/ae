@@ -531,19 +531,19 @@ class DManager : ICacheHost
 
 					// tempDir might be removed by a dependency's build failure.
 					if (!tempDir.exists)
-						log("Not caching dependency build failure.");
+						log("Not caching %s dependency build failure.".format(name));
 					else
 					// Don't cache failed build results due to temporary/environment problems
 					if (failed && tempError > 0)
 					{
-						log("Not caching build failure due to temporary/environment error.");
+						log("Not caching %s build failure due to temporary/environment error.".format(name));
 						rmdirRecurse(tempDir);
 					}
 					else
 					// Don't cache failed build results during delve
 					if (failed && !cacheFailures)
 					{
-						log("Not caching failed build.");
+						log("Not caching failed %s build.".format(name));
 						rmdirRecurse(tempDir);
 					}
 					else
