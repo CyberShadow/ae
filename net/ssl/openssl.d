@@ -211,12 +211,15 @@ class OpenSSLAdapter : SSLAdapter
 		}
 	}
 
-	MemoryBIO r, w;
+	MemoryBIO r; // BIO for incoming ciphertext
+	MemoryBIO w; // BIO for outgoing ciphertext
 
 	override void onReadData(Data data)
 	{
+		debug(OPENSSL) stderr.writefln("OpenSSL: Got %d incoming bytes from network", data.length);
 		assert(r.data.length == 0, "Would clobber data");
 		r.set(data.contents);
+		debug(OPENSSL) stderr.writefln("OpenSSL: r.data.length = %d", r.data.length);
 
 		try
 		{
@@ -226,7 +229,9 @@ class OpenSSLAdapter : SSLAdapter
 			while (r.data.length)
 			{
 				static ubyte[4096] buf;
+				debug(OPENSSL) auto oldLength = r.data.length;
 				auto result = SSL_read(sslHandle, buf.ptr, buf.length);
+				debug(OPENSSL) stderr.writefln("OpenSSL: SSL_read ate %d bytes and spat out %d bytes", oldLength - r.data.length, result);
 				flushWritten();
 				if (result > 0)
 					super.onReadData(Data(buf[0..result]));
@@ -245,6 +250,45 @@ class OpenSSLAdapter : SSLAdapter
 		}
 	}
 
+	Data[] queue; /// Queue of outgoing plaintext
+
+	override void send(Data[] data, int priority = DEFAULT_PRIORITY)
+	{
+		foreach (datum; data)
+			if (datum.length)
+			{
+				debug(OPENSSL) stderr.writefln("OpenSSL: Got %d outgoing bytes from program", datum.length);
+				queue ~= datum;
+			}
+
+		flushQueue();
+	}
+
+	/// Encrypt outgoing plaintext
+	/// queue -> SSL_write -> w
+	void flushQueue()
+	{
+		while (queue.length)
+		{
+			debug(OPENSSL) auto oldLength = w.data.length;
+			auto result = SSL_write(sslHandle, queue[0].ptr, queue[0].length.to!int);
+			debug(OPENSSL) stderr.writefln("OpenSSL: SSL_write ate %d bytes and spat out %d bytes", queue[0].length, w.data.length - oldLength);
+			if (result > 0)
+			{
+				queue[0] = queue[0][result..$];
+				if (!queue[0].length)
+					queue = queue[1..$];
+			}
+			else
+			{
+				sslError(result, "SSL_write");
+				break;
+			}
+		}
+		flushWritten();
+	}
+
+	/// Flush any accumulated outgoing ciphertext to the network
 	void flushWritten()
 	{
 		if (w.data.length)
@@ -252,17 +296,6 @@ class OpenSSLAdapter : SSLAdapter
 			next.send([Data(w.data)]);
 			w.clear();
 		}
-	}
-
-	Data[] queue;
-
-	override void send(Data[] data, int priority = DEFAULT_PRIORITY)
-	{
-		foreach (datum; data)
-			if (datum.length)
-				queue ~= datum;
-
-		flushQueue();
 	}
 
 	override void disconnect(string reason, DisconnectType type)
@@ -281,26 +314,6 @@ class OpenSSLAdapter : SSLAdapter
 	}
 
 	alias send = super.send;
-
-	void flushQueue()
-	{
-		while (queue.length)
-		{
-			auto result = SSL_write(sslHandle, queue[0].ptr, queue[0].length.to!int);
-			if (result > 0)
-			{
-				queue[0] = queue[0][result..$];
-				if (!queue[0].length)
-					queue = queue[1..$];
-			}
-			else
-			{
-				sslError(result, "SSL_write");
-				break;
-			}
-		}
-		flushWritten();
-	}
 
 	void sslError(int ret, string msg)
 	{
