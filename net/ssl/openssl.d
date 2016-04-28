@@ -275,9 +275,9 @@ class OpenSSLAdapter : SSLAdapter
 			debug(OPENSSL) stderr.writefln("OpenSSL: SSL_write ate %d bytes and spat out %d bytes", queue[0].length, w.data.length - oldLength);
 			if (result > 0)
 			{
-				queue[0] = queue[0][result..$];
-				if (!queue[0].length)
-					queue = queue[1..$];
+				// "SSL_write() will only return with success, when the
+				// complete contents of buf of length num has been written."
+				queue = queue[1..$];
 			}
 			else
 			{
