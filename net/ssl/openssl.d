@@ -226,7 +226,7 @@ class OpenSSLAdapter : SSLAdapter
 			if (queue.length)
 				flushQueue();
 
-			while (r.data.length)
+			while (true)
 			{
 				static ubyte[4096] buf;
 				debug(OPENSSL) auto oldLength = r.data.length;
