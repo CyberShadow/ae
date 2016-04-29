@@ -376,7 +376,7 @@ mixin template GenerateContructorProxies()
 	mixin(() {
 		import std.conv : text;
 		import std.string : join;
-		import std.traits : ParameterTypeTuple;
+		import std.traits : ParameterTypeTuple, fullyQualifiedName;
 
 		alias T = typeof(super);
 
@@ -388,7 +388,7 @@ mixin template GenerateContructorProxies()
 				foreach (i, param; ParameterTypeTuple!(typeof(&ctor)))
 				{
 					auto varName = "v" ~ text(i);
-					declarationList ~= param.stringof ~ " " ~ varName;
+					declarationList ~= fullyQualifiedName!param ~ " " ~ varName;
 					usageList ~= varName;
 				}
 				s ~= "this(" ~ declarationList.join(", ") ~ ") { super(" ~ usageList.join(", ") ~ "); }\n";
