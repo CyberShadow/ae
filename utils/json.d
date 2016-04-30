@@ -345,6 +345,23 @@ private struct JsonParser(C)
 			return Nullable!T(read!T);
 	}
 
+	C[] readSimpleString() /// i.e. without escapes
+	{
+		skipWhitespace();
+		expect('"');
+		auto start = p;
+		while (true)
+		{
+			auto c = next();
+			if (c=='"')
+				break;
+			else
+			if (c=='\\')
+				throw new Exception("Unexpected escaped character");
+		}
+		return s[start..p-1];
+	}
+
 	string readString()
 	{
 		skipWhitespace();
@@ -460,7 +477,7 @@ private struct JsonParser(C)
 		auto start = p;
 		char c = peek();
 		if (c == '"')
-			n = readString();
+			n = readSimpleString();
 		else
 		{
 			while (c=='+' || c=='-' || (c>='0' && c<='9') || c=='e' || c=='E' || c=='.')
@@ -516,8 +533,8 @@ private struct JsonParser(C)
 
 		while (true)
 		{
-			string jsonField = readString();
-			mixin(exceptionContext(q{"Error with field " ~ jsonField}));
+			auto jsonField = readSimpleString();
+			mixin(exceptionContext(q{"Error with field " ~ to!string(jsonField)}));
 			skipWhitespace();
 			expect(':');
 
@@ -578,7 +595,7 @@ private struct JsonParser(C)
 
 	T readEnum(T)()
 	{
-		return to!T(readString());
+		return to!T(readSimpleString());
 	}
 
 	T readPointer(T)()
