@@ -13,6 +13,7 @@
 
 module ae.net.sync;
 
+import core.atomic;
 import core.thread;
 
 import std.exception;
@@ -58,10 +59,13 @@ private:
 
 	alias Dg = void delegate();
 
+	enum queueSize = 1024;
+
 	final static class AnchorSocket : TcpConnection
 	{
 		Socket pinger;
-		Dg[] queue;
+		Dg[queueSize] queue;
+		shared size_t readIndex, writeIndex;
 
 		this()
 		{
@@ -79,8 +83,7 @@ private:
 
 			foreach (cmd; cast(Command[])data.contents)
 			{
-				Dg dg;
-				synchronized(this) dg = queue.shift();
+				Dg dg = queue[readIndex.atomicOp!"+="(1)-1 % $];
 				switch (cmd)
 				{
 					case Command.runAsync:
@@ -102,25 +105,37 @@ private:
 
 	AnchorSocket socket;
 
+	void sendCommand(Command command) nothrow @nogc
+	{
+		// https://github.com/dlang/phobos/pull/4273
+		(cast(void delegate(Command) nothrow @nogc)&sendCommandImpl)(command);
+	}
+
+	void sendCommandImpl(Command command)
+	{
+		Command[1] data;
+		data[0] = command;
+		socket.pinger.send(data[]);
+	}
+
 public:
 	this()
 	{
 		socket = new AnchorSocket();
 	}
 
-	void runAsync(Dg dg)
+	void runAsync(Dg dg) nothrow @nogc
 	{
-		synchronized(socket) socket.queue ~= dg;
-		Command[] data = [Command.runAsync];
-		socket.pinger.send(data);
+		socket.queue[socket.writeIndex.atomicOp!"+="(1)-1 % $] = dg;
+		sendCommand(Command.runAsync);
 	}
 
 	void runWait(Dg dg)
 	{
-		synchronized(socket) socket.queue ~= dg;
-		Command[] data = [Command.runWait];
-		socket.pinger.send(data);
-		data = [Command.none];
+		socket.queue[socket.writeIndex.atomicOp!"+="(1)-1 % $] = dg;
+		sendCommand(Command.runWait);
+
+		Command[] data = [Command.none];
 		data = data[0..socket.pinger.receive(data)];
 		enforce(data.length && data[0] == Command.runWaitDone, "runWait error");
 	}
