@@ -17,6 +17,12 @@
  *   Vladimir Panteleev <vladimir@thecybershadow.net>
  */
 
+// TODO: Unify addShutdownHandler under a common API.
+// The host program should decide which shutdown
+// driver to use.
+
+// TODO: Add shuttingDown property
+
 module ae.net.shutdown;
 
 void addShutdownHandler(void delegate() fn)
