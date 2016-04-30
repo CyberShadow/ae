@@ -361,14 +361,14 @@ void forceDelete(Flag!"atomic" atomic=Yes.atomic)(string fn, Flag!"recursive" re
 		bool tryMoveTo(string target)
 		{
 			target = target.longPath();
-			if (target.endsWith(`\`))
+			if (target.endsWith(dirSeparator))
 				target = target[0..$-1];
 			if (target.length && !target.exists)
 				return false;
 
 			string newfn;
 			do
-				newfn = format("%s\\deleted-%s.%s.%s", target, name, thisProcessID, randomString());
+				newfn = format("%s%sdeleted-%s.%s.%s", target, dirSeparator, name, thisProcessID, randomString());
 			while (newfn.exists);
 
 			version(Windows)
