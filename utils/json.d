@@ -353,6 +353,7 @@ private struct JsonParser(C)
 		{
 			next(); // '"'
 			string result;
+			auto start = p;
 			while (true)
 			{
 				c = next();
@@ -360,6 +361,8 @@ private struct JsonParser(C)
 					break;
 				else
 				if (c=='\\')
+				{
+					result ~= s[start..p-1];
 					switch (next())
 					{
 						case '"':  result ~= '"'; break;
@@ -386,9 +389,10 @@ private struct JsonParser(C)
 						}
 						default: enforce(false, "Unknown escape");
 					}
-				else
-					result ~= c;
+					start = p;
+				}
 			}
+			result ~= s[start..p-1];
 			return result;
 		}
 		else
@@ -413,10 +417,10 @@ private struct JsonParser(C)
 				'E':true,
 			];
 
-			string s;
+			auto start = p;
 			while (c=peek(), numeric[c])
-				s ~= c, p++;
-			return s;
+				p++;
+			return s[start..p].idup;
 		}
 		else
 		{
@@ -452,19 +456,23 @@ private struct JsonParser(C)
 	{
 		skipWhitespace();
 		T v;
-		string s;
+		const(char)[] n;
+		auto start = p;
 		char c = peek();
 		if (c == '"')
-			s = readString();
+			n = readString();
 		else
+		{
 			while (c=='+' || c=='-' || (c>='0' && c<='9') || c=='e' || c=='E' || c=='.')
 			{
-				s ~= c, p++;
+				p++;
 				if (eof) break;
 				c=peek();
 			}
+			n = s[start..p];
+		}
 		static if (is(T : real))
-			return to!T(s);
+			return to!T(n);
 		else
 			static assert(0, "Don't know how to parse numerical type " ~ T.stringof);
 	}
