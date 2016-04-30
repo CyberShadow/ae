@@ -64,10 +64,10 @@ final class ShutdownConnection : TcpConnection
 		this.daemon = true;
 	}
 
-	void ping()
+	void ping() //@nogc
 	{
-		ubyte[] data = [42];
-		pinger.send(data);
+		static immutable ubyte[1] data = [42];
+		pinger.send(data[]);
 	}
 
 	void onShutdown()
