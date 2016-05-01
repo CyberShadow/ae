@@ -476,6 +476,8 @@ class ManagedRepository
 	/// This should be called after any git command which mutates the git state.
 	void saveState()
 	{
+		if (!verify)
+			return;
 		std.file.write(workTreeStatePath, getState().toJson());
 	}
 
