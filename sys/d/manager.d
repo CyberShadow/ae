@@ -36,6 +36,8 @@ import ae.utils.digest;
 import ae.utils.json;
 import ae.utils.regex;
 
+alias ensureDirExists = ae.sys.file.ensureDirExists;
+
 version (Windows)
 {
 	import ae.sys.install.dmc;
