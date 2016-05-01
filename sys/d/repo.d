@@ -38,6 +38,9 @@ class ManagedRepository
 	/// Should we fetch the latest stuff?
 	public bool offline;
 
+	/// Verify working tree state to make sure we don't clobber user changes?
+	public bool verify;
+
 	/// Ensure we have a repository.
 	public void needRepo()
 	{
@@ -440,6 +443,7 @@ class ManagedRepository
 
 	FileState getFileState(string file)
 	{
+		assert(verify);
 		auto path = git.path.buildPath(file);
 		auto de = DirEntry(path);
 		return FileState(de.size, de.timeLastModified.stdTime);
@@ -451,6 +455,7 @@ class ManagedRepository
 	/// This returns a file list, along with size and modification time.
 	RepositoryState getState()
 	{
+		assert(verify);
 		needRepo();
 		auto files = git.query(["ls-files"]).splitLines();
 		RepositoryState state;
@@ -461,6 +466,7 @@ class ManagedRepository
 
 	private @property string workTreeStatePath()
 	{
+		assert(verify);
 		needRepo();
 		return buildPath(git.gitDir, "ae-sys-d-worktree.json");
 	}
@@ -478,6 +484,8 @@ class ManagedRepository
 	/// The file parameter should be relative to the directory root, and use forward slashes.
 	void saveFileState(string file)
 	{
+		if (!verify)
+			return;
 		if (!workTreeStatePath.exists)
 			return;
 		auto state = workTreeStatePath.readText.jsonParse!RepositoryState();
@@ -491,6 +499,8 @@ class ManagedRepository
 	/// which destroys working directory changes.
 	void checkState()
 	{
+		if (!verify)
+			return;
 		if (!workTreeStatePath.exists)
 			return;
 		auto savedState = workTreeStatePath.readText.jsonParse!RepositoryState();
@@ -510,6 +520,8 @@ class ManagedRepository
 	/// Delete the saved working tree state, if any.
 	void clearState()
 	{
+		if (!verify)
+			return;
 		if (workTreeStatePath.exists)
 			workTreeStatePath.remove();
 	}
