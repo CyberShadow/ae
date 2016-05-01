@@ -119,6 +119,10 @@ class DManager : ICacheHost
 	/// "git reset --hard" fails.
 	bool autoClean;
 
+	/// Whether to verify working tree state
+	/// to make sure we don't clobber user changes
+	bool verifyWorkTree;
+
 	/// Whether we should cache failed builds.
 	bool cacheFailures = true;
 
@@ -182,6 +186,7 @@ class DManager : ICacheHost
 		this()
 		{
 			this.offline = config.local.offline;
+			this.verify = this.outer.verifyWorkTree;
 		}
 
 		override void log(string s) { return this.outer.log(s); }
