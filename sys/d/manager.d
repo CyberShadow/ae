@@ -1297,7 +1297,7 @@ EOS";
 
 		override void performBuild()
 		{
-			foreach (dep; ["dmd", "druntime", "phobos"])
+			foreach (dep; ["dmd", "druntime", "phobos", "phobos-includes"])
 				getComponent(dep).needInstalled();
 
 			auto env = baseEnvironment;
@@ -1344,7 +1344,7 @@ EOS";
 					return;
 				}
 
-			foreach (dep; ["dmd", "druntime", "phobos"])
+			foreach (dep; ["dmd", "druntime", "phobos", "phobos-includes"])
 				getComponent(dep).needInstalled();
 
 			auto env = baseEnvironment;
