@@ -1229,8 +1229,8 @@ EOS";
 					exists(getComponent("druntime").sourceDir.buildPath("generated")))
 				{
 					auto dir = getComponent("druntime").sourceDir.buildPath("generated");
-					auto aFile  = dir.dirEntries("libdruntime*.a", SpanMode.depth).filter!(de => !de.name.canFind(".so."));
-					auto soFile = dir.dirEntries("libdruntime*.so.a", SpanMode.depth);
+					auto aFile  = dir.dirEntries("libdruntime.a", SpanMode.depth);
+					auto soFile = dir.dirEntries("libdruntime.so.a", SpanMode.depth);
 					if (!aFile.empty && !soFile.empty)
 						makeArgs ~= [
 							"DRUNTIME="   ~ aFile .front,
