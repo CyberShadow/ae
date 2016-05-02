@@ -1211,17 +1211,33 @@ EOS";
 			needCC(env, config.build.components.common.model);
 
 			string phobosMakeFileName = findMakeFile(sourceDir, makeFileNameModel);
+			string phobosMakeFullName = sourceDir.buildPath(phobosMakeFileName);
+
+			auto makeArgs = getMake(env) ~ ["-f", phobosMakeFileName, "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs;
 
 			version (Windows)
 			{
 				auto lib = "phobos%s.lib".format(modelSuffix);
-				run(getMake(env) ~ ["-f", phobosMakeFileName, lib, "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
+				run(makeArgs ~ lib, env.vars, sourceDir);
 				enforce(sourceDir.buildPath(lib).exists);
 				targets = ["phobos%s.lib".format(modelSuffix)];
 			}
 			else
 			{
-				run(getMake(env) ~ ["-f", phobosMakeFileName,      "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
+				if (phobosMakeFullName.readText().canFind("DRUNTIME = $(DRUNTIME_PATH)/lib/libdruntime-$(OS)$(MODEL).a") &&
+					getComponent("druntime").sourceDir.buildPath("lib").dirEntries(SpanMode.shallow).walkLength == 0 &&
+					exists(getComponent("druntime").sourceDir.buildPath("generated")))
+				{
+					auto dir = getComponent("druntime").sourceDir.buildPath("generated");
+					auto aFile  = dir.dirEntries("libdruntime.a", SpanMode.depth);
+					auto soFile = dir.dirEntries("libdruntime.so.a", SpanMode.depth);
+					if (!aFile.empty && !soFile.empty)
+						makeArgs ~= [
+							"DRUNTIME="   ~ aFile .front,
+							"DRUNTIMESO=" ~ soFile.front,
+						];
+				}
+				run(makeArgs, env.vars, sourceDir);
 				targets = sourceDir
 					.buildPath("generated")
 					.dirEntries(SpanMode.depth)
