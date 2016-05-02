@@ -1230,12 +1230,9 @@ EOS";
 				{
 					auto dir = getComponent("druntime").sourceDir.buildPath("generated");
 					auto aFile  = dir.dirEntries("libdruntime.a", SpanMode.depth);
+					if (!aFile .empty) makeArgs ~= ["DRUNTIME="   ~ aFile .front];
 					auto soFile = dir.dirEntries("libdruntime.so.a", SpanMode.depth);
-					if (!aFile.empty && !soFile.empty)
-						makeArgs ~= [
-							"DRUNTIME="   ~ aFile .front,
-							"DRUNTIMESO=" ~ soFile.front,
-						];
+					if (!soFile.empty) makeArgs ~= ["DRUNTIMESO=" ~ soFile.front];
 				}
 				run(makeArgs, env.vars, sourceDir);
 				targets = sourceDir
