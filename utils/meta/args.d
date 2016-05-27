@@ -43,7 +43,7 @@ if (is(typeof(fun) == function))
 			{
 				enum name = __traits(identifier, PT);
 				foreach (i, argName; names)
-					if (name == argName)
+					static if (name == argName)
 						args[i] = fun(DummyType.init);
 			}
 			else
@@ -93,7 +93,7 @@ if (is(S == struct))
 			{
 				enum name = __traits(identifier, PT);
 				foreach (i, field; s.tupleof)
-					if (__traits(identifier, S.tupleof[i]) == name)
+					static if (__traits(identifier, S.tupleof[i]) == name)
 						s.tupleof[i] = fun(DummyType.init);
 			}
 			else
