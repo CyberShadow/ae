@@ -18,6 +18,9 @@ import std.traits;
 // Inspired by
 // http://forum.dlang.org/post/awjuoemsnmxbfgzhgkgx@forum.dlang.org
 
+/// Simulates named arguments for function calls.
+/// Accepts arguments as lambdas (name => value) on the template parameter list,
+/// and positional arguments on the runtime parameter list (see examples below).
 template args(alias fun, dgs...)
 if (is(typeof(fun) == function))
 {
@@ -50,6 +53,7 @@ if (is(typeof(fun) == function))
 	}
 }
 
+///
 unittest
 {
 	static int fun(int a=1, int b=2, int c=3, int d=4, int e=5)
@@ -62,6 +66,7 @@ unittest
 	assert(args!(fun, b=>3, d=>3) == 15);
 }
 
+/// Mixing named and positional arguments
 unittest
 {
 	static int fun(int a, int b=2, int c=3, int d=4, int e=5)
@@ -73,6 +78,7 @@ unittest
 	assert(args!(fun, b=>3)(1) == 16);
 }
 
+/// Simulates named arguments for struct literals.
 template args(S, dgs...)
 if (is(S == struct))
 {
