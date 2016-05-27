@@ -912,7 +912,7 @@ public:
 			{
 				assert(conn, "Attempting to disconnect on an uninitialized socket");
 				// queue disconnect after all data is sent
-				debug (ASOCKETS) writefln("[%s] Queueing disconnect: %s", remoteAddress, reason);
+				debug (ASOCKETS) writefln("[%s] Queueing disconnect: %s", remoteAddressStr, reason);
 				state = ConnectionState.disconnecting;
 				//setIdleTimeout(30.seconds);
 				if (disconnectHandler)
