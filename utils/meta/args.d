@@ -72,3 +72,40 @@ unittest
 	assert(args!(fun)(1) == 15);
 	assert(args!(fun, b=>3)(1) == 16);
 }
+
+template args(S, dgs...)
+if (is(S == struct))
+{
+	@property S args()
+	{
+		S s;
+		foreach (dg; dgs)
+		{
+			alias DummyType = int; // anything goes
+			alias fun = dg!DummyType;
+			static if (is(FunctionTypeOf!fun PT == __parameters))
+			{
+				enum name = __traits(identifier, PT);
+				foreach (i, field; s.tupleof)
+					if (__traits(identifier, S.tupleof[i]) == name)
+						s.tupleof[i] = fun(DummyType.init);
+			}
+			else
+				static assert(false, "Failed to extract parameter name from " ~ fun.stringof);
+		}
+		return s;
+	}
+}
+
+unittest
+{
+	static struct S
+	{
+		int a = 1, b = 2, c = 3, d = 4, e = 5;
+		@property int sum() { return a + b + c + d + e; }
+	}
+
+	assert(args!(S).sum == 15);
+	assert(args!(S, b=>3).sum == 16);
+	assert(args!(S, b=>3, d=>3).sum == 15);
+}
