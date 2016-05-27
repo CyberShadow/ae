@@ -688,8 +688,7 @@ interface IConnection
 
 // ***************************************************************************
 
-/// An asynchronous TCP connection.
-class TcpConnection : GenericSocket, IConnection
+class StreamConnection : GenericSocket, IConnection
 {
 private:
 	/// Blocks of data larger than this value are passed as unmanaged memory
@@ -711,6 +710,9 @@ public:
 	override @property ConnectionState state() { return _state; }
 
 protected:
+	abstract sizediff_t doSend(in void[] buffer);
+	abstract sizediff_t doReceive(void[] buffer);
+
 	/// The send buffers.
 	Data[][MAX_PRIORITY+1] outQueue;
 	/// Whether the first item from each queue has been partially sent (and thus can't be cancelled).
@@ -742,7 +744,7 @@ protected:
 	{
 		// TODO: use FIONREAD when Phobos gets ioctl support (issue 6649)
 		static ubyte[0x10000] inBuffer;
-		auto received = conn.receive(inBuffer);
+		auto received = doReceive(inBuffer);
 
 		if (received == 0)
 			return disconnect("Connection closed", DisconnectType.graceful);
@@ -831,7 +833,7 @@ protected:
 				ptrdiff_t sent = 0;
 				if (pdata.length)
 				{
-					sent = conn.send(pdata.contents);
+					sent = doSend(pdata.contents);
 					debug (ASOCKETS) writefln("\t\t%s: sent %d/%d bytes", this, sent, pdata.length);
 				}
 				else
@@ -882,15 +884,6 @@ protected:
 	/// Called when an error occurs on the socket.
 	override void onError(string reason)
 	{
-		if (state == ConnectionState.connecting && addressQueue.length)
-		{
-			socketManager.unregister(this);
-			conn.close();
-			conn = null;
-
-			return tryNextAddress();
-		}
-
 		if (state == ConnectionState.disconnecting)
 		{
 			debug (ASOCKETS) writefln("Socket error while disconnecting @ %s: %s".format(cast(void*)this, reason));
@@ -901,69 +894,11 @@ protected:
 		disconnect("Socket error: " ~ reason, DisconnectType.error);
 	}
 
-	final void tryNextAddress()
+	this()
 	{
-		assert(state == ConnectionState.connecting);
-		auto address = addressQueue[0];
-		addressQueue = addressQueue[1..$];
-
-		try
-		{
-			conn = new Socket(address.addressFamily(), SocketType.STREAM, ProtocolType.TCP);
-			conn.blocking = false;
-
-			socketManager.register(this);
-			updateFlags();
-			debug (ASOCKETS) writefln("Attempting connection to %s", address.toString());
-			conn.connect(address);
-		}
-		catch (SocketException e)
-			return onError("Connect error: " ~ e.msg);
 	}
 
 public:
-	/// Default constructor
-	this()
-	{
-		debug (ASOCKETS) writefln("New TcpConnection @ %s", cast(void*)this);
-	}
-
-	/// Start establishing a connection.
-	final void connect(string host, ushort port)
-	{
-		assert(host.length, "Empty host");
-		assert(port, "No port specified");
-
-		debug (ASOCKETS) writefln("Connecting to %s:%s", host, port);
-		assert(state == ConnectionState.disconnected, "Attempting to connect on a %s socket".format(state));
-		assert(!conn);
-
-		state = ConnectionState.resolving;
-
-		try
-		{
-			addressQueue = getAddress(host, port);
-			enforce(addressQueue.length, "No addresses found");
-			debug (ASOCKETS)
-			{
-				writefln("Resolved to %s addresses:", addressQueue.length);
-				foreach (address; addressQueue)
-					writefln("- %s", address.toString());
-			}
-
-			state = ConnectionState.connecting;
-			if (addressQueue.length > 1)
-			{
-				import std.random : randomShuffle;
-				randomShuffle(addressQueue);
-			}
-		}
-		catch (SocketException e)
-			return onError("Lookup error: " ~ e.msg);
-
-		tryNextAddress();
-	}
-
 	/// Close a connection. If there is queued data waiting to be sent, wait until it is sent before disconnecting.
 	/// The disconnect handler will be called when all data has been flushed.
 	void disconnect(string reason = defaultDisconnectReason, DisconnectType type = DisconnectType.requested)
@@ -1092,6 +1027,102 @@ public:
 	private DisconnectHandler disconnectHandler;
 	/// Callback for when a connection was closed.
 	@property final void handleDisconnect(DisconnectHandler value) { disconnectHandler = value; updateFlags(); }
+}
+
+// ***************************************************************************
+
+/// An asynchronous TCP connection.
+class TcpConnection : StreamConnection
+{
+protected:
+	override sizediff_t doSend(in void[] buffer)
+	{
+		return conn.send(buffer);
+	}
+
+	override sizediff_t doReceive(void[] buffer)
+	{
+		return conn.receive(buffer);
+	}
+
+	final void tryNextAddress()
+	{
+		assert(state == ConnectionState.connecting);
+		auto address = addressQueue[0];
+		addressQueue = addressQueue[1..$];
+
+		try
+		{
+			conn = new Socket(address.addressFamily(), SocketType.STREAM, ProtocolType.TCP);
+			conn.blocking = false;
+
+			socketManager.register(this);
+			updateFlags();
+			debug (ASOCKETS) writefln("Attempting connection to %s", address.toString());
+			conn.connect(address);
+		}
+		catch (SocketException e)
+			return onError("Connect error: " ~ e.msg);
+	}
+
+	/// Called when an error occurs on the socket.
+	override void onError(string reason)
+	{
+		if (state == ConnectionState.connecting && addressQueue.length)
+		{
+			socketManager.unregister(this);
+			conn.close();
+			conn = null;
+
+			return tryNextAddress();
+		}
+
+		super.onError(reason);
+	}
+
+public:
+	/// Default constructor
+	this()
+	{
+		debug (ASOCKETS) writefln("New TcpConnection @ %s", cast(void*)this);
+	}
+
+	/// Start establishing a connection.
+	final void connect(string host, ushort port)
+	{
+		assert(host.length, "Empty host");
+		assert(port, "No port specified");
+
+		debug (ASOCKETS) writefln("Connecting to %s:%s", host, port);
+		assert(state == ConnectionState.disconnected, "Attempting to connect on a %s socket".format(state));
+		assert(!conn);
+
+		state = ConnectionState.resolving;
+
+		try
+		{
+			addressQueue = getAddress(host, port);
+			enforce(addressQueue.length, "No addresses found");
+			debug (ASOCKETS)
+			{
+				writefln("Resolved to %s addresses:", addressQueue.length);
+				foreach (address; addressQueue)
+					writefln("- %s", address.toString());
+			}
+
+			state = ConnectionState.connecting;
+			if (addressQueue.length > 1)
+			{
+				import std.random : randomShuffle;
+				randomShuffle(addressQueue);
+			}
+		}
+		catch (SocketException e)
+			return onError("Lookup error: " ~ e.msg);
+
+		tryNextAddress();
+	}
+
 }
 
 // ***************************************************************************
