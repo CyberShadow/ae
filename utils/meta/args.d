@@ -1,5 +1,5 @@
 /**
- * Named method arguments
+ * Named method and struct literal arguments
  *
  * License:
  *   This Source Code Form is subject to the terms of
