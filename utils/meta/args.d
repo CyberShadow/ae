@@ -35,9 +35,11 @@ if (is(typeof(fun) == function))
 			static if (i >= posArgs.length)
 				args[i] = ParameterDefaults!fun[i];
 
+		// anything works here, but use a custom type to avoid user errors
+		static struct DummyType {}
+
 		foreach (dg; dgs)
 		{
-			alias DummyType = int; // anything goes
 			alias fun = dg!DummyType;
 			static if (is(FunctionTypeOf!fun PT == __parameters))
 			{
@@ -85,9 +87,12 @@ if (is(S == struct))
 	@property S args()
 	{
 		S s;
+
+		// anything works here, but use a custom type to avoid user errors
+		static struct DummyType {}
+
 		foreach (dg; dgs)
 		{
-			alias DummyType = int; // anything goes
 			alias fun = dg!DummyType;
 			static if (is(FunctionTypeOf!fun PT == __parameters))
 			{
@@ -114,4 +119,6 @@ unittest
 	assert(args!(S).sum == 15);
 	assert(args!(S, b=>3).sum == 16);
 	assert(args!(S, b=>3, d=>3).sum == 15);
+
+	static assert(!is(typeof(args!(S, b=>b))));
 }
