@@ -1035,6 +1035,11 @@ public:
 class TcpConnection : StreamConnection
 {
 protected:
+	this(Socket conn)
+	{
+		super(conn);
+	}
+
 	override sizediff_t doSend(in void[] buffer)
 	{
 		return conn.send(buffer);
