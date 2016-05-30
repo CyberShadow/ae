@@ -272,8 +272,6 @@ void putTime(S)(ref S sink, SysTime t, string fmt)
 	putTimeImpl!fmt(sink, t);
 }
 
-deprecated alias format = formatTime;
-
 /// ditto
 deprecated void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime())
 	if (IsStringSink!S)
