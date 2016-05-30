@@ -1031,6 +1031,36 @@ public:
 
 // ***************************************************************************
 
+/// A POSIX file stream.
+/// Allows adding a file (e.g. stdin/stdout) to the socket manager.
+/// Does not dup the given file descriptor, so "disconnecting" this connection
+/// will close it.
+version (Posix)
+class FileConnection : StreamConnection
+{
+	this(int fileno)
+	{
+		auto conn = new Socket(cast(socket_t)fileno, AddressFamily.UNSPEC);
+		conn.blocking = false;
+		super(conn);
+	}
+
+protected:
+	import core.sys.posix.unistd : read, write;
+
+	override sizediff_t doSend(in void[] buffer)
+	{
+		return write(socket.handle, buffer.ptr, buffer.length);
+	}
+
+	override sizediff_t doReceive(void[] buffer)
+	{
+		return read(socket.handle, buffer.ptr, buffer.length);
+	}
+}
+
+// ***************************************************************************
+
 /// An asynchronous TCP connection.
 class TcpConnection : StreamConnection
 {
