@@ -19,8 +19,8 @@
 /// To allow state, each functor can be represented
 /// as a struct.
 
-/// Functors return a bool, true if iteration should
-/// continue.
+/// Functors return a bool (true if iteration should
+/// stop, false if it should continue).
 
 module ae.utils.meta.chains;
 
@@ -29,7 +29,7 @@ unittest
 {
 	int a = 2;
 	int x;
-	chainIterator(chainFilter!(n => n > a)((int n) => (x = n, false)))(1, 2, 3);
+	chainIterator(chainFilter!(n => n > a)((int n) => (x = n, true)))(1, 2, 3);
 	assert(x == 3);
 }
 
@@ -51,9 +51,9 @@ struct ChainIterator(Next)
 	bool opCall(Args...)(auto ref Args args)
 	{
 		foreach (ref arg; args)
-			if (!next(arg))
-				return false;
-		return true;
+			if (next(arg))
+				return true;
+		return false;
 	}
 }
 static template chainIterator(Next) /// ditto
@@ -77,7 +77,7 @@ unittest
 	S s;
 
 	int[] results;
-	chainIterator((long n) => (results ~= cast(int)n, true))(s.tupleof);
+	chainIterator((long n) => (results ~= cast(int)n, false))(s.tupleof);
 	assert(results == [1, 2, 3]);
 }
 
@@ -112,7 +112,7 @@ struct ChainFilter(alias pred, Next)
 	{
 		if (pred(v))
 			return next(v);
-		return true;
+		return false;
 	}
 }
 template chainFilter(alias pred) /// ditto
@@ -132,7 +132,7 @@ unittest
 	int b = 3;
 	int[] results;
 	foreach (i; 0..10)
-		chainFilter!(n => n % a == 0)(chainFilter!(n => n % b == 0)((int n) => (results ~= n, true)))(i);
+		chainFilter!(n => n % a == 0)(chainFilter!(n => n % b == 0)((int n) => (results ~= n, false)))(i);
 	assert(results == [0, 6]);
 }
 
@@ -160,6 +160,6 @@ template chainMap(alias pred) /// ditto
 unittest
 {
 	int result;
-	chainMap!(n => n+1)(chainMap!(n => n * 2)((int n) => (result = n, true)))(2);
+	chainMap!(n => n+1)(chainMap!(n => n * 2)((int n) => (result = n, false)))(2);
 	assert(result == 6);
 }
