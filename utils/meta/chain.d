@@ -33,20 +33,35 @@ unittest
 	assert(x == 3);
 }
 
-// Work around egregious "cannot access frame pointer" errors
-// TODO: File DMD bug
-struct VoidProxy(T)
+unittest
 {
-	void[T.sizeof] _VoidProxy_data;
+	static struct X
+	{
+		bool fun(int x)
+		{
+			return chainIterator(chainFunctor!(n => n == x))(this.tupleof);
+		}
 
-	@property ref T _VoidProxy_value() { return *cast(T*)(_VoidProxy_data.ptr); }
-	alias _VoidProxy_value this;
+		long a;
+		int b;
+		ubyte c;
+	}
+
+	X x;
+	assert(!x.fun(5));
+	x.c = 5;
+	assert(x.fun(5));
 }
 
 /// Starts the chain by iterating over a tuple.
 struct ChainIterator(Next)
 {
-	VoidProxy!Next next;
+	Next next;
+
+	this(ref Next next)
+	{
+		this.next = next;
+	}
 
 	bool opCall(Args...)(auto ref Args args)
 	{
@@ -56,14 +71,9 @@ struct ChainIterator(Next)
 		return false;
 	}
 }
-static template chainIterator(Next) /// ditto
+auto chainIterator(Next)(Next next)
 {
-	static auto chainIterator(Next next)
-	{
-		ChainIterator!Next f;
-		f.next = next;
-		return f;
-	}
+	return ChainIterator!Next(next);
 }
 
 unittest
@@ -84,7 +94,10 @@ unittest
 /// Wraps a function template into a concrete value type functor.
 struct ChainFunctor(alias fun)
 {
-	alias opCall = fun;
+	auto opCall(Arg)(auto ref Arg arg)
+	{
+		return fun(arg);
+	}
 }
 auto chainFunctor(alias fun)() /// ditto
 {
