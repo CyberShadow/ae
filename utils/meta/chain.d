@@ -1,5 +1,5 @@
 /**
- * ae.utils.meta.chains
+ * ae.utils.meta.chain
  *
  * License:
  *   This Source Code Form is subject to the terms of
@@ -22,7 +22,7 @@
 /// Functors return a bool (true if iteration should
 /// stop, false if it should continue).
 
-module ae.utils.meta.chains;
+module ae.utils.meta.chain;
 
 ///
 unittest
