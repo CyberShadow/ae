@@ -98,7 +98,36 @@ struct TestAliasCtxInference
 	}
 }
 
-/// Does this compiler support infering "this" of an aliased
+/// Does this compiler support inferring "this" of an aliased
 /// method call from the current context?
 /// https://github.com/D-Programming-Language/dmd/pull/3361
 enum haveAliasCtxInference = __traits(compiles, TestAliasCtxInference.test());
+
+// ************************************************************************
+
+struct S(alias fun)
+{
+	void call(T)(T t)
+	{
+		fun(t);
+	}
+}
+
+struct TestAliasStructBinding
+{
+	static void test()()
+	{
+		int n;
+
+		// Hmm, why doesn't this work?
+		//void fun(T)(T x) { n += x; }
+		//S!fun s;
+
+		S!(x => n+=x) s;
+		s.call(42);
+	}
+}
+
+/// Does this compiler support binding lambdas via struct template alias parameters?
+/// https://github.com/dlang/dmd/pull/5518
+enum haveAliasStructBinding = __traits(compiles, TestAliasStructBinding.test());
