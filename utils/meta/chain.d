@@ -24,7 +24,10 @@
 
 module ae.utils.meta.chain;
 
+import ae.utils.meta.caps;
+
 ///
+static if (haveAliasStructBinding)
 unittest
 {
 	int a = 2;
@@ -33,6 +36,7 @@ unittest
 	assert(x == 3);
 }
 
+static if (haveAliasStructBinding)
 unittest
 {
 	static struct X
@@ -106,6 +110,7 @@ auto chainFunctor(alias fun)() /// ditto
 }
 
 ///
+static if (haveAliasStructBinding)
 unittest
 {
 	int[] results;
@@ -139,6 +144,7 @@ template chainFilter(alias pred) /// ditto
 }
 
 ///
+static if (haveAliasStructBinding)
 unittest
 {
 	int a = 2;
