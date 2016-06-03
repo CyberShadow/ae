@@ -160,6 +160,8 @@ struct ChainMap(alias pred, Next)
 {
 	Next next;
 
+	this(Next next) { this.next = next; }
+
 	bool opCall(T)(auto ref T v)
 	{
 		return next(pred(v));
@@ -169,9 +171,7 @@ template chainMap(alias pred) /// ditto
 {
 	auto chainMap(Next)(Next next)
 	{
-		ChainMap!(pred, Next) f;
-		f.next = next;
-		return f;
+		return ChainMap!(pred, Next)(next);
 	}
 }
 
