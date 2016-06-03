@@ -1465,7 +1465,9 @@ EOS";
 				throw new Exception("The dlang.org website is only buildable on POSIX platforms.");
 			else
 			{
-				getComponent("dmd").needInstalled();
+				foreach (dep; ["dmd", "druntime", "phobos"])
+					getComponent(dep).needInstalled();
+				getComponent("dmd").updateEnv(env);
 
 				needKindleGen(env);
 
