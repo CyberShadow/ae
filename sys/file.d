@@ -36,6 +36,14 @@ version(Windows) import ae.sys.windows.imports;
 
 // ************************************************************************
 
+version (Windows)
+{
+	// Work around std.file overload
+	mixin(importWin32!(q{winnt}, null, q{FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_REPARSE_POINT}));
+}
+
+// ************************************************************************
+
 version(Windows)
 {
 	string[] fastListDir(bool recursive = false, bool symlinks=false)(string pathname, string pattern = null)
