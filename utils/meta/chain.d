@@ -143,6 +143,28 @@ template chainFilter(alias pred) /// ditto
 	}
 }
 
+struct ChainControl(bool result, Next)
+{
+	Next next;
+
+	this(Next next) { this.next = next; }
+
+	bool opCall(T)(auto ref T v)
+	{
+		cast(void)next(v);
+		return result;
+	}
+}
+template chainControl(bool result) /// ditto
+{
+	auto chainControl(Next)(Next next)
+	{
+		return ChainControl!(result, Next)(next);
+	}
+}
+alias chainAll = chainControl!false; // Always continue iteration
+alias chainFirst = chainControl!true; // Stop iteration after this element
+
 ///
 static if (haveAliasStructBinding)
 unittest
