@@ -126,6 +126,8 @@ struct ChainFilter(alias pred, Next)
 {
 	Next next;
 
+	this(Next next) { this.next = next; }
+
 	bool opCall(T)(auto ref T v)
 	{
 		if (pred(v))
@@ -137,9 +139,7 @@ template chainFilter(alias pred) /// ditto
 {
 	auto chainFilter(Next)(Next next)
 	{
-		ChainFilter!(pred, Next) f;
-		f.next = next;
-		return f;
+		return ChainFilter!(pred, Next)(next);
 	}
 }
 
