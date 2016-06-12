@@ -193,10 +193,22 @@ public:
 		return decodeUrlParameters(queryString);
 	}
 
+	/// URL without resource (protocol, host and port).
+	@property string root()
+	{
+		return protocol ~ "://" ~ host ~ (port==protocolDefaultPort ? null : to!string(port));
+	}
+
 	/// Reconstruct full URL from host, port and resource
 	@property string url()
 	{
-		return protocol ~ "://" ~ host ~ (port==protocolDefaultPort ? null : to!string(port)) ~ resource;
+		return root ~ resource;
+	}
+
+	/// Full URL without query parameters or fragment.
+	@property string baseURL()
+	{
+		return root ~ resource.findSplit("?")[0];
 	}
 
 	@property string proxyHost()
