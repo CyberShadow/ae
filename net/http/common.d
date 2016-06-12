@@ -187,10 +187,25 @@ public:
 			return null;
 	}
 
+	/// ditto
+	@property void queryString(string value)
+	{
+		auto p = resource.indexOf('?');
+		if (p >= 0)
+			resource = resource[0..p];
+		resource = resource ~ '?' ~ value;
+	}
+
 	/// AA of query string parameters
 	@property UrlParameters urlParameters()
 	{
 		return decodeUrlParameters(queryString);
+	}
+
+	/// ditto
+	@property void urlParameters(UrlParameters parameters)
+	{
+		queryString = encodeUrlParameters(parameters);
 	}
 
 	/// URL without resource (protocol, host and port).
