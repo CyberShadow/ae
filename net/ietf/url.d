@@ -164,8 +164,10 @@ string decodeUrlParameter(bool plusToSpace=true, char escape = '%')(string encod
 
 UrlParameters decodeUrlParameters(string qs)
 {
-	string[] segs = split(qs, "&");
 	UrlParameters dic;
+	if (!qs.length)
+		return dic;
+	string[] segs = split(qs, "&");
 	foreach (pair; segs)
 	{
 		auto p = pair.indexOf('=');
@@ -175,4 +177,9 @@ UrlParameters decodeUrlParameters(string qs)
 			dic.add(decodeUrlParameter(pair[0..p]), decodeUrlParameter(pair[p+1..$]));
 	}
 	return dic;
+}
+
+unittest
+{
+	assert(decodeUrlParameters("").length == 0);
 }
