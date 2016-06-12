@@ -21,6 +21,19 @@ class SSLProvider
 	abstract SSLAdapter createAdapter(SSLContext context, IConnection next);
 }
 
+class NoSSLProvider : SSLProvider
+{
+	override SSLContext createContext(SSLContext.Kind kind)
+	{
+		assert(false, "SSL implementation not set");
+	}
+
+	override SSLAdapter createAdapter(SSLContext context, IConnection next)
+	{
+		assert(false, "SSL implementation not set");
+	}
+}
+
 abstract class SSLContext
 {
 	enum Kind { client, server }
@@ -49,3 +62,9 @@ abstract class SSLCertificate
 }
 
 SSLProvider ssl;
+
+static this()
+{
+	assert(!ssl);
+	ssl = new NoSSLProvider();
+}
