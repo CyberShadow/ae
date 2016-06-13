@@ -25,10 +25,10 @@ void prepareRequest(ref OAuthSession session, HttpRequest request)
 		parameters ~= request.decodePostData();
 	auto oauthParams = session.prepareRequest(request.baseURL, request.method, parameters);
 
-	// request.headers.add("Authorization", oauthHeader(oauthParams));
+	request.headers.add("Authorization", oauthHeader(oauthParams));
 
-	auto params = request.urlParameters;
-	foreach (name, value; oauthParams)
-		params.add(name, value);
-	request.urlParameters = params;
+	// auto params = request.urlParameters;
+	// foreach (name, value; oauthParams)
+	// 	params.add(name, value);
+	// request.urlParameters = params;
 }
