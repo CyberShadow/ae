@@ -20,6 +20,7 @@ import ae.sys.signals;
 
 import std.process;
 
+/// Asynchronously wait for a process to terminate.
 void asyncWait(Pid pid, void delegate(int status) dg)
 {
 	auto anchor = new ThreadAnchor;
@@ -28,6 +29,8 @@ void asyncWait(Pid pid, void delegate(int status) dg)
 	{
 		anchor.runAsync(
 			{
+				// Linux may coalesce multiple SIGCHLD into one, so
+				// we need to explicitly check if our process exited.
 				auto result = tryWait(pid);
 				if (result.terminated)
 				{
