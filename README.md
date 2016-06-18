@@ -1,4 +1,4 @@
-﻿[![Travis](https://travis-ci.org/CyberShadow/ae.svg?branch=master)](https://travis-ci.org/CyberShadow/ae) [![AppVeyor](https://ci.appveyor.com/api/projects/status/32r7s2skrgm9ubva?svg=true)](https://ci.appveyor.com/project/CyberShadow/ae)
+﻿[![Travis](https://travis-ci.org/CyberShadow/ae.svg?branch=master)](https://travis-ci.org/CyberShadow/ae) [![AppVeyor](https://ci.appveyor.com/api/projects/status/5stp93xj578fdwwc?svg=true)](https://ci.appveyor.com/project/CyberShadow/ae)
 
 About this library
 ==================
