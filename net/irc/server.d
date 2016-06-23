@@ -531,6 +531,7 @@ class IrcServer
 		void changeNick(string newNick)
 		{
 			auto channels = getJoinedChannels();
+			auto witnesses = server.whoCanSee(this);
 
 			foreach (channel; channels)
 			{
@@ -541,7 +542,7 @@ class IrcServer
 				channel.members[newNick.normalized] = member;
 			}
 
-			foreach (client; server.whoCanSee(this))
+			foreach (client; witnesses)
 				client.sendCommand(this, "NICK", newNick, null);
 
 			server.nicknames.remove(nickname.normalized);
