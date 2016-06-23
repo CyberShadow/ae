@@ -133,7 +133,11 @@ class IrcServer
 							if (!newNick.match(server.nicknameValidationPattern))
 								return sendReply(Reply.ERR_ERRONEUSNICKNAME, newNick, "Erroneous nickname");
 							if (newNick.normalized in server.nicknames)
-								return sendReply(Reply.ERR_NICKNAMEINUSE, newNick, "Nickname is already in use");
+							{
+								if (newNick.normalized != nickname.normalized)
+									sendReply(Reply.ERR_NICKNAMEINUSE, newNick, "Nickname is already in use");
+								return;
+							}
 
 							changeNick(newNick);
 						}
