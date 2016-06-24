@@ -39,6 +39,7 @@ class IrcServer
 	/// Server configuration
 	string hostname, password, network;
 	string nicknameValidationPattern = "^[a-zA-Z][a-zA-Z0-9\\-`\\|\\[\\]\\{\\}_^]{0,14}$";
+	uint nicknameMaxLength = 15; /// For the announced capabilities
 	string serverVersion = "ae.net.irc.server";
 	string[] motd;
 	string chanTypes = "#&";
@@ -1046,6 +1047,7 @@ protected:
 		if (network)
 			result ~= "NETWORK=" ~ network;
 		result ~= "CASEMAPPING=rfc1459";
+		result ~= "NICKLEN=" ~ text(nicknameMaxLength);
 		return result;
 	}
 
