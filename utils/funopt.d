@@ -521,22 +521,23 @@ auto funoptDispatch(alias Actions, FunOptConfig config = FunOptConfig.init, alia
 		}
 
 		foreach (m; __traits(allMembers, Actions))
-		{
-			enum name = m.toLower();
-			if (name == action)
+			static if (is(typeof(hasAttribute!(string, __traits(getMember, Actions, m)))))
 			{
-				static if (hasAttribute!(string, __traits(getMember, Actions, m)))
+				enum name = m.toLower();
+				if (name == action)
 				{
-					enum description = getAttribute!(string, __traits(getMember, Actions, m));
-					alias myUsageFun = descUsageFun!description;
-				}
-				else
-					alias myUsageFun = usageFun;
+					static if (hasAttribute!(string, __traits(getMember, Actions, m)))
+					{
+						enum description = getAttribute!(string, __traits(getMember, Actions, m));
+						alias myUsageFun = descUsageFun!description;
+					}
+					else
+						alias myUsageFun = usageFun;
 
-				auto args = [getProgramName(program) ~ " " ~ action] ~ actionArguments;
-				return funopt!(__traits(getMember, Actions, m), config, myUsageFun)(args);
+					auto args = [getProgramName(program) ~ " " ~ action] ~ actionArguments;
+					return funopt!(__traits(getMember, Actions, m), config, myUsageFun)(args);
+				}
 			}
-		}
 
 		throw new GetOptException("Unknown action: " ~ action);
 	}
@@ -557,16 +558,18 @@ private string genActionList(alias Actions)()
 
 	size_t longestAction = 0;
 	foreach (m; __traits(allMembers, Actions))
-		static if (hasAttribute!(string, __traits(getMember, Actions, m)))
-			longestAction = max(longestAction, m.splitByCamelCase.join("-").length);
+		static if (is(typeof(hasAttribute!(string, __traits(getMember, Actions, m)))))
+			static if (hasAttribute!(string, __traits(getMember, Actions, m)))
+				longestAction = max(longestAction, m.splitByCamelCase.join("-").length);
 
 	foreach (m; __traits(allMembers, Actions))
-		static if (hasAttribute!(string, __traits(getMember, Actions, m)))
-		{
-			enum name = m.splitByCamelCase.join("-").toLower();
-			//__traits(comment, __traits(getMember, Actions, m)) // https://github.com/D-Programming-Language/dmd/pull/3531
-			result ~= optionWrap(getAttribute!(string, __traits(getMember, Actions, m)), name, longestAction);
-		}
+		static if (is(typeof(hasAttribute!(string, __traits(getMember, Actions, m)))))
+			static if (hasAttribute!(string, __traits(getMember, Actions, m)))
+			{
+				enum name = m.splitByCamelCase.join("-").toLower();
+				//__traits(comment, __traits(getMember, Actions, m)) // https://github.com/D-Programming-Language/dmd/pull/3531
+				result ~= optionWrap(getAttribute!(string, __traits(getMember, Actions, m)), name, longestAction);
+			}
 
 	return result;
 }
