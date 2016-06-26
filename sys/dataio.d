@@ -53,6 +53,8 @@ Data readFileData(ref std.stdio.File f)
 	{
 		auto pos = f.tell;
 		ulong remaining = size - pos;
+		if (!remaining)
+			return Data();
 		enforce(remaining <= ulong(size_t.max), "File does not fit in memory");
 		result = Data(cast(size_t)remaining);
 		result.length = f.rawRead(cast(ubyte[])result.mcontents).length;
