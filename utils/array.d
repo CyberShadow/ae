@@ -218,6 +218,12 @@ size_t sliceIndex(T)(in T[] arr, in T[] slice)
 	return p - a;
 }
 
+/// Like std.array.split, but returns null if val was empty.
+auto splitEmpty(T, S)(T value, S separator)
+{
+	return value.length ? split(value, separator) : null;
+}
+
 import std.random;
 
 /// Select and return a random element from the array.
