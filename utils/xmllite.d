@@ -124,9 +124,14 @@ class XmlNode
 			case XmlNodeType.Node:
 				output.startTagWithAttributes(tag);
 				writeAttributes();
-				output.endAttributes();
-				writeChildren();
-				output.endTag(tag);
+				if (children.length)
+				{
+					output.endAttributes();
+					writeChildren();
+					output.endTag(tag);
+				}
+				else
+					output.endAttributesAndTag();
 				return;
 			case XmlNodeType.Meta:
 				assert(children.length == 0);
