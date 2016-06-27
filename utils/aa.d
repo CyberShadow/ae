@@ -217,7 +217,7 @@ struct OrderedMap(K, V)
 
 	@property size_t length() const { return values.length; }
 
-	int opApply(int delegate(ref K k, ref V v) dg)
+	private int opApplyImpl(this This, Dg)(Dg dg)
 	{
 		int result = 0;
 
@@ -228,6 +228,16 @@ struct OrderedMap(K, V)
 				break;
 		}
 		return result;
+	}
+
+	int opApply(int delegate(ref K k, ref V v) dg)
+	{
+		return opApplyImpl(dg);
+	}
+
+	int opApply(int delegate(const ref K k, const ref V v) dg) const
+	{
+		return opApplyImpl(dg);
 	}
 }
 
@@ -246,6 +256,10 @@ unittest
 	assert(m["x"] == -1);
 	++m["y"];
 	assert(m["y"] == 1);
+	auto cm = cast(const)m;
+	foreach (k, v; cm)
+		if (k == "x")
+			assert(v == -1);
 }
 
 // ***************************************************************************
