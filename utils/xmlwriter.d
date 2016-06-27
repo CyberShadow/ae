@@ -15,38 +15,49 @@ module ae.utils.xmlwriter;
 
 import ae.utils.textout;
 
-mixin template NullXmlFormatter()
+struct NullXmlFormatter
 {
-	void newLine() {}
-	void startLine() {}
-	void indent() {}
-	void outdent() {}
+	mixin template Mixin(Formatter)
+	{
+		void newLine() {}
+		void startLine() {}
+		void indent() {}
+		void outdent() {}
+	}
 }
 
-mixin template DefaultXmlFormatter()
+struct CustomXmlFormatter(char indentCharP, uint indentSizeP)
 {
-	uint indentLevel = 0;
+	enum indentChar = indentCharP;
+	enum indentSize = indentSizeP;
 
-	void newLine()
+	mixin template Mixin(Formatter)
 	{
-		output.put('\n');
-	}
+		uint indentLevel = 0;
 
-	void startLine()
-	{
-		output.allocate(indentLevel)[] = '\t';
-	}
+		void newLine()
+		{
+			output.put('\n');
+		}
 
-	void indent () {                      indentLevel++; }
-	void outdent() { assert(indentLevel); indentLevel--; }
+		void startLine()
+		{
+			output.allocate(indentLevel * Formatter.indentSize)[] = Formatter.indentChar;
+		}
+
+		void indent () {                      indentLevel++; }
+		void outdent() { assert(indentLevel); indentLevel--; }
+	}
 }
 
-struct CustomXmlWriter(WRITER, alias Formatter)
+alias DefaultXmlFormatter = CustomXmlFormatter!('\t', 1);
+
+struct CustomXmlWriter(WRITER, Formatter)
 {
 	/// You can set this to something to e.g. write to another buffer.
 	WRITER output;
 
-	mixin Formatter;
+	mixin Formatter.Mixin!(Formatter);
 
 	debug // verify well-formedness
 	{
