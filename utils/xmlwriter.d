@@ -15,28 +15,38 @@ module ae.utils.xmlwriter;
 
 import ae.utils.textout;
 
-struct CustomXmlWriter(WRITER, bool PRETTY)
+mixin template NullXmlFormatter()
+{
+	void newLine() {}
+	void startLine() {}
+	void indent() {}
+	void outdent() {}
+}
+
+mixin template DefaultXmlFormatter()
+{
+	uint indentLevel = 0;
+
+	void newLine()
+	{
+		output.put('\n');
+	}
+
+	void startLine()
+	{
+		output.allocate(indentLevel)[] = '\t';
+	}
+
+	void indent () {                      indentLevel++; }
+	void outdent() { assert(indentLevel); indentLevel--; }
+}
+
+struct CustomXmlWriter(WRITER, alias Formatter)
 {
 	/// You can set this to something to e.g. write to another buffer.
 	WRITER output;
 
-	static if (PRETTY)
-	{
-		uint indentLevel = 0;
-
-		void newLine()
-		{
-			output.put('\n');
-		}
-
-		void startLine()
-		{
-			output.allocate(indentLevel)[] = '\t';
-		}
-
-		void indent () {                      indentLevel++; }
-		void outdent() { assert(indentLevel); indentLevel--; }
-	}
+	mixin Formatter;
 
 	debug // verify well-formedness
 	{
@@ -60,7 +70,7 @@ struct CustomXmlWriter(WRITER, bool PRETTY)
 	void startDocument()
 	{
 		output.put(`<?xml version="1.0" encoding="UTF-8"?>`);
-		static if (PRETTY) newLine();
+		newLine();
 		debug assert(tagStack.length==0);
 	}
 
@@ -88,7 +98,7 @@ struct CustomXmlWriter(WRITER, bool PRETTY)
 	private enum mixStartWithAttributesGeneric =
 	q{
 		debug assert(!inAttributes, "Tag attributes not ended");
-		static if (PRETTY) startLine();
+		startLine();
 
 		static if (STATIC)
 			output.put(OPEN ~ name);
@@ -103,7 +113,7 @@ struct CustomXmlWriter(WRITER, bool PRETTY)
 	q{
 		debug assert(inAttributes, "Tag attributes not started");
 		output.put(CLOSE);
-		static if (PRETTY) newLine();
+		newLine();
 		debug inAttributes = false;
 		debug popTag();
 	};
@@ -113,14 +123,15 @@ struct CustomXmlWriter(WRITER, bool PRETTY)
 	private enum mixStartTag =
 	q{
 		debug assert(!inAttributes, "Tag attributes not ended");
-		static if (PRETTY) startLine();
+		startLine();
 
 		static if (STATIC)
 			output.put('<' ~ name ~ '>');
 		else
 			output.put('<', name, '>');
 
-		static if (PRETTY) { newLine(); indent(); }
+		newLine();
+		indent();
 		debug pushTag(name);
 	};
 
@@ -156,7 +167,8 @@ struct CustomXmlWriter(WRITER, bool PRETTY)
 	{
 		debug assert(inAttributes, "Tag attributes not started");
 		output.put('>');
-		static if (PRETTY) { newLine(); indent(); }
+		newLine();
+		indent();
 		debug inAttributes = false;
 	}
 
@@ -167,14 +179,15 @@ struct CustomXmlWriter(WRITER, bool PRETTY)
 	private enum mixEndTag =
 	q{
 		debug assert(!inAttributes, "Tag attributes not ended");
-		static if (PRETTY) { outdent(); startLine(); }
+		outdent();
+		startLine();
 
 		static if (STATIC)
 			output.put("</" ~ name ~ ">");
 		else
 			output.put("</", name, ">");
 
-		static if (PRETTY) newLine();
+		newLine();
 		debug popTag(name);
 	};
 
@@ -195,12 +208,20 @@ struct CustomXmlWriter(WRITER, bool PRETTY)
 	{
 		debug assert(!inAttributes, "Tag attributes not ended");
 		output.put("<!", text, ">");
-		static if (PRETTY) newLine();
+		newLine();
 	}
 }
 
-alias CustomXmlWriter!(StringBuilder, false) XmlWriter;
-alias CustomXmlWriter!(StringBuilder, true ) PrettyXmlWriter;
+deprecated template CustomXmlWriter(Writer, bool pretty)
+{
+	static if (pretty)
+		alias CustomXmlWriter = CustomXmlWriter!(Writer, DefaultXmlFormatter);
+	else
+		alias CustomXmlWriter = CustomXmlWriter!(Writer, NullXmlFormatter);
+}
+
+alias CustomXmlWriter!(StringBuilder, NullXmlFormatter   ) XmlWriter;
+alias CustomXmlWriter!(StringBuilder, DefaultXmlFormatter) PrettyXmlWriter;
 
 private:
 
