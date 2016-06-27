@@ -239,6 +239,15 @@ struct OrderedMap(K, V)
 	{
 		return opApplyImpl(dg);
 	}
+
+	@property typeof(this) dup()
+	{
+		typeof(this) result;
+		result.keys = keys.dup;
+		result.values = values.dup;
+		result.index = index.dup;
+		return result;
+	}
 }
 
 unittest
@@ -256,7 +265,7 @@ unittest
 	assert(m["x"] == -1);
 	++m["y"];
 	assert(m["y"] == 1);
-	auto cm = cast(const)m;
+	auto cm = cast(const)m.dup;
 	foreach (k, v; cm)
 		if (k == "x")
 			assert(v == -1);
