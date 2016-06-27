@@ -17,7 +17,10 @@ import ae.utils.textout;
 
 struct NullXmlFormatter
 {
-	mixin template Mixin(Formatter)
+	@property bool enabled() { return false; }
+	@property void enabled(bool value) {}
+
+	mixin template Mixin(alias formatter)
 	{
 		void newLine() {}
 		void startLine() {}
@@ -31,18 +34,22 @@ struct CustomXmlFormatter(char indentCharP, uint indentSizeP)
 	enum indentChar = indentCharP;
 	enum indentSize = indentSizeP;
 
-	mixin template Mixin(Formatter)
+	bool enabled = true;
+
+	mixin template Mixin(alias formatter)
 	{
 		uint indentLevel = 0;
 
 		void newLine()
 		{
-			output.put('\n');
+			if (formatter.enabled)
+				output.put('\n');
 		}
 
 		void startLine()
 		{
-			output.allocate(indentLevel * Formatter.indentSize)[] = Formatter.indentChar;
+			if (formatter.enabled)
+				output.allocate(indentLevel * formatter.indentSize)[] = formatter.indentChar;
 		}
 
 		void indent () {                      indentLevel++; }
@@ -57,7 +64,8 @@ struct CustomXmlWriter(WRITER, Formatter)
 	/// You can set this to something to e.g. write to another buffer.
 	WRITER output;
 
-	mixin Formatter.Mixin!(Formatter);
+	Formatter formatter;
+	mixin Formatter.Mixin!formatter;
 
 	debug // verify well-formedness
 	{
