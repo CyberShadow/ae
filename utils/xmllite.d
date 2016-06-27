@@ -126,9 +126,17 @@ class XmlNode
 				writeAttributes();
 				if (children.length)
 				{
+					bool oneLine = children.length == 1 && children[0].type == XmlNodeType.Text;
+					if (oneLine)
+						output.formatter.enabled = false;
 					output.endAttributes();
 					writeChildren();
 					output.endTag(tag);
+					if (oneLine)
+					{
+						output.formatter.enabled = true;
+						output.newLine();
+					}
 				}
 				else
 					output.endAttributesAndTag();
