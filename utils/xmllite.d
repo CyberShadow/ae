@@ -65,7 +65,7 @@ enum XmlNodeType
 class XmlNode
 {
 	string tag;
-	string[string] attributes;
+	OrderedMap!(string, string) attributes;
 	XmlNode parent;
 	XmlNode[] children;
 	XmlNodeType type;
