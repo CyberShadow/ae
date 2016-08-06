@@ -65,6 +65,13 @@ final class XmlBuildNode
 		return writer.output.get();
 	}
 
+	string toPrettyString() const
+	{
+		PrettyXmlWriter writer;
+		writeTo(writer);
+		return writer.output.get();
+	}
+
 	final void writeTo(XmlWriter)(ref XmlWriter output) const
 	{
 		with (_xmlbuild_info)
