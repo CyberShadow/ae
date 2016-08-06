@@ -56,10 +56,26 @@ private struct VideoStreamImpl
 		else
 		{
 			if (!tryWait(pipes.pid).terminated)
+			{
 				try
 					kill(pipes.pid);
 				catch (ProcessException e)
-					wait(pipes.pid);
+				{}
+			}
+
+			version(Posix)
+			{
+				import core.sys.posix.signal : SIGKILL;
+				if (!tryWait(pipes.pid).terminated)
+				{
+					try
+						kill(pipes.pid, SIGKILL);
+					catch (ProcessException e)
+					{}
+				}
+			}
+
+			wait(pipes.pid);
 		}
 	}
 
