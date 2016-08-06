@@ -24,6 +24,7 @@ dub.selections.json
 /demo/colorcube/ae-demo-colorcube
 /demo/drawsprite/ae-demo-drawsprite
 /demo/http/ae-http-demo
+/demo/irc/irctest
 /demo/pewpew/ae-demo-pewpew
 /demo/portforward/ae-demo-portforward
 /demo/render/ae-demo-render
