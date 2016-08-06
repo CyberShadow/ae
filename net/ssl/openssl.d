@@ -217,6 +217,10 @@ class OpenSSLAdapter : SSLAdapter
 	override void onReadData(Data data)
 	{
 		debug(OPENSSL) stderr.writefln("OpenSSL: Got %d incoming bytes from network", data.length);
+
+		if (next.state == ConnectionState.disconnecting)
+			return;
+
 		assert(r.data.length == 0, "Would clobber data");
 		r.set(data.contents);
 		debug(OPENSSL) stderr.writefln("OpenSSL: r.data.length = %d", r.data.length);
