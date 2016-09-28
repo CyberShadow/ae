@@ -18,7 +18,7 @@ import core.time : minutes, seconds, dur;
 import std.exception : enforce;
 import std.conv : to;
 import std.ascii : isDigit, isWhite;
-import std.datetime : SysTime, DateTime, TimeZone, SimpleTimeZone, UTC;
+import std.datetime;
 import std.typecons : Rebindable;
 import std.string : strip, startsWith;
 
@@ -244,7 +244,12 @@ private void parseToken(alias c, alias context)()
 				break;
 			}
 			case 'T':
-				tz = TimeZone.getTimeZone(t.idup);
+				version(Posix)
+					tz = PosixTimeZone.getTimeZone(t);
+				else
+				version(Windows)
+					tz = WindowsTimeZone.getTimeZone(t);
+
 				t = null;
 				break;
 			case 'Z':
