@@ -435,7 +435,7 @@ private struct JsonParser(C)
 			];
 
 			auto start = p;
-			while (c=peek(), numeric[c])
+			while (numeric[c = peek()])
 				p++;
 			return s[start..p].idup;
 		}
