@@ -230,7 +230,7 @@ int waitTimeout(Pid pid, Duration time)
 		if (!ok)
 			try
 				pid.kill();
-			catch {} // Ignore race condition
+			catch (Exception) {} // Ignore race condition
 	}).start();
 	auto result = pid.wait();
 	ok = true;
