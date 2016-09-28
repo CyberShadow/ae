@@ -67,7 +67,12 @@ struct Extent
 	ulong offset;
 }
 
-void sameExtent(in Extent[] extents, ulong length)
+struct SameExtentResult
+{
+	ulong totalBytesDeduped;
+}
+
+SameExtentResult sameExtent(in Extent[] extents, ulong length)
 {
 	assert(extents.length >= 2, "Need at least 2 extents to deduplicate");
 
@@ -90,6 +95,8 @@ void sameExtent(in Extent[] extents, ulong length)
 	int ret = ioctl(extents[0].file.fileno, BTRFS_IOC_FILE_EXTENT_SAME, same);
 	errnoEnforce(ret >= 0, "ioctl(BTRFS_IOC_FILE_EXTENT_SAME)");
 
+	SameExtentResult result;
+
 	foreach (i, ref extent; extents[1..$])
 	{
 		auto status = same.info.ptr[i].status;
@@ -101,7 +108,10 @@ void sameExtent(in Extent[] extents, ulong length)
 			errnoEnforce(false,
 				"Deduplicating extent #%d returned status %d".format(i+1, status));
 		}
+		result.totalBytesDeduped += same.info.ptr[i].bytes_deduped;
 	}
+
+	return result;
 }
 
 unittest
