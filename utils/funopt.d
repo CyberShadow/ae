@@ -410,7 +410,7 @@ string getUsageFormatString(alias FUN)()
 				else
 					result ~= " [" ~ getSwitchText!i() ~ "]";
 			}
-			static if (isOptionArray!Param && !optionHasDescription!Param)
+			static if (isOptionArray!Param)
 				result ~= "...";
 		}
 
@@ -497,6 +497,29 @@ Options:
 	usage = getUsage!f2("program");
 	assert(usage ==
 "Usage: program [--verbose] [--extra-file=STR]... FILENAME [OUTPUT]
+", usage);
+
+	void f3(
+		Parameter!(string[]) args = null,
+	)
+	{}
+
+	usage = getUsage!f3("program");
+	assert(usage ==
+"Usage: program [ARGS]...
+", usage);
+
+	void f4(
+		Parameter!(string[], "The program arguments.") args = null,
+	)
+	{}
+
+	usage = getUsage!f4("program");
+	assert(usage ==
+"Usage: program [ARGS]...
+
+Options:
+  ARGS  The program arguments.
 ", usage);
 }
 
