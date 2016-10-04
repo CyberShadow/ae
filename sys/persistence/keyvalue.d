@@ -52,8 +52,8 @@ struct KeyValueStore(K, V)
 	V get()(auto ref K k, auto ref V defaultValue)
 	{
 		checkInitialized();
-		foreach (void[] s; sqlGet.iterate(toSqlType(k)))
-			return fromSqlType!V(s);
+		foreach (SqlType!V v; sqlGet.iterate(toSqlType(k)))
+			return fromSqlType!V(v);
 		return defaultValue;
 	}
 
