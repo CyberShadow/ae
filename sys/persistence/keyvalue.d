@@ -129,6 +129,9 @@ private:
 			alias SqlType = string; // JSON-encoded
 	}
 
+	static assert(is(SqlType!int == long));
+	static assert(is(SqlType!string == string));
+
 	template sqlTypeName(T)
 	{
 		alias S = SqlType!T;
