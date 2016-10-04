@@ -126,7 +126,7 @@ private:
 				initVary();
 
 			started = true; starting = false;
-			scope(failure) if (errorCallback) try { errorCallback.call(); } catch {}
+			scope(failure) if (errorCallback) try { errorCallback.call(); } catch (Exception) {}
 
 			if (initializeVideoInRenderThread && !initializeVideoSynchronously)
 				initVary();
