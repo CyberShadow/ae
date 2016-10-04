@@ -32,7 +32,7 @@ unittest
 {
 	int a = 2;
 	int x;
-	chainIterator(chainFilter!(n => n > a)((int n) => (x = n, true)))(1, 2, 3);
+	chainIterator(chainFilter!(n => n > a)((int n) { x = n; return true; } ))(1, 2, 3);
 	assert(x == 3);
 }
 
@@ -91,7 +91,7 @@ unittest
 	S s;
 
 	int[] results;
-	chainIterator((long n) => (results ~= cast(int)n, false))(s.tupleof);
+	chainIterator((long n) { results ~= cast(int)n; return  false; })(s.tupleof);
 	assert(results == [1, 2, 3]);
 }
 
@@ -173,7 +173,7 @@ unittest
 	int b = 3;
 	int[] results;
 	foreach (i; 0..10)
-		chainFilter!(n => n % a == 0)(chainFilter!(n => n % b == 0)((int n) => (results ~= n, false)))(i);
+		chainFilter!(n => n % a == 0)(chainFilter!(n => n % b == 0)((int n) { results ~= n; return false; }))(i);
 	assert(results == [0, 6]);
 }
 
@@ -201,6 +201,6 @@ template chainMap(alias pred) /// ditto
 unittest
 {
 	int result;
-	chainMap!(n => n+1)(chainMap!(n => n * 2)((int n) => (result = n, false)))(2);
+	chainMap!(n => n+1)(chainMap!(n => n * 2)((int n) { result = n; return false; }))(2);
 	assert(result == 6);
 }
