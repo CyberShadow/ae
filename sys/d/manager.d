@@ -1238,7 +1238,7 @@ EOS";
 				targets = sourceDir
 					.buildPath("generated")
 					.dirEntries(SpanMode.depth)
-					.filter!(de => de.name.endsWith(".a"))
+					.filter!(de => de.name.endsWith(".a") || de.name.endsWith(".so"))
 					.map!(de => de.name.relativePath(sourceDir))
 					.array()
 				;
