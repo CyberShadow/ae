@@ -17,13 +17,14 @@ dub.selections.json
 # demos - rdmd binaries
 /demo/http/httpserve
 /demo/pewpew/pewpew
+/demo/render/main
 /demo/sqlite/exec
 
 # demos - dub binaries
 /demo/canvas/ae-demo-canvas
 /demo/colorcube/ae-demo-colorcube
 /demo/drawsprite/ae-demo-drawsprite
-/demo/http/ae-http-demo
+/demo/http/ae-demo-http
 /demo/irc/irctest
 /demo/pewpew/ae-demo-pewpew
 /demo/portforward/ae-demo-portforward
