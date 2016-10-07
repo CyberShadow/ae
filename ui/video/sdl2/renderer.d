@@ -219,6 +219,12 @@ final class SDL2Renderer : Renderer
 		}
 		else
 		{
+			if (SDL_QueryTexture(data.t, null, null, null, null) != 0)
+			{
+				data.destroy();
+				rebuildTexture(data, source);
+			}
+			else
 			if (data.textureVersion != source.textureVersion)
 			{
 				auto pixelInfo = source.getPixels();
@@ -235,6 +241,7 @@ final class SDL2Renderer : Renderer
 		data.t = sdlEnforce(SDL_CreateTexture(renderer, PIXEL_FORMAT, SDL_TEXTUREACCESS_STREAMING, pixelInfo.w, pixelInfo.h), "SDL_CreateTexture");
 		sdlEnforce(SDL_UpdateTexture(data.t, null, pixelInfo.pixels, cast(uint)pixelInfo.pitch)==0, "SDL_UpdateTexture");
 		data.textureVersion = source.textureVersion;
+		data.invalid = false;
 	}
 
 	// **********************************************************************
