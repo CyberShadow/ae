@@ -626,18 +626,8 @@ unittest
 
 // ***************************************************************************
 
-/// Creates a PNG file.
-/// Only basic PNG features are supported
-/// (no filters, interlacing, palettes etc.)
-ubyte[] toPNG(SRC)(auto ref SRC src)
-	if (isView!SRC)
+private // https://issues.dlang.org/show_bug.cgi?id=16563
 {
-	import std.digest.crc;
-	import std.zlib : compress;
-	import ae.utils.math : swapBytes; // TODO: proper endianness support
-
-	enum : ulong { SIGNATURE = 0x0a1a0a0d474e5089 }
-
 	struct PNGChunk
 	{
 		char[4] type;
@@ -645,6 +635,7 @@ ubyte[] toPNG(SRC)(auto ref SRC src)
 
 		uint crc32()
 		{
+			import std.digest.crc;
 			CRC32 crc;
 			crc.put(cast(ubyte[])(type[]));
 			crc.put(cast(ubyte[])data);
@@ -678,6 +669,18 @@ ubyte[] toPNG(SRC)(auto ref SRC src)
 		PNGInterlaceMethod interlaceMethod;
 		static assert(PNGHeader.sizeof == 13);
 	}
+}
+
+/// Creates a PNG file.
+/// Only basic PNG features are supported
+/// (no filters, interlacing, palettes etc.)
+ubyte[] toPNG(SRC)(auto ref SRC src)
+	if (isView!SRC)
+{
+	import std.zlib : compress;
+	import ae.utils.math : swapBytes; // TODO: proper endianness support
+
+	enum : ulong { SIGNATURE = 0x0a1a0a0d474e5089 }
 
 	alias COLOR = ViewColor!SRC;
 	static if (!is(COLOR == struct))
