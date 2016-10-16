@@ -107,3 +107,28 @@ unittest
 	assert(bitsFor( int.max) == 31);
 	assert(bitsFor(uint.max) == 32);
 }
+
+/// Get the smallest built-in unsigned integer type
+/// that can store this many bits of data.
+template TypeForBits(uint bits)
+{
+	static if (bits <= 8)
+		alias TypeForBits = ubyte;
+	else
+	static if (bits <= 16)
+		alias TypeForBits = ushort;
+	else
+	static if (bits <= 32)
+		alias TypeForBits = uint;
+	else
+	static if (bits <= 64)
+		alias TypeForBits = ulong;
+	else
+		static assert(false, "No integer type big enough for " ~ bits.stringof ~ " bits");
+}
+
+static assert(is(TypeForBits!7 == ubyte));
+static assert(is(TypeForBits!8 == ubyte));
+static assert(is(TypeForBits!9 == ushort));
+static assert(is(TypeForBits!64 == ulong));
+static assert(!is(TypeForBits!65));
