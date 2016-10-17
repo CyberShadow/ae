@@ -183,3 +183,38 @@ unittest
 {
 	assert(toDecFixed!6(12345u) == "012345");
 }
+
+// ************************************************************************
+
+/// Basic string-to-integer conversion.
+/// Doesn't check for overflows.
+T fromDec(T)(string s)
+{
+	static if (isSigned!T)
+	{
+		bool neg;
+		if (s.length && s[0] == '-')
+		{
+			neg = true;
+			s = s[1..$];
+		}
+	}
+
+	T n;
+	foreach (i, c; s)
+	{
+		if (c < '0' || c > '9')
+			throw new Exception("Bad digit");
+		n = n * 10 + cast(T)(c - '0');
+	}
+	static if (isSigned!T)
+		if (neg)
+			n = -n;
+	return n;
+}
+
+unittest
+{
+	assert(fromDec!int("456") == 456);
+	assert(fromDec!int("-42") == -42);
+}
