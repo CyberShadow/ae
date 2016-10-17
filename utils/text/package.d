@@ -32,12 +32,9 @@ public import ae.utils.regex;
 
 alias indexOf = std.string.indexOf;
 
-// ************************************************************************
+public import ae.utils.text.ascii : ascii, DecimalSize, toDec, toDecFixed;
 
-/// Semantic alias for an array of immutable bytes containing some
-/// ASCII-based 8-bit character encoding. Might be UTF-8, but not
-/// necessarily - thus, is a semantic superset of the D "string" alias.
-alias string ascii;
+// ************************************************************************
 
 /// Convenience helper
 bool contains(T, U)(T[] str, U[] what)
@@ -710,90 +707,6 @@ unittest
 {
 	alias floatToString = fpToString!float;
 	alias realToString = fpToString!real;
-}
-
-import std.algorithm : max;
-
-template DecimalSize(T : ulong)
-{
-	enum DecimalSize = max(text(T.min).length, text(T.max).length);
-}
-
-static assert(DecimalSize!ubyte == 3);
-static assert(DecimalSize!byte == 4);
-static assert(DecimalSize!ushort == 5);
-static assert(DecimalSize!short == 6);
-static assert(DecimalSize!uint == 10);
-static assert(DecimalSize!int == 11);
-static assert(DecimalSize!ulong == 20);
-static assert(DecimalSize!long == 20);
-
-import std.typecons;
-
-/// Writes n as decimal number to buf (right-aligned), returns slice of buf containing result.
-char[] toDec(N : ulong, size_t U)(N o, ref char[U] buf)
-{
-	static assert(U >= DecimalSize!N, "Buffer too small to fit any " ~ N.stringof ~ " value");
-
-	Unqual!N n = o;
-	char* p = buf.ptr+buf.length;
-
-	if (isSigned!N && n<0)
-	{
-		do
-		{
-			*--p = '0' - n%10;
-			n = n/10;
-		} while (n);
-		*--p = '-';
-	}
-	else
-		do
-		{
-			*--p = '0' + n%10;
-			n = n/10;
-		} while (n);
-
-	return p[0 .. buf.ptr + buf.length - p];
-}
-
-string toDec(T : ulong)(T n)
-{
-	static struct Buf { char[DecimalSize!T] buf; } // Can't put static array on heap, use struct
-	return assumeUnique(toDec(n, (new Buf).buf));
-}
-
-unittest
-{
-	assert(toDec(42) == "42");
-	assert(toDec(int.min) == int.min.to!string());
-}
-
-/// Print an unsigned integer as a zero-padded, right-aligned decimal number into a buffer
-void toDecFixed(N : ulong, size_t U)(N n, ref char[U] buf)
-	if (!isSigned!N)
-{
-	assert(n < 10^^U, "Number too large");
-
-	foreach (i; Reverse!(RangeTuple!U))
-	{
-		buf[i] = cast(char)('0' + (n % 10));
-		n /= 10;
-	}
-}
-
-/// ditto
-char[U] toDecFixed(size_t U, N : ulong)(N n)
-	if (!isSigned!N)
-{
-	char[U] buf;
-	toDecFixed(n, buf);
-	return buf;
-}
-
-unittest
-{
-	assert(toDecFixed!6(12345u) == "012345");
 }
 
 string numberToString(T)(T v)
