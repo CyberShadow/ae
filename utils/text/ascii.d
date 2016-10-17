@@ -33,28 +33,29 @@ alias string ascii;
 /// representation of any number of this basic integer type.
 template DecimalSize(T : ulong)
 {
-	static if (is(T == ubyte))
+	alias U = Unqual!T;
+	static if (is(U == ubyte))
 		enum DecimalSize = 3;
 	else
-	static if (is(T == byte))
+	static if (is(U == byte))
 		enum DecimalSize = 4;
 	else
-	static if (is(T == ushort))
+	static if (is(U == ushort))
 		enum DecimalSize = 5;
 	else
-	static if (is(T == short))
+	static if (is(U == short))
 		enum DecimalSize = 6;
 	else
-	static if (is(T == uint))
+	static if (is(U == uint))
 		enum DecimalSize = 10;
 	else
-	static if (is(T == int))
+	static if (is(U == int))
 		enum DecimalSize = 11;
 	else
-	static if (is(T == ulong))
+	static if (is(U == ulong))
 		enum DecimalSize = 20;
 	else
-	static if (is(T == long))
+	static if (is(U == long))
 		enum DecimalSize = 20;
 	else
 		static assert(false, "Unknown type for DecimalSize");
@@ -76,6 +77,8 @@ unittest
 	static assert(DecimalSize!int == DecimalSize2!int);
 	static assert(DecimalSize!ulong == DecimalSize2!ulong);
 	static assert(DecimalSize!long == DecimalSize2!long);
+
+	static assert(DecimalSize!(const(long)) == DecimalSize!long);
 }
 
 /// Writes n as decimal number to buf (right-aligned), returns slice of buf containing result.
