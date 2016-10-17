@@ -18,6 +18,8 @@ import std.algorithm : max;
 import std.exception : assumeUnique;
 import std.traits : Unqual, isSigned;
 
+import ae.utils.array : contains;
+
 // ************************************************************************
 
 /// Semantic alias for an array of immutable bytes containing some
@@ -217,4 +219,14 @@ unittest
 {
 	assert(fromDec!int("456") == 456);
 	assert(fromDec!int("-42") == -42);
+}
+
+// ************************************************************************
+
+bool containsOnlyChars(string s, string chars)
+{
+	foreach (c; s)
+		if (!chars.contains(c))
+			return false;
+	return true;
 }
