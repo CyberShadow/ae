@@ -230,3 +230,16 @@ bool containsOnlyChars(string s, string chars)
 			return false;
 	return true;
 }
+
+bool isUnsignedInteger(string s)
+{
+	foreach (c; s)
+		if (c < '0' || c > '9')
+			return false;
+	return s.length > 0;
+}
+
+bool isSignedInteger(string s)
+{
+	return s.length && isUnsignedInteger(s[0] == '-' ? s[1..$] : s);
+}
