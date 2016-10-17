@@ -36,7 +36,7 @@ import ae.utils.time;
 
 import ae.net.ietf.wrap;
 
-alias ae.utils.text.ascii ascii; // https://d.puremagic.com/issues/show_bug.cgi?id=12156
+alias ae.utils.text.ascii.ascii ascii; // https://d.puremagic.com/issues/show_bug.cgi?id=12156
 alias std.string.indexOf indexOf;
 
 struct Xref
