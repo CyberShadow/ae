@@ -103,10 +103,46 @@ char[] toDec(N : ulong, size_t U)(N o, ref char[U] buf)
 	return p[0 .. buf.ptr + buf.length - p];
 }
 
+/// CTFE-friendly variant.
+char[] toDecCTFE(N : ulong, size_t U)(N o, ref char[U] buf)
+{
+	static assert(U >= DecimalSize!N, "Buffer too small to fit any " ~ N.stringof ~ " value");
+
+	Unqual!N n = o;
+	size_t p = buf.length;
+
+	if (isSigned!N && n<0)
+	{
+		do
+		{
+			buf[--p] = '0' - n%10;
+			n = n/10;
+		} while (n);
+		buf[--p] = '-';
+	}
+	else
+		do
+		{
+			buf[--p] = '0' + n%10;
+			n = n/10;
+		} while (n);
+
+	return buf[p..$];
+}
+
+/// Basic integer-to-string conversion.
 string toDec(T : ulong)(T n)
 {
-	static struct Buf { char[DecimalSize!T] buf; } // Can't put static array on heap, use struct
-	return assumeUnique(toDec(n, (new Buf).buf));
+	if (__ctfe)
+	{
+		char[DecimalSize!T] buf;
+		return toDecCTFE(n, buf).idup;
+	}
+	else
+	{
+		static struct Buf { char[DecimalSize!T] buf; } // Can't put static array on heap, use struct
+		return assumeUnique(toDec(n, (new Buf).buf));
+	}
 }
 
 unittest
@@ -114,6 +150,7 @@ unittest
 	import std.conv : to;
 	assert(toDec(42) == "42");
 	assert(toDec(int.min) == int.min.to!string());
+	static assert(toDec(42) == "42", toDec(42));
 }
 
 /// Print an unsigned integer as a zero-padded, right-aligned decimal number into a buffer
