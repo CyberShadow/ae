@@ -132,13 +132,21 @@ sizediff_t indexOf(T)(in T[] arr, in T[] val) /// ditto
 	return arr.countUntil(val);
 }
 
-bool contains(T, V)(T[] arr, V val)
+/// Index of element, no BS.
+sizediff_t indexOfElement(T, D)(in T[] arr, auto ref in D val)
 	if (is(typeof(arr[0]==val)))
 {
-	foreach (v; arr)
+	foreach (i, ref v; arr)
 		if (v == val)
-			return true;
-	return false;
+			return i;
+	return -1;
+}
+
+/// Whether array contains value, no BS.
+bool contains(T, V)(in T[] arr, auto ref in V val)
+	if (is(typeof(arr[0]==val)))
+{
+	return arr.indexOfElement(val) >= 0;
 }
 
 /// Like startsWith, but with an offset.
