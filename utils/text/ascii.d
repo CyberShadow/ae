@@ -160,8 +160,8 @@ void toDecFixed(N : ulong, size_t U)(N n, ref char[U] buf)
 	import std.meta : Reverse;
 	import ae.utils.meta : RangeTuple;
 
-	// TODO: get rid of pow
-	assert(n < 10^^U, "Number too large");
+	enum limit = 10^^U;
+	assert(n < limit, "Number too large");
 
 	foreach (i; Reverse!(RangeTuple!U))
 	{
