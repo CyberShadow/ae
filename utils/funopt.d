@@ -195,7 +195,7 @@ void defaultUsageFun(string usage)
 /// Throws GetOptException on errors.
 auto funopt(alias FUN, FunOptConfig config = FunOptConfig.init, alias usageFun = defaultUsageFun)(string[] args)
 {
-	alias Params = ParameterTypeTuple!FUN;
+	alias Params = staticMap!(Unqual, ParameterTypeTuple!FUN);
 	Params values;
 	enum names = optionNames!FUN;
 	alias defaults = ParameterDefaultValueTuple!FUN;
@@ -469,7 +469,7 @@ unittest
 		Switch!("Enable verbose logging", 'v') verbose,
 		Option!(int, "Number of tries") tries,
 		Option!(int, "Seconds to\nwait each try", "SECS", 0, "timeout") t,
-		string filename,
+		in string filename,
 		string output = "default",
 		string[] extraFiles = null
 	)
