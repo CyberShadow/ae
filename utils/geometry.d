@@ -43,7 +43,9 @@ struct Rect(T)
 {
 	T x0, y0, x1, y1;
 	@property T w() { return x1-x0; }
+	@property void w(T value) { x1 = x0 + value; }
 	@property T h() { return y1-y0; }
+	@property void h(T value) { y1 = y0 + value; }
 	void sort() { sort2(x0, x1); sort2(y0, y1); }
 	@property bool sorted() { return x0 <= x1 && y0 <= y1; }
 	void translate(T dx, T dy) { x0 += dx; y0 += dy; x1 += dx; y1 += dy; }
