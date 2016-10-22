@@ -47,9 +47,14 @@ struct Rect(T)
 	void sort() { sort2(x0, x1); sort2(y0, y1); }
 	@property bool sorted() { return x0 <= x1 && y0 <= y1; }
 	void translate(T dx, T dy) { x0 += dx; y0 += dy; x1 += dx; y1 += dy; }
-	Point!T getCenter() { return Point!T(average(x0, x1), average(y0, y1)); }
+	Point!T getCenter() { return Point!T(cast(T)average(x0, x1), cast(T)average(y0, y1)); }
 }
 auto rect(T...)(T args) { return Rect!(CommonType!T)(args); }
+
+unittest
+{
+	Rect!int rint;
+}
 
 struct Circle(T)
 {
