@@ -83,3 +83,26 @@ unittest
 	FastArrayRange!ubyte r;
 	auto x = r.save;
 }
+
+// ************************************************************************
+
+/// Apply a predicate over each consecutive pair.
+template pairwise(alias pred)
+{
+	import std.range : zip, dropOne;
+	import std.algorithm.iteration : map;
+	import std.functional : binaryFun;
+
+	auto pairwise(R)(R r)
+	{
+		return zip(r, r.dropOne).map!(pair => binaryFun!pred(pair[0], pair[1]));
+	}
+}
+
+///
+unittest
+{
+	import std.algorithm.comparison : equal;
+	assert(equal(pairwise!"a+b"([1, 2, 3]), [3, 5]));
+	assert(equal(pairwise!"b-a"([1, 2, 3]), [1, 1]));
+}
