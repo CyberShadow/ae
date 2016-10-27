@@ -26,6 +26,9 @@ excludedSourceFiles "utils/graphics/sdl2image.d"
 # Needs SDL
 excludedSourceFiles "utils/graphics/sdlimage.d"
 
+# Needs X11
+excludedSourceFiles "sys/sendinput.d"
+
 # Triggers on import
 excludedSourceFiles "sys/benchmark.d"
 
