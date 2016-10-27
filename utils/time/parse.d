@@ -245,10 +245,10 @@ private void parseToken(alias c, alias context)()
 			}
 			case 'T':
 				version(Posix)
-					tz = PosixTimeZone.getTimeZone(t);
+					tz = PosixTimeZone.getTimeZone(t.idup);
 				else
 				version(Windows)
-					tz = WindowsTimeZone.getTimeZone(t);
+					tz = WindowsTimeZone.getTimeZone(t.idup);
 
 				t = null;
 				break;
@@ -361,3 +361,8 @@ unittest
 	"Tue, 21 Nov 2006 21:19:46 +0000".parseTimeUsing(TimeFormats.RFC2822);
 }
 
+unittest
+{
+	const char[] s = "Tue, 21 Nov 2006 21:19:46 +0000";
+	s.parseTime!(TimeFormats.RFC2822);
+}
