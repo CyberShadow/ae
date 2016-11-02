@@ -15,6 +15,7 @@ module ae.sys.d.repo;
 
 import std.algorithm;
 import std.conv : text;
+import std.datetime : SysTime;
 import std.exception;
 import std.file;
 import std.process : environment;
@@ -512,7 +513,11 @@ class ManagedRepository
 			foreach (file, fileState; currentState)
 			{
 				enforce(file in savedState, "New file: " ~ file);
-				enforce(savedState[file] == fileState, "File modified: " ~ file);
+				enforce(savedState[file].size == fileState.size,
+					"File modified: %s (size changed, before: %s, after: %s)".format(file, savedState[file].size, fileState.size));
+				enforce(savedState[file].modificationTime == fileState.modificationTime,
+					"File modified: %s (modification time changed, before: %s, after: %s)".format(file, SysTime(savedState[file].modificationTime), SysTime(fileState.modificationTime)));
+				assert(savedState[file] == fileState);
 			}
 		}
 		catch (Exception e)
