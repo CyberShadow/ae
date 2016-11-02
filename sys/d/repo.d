@@ -438,6 +438,7 @@ class ManagedRepository
 
 	struct FileState
 	{
+		bool isLink;
 		ulong size;
 		StdTime modificationTime;
 	}
@@ -447,7 +448,7 @@ class ManagedRepository
 		assert(verify);
 		auto path = git.path.buildPath(file);
 		auto de = DirEntry(path);
-		return FileState(de.size, de.timeLastModified.stdTime);
+		return FileState(de.isSymlink, de.size, de.timeLastModified.stdTime);
 	}
 
 	alias RepositoryState = FileState[string];
@@ -513,6 +514,10 @@ class ManagedRepository
 			foreach (file, fileState; currentState)
 			{
 				enforce(file in savedState, "New file: " ~ file);
+				enforce(savedState[file].isLink == fileState.isLink,
+					"File modified: %s (is link changed, before: %s, after: %s)".format(file, savedState[file].isLink, fileState.isLink));
+				if (fileState.isLink)
+					continue; // Correct lstat is too hard, just skip symlinks
 				enforce(savedState[file].size == fileState.size,
 					"File modified: %s (size changed, before: %s, after: %s)".format(file, savedState[file].size, fileState.size));
 				enforce(savedState[file].modificationTime == fileState.modificationTime,
