@@ -29,6 +29,12 @@ excludedSourceFiles "utils/graphics/sdlimage.d"
 # Needs X11
 excludedSourceFiles "sys/sendinput.d"
 
+# Needs Win32
+excludedSourceFiles "sys/windows/pe/package.d"
+excludedSourceFiles "sys/windows/pe/pe.d"
+excludedSourceFiles "sys/windows/pe/resources.d"
+excludedSourceFiles "sys/windows/pe/versioninfo.d"
+
 # Triggers on import
 excludedSourceFiles "sys/benchmark.d"
 
