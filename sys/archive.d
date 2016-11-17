@@ -13,6 +13,7 @@
 
 module ae.sys.archive;
 
+import std.array;
 import std.datetime;
 import std.exception;
 import std.file;
@@ -31,7 +32,7 @@ void unzip(string zip, string target)
 	auto archive = new ZipArchive(zip.read);
 	foreach (name, entry; archive.directory)
 	{
-		auto path = buildPath(target, name);
+		auto path = buildPath(target, name).replace("\\", "/");
 		ensurePathExists(path);
 		if (name.endsWith(`/`))
 		{
