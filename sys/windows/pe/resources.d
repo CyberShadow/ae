@@ -36,6 +36,22 @@ struct ResourceParser
 		uint characteristics, timestamp;
 		ushort majorVersion, minorVersion;
 		DirectoryEntry[] entries;
+
+		ref DirectoryEntry opIndex(uint id)
+		{
+			foreach (ref entry; entries)
+				if (entry.name is null && entry.id == id)
+					return entry;
+			throw new Exception("Can't find directory with this ID");
+		}
+
+		ref DirectoryEntry opIndex(string name)
+		{
+			foreach (ref entry; entries)
+				if (entry.name !is null && entry.name == name)
+					return entry;
+			throw new Exception("Can't find directory with this name");
+		}
 	}
 	Directory root;
 
