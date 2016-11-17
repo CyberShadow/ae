@@ -12,17 +12,25 @@
  */
 
 module ae.sys.windows.imports;
-version (Windows):
 
 // Using a string mixin instead of a mixin template due to
 // https://issues.dlang.org/show_bug.cgi?id=15925
-enum importWin32(string moduleName, string access = null, string selective = null) =
-	access ~
-		" import " ~
-		(__VERSION__ >= 2070 ? "core.sys.windows" : "win32") ~
-		"." ~
-		moduleName ~
-		" " ~
-		(selective ? ":" : "") ~
-		selective ~
-		";";
+template importWin32(string moduleName, string access = null, string selective = null)
+{
+	// All Druntime headers are version(Windows)
+	version (Windows)
+		enum useDruntime = __VERSION__ >= 2070;
+	else
+		enum useDruntime = false;
+
+	enum importWin32 =
+		access ~
+			" import " ~
+			(useDruntime ? "core.sys.windows" : "win32") ~
+			"." ~
+			moduleName ~
+			" " ~
+			(selective ? ":" : "") ~
+			selective ~
+			";";
+}
