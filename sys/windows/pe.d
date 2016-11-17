@@ -12,7 +12,6 @@
  */
 
 module ae.sys.windows.pe;
-version (Windows):
 
 import std.exception;
 import std.string;
