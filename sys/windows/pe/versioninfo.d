@@ -22,9 +22,10 @@ struct VersionInfoParser
 {
 	ubyte[] data;
 
-	void parse()
+	this(void[] data)
 	{
-		enforce((cast(size_t)data.ptr) % 4 == 0, "Data must be aligned");
+		enforce((cast(size_t)data.ptr) % 4 == 0, "Data must be DWORD-aligned");
+		this.data = cast(ubyte[])data;
 		root = readNode();
 	}
 
