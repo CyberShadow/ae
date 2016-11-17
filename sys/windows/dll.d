@@ -18,14 +18,13 @@ import ae.sys.windows.imports;
 mixin(importWin32!q{winbase});
 mixin(importWin32!q{windef});
 
-import ae.sys.windows.exception;
-
 /// Loads or retrieves the handle of a DLL.
 /// As there will be only one template instantiation
 /// per unique DLL string, LoadLibrary will be called
 /// at most once per unique "dll" parameter.
 @property HMODULE moduleHandle(string dll)()
 {
+	import ae.sys.windows.exception;
 	static HMODULE hModule = null;
 	if (!hModule)
 		hModule = LoadLibrary(dll).wenforce("LoadLibrary");
@@ -40,6 +39,10 @@ mixin template DynamicLoad(alias F, string DLL, string NAME=__traits(identifier,
 
 	static std.traits.ReturnType!F loader(ARGS...)(ARGS args)
 	{
+		import ae.sys.windows.exception;
+		import ae.sys.windows.imports;
+		mixin(importWin32!q{winbase});
+
 		alias typeof(&F) FP;
 		static FP fp = null;
 		if (!fp)
