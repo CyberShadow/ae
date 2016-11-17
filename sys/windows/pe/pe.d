@@ -11,7 +11,7 @@
  *   Vladimir Panteleev <vladimir@thecybershadow.net>
  */
 
-module ae.sys.windows.pe;
+module ae.sys.windows.pe.pe;
 
 import std.exception;
 import std.string;
