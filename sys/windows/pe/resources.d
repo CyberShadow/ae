@@ -44,8 +44,14 @@ struct ResourceParser
 		string name;
 		uint id;
 		bool isDirectory;
-		Directory directory;
-		DirectoryData data;
+		union Contents
+		{
+			Directory directory;
+			DirectoryData data;
+		}
+		Contents contents;
+		ref @property Directory directory() { assert(isDirectory); return contents.directory; }
+		ref @property DirectoryData data() { assert(!isDirectory); return contents.data; }
 	}
 
 	struct DirectoryData
