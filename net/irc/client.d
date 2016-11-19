@@ -50,9 +50,6 @@ private:
 
 		assert(params.length <= 15);
 
-		// SA 2007.08.12: Can't send "PASS ELSILRACLIHP "
-		//                If we NEED to then the ircd is broken
-		//                - make "PASS" special if and when this happens.
 		foreach(i,parameter; params)
 		{
 			message ~= " ";
@@ -72,7 +69,10 @@ private:
 	{
 		if (log) log("* Connected.");
 		if (password.length > 0)
-			command("PASS", password);
+		{
+			// Use sendRaw for hacked-up finicky IRC servers (WormNET)
+			sendRaw("PASS " ~ password);
+		}
 		currentNickname = connectNickname;
 		command("NICK", currentNickname);
 		command("USER", username ? username : currentNickname, "hostname", "servername", realname);
