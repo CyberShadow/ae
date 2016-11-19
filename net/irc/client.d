@@ -75,7 +75,7 @@ private:
 			command("PASS", password);
 		currentNickname = connectNickname;
 		command("NICK", currentNickname);
-		command("USER", currentNickname, "hostname", "servername", realname);
+		command("USER", username ? username : currentNickname, "hostname", "servername", realname);
 	}
 
 	/// Called when a connection was closed.
@@ -523,6 +523,9 @@ public:
 	string realname;
 	/// The password used when logging in.
 	string password;
+	/// Username field (shown before the @ in the hostmask).
+	/// If not set, defaults to the nickname.
+	string username;
 	/// A list of joined channels.
 	Channel[string] channels;
 	/// Canonical names
