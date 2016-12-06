@@ -1445,13 +1445,13 @@ EOS";
 
 			auto t = dmd.git.query(["log", "--pretty=format:%ct"]).splitLines.map!(to!int).filter!(n => n > 0).front;
 
-			foreach (line; dmd.git.query(["log", "--decorate=full", "--pretty=format:%ct%d"]).splitLines())
+			foreach (line; dmd.git.query(["log", "--decorate=full", "--tags", "--pretty=format:%ct%d"]).splitLines())
 				if (line.length > 10 && line[0..10].to!int < t)
 					if (line[10..$].startsWith(" (") && line.endsWith(")"))
 					{
 						foreach (r; line[12..$-1].split(", "))
 							if (r.skipOver("tag: refs/tags/"))
-								if (r.match(re!`^v\d\.\d\d\d(\.\d)?$`))
+								if (r.match(re!`^v2\.\d\d\d(\.\d)?$`))
 									return r[1..$];
 					}
 			throw new Exception("Can't find any DMD version tags at this point!");
