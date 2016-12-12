@@ -1467,6 +1467,7 @@ EOS";
 			{
 				foreach (dep; ["dmd", "druntime", "phobos"])
 					getComponent(dep).needInstalled();
+				getComponent("dmd").needSource(); // https://github.com/dlang/phobos/pull/4613#issuecomment-266462596
 				getComponent("dmd").updateEnv(env);
 
 				needKindleGen(env);
