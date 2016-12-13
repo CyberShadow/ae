@@ -56,13 +56,13 @@ struct CustomJsonWriter(WRITER)
 		static if (is(T : const(char)[]))
 			putString(v);
 		else
-		static if (is(T == bool))
+		static if (is(Unqual!T == bool))
 			return output.put(v ? "true" : "false");
 		else
-		static if (is(T : long))
+		static if (is(Unqual!T : long))
 			return .put(output, v);
 		else
-		static if (is(T : real))
+		static if (is(Unqual!T : real))
 			return output.put(fpToString!T(v)); // TODO: don't allocate
 		else
 		static if (is(T U : U[]))
@@ -697,6 +697,12 @@ unittest
 
 	b = jsonParse!B("null");
 	assert(b.isNull);
+}
+
+unittest // Issue 49
+{
+	immutable bool b;
+	assert(toJson(b) == "false");
 }
 
 // ************************************************************************
