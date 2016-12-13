@@ -26,6 +26,7 @@ import std.string : format;
 public import std.socket : Address, Socket;
 
 debug(ASOCKETS) import std.stdio;
+debug(PRINTDATA) static import std.stdio;
 debug(PRINTDATA) import ae.utils.text : hexDump;
 private import std.conv : to;
 
