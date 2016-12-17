@@ -392,7 +392,7 @@ string getUsageFormatString(alias FUN)()
 	}
 
 	foreach (i, Param; Params)
-		static if (!isHiddenOption!Param)
+		static if (!isHiddenOption!Param && (isParameter!Param || !optionHasDescription!Param))
 		{
 			static if (isParameter!Param)
 			{
@@ -404,12 +404,7 @@ string getUsageFormatString(alias FUN)()
 					result ~= "]";
 			}
 			else
-			{
-				static if (optionHasDescription!Param)
-					continue;
-				else
-					result ~= " [" ~ getSwitchText!i() ~ "]";
-			}
+				result ~= " [" ~ getSwitchText!i() ~ "]";
 			static if (isOptionArray!Param)
 				result ~= "...";
 		}
@@ -520,6 +515,19 @@ Options:
 
 Options:
   ARGS  The program arguments.
+", usage);
+
+	void f5(
+		Option!(string[], "Features to disable.") without = null,
+	)
+	{}
+
+	usage = getUsage!f5("program");
+	assert(usage ==
+"Usage: program [OPTION]...
+
+Options:
+  --without=STR  Features to disable.
 ", usage);
 }
 
