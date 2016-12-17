@@ -899,6 +899,8 @@ class DManager : ICacheHost
 					// Fix hard-coded reference to gcc as linker
 					.replace(`gcc -m32 -lstdc++`, `g++ -m32 -lstdc++`)
 					.replace(`gcc $(MODEL) -lstdc++`, `g++ $(MODEL) -lstdc++`)
+					// Fix compilation of older versions of go.c with GCC 6
+					.replace(`-Wno-deprecated`, `-Wno-deprecated -Wno-narrowing`)
 				;
 				// Fix pthread linker error
 				version (linux)
