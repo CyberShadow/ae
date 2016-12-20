@@ -55,3 +55,16 @@ unittest
 	//static assert(1.5.seconds == 1500.msecs);
 	static assert(1.5.seconds == 1500.msecs);
 }
+
+/// Multiply a duration by a floating-point number.
+Duration durScale(F)(Duration d, F f)
+if (is(F : real))
+{
+	return hnsecs(d.total!"hnsecs" * f);
+}
+
+unittest
+{
+	import core.time : seconds, msecs;
+	assert(durScale(1.seconds, 1.5) == 1500.msecs);
+}
