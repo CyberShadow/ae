@@ -49,10 +49,10 @@ alias usecs   = dur!"usecs";   /// Ditto
 alias hnsecs  = dur!"hnsecs";  /// Ditto
 alias nsecs   = dur!"nsecs";   /// Ditto
 
+///
 unittest
 {
 	import core.time : msecs;
-	//static assert(1.5.seconds == 1500.msecs);
 	static assert(1.5.seconds == 1500.msecs);
 }
 
@@ -63,6 +63,7 @@ if (is(F : real))
 	return hnsecs(d.total!"hnsecs" * f);
 }
 
+///
 unittest
 {
 	import core.time : seconds, msecs;
