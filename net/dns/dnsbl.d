@@ -75,6 +75,10 @@ string lookupEfnetRBL(string ip)
 string[] blacklistCheck(string hostname)
 {
 	string ip = getIP(hostname);
+
+	if (!ip)
+		throw new Exception("Can't resolve hostname to IPv4 address: " ~ hostname);
+
 	string result;
 
 	result = lookupDroneBL(ip);
