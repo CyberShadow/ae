@@ -626,11 +626,11 @@ string readUntil(ref StringStream s, char until)
 unittest
 {
 	enum xmlText =
-		`<?xml version="1.0" encoding="UTF-8"?>`
-		`<quotes>`
-			`<quote author="Alan Perlis">`
-				`When someone says, &quot;I want a programming language in which I need only say what I want done,&quot; give him a lollipop.`
-			`</quote>`
+		`<?xml version="1.0" encoding="UTF-8"?>` ~
+		`<quotes>` ~
+			`<quote author="Alan Perlis">` ~
+				`When someone says, &quot;I want a programming language in which I need only say what I want done,&quot; give him a lollipop.` ~
+			`</quote>` ~
 		`</quotes>`;
 	auto doc = new XmlDocument(xmlText);
 	assert(doc.toString() == xmlText);
