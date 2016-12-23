@@ -1468,8 +1468,14 @@ EOS";
 			else
 			{
 				foreach (dep; ["dmd", "druntime", "phobos"])
-					getComponent(dep).needInstalled();
-				getComponent("dmd").needSource(); // https://github.com/dlang/phobos/pull/4613#issuecomment-266462596
+				{
+					auto c = getComponent(dep);
+					c.needInstalled();
+
+					// Need DMD source because https://github.com/dlang/phobos/pull/4613#issuecomment-266462596
+					// Need Druntime/Phobos source because we are building its documentation from there.
+					c.needSource();
+				}
 				getComponent("dmd").updateEnv(env);
 
 				needKindleGen(env);
