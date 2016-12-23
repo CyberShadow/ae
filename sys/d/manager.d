@@ -1416,7 +1416,7 @@ EOS";
 	final class Website : Component
 	{
 		@property override string submoduleName() { return "dlang.org"; }
-		@property override string[] sourceDependencies() { return []; }
+		@property override string[] sourceDependencies() { return ["druntime", "phobos"]; }
 		@property override string[] dependencies() { return ["dmd", "druntime", "phobos", "rdmd"]; }
 
 		struct Config
