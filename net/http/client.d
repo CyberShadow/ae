@@ -276,6 +276,7 @@ public:
 class HttpsClient : HttpClient
 {
 	SSLContext ctx;
+	SSLAdapter adapter;
 
 	this(Duration timeout = 30.seconds)
 	{
@@ -285,7 +286,14 @@ class HttpsClient : HttpClient
 
 	override IConnection adaptConnection(IConnection conn)
 	{
-		return ssl.createAdapter(ctx, conn);
+		adapter = ssl.createAdapter(ctx, conn);
+		return adapter;
+	}
+
+	override void request(HttpRequest request)
+	{
+		super.request(request);
+		adapter.setHostName(request.host);
 	}
 }
 
