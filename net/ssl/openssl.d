@@ -335,6 +335,11 @@ class OpenSSLAdapter : SSLAdapter
 		}
 	}
 
+	override void setHostName(string hostname)
+	{
+		SSL_set_tlsext_host_name(sslHandle, cast(char*)hostname.toStringz());
+	}
+
 	override OpenSSLCertificate getHostCertificate()
 	{
 		return new OpenSSLCertificate(SSL_get_certificate(sslHandle).sslEnforce());

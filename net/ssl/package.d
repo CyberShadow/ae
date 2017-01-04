@@ -52,6 +52,7 @@ abstract class SSLContext
 abstract class SSLAdapter : ConnectionAdapter
 {
 	this(IConnection next) { super(next); }
+	abstract void setHostName(string hostname);
 	abstract SSLCertificate getHostCertificate();
 	abstract SSLCertificate getPeerCertificate();
 }
