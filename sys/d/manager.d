@@ -1495,15 +1495,23 @@ EOS";
 				submodule.saveFileState(makeFileName);
 				scope(exit) submodule.saveFileState("dpl-docs/dub.selections.json");
 
-				auto latest = getLatest;
-				log("LATEST=" ~ latest);
+				string latest = null;
+				if (!sourceDir.buildPath("VERSION").exists)
+				{
+					latest = getLatest();
+					log("LATEST=" ~ latest);
+				}
+				else
+					log("VERSION file found, not passing LATEST parameter");
 
-				run(getMake(env) ~ [
-					"-f", makeFileName,
-					"all", "kindle", "pdf", "verbatim",
-					] ~ (config.build.components.website.noDateTime ? ["NODATETIME=nodatetime.ddoc"] : []) ~ [ // Can't be last due to https://issues.dlang.org/show_bug.cgi?id=14682
-					"LATEST=" ~ latest,
-				] ~ gnuMakeArgs, env.vars, sourceDir);
+				auto args =
+					getMake(env) ~
+					[ "-f", makeFileName ] ~
+					(config.build.components.website.noDateTime ? ["NODATETIME=nodatetime.ddoc"] : []) ~
+					(latest ? ["LATEST=" ~ latest] : []) ~
+					[ "all", "kindle", "pdf", "verbatim" ] ~
+					gnuMakeArgs;
+				run(args, env.vars, sourceDir);
 			}
 		}
 
