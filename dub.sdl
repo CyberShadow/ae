@@ -87,7 +87,7 @@ subPackage {
 	systemDependencies "SDL 2"
 	libs "SDL2" "SDL2_image" platform="posix"
 	dependency "ae" version="*" path="."
-	dependency "derelict-sdl2" version=">=2.0.0"
+	dependency "derelict-sdl2" version="==2.0.2"
 	sourcePaths "ui"
 	importPaths "ui"
 	sourceFiles \
