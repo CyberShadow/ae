@@ -38,6 +38,7 @@ class IrcClientLogSource : IConnection
 	private ReadDataHandler readDataHandler;
 
 	@property void handleDisconnect(DisconnectHandler value) {}
+	@property void handleBufferFlushed(BufferFlushedHandler value) {}
 
 	void recv(Data data)
 	{
