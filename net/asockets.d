@@ -685,6 +685,10 @@ interface IConnection
 	/// Callback setter for when a connection was closed.
 	alias void delegate(string reason, DisconnectType type) DisconnectHandler;
 	@property void handleDisconnect(DisconnectHandler value); /// ditto
+
+	/// Callback setter for when all queued data has been sent.
+	alias void delegate() BufferFlushedHandler;
+	@property void handleBufferFlushed(BufferFlushedHandler value); /// ditto
 }
 
 // ***************************************************************************
@@ -873,8 +877,8 @@ protected:
 			}
 
 		// outQueue is now empty
-		if (handleBufferFlushed)
-			handleBufferFlushed();
+		if (bufferFlushedHandler)
+			bufferFlushedHandler();
 		if (state == ConnectionState.disconnecting)
 		{
 			debug (ASOCKETS) writefln("Closing @ %s (Delayed disconnect - buffer flushed)", cast(void*)this);
@@ -1017,9 +1021,6 @@ public:
 	/// Callback for when a connection has been established.
 	@property final void handleConnect(ConnectHandler value) { connectHandler = value; updateFlags(); }
 
-	/// Callback for when the send buffer has been flushed.
-	void delegate() handleBufferFlushed;
-
 	private ReadDataHandler readDataHandler;
 	/// Callback for incoming data.
 	/// Data will not be received unless this handler is set.
@@ -1028,6 +1029,10 @@ public:
 	private DisconnectHandler disconnectHandler;
 	/// Callback for when a connection was closed.
 	@property final void handleDisconnect(DisconnectHandler value) { disconnectHandler = value; updateFlags(); }
+
+	/// Callback setter for when all queued data has been sent.
+	private BufferFlushedHandler bufferFlushedHandler;
+	@property final void handleBufferFlushed(BufferFlushedHandler value) { bufferFlushedHandler = value; updateFlags(); }
 }
 
 // ***************************************************************************
@@ -1359,6 +1364,12 @@ class ConnectionAdapter : IConnection
 			disconnectHandler(reason, type);
 	}
 
+	protected void onBufferFlushed()
+	{
+		if (bufferFlushedHandler)
+			bufferFlushedHandler();
+	}
+
 	/// Callback for when a connection has been established.
 	@property void handleConnect(ConnectHandler value) { connectHandler = value; }
 	private ConnectHandler connectHandler;
@@ -1374,6 +1385,10 @@ class ConnectionAdapter : IConnection
 	/// Callback setter for when a connection was closed.
 	@property void handleDisconnect(DisconnectHandler value) { disconnectHandler = value; }
 	private DisconnectHandler disconnectHandler;
+
+	/// Callback setter for when all queued data has been written.
+	@property void handleBufferFlushed(BufferFlushedHandler value) { bufferFlushedHandler = value; }
+	private BufferFlushedHandler bufferFlushedHandler;
 }
 
 // ***************************************************************************
