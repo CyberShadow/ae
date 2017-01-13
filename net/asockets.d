@@ -901,7 +901,7 @@ protected:
 
 public:
 	/// Close a connection. If there is queued data waiting to be sent, wait until it is sent before disconnecting.
-	/// The disconnect handler will be called when all data has been flushed.
+	/// The disconnect handler will be called immediately, even when not all data has been flushed yet.
 	void disconnect(string reason = defaultDisconnectReason, DisconnectType type = DisconnectType.requested)
 	{
 		//scope(success) updateFlags(); // Work around scope(success) breaking debugger stack traces
