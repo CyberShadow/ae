@@ -216,14 +216,16 @@ class OpenSSLAdapter : SSLAdapter
 
 	override void onReadData(Data data)
 	{
-		debug(OPENSSL) stderr.writefln("OpenSSL: Got %d incoming bytes from network", data.length);
+		debug(OPENSSL_DATA) stderr.writefln("OpenSSL: Got %d incoming bytes from network", data.length);
 
 		if (next.state == ConnectionState.disconnecting)
+		{
 			return;
+		}
 
 		assert(r.data.length == 0, "Would clobber data");
 		r.set(data.contents);
-		debug(OPENSSL) stderr.writefln("OpenSSL: r.data.length = %d", r.data.length);
+		debug(OPENSSL_DATA) stderr.writefln("OpenSSL: r.data.length = %d", r.data.length);
 
 		try
 		{
@@ -233,12 +235,17 @@ class OpenSSLAdapter : SSLAdapter
 			while (true)
 			{
 				static ubyte[4096] buf;
-				debug(OPENSSL) auto oldLength = r.data.length;
+				debug(OPENSSL_DATA) auto oldLength = r.data.length;
 				auto result = SSL_read(sslHandle, buf.ptr, buf.length);
-				debug(OPENSSL) stderr.writefln("OpenSSL: SSL_read ate %d bytes and spat out %d bytes", oldLength - r.data.length, result);
+				debug(OPENSSL_DATA) stderr.writefln("OpenSSL: SSL_read ate %d bytes and spat out %d bytes", oldLength - r.data.length, result);
 				flushWritten();
 				if (result > 0)
+				{
 					super.onReadData(Data(buf[0..result]));
+					// Stop if upstream decided to disconnect.
+					if (next.state != ConnectionState.connected)
+						return;
+				}
 				else
 				{
 					sslError(result, "SSL_read");
@@ -261,7 +268,7 @@ class OpenSSLAdapter : SSLAdapter
 		foreach (datum; data)
 			if (datum.length)
 			{
-				debug(OPENSSL) stderr.writefln("OpenSSL: Got %d outgoing bytes from program", datum.length);
+				debug(OPENSSL_DATA) stderr.writefln("OpenSSL: Got %d outgoing bytes from program", datum.length);
 				queue ~= datum;
 			}
 
@@ -274,9 +281,9 @@ class OpenSSLAdapter : SSLAdapter
 	{
 		while (queue.length)
 		{
-			debug(OPENSSL) auto oldLength = w.data.length;
+			debug(OPENSSL_DATA) auto oldLength = w.data.length;
 			auto result = SSL_write(sslHandle, queue[0].ptr, queue[0].length.to!int);
-			debug(OPENSSL) stderr.writefln("OpenSSL: SSL_write ate %d bytes and spat out %d bytes", queue[0].length, w.data.length - oldLength);
+			debug(OPENSSL_DATA) stderr.writefln("OpenSSL: SSL_write ate %d bytes and spat out %d bytes", queue[0].length, w.data.length - oldLength);
 			if (result > 0)
 			{
 				// "SSL_write() will only return with success, when the
@@ -304,16 +311,21 @@ class OpenSSLAdapter : SSLAdapter
 
 	override void disconnect(string reason, DisconnectType type)
 	{
+		debug(OPENSSL) stderr.writefln("OpenSSL: disconnect called ('%s'), calling SSL_shutdown", reason);
 		SSL_shutdown(sslHandle);
+		debug(OPENSSL) stderr.writefln("OpenSSL: SSL_shutdown done, flushing");
 		flushWritten();
+		debug(OPENSSL) stderr.writefln("OpenSSL: SSL_shutdown output flushed");
 		super.disconnect(reason, type);
 	}
 
 	override void onDisconnect(string reason, DisconnectType type)
 	{
-		SSL_shutdown(sslHandle);
+		debug(OPENSSL) stderr.writefln("OpenSSL: onDisconnect ('%s'), calling SSL_free", reason);
 		r.clear();
 		w.clear();
+		SSL_free(sslHandle);
+		sslHandle = null;
 		super.onDisconnect(reason, type);
 	}
 
@@ -322,6 +334,7 @@ class OpenSSLAdapter : SSLAdapter
 	void sslError(int ret, string msg)
 	{
 		auto err = SSL_get_error(sslHandle, ret);
+		debug(OPENSSL) stderr.writefln("OpenSSL: SSL error ('%s', ret %d): %s", msg, ret, err);
 		switch (err)
 		{
 			case SSL_ERROR_WANT_READ:
