@@ -123,10 +123,10 @@ XmlNode[] findAll(XmlNode roots, string selector)
 unittest
 {
 	enum xmlText =
-		`<doc>`
-			`<test>Test 1</test>`
-			`<node id="test2">Test 2</node>`
-			`<node class="test3">Test 3</node>`
+		`<doc>` ~
+			`<test>Test 1</test>` ~
+			`<node id="test2">Test 2</node>` ~
+			`<node class="test3">Test 3</node>` ~
 		`</doc>`;
 	auto doc = xmlText.xmlParse();
 

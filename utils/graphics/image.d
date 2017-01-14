@@ -397,7 +397,7 @@ auto parsePBM(COLOR)(const(void)[] vdata)
 unittest
 {
 	auto data = "P6\n2\n2\n255\n" ~
-		x"000000 FFF000"
+		x"000000 FFF000" ~
 		x"000FFF FFFFFF";
 	auto i = data.parsePBM!RGB();
 	assert(i[0, 0] == RGB.fromHex("000000"));
@@ -407,7 +407,7 @@ unittest
 unittest
 {
 	auto data = "P5\n2\n2\n255\n" ~
-		x"00 55"
+		x"00 55" ~
 		x"AA FF";
 	auto i = data.parsePBM!L8();
 	assert(i[0, 0] == L8(0x00));
