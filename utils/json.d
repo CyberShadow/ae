@@ -24,12 +24,13 @@ import ae.utils.textout;
 
 // ************************************************************************
 
-struct CustomJsonWriter(WRITER)
+struct JsonWriter(Output)
 {
 	/// You can set this to something to e.g. write to another buffer.
-	WRITER output;
+	Output output;
 
-	void putString(in char[] s)
+	/// Write a string literal.
+	private void putString(in char[] s)
 	{
 		// TODO: escape Unicode characters?
 		// TODO: Handle U+2028 and U+2029 ( http://timelessrepo.com/json-isnt-a-javascript-subset )
@@ -48,10 +49,11 @@ struct CustomJsonWriter(WRITER)
 		output.put(start[0..p-start], '"');
 	}
 
-	void put(T)(T v)
+	/// Write a value of a simple type.
+	void putValue(T)(T v)
 	{
-		static if (is(T == enum))
-			put(to!string(v));
+		static if (is(T == typeof(null)))
+			return output.put("null");
 		else
 		static if (is(T : const(char)[]))
 			putString(v);
@@ -65,19 +67,66 @@ struct CustomJsonWriter(WRITER)
 		static if (is(Unqual!T : real))
 			return output.put(fpToString!T(v)); // TODO: don't allocate
 		else
+			static assert(0, "Don't know how to write " ~ T.stringof);
+	}
+
+	void beginArray()
+	{
+		output.put('[');
+	}
+
+	void endArray()
+	{
+		output.put(']');
+	}
+
+	void beginObject()
+	{
+		output.put('{');
+	}
+
+	void endObject()
+	{
+		output.put('}');
+	}
+
+	void putKey(in char[] key)
+	{
+		putString(key);
+		output.put(':');
+	}
+
+	void putComma()
+	{
+		output.put(',');
+	}
+}
+
+struct CustomJsonSerializer(Writer)
+{
+	Writer writer;
+
+	void put(T)(T v)
+	{
+		static if (is(T == enum))
+			put(to!string(v));
+		else
+		static if (is(T : const(char)[]) || is(Unqual!T : real))
+			writer.putValue(v);
+		else
 		static if (is(T U : U[]))
 		{
-			output.put('[');
+			writer.beginArray();
 			if (v.length)
 			{
 				put(v[0]);
 				foreach (i; v[1..$])
 				{
-					output.put(',');
+					writer.putComma();
 					put(i);
 				}
 			}
-			output.put(']');
+			writer.endArray();
 		}
 		else
 		static if (isTuple!T)
@@ -91,37 +140,36 @@ struct CustomJsonWriter(WRITER)
 				put(v.expand[0]);
 			else
 			{
-				output.put('[');
+				writer.beginArray();
 				foreach (n; RangeTuple!N)
 				{
 					static if (n)
-						output.put(',');
+						writer.putComma();
 					put(v.expand[n]);
 				}
-				output.put(']');
+				writer.endArray();
 			}
 		}
 		else
 		static if (is(typeof(T.init.keys)) && is(typeof(T.init.values)) && is(typeof(T.init.keys[0])==string))
 		{
-			output.put('{');
+			writer.beginObject();
 			bool first = true;
 			foreach (key, value; v)
 			{
 				if (!first)
-					output.put(',');
+					writer.putComma();
 				else
 					first = false;
-				put(key);
-				output.put(':');
+				writer.putKey(key);
 				put(value);
 			}
-			output.put('}');
+			writer.endObject();
 		}
 		else
 		static if (is(T==struct))
 		{
-			output.put('{');
+			writer.beginObject();
 			bool first = true;
 			foreach (i, field; v.tupleof)
 			{
@@ -131,15 +179,14 @@ struct CustomJsonWriter(WRITER)
 						if (v.tupleof[i] == T.init.tupleof[i])
 							continue;
 					if (!first)
-						output.put(',');
+						writer.putComma();
 					else
 						first = false;
-					put(getJsonName!(T, v.tupleof[i].stringof[2..$]));
-					output.put(':');
+					writer.putKey(getJsonName!(T, v.tupleof[i].stringof[2..$]));
 					put(field);
 				}
 			}
-			output.put('}');
+			writer.endObject();
 		}
 		else
 		static if (is(typeof(*v)))
@@ -147,14 +194,14 @@ struct CustomJsonWriter(WRITER)
 			if (v)
 				put(*v);
 			else
-				output.put("null");
+				writer.putValue(null);
 		}
 		else
 			static assert(0, "Can't serialize " ~ T.stringof ~ " to JSON");
 	}
 }
 
-alias CustomJsonWriter!StringBuilder JsonWriter;
+alias CustomJsonSerializer!(JsonWriter!StringBuilder) JsonSerializer;
 
 private struct Escapes
 {
@@ -200,16 +247,16 @@ private struct Escapes
 
 string toJson(T)(T v)
 {
-	JsonWriter writer;
-	writer.put(v);
-	return writer.output.get();
+	JsonSerializer serializer;
+	serializer.put(v);
+	return serializer.writer.output.get();
 }
 
 unittest
 {
 	struct X { int a; string b; }
 	X x = {17, "aoeu"};
-	assert(toJson(x) == `{"a":17,"b":"aoeu"}`);
+	assert(toJson(x) == `{"a":17,"b":"aoeu"}`, toJson(x));
 	int[] arr = [1,5,7];
 	assert(toJson(arr) == `[1,5,7]`);
 	assert(toJson(true) == `true`);
