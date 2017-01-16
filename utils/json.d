@@ -102,6 +102,23 @@ struct CustomJsonWriter(WRITER)
 			}
 		}
 		else
+		static if (is(typeof(T.init.keys)) && is(typeof(T.init.values)) && is(typeof(T.init.keys[0])==string))
+		{
+			output.put('{');
+			bool first = true;
+			foreach (key, value; v)
+			{
+				if (!first)
+					output.put(',');
+				else
+					first = false;
+				put(key);
+				output.put(':');
+				put(value);
+			}
+			output.put('}');
+		}
+		else
 		static if (is(T==struct))
 		{
 			output.put('{');
@@ -121,23 +138,6 @@ struct CustomJsonWriter(WRITER)
 					output.put(':');
 					put(field);
 				}
-			}
-			output.put('}');
-		}
-		else
-		static if (isAssociativeArray!T)
-		{
-			output.put('{');
-			bool first = true;
-			foreach (key, value; v)
-			{
-				if (!first)
-					output.put(',');
-				else
-					first = false;
-				put(key);
-				output.put(':');
-				put(value);
 			}
 			output.put('}');
 		}
@@ -295,11 +295,11 @@ private struct JsonParser(C)
 		static if (isTuple!T)
 			return readTuple!T();
 		else
-		static if (is(T==struct))
-			return readObject!(T)();
-		else
 		static if (is(typeof(T.init.keys)) && is(typeof(T.init.values)) && is(typeof(T.init.keys[0])==string))
 			return readAA!(T)();
+		else
+		static if (is(T==struct))
+			return readObject!(T)();
 		else
 		static if (is(T U : U*))
 			return readPointer!T();
@@ -703,6 +703,18 @@ unittest // Issue 49
 {
 	immutable bool b;
 	assert(toJson(b) == "false");
+}
+
+unittest
+{
+	import ae.utils.aa;
+	alias M = OrderedMap!(string, int);
+	M m;
+	m["one"] = 1;
+	m["two"] = 2;
+	auto j = m.toJson();
+	assert(j == `{"one":1,"two":2}`, j);
+	assert(j.jsonParse!M == m);
 }
 
 // ************************************************************************
