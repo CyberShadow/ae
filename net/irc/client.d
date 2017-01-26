@@ -45,15 +45,15 @@ private:
 		assert(command.length > 1);
 		string message = toUpper(command);
 
-		while((params.length > 1) && (params[$-1]==null || params[$-1]==""))
+		while ((params.length > 1) && (params[$-1]==null || params[$-1]==""))
 			params.length = params.length-1;
 
 		assert(params.length <= 15);
 
-		foreach(i,parameter; params)
+		foreach (i, parameter; params)
 		{
 			message ~= " ";
-			if(parameter.indexOf(" ")!=-1)
+			if (parameter.indexOf(" ") != -1)
 			{
 				assert(i == params.length-1);
 				message ~= ":";
@@ -95,7 +95,7 @@ private:
 	string removePrefix(string nick)
 	{
 		// TODO: do this properly, maybe?
-		if(nick[0]=='@' || nick[0]=='+')
+		if (nick[0]=='@' || nick[0]=='+')
 			return nick[1..$];
 		else
 			return nick;
@@ -217,7 +217,7 @@ private:
 				hopcount = to!int(gecos[0]);
 			catch (Exception e)
 				hopcount = 0;
-			if(gecos.length > 1)
+			if (gecos.length > 1)
 				gecos = gecos[1..$];
 			else
 				gecos = null;
@@ -244,11 +244,11 @@ private:
 			}
 
 			if (handleWho)
-				handleWho(params[1],params[2],params[3],params[4],params[5],params[6],hopcount,std.string.join(gecos, " "));
+				handleWho(params[1], params[2], params[3], params[4], params[5], params[6], hopcount, std.string.join(gecos, " "));
 			break;
 
 		case "315":     // WHO end
-			if(handleWhoEnd)
+			if (handleWhoEnd)
 				handleWhoEnd(params.length>=2 ? params[1] : null);
 			break;
 
@@ -354,14 +354,14 @@ private:
 
 		case "QUIT":
 			string[] oldChannels;
-			foreach (channelName,channel;channels)
+			foreach (channelName, channel; channels)
 				if (nick in channel.users)
 					oldChannels ~= channelName;
 
 			if (handleQuit)
 				handleQuit(nick, params.length == 1 ? params[0] : null, oldChannels);
 
-			foreach (channel;channels)
+			foreach (channel; channels)
 				if (nick in channel.users)
 					channel.users.remove(nick);
 
@@ -411,7 +411,7 @@ private:
 		assert(channel in channels);
 		if (nick == currentNickname)
 		{
-			foreach(user,b;channels[channel].users)
+			foreach (user, b; channels[channel].users)
 				users[user].channelsJoined--;
 			purgeUsers();
 			channels.remove(channel);
