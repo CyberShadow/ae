@@ -53,9 +53,9 @@ private:
 		foreach (i, parameter; params)
 		{
 			message ~= " ";
-			if (parameter.indexOf(" ") != -1)
+			if (parameter.indexOf(" ") != -1 || !parameter.length || parameter.startsWith(":"))
 			{
-				assert(i == params.length-1);
+				assert(i == params.length-1, "Malformed non-terminal parameter: " ~ parameter);
 				message ~= ":";
 			}
 			message ~= parameter;
