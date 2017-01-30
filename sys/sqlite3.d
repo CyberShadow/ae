@@ -23,9 +23,9 @@ final class SQLite
 {
 	private sqlite3* db;
 
-	this(string fn)
+	this(string fn, bool readOnly = false)
 	{
-		sqenforce(sqlite3_open(toStringz(fn), &db));
+		sqenforce(sqlite3_open_v2(toStringz(fn), &db, readOnly ? SQLITE_OPEN_READONLY : SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, null));
 	}
 
 	~this()
