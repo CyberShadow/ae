@@ -841,7 +841,7 @@ version (linux)
 			if (errno == ENOATTR)
 				return false;
 			else
-				errnoEnforce(false);
+				errnoEnforce(false, "Error reading file xattrs");
 			assert(false);
 		}
 
