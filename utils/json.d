@@ -102,6 +102,83 @@ struct JsonWriter(Output)
 	}
 }
 
+struct PrettyJsonWriter(Output, alias indent = '\t', alias newLine = '\n', alias pad = ' ')
+{
+	JsonWriter!Output jsonWriter;
+	alias jsonWriter this;
+
+	bool indentPending;
+	uint indentLevel;
+
+	void putIndent()
+	{
+		if (indentPending)
+		{
+			foreach (n; 0..indentLevel)
+				output.put(indent);
+			indentPending = false;
+		}
+	}
+
+	void putNewline()
+	{
+		if (!indentPending)
+		{
+			output.put(newLine);
+			indentPending = true;
+		}
+	}
+
+	void putValue(T)(T v)
+	{
+		putIndent();
+		jsonWriter.putValue(v);
+	}
+
+	void beginArray()
+	{
+		jsonWriter.beginArray();
+		indentLevel++;
+		putNewline();
+	}
+
+	void endArray()
+	{
+		indentLevel--;
+		putNewline();
+		putIndent();
+		jsonWriter.endArray();
+	}
+
+	void beginObject()
+	{
+		jsonWriter.beginObject();
+		indentLevel++;
+		putNewline();
+	}
+
+	void endObject()
+	{
+		indentLevel--;
+		putNewline();
+		putIndent();
+		jsonWriter.endObject();
+	}
+
+	void putKey(in char[] key)
+	{
+		putIndent();
+		putString(key);
+		output.put(pad, ':', pad);
+	}
+
+	void putComma()
+	{
+		jsonWriter.putComma();
+		putNewline();
+	}
+}
+
 struct CustomJsonSerializer(Writer)
 {
 	Writer writer;
@@ -264,6 +341,33 @@ unittest
 	assert(toJson(tuple()) == ``);
 	assert(toJson(tuple(42)) == `42`);
 	assert(toJson(tuple(42, "banana")) == `[42,"banana"]`);
+}
+
+// ************************************************************************
+
+string toPrettyJson(T)(T v)
+{
+	CustomJsonSerializer!(PrettyJsonWriter!StringBuilder) serializer;
+	serializer.put(v);
+	return serializer.writer.output.get();
+}
+
+unittest
+{
+	struct X { int a; string b; int[] c, d; }
+	X x = {17, "aoeu", [1, 2, 3]};
+	assert(toPrettyJson(x) ==
+`{
+	"a" : 17,
+	"b" : "aoeu",
+	"c" : [
+		1,
+		2,
+		3
+	],
+	"d" : [
+	]
+}`, toPrettyJson(x));
 }
 
 // ************************************************************************
