@@ -7,6 +7,8 @@ install:
   # Dub
   - cinst dub
 build_script:
-  - dub test --arch=x86
   - call "C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\vcvarsall.bat" amd64
   - dub test --arch=x86_64
+  - call "C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\vcvarsall.bat" x86
+  - set DFLAGS=-m32mscoff
+  - dub test --arch=x86
