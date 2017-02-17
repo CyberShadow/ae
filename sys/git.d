@@ -41,7 +41,7 @@ struct Repository
 	this(string path)
 	{
 		path = path.absolutePath();
-		enforce(path.exists, "Repository path does not exist");
+		enforce(path.exists, "Repository path does not exist: " ~ path);
 		gitDir = path.buildPath(".git");
 		if (gitDir.exists && gitDir.isFile)
 			gitDir = path.buildNormalizedPath(gitDir.readText().strip()[8..$]);
