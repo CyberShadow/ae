@@ -1,11 +1,10 @@
 install:
   # cinst dmd --version=2.071.0
-  - ps: Start-FileDownload 'http://downloads.dlang.org/releases/2.x/2.071.0/dmd.2.071.0.windows.7z' -FileName 'dmd2.7z'
+  - ps: Start-FileDownload 'http://downloads.dlang.org/releases/2.x/2.073.1/dmd.2.073.1.windows.7z' -FileName 'dmd2.7z'
   - 7z x dmd2.7z > nul
   - set PATH=%CD%\dmd2\windows\bin;%CD%\dmd2\windows\bin64;%PATH%
   - dmd.exe --version
-  # Dub
-  - cinst dub
+  - dub.exe --version
 build_script:
   - call "C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\vcvarsall.bat" amd64
   - dub test --arch=x86_64
