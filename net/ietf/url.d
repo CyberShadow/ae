@@ -20,8 +20,11 @@ import ae.utils.array;
 
 string applyRelativeURL(string base, string rel)
 {
-	if (rel.indexOf("://") >= 0)
-		return rel;
+	{
+		auto p = rel.indexOf("://");
+		if (p >= 0 && rel.indexOf("/") > p)
+			return rel;
+	}
 
 	base = base.split("?")[0];
 	base = base[0..base.lastIndexOf('/')+1];
@@ -50,6 +53,7 @@ unittest
 	assert(applyRelativeURL("http://example.com/dir/index.html", "../page.html") == "http://example.com/page.html");
 	assert(applyRelativeURL("http://example.com/script.php?path=a/b/c", "page.html") == "http://example.com/page.html");
 	assert(applyRelativeURL("http://example.com/index.html", "http://example.org/page.html") == "http://example.org/page.html");
+	assert(applyRelativeURL("http://example.com/http://archived.website", "/http://archived.website/2") == "http://example.com/http://archived.website/2");
 }
 
 string fileNameFromURL(string url)
