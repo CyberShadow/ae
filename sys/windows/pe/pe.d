@@ -40,8 +40,10 @@ struct PE
 		enforce(ntHeaders.Signature == IMAGE_NT_SIGNATURE, "Invalid NT signature");
 		enforce(ntHeaders.FileHeader.Machine == IMAGE_FILE_MACHINE_I386, "Not an x86 PE");
 
-		auto sectionOffset = dosHeader.e_lfanew + ntHeaders.OptionalHeader.offsetof + ntHeaders.FileHeader.SizeOfOptionalHeader;
-		sectionHeaders = cast(IMAGE_SECTION_HEADER[])(data[sectionOffset .. sectionOffset + ntHeaders.FileHeader.NumberOfSections * IMAGE_SECTION_HEADER.sizeof]);
+		auto sectionsStart = dosHeader.e_lfanew + ntHeaders.OptionalHeader.offsetof + ntHeaders.FileHeader.SizeOfOptionalHeader;
+		auto sectionsEnd = sectionsStart + ntHeaders.FileHeader.NumberOfSections * IMAGE_SECTION_HEADER.sizeof;
+		enforce(sectionsEnd <= data.length, "Not enough data for section headers");
+		sectionHeaders = cast(IMAGE_SECTION_HEADER[])(data[sectionsStart .. sectionsEnd]);
 	}
 
 	/// Translate a file offset to the relative virtual address
