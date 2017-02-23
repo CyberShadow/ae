@@ -44,8 +44,8 @@ struct KeyValueStore(K, V)
 	V opIndex()(auto ref K k)
 	{
 		checkInitialized();
-		foreach (void[] s; sqlGet.iterate(toSqlType(k)))
-			return fromStr!V(s);
+		foreach (SqlType!V v; sqlGet.iterate(toSqlType(k)))
+			return fromSqlType!V(v);
 		throw new Exception("Value not in KeyValueStore");
 	}
 
@@ -204,6 +204,7 @@ unittest
 
 	assert(store.length == 1);
 	assert("key" in store);
+	assert(store["key"] == "value");
 	assert(store.get("key", null) == "value");
 
 	store["key"] = "value2";
