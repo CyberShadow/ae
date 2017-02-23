@@ -26,6 +26,7 @@ struct PE
 	PIMAGE_DOS_HEADER dosHeader;
 	PIMAGE_NT_HEADERS ntHeaders;
 	IMAGE_SECTION_HEADER[] sectionHeaders;
+	IMAGE_DATA_DIRECTORY[] dataDirectories;
 
 	this(void[] exe)
 	{
@@ -39,6 +40,9 @@ struct PE
 		ntHeaders = cast(PIMAGE_NT_HEADERS)(data.ptr + dosHeader.e_lfanew);
 		enforce(ntHeaders.Signature == IMAGE_NT_SIGNATURE, "Invalid NT signature");
 		enforce(ntHeaders.FileHeader.Machine == IMAGE_FILE_MACHINE_I386, "Not an x86 PE");
+
+		dataDirectories = ntHeaders.OptionalHeader.DataDirectory.ptr[0..ntHeaders.OptionalHeader.NumberOfRvaAndSizes];
+		enforce(cast(ubyte*)(dataDirectories.ptr + dataDirectories.length) <= data.ptr + data.length, "Not enough data for data directories");
 
 		auto sectionsStart = dosHeader.e_lfanew + ntHeaders.OptionalHeader.offsetof + ntHeaders.FileHeader.SizeOfOptionalHeader;
 		auto sectionsEnd = sectionsStart + ntHeaders.FileHeader.NumberOfSections * IMAGE_SECTION_HEADER.sizeof;
