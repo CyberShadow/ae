@@ -20,6 +20,8 @@ version (Windows)
 	import ae.sys.windows.imports;
 	mixin(importWin32!q{winuser});
 
+	pragma(lib, "user32");
+
 	void getDesktopResolution(out uint x, out uint y)
 	{
 		x = GetSystemMetrics(SM_CXSCREEN);
