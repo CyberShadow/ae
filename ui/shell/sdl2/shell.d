@@ -69,9 +69,8 @@ final class SDL2Shell : Shell
 			switch (SDL_PeepEvents(null, 1, SDL_GETEVENT, 0, uint.max))
 			{
 				case -1: return 0;
-				case  1: return 1;
 				case  0: SDL_Delay(1); break;
-				default: assert(0);
+				default: return 1;
 			}
 		}
 	}
