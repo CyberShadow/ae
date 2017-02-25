@@ -29,7 +29,7 @@ excludedSourceFiles "utils/graphics/sdlimage.d"
 # Needs X11
 excludedSourceFiles "sys/sendinput.d"
 
-# Needs Win32
+# In ae:windows
 excludedSourceFiles "sys/windows/pe/package.d"
 excludedSourceFiles "sys/windows/pe/pe.d"
 excludedSourceFiles "sys/windows/pe/resources.d"
@@ -94,6 +94,19 @@ subPackage {
 		"utils/graphics/sdl2image.d"
 	excludedSourceFiles \
 		"ui/*/main.d"
+}
+
+---------------------------
+
+subPackage {
+	name "windows"
+	targetType "sourceLibrary"
+	dependency "ae" version="*" path="."
+	sourceFiles \
+		"sys/windows/pe/package.d" \
+		"sys/windows/pe/pe.d" \
+		"sys/windows/pe/resources.d" \
+		"sys/windows/pe/versioninfo.d"
 }
 
 ---------------------------
