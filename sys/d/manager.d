@@ -1421,9 +1421,12 @@ EOS";
 
 		struct Config
 		{
-			/// Do not include a timestamp in generated .ddoc files.
+			/// Do not include timestamps, line numbers, or other
+			/// volatile dynamic content in generated .ddoc files.
 			/// Improves cache efficiency and allows meaningful diffs.
-			bool noDateTime = false;
+			bool diffable = false;
+
+			deprecated alias noDateTime = diffable;
 		}
 
 		@property override string configString()
@@ -1505,10 +1508,19 @@ EOS";
 				else
 					log("VERSION file found, not passing LATEST parameter");
 
+				string[] diffable = null;
+				if (config.build.components.website.diffable)
+				{
+					if (makeFullName.readText.indexOf("DIFFABLE") >= 0)
+						diffable = ["DIFFABLE=1"];
+					else
+						diffable = ["NODATETIME=nodatetime.ddoc"];
+				}
+
 				auto args =
 					getMake(env) ~
 					[ "-f", makeFileName ] ~
-					(config.build.components.website.noDateTime ? ["NODATETIME=nodatetime.ddoc"] : []) ~
+					diffable ~
 					(latest ? ["LATEST=" ~ latest] : []) ~
 					[ "all", "kindle", "pdf", "verbatim" ] ~
 					gnuMakeArgs;
