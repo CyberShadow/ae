@@ -2198,11 +2198,12 @@ EOS";
 
 		env.vars["PATH"] = newPaths.join(pathSeparator);
 
+		auto tmpDir = buildPath(config.local.workDir, "tmp");
+		ensureDirExists(tmpDir);
+		env.vars["TMPDIR"] = env.vars["TEMP"] = env.vars["TMP"] = tmpDir;
+
 		version (Windows)
 		{
-			auto tmpDir = buildPath(config.local.workDir, "tmp");
-			tmpDir.recreateEmptyDirectory();
-			env.vars["TEMP"] = env.vars["TMP"] = tmpDir;
 			env.vars["SystemDrive"] = winDir.driveName;
 			env.vars["SystemRoot"] = winDir;
 		}
