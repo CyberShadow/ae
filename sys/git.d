@@ -92,11 +92,21 @@ struct Repository
 		}
 
 		Commit* commit;
+		bool inSig; // PGP signature
 
 		foreach (line; query([`log`, `--all`, `--pretty=raw`]).splitLines())
 		{
 			if (!line.length)
+			{
+				inSig = false;
 				continue;
+			}
+
+			if (inSig)
+			{
+				enforce(line.startsWith(" "), "Expected GPG signature line in git log");
+				continue;
+			}
 
 			if (line.startsWith("commit "))
 			{
@@ -127,8 +137,10 @@ struct Repository
 			if (line.startsWith("    "))
 				commit.message ~= line[4..$];
 			else
-				//enforce(false, "Unknown line in git log: " ~ line);
-				commit.message[$-1] ~= line;
+			if (line.startsWith("gpgsig "))
+				inSig = true;
+			else
+				enforce(false, "Unknown line in git log: " ~ line);
 		}
 
 		foreach (line; query([`show-ref`, `--dereference`]).splitLines())
