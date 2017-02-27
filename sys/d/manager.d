@@ -840,7 +840,9 @@ class DManager : ICacheHost
 			auto env = baseEnvironment;
 			needCC(env, config.build.components.dmd.dmdModel, dmcVer); // Need VC too for VSINSTALLDIR
 
-			if (buildPath(sourceDir, "src", "idgen.d").exists)
+			if (buildPath(sourceDir, "src", "idgen.d").exists ||
+			    buildPath(sourceDir, "src", "ddmd", "idgen.d").exists ||
+			    buildPath(sourceDir, "src", "dmd", "idgen.d").exists)
 			{
 				// Required for bootstrapping.
 				needDMD(env);
