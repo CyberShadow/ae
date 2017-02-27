@@ -1476,6 +1476,7 @@ EOS";
 					// Need Druntime/Phobos source because we are building its documentation from there.
 					c.needSource();
 				}
+				getComponent("tools").needSource(); // for changed.d
 				getComponent("dmd").updateEnv(env);
 
 				needKindleGen(env);
