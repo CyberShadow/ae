@@ -69,3 +69,16 @@ unittest
 	import core.time : seconds, msecs;
 	assert(durScale(1.seconds, 1.5) == 1500.msecs);
 }
+
+/// Like d.total!units, but returns fractional parts as well.
+T fracTotal(string units, T = real)(Duration d)
+{
+	return T(d.total!"hnsecs") / convert!(units, "hnsecs")(1);
+}
+
+///
+unittest
+{
+	import core.time : seconds, msecs;
+	assert(1500.msecs.fracTotal!"seconds" == 1.5);
+}
