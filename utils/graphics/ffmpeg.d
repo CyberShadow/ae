@@ -20,7 +20,7 @@ import ae.utils.graphics.bitmap;
 import ae.utils.graphics.color;
 import ae.utils.graphics.image;
 
-private struct VideoStreamImpl
+private struct VideoInputStreamImpl
 {
 	@property ref Image!BGR front() return
 	{
@@ -113,17 +113,18 @@ private:
 	Image!BGR frame;
 }
 
-struct VideoStream
+struct VideoInputStream
 {
-	RefCounted!VideoStreamImpl impl;
+	RefCounted!VideoInputStreamImpl impl;
 	this(string fn) { impl.initialize(fn); }
 	@property ref Image!BGR front() return { return impl.front; }
 	@property bool empty() { return impl.empty; }
 	void popFront() { impl.popFront(); }
 }
 //alias RefCounted!VideoStreamImpl VideoStream;
+deprecated alias VideoStream = VideoInputStream;
 
-VideoStream streamVideo(string fn) { return VideoStream(fn); }
+VideoInputStream streamVideo(string fn) { return VideoInputStream(fn); }
 
 private:
 
