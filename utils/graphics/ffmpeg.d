@@ -128,6 +128,54 @@ deprecated alias VideoStream = VideoInputStream;
 
 VideoInputStream streamVideo(string fn, string[] ffmpegArgs = null) { return VideoInputStream(fn, ffmpegArgs); }
 
+// ----------------------------------------------------------------------------
+
+struct VideoOutputStream
+{
+	void put(ref Image!BGR frame)
+	{
+		pipes.stdin.rawWrite(frame.toBMP);
+	}
+
+	@disable this(this);
+
+	~this()
+	{
+		pipes.stdin.close();
+		wait(pipes.pid);
+	}
+
+	this(string fn, string[] ffmpegArgs = null, string[] inputArgs = null)
+	{
+		pipes = pipeProcess([
+			"ffmpeg",
+			// Additional input arguments (such as -framerate)
+			] ~ inputArgs ~ [
+		//	// Be quiet
+		//	"-loglevel", "panic",
+			// Specify input format
+			"-f", "image2pipe",
+			// Specify input
+			"-i", "-",
+			// Additional arguments
+			] ~ ffmpegArgs ~ [
+			// Specify output
+			fn
+		], Redirect.stdin);
+	}
+
+private:
+	import std.process;
+
+	ProcessPipes pipes;
+	bool done;
+
+	alias BitmapHeader!3 Header;
+	Image!BGR frame;
+}
+
+// ----------------------------------------------------------------------------
+
 private:
 
 import std.stdio;
