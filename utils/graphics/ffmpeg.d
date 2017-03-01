@@ -79,7 +79,7 @@ private struct VideoInputStreamImpl
 		}
 	}
 
-	private void initialize(string fn)
+	private void initialize(string fn, string[] ffmpegArgs)
 	{
 		pipes = pipeProcess([
 			"ffmpeg",
@@ -93,6 +93,8 @@ private struct VideoInputStreamImpl
 			"-vcodec", "bmp",
 			// Specify output format
 			"-f", "image2pipe",
+			// Additional arguments
+			] ~ ffmpegArgs ~ [
 			// Specify output
 			"-"
 		], Redirect.stdout);
@@ -116,7 +118,7 @@ private:
 struct VideoInputStream
 {
 	RefCounted!VideoInputStreamImpl impl;
-	this(string fn) { impl.initialize(fn); }
+	this(string fn, string[] ffmpegArgs) { impl.initialize(fn, ffmpegArgs); }
 	@property ref Image!BGR front() return { return impl.front; }
 	@property bool empty() { return impl.empty; }
 	void popFront() { impl.popFront(); }
@@ -124,7 +126,7 @@ struct VideoInputStream
 //alias RefCounted!VideoStreamImpl VideoStream;
 deprecated alias VideoStream = VideoInputStream;
 
-VideoInputStream streamVideo(string fn) { return VideoInputStream(fn); }
+VideoInputStream streamVideo(string fn, string[] ffmpegArgs = null) { return VideoInputStream(fn, ffmpegArgs); }
 
 private:
 
