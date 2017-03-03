@@ -60,6 +60,37 @@ unittest
 	assert(sa.bytes == [5]);
 }
 
+/// Reverse of bytes()
+ref inout(T) fromBytes(T)(inout(ubyte)[] bytes)
+	if (!hasIndirections!T)
+{
+	assert(bytes.length == T.sizeof, "Data length mismatch for %s".format(T.stringof));
+	return *cast(inout(T)*)bytes.ptr;
+}
+
+/// ditto
+inout(T) fromBytes(T)(inout(ubyte)[] bytes)
+	if (is(T U : U[]) && !hasIndirections!U)
+{
+	return cast(inout(T))bytes;
+}
+
+unittest
+{
+	{       ubyte b = 5; assert(b.bytes.fromBytes!ubyte == 5); }
+	{ const ubyte b = 5; assert(b.bytes.fromBytes!ubyte == 5); }
+	struct S { ubyte b; }
+	{       ubyte b = 5; assert(b.bytes.fromBytes!S == S(5)); }
+}
+
+unittest
+{
+	struct S { ubyte a, b; }
+	ubyte[] arr = [1, 2];
+	assert(arr.fromBytes!S == S(1, 2));
+	assert(arr.fromBytes!(S[]) == [S(1, 2)]);
+}
+
 int memcmp(in ubyte[] a, in ubyte[] b)
 {
 	assert(a.length == b.length);
