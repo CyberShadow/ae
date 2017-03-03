@@ -35,19 +35,16 @@ T[] toArray(T)(ref T v)
 
 /// Return the value represented as an array of bytes.
 @property inout(ubyte)[] bytes(T)(ref inout(T) value)
-	if (!(is(T == class) || isDynamicArray!T))
+	if (!hasIndirections!T)
 {
 	return value.toArray().bytes;
 }
 
 /// ditto
 @property inout(ubyte)[] bytes(T)(inout(T) value)
-	if ( (is(T == class) || isDynamicArray!T))
+	if (is(T U : U[]) && !hasIndirections!U)
 {
-	static if (is(T U : U[]))
-		return cast(inout(ubyte)[])value;
-	else
-		return (cast(inout(ubyte)*)value)[0..__traits(classInstanceSize, T)];
+	return cast(inout(ubyte)[])value;
 }
 
 unittest
