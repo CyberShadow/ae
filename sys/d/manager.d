@@ -648,6 +648,20 @@ class DManager : ICacheHost
 			enum string binExt = "";
 		}
 
+		version (Windows)
+			enum platform = "windows";
+		else
+		version (linux)
+			enum platform = "linux";
+		else
+		version (OSX)
+			enum platform = "osx";
+		else
+		version (FreeBSD)
+			enum platform = "freebsd";
+		else
+			static assert(false);
+
 		/// Returns the command for the make utility.
 		string[] getMake(in ref Environment env)
 		{
@@ -981,8 +995,13 @@ class DManager : ICacheHost
 			}
 			else
 			{
+				string dmdPath;
+				if (sourceDir.buildPath("src", "posix.mak").readText().canFind("GENERATED"))
+					dmdPath = buildPath(sourceDir, "generated", platform, "release", config.build.components.dmd.dmdModel, "dmd" ~ binExt);
+				else
+					dmdPath = buildPath(sourceDir, "src", "dmd" ~ binExt);
 				cp(
-					buildPath(sourceDir, "src", "dmd" ~ binExt),
+					dmdPath,
 					buildPath(stageDir , "bin", "dmd" ~ binExt),
 				);
 			}
@@ -1555,20 +1574,6 @@ EOS";
 
 		override void performStage()
 		{
-			version (Windows)
-				enum platform = "windows";
-			else
-			version (linux)
-				enum platform = "linux";
-			else
-			version (OSX)
-				enum platform = "osx";
-			else
-			version (FreeBSD)
-				enum platform = "freebsd";
-			else
-				static assert(false);
-
 			auto extrasDir = needExtras();
 
 			void copyDir(string source, string target)
