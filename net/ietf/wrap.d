@@ -202,7 +202,7 @@ Paragraph[] unwrapText(string text, WrapFormat wrapFormat)
 	return paragraphs;
 }
 
-enum DEFAULT_WRAP_LENGTH = 66;
+enum DEFAULT_WRAP_LENGTH = 72;
 
 /// Returns wrapped text in the WrapFormat.flowed format.
 string wrapText(Paragraph[] paragraphs, int margin = DEFAULT_WRAP_LENGTH)
