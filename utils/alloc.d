@@ -186,7 +186,7 @@ mixin template AllocTypes()
 	static if (is(R) && !is(T)) alias FromRefType!R T;
 	static if (is(T) && !is(R)) alias RefType!T R;
 	static if (is(T) && !is(V)) alias StorageType!T V;
-	static if (is(ALLOCATOR_TYPE)) static assert(is(ALLOCATOR_TYPE==T), "This allocator can "
+	static if (is(ALLOCATOR_TYPE)) static assert(is(ALLOCATOR_TYPE==T), "This allocator can " ~
 		"only allocate instances of " ~ ALLOCATOR_TYPE.stringof ~ ", not " ~ T.stringof);
 	static if (is(BASE_TYPE) && is(V))
 	{
