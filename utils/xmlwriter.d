@@ -267,7 +267,7 @@ private struct Escapes
 			if (c=='"')
 				chars[c] = "&quot;";
 			else
-			if (c < 0x20 && c != 0x0D && c != 0x0A)
+			if (c < 0x20 && c != 0x0D && c != 0x0A && c != 0x09)
 				chars[c] = format("&#x%02X;", c);
 			else
 				chars[c] = [cast(char)c],
