@@ -211,7 +211,7 @@ public:
 	/// URL without resource (protocol, host and port).
 	@property string root()
 	{
-		return protocol ~ "://" ~ host ~ (port==protocolDefaultPort ? null : to!string(port));
+		return protocol ~ "://" ~ host ~ (port==protocolDefaultPort ? null : ":" ~ to!string(port));
 	}
 
 	/// Reconstruct full URL from host, port and resource
