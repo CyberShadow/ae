@@ -1,0 +1,43 @@
+#!/bin/bash
+set -eu
+
+# Generate a JSON file usable with DAutoFix.
+# Also create an all.d file, which can be used to run all unit tests.
+
+IFS=$'\n'
+
+files=$(git ls-files)
+
+files=$(echo "$files" | grep '\.d$')
+
+files=$(echo "$files" | grep -vxF 'utils/graphics/sdlimage.d') # Needs SDLv1
+files=$(echo "$files" | grep -vxF 'ui/app/windows/main.d') # Windows-only
+files=$(echo "$files" | grep -vxF 'utils/meta/proxy.d') # Needs __traits(child)
+files=$(echo "$files" | grep -v  '^utils/serialization/') # Needs __traits(child)
+
+files=$(echo "$files" | grep -vxF 'sys/vfs_curl.d') # Deprecated redirect
+files=$(echo "$files" | grep -vxF 'utils/meta/misc.d') # Deprecated redirect
+
+files=$(echo "$files" | grep -v  '^ui/app/main\.d$') # Has main()
+files=$(echo "$files" | grep -v  '^ui/app/.*/main\.d$') # Has main()
+files=$(echo "$files" | grep -v  '^demo/') # Most have main()
+
+dmd -o- -dw -Xfae.json $files
+
+# files=$(echo "$files" | grep -v \
+#      -e sdl \
+#      -e demo \
+#      -e hls \
+#      -e /app/main.d \
+#      -e /app/.*/main.d \
+#      -e signals\.d \
+#      -e benchmark \
+#      -e serialization \
+#      -e vfs_curl \
+#      -e openssl \
+#      -e utils/meta/misc \
+#      -e utils/graphics/image \
+#      -e '!' \
+# )
+
+echo "$files" | sed 's#^\(.*\)\.d$#import ae/\1;#g' | grep -v "package;" | sed s#/#.#g > all.d 
