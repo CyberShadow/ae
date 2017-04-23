@@ -89,6 +89,13 @@ void unpack(string archive, string target)
 		untar(".tar.xz", ".txz", "--xz", "xz")))
 		{}
 	else
+	if (archive.extension.toLower == ".rar" && haveExecutable("unrar"))
+	{
+		target.mkdirRecurse();
+		auto pid = spawnProcess(["unrar", "x", archive, target]);
+		enforce(pid.wait() == 0, "Extraction failed");
+	}
+	else
 	{
 		auto tar = archive.stripExtension;
 		if (tar.extension.toLower == ".tar")
