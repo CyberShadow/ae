@@ -42,6 +42,7 @@ version (linux)
 	import std.conv;
 	import std.process;
 
+	static if (haveX11)
 	private Display* getDisplay()
 	{
 		static Display* dpy;
@@ -62,10 +63,13 @@ version (linux)
 			XFlush(dpy);
 		}
 		else
-			enforce(spawnProcess(["xdotool", "mousemove", text(windowX + x), text(windowY + y)]).wait() == 0, "xdotool failed");
+			enforce(spawnProcess(["xdotool", "mousemove", text(x), text(y)]).wait() == 0, "xdotool failed");
 	}
 
-	alias Window = deimos.X11.X.Window;
+	static if (haveX11)
+		alias Window = deimos.X11.X.Window;
+	else
+		alias Window = uint;
 
 	Image!BGR captureWindow(Window window)
 	{
@@ -83,6 +87,7 @@ version (linux)
 		return result.output.chomp.to!Window;
 	}
 
+	static if (haveX11)
 	Rect!int getWindowGeometry(Window window)
 	{
 		auto dpy = getDisplay();
