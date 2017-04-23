@@ -15,6 +15,11 @@ files=$(echo "$files" | grep -vxF 'ui/app/windows/main.d') # Windows-only
 files=$(echo "$files" | grep -vxF 'utils/meta/proxy.d') # Needs __traits(child)
 files=$(echo "$files" | grep -v  '^utils/serialization/') # Needs __traits(child)
 
+files=$(echo "$files" | grep -vxF 'utils/alloc.d') # Needs alias template parameter binding
+files=$(echo "$files" | grep -vxF 'utils/container/list.d') # Needs ae.utils.alloc
+files=$(echo "$files" | grep -vxF 'utils/container/package.d') # Needs ae.utils.container.list
+files=$(echo "$files" | grep -vxF 'utils/xmldom.d') # Needs ae.utils.alloc
+
 files=$(echo "$files" | grep -vxF 'sys/vfs_curl.d') # Deprecated redirect
 files=$(echo "$files" | grep -vxF 'utils/meta/misc.d') # Deprecated redirect
 
