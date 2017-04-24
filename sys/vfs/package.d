@@ -42,6 +42,10 @@ void rename(string from, string to)
 		throw new Exception("Cannot rename across VFS");
 }
 
+/// Enumerate directory entries.
+/// Returns an array of file/directory names only.
+string[] listDir(string path) { return getVFS(path).listDir(path); }
+
 /// Get MD5 digest of file at location.
 ubyte[16] mdFile(string path) { return getVFS(path).mdFile(path); }
 
@@ -135,6 +139,9 @@ class VFS
 
 	/// Get MD5 digest of file at location.
 	ubyte[16] mdFile(string path) { import std.digest.md; return md5Of(read(path)); }
+
+	/// Enumerate directory entries.
+	string[] listDir(string path) { assert(false, "Not implemented"); }
 }
 
 VFS[string] registry;
@@ -209,6 +216,12 @@ class FS : VFS
 	override void rename(string from, string to) { std.file.rename(from, to); }
 	override void mkdirRecurse(string path) { std.file.mkdirRecurse(path); }
 	override ubyte[16] mdFile(string path) { return ae.sys.file.mdFile(path); }
+
+	override string[] listDir(string path)
+	{
+		import std.algorithm, std.path, std.array;
+		return std.file.dirEntries(path, std.file.SpanMode.shallow).map!(de => de.baseName).array;
+	}
 
 	static this()
 	{
