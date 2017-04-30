@@ -590,3 +590,14 @@ template SignedBitsType(uint bits)
 	}
 	return fields;
 }
+
+/// Create a functor value type (bound struct) from an alias.
+auto functor(alias fun)()
+{
+	struct Functor(alias fun)
+	{
+		alias opCall = fun;
+	}
+
+	return Functor!fun.init;
+}
