@@ -690,12 +690,12 @@ private struct JsonParser(C)
 			expect(':');
 
 			bool found;
-			foreach (i, field; v.tupleof)
+			foreach (i, ref field; v.tupleof)
 			{
 				enum name = getJsonName!(T, v.tupleof[i].stringof[2..$]);
 				if (name == jsonField)
 				{
-					v.tupleof[i] = read!(typeof(v.tupleof[i]))();
+					field = read!(typeof(v.tupleof[i]))();
 					found = true;
 					break;
 				}
