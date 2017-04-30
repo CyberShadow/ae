@@ -56,14 +56,6 @@ protected:
 
 	void sendRequest(HttpRequest request)
 	{
-		string reqMessage = request.method ~ " ";
-		if (request.proxy !is null) {
-			reqMessage ~= "http://" ~ request.host;
-			if (compat || request.port != 80)
-				reqMessage ~= format(":%d", request.port);
-		}
-		reqMessage ~= request.resource ~ " HTTP/1.0\r\n";
-
 		if ("User-Agent" !in request.headers && agent)
 			request.headers["User-Agent"] = agent;
 		if (!compat) {
@@ -78,8 +70,22 @@ protected:
 		if ("Connection" !in request.headers)
 			request.headers["Connection"] = keepAlive ? "keep-alive" : "close";
 
+		sendRawRequest(request);
+	}
+
+	void sendRawRequest(HttpRequest request)
+	{
+		string reqMessage = request.method ~ " ";
+		if (request.proxy !is null) {
+			reqMessage ~= "http://" ~ request.host;
+			if (compat || request.port != 80)
+				reqMessage ~= format(":%d", request.port);
+		}
+		reqMessage ~= request.resource ~ " HTTP/1.0\r\n";
+
 		foreach (string header, string value; request.headers)
-			reqMessage ~= header ~ ": " ~ value ~ "\r\n";
+			if (value !is null)
+				reqMessage ~= header ~ ": " ~ value ~ "\r\n";
 
 		reqMessage ~= "\r\n";
 		debug(HTTP)
