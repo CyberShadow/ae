@@ -371,7 +371,7 @@ else
 
 /// Generate constructors that simply call the parent class constructors.
 /// Based on http://forum.dlang.org/post/i3hpj0$2vc6$1@digitalmars.com
-mixin template GenerateContructorProxies()
+mixin template GenerateConstructorProxies()
 {
 	mixin(() {
 		import std.conv : text;
@@ -397,6 +397,8 @@ mixin template GenerateContructorProxies()
 	} ());
 }
 
+deprecated alias GenerateContructorProxies = GenerateConstructorProxies;
+
 unittest
 {
 	class A
@@ -409,7 +411,7 @@ unittest
 
 	class B : A
 	{
-		mixin GenerateContructorProxies;
+		mixin GenerateConstructorProxies;
 	}
 
 	A a;

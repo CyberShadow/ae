@@ -63,7 +63,7 @@ import ae.utils.meta;
 /// Subclass any control to give it an arbitrary background color.
 class SetBGColor(BASE : Control, uint C) : BASE
 {
-	mixin GenerateContructorProxies;
+	mixin GenerateConstructorProxies;
 
 	enum BGRX color = BGRX(C&0xFF, (C>>8)&0xFF, C>>16);
 

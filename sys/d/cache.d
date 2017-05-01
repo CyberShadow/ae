@@ -205,7 +205,7 @@ class TempCache : DirCacheBase
 /// Optimize things by hard-linking identical files.
 class DirCache : DirCacheBase
 {
-	mixin GenerateContructorProxies;
+	mixin GenerateConstructorProxies;
 	alias cacheHost this; // https://issues.dlang.org/show_bug.cgi?id=5973
 
 	override @property string name() const { return "directory"; }
