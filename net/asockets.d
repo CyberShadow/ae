@@ -934,7 +934,11 @@ public:
 		if (state == ConnectionState.connecting || state == ConnectionState.connected)
 			close();
 		else
+		{
 			assert(conn is null, "Registered but %s socket".format(state));
+			if (state == ConnectionState.resolving)
+				state = ConnectionState.disconnected;
+		}
 
 		if (disconnectHandler)
 			disconnectHandler(reason, type);
