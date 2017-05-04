@@ -312,12 +312,9 @@ void fillSector(V, COLOR)(auto ref V v, int x, int y, int r0, int r1, real a0, r
 			if (r0s <= rs && rs < r1s)
 			{
 				real a = atan2(cast(real)dy, cast(real)dx);
-				if (!(a0 <= a && a <= a1))
-					continue;
-				a += TAU;
-				if (!(a0 <= a && a <= a1))
-					continue;
-				v[px, py] = c;
+				if ((a0 <= a     && a     <= a1) ||
+				    (a0 <= a+TAU && a+TAU <= a1))
+					v[px, py] = c;
 			}
 		}
 }
