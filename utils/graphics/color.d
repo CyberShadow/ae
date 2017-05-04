@@ -107,6 +107,34 @@ struct Color(FieldTuple...)
 		return r;
 	}
 
+	/// Alpha-blend a color with an alpha channel on top of one without.
+	static typeof(this) blend(C)(typeof(this) c0, C c1)
+		if (!is(typeof(a)) && is(typeof(c1.a)))
+	{
+		alias A = typeof(c1.a);
+		if (!c1.a)
+			return c0;
+		//A x = cast(A)(c1.a * A.max / a);
+
+		typeof(this) r;
+		foreach (i, ref f; r.tupleof)
+		{
+			enum name = __traits(identifier, r.tupleof[i]);
+			static if (name == "x")
+				{} // skip padding
+			else
+			static if (name == "a")
+				static assert(false);
+			else
+			{
+				auto v0 = __traits(getMember, c0, name);
+				auto v1 = __traits(getMember, c1, name);
+				f = .blend(v1, v0, c1.a);
+			}
+		}
+		return r;
+	}
+
 	/// Construct an RGB color from a typical hex string.
 	static if (is(typeof(this.r) == ubyte) && is(typeof(this.g) == ubyte) && is(typeof(this.b) == ubyte))
 	{
@@ -310,6 +338,25 @@ unittest
 	r = LA.blend(LA(  0, 255),
 	             LA(255, 100));
 	assert(r ==  LA(100, 255), text(r));
+}
+
+unittest
+{
+	import std.conv;
+
+	L8 r;
+
+	r = L8.blend(L8(123),
+	             LA(231, 0));
+	assert(r ==  L8(123), text(r));
+
+	r = L8.blend(L8(123),
+	             LA(231, 255));
+	assert(r ==  L8(231), text(r));
+
+	r = L8.blend(L8(  0),
+	             LA(255, 100));
+	assert(r ==  L8(100), text(r));
 }
 
 unittest
