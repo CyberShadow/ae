@@ -31,9 +31,8 @@ private struct VideoInputStreamImpl
 
 	void popFront()
 	{
-		auto stream = pipes.stdout;
 		auto headerBuf = frameBuf[0..Header.sizeof];
-		if (!stream.readExactly(headerBuf))
+		if (!output.readExactly(headerBuf))
 		{
 			done = true;
 			return;
@@ -42,7 +41,7 @@ private struct VideoInputStreamImpl
 		auto pHeader = cast(Header*)headerBuf.ptr;
 		frameBuf.length = pHeader.bfSize;
 		auto dataBuf = frameBuf[Header.sizeof..$];
-		enforce(stream.readExactly(dataBuf), "Unexpected end of stream");
+		enforce(output.readExactly(dataBuf), "Unexpected end of stream");
 
 		frameBuf.parseBMP!BGR(frame);
 	}
@@ -52,13 +51,13 @@ private struct VideoInputStreamImpl
 	~this()
 	{
 		if (done)
-			wait(pipes.pid);
+			wait(pid);
 		else
 		{
-			if (!tryWait(pipes.pid).terminated)
+			if (!tryWait(pid).terminated)
 			{
 				try
-					kill(pipes.pid);
+					kill(pid);
 				catch (ProcessException e)
 				{}
 			}
@@ -66,27 +65,29 @@ private struct VideoInputStreamImpl
 			version(Posix)
 			{
 				import core.sys.posix.signal : SIGKILL;
-				if (!tryWait(pipes.pid).terminated)
+				if (!tryWait(pid).terminated)
 				{
 					try
-						kill(pipes.pid, SIGKILL);
+						kill(pid, SIGKILL);
 					catch (ProcessException e)
 					{}
 				}
 			}
 
-			wait(pipes.pid);
+			wait(pid);
 		}
 	}
 
-	private void initialize(string fn, string[] ffmpegArgs)
+	private void initialize(File f, string fn, string[] ffmpegArgs)
 	{
-		pipes = pipeProcess([
+		auto pipes = pipe();
+		output = pipes.readEnd();
+		pid = spawnProcess([
 			"ffmpeg",
 			// Be quiet
 			"-loglevel", "panic",
 			// Specify input
-			"-i", fn,
+			"-i", "-",
 			// No audio
 			"-an",
 			// Specify output codec
@@ -96,8 +97,8 @@ private struct VideoInputStreamImpl
 			// Additional arguments
 			] ~ ffmpegArgs ~ [
 			// Specify output
-			"-"
-		], Redirect.stdout);
+			fn
+		], f, pipes.writeEnd);
 
 		frameBuf.length = Header.sizeof;
 
@@ -107,7 +108,8 @@ private struct VideoInputStreamImpl
 private:
 	import std.process;
 
-	ProcessPipes pipes;
+	Pid pid;
+	File output;
 	bool done;
 
 	alias BitmapHeader!3 Header;
@@ -118,7 +120,8 @@ private:
 struct VideoInputStream
 {
 	RefCounted!VideoInputStreamImpl impl;
-	this(string fn, string[] ffmpegArgs) { impl.initialize(fn, ffmpegArgs); }
+	this(File f, string[] ffmpegArgs) { impl.initialize(f, "-", ffmpegArgs); }
+	this(string fn, string[] ffmpegArgs) { impl.initialize(stdin, fn, ffmpegArgs); }
 	@property ref Image!BGR front() return { return impl.front; }
 	@property bool empty() { return impl.empty; }
 	void popFront() { impl.popFront(); }
@@ -126,6 +129,7 @@ struct VideoInputStream
 //alias RefCounted!VideoStreamImpl VideoStream;
 deprecated alias VideoStream = VideoInputStream;
 
+VideoInputStream streamVideo(File f, string[] ffmpegArgs = null) { return VideoInputStream(f, ffmpegArgs); }
 VideoInputStream streamVideo(string fn, string[] ffmpegArgs = null) { return VideoInputStream(fn, ffmpegArgs); }
 
 // ----------------------------------------------------------------------------
@@ -134,20 +138,22 @@ struct VideoOutputStream
 {
 	void put(ref Image!BGR frame)
 	{
-		pipes.stdin.rawWrite(frame.toBMP);
+		output.rawWrite(frame.toBMP);
 	}
 
 	@disable this(this);
 
 	~this()
 	{
-		pipes.stdin.close();
-		wait(pipes.pid);
+		output.close();
+		wait(pid);
 	}
 
-	this(string fn, string[] ffmpegArgs = null, string[] inputArgs = null)
+	private this(File f, string fn, string[] ffmpegArgs, string[] inputArgs)
 	{
-		pipes = pipeProcess([
+		auto pipes = pipe();
+		output = pipes.writeEnd;
+		pid = spawnProcess([
 			"ffmpeg",
 			// Additional input arguments (such as -framerate)
 			] ~ inputArgs ~ [
@@ -161,13 +167,24 @@ struct VideoOutputStream
 			] ~ ffmpegArgs ~ [
 			// Specify output
 			fn
-		], Redirect.stdin);
+		], pipes.readEnd, f);
+	}
+
+	this(File f, string[] ffmpegArgs = null, string[] inputArgs = null)
+	{
+		this(f, "-", ffmpegArgs, inputArgs);
+	}
+
+	this(string fn, string[] ffmpegArgs = null, string[] inputArgs = null)
+	{
+		this(stdin, fn, ffmpegArgs, inputArgs);
 	}
 
 private:
 	import std.process;
 
-	ProcessPipes pipes;
+	Pid pid;
+	File output;
 	bool done;
 
 	alias BitmapHeader!3 Header;
