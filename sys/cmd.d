@@ -142,7 +142,7 @@ T[] pipe(T, Params...)(string[] args, in T[] input, Params params)
 
 ubyte[] iconv(in void[] data, string inputEncoding, string outputEncoding)
 {
-	auto args = ["iconv", "-f", inputEncoding, "-t", outputEncoding];
+	auto args = ["timeout", "30", "iconv", "-f", inputEncoding, "-t", outputEncoding];
 	auto result = pipe(args, data);
 	return cast(ubyte[])result;
 }
