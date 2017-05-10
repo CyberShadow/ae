@@ -210,11 +210,13 @@ auto funopt(alias FUN, FunOptConfig config = FunOptConfig.init, alias usageFun =
 		}
 	}
 
-	enum structFields =
-		config.getoptConfig.length.iota.map!(n => "std.getopt.config config%d = std.getopt.config.%s;\n".format(n, config.getoptConfig[n])).join() ~
-		Params.length.iota.map!(n => "string selector%d; OptionValueType!(Params[%d])* value%d;\n".format(n, n, n)).join();
-
-	static struct GetOptArgs { mixin(structFields); }
+	static struct GetOptArgs
+	{
+		static foreach (n, field; config.getoptConfig)
+			mixin("std.getopt.config config%d = std.getopt.config.%s;".format(n, field));
+		static foreach (n, param; Params)
+			mixin("string selector%d; OptionValueType!(Params[%d])* value%d;\n".format(n, n, n));
+	}
 	GetOptArgs getOptArgs;
 
 	static string optionSelector(int i)()

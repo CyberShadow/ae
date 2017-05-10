@@ -45,7 +45,8 @@ static if (!is(typeof(Duration.init.split!())))
 {
 	static struct Result
 	{
-		mixin("long " ~ [units].join(", ") ~ ";");
+		static foreach (unit; units)
+			mixin("long " ~ unit ~ ";");
 	}
 
 	Result result;
