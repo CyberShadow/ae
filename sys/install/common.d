@@ -44,7 +44,7 @@ class Installer
 	}
 
 	/// Component name. Used for logging.
-	@property string name() { return this.classinfo.name.split(".")[$-1]; }
+	@property string name() { return this.classinfo.name.split(".")[$-1].chomp("Installer"); }
 
 	/// The subdirectory where this component will be installed.
 	@property string subdirectory() { return name.toLower(); }
