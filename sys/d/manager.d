@@ -534,6 +534,10 @@ class DManager : ICacheHost
 					// Use a separate function to work around
 					// "cannot put scope(success) statement inside scope(exit)"
 
+					int currentTempError = tempError;
+
+					// Treat cache errors an environmental errors
+					// (for when needInstalled is invoked to build a dependency)
 					tempError++; scope(success) tempError--;
 
 					// tempDir might be removed by a dependency's build failure.
@@ -541,7 +545,7 @@ class DManager : ICacheHost
 						log("Not caching %s dependency build failure.".format(name));
 					else
 					// Don't cache failed build results due to temporary/environment problems
-					if (failed && tempError > 0)
+					if (failed && currentTempError > 0)
 					{
 						log("Not caching %s build failure due to temporary/environment error.".format(name));
 						rmdirRecurse(tempDir);
