@@ -923,6 +923,17 @@ class DManager : ICacheHost
 					m = m.replace(`-lpthread`, `-pthread`);
 				dmdMakeFullName.write(m);
 			}
+
+			// Fix compilation error of older DMDs with glibc >= 2.25
+			version (linux)
+			{
+				auto fn = srcDir.buildPath("root", "port.c");
+				if (fn.exists)
+					fn.write(fn.readText
+						.replace(`#include <bits/mathdef.h>`, `#include <complex.h>`)
+					);
+			}
+
 			submodule.saveFileState("src/" ~ dmdMakeFileName);
 
 			string[] extraArgs, targets;
