@@ -22,6 +22,9 @@ static import ae.sys.net.wininet;
 
 debug static import std.stdio;
 
+// Server-side test scripts are here:
+// https://gist.github.com/58df32ed1dbe64fffd0545f87d9321ad
+
 void test(string moduleName, string className)()
 {
 	debug std.stdio.stderr.writeln("Testing " ~ className);
@@ -32,7 +35,7 @@ void test(string moduleName, string className)()
 
 	debug std.stdio.stderr.writeln(" - getFile");
 	{
-		assert(net.getFile("http://d-lang.appspot.com/testUrl1") == "Hello world\n");
+		assert(net.getFile("http://thecybershadow.net/d/nettest/testUrl1") == "Hello world\n");
 	}
 
 	debug std.stdio.stderr.writeln(" - downloadFile");
@@ -41,22 +44,22 @@ void test(string moduleName, string className)()
 		if (fn.exists) fn.remove();
 		scope(exit) if (fn.exists) fn.remove();
 
-		net.downloadFile("http://d-lang.appspot.com/testUrl1", fn);
+		net.downloadFile("http://thecybershadow.net/d/nettest/testUrl1", fn);
 		assert(fn.readText() == "Hello world\n");
 	}
 
 	debug std.stdio.stderr.writeln(" - urlOK");
 	{
-		assert( net.urlOK("http://d-lang.appspot.com/testUrl1"));
-		assert(!net.urlOK("http://d-lang.appspot.com/testUrlNX"));
+		assert( net.urlOK("http://thecybershadow.net/d/nettest/testUrl1"));
+		assert(!net.urlOK("http://thecybershadow.net/d/nettest/testUrlNX"));
 		static if (moduleName == "wininet")
-			assert( net.urlOK("https://d-lang.appspot.com/testUrl1"));
+			assert( net.urlOK("https://thecybershadow.net/d/nettest/testUrl1"));
 	}
 
 	debug std.stdio.stderr.writeln(" - resolveRedirect");
 	{
-		auto result = net.resolveRedirect("http://d-lang.appspot.com/testUrl3");
-		assert(result == "http://d-lang.appspot.com/testUrl2", result);
+		auto result = net.resolveRedirect("http://thecybershadow.net/d/nettest/testUrl3");
+		assert(result == "http://thecybershadow.net/d/nettest/testUrl2", result);
 	}
 }
 
