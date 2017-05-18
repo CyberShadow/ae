@@ -11,8 +11,10 @@
 *.so
 *.dll
 
+# dub
 .dub
 dub.selections.json
+/ae-test-library
 
 # demos - rdmd binaries
 /demo/http/httpserve
