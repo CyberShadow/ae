@@ -928,17 +928,20 @@ class DManager : ICacheHost
 				dmdMakeFullName.write(m);
 			}
 
+			submodule.saveFileState("src/" ~ dmdMakeFileName);
+
 			// Fix compilation error of older DMDs with glibc >= 2.25
 			version (linux)
 			{
 				auto fn = srcDir.buildPath("root", "port.c");
 				if (fn.exists)
+				{
 					fn.write(fn.readText
 						.replace(`#include <bits/mathdef.h>`, `#include <complex.h>`)
 					);
+					submodule.saveFileState("src/root/port.c");
+				}
 			}
-
-			submodule.saveFileState("src/" ~ dmdMakeFileName);
 
 			string[] extraArgs, targets;
 			version (Posix)
