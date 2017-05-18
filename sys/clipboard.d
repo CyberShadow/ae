@@ -67,13 +67,15 @@ version (Windows)
 
 		string getName()
 		{
+			import ae.utils.meta : progn;
+
 			wchar[256] sbuf;
 			wchar[] buf = sbuf[];
 			int ret;
 			do
 			{
 				ret = wenforce(GetClipboardFormatNameW(format, buf.ptr, buf.length.to!DWORD), "GetClipboardFormatNameW");
-			} while (ret == buf.length ? (buf.length *=2, true) : false);
+			} while (ret == buf.length ? progn(buf.length *=2, true) : false);
 			return buf[0..ret].toUTF8();
 		}
 	}
