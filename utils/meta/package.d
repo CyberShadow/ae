@@ -21,11 +21,7 @@ public import ae.utils.meta.binding;
 
 // ************************************************************************
 
-import std.algorithm;
-import std.range;
-import std.string;
 import std.traits;
-import std.typetuple;
 
 /**
  * Same as TypeTuple, but meant to be used with values.
@@ -79,6 +75,8 @@ unittest
 template expand(alias arr, size_t offset = 0)
 	if (isStaticArray!(typeof(arr)))
 {
+	import std.typetuple : AliasSeq;
+
 	static if (arr.length == offset)
 		alias expand = AliasSeq!();
 	else
@@ -206,10 +204,15 @@ template enumLength(T)
 deprecated alias EnumLength = enumLength;
 
 /// A range that iterates over all members of an enum.
-@property auto enumIota(T)() { return iota(T.init, enumLength!T); }
+@property auto enumIota(T)()
+{
+	import std.range : iota;
+	return iota(T.init, enumLength!T);
+}
 
 unittest
 {
+	import std.algorithm.comparison : equal;
 	enum E { a, b, c }
 	static assert(equal(enumIota!E, [E.a, E.b, E.c]));
 }
@@ -259,6 +262,12 @@ template structFun(S)
 {
 	string gen()
 	{
+		import std.algorithm.iteration : map;
+		import std.array : join;
+		import std.format : format;
+		import std.meta : staticMap;
+		import std.range : iota;
+
 		enum identifierAt(int n) = __traits(identifier, S.tupleof[n]);
 		enum names = [staticMap!(identifierAt, RangeTuple!(S.tupleof.length))];
 
