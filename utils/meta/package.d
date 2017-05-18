@@ -286,6 +286,36 @@ unittest
 	assert(test.b == 42);
 }
 
+/// Evaluate all arguments and return the last argument.
+/// Can be used instead of the comma operator.
+/// Inspired by http://clhs.lisp.se/Body/s_progn.htm
+Args[$-1] progn(Args...)(lazy Args args)
+{
+	foreach (n; RangeTuple!(Args.length-1))
+		cast(void)args[n];
+	return args[$-1];
+}
+
+unittest
+{
+	// Test that expressions are correctly evaluated exactly once.
+	int a, b, c, d;
+	d = progn(a++, b++, c++);
+	assert(a==1 && b==1 && c == 1 && d == 0);
+	d = progn(a++, b++, ++c);
+	assert(a==2 && b==2 && c == 2 && d == 2);
+}
+
+unittest
+{
+	// Test void expressions.
+	int a, b;
+	void incA() { a++; }
+	void incB() { b++; }
+	progn(incA(), incB());
+	assert(a == 1 && b == 1);
+}
+
 // ************************************************************************
 
 // Using a compiler with UDA support?
