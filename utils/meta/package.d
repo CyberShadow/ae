@@ -236,24 +236,44 @@ static template stringofArray(Args...)
 /// "names" can contain multiple names separated by slashes.
 static size_t findParameter(alias fun, string names)()
 {
+	import std.array : split;
+
 	foreach (name; names.split("/"))
 		foreach (i, param; ParameterIdentifierTuple!fun)
 			if (param == name)
 				return i;
-	assert(false, "Function " ~ __traits(identifier, fun) ~ " doesn't have a parameter called " ~ name);
+	assert(false, "Function " ~ __traits(identifier, fun) ~ " doesn't have a parameter called " ~ names);
 }
 
 /// ditto
 // Workaround for no "static alias" template parameters
 static size_t findParameter()(string[] searchedNames, string soughtNames, string funName)
 {
+	import std.array : split;
+
 	foreach (soughtName; soughtNames.split("/"))
 	{
+		import std.algorithm.searching : countUntil;
+
 		auto targetIndex = searchedNames.countUntil(soughtName);
 		if (targetIndex >= 0)
 			return targetIndex;
 	}
-	assert(false, "No argument %s in %s's parameters (%s)".format(soughtNames, funName, searchedNames).idup);
+
+	{
+		import std.format : format;
+
+		assert(false, "No argument %s in %s's parameters (%s)"
+			.format(soughtNames, funName, searchedNames).idup);
+	}
+}
+
+unittest
+{
+	static void fun(int a, int b, int c) {}
+
+	static assert(findParameter!(fun, "x/c") == 2);
+	assert(findParameter(["a", "b", "c"], "x/c", "fun") == 2);
 }
 
 /// Generates a function which passes its arguments to a struct, which is
