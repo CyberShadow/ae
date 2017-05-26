@@ -396,6 +396,8 @@ class ManagedRepository
 	/// the mainline index of said commit for the child.
 	void getChild(string branch, string commit, out string child, out int mainline)
 	{
+		needCommit(branch);
+
 		log("Querying history for commit children...");
 		auto history = git.getHistory();
 
