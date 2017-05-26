@@ -411,7 +411,7 @@ class ManagedRepository
 		}
 		auto branchHash = branch.toCommitHash();
 		auto pBranchCommit = branchHash in history.commits;
-		enforce(pBranchCommit, "Can't find commit in history");
+		enforce(pBranchCommit, "Can't find commit " ~ branch ~" in history");
 		visit(*pBranchCommit);
 
 		auto commitHash = commit.toCommitHash();
