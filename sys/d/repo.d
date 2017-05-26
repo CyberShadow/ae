@@ -94,25 +94,38 @@ class ManagedRepository
 	protected void performCheckout(string hash)
 	{
 		needClean();
+		needCommit(hash);
 
 		log("Checking out %s commit %s...".format(name, hash));
 
-		if (offline)
-			git.run("checkout", hash);
-		else
-		{
-			try
-				git.run("checkout", hash);
-			catch (Exception e)
-			{
-				log("Checkout failed, updating and retrying...");
-				update();
-				git.run("checkout", hash);
-			}
-		}
+		git.run("checkout", hash);
 
 		saveState();
 		currentHead = hash;
+	}
+
+	/// Ensure that the specified commit is fetched.
+	protected void needCommit(string hash)
+	{
+		void check()
+		{
+			enforce(git.query(["cat-file", "-t", hash]) == "commit",
+				"Unexpected object type");
+		}
+
+		if (offline)
+			check();
+		else
+		{
+			try
+				check();
+			catch (Exception e)
+			{
+				log("Don't have commit " ~ hash ~ ", updating and retrying...");
+				update();
+				check();
+			}
+		}
 	}
 
 	/// Update the remote.
