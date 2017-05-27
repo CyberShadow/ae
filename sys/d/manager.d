@@ -1558,7 +1558,7 @@ EOS";
 						diffable = ["NODATETIME=nodatetime.ddoc"];
 
 					env.vars["SOURCE_DATE_EPOCH"] = "0";
-					targets = [ "all", "verbatim", "pdf" ];
+					targets = [ "all", "verbatim", "pdf", "dlangspec.html" ];
 				}
 				else
 					targets = [ "all", "verbatim", "pdf", "kindle" ];
