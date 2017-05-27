@@ -72,8 +72,9 @@ class LegacyDMCInstaller : Installer
 /// Installs DMC and updates it with the latest OPTLINK and snn.lib.
 class DMCInstaller : LegacyDMCInstaller
 {
-	string optlinkURL = "http://downloads.dlang.org/other/optlink-8.00.15.zip";
-	string dmdURL = "http://downloads.dlang.org/releases/2.x/2.071.0/dmd.2.071.0.windows.7z";
+	//string optlinkURL = "http://downloads.dlang.org/other/optlink-8.00.15.zip";
+	string optlinkURL = null;
+	string dmdURL = "http://downloads.dlang.org/releases/2.x/2.074.0/dmd.2.074.0.windows.7z";
 
 	@property override string subdirectory() { return super.subdirectory ~ "-snn2071"; }
 
@@ -86,6 +87,7 @@ class DMCInstaller : LegacyDMCInstaller
 	{
 		urlDigests["http://downloads.dlang.org/other/optlink-8.00.15.zip"                  ] = "f5a161029d795063e57523824be7408282cbdb81";
 		urlDigests["http://downloads.dlang.org/releases/2.x/2.071.0/dmd.2.071.0.windows.7z"] = "c1bc880e54ff25ba8ee938abb2a1436ff6a9dec8";
+		urlDigests["http://downloads.dlang.org/releases/2.x/2.074.0/dmd.2.074.0.windows.7z"] = "b2f491a448a674c0c3854ffa6b38b2da638c0ea0";
 	}
 
 	override void installImpl(string target)
@@ -94,24 +96,35 @@ class DMCInstaller : LegacyDMCInstaller
 
 		// Get latest OPTLINK
 
-		auto optlinkDir =
-			optlinkURL
-			.I!save()
-			.I!unpack();
-		scope(success) rmdirRecurse(optlinkDir);
+		if (optlinkURL)
+		{
+			auto optlinkDir =
+				optlinkURL
+				.I!save()
+				.I!unpack();
+			scope(success) rmdirRecurse(optlinkDir);
 
-		rename(buildPath(optlinkDir, "link.exe"), buildPath(target, "bin", "link.exe"));
-		hardLink(buildPath(target, "bin", "link.exe"), buildPath(target, "bin", "optlink.exe"));
+			rename(buildPath(optlinkDir, "link.exe"), buildPath(target, "bin", "link.exe"));
+			hardLink(buildPath(target, "bin", "link.exe"), buildPath(target, "bin", "optlink.exe"));
+		}
 
 		// Get latest snn.lib
 
-		auto dmdDir =
-			dmdURL
-			.I!save()
-			.I!unpack();
-		scope(success) rmdirRecurse(dmdDir);
+		if (dmdURL)
+		{
+			auto dmdDir =
+				dmdURL
+				.I!save()
+				.I!unpack();
+			scope(success) rmdirRecurse(dmdDir);
 
-		rename(buildPath(dmdDir, "dmd2", "windows", "lib", "snn.lib"), buildPath(target, "lib", "snn.lib"));
+			rename(buildPath(dmdDir, "dmd2", "windows", "lib", "snn.lib"), buildPath(target, "lib", "snn.lib"));
+			if (!optlinkURL)
+			{
+				rename(buildPath(dmdDir, "dmd2", "windows", "bin", "link.exe"), buildPath(target, "bin", "link.exe"));
+				hardLink(buildPath(target, "bin", "link.exe"), buildPath(target, "bin", "optlink.exe"));
+			}
+		}
 	}
 }
 
