@@ -1548,20 +1548,27 @@ EOS";
 					log("VERSION file found, not passing LATEST parameter");
 
 				string[] diffable = null;
+				string[] targets;
+
 				if (config.build.components.website.diffable)
 				{
 					if (makeFullName.readText.indexOf("DIFFABLE") >= 0)
 						diffable = ["DIFFABLE=1"];
 					else
 						diffable = ["NODATETIME=nodatetime.ddoc"];
+
+					env.vars["SOURCE_DATE_EPOCH"] = "0";
+					targets = [ "all", "verbatim", "pdf" ];
 				}
+				else
+					targets = [ "all", "verbatim", "pdf", "kindle" ];
 
 				auto args =
 					getMake(env) ~
 					[ "-f", makeFileName ] ~
 					diffable ~
 					(latest ? ["LATEST=" ~ latest] : []) ~
-					[ "all", "kindle", "pdf", "verbatim" ] ~
+					targets ~
 					gnuMakeArgs;
 				run(args, env.vars, sourceDir);
 			}
