@@ -15,7 +15,6 @@
 module ae.utils.text.ascii;
 
 import std.algorithm : max;
-import std.exception : assumeUnique;
 import std.traits : Unqual, isSigned;
 
 import ae.utils.array : contains;
@@ -82,7 +81,7 @@ unittest
 }
 
 /// Writes n as decimal number to buf (right-aligned), returns slice of buf containing result.
-char[] toDec(N : ulong, size_t U)(N o, ref char[U] buf)
+char[] toDec(N : ulong, size_t U)(N o, ref char[U] buf) pure
 {
 	static assert(U >= DecimalSize!N, "Buffer too small to fit any " ~ N.stringof ~ " value");
 
@@ -146,7 +145,7 @@ string toDec(T : ulong)(T n)
 	else
 	{
 		static struct Buf { char[DecimalSize!T] buf; } // Can't put static array on heap, use struct
-		return assumeUnique(toDec(n, (new Buf).buf));
+		return toDec(n, (new Buf).buf);
 	}
 }
 

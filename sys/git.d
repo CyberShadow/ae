@@ -475,13 +475,13 @@ struct GitObject
 
 	static GitObject createTree(TreeEntry[] entries)
 	{
-		auto buf = appender!(ubyte[]);
+		auto buf = appender!(immutable(ubyte)[]);
 		foreach (entry; entries)
 		{
 			buf.formattedWrite("%o %s\0", entry.mode, entry.name);
 			buf.put(entry.hash[]);
 		}
-		return GitObject(Hash.init, "tree", buf.data.assumeUnique);
+		return GitObject(Hash.init, "tree", buf.data);
 	}
 }
 

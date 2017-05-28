@@ -172,7 +172,7 @@ unittest
 }
 
 /// Normalize capitalization
-string normalizeHeaderName(string header)
+string normalizeHeaderName(string header) pure
 {
 	alias std.ascii.toUpper toUpper;
 	alias std.ascii.toLower toLower;
@@ -200,7 +200,7 @@ string normalizeHeaderName(string header)
 				break;
 		}
 	}
-	return assumeUnique(s);
+	return s;
 }
 
 unittest

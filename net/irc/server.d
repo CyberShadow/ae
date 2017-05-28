@@ -1085,9 +1085,9 @@ struct Modes
 
 mixin template CommonModes()
 {
-	Type[char.max] modeTypes;
-	string supported()       { return modeTypes.length.iota.filter!(m => modeTypes[m]        ).map!(m => cast(char)m).array.assumeUnique; }
-	string byType(Type type) { return modeTypes.length.iota.filter!(m => modeTypes[m] == type).map!(m => cast(char)m).array.assumeUnique; }
+	immutable Type[char.max] modeTypes;
+	string supported()       pure { return modeTypes.length.iota.filter!(m => modeTypes[m]        ).map!(m => cast(char)m).array; }
+	string byType(Type type) pure { return modeTypes.length.iota.filter!(m => modeTypes[m] == type).map!(m => cast(char)m).array; }
 }
 
 struct ChannelModes

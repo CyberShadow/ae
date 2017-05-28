@@ -105,7 +105,7 @@ T[] fastReplace(T)(T[] what, T[] from, T[] to)
 				p++;
 				p = cast(T*)memchr(p, fromc, end - p);
 			} while (p);
-			return assumeUnique(result);
+			return result;
 		}
 		else
 		{
@@ -158,7 +158,7 @@ T[] fastReplace(T)(T[] what, T[] from, T[] to)
 				}
 				while (p);
 
-				return assumeUnique(result);
+				return result;
 			}
 			else
 			{
@@ -455,7 +455,7 @@ string rawToUTF8(in char[] s)
 }
 
 /// Undo rawToUTF8.
-ascii UTF8ToRaw(in char[] r)
+ascii UTF8ToRaw(in char[] r) pure
 {
 	auto s = new char[r.length];
 	size_t i = 0;
@@ -464,7 +464,7 @@ ascii UTF8ToRaw(in char[] r)
 		assert(c < '\u0100');
 		s[i++] = cast(char)c;
 	}
-	return assumeUnique(s[0..i]);
+	return s[0..i];
 }
 
 unittest
@@ -589,18 +589,29 @@ ubyte[] arrayFromHex(in char[] hex, ubyte[] buf = null)
 	return buf;
 }
 
-string toHex(alias digits = hexDigits)(in ubyte[] data, char[] buf = null)
+template toHex(alias digits = hexDigits)
 {
-	if (buf is null)
-		buf = new char[data.length*2];
-	else
-		assert(buf.length == data.length*2);
-	foreach (i, b; data)
+	char[] toHex(in ubyte[] data, char[] buf) pure
 	{
-		buf[i*2  ] = digits[b>>4];
-		buf[i*2+1] = digits[b&15];
+		assert(buf.length == data.length*2);
+		foreach (i, b; data)
+		{
+			buf[i*2  ] = digits[b>>4];
+			buf[i*2+1] = digits[b&15];
+		}
+		return buf;
 	}
-	return assumeUnique(buf);
+
+	string toHex(in ubyte[] data) pure
+	{
+		auto buf = new char[data.length*2];
+		foreach (i, b; data)
+		{
+			buf[i*2  ] = digits[b>>4];
+			buf[i*2+1] = digits[b&15];
+		}
+		return buf;
+	}
 }
 
 alias toLowerHex = toHex!lowerHexDigits;
@@ -612,6 +623,20 @@ void toHex(T : ulong, size_t U = T.sizeof*2)(T n, ref char[U] buf)
 		buf[i] = hexDigits[n & 0xF];
 		n >>= 4;
 	}
+}
+
+unittest
+{
+	ubyte[] bytes = [0x12, 0x34];
+	assert(toHex(bytes) == "1234");
+}
+
+unittest
+{
+	ubyte[] bytes = [0x12, 0x34];
+	char[] buf = new char[4];
+	toHex(bytes, buf);
+	assert(buf == "1234");
 }
 
 unittest
@@ -790,12 +815,11 @@ string selectBestFrom(in string[] items, string target, float threshold = 0.7)
 
 // ************************************************************************
 
-import std.random;
 
 string randomString(int length=20, string chars="abcdefghijklmnopqrstuvwxyz")
 {
-	char[] result = new char[length];
-	foreach (ref c; result)
-		c = chars[uniform(0, $)];
-	return assumeUnique(result);
+	import std.random;
+	import std.range;
+
+	return length.iota.map!(n => chars[uniform(0, $)]).array;
 }

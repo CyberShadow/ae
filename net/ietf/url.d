@@ -105,7 +105,7 @@ template UrlEncoder(alias isCharAllowed, char escape = '%')
 
 import ae.utils.textout : countCopy;
 
-string encodeUrlPart(alias isCharAllowed, char escape = '%')(string s)
+string encodeUrlPart(alias isCharAllowed, char escape = '%')(string s) pure
 {
 	alias UrlPartEncoder = UrlEncoder!(isCharAllowed, escape);
 
@@ -121,7 +121,7 @@ string encodeUrlPart(alias isCharAllowed, char escape = '%')(string s)
 	}
 
 	Encoder encoder = {s};
-	return countCopy!char(encoder).assumeUnique();
+	return countCopy!char(encoder);
 }
 
 import std.ascii;

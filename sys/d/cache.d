@@ -388,7 +388,7 @@ class GitCache : DCache
 			targetPath.mkdirRecurse();
 
 		auto reader = git.createObjectReader();
-		git.exportCommit(refPrefix ~ key, targetPath, reader, fn => pathFilter(fn.pathSplitter.front.assumeUnique));
+		git.exportCommit(refPrefix ~ key, targetPath, reader, fn => pathFilter(fn.pathSplitter.front));
 	}
 
 	override void remove(string key)

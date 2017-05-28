@@ -71,7 +71,7 @@ string toUtf8(in ascii data, string cp, bool force = false)
 				wchar[] result = new wchar[data.length];
 				foreach (size_t i, ubyte b; data)
 					result[i] = b < 0x80 ? b : cpData[b - 0x80];
-				return to!string(assumeUnique(result));
+				return to!string(result);
 			}
 			else
 			if (force)
@@ -95,7 +95,7 @@ string stripNonAscii(in ascii data)
 	wchar[] result = new wchar[data.length];
 	foreach (size_t i, ubyte b; data)
 		result[i] = b < 0x80 ? b : '\uFFFD';
-	return to!string(assumeUnique(result));
+	return to!string(result);
 }
 
 

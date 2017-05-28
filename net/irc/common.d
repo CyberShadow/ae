@@ -44,29 +44,29 @@ static assert(toLower("}") == "}" && toUpper("}") == "}");
 static assert(toLower("|") == "|" && toUpper("|") == "|");
 static assert(toLower("\\") == "\\" && toUpper("\\") == "\\");
 
-char rfc1459toLower(char c)
+char rfc1459toLower(char c) pure
 {
 	if (c >= 'A' && c <= ']')
 		c += ('a' - 'A');
 	return c;
 }
 
-char rfc1459toUpper(char c)
+char rfc1459toUpper(char c) pure
 {
 	if (c >= 'a' && c <= '}')
 		c -= ('a' - 'A');
 	return c;
 }
 
-string rfc1459toLower(string name)
+string rfc1459toLower(string name) pure
 {
-	return name.byChar.map!rfc1459toLower.array.assumeUnique;
+	return name.byChar.map!rfc1459toLower.array;
 }
 
 
-string rfc1459toUpper(string name)
+string rfc1459toUpper(string name) pure
 {
-	return name.byChar.map!rfc1459toUpper.array.assumeUnique;
+	return name.byChar.map!rfc1459toUpper.array;
 }
 
 unittest

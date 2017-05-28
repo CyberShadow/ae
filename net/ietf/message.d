@@ -649,10 +649,10 @@ string encodeRfc1522(string str)
 	return words.join(" ");
 }
 
-string encodeRfc1522Chunk(string str)
+string encodeRfc1522Chunk(string str) pure
 {
 	auto result = "=?UTF-8?B?" ~ Base64.encode(cast(ubyte[])str) ~ "?=";
-	return assumeUnique(result);
+	return result;
 }
 
 unittest
