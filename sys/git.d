@@ -81,7 +81,7 @@ struct Repository
 		}
 	}
 
-	History getHistory()
+	History getHistory(string[] extraRefs = null)
 	{
 		History history;
 
@@ -94,7 +94,7 @@ struct Repository
 		Commit* commit;
 		bool inSig; // PGP signature
 
-		foreach (line; query([`log`, `--all`, `--pretty=raw`]).split('\n'))
+		foreach (line; query([`log`, `--all`, `--pretty=raw`] ~ extraRefs).split('\n'))
 		{
 			if (!line.length)
 			{
