@@ -256,8 +256,11 @@ class OpenSSLAdapter : SSLAdapter
 		}
 		catch (CaughtException e)
 		{
-			debug(OPENSSL) stderr.writeln("Error while processing incoming data: " ~ e.msg);
-			disconnect(e.msg, DisconnectType.error);
+			debug(OPENSSL) stderr.writeln("Error while %s and processing incoming data: %s".format(next.state, e.msg));
+			if (next.state != ConnectionState.disconnecting && next.state != ConnectionState.disconnected)
+				disconnect(e.msg, DisconnectType.error);
+			else
+				throw e;
 		}
 	}
 
@@ -326,7 +329,9 @@ class OpenSSLAdapter : SSLAdapter
 		w.clear();
 		SSL_free(sslHandle);
 		sslHandle = null;
+		debug(OPENSSL) stderr.writeln("OpenSSL: onDisconnect: SSL_free called, calling super.onDisconnect");
 		super.onDisconnect(reason, type);
+		debug(OPENSSL) stderr.writeln("OpenSSL: onDisconnect finished");
 	}
 
 	alias send = super.send;
