@@ -267,6 +267,8 @@ class ManagedRepository
 
 		log("%s %s into %s.".format(revert ? "Reverting" : "Merging", branch, base));
 
+		scope(exit) saveState();
+
 		scope (failure)
 		{
 			if (!revert)
@@ -315,7 +317,6 @@ class ManagedRepository
 		else
 			doMerge();
 
-		saveState();
 		log("Merge successful.");
 	}
 
