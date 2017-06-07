@@ -400,7 +400,7 @@ class ManagedRepository
 		needCommit(branch);
 
 		log("Querying history for commit children...");
-		auto history = git.getHistory();
+		auto history = git.getHistory([branch]);
 
 		bool[Hash] seen;
 		void visit(Commit* commit)
