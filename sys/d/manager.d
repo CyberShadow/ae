@@ -1853,6 +1853,10 @@ EOS";
 			buildDir.removeRecurse();
 		enforce(!buildDir.exists);
 
+		// Nuke any additional directories cloned by makefiles
+		getMetaRepo().needRepo();
+		getMetaRepo().git.run(["clean", "-ffdx"]);
+
 		scope(exit) if (cacheEngine) cacheEngine.finalize();
 
 		foreach (componentName; componentNames)
