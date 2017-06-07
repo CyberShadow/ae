@@ -94,7 +94,7 @@ struct Repository
 		Commit* commit;
 		bool inSig; // PGP signature
 
-		foreach (line; query([`log`, `--all`, `--pretty=raw`]).splitLines())
+		foreach (line; query([`log`, `--all`, `--pretty=raw`]).split('\n'))
 		{
 			if (!line.length)
 			{
