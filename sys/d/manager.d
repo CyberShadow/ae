@@ -1536,6 +1536,15 @@ EOS";
 					.toFile(makeFullName)
 				;
 				submodule.saveFileState(makeFileName);
+
+				// Retroactive OpenSSL 1.1.0 fix
+				// See https://github.com/dlang/dlang.org/pull/1654
+				auto dubJson = sourceDir.buildPath("dpl-docs/dub.json");
+				dubJson
+					.readText()
+					.replace(`"versions": ["VibeCustomMain"]`, `"versions": ["VibeCustomMain", "VibeNoSSL"]`)
+					.toFile(dubJson);
+				submodule.saveFileState("dpl-docs/dub.json");
 				scope(exit) submodule.saveFileState("dpl-docs/dub.selections.json");
 
 				string latest = null;
