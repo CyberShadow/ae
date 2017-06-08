@@ -490,6 +490,9 @@ class DManager : ICacheHost
 
 			needSource();
 
+			// Nuke any additional directories cloned by makefiles
+			getMetaRepo().git.run(["clean", "-ffdx"]);
+
 			log("Building " ~ getBuildID());
 			if (submoduleName)
 				submodule.clean = false;
@@ -1852,10 +1855,6 @@ EOS";
 		if (buildDir.exists)
 			buildDir.removeRecurse();
 		enforce(!buildDir.exists);
-
-		// Nuke any additional directories cloned by makefiles
-		getMetaRepo().needRepo();
-		getMetaRepo().git.run(["clean", "-ffdx"]);
 
 		scope(exit) if (cacheEngine) cacheEngine.finalize();
 
