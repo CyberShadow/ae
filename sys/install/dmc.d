@@ -76,7 +76,7 @@ class DMCInstaller : LegacyDMCInstaller
 	string optlinkURL = null;
 	string dmdURL = "http://downloads.dlang.org/releases/2.x/2.074.0/dmd.2.074.0.windows.7z";
 
-	@property override string subdirectory() { return super.subdirectory ~ "-snn2071"; }
+	@property override string subdirectory() { return super.subdirectory ~ "-snn2074-optlink80017"; }
 
 	this()
 	{
