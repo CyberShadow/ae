@@ -491,7 +491,8 @@ class DManager : ICacheHost
 			needSource();
 
 			// Nuke any additional directories cloned by makefiles
-			getMetaRepo().git.run(["clean", "-ffdx"]);
+			if (!incrementalBuild)
+				getMetaRepo().git.run(["clean", "-ffdx"]);
 
 			log("Building " ~ getBuildID());
 			if (submoduleName)
