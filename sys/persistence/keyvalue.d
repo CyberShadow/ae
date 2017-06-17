@@ -65,10 +65,11 @@ struct KeyValueStore(K, V)
 		assert(false);
 	}
 
-	void opIndexAssign()(auto ref V v, auto ref K k)
+	auto ref V opIndexAssign()(auto ref V v, auto ref K k)
 	{
 		checkInitialized();
 		sqlSet.exec(toSqlType(k), toSqlType(v));
+		return v;
 	}
 
 	void remove()(auto ref K k)
