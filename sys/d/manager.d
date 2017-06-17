@@ -1505,7 +1505,7 @@ EOS";
 			throw new Exception("Can't find any DMD version tags at this point!");
 		}
 
-		override void performBuild()
+		private void make(in string[] targets)
 		{
 			auto env = baseEnvironment;
 
@@ -1561,7 +1561,6 @@ EOS";
 					log("VERSION file found, not passing LATEST parameter");
 
 				string[] diffable = null;
-				string[] targets;
 
 				if (config.build.components.website.diffable)
 				{
@@ -1571,10 +1570,7 @@ EOS";
 						diffable = ["NODATETIME=nodatetime.ddoc"];
 
 					env.vars["SOURCE_DATE_EPOCH"] = "0";
-					targets = [ "all", "verbatim", "pdf", "dlangspec.html" ];
 				}
-				else
-					targets = [ "all", "verbatim", "pdf", "kindle" ];
 
 				auto args =
 					getMake(env) ~
@@ -1585,6 +1581,19 @@ EOS";
 					gnuMakeArgs;
 				run(args, env.vars, sourceDir);
 			}
+		}
+
+		override void performBuild()
+		{
+			if (config.build.components.website.diffable)
+				make(["all", "verbatim", "pdf", "dlangspec.html"]);
+			else
+				make(["all", "verbatim", "pdf", "kindle"]);
+		}
+
+		override void performTest()
+		{
+			make(["test"]);
 		}
 
 		override void performStage()
