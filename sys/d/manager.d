@@ -1513,16 +1513,6 @@ EOS";
 				throw new Exception("The dlang.org website is only buildable on POSIX platforms.");
 			else
 			{
-				foreach (dep; ["dmd", "druntime", "phobos"])
-				{
-					auto c = getComponent(dep);
-					c.needInstalled();
-
-					// Need DMD source because https://github.com/dlang/phobos/pull/4613#issuecomment-266462596
-					// Need Druntime/Phobos source because we are building its documentation from there.
-					c.needSource();
-				}
-				getComponent("tools").needSource(); // for changed.d
 				getComponent("dmd").updateEnv(env);
 
 				needKindleGen(env);
@@ -1585,6 +1575,17 @@ EOS";
 
 		override void performBuild()
 		{
+			foreach (dep; ["dmd", "druntime", "phobos"])
+			{
+				auto c = getComponent(dep);
+				c.needInstalled();
+
+				// Need DMD source because https://github.com/dlang/phobos/pull/4613#issuecomment-266462596
+				// Need Druntime/Phobos source because we are building its documentation from there.
+				c.needSource();
+			}
+			getComponent("tools").needSource(); // for changed.d
+
 			if (config.build.components.website.diffable)
 				make(["all", "verbatim", "pdf", "dlangspec.html"]);
 			else
