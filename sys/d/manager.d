@@ -376,8 +376,8 @@ class DManager : ICacheHost
 		@property ManagedRepository submodule() { return getSubmodule(submoduleName); }
 
 		/// Configuration applicable to multiple (not all) components.
-		/// Note: don't serialize this structure whole!
-		/// Only serialize used fields.
+		// Note: don't serialize this structure whole!
+		// Only serialize used fields.
 		struct CommonConfig
 		{
 			version (Windows)
@@ -388,7 +388,9 @@ class DManager : ICacheHost
 			else
 				enum defaultModel = "32";
 
-			string model = defaultModel; /// Target model ("32" or "64").
+			/// Target model ("32", "64", or on Windows, "32mscoff").
+			/// Controls the model of the built Phobos and Druntime libraries.
+			string model = defaultModel;
 
 			string[] makeArgs; /// Additional make parameters,
 			                   /// e.g. "HOST_CC=g++48"
@@ -901,7 +903,7 @@ class DManager : ICacheHost
 			string dmdMakeFileName = findMakeFile(srcDir, makeFileName);
 			string dmdMakeFullName = srcDir.buildPath(dmdMakeFileName);
 
-			string modelFlag = config.build.components.common.model;
+			string modelFlag = config.build.components.dmd.dmdModel;
 			if (dmdMakeFullName.readText().canFind("MODEL=-m32"))
 				modelFlag = "-m" ~ modelFlag;
 
@@ -966,9 +968,9 @@ class DManager : ICacheHost
 					targets ~= ["dmd"];
 			}
 
-			if (config.build.components.dmd.dmdModel != CommonConfig.defaultModel)
+			version (Windows)
 			{
-				version (Windows)
+				if (config.build.components.dmd.dmdModel != CommonConfig.defaultModel)
 				{
 					dmdMakeFileName = "win64.mak";
 					dmdMakeFullName = srcDir.buildPath(dmdMakeFileName);
@@ -981,8 +983,6 @@ class DManager : ICacheHost
 						extraArgs ~= "OBJ_MSVC=" ~ objFiles.front.findSplit("=")[2].split().filter!(obj => obj != "ldfpu.obj").join(" ");
 					}
 				}
-				else
-					throw new Exception("dmdModel is only supported on Windows");
 			}
 
 			// Avoid HOST_DC reading ~/dmd.conf
