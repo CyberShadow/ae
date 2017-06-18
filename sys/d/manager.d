@@ -1017,11 +1017,11 @@ class DManager : ICacheHost
 			}
 			else
 			{
-				string dmdPath;
-				if (sourceDir.buildPath("src", "posix.mak").readText().canFind("GENERATED"))
-					dmdPath = buildPath(sourceDir, "generated", platform, "release", config.build.components.dmd.dmdModel, "dmd" ~ binExt);
-				else
-					dmdPath = buildPath(sourceDir, "src", "dmd" ~ binExt);
+				string dmdPath = buildPath(sourceDir, "generated", platform, "release", config.build.components.dmd.dmdModel, "dmd" ~ binExt);
+				if (!dmdPath.exists)
+					dmdPath = buildPath(sourceDir, "src", "dmd" ~ binExt); // legacy
+				enforce(dmdPath.exists && dmdPath.isFile, "Can't find built DMD executable");
+
 				cp(
 					dmdPath,
 					buildPath(stageDir , "bin", "dmd" ~ binExt),
