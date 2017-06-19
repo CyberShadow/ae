@@ -2189,9 +2189,6 @@ EOS";
 		if (config.build.components.dmd.useVC)
 			vs["Msi_BuildTools_MSBuild_x86"].requireLocal(false); // msbuild.exe
 
-		// These packages were previously pulled it, but it's not clear why:
-		// "vcRuntimeMinimum_x86", "vcRuntimeMinimum_x64", "vc_compilerx64nat", "vc_compilerx64natres"
-
 		env.deps.vsDir  = vs.directory.buildPath("Program Files (x86)", "Microsoft Visual Studio 12.0").absolutePath();
 		env.deps.sdkDir = vs.directory.buildPath("Program Files", "Microsoft SDKs", "Windows", "v7.1A").absolutePath();
 
