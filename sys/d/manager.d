@@ -852,7 +852,7 @@ class DManager : ICacheHost
 		}
 
 		@property string vsConfiguration() { return config.build.components.dmd.debugDMD ? "Debug" : "Release"; }
-		@property string vsPlatform     () { return config.build.components.common.model == "64" ? "x64" : "Win32"; }
+		@property string vsPlatform     () { return config.build.components.dmd.dmdModel == "64" ? "x64" : "Win32"; }
 
 		override void performBuild()
 		{
