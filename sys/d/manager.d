@@ -843,11 +843,23 @@ class DManager : ICacheHost
 			{
 				Config config;
 				string[] makeArgs;
+
+				// Include the common model as well as the DMD model (from config).
+				// Necessary to ensure the correct sc.ini is generated on Windows
+				// (we don't want to pull in MSVC unless either DMD or Phobos are
+				// built as 64-bit, but also we can't reuse a DMD build with 32-bit
+				// DMD and Phobos for a 64-bit Phobos build because it won't have
+				// the VC vars set up in its sc.ini).
+				// Possibly refactor the compiler configuration to a separate
+				// component in the future to avoid the inefficiency of rebuilding
+				// DMD just to generate a different sc.ini.
+				string commonModel;
 			}
 
 			return FullConfig(
 				config.build.components.dmd,
 				config.build.components.common.makeArgs,
+				config.build.components.common.model,
 			).toJson();
 		}
 
