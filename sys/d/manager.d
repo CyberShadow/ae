@@ -1031,12 +1031,23 @@ class DManager : ICacheHost
 
 			version (Windows)
 			{
+				auto env = baseEnvironment;
+				needCC(env, config.build.components.dmd.dmdModel);
+				needCC(env, config.build.components.common.model);
+
 				auto ini = q"EOS
 [Environment]
 LIB="%@P%\..\lib"
 DFLAGS="-I%@P%\..\import"
 DMC=__DMC__
 LINKCMD=%DMC%\link.exe
+EOS"
+				.replace("__DMC__", env.deps.dmcDir.buildPath(`bin`).absolutePath())
+			;
+
+				if (env.deps.vsDir && env.deps.sdkDir)
+				{
+					ini ~= q"EOS
 
 [Environment64]
 LIB="%@P%\..\lib"
@@ -1059,14 +1070,11 @@ WindowsSdkDir=__SDK__
 LINKCMD=%VCINSTALLDIR%\bin\link.exe
 LIB=%LIB%;"%VCINSTALLDIR%\lib"
 LIB=%LIB%;"%WindowsSdkDir%\Lib"
-EOS";
-
-				auto env = baseEnvironment;
-				needCC(env, config.build.components.common.model);
-
-				ini = ini.replace("__DMC__", env.deps.dmcDir.buildPath(`bin`).absolutePath());
-				ini = ini.replace("__VS__" , env.deps.vsDir .absolutePath());
-				ini = ini.replace("__SDK__", env.deps.sdkDir.absolutePath());
+EOS"
+						.replace("__VS__" , env.deps.vsDir .absolutePath())
+						.replace("__SDK__", env.deps.sdkDir.absolutePath())
+					;
+				}
 
 				buildPath(stageDir, "bin", configFileName).write(ini);
 			}
