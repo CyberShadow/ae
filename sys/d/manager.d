@@ -764,8 +764,6 @@ class DManager : ICacheHost
 
 		void run(in string[] args, in string[string] newEnv, string dir)
 		{
-			log("Running: " ~ escapeShellCommand(args));
-
 			// Apply user environment
 			auto env = applyEnv(newEnv, config.build.environment);
 
@@ -774,7 +772,10 @@ class DManager : ICacheHost
 			string oldPath = std.process.environment["PATH"];
 			scope (exit) std.process.environment["PATH"] = oldPath;
 			std.process.environment["PATH"] = env["PATH"];
-			log("PATH=" ~ env["PATH"]);
+			foreach (name, value; env)
+				log("Environment: " ~ name ~ "=" ~ value);
+			log("Working directory: " ~ dir);
+			log("Running: " ~ escapeShellCommand(args));
 
 			auto status = spawnProcess(args, env, std.process.Config.newEnv, dir).wait();
 			enforce(status == 0, "Command %s failed with status %d".format(args, status));
