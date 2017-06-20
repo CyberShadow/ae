@@ -37,6 +37,7 @@ struct Repository
 	string gitDir;
 
 	string[string] environment;
+	static immutable string[] commandPrefix = ["git", "-c", "core.autocrlf=false"];
 
 	this(string path)
 	{
@@ -60,11 +61,11 @@ struct Repository
 
 	// Have just some primitives here.
 	// Higher-level functionality can be added using UFCS.
-	void   run  (string[] args...) const { auto owd = pushd(workPath(args[0])); return .run  (["git"] ~ args, environment, path); }
-	string query(string[] args...) const { auto owd = pushd(workPath(args[0])); return .query(["git"]  ~ args, environment, path); }
-	bool   check(string[] args...) const { auto owd = pushd(workPath(args[0])); return spawnProcess(["git"]  ~ args, environment, Config.none, path).wait() == 0; }
+	void   run  (string[] args...) const { auto owd = pushd(workPath(args[0])); return .run  (commandPrefix ~ args, environment, path); }
+	string query(string[] args...) const { auto owd = pushd(workPath(args[0])); return .query(commandPrefix ~ args, environment, path); }
+	bool   check(string[] args...) const { auto owd = pushd(workPath(args[0])); return spawnProcess(commandPrefix ~ args, environment, Config.none, path).wait() == 0; }
 	auto   pipe (string[] args, Redirect redirect)
-	                               const { auto owd = pushd(workPath(args[0])); return pipeProcess(["git"]  ~ args, redirect, environment, Config.none, path); }
+	                               const { auto owd = pushd(workPath(args[0])); return pipeProcess(commandPrefix ~ args, redirect, environment, Config.none, path); }
 	auto   pipe (string[] args...) const { return pipe(args, Redirect.stdin | Redirect.stdout); }
 
 	/// Certain git commands (notably, bisect) must
