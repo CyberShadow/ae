@@ -2038,8 +2038,10 @@ EOS";
 		}
 		else
 		{
+			import std.ascii;
 			log("Preparing DMD " ~ dmdVer);
-			enforce(dmdVer.startsWith("v"), "Invalid DMD version spec for binary bootstrap. Did you forget to enable fromSource?");
+			enforce(dmdVer.startsWith("v"), "Invalid DMD version spec for binary bootstrap. Did you forget to " ~
+				((dmdVer.length && dmdVer[0].isDigit && dmdVer.contains('.')) ? "add a leading 'v'" : "enable fromSource") ~ "?");
 			needInstaller();
 			auto dmdInstaller = new DMDInstaller(dmdVer[1..$]);
 			dmdInstaller.requireLocal(false);
