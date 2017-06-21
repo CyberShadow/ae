@@ -543,10 +543,15 @@ class ManagedRepository
 		}
 		catch (Exception e)
 			throw new Exception(
-				"The worktree has changed since the last time this software updated it. Specifically:\n" ~
-				e.msg ~ "\n" ~
+				"The worktree has changed since the last time this software updated it.\n" ~
+				"Specifically:\n" ~
+				"    " ~ e.msg ~ "\n\n" ~
 				"Aborting to avoid overwriting your changes.\n" ~
-				"To continue, save / commit your changes, delete " ~ workTreeStatePath ~ ", and try again.");
+				"To continue:\n" ~
+				" 1. Commit / stash / back up your changes, if you wish to keep them\n" ~
+				" 2. Delete " ~ workTreeStatePath ~ "\n" ~
+				" 3. Try this operation again."
+			);
 	}
 
 	/// Delete the saved working tree state, if any.
