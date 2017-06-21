@@ -2030,6 +2030,11 @@ EOS";
 			config.local = configBackup.local;
 			if (config.build.components.dmd.bootstrap.build)
 				config.build = *config.build.components.dmd.bootstrap.build;
+
+			// Disable building rdmd in the bootstrap compiler by default
+			if ("rdmd" !in config.build.components.enable)
+				config.build.components.enable["rdmd"] = false;
+
 			build(parseSpec(dmdVer));
 
 			log("Built bootstrap DMD " ~ dmdVer ~ " successfully.");
