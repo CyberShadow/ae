@@ -819,8 +819,11 @@ class DManager : ICacheHost
 				/// Version specification.
 				/// When building from source, syntax can be defined
 				/// by outer application (see parseSpec method);
-				/// By default, it is understood as a version number,
-				/// such as "v2.070.2", which also doubles as a tag name.
+				/// When the bootstrapping compiler is not built from source,
+				/// it is understood as a version number, such as "v2.070.2",
+				/// which also doubles as a tag name.
+				/// By default (when set to null), an appropriate version
+				/// is selected automatically.
 				@JSONOptional string ver = null;
 
 				/// Build configuration for the compiler used for bootstrapping.
