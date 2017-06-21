@@ -827,8 +827,8 @@ class DManager : ICacheHost
 				@JSONOptional string ver = null;
 
 				/// Build configuration for the compiler used for bootstrapping.
-				/// If not set, then use the same build configuration as for the
-				/// target build. Used when fromSource is set.
+				/// If not set, then use the default build configuration.
+				/// Used when fromSource is set.
 				@JSONOptional DManager.Config.Build* build;
 			}
 			@JSONOptional Bootstrap bootstrap; /// ditto
@@ -2020,13 +2020,14 @@ EOS";
 			// Back up and clear component state
 			enum backupTemplate = q{
 				auto VARBackup = this.VAR;
+				this.VAR = typeof(VAR).init;
 				scope(exit) this.VAR = VARBackup;
 			};
 			mixin(backupTemplate.replace(q{VAR}, q{components}));
 			mixin(backupTemplate.replace(q{VAR}, q{config}));
 			mixin(backupTemplate.replace(q{VAR}, q{submoduleState}));
 
-			components = null;
+			config.local = configBackup.local;
 			if (config.build.components.dmd.bootstrap.build)
 				config.build = *config.build.components.dmd.bootstrap.build;
 			build(parseSpec(dmdVer));
