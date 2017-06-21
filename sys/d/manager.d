@@ -2028,6 +2028,8 @@ EOS";
 				config.build = *config.build.components.dmd.bootstrap.build;
 			build(parseSpec(dmdVer));
 
+			log("Built bootstrap DMD " ~ dmdVer ~ " successfully.");
+
 			auto bootstrapDir = buildPath(config.local.workDir, "bootstrap");
 			if (bootstrapDir.exists)
 				bootstrapDir.removeRecurse();
