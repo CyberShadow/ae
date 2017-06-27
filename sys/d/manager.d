@@ -1069,9 +1069,9 @@ LIB="%@P%\..\lib"
 DFLAGS=%DFLAGS% -L/OPT:NOICF
 VSINSTALLDIR=__VS__\
 VCINSTALLDIR=%VSINSTALLDIR%VC\
-PATH=%PATH%;%VCINSTALLDIR%\bin\amd64
+PATH=%PATH%;%VCINSTALLDIR%\bin\__MODELDIR__;%VCINSTALLDIR%\bin
 WindowsSdkDir=__SDK__
-LINKCMD=%VCINSTALLDIR%\bin\amd64\link.exe
+LINKCMD=%VCINSTALLDIR%\bin\__MODELDIR__\link.exe
 LIB=%LIB%;"%VCINSTALLDIR%\lib\amd64"
 LIB=%LIB%;"%WindowsSdkDir%\Lib\x64"
 
@@ -1086,8 +1086,9 @@ LINKCMD=%VCINSTALLDIR%\bin\link.exe
 LIB=%LIB%;"%VCINSTALLDIR%\lib"
 LIB=%LIB%;"%WindowsSdkDir%\Lib"
 EOS"
-						.replace("__VS__" , env.deps.vsDir .absolutePath())
-						.replace("__SDK__", env.deps.sdkDir.absolutePath())
+						.replace("__VS__"      , env.deps.vsDir .absolutePath())
+						.replace("__SDK__"     , env.deps.sdkDir.absolutePath())
+						.replace("__MODELDIR__", msvcModelDir("64"))
 					;
 				}
 
