@@ -2017,6 +2017,8 @@ EOS";
 		{
 			log("Bootstrapping DMD " ~ dmdVer);
 
+			auto bootstrapBuildConfig = config.build.components.dmd.bootstrap.build;
+
 			// Back up and clear component state
 			enum backupTemplate = q{
 				auto VARBackup = this.VAR;
@@ -2028,8 +2030,8 @@ EOS";
 			mixin(backupTemplate.replace(q{VAR}, q{submoduleState}));
 
 			config.local = configBackup.local;
-			if (config.build.components.dmd.bootstrap.build)
-				config.build = *config.build.components.dmd.bootstrap.build;
+			if (bootstrapBuildConfig)
+				config.build = *bootstrapBuildConfig;
 
 			// Disable building rdmd in the bootstrap compiler by default
 			if ("rdmd" !in config.build.components.enable)
