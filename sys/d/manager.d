@@ -802,7 +802,6 @@ class DManager : ICacheHost
 
 			/// Model for building DMD itself (on Windows).
 			/// Can be used to build a 64-bit DMD, to avoid 4GB limit.
-			/// Currently only implemented on Windows, for DMD 2.072 or later.
 			@JSONOptional string dmdModel = CommonConfig.defaultModel;
 
 			/// How to build DMD versions written in D.
