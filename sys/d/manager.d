@@ -1284,6 +1284,8 @@ EOS";
 			getComponent("dmd").needInstalled();
 			getComponent("druntime").needBuild();
 
+			targets = null;
+
 			foreach (model; config.build.components.common.models)
 			{
 				// Clean up old object files with mismatching model.
@@ -1330,7 +1332,7 @@ EOS";
 					auto lib = "phobos%s.lib".format(modelSuffix(model));
 					run(makeArgs ~ lib, env.vars, sourceDir);
 					enforce(sourceDir.buildPath(lib).exists);
-					targets = ["phobos%s.lib".format(modelSuffix(model))];
+					targets ~= ["phobos%s.lib".format(modelSuffix(model))];
 				}
 				else
 				{
@@ -1345,7 +1347,7 @@ EOS";
 						if (!soFile.empty) makeArgs ~= ["DRUNTIMESO=" ~ soFile.front];
 					}
 					run(makeArgs, env.vars, sourceDir);
-					targets = sourceDir
+					targets ~= sourceDir
 						.buildPath("generated")
 						.dirEntries(SpanMode.depth)
 						.filter!(de => de.name.endsWith(".a") || de.name.endsWith(".so"))
