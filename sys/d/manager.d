@@ -388,9 +388,9 @@ class DManager : ICacheHost
 			else
 				enum defaultModel = "32";
 
-			/// Target model ("32", "64", or on Windows, "32mscoff").
-			/// Controls the model of the built Phobos and Druntime libraries.
-			string model = defaultModel;
+			/// Target models ("32", "64", and on Windows, "32mscoff").
+			/// Controls the models of the built Phobos and Druntime libraries.
+			string[] models = [defaultModel];
 
 			string[] makeArgs; /// Additional make parameters,
 			                   /// e.g. "HOST_CC=g++48"
@@ -638,13 +638,12 @@ class DManager : ICacheHost
 	protected final:
 		// Utility declarations for component implementations
 
-		@property string modelSuffix() { return config.build.components.common.model == "32" ? "" : config.build.components.common.model; }
+		string modelSuffix(string model) { return model == "32" ? "" : model; }
 		version (Windows)
 		{
 			enum string makeFileName = "win32.mak";
-			@property string makeFileNameModel()
+			string makeFileNameModel(string model)
 			{
-				string model = config.build.components.common.model;
 				if (model == "32mscoff")
 					model = "64";
 				return "win"~model~".mak";
@@ -654,7 +653,7 @@ class DManager : ICacheHost
 		else
 		{
 			enum string makeFileName = "posix.mak";
-			enum string makeFileNameModel = "posix.mak";
+			string makeFileNameModel(string model) { return "posix.mak"; }
 			enum string binExt = "";
 		}
 
@@ -693,9 +692,8 @@ class DManager : ICacheHost
 			assert(dDoTestEscape(`C:\Foo boo bar\baz quuz\derp.exe`) == `C:\"Foo boo bar"\"baz quuz"\derp.exe`);
 		}
 
-		string[] getPlatformMakeVars(in ref Environment env)
+		string[] getPlatformMakeVars(in ref Environment env, string model)
 		{
-			string model = config.build.components.common.model;
 			string[] args;
 
 			args ~= "MODEL=" ~ model;
@@ -846,7 +844,7 @@ class DManager : ICacheHost
 				Config config;
 				string[] makeArgs;
 
-				// Include the common model as well as the DMD model (from config).
+				// Include the common models as well as the DMD model (from config).
 				// Necessary to ensure the correct sc.ini is generated on Windows
 				// (we don't want to pull in MSVC unless either DMD or Phobos are
 				// built as 64-bit, but also we can't reuse a DMD build with 32-bit
@@ -855,13 +853,13 @@ class DManager : ICacheHost
 				// Possibly refactor the compiler configuration to a separate
 				// component in the future to avoid the inefficiency of rebuilding
 				// DMD just to generate a different sc.ini.
-				string commonModel;
+				string[] commonModels;
 			}
 
 			return FullConfig(
 				config.build.components.dmd,
 				config.build.components.common.makeArgs,
-				config.build.components.common.model,
+				config.build.components.common.models,
 			).toJson();
 		}
 
@@ -1047,7 +1045,8 @@ class DManager : ICacheHost
 			{
 				auto env = baseEnvironment;
 				needCC(env, config.build.components.dmd.dmdModel);
-				needCC(env, config.build.components.common.model);
+				foreach (model; config.build.components.common.models)
+					needCC(env, model);
 
 				auto ini = q"EOS
 [Environment]
@@ -1122,50 +1121,53 @@ EOS";
 			foreach (dep; ["dmd", "druntime", "phobos"])
 				getComponent(dep).needBuild();
 
-			auto env = baseEnvironment;
-			version (Windows)
+			foreach (model; config.build.components.common.models)
 			{
-				// In this order so it uses the MSYS make
-				needCC(env, config.build.components.common.model);
-				needMSYS(env);
-
-				disableCrashDialog();
-			}
-
-			auto makeArgs = getMake(env) ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env) ~ gnuMakeArgs;
-			version (Windows)
-			{
-				makeArgs ~= ["OS=win" ~ config.build.components.common.model[0..2], "SHELL=bash"];
-				if (config.build.components.common.model == "32")
+				auto env = baseEnvironment;
+				version (Windows)
 				{
-					auto extrasDir = needExtras();
-					// The autotester seems to pass this via environment. Why does that work there???
-					makeArgs ~= "LIB=" ~ extrasDir.buildPath("localextras-windows", "dmd2", "windows", "lib") ~ `;..\..\phobos`;
+					// In this order so it uses the MSYS make
+					needCC(env, model);
+					needMSYS(env);
+
+					disableCrashDialog();
 				}
-				else
+
+				auto makeArgs = getMake(env) ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env, model) ~ gnuMakeArgs;
+				version (Windows)
 				{
-					// Fix path for d_do_test and its special escaping (default is the system VS2010 install)
-					// We can't use the same syntax in getPlatformMakeVars because win64.mak uses "CC=\$(CC32)"\""
-					auto cl = env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(config.build.components.common.model), "cl.exe");
-					foreach (ref arg; makeArgs)
-						if (arg.startsWith("CC="))
-							arg = "CC=" ~ dDoTestEscape(cl);
+					makeArgs ~= ["OS=win" ~ model[0..2], "SHELL=bash"];
+					if (model == "32")
+					{
+						auto extrasDir = needExtras();
+						// The autotester seems to pass this via environment. Why does that work there???
+						makeArgs ~= "LIB=" ~ extrasDir.buildPath("localextras-windows", "dmd2", "windows", "lib") ~ `;..\..\phobos`;
+					}
+					else
+					{
+						// Fix path for d_do_test and its special escaping (default is the system VS2010 install)
+						// We can't use the same syntax in getPlatformMakeVars because win64.mak uses "CC=\$(CC32)"\""
+						auto cl = env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(model), "cl.exe");
+						foreach (ref arg; makeArgs)
+							if (arg.startsWith("CC="))
+								arg = "CC=" ~ dDoTestEscape(cl);
+					}
 				}
-			}
 
-			version (test)
-			{
-				// Only try a few tests during CI runs, to check for
-				// platform integration and correct invocation.
-				// For this purpose, the C++ ABI tests will do nicely.
-				makeArgs ~= [
-				//	"test_results/runnable/cppa.d.out", // https://github.com/dlang/dmd/pull/5686
-					"test_results/runnable/cpp_abi_tests.d.out",
-					"test_results/runnable/cabi1.d.out",
-				];
-			}
+				version (test)
+				{
+					// Only try a few tests during CI runs, to check for
+					// platform integration and correct invocation.
+					// For this purpose, the C++ ABI tests will do nicely.
+					makeArgs ~= [
+					//	"test_results/runnable/cppa.d.out", // https://github.com/dlang/dmd/pull/5686
+						"test_results/runnable/cpp_abi_tests.d.out",
+						"test_results/runnable/cabi1.d.out",
+					];
+				}
 
-			run(makeArgs, env.vars, sourceDir.buildPath("test"));
+				run(makeArgs, env.vars, sourceDir.buildPath("test"));
+			}
 		}
 	}
 
@@ -1200,12 +1202,12 @@ EOS";
 		{
 			static struct FullConfig
 			{
-				string model;
+				string[] models;
 				string[] makeArgs;
 			}
 
 			return FullConfig(
-				config.build.components.common.model,
+				config.build.components.common.models,
 				config.build.components.common.makeArgs,
 			).toJson();
 		}
@@ -1216,17 +1218,20 @@ EOS";
 			getComponent("dmd").needInstalled();
 			getComponent("phobos-includes").needInstalled();
 
-			auto env = baseEnvironment;
-			needCC(env, config.build.components.common.model);
+			foreach (model; config.build.components.common.models)
+			{
+				auto env = baseEnvironment;
+				needCC(env, model);
 
-			mkdirRecurse(sourceDir.buildPath("import"));
-			mkdirRecurse(sourceDir.buildPath("lib"));
+				mkdirRecurse(sourceDir.buildPath("import"));
+				mkdirRecurse(sourceDir.buildPath("lib"));
 
-			setTimes(sourceDir.buildPath("src", "rt", "minit.obj"), Clock.currTime(), Clock.currTime()); // Don't rebuild
-			submodule.saveFileState("src/rt/minit.obj");
+				setTimes(sourceDir.buildPath("src", "rt", "minit.obj"), Clock.currTime(), Clock.currTime()); // Don't rebuild
+				submodule.saveFileState("src/rt/minit.obj");
 
-			run(getMake(env) ~ ["-f", makeFileNameModel, "import", "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
-			run(getMake(env) ~ ["-f", makeFileNameModel          , "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
+				run(getMake(env) ~ ["-f", makeFileNameModel(model), "import", "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env, model) ~ dMakeArgs, env.vars, sourceDir);
+				run(getMake(env) ~ ["-f", makeFileNameModel(model)          , "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env, model) ~ dMakeArgs, env.vars, sourceDir);
+			}
 		}
 
 		override void performStage()
@@ -1242,9 +1247,12 @@ EOS";
 			getComponent("druntime").needBuild();
 			getComponent("dmd").needInstalled();
 
-			auto env = baseEnvironment;
-			needCC(env, config.build.components.common.model);
-			run(getMake(env) ~ ["-f", makeFileNameModel, "unittest", "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
+			foreach (model; config.build.components.common.models)
+			{
+				auto env = baseEnvironment;
+				needCC(env, model);
+				run(getMake(env) ~ ["-f", makeFileNameModel(model), "unittest", "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env, model) ~ dMakeArgs, env.vars, sourceDir);
+			}
 		}
 	}
 
@@ -1259,12 +1267,12 @@ EOS";
 		{
 			static struct FullConfig
 			{
-				string model;
+				string[] models;
 				string[] makeArgs;
 			}
 
 			return FullConfig(
-				config.build.components.common.model,
+				config.build.components.common.models,
 				config.build.components.common.makeArgs,
 			).toJson();
 		}
@@ -1276,41 +1284,44 @@ EOS";
 			getComponent("dmd").needInstalled();
 			getComponent("druntime").needBuild();
 
-			auto env = baseEnvironment;
-			needCC(env, config.build.components.common.model);
-
-			string phobosMakeFileName = findMakeFile(sourceDir, makeFileNameModel);
-			string phobosMakeFullName = sourceDir.buildPath(phobosMakeFileName);
-
-			auto makeArgs = getMake(env) ~ ["-f", phobosMakeFileName, "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs;
-
-			version (Windows)
+			foreach (model; config.build.components.common.models)
 			{
-				auto lib = "phobos%s.lib".format(modelSuffix);
-				run(makeArgs ~ lib, env.vars, sourceDir);
-				enforce(sourceDir.buildPath(lib).exists);
-				targets = ["phobos%s.lib".format(modelSuffix)];
-			}
-			else
-			{
-				if (phobosMakeFullName.readText().canFind("DRUNTIME = $(DRUNTIME_PATH)/lib/libdruntime-$(OS)$(MODEL).a") &&
-					getComponent("druntime").sourceDir.buildPath("lib").dirEntries(SpanMode.shallow).walkLength == 0 &&
-					exists(getComponent("druntime").sourceDir.buildPath("generated")))
+				auto env = baseEnvironment;
+				needCC(env, model);
+
+				string phobosMakeFileName = findMakeFile(sourceDir, makeFileNameModel(model));
+				string phobosMakeFullName = sourceDir.buildPath(phobosMakeFileName);
+
+				auto makeArgs = getMake(env) ~ ["-f", phobosMakeFileName, "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env, model) ~ dMakeArgs;
+
+				version (Windows)
 				{
-					auto dir = getComponent("druntime").sourceDir.buildPath("generated");
-					auto aFile  = dir.dirEntries("libdruntime.a", SpanMode.depth);
-					if (!aFile .empty) makeArgs ~= ["DRUNTIME="   ~ aFile .front];
-					auto soFile = dir.dirEntries("libdruntime.so.a", SpanMode.depth);
-					if (!soFile.empty) makeArgs ~= ["DRUNTIMESO=" ~ soFile.front];
+					auto lib = "phobos%s.lib".format(modelSuffix(model));
+					run(makeArgs ~ lib, env.vars, sourceDir);
+					enforce(sourceDir.buildPath(lib).exists);
+					targets = ["phobos%s.lib".format(modelSuffix(model))];
 				}
-				run(makeArgs, env.vars, sourceDir);
-				targets = sourceDir
-					.buildPath("generated")
-					.dirEntries(SpanMode.depth)
-					.filter!(de => de.name.endsWith(".a") || de.name.endsWith(".so"))
-					.map!(de => de.name.relativePath(sourceDir))
-					.array()
-				;
+				else
+				{
+					if (phobosMakeFullName.readText().canFind("DRUNTIME = $(DRUNTIME_PATH)/lib/libdruntime-$(OS)$(MODEL).a") &&
+						getComponent("druntime").sourceDir.buildPath("lib").dirEntries(SpanMode.shallow).walkLength == 0 &&
+						exists(getComponent("druntime").sourceDir.buildPath("generated")))
+					{
+						auto dir = getComponent("druntime").sourceDir.buildPath("generated");
+						auto aFile  = dir.dirEntries("libdruntime.a", SpanMode.depth);
+						if (!aFile .empty) makeArgs ~= ["DRUNTIME="   ~ aFile .front];
+						auto soFile = dir.dirEntries("libdruntime.so.a", SpanMode.depth);
+						if (!soFile.empty) makeArgs ~= ["DRUNTIMESO=" ~ soFile.front];
+					}
+					run(makeArgs, env.vars, sourceDir);
+					targets = sourceDir
+						.buildPath("generated")
+						.dirEntries(SpanMode.depth)
+						.filter!(de => de.name.endsWith(".a") || de.name.endsWith(".so"))
+						.map!(de => de.name.relativePath(sourceDir))
+						.array()
+					;
+				}
 			}
 		}
 
@@ -1330,32 +1341,35 @@ EOS";
 			getComponent("phobos").needBuild();
 			getComponent("dmd").needInstalled();
 
-			auto env = baseEnvironment;
-			needCC(env, config.build.components.common.model);
-			version (Windows)
+			foreach (model; config.build.components.common.models)
 			{
-				getComponent("curl").needInstalled();
-				getComponent("curl").updateEnv(env);
-
-				// Patch out std.datetime unittest to work around Digger test
-				// suite failure on AppVeyor due to Windows time zone changes
-				auto stdDateTime = buildPath(sourceDir, "std", "datetime.d");
-				if (stdDateTime.exists && !stdDateTime.readText().canFind("Altai Standard Time"))
+				auto env = baseEnvironment;
+				needCC(env, model);
+				version (Windows)
 				{
-					auto m = stdDateTime.readText();
-					m = m
-						.replace(`assert(tzName !is null, format("TZName which is missing: %s", winName));`, ``)
-						.replace(`assert(tzDatabaseNameToWindowsTZName(tzName) !is null, format("TZName which failed: %s", tzName));`, `{}`)
-						.replace(`assert(windowsTZNameToTZDatabaseName(tzName) !is null, format("TZName which failed: %s", tzName));`, `{}`)
-					;
-					stdDateTime.write(m);
-					submodule.saveFileState("std/datetime.d");
-				}
+					getComponent("curl").needInstalled();
+					getComponent("curl").updateEnv(env);
 
-				if (config.build.components.common.model == "32")
-					getComponent("extras").needInstalled();
+					// Patch out std.datetime unittest to work around Digger test
+					// suite failure on AppVeyor due to Windows time zone changes
+					auto stdDateTime = buildPath(sourceDir, "std", "datetime.d");
+					if (stdDateTime.exists && !stdDateTime.readText().canFind("Altai Standard Time"))
+					{
+						auto m = stdDateTime.readText();
+						m = m
+							.replace(`assert(tzName !is null, format("TZName which is missing: %s", winName));`, ``)
+							.replace(`assert(tzDatabaseNameToWindowsTZName(tzName) !is null, format("TZName which failed: %s", tzName));`, `{}`)
+							.replace(`assert(windowsTZNameToTZDatabaseName(tzName) !is null, format("TZName which failed: %s", tzName));`, `{}`)
+						;
+						stdDateTime.write(m);
+						submodule.saveFileState("std/datetime.d");
+					}
+
+					if (model == "32")
+						getComponent("extras").needInstalled();
+				}
+				run(getMake(env) ~ ["-f", makeFileNameModel(model), "unittest", "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env, model) ~ dMakeArgs, env.vars, sourceDir);
 			}
-			run(getMake(env) ~ ["-f", makeFileNameModel, "unittest", "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
 		}
 	}
 
@@ -1367,6 +1381,8 @@ EOS";
 		@property override string[] sourceDependencies() { return []; }
 		@property override string[] dependencies() { return ["dmd", "druntime", "phobos"]; }
 
+		@property string model() { return config.build.components.common.models.get(0); }
+
 		@property override string configString()
 		{
 			static struct FullConfig
@@ -1375,7 +1391,7 @@ EOS";
 			}
 
 			return FullConfig(
-				config.build.components.common.model,
+				this.model,
 			).toJson();
 		}
 
@@ -1385,7 +1401,7 @@ EOS";
 				getComponent(dep).needInstalled();
 
 			auto env = baseEnvironment;
-			needCC(env, config.build.components.common.model);
+			needCC(env, this.model);
 
 			// Just build rdmd
 			bool needModel; // Need -mXX switch?
@@ -1405,7 +1421,7 @@ EOS";
 					needModel = true;
 
 			if (needModel)
-				run([dmd, "-m" ~ config.build.components.common.model] ~ args, env.vars, sourceDir);
+				run([dmd, "-m" ~ this.model] ~ args, env.vars, sourceDir);
 		}
 
 		override void performStage()
@@ -1419,12 +1435,12 @@ EOS";
 		override void performTest()
 		{
 			version (Windows)
-				if (config.build.components.common.model != "32")
+				if (this.model != "32")
 				{
 					// Can't test rdmd on non-32-bit Windows until compiler model matches Phobos model.
 					// rdmd_test does not use -m when building rdmd, thus linking will fail
 					// (because of model mismatch with the phobos we built).
-					log("Can't test rdmd with model " ~ config.build.components.common.model ~ ", skipping");
+					log("Can't test rdmd with model " ~ this.model ~ ", skipping");
 					return;
 				}
 
@@ -1444,6 +1460,8 @@ EOS";
 		@property override string[] sourceDependencies() { return []; }
 		@property override string[] dependencies() { return ["dmd", "druntime", "phobos"]; }
 
+		@property string model() { return config.build.components.common.models.get(0); }
+
 		@property override string configString()
 		{
 			static struct FullConfig
@@ -1453,7 +1471,7 @@ EOS";
 			}
 
 			return FullConfig(
-				config.build.components.common.model,
+				this.model,
 				config.build.components.common.makeArgs,
 			).toJson();
 		}
@@ -1464,16 +1482,16 @@ EOS";
 				getComponent(dep).needInstalled();
 
 			auto env = baseEnvironment;
-			needCC(env, config.build.components.common.model);
+			needCC(env, this.model);
 
-			run(getMake(env) ~ ["-f", makeFileName, "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env) ~ dMakeArgs, env.vars, sourceDir);
+			run(getMake(env) ~ ["-f", makeFileName, "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env, this.model) ~ dMakeArgs, env.vars, sourceDir);
 		}
 
 		override void performStage()
 		{
 			foreach (os; buildPath(sourceDir, "generated").dirEntries(SpanMode.shallow))
 			{
-				auto dir = os.buildPath(config.build.components.common.model);
+				auto dir = os.buildPath(this.model);
 				cp(dir, buildPath(stageDir , "bin"));
 			}
 		}
@@ -1657,17 +1675,19 @@ EOS";
 			}
 
 			copyDir("bin", "bin");
-			copyDir("bin" ~ config.build.components.common.model, "bin");
+			foreach (model; config.build.components.common.models)
+				copyDir("bin" ~ model, "bin");
 			copyDir("lib", "lib");
 
 			version (Windows)
-				if (config.build.components.common.model == "32")
-				{
-					// The version of snn.lib bundled with DMC will be newer.
-					Environment env;
-					needDMC(env);
-					cp(buildPath(env.deps.dmcDir, "lib", "snn.lib"), buildPath(stageDir, "lib", "snn.lib"));
-				}
+				foreach (model; config.build.components.common.models)
+					if (model == "32")
+					{
+						// The version of snn.lib bundled with DMC will be newer.
+						Environment env;
+						needDMC(env);
+						cp(buildPath(env.deps.dmcDir, "lib", "snn.lib"), buildPath(stageDir, "lib", "snn.lib"));
+					}
 		}
 	}
 
@@ -1701,9 +1721,12 @@ EOS";
 						cp(source, target);
 				}
 
-				auto suffix = config.build.components.common.model == "64" ? "64" : "";
-				copyDir("bin" ~ suffix, "bin");
-				copyDir("lib" ~ suffix, "lib");
+				foreach (model; config.build.components.common.models)
+				{
+					auto suffix = model == "64" ? "64" : "";
+					copyDir("bin" ~ suffix, "bin");
+					copyDir("lib" ~ suffix, "lib");
+				}
 			}
 			else
 				log("Not on Windows, skipping libcurl install");
