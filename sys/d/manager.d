@@ -1286,6 +1286,37 @@ EOS";
 
 			foreach (model; config.build.components.common.models)
 			{
+				// Clean up old object files with mismatching model.
+				// Necessary for a consecutive 32/64 build.
+				version (Windows)
+				{
+					foreach (de; dirEntries(sourceDir.buildPath("etc", "c", "zlib"), "*.obj", SpanMode.shallow))
+					{
+						auto data = cast(ubyte[])read(de.name);
+
+						string fileModel;
+						if (data.length < 4)
+							fileModel = "invalid";
+						else
+						if (data[0] == 0x80)
+							fileModel = "32"; // OMF
+						else
+						if (data[0] == 0x01 && data[0] == 0x4C)
+							fileModel = "32mscoff"; // COFF - IMAGE_FILE_MACHINE_I386
+						else
+						if (data[0] == 0x86 && data[0] == 0x64)
+							fileModel = "64"; // COFF - IMAGE_FILE_MACHINE_AMD64
+						else
+							fileModel = "unknown";
+
+						if (fileModel != model)
+						{
+							log("Cleaning up object file '%s' with mismatching model (file is %s, building %s)".format(de.name, fileModel, model));
+							remove(de.name);
+						}
+					}
+				}
+
 				auto env = baseEnvironment;
 				needCC(env, model);
 
