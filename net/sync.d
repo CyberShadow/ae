@@ -84,7 +84,9 @@ private:
 
 			foreach (cmd; cast(Command[])data.contents)
 			{
-				Dg dg = queue[readIndex.atomicOp!"+="(1)-1 % $];
+				Dg* pdg = &queue[readIndex.atomicOp!"+="(1)-1 % $];
+				Dg dg = *pdg;
+				*pdg = null;
 				switch (cmd)
 				{
 					case Command.runAsync:
