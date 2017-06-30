@@ -84,7 +84,7 @@ private:
 
 			foreach (cmd; cast(Command[])data.contents)
 			{
-				Dg* pdg = &queue[readIndex.atomicOp!"+="(1)-1 % $];
+				Dg* pdg = &queue[(readIndex.atomicOp!"+="(1)-1) % $];
 				Dg dg = *pdg;
 				*pdg = null;
 				switch (cmd)
@@ -129,13 +129,13 @@ public:
 
 	void runAsync(Dg dg) nothrow @nogc
 	{
-		socket.queue[socket.writeIndex.atomicOp!"+="(1)-1 % $] = dg;
+		socket.queue[(socket.writeIndex.atomicOp!"+="(1)-1) % $] = dg;
 		sendCommand(Command.runAsync);
 	}
 
 	void runWait(Dg dg)
 	{
-		socket.queue[socket.writeIndex.atomicOp!"+="(1)-1 % $] = dg;
+		socket.queue[(socket.writeIndex.atomicOp!"+="(1)-1) % $] = dg;
 		sendCommand(Command.runWait);
 
 		Command[] data = [Command.none];
