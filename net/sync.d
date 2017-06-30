@@ -18,6 +18,7 @@ import core.thread;
 
 import std.exception;
 import std.socket;
+import std.typecons : Flag, Yes;
 
 import ae.net.asockets;
 
@@ -67,14 +68,14 @@ private:
 		Dg[queueSize] queue;
 		shared size_t readIndex, writeIndex;
 
-		this()
+		this(bool daemon)
 		{
 			auto pair = socketPair();
 			pair[0].blocking = false;
 			super(pair[0]);
 			pinger = pair[1];
 			this.handleReadData = &onReadData;
-			this.daemon = true;
+			this.daemon = daemon;
 		}
 
 		void onReadData(Data data)
@@ -119,9 +120,9 @@ private:
 	}
 
 public:
-	this()
+	this(Flag!"daemon" = Yes.daemon)
 	{
-		socket = new AnchorSocket();
+		socket = new AnchorSocket(daemon);
 	}
 
 	void runAsync(Dg dg) nothrow @nogc
