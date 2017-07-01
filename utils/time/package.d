@@ -25,9 +25,15 @@ import std.datetime;
 
 alias StdTime = typeof(SysTime.init.stdTime); // long
 
+/// Like SysTime.stdTime.
+@property StdTime stdTime(Duration d)
+{
+	return d.total!"hnsecs"();
+}
+
 @property bool empty(Duration d)
 {
-	return !d.total!"hnsecs"();
+	return !d.stdTime;
 }
 
 /// Workaround SysTime.fracSecs only being available in 2.067,
