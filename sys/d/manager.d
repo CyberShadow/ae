@@ -856,7 +856,7 @@ class DManager : ICacheHost
 				// Possibly refactor the compiler configuration to a separate
 				// component in the future to avoid the inefficiency of rebuilding
 				// DMD just to generate a different sc.ini.
-				string commonModel;
+				@JSONOptional string commonModel = Component.CommonConfig.defaultModel;
 			}
 
 			return FullConfig(
