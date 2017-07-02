@@ -393,6 +393,7 @@ class DManager : ICacheHost
 			string model = defaultModel;
 
 			@property string[] models() { return model.split(","); }
+			@property void models(string[] value) { this.model = value.join(","); }
 
 			string[] makeArgs; /// Additional make parameters,
 			                   /// e.g. "HOST_CC=g++48"
