@@ -388,9 +388,11 @@ class DManager : ICacheHost
 			else
 				enum defaultModel = "32";
 
-			/// Target models ("32", "64", and on Windows, "32mscoff").
+			/// Target comma-separated models ("32", "64", and on Windows, "32mscoff").
 			/// Controls the models of the built Phobos and Druntime libraries.
-			string[] models = [defaultModel];
+			string model = defaultModel;
+
+			@property string[] models() { return model.split(","); }
 
 			string[] makeArgs; /// Additional make parameters,
 			                   /// e.g. "HOST_CC=g++48"
@@ -853,13 +855,13 @@ class DManager : ICacheHost
 				// Possibly refactor the compiler configuration to a separate
 				// component in the future to avoid the inefficiency of rebuilding
 				// DMD just to generate a different sc.ini.
-				string[] commonModels;
+				string commonModel;
 			}
 
 			return FullConfig(
 				config.build.components.dmd,
 				config.build.components.common.makeArgs,
-				config.build.components.common.models,
+				config.build.components.common.model,
 			).toJson();
 		}
 
@@ -1202,12 +1204,12 @@ EOS";
 		{
 			static struct FullConfig
 			{
-				string[] models;
+				string model;
 				string[] makeArgs;
 			}
 
 			return FullConfig(
-				config.build.components.common.models,
+				config.build.components.common.model,
 				config.build.components.common.makeArgs,
 			).toJson();
 		}
@@ -1267,12 +1269,12 @@ EOS";
 		{
 			static struct FullConfig
 			{
-				string[] models;
+				string model;
 				string[] makeArgs;
 			}
 
 			return FullConfig(
-				config.build.components.common.models,
+				config.build.components.common.model,
 				config.build.components.common.makeArgs,
 			).toJson();
 		}
