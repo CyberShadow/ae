@@ -163,7 +163,7 @@ class ManagedRepository
 		try
 		{
 			git.run("reset", "--hard");
-			git.run("clean", "--force", "-x", "-d", "--quiet");
+			git.run("clean", "--force", "--force" /*Sic*/, "-x", "-d", "--quiet");
 		}
 		catch (Exception e)
 			throw new RepositoryCleanException(e.msg, e);
