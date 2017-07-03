@@ -1218,6 +1218,7 @@ EOS";
 		override void performBuild()
 		{
 			getComponent("phobos").needSource();
+			getComponent("dmd").needSource();
 			getComponent("dmd").needInstalled();
 			getComponent("phobos-includes").needInstalled();
 
@@ -1284,6 +1285,7 @@ EOS";
 
 		override void performBuild()
 		{
+			getComponent("dmd").needSource();
 			getComponent("dmd").needInstalled();
 			getComponent("druntime").needBuild();
 
@@ -1514,6 +1516,7 @@ EOS";
 
 		override void performBuild()
 		{
+			getComponent("dmd").needSource();
 			foreach (dep; ["dmd", "druntime", "phobos"])
 				getComponent(dep).needInstalled();
 
