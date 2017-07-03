@@ -1569,6 +1569,7 @@ EOS";
 		/// Needed for the makefile's "LATEST" parameter.
 		string getLatest()
 		{
+			getComponent("dmd").needSource();
 			auto dmd = getComponent("dmd").submodule;
 			dmd.needRepo();
 
