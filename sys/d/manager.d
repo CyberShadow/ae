@@ -1569,7 +1569,6 @@ EOS";
 		/// Needed for the makefile's "LATEST" parameter.
 		string getLatest()
 		{
-			getComponent("dmd").needSource();
 			auto dmd = getComponent("dmd").submodule;
 			dmd.needRepo();
 
@@ -1657,6 +1656,7 @@ EOS";
 
 		override void performBuild()
 		{
+			getComponent("dmd").needSource();
 			foreach (dep; ["dmd", "druntime", "phobos"])
 			{
 				auto c = getComponent(dep);
