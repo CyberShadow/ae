@@ -1656,7 +1656,6 @@ EOS";
 
 		override void performBuild()
 		{
-			getComponent("dmd").needSource();
 			foreach (dep; ["dmd", "druntime", "phobos"])
 			{
 				auto c = getComponent(dep);
