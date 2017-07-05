@@ -480,6 +480,7 @@ class DManager : ICacheHost
 				component.haveBuild = false;
 
 			submodule.needHead(commit);
+			submodule.clean = false;
 		}
 
 		private bool haveBuild;
@@ -500,8 +501,6 @@ class DManager : ICacheHost
 				getMetaRepo().git.run(["clean", "-ffdx"]);
 
 			log("Building " ~ getBuildID());
-			if (submoduleName)
-				submodule.clean = false;
 			performBuild();
 			log(getBuildID() ~ " built OK!");
 		}
