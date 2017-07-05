@@ -34,15 +34,32 @@ void unzip(string zip, string target)
 	{
 		auto path = buildPath(target, name).replace("\\", "/");
 		ensurePathExists(path);
+
+		auto attr = entry.fileAttributes;
+
 		if (name.endsWith(`/`))
 		{
 			if (!path.exists)
 				path.mkdirRecurse();
 		}
 		else
-			std.file.write(path, archive.expand(entry));
+		{
+			bool isLink = false;
+			version (Posix)
+			{
+				import core.sys.posix.sys.stat;
+				if (S_ISLNK(attr))
+					isLink = true;
+			}
+			if (isLink)
+			{
+				symlink(cast(string)archive.expand(entry), path);
+				continue; // Don't try to chmod the link target!
+			}
+			else
+				std.file.write(path, archive.expand(entry));
+		}
 
-		auto attr = entry.fileAttributes;
 		if (attr)
 			path.setAttributes(attr);
 
