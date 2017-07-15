@@ -150,6 +150,7 @@ class DManager : ICacheHost
 	alias repoDir    = subDir!"repo";        /// The git repository location.
 	alias buildDir   = subDir!"build";       /// The build directory.
 	alias dlDir      = subDir!"dl";          /// The directory for downloaded software.
+	alias tmpDir     = subDir!"tmp";         /// Directory for $TMPDIR etc.
 
 	/// This number increases with each incompatible change to cached data.
 	enum cacheVersion = 3;
@@ -498,7 +499,13 @@ class DManager : ICacheHost
 
 			// Nuke any additional directories cloned by makefiles
 			if (!incrementalBuild)
+			{
 				getMetaRepo().git.run(["clean", "-ffdx"]);
+
+				if (tmpDir.exists && !tmpDir.dirEntries(SpanMode.shallow).empty)
+					log(format!"Clearing %s ..."(tmpDir));
+				tmpDir.recreateEmptyDirectory();
+			}
 
 			log("Building " ~ getBuildID());
 			performBuild();
@@ -2336,7 +2343,6 @@ EOS";
 			// Needed for DLLs
 			auto winDir = buf[0..GetWindowsDirectory(buf.ptr, buf.length)].toUTF8();
 			auto sysDir = buf[0..GetSystemDirectory (buf.ptr, buf.length)].toUTF8();
-			//auto tmpDir = buf[0..GetTempPath(buf.length, buf.ptr)].toUTF8()[0..$-1];
 			newPaths ~= [sysDir, winDir];
 		}
 		else
@@ -2347,7 +2353,6 @@ EOS";
 
 		env.vars["PATH"] = newPaths.join(pathSeparator);
 
-		auto tmpDir = buildPath(config.local.workDir, "tmp");
 		ensureDirExists(tmpDir);
 		env.vars["TMPDIR"] = env.vars["TEMP"] = env.vars["TMP"] = tmpDir;
 
