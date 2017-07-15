@@ -892,7 +892,8 @@ class DManager : ICacheHost
 
 			if (buildPath(sourceDir, "src", "idgen.d").exists ||
 			    buildPath(sourceDir, "src", "ddmd", "idgen.d").exists ||
-			    buildPath(sourceDir, "src", "dmd", "idgen.d").exists)
+			    buildPath(sourceDir, "src", "ddmd", "mars.d").exists ||
+			    buildPath(sourceDir, "src", "dmd", "mars.d").exists)
 			{
 				// Required for bootstrapping.
 				needDMD(env);
