@@ -151,6 +151,7 @@ class DManager : ICacheHost
 	alias buildDir   = subDir!"build";       /// The build directory.
 	alias dlDir      = subDir!"dl";          /// The directory for downloaded software.
 	alias tmpDir     = subDir!"tmp";         /// Directory for $TMPDIR etc.
+	alias homeDir    = subDir!"home";        /// Directory for $HOME.
 
 	/// This number increases with each incompatible change to cached data.
 	enum cacheVersion = 3;
@@ -502,9 +503,12 @@ class DManager : ICacheHost
 			{
 				getMetaRepo().git.run(["clean", "-ffdx"]);
 
-				if (tmpDir.exists && !tmpDir.dirEntries(SpanMode.shallow).empty)
-					log(format!"Clearing %s ..."(tmpDir));
-				tmpDir.recreateEmptyDirectory();
+				foreach (dir; [tmpDir, homeDir])
+				{
+					if (dir.exists && !dir.dirEntries(SpanMode.shallow).empty)
+						log(format!"Clearing %s ..."(dir));
+					dir.recreateEmptyDirectory();
+				}
 			}
 
 			log("Building " ~ getBuildID());
@@ -2361,12 +2365,9 @@ EOS";
 			env.vars["SystemDrive"] = winDir.driveName;
 			env.vars["SystemRoot"] = winDir;
 		}
-		else
-		{
-			auto home = buildPath(config.local.workDir, "home");
-			ensureDirExists(home);
-			env.vars["HOME"] = home;
-		}
+
+		ensureDirExists(homeDir);
+		env.vars["HOME"] = homeDir;
 
 		return env;
 	}
