@@ -14,6 +14,7 @@
 module ae.sys.archive;
 
 import std.array;
+import std.conv;
 import std.datetime;
 import std.exception;
 import std.file;
@@ -48,7 +49,7 @@ void unzip(string zip, string target)
 			version (Posix)
 			{
 				import core.sys.posix.sys.stat;
-				if (S_ISLNK(attr))
+				if (S_ISLNK(attr.to!mode_t))
 					isLink = true;
 			}
 			if (isLink)
