@@ -506,7 +506,7 @@ class DManager : ICacheHost
 				foreach (dir; [tmpDir, homeDir])
 				{
 					if (dir.exists && !dir.dirEntries(SpanMode.shallow).empty)
-						log(format!"Clearing %s ..."(dir));
+						log("Clearing %s ...".format(dir));
 					dir.recreateEmptyDirectory();
 				}
 			}
