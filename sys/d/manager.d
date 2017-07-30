@@ -110,6 +110,10 @@ class DManager : ICacheHost
 
 			/// How to cache built files.
 			string cache;
+
+			/// Maximum execution time, in seconds, of any single
+			/// command.
+			int timeout;
 		}
 		Local local; /// ditto
 	}
@@ -773,7 +777,7 @@ class DManager : ICacheHost
 			}
 		}
 
-		void run(in string[] args, in string[string] newEnv, string dir)
+		void run(const(string)[] args, in string[string] newEnv, string dir)
 		{
 			// Apply user environment
 			auto env = applyEnv(newEnv, config.build.environment);
@@ -783,6 +787,11 @@ class DManager : ICacheHost
 			string oldPath = std.process.environment["PATH"];
 			scope (exit) std.process.environment["PATH"] = oldPath;
 			std.process.environment["PATH"] = env["PATH"];
+
+			// Apply timeout setting
+			if (config.local.timeout)
+				args = ["timeout", config.local.timeout.text] ~ args;
+
 			foreach (name, value; env)
 				log("Environment: " ~ name ~ "=" ~ value);
 			log("Working directory: " ~ dir);
