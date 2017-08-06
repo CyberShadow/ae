@@ -156,6 +156,7 @@ class DManager : ICacheHost
 	alias dlDir      = subDir!"dl";          /// The directory for downloaded software.
 	alias tmpDir     = subDir!"tmp";         /// Directory for $TMPDIR etc.
 	alias homeDir    = subDir!"home";        /// Directory for $HOME.
+	alias binDir     = subDir!"bin" ;        /// For wrapper scripts.
 
 	/// This number increases with each incompatible change to cached data.
 	enum cacheVersion = 3;
@@ -898,6 +899,20 @@ class DManager : ICacheHost
 
 			auto env = baseEnvironment;
 			needCC(env, config.build.components.dmd.dmdModel, dmcVer); // Need VC too for VSINSTALLDIR
+
+			// Set up compiler wrappers.
+			foreach (cc; ["cc", "gcc", "c++", "g++"])
+			{
+				auto fileName = binDir.buildPath(cc);
+				if (fileName.exists)
+					fileName.remove();
+
+				version (linux)
+				{
+					write(fileName, "#!/bin/sh\nexec /usr/bin/" ~ cc ~ ` -no-pie "$@"`);
+					setAttributes(fileName, octal!755);
+				}
+			}
 
 			if (buildPath(sourceDir, "src", "idgen.d").exists ||
 			    buildPath(sourceDir, "src", "ddmd", "idgen.d").exists ||
@@ -2363,6 +2378,13 @@ EOS";
 		{
 			// Needed for coreutils, make, gcc, git etc.
 			newPaths = ["/bin", "/usr/bin"];
+
+			version (linux)
+			{
+				// GCC wrappers
+				ensureDirExists(binDir);
+				newPaths = binDir ~ newPaths;
+			}
 		}
 
 		env.vars["PATH"] = newPaths.join(pathSeparator);
