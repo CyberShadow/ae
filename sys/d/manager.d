@@ -1015,15 +1015,32 @@ EOF");
 
 			// Fix compilation error of older DMDs with glibc >= 2.25
 			version (linux)
-			{
+			{{
 				auto fn = srcDir.buildPath("root", "port.c");
 				if (fn.exists)
 				{
 					fn.write(fn.readText
 						.replace(`#include <bits/mathdef.h>`, `#include <complex.h>`)
 					);
-					submodule.saveFileState("src/root/port.c");
+					submodule.saveFileState(fn.relativePath(sourceDir));
 				}
+			}}
+
+			// Fix alignment issue in older DMDs with GCC >= 7
+			// See https://issues.dlang.org/show_bug.cgi?id=17726
+			version (Posix)
+			{
+				foreach (fn; [srcDir.buildPath("tk", "mem.c"), srcDir.buildPath("ddmd", "tk", "mem.c")])
+					if (fn.exists)
+					{
+						fn.write(fn.readText.replace(
+								// `#if defined(__llvm__) && (defined(__GNUC__) || defined(__clang__))`,
+								// `#if defined(__GNUC__) || defined(__clang__)`,
+								`numbytes = (numbytes + 3) & ~3;`,
+								`numbytes = (numbytes + 0xF) & ~0xF;`
+						));
+						submodule.saveFileState(fn.relativePath(sourceDir));
+					}
 			}
 
 			string[] extraArgs, targets;
