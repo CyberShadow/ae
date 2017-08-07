@@ -544,14 +544,16 @@ flagfile=$TMP/nopie-flag-$tool
 if [ ! -e "$flagfile" ]
 then
 	echo 'Testing for -no-pie...' 1>&2
-	testfile=$TMP/test.c
+	testfile=$TMP/test-$$.c
 	echo 'int main(){return 0;}' > $testfile
 	if $next -no-pie -c -o$testfile.o $testfile
 	then
-		printf "%s" "-no-pie" > "$flagfile"
+		printf "%s" "-no-pie" > "$flagfile".tmp
+		mv "$flagfile".tmp "$flagfile"
 	else
 		touch "$flagfile"
 	fi
+	rm -f $testfile $testfile.o
 fi
 
 exec $next $(cat "$flagfile") "$@"
