@@ -527,14 +527,12 @@ class DManager : ICacheHost
 			}
 
 			// Set up compiler wrappers.
-			foreach (cc; ["cc", "gcc", "c++", "g++"])
+			recreateEmptyDirectory(binDir);
+			version (linux)
 			{
-				auto fileName = binDir.buildPath(cc);
-				if (fileName.exists)
-					fileName.remove();
-
-				version (linux)
+				foreach (cc; ["cc", "gcc", "c++", "g++"])
 				{
+					auto fileName = binDir.buildPath(cc);
 					write(fileName, q"EOF
 #!/bin/sh
 set -eu
@@ -561,7 +559,6 @@ EOF");
 					setAttributes(fileName, octal!755);
 				}
 			}
-
 		}
 
 		private bool haveInstalled;
