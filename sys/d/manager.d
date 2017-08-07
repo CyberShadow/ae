@@ -503,6 +503,16 @@ class DManager : ICacheHost
 
 			needSource();
 
+			prepareEnv();
+
+			log("Building " ~ getBuildID());
+			performBuild();
+			log(getBuildID() ~ " built OK!");
+		}
+
+		/// Set up / clean the build environment.
+		private void prepareEnv()
+		{
 			// Nuke any additional directories cloned by makefiles
 			if (!incrementalBuild)
 			{
@@ -515,10 +525,6 @@ class DManager : ICacheHost
 					dir.recreateEmptyDirectory();
 				}
 			}
-
-			log("Building " ~ getBuildID());
-			performBuild();
-			log(getBuildID() ~ " built OK!");
 		}
 
 		private bool haveInstalled;
