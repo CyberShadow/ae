@@ -525,6 +525,43 @@ class DManager : ICacheHost
 					dir.recreateEmptyDirectory();
 				}
 			}
+
+			// Set up compiler wrappers.
+			foreach (cc; ["cc", "gcc", "c++", "g++"])
+			{
+				auto fileName = binDir.buildPath(cc);
+				if (fileName.exists)
+					fileName.remove();
+
+				version (linux)
+				{
+					write(fileName, q"EOF
+#!/bin/sh
+set -eu
+
+tool=$(basename "$0")
+next=/usr/bin/$tool
+flagfile=$TMP/nopie-flag-$tool
+
+if [ ! -e "$flagfile" ]
+then
+	echo 'Testing for -no-pie...' 1>&2
+	testfile=$TMP/test.c
+	echo 'int main(){return 0;}' > $testfile
+	if $next -no-pie -c -o$testfile.o $testfile
+	then
+		printf "%s" "-no-pie" > "$flagfile"
+	else
+		touch "$flagfile"
+	fi
+fi
+
+exec $next $(cat "$flagfile") "$@"
+EOF");
+					setAttributes(fileName, octal!755);
+				}
+			}
+
 		}
 
 		private bool haveInstalled;
@@ -905,20 +942,6 @@ class DManager : ICacheHost
 
 			auto env = baseEnvironment;
 			needCC(env, config.build.components.dmd.dmdModel, dmcVer); // Need VC too for VSINSTALLDIR
-
-			// Set up compiler wrappers.
-			foreach (cc; ["cc", "gcc", "c++", "g++"])
-			{
-				auto fileName = binDir.buildPath(cc);
-				if (fileName.exists)
-					fileName.remove();
-
-				version (linux)
-				{
-					write(fileName, "#!/bin/sh\nexec /usr/bin/" ~ cc ~ ` -no-pie "$@"`);
-					setAttributes(fileName, octal!755);
-				}
-			}
 
 			if (buildPath(sourceDir, "src", "idgen.d").exists ||
 			    buildPath(sourceDir, "src", "ddmd", "idgen.d").exists ||
