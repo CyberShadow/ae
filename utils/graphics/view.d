@@ -140,7 +140,10 @@ void blitTo(SRC, DST)(auto ref SRC src, auto ref DST dst, int x, int y)
 void size(V)(auto ref V src, int w, int h)
 	if (isView!V)
 {
-	assert(src.w == w && src.h == h, "Wrong size for " ~ V.stringof);
+	import std.string : format;
+	assert(src.w == w && src.h == h,
+		"Wrong size for %s: need (%s,%s), have (%s,%s)"
+		.format(V.stringof, w, h, src.w, src.h));
 }
 
 // ***************************************************************************
