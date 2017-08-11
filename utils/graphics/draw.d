@@ -151,7 +151,11 @@ void hline(bool CHECKED=true, V, COLOR)(auto ref V v, int x1, int x2, int y, COL
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
 	mixin(CheckHLine);
-	v.scanline(y)[x1..x2] = c;
+	static if (isDirectView!V)
+		v.scanline(y)[x1..x2] = c;
+	else
+		foreach (x; x1..x2)
+			v[x, y] = c;
 }
 
 void vline(bool CHECKED=true, V, COLOR)(auto ref V v, int x, int y1, int y2, COLOR c)
@@ -241,7 +245,7 @@ void fillRect(bool CHECKED=true, V, COLOR)(auto ref V v, int x1, int y1, int x2,
 		if (y2 >= v.h) y2 = v.h;
 	}
 	foreach (y; y1..y2)
-		v.scanline(y)[x1..x2] = b;
+		v.hline!false(x1, x2, y, b);
 }
 
 void fillRect(bool CHECKED=true, V, COLOR)(auto ref V v, int x1, int y1, int x2, int y2, COLOR c, COLOR b) // [)
