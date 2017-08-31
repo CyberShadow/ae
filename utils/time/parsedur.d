@@ -66,8 +66,8 @@ Duration parseDuration(string s)
 				amount /= 100;
 				unit = 1.hnsecs;
 				break;
-			case "hectananoseconds":
-			case "hectananosecond":
+			case "hectonanoseconds":
+			case "hectonanosecond":
 			case "hnsecs":
 			case "hns":
 				unit = 1.hnsecs;
