@@ -137,6 +137,7 @@ struct PrettyJsonWriter(Output, alias indent = '\t', alias newLine = '\n', alias
 
 	void beginArray()
 	{
+		putIndent();
 		jsonWriter.beginArray();
 		indentLevel++;
 		putNewline();
