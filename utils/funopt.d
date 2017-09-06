@@ -371,9 +371,9 @@ string getUsageFormatString(alias FUN)()
 	alias defaults = ParameterDefaultValueTuple!FUN;
 
 	string result = "Usage: %s";
-	enum haveNonParameters = !allSatisfy!(isParameter, Params);
-	enum haveDescriptions = anySatisfy!(optionHasDescription, Params);
-	static if (haveNonParameters && haveDescriptions)
+	enum inSynopsis(Param) = isParameter!Param || !optionHasDescription!Param;
+	enum haveOmittedOptions = !allSatisfy!(inSynopsis, Params);
+	static if (haveOmittedOptions)
 		result ~= " [OPTION]...";
 
 	string getSwitchText(int i)()
@@ -392,7 +392,7 @@ string getUsageFormatString(alias FUN)()
 	}
 
 	foreach (i, Param; Params)
-		static if (!isHiddenOption!Param && (isParameter!Param || !optionHasDescription!Param))
+		static if (!isHiddenOption!Param && inSynopsis!Param)
 		{
 			static if (isParameter!Param)
 			{
@@ -411,6 +411,7 @@ string getUsageFormatString(alias FUN)()
 
 	result ~= "\n";
 
+	enum haveDescriptions = anySatisfy!(optionHasDescription, Params);
 	static if (haveDescriptions)
 	{
 		enum haveShorthands = anySatisfy!(optionShorthand, Params);
@@ -528,6 +529,21 @@ Options:
 
 Options:
   --without=STR  Features to disable.
+", usage);
+
+	// If all options are on the command line, don't add "[OPTION]..."
+	void f6(
+		bool verbose,
+		Parameter!(string[], "Files to transmogrify.") files = null,
+	)
+	{}
+
+	usage = getUsage!f6("program");
+	assert(usage ==
+"Usage: program [--verbose] [FILES]...
+
+Options:
+  FILES  Files to transmogrify.
 ", usage);
 }
 
