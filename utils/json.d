@@ -702,7 +702,14 @@ private struct JsonParser(C)
 					break;
 				}
 			}
-			enforce(found, "Unknown field " ~ jsonField);
+
+			if (!found)
+			{
+				static if (hasAttribute!(JSONPartial, T))
+					skipValue();
+				else
+					throw new Exception(cast(string)("Unknown field " ~ jsonField));
+			}
 
 			skipWhitespace();
 			if (peek()=='}')
@@ -763,6 +770,64 @@ private struct JsonParser(C)
 		T v = new S;
 		*v = read!S();
 		return v;
+	}
+
+	void skipValue()
+	{
+		skipWhitespace();
+		char c = peek();
+		switch (c)
+		{
+			case '"':
+				readString(); // TODO: Optimize
+				break;
+			case '0': .. case '9':
+			case '-':
+				readNumber!real(); // TODO: Optimize
+				break;
+			case '{':
+				next();
+				bool first = true;
+				while (peek() != '}')
+				{
+					if (first)
+						first = false;
+					else
+						expect(',');
+					skipValue(); // key
+					expect(':');
+					skipValue(); // value
+				}
+				expect('}');
+				break;
+			case '[':
+				next();
+				bool first = true;
+				while (peek() != ']')
+				{
+					if (first)
+						first = false;
+					else
+						expect(',');
+					skipValue();
+				}
+				expect(']');
+				break;
+			case 't':
+				foreach (l; "true")
+					expect(l);
+				break;
+			case 'f':
+				foreach (l; "false")
+					expect(l);
+				break;
+			case 'n':
+				foreach (l; "null")
+					expect(l);
+				break;
+			default:
+				throw new Exception("Can't parse: " ~ c);
+		}
 	}
 }
 
@@ -894,4 +959,15 @@ unittest
 	static struct S { @JSONOptional bool a=true, b=false; }
 	assert(S().toJson == `{}`, S().toJson);
 	assert(S(false, true).toJson == `{"a":false,"b":true}`);
+}
+
+// ************************************************************************
+
+/// User-defined attribute - skip unknown fields when deserializing.
+struct JSONPartial {}
+
+unittest
+{
+	@JSONPartial static struct S { int b; }
+	assert(`{"a":1,"b":2,"c":3.4,"d":[5,"x"],"de":[],"e":{"k":"v"},"ee":{},"f":true,"g":false,"h":null}`.jsonParse!S == S(2));
 }
