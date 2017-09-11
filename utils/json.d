@@ -246,6 +246,9 @@ struct CustomJsonSerializer(Writer)
 			writer.endObject();
 		}
 		else
+		static if (is(T==JSONFragment))
+			writer.output.put(v.json);
+		else
 		static if (is(T==struct))
 		{
 			writer.beginObject();
@@ -450,6 +453,13 @@ private struct JsonParser(C)
 		else
 		static if (is(typeof(T.init.keys)) && is(typeof(T.init.values)) && is(typeof(T.init.keys[0])==string))
 			return readAA!(T)();
+		else
+		static if (is(T==JSONFragment))
+		{
+			auto start = p;
+			skipValue();
+			return JSONFragment(s[start..p]);
+		}
 		else
 		static if (is(T==struct))
 			return readObject!(T)();
@@ -970,4 +980,21 @@ unittest
 {
 	@JSONPartial static struct S { int b; }
 	assert(`{"a":1,"b":2,"c":3.4,"d":[5,"x"],"de":[],"e":{"k":"v"},"ee":{},"f":true,"g":false,"h":null}`.jsonParse!S == S(2));
+}
+
+// ************************************************************************
+
+/// Fragment of raw JSON.
+/// When serialized, the .json field is inserted into the resulting
+/// string verbatim, without any validation.
+/// When deserialized, will contain the raw JSON of one JSON object of
+/// any type.
+struct JSONFragment { string json; }
+
+unittest
+{
+	import std.conv;
+	JSONFragment[] arr = [JSONFragment(`1`), JSONFragment(`true`), JSONFragment(`"foo"`), JSONFragment(`[55]`)];
+	assert(arr.toJson == `[1,true,"foo",[55]]`);
+	assert(arr.toJson.jsonParse!(JSONFragment[]) == arr);
 }
