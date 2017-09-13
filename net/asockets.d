@@ -931,7 +931,7 @@ public:
 
 		debug (ASOCKETS) writefln("Disconnecting @ %s: %s", cast(void*)this, reason);
 
-		if (state == ConnectionState.connecting || state == ConnectionState.connected)
+		if ((state == ConnectionState.connecting && conn) || state == ConnectionState.connected)
 			close();
 		else
 		{
