@@ -705,7 +705,7 @@ private:
 	enum UNMANAGED_THRESHOLD = 256;
 
 	/// Queue of addresses to try connecting to.
-	Address[] addressQueue;
+	AddressInfo[] addressQueue;
 
 	ConnectionState _state;
 	final @property ConnectionState state(ConnectionState value) { return _state = value; }
@@ -1093,18 +1093,18 @@ protected:
 	final void tryNextAddress()
 	{
 		assert(state == ConnectionState.connecting);
-		auto address = addressQueue[0];
+		auto addressInfo = addressQueue[0];
 		addressQueue = addressQueue[1..$];
 
 		try
 		{
-			conn = new Socket(address.addressFamily(), SocketType.STREAM, ProtocolType.TCP);
+			conn = new Socket(addressInfo.family, addressInfo.type, addressInfo.protocol);
 			conn.blocking = false;
 
 			socketManager.register(this);
 			updateFlags();
-			debug (ASOCKETS) writefln("Attempting connection to %s", address.toString());
-			conn.connect(address);
+			debug (ASOCKETS) writefln("Attempting connection to %s", addressInfo.address.toString());
+			conn.connect(addressInfo.address);
 		}
 		catch (SocketException e)
 			return onError("Connect error: " ~ e.msg);
@@ -1140,34 +1140,49 @@ public:
 
 		debug (ASOCKETS) writefln("Connecting to %s:%s", host, port);
 		assert(state == ConnectionState.disconnected, "Attempting to connect on a %s socket".format(state));
-		assert(!conn);
 
 		state = ConnectionState.resolving;
 
+		AddressInfo[] addressInfos;
 		try
 		{
-			addressQueue = getAddress(host, port);
-			enforce(addressQueue.length, "No addresses found");
+			auto addresses = getAddress(host, port);
+			enforce(addresses.length, "No addresses found");
 			debug (ASOCKETS)
 			{
-				writefln("Resolved to %s addresses:", addressQueue.length);
-				foreach (address; addressQueue)
+				writefln("Resolved to %s addresses:", addresses.length);
+				foreach (address; addresses)
 					writefln("- %s", address.toString());
 			}
 
-			state = ConnectionState.connecting;
-			if (addressQueue.length > 1)
+			if (addresses.length > 1)
 			{
 				import std.random : randomShuffle;
-				randomShuffle(addressQueue);
+				randomShuffle(addresses);
 			}
+
+			foreach (address; addresses)
+				addressInfos ~= AddressInfo(address.addressFamily, SocketType.STREAM, ProtocolType.TCP, address, host);
 		}
 		catch (SocketException e)
 			return onError("Lookup error: " ~ e.msg);
 
-		tryNextAddress();
+		state = ConnectionState.disconnected;
+		connect(addressInfos);
 	}
 
+	/// ditto
+	final void connect(AddressInfo[] addresses)
+	{
+		assert(addresses.length, "No addresses specified");
+
+		assert(state == ConnectionState.disconnected, "Attempting to connect on a %s socket".format(state));
+		assert(!conn);
+
+		addressQueue = addresses;
+		state = ConnectionState.connecting;
+		tryNextAddress();
+	}
 }
 
 // ***************************************************************************
