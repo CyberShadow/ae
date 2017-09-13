@@ -674,7 +674,7 @@ private // https://issues.dlang.org/show_bug.cgi?id=16563
 /// Creates a PNG file.
 /// Only basic PNG features are supported
 /// (no filters, interlacing, palettes etc.)
-ubyte[] toPNG(SRC)(auto ref SRC src)
+ubyte[] toPNG(SRC)(auto ref SRC src, int compressionLevel = 5)
 	if (isView!SRC)
 {
 	import std.zlib : compress;
@@ -723,7 +723,7 @@ ubyte[] toPNG(SRC)(auto ref SRC src)
 			foreach (ref p; cast(ChannelType!COLOR[])rowPixels)
 				p = swapBytes(p);
 	}
-	chunks ~= PNGChunk("IDAT", compress(idatData, 5));
+	chunks ~= PNGChunk("IDAT", compress(idatData, compressionLevel));
 	chunks ~= PNGChunk("IEND", null);
 
 	uint totalSize = 8;
