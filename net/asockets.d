@@ -23,7 +23,7 @@ public import ae.sys.data;
 import std.exception;
 import std.socket;
 import std.string : format;
-public import std.socket : Address, Socket;
+public import std.socket : Address, AddressInfo, Socket;
 
 debug(ASOCKETS) import std.stdio;
 debug(PRINTDATA) static import std.stdio;
@@ -599,7 +599,7 @@ public:
 		{
 			try
 				conn.setKeepAlive(time, interval);
-			catch (SocketFeatureException)
+			catch (SocketException)
 				conn.setOption(SocketOptionLevel.SOCKET, SocketOption.KEEPALIVE, true);
 		}
 		else

@@ -19,6 +19,7 @@ import std.conv;
 import std.datetime;
 import std.exception;
 import std.range;
+import std.socket;
 import std.string;
 import std.uri;
 
@@ -57,6 +58,14 @@ public:
 			foreach (address; conn.localAddresses)
 				log("Listening on " ~ formatAddress(protocol, address) ~ " [" ~ to!string(address.addressFamily) ~ "]");
 		return port;
+	}
+
+	void listen(AddressInfo[] addresses)
+	{
+		conn.listen(addresses);
+		if (log)
+			foreach (address; conn.localAddresses)
+				log("Listening on " ~ formatAddress(protocol, address) ~ " [" ~ to!string(address.addressFamily) ~ "]");
 	}
 
 	void close()
@@ -433,10 +442,13 @@ public:
 string formatAddress(string protocol, Address address, string vhost = null, ushort logPort = 0)
 {
 	string addr = address.toAddrString();
-	string port = logPort ? text(logPort) : address.toPortString();
+	string port =
+		address.addressFamily == AddressFamily.UNIX ? null :
+		logPort ? text(logPort) :
+		address.toPortString();
 	return protocol ~ "://" ~
 		(vhost ? vhost : addr == "0.0.0.0" || addr == "::" ? "*" : addr.contains(":") ? "[" ~ addr ~ "]" : addr) ~
-		(port == "80" ? "" : ":" ~ port);
+		(port is null || port == "80" ? "" : ":" ~ port);
 }
 
 unittest
