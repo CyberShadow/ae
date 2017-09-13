@@ -735,6 +735,15 @@ private struct JsonParser(C)
 	T readAA(T)()
 	{
 		skipWhitespace();
+		static if (is(typeof(T.init is null)))
+			if (peek() == 'n')
+			{
+				next();
+				expect('u');
+				expect('l');
+				expect('l');
+				return null;
+			}
 		expect('{');
 		skipWhitespace();
 		T v;
@@ -860,6 +869,8 @@ unittest
 	assert(jsonParse!(Tuple!())(``) == tuple());
 	assert(jsonParse!(Tuple!int)(`42`) == tuple(42));
 	assert(jsonParse!(Tuple!(int, string))(`[42, "banana"]`) == tuple(42, "banana"));
+
+	assert(jsonParse!(string[string])(`null`) is null);
 }
 
 // ************************************************************************
