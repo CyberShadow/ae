@@ -106,7 +106,8 @@ protected:
 		try
 		{
 			inBuffer ~= data;
-			timer.markNonIdle();
+			if (timer)
+				timer.markNonIdle();
 
 			string statusLine;
 			Headers headers;
@@ -167,7 +168,8 @@ protected:
 	void onContinuation(Data data)
 	{
 		onData(data.toArray);
-		timer.markNonIdle();
+		if (timer)
+			timer.markNonIdle();
 
 		auto received = currentResponse.data.bytes.length;
 		if (expect!=size_t.max && received >= expect)
@@ -222,16 +224,19 @@ public:
 public:
 	this(Duration timeout = 30.seconds, Connector connector = new TcpConnector)
 	{
-		assert(timeout > Duration.zero);
+		assert(timeout >= Duration.zero);
 
 		this.connector = connector;
 		IConnection c = connector.getConnection();
 
 		c = adaptConnection(c);
 
-		timer = new TimeoutAdapter(c);
-		timer.setIdleTimeout(timeout);
-		c = timer;
+		if (timeout > Duration.zero)
+		{
+			timer = new TimeoutAdapter(c);
+			timer.setIdleTimeout(timeout);
+			c = timer;
+		}
 
 		conn = c;
 		conn.handleConnect = &onConnect;
