@@ -114,7 +114,7 @@ private:
 	{
 		char[] s = cast(char[])data.contents;
 		auto p = s.indexOf('\0');
-		enforce!PgSqlException(p >= 0, "Unterminated string in packet packet");
+		enforce!PgSqlException(p >= 0, "Unterminated string in packet");
 		char[] result = s[0..p];
 		data = data[p+1..$];
 		return result;
