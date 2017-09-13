@@ -37,9 +37,9 @@ public import ae.net.http.common;
 class HttpClient
 {
 private:
-	TcpConnection tcp;    // Bottom-level transport. Reused for new connections.
+	Connector connector;  // Bottom-level transport factory.
 	TimeoutAdapter timer; // Timeout adapter.
-	IConnection conn;     // Top-level abstract connection.
+	IConnection conn;     // Top-level abstract connection. Reused for new connections.
 
 	Data[] inBuffer;
 
@@ -135,7 +135,7 @@ protected:
 			if (conn.state == ConnectionState.connected)
 				conn.disconnect(e.msg.length ? e.msg : e.classinfo.name, DisconnectType.error);
 			else
-				throw new Exception("Unhandled exception after connection was closed", e);
+				throw new Exception("Unhandled exception after connection was closed: " ~ e.msg, e);
 		}
 	}
 
@@ -220,11 +220,12 @@ public:
 	string[] cookies;
 
 public:
-	this(Duration timeout = 30.seconds)
+	this(Duration timeout = 30.seconds, Connector connector = new TcpConnector)
 	{
 		assert(timeout > Duration.zero);
 
-		IConnection c = tcp = new TcpConnection;
+		this.connector = connector;
+		IConnection c = connector.getConnection();
 
 		c = adaptConnection(c);
 
@@ -254,9 +255,9 @@ public:
 		else
 		{
 			if (request.proxy !is null)
-				tcp.connect(request.proxyHost, request.proxyPort);
+				connector.connect(request.proxyHost, request.proxyPort);
 			else
-				tcp.connect(request.host, request.port);
+				connector.connect(request.host, request.port);
 		}
 	}
 
@@ -300,6 +301,52 @@ class HttpsClient : HttpClient
 	{
 		super.request(request);
 		adapter.setHostName(request.host);
+	}
+}
+
+// Experimental for now
+class Connector
+{
+	abstract IConnection getConnection();
+	abstract void connect(string host, ushort port);
+}
+
+// ditto
+class TcpConnector : Connector
+{
+	protected TcpConnection conn;
+
+	this()
+	{
+		conn = new TcpConnection();
+	}
+
+	override IConnection getConnection()
+	{
+		return conn;
+	}
+
+	override void connect(string host, ushort port)
+	{
+		conn.connect(host, port);
+	}
+}
+
+// ditto
+class UnixConnector : TcpConnector
+{
+	string path;
+
+	this(string path)
+	{
+		this.path = path;
+	}
+
+	override void connect(string host, ushort port)
+	{
+		import std.socket;
+		auto addr = new UnixAddress(path);
+		conn.connect([AddressInfo(AddressFamily.UNIX, SocketType.STREAM, cast(ProtocolType)0, addr, path)]);
 	}
 }
 
