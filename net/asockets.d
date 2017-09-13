@@ -1245,11 +1245,31 @@ public:
 
 		auto addressInfos = getAddressInfo(addr, to!string(port), AddressInfoFlags.PASSIVE, SocketType.STREAM, ProtocolType.TCP);
 
+		// listen on random ports only on IPv4 for now
+		if (port == 0)
+		{
+			foreach_reverse (i, ref addressInfo; addressInfos)
+				if (addressInfo.family != AddressFamily.INET)
+					addressInfos = addressInfos[0..i] ~ addressInfos[i+1..$];
+		}
+
+		listen(addressInfos);
+
+		foreach (listener; listeners)
+		{
+			auto address = listener.conn.localAddress();
+			if (address.addressFamily == AddressFamily.INET)
+				port = to!ushort(address.toPortString());
+		}
+
+		return port;
+	}
+
+	/// ditto
+	void listen(AddressInfo[] addressInfos)
+	{
 		foreach (ref addressInfo; addressInfos)
 		{
-			if (addressInfo.family != AddressFamily.INET && port == 0)
-				continue;  // listen on random ports only on IPv4 for now
-
 			try
 			{
 				Socket conn = new Socket(addressInfo);
@@ -1260,9 +1280,6 @@ public:
 
 				conn.bind(addressInfo.address);
 				conn.listen(8);
-
-				if (addressInfo.family == AddressFamily.INET)
-					port = to!ushort(conn.localAddress().toPortString());
 
 				listeners ~= new Listener(conn);
 			}
@@ -1279,8 +1296,6 @@ public:
 		listening = true;
 
 		updateFlags();
-
-		return port;
 	}
 
 	@property Address[] localAddresses()
