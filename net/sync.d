@@ -122,7 +122,7 @@ private:
 	}
 
 public:
-	this(Flag!"daemon" = Yes.daemon)
+	this(Flag!"daemon" daemon = Yes.daemon)
 	{
 		socket = new AnchorSocket(daemon);
 	}
