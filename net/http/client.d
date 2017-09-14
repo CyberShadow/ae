@@ -338,6 +338,7 @@ class TcpConnector : Connector
 }
 
 // ditto
+version(Posix)
 class UnixConnector : TcpConnector
 {
 	string path;
