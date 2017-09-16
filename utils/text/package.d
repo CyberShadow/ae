@@ -582,13 +582,24 @@ ubyte[] arrayFromHex(in char[] hex)
 	return buf;
 }
 
-void arrayFromHex(in char[] hex, ubyte[] buf) @nogc
+ubyte parseHexDigit(char c)
+{
+	switch (c)
+	{
+		case '0': .. case '9': return cast(ubyte)(c - '0');
+		case 'a': .. case 'f': return cast(ubyte)(c - 'a' + 10);
+		case 'A': .. case 'F': return cast(ubyte)(c - 'A' + 10);
+		default: throw new Exception("Bad hex digit: " ~ c);
+	}
+}
+
+void arrayFromHex(in char[] hex, ubyte[] buf)
 {
 	assert(buf.length == hex.length/2);
 	for (int i=0; i<hex.length; i+=2)
 		buf[i/2] = cast(ubyte)(
-			hexDigits.indexOf(hex[i  ], CaseSensitive.no)*16 +
-			hexDigits.indexOf(hex[i+1], CaseSensitive.no)
+			parseHexDigit(hex[i  ])*16 +
+			parseHexDigit(hex[i+1])
 		);
 }
 
