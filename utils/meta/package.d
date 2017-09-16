@@ -613,6 +613,26 @@ static assert(is(ResizeNumericType!(float, double.mant_dig) == double));
 alias ExpandNumericType(T, uint additionalBits) =
 	ResizeNumericType!(T, valueBits!T + additionalBits);
 
+/// Like ExpandNumericType, but do not error if the resulting type is
+/// too large to fit any native D type - just expand to the largest
+/// type of the same kind instead.
+template TryExpandNumericType(T, uint additionalBits)
+{
+	static if (is(typeof(ExpandNumericType!(T, additionalBits))))
+		alias TryExpandNumericType = ExpandNumericType!(T, additionalBits);
+	else
+		static if (is(T : ulong))
+			static if (isSigned!T)
+				alias TryExpandNumericType = long;
+			else
+				alias TryExpandNumericType = ulong;
+		else
+		static if (is(T : real))
+			alias TryExpandNumericType = real;
+		else
+			static assert(false, "Don't know how to expand type: " ~ T.stringof);
+}
+
 /// Unsigned integer type big enough to fit N bits of precision.
 template UnsignedBitsType(uint bits)
 {
