@@ -72,7 +72,7 @@ struct Color(FieldTuple...)
 	/// See also: Gradient
 	static typeof(this) itpl(P)(typeof(this) c0, typeof(this) c1, P p, P p0, P p1)
 	{
-		alias ExpandNumericType!(ChannelType, P.sizeof*8) U;
+		alias TryExpandNumericType!(ChannelType, P.sizeof*8) U;
 		alias Signed!U S;
 		typeof(this) r;
 		foreach (i, f; r.tupleof)
