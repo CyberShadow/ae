@@ -69,6 +69,7 @@ struct Color(FieldTuple...)
 	}
 
 	/// Interpolate between two colors.
+	/// See also: Gradient
 	static typeof(this) itpl(P)(typeof(this) c0, typeof(this) c1, P p, P p0, P p1)
 	{
 		alias ExpandNumericType!(ChannelType, P.sizeof*8) U;
@@ -415,6 +416,52 @@ unittest
 	assert(rgbf.r == 1f);
 	assert(rgbf.g == 2f);
 	assert(rgbf.b == 3f);
+}
+
+// ***************************************************************************
+
+/// Calculate an interpolated color on a gradient with multiple points
+struct Gradient(Value, Color)
+{
+	struct Point
+	{
+		Value value;
+		Color color;
+	}
+	Point[] points;
+
+	Color get(Value value) const
+	{
+		assert(points.length, "Gradient must have at least one point");
+
+		if (value <= points[0].value)
+			return points[0].color;
+
+		for (int i = 0; i < points.length - 1; i++)
+		{
+			assert(points[i].value <= points[i+1].value,
+				"Gradient values are not in ascending order");
+			if (value < points[i+1].value)
+				return Color.itpl(points[i].color, points[i+1].color, value, points[i].value, points[i+1].value);
+		}
+
+		return points[$-1].color;
+	}
+}
+
+unittest
+{
+	Gradient!(int, L8) grad;
+	grad.points = [
+		grad.Point(0, L8(0)),
+		grad.Point(10, L8(100)),
+	];
+
+	assert(grad.get(-5) == L8(  0));
+	assert(grad.get( 0) == L8(  0));
+	assert(grad.get( 5) == L8( 50));
+	assert(grad.get(10) == L8(100));
+	assert(grad.get(15) == L8(100));
 }
 
 // ***************************************************************************
