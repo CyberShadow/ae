@@ -575,18 +575,21 @@ T fromHex(T : ulong = uint, C)(const(C)[] s)
 	return result;
 }
 
-ubyte[] arrayFromHex(in char[] hex, ubyte[] buf = null)
+ubyte[] arrayFromHex(in char[] hex)
 {
-	if (buf is null)
-		buf = new ubyte[hex.length/2];
-	else
-		assert(buf.length == hex.length/2);
+	auto buf = new ubyte[hex.length/2];
+	arrayFromHex(hex, buf);
+	return buf;
+}
+
+void arrayFromHex(in char[] hex, ubyte[] buf) @nogc
+{
+	assert(buf.length == hex.length/2);
 	for (int i=0; i<hex.length; i+=2)
 		buf[i/2] = cast(ubyte)(
 			hexDigits.indexOf(hex[i  ], CaseSensitive.no)*16 +
 			hexDigits.indexOf(hex[i+1], CaseSensitive.no)
 		);
-	return buf;
 }
 
 template toHex(alias digits = hexDigits)
