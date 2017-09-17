@@ -595,7 +595,7 @@ ubyte parseHexDigit(char c)
 
 void arrayFromHex(in char[] hex, ubyte[] buf)
 {
-	assert(buf.length == hex.length/2);
+	assert(buf.length == hex.length/2, "Wrong buffer size for arrayFromHex");
 	for (int i=0; i<hex.length; i+=2)
 		buf[i/2] = cast(ubyte)(
 			parseHexDigit(hex[i  ])*16 +
