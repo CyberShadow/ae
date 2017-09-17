@@ -132,7 +132,7 @@ version (Posix)
 					string name = fdata.d_name[0 .. len].idup;
 					if (pattern && !globMatch(name, pattern))
 						continue;
-					string path = buildPath(pathname, name);
+					string path = pathname ~ (pathname.length && pathname[$-1] != '/' ? "/" : "") ~ name;
 
 					static if (recursive)
 					{
