@@ -514,6 +514,8 @@ abstract class DataWrapper
 	}
 }
 
+void setGCThreshold(size_t value) { MemoryDataWrapper.collectThreshold = value; }
+
 private:
 
 version (Windows)
@@ -535,7 +537,7 @@ final class MemoryDataWrapper : DataWrapper
 	size_t _capacity;
 
 	/// Threshold of allocated memory to trigger a collect.
-	enum { COLLECT_THRESHOLD = 8*1024*1024 } // 8MB
+	__gshared size_t collectThreshold = 8*1024*1024; // 8MB
 	/// Counter towards the threshold.
 	static /*thread-local*/ size_t allocatedThreshold;
 
@@ -565,7 +567,7 @@ final class MemoryDataWrapper : DataWrapper
 
 		// also collect
 		allocatedThreshold += capacity;
-		if (allocatedThreshold > COLLECT_THRESHOLD)
+		if (allocatedThreshold > collectThreshold)
 		{
 			debug(DATA) printf("Garbage collect triggered by total allocated Data exceeding threshold... ");
 			GC.collect();
