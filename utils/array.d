@@ -352,7 +352,24 @@ T queuePop(T)(ref T[] arr)
 }
 
 T shift(T)(ref T[] arr) { T result = arr[0]; arr = arr[1..$]; return result; }
+T[] shift(T)(ref T[] arr, size_t n) { T[] result = arr[0..n]; arr = arr[n..$]; return result; }
 void unshift(T)(ref T[] arr, T value) { arr.insertInPlace(0, value); }
+void unshift(T)(ref T[] arr, T[] value) { arr.insertInPlace(0, value); }
+
+unittest
+{
+	int[] arr = [1, 2, 3];
+	assert(arr.shift == 1);
+	assert(arr == [2, 3]);
+	assert(arr.shift(2) == [2, 3]);
+	assert(arr == []);
+
+	arr = [3];
+	arr.unshift([1, 2]);
+	assert(arr == [1, 2, 3]);
+	arr.unshift(0);
+	assert(arr == [0, 1, 2, 3]);
+}
 
 /// If arr starts with prefix, slice it off and return true.
 /// Otherwise leave arr unchaned and return false.
