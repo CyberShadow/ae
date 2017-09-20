@@ -781,11 +781,12 @@ version (linux)
 		return File("/proc/self/mounts", "rb").byLine().map!parseMountInfo();
 	}
 
-	/// Get the name of the filesystem that the given path is mounted under.
-	string getPathFilesystem(string path)
+	/// Get MountInfo with longest mount point matching path.
+	/// Returns MountInfo.init if none match.
+	MountInfo getPathMountInfo(string path)
 	{
 		path = realPath(path);
-		size_t bestLength; string bestFS;
+		size_t bestLength; MountInfo bestInfo;
 		foreach (ref info; getMounts())
 		{
 			if (path.startsWith(info.file) && (path.length == info.file.length || path[info.file.length] == '/'))
@@ -793,11 +794,18 @@ version (linux)
 				if (bestLength < info.file.length)
 				{
 					bestLength = info.file.length;
-					bestFS = info.vfstype;
+					bestInfo = info;
 				}
 			}
 		}
-		return bestFS;
+		return bestInfo;
+	}
+
+	/// Get the name of the filesystem that the given path is mounted under.
+	/// Returns null if none match.
+	string getPathFilesystem(string path)
+	{
+		return getPathMountInfo(path).vfstype;
 	}
 }
 
