@@ -42,14 +42,21 @@ string excludeTrailingPathSeparator(string path)
 /// Like startsWith, but pathStartsWith("/foo/barbara", "/foo/bar") is false.
 bool pathStartsWith(in char[] path, in char[] prefix)
 {
+	// Special cases to accommodate relativePath(path, path) results
+	if (prefix == "" || prefix == ".")
+		return true;
+
 	return path.startsWith(prefix) &&
 		(path.length == prefix.length || isDirSeparator(path[prefix.length]));
 }
 
 unittest
 {
+	assert( "/foo/bar"    .pathStartsWith("/foo/bar"));
 	assert( "/foo/bar/baz".pathStartsWith("/foo/bar"));
 	assert(!"/foo/barbara".pathStartsWith("/foo/bar"));
+	assert( "/foo/bar"    .pathStartsWith(""));
+	assert( "/foo/bar"    .pathStartsWith("."));
 }
 
 // ************************************************************************
