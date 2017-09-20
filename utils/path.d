@@ -13,6 +13,7 @@
 
 module ae.utils.path;
 
+import std.algorithm.searching;
 import std.path;
 
 /// Modify a path under oldBase to a new path with the same subpath under newBase.
@@ -36,6 +37,19 @@ string excludeTrailingPathSeparator(string path)
 	if (path.length && path[$-1].isDirSeparator())
 		path = path[0..$-1];
 	return path;
+}
+
+/// Like startsWith, but pathStartsWith("/foo/barbara", "/foo/bar") is false.
+bool pathStartsWith(in char[] path, in char[] prefix)
+{
+	return path.startsWith(prefix) &&
+		(path.length == prefix.length || isDirSeparator(path[prefix.length]));
+}
+
+unittest
+{
+	assert( "/foo/bar/baz".pathStartsWith("/foo/bar"));
+	assert(!"/foo/barbara".pathStartsWith("/foo/bar"));
 }
 
 // ************************************************************************
