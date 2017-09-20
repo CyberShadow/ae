@@ -112,9 +112,20 @@ string query(Params...)(string[] args, Params params)
 	auto parsed = ProcessParams(params);
 	string output;
 	invoke!({
-		auto result = execute(args, parsed.environment, parsed.config, parsed.maxOutput, parsed.workDir);
-		output = result.output.stripRight();
-		return result.status;
+		// Don't use execute due to https://issues.dlang.org/show_bug.cgi?id=17844
+		version (none)
+		{
+			auto result = execute(args, parsed.environment, parsed.config, parsed.maxOutput, parsed.workDir);
+			output = result.output.stripRight();
+			return result.status;
+		}
+		else
+		{
+			auto pipes = pipeProcess(args, Redirect.stdout,
+				parsed.environment, parsed.config, parsed.workDir);
+			output = cast(string)readFile(pipes.stdout);
+			return pipes.pid.wait();
+		}
 	})(args);
 	return output;
 }
