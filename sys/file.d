@@ -26,6 +26,7 @@ import std.typecons;
 import std.utf;
 
 import ae.sys.cmd : getCurrentThreadID;
+import ae.utils.path;
 
 public import std.typecons : No, Yes;
 
@@ -789,7 +790,7 @@ version (linux)
 		size_t bestLength; MountInfo bestInfo;
 		foreach (ref info; getMounts())
 		{
-			if (path.startsWith(info.file) && (path.length == info.file.length || path[info.file.length] == '/'))
+			if (path.pathStartsWith(info.file))
 			{
 				if (bestLength < info.file.length)
 				{
