@@ -345,6 +345,22 @@ unittest
 	assert(a == 1 && b == 1);
 }
 
+/// Like progn, but return the first argument instead.
+Args[0] prog1(Args...)(lazy Args args)
+{
+	auto result = args[0];
+	foreach (n; RangeTuple!(Args.length-1))
+		cast(void)args[1+n];
+	return result;
+}
+
+unittest
+{
+	int a = 10, b = 20, c = 30;
+	int d = prog1(a++, b++, c++);
+	assert(a==11 && b==21 && c == 31 && d == 10);
+}
+
 // ************************************************************************
 
 // Using a compiler with UDA support?
