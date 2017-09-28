@@ -65,8 +65,11 @@ void test(string moduleName, string className)()
 
 unittest
 {
-	test!("ae", "AENetwork");
-	test!("curl", "CurlNetwork");
-	version(Windows)
-	test!("wininet", "WinINetNetwork");
+	if (false)
+	{
+		test!("ae", "AENetwork");
+		test!("curl", "CurlNetwork");
+		version(Windows)
+		test!("wininet", "WinINetNetwork");
+	}
 }
