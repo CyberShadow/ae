@@ -284,6 +284,44 @@ unittest
 	assert(splitAsciiLines(string.init) == splitLines(string.init));
 }
 
+/// Like std.string.split (one argument version, which splits by
+/// whitespace), but only splits by ASCII and does not autodecode.
+T[][] asciiSplit(T)(T[] text)
+	if (is(Unqual!T == char))
+{
+	bool inWhitespace = true;
+	size_t wordStart;
+	T[][] result;
+
+	void endWord(size_t p)
+	{
+		if (!inWhitespace)
+		{
+			result ~= text[wordStart..p];
+			inWhitespace = true;
+		}
+	}
+
+	foreach (p, c; text)
+		if (std.ascii.isWhite(c))
+			endWord(p);
+		else
+			if (inWhitespace)
+			{
+				inWhitespace = false;
+				wordStart = p;
+			}
+	endWord(text.length);
+	return result;
+}
+
+unittest
+{
+	foreach (s; ["", " ", "a", " a", "a ", "a b", " a b", "a b ", " a b ",
+			"  ", "  a", "a  ", "a  b", "a  b  ", "a b  c"])
+		assert(s.split == s.asciiSplit, format("Got %s, expected %s", s.asciiSplit, s.split));
+}
+
 T[] asciiStrip(T)(T[] s)
 	if (is(Unqual!T == char))
 {
