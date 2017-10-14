@@ -144,6 +144,17 @@ struct OrderedMap(K, V)
 	V[] values;
 	size_t[K] index;
 
+	/// Convert from regular AA
+	this(in V[K] aa)
+	{
+		foreach (ref k, ref v; aa)
+		{
+			index[k] = values.length;
+			keys ~= k;
+			values ~= v;
+		}
+	}
+
 	ref inout(V) opIndex()(auto ref K k) inout
 	{
 		return values[index[k]];
