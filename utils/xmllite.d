@@ -154,7 +154,9 @@ class XmlNode
 				output.doctype(tag);
 				return;
 			case XmlNodeType.Text:
+				output.startLine();
 				output.text(tag);
+				output.newLine();
 				return;
 			case XmlNodeType.Comment:
 				// TODO
