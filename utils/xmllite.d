@@ -62,10 +62,12 @@ enum XmlNodeType
 	Text
 }
 
+alias XmlAttributes = OrderedMap!(string, string);
+
 class XmlNode
 {
 	string tag;
-	OrderedMap!(string, string) attributes;
+	XmlAttributes attributes;
 	XmlNode parent;
 	XmlNode[] children;
 	XmlNodeType type;
