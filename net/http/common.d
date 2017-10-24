@@ -669,8 +669,9 @@ Data encodeMultipart(MultipartPart[] parts, string boundary)
 		data ~= "\r\n";
 		assert((cast(string)part.data.contents).indexOf(boundary) < 0);
 		data ~= part.data;
+		data ~= "\r\n";
 	}
-	data ~= "\r\n--" ~ boundary ~ "--\r\n";
+	data ~= "--" ~ boundary ~ "--\r\n";
 	return data;
 }
 
