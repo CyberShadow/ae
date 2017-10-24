@@ -145,7 +145,7 @@ struct OrderedMap(K, V)
 	size_t[K] index;
 
 	/// Convert from regular AA
-	this(in V[K] aa)
+	this(V[K] aa)
 	{
 		foreach (ref k, ref v; aa)
 		{
