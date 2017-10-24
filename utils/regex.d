@@ -18,6 +18,8 @@ import std.conv;
 import std.exception;
 import std.regex;
 import std.string;
+import std.traits;
+import std.typecons;
 
 import ae.utils.text;
 
@@ -114,15 +116,34 @@ size_t matchAllCaptures(S, R, Ret, Args...)(S s, R r, Ret delegate(Args args) fu
 }
 
 /// Returns a range which extracts a capture from text.
-template extractCapture(T)
+template extractCaptures(T...)
 {
-	auto extractCapture(S, R)(S s, R r)
+	auto extractCaptures(S, R)(S s, R r)
 	{
-		return s.matchAll(r).map!(m => m.captures[1].to!T);
+		return s.matchAll(r).map!(
+			(m)
+			{
+				static if (T.length == 1)
+					return m.captures[1].to!T;
+				else
+				{
+					Tuple!T r;
+					foreach (n, TT; T)
+						r[n] = m.captures[1+n].to!TT;
+					return r;
+				}
+			});
 	}
 }
 
-auto extractCapture(S, R)(S s, R r) { alias x = extractCapture!S; return x(s, r); }
+alias extractCapture = extractCaptures;
+
+auto extractCapture(S, R)(S s, R r)
+if (isSomeString!S)
+{
+	alias x = .extractCaptures!S;
+	return x(s, r);
+}
 
 ///
 unittest
@@ -131,6 +152,14 @@ unittest
 	auto r = `(\d+)`;
 	assert(s.extractCapture    (r).equal(["2", "42"]));
 	assert(s.extractCapture!int(r).equal([ 2 ,  42 ]));
+}
+
+///
+unittest
+{
+	auto s = "2.3 4.56 78.9";
+	auto r = `(\d+)\.(\d+)`;
+	assert(s.extractCapture!(int, int)(r).equal([tuple(2, 3), tuple(4, 56), tuple(78, 9)]));
 }
 
 // ************************************************************************
