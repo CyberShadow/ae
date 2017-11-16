@@ -675,6 +675,49 @@ Data encodeMultipart(MultipartPart[] parts, string boundary)
 	return data;
 }
 
+MultipartPart[] decodeMultipart(Data data, string boundary)
+{
+	auto s = cast(char[])data.contents;
+	auto term = "\r\n--" ~ boundary ~ "--\r\n";
+	enforce(s.endsWith(term), "Bad multipart terminator");
+	s = s[0..$-term.length];
+	auto delim = "--" ~ boundary ~ "\r\n";
+	enforce(s.skipOver(delim), "Bad multipart start");
+	delim = "\r\n" ~ delim;
+	auto parts = s.split(delim);
+	MultipartPart[] result;
+	foreach (part; parts)
+	{
+		auto segs = part.findSplit("\r\n\r\n");
+		enforce(segs[1], "Can't find headers in multipart part");
+		MultipartPart p;
+		foreach (line; segs[0].split("\r\n"))
+		{
+			auto hparts = line.findSplit(":");
+			p.headers[hparts[0].strip.idup] = hparts[2].strip.idup;
+		}
+		p.data = Data(segs[2]);
+		result ~= p;
+	}
+	return result;
+}
+
+unittest
+{
+	auto parts = [
+		MultipartPart(["Foo" : "bar"], Data.init),
+		MultipartPart(["Baz" : "quux", "Frob" : "xyzzy"], Data("Content goes here\xFF")),
+	];
+	auto boundary = "abcde";
+	auto parts2 = parts.encodeMultipart(boundary).decodeMultipart(boundary);
+	assert(parts2.length == parts.length);
+	foreach (p; 0..parts.length)
+	{
+		assert(parts[p].headers == parts2[p].headers);
+		assert(parts[p].data.contents == parts2[p].data.contents);
+	}
+}
+
 private bool asciiStartsWith(string s, string prefix)
 {
 	if (s.length < prefix.length)
