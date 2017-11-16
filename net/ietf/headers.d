@@ -207,3 +207,45 @@ unittest
 {
 	assert(normalizeHeaderName("X-ORIGINATING-IP") == "X-Originating-IP");
 }
+
+struct TokenHeader
+{
+	string value;
+	string[string] properties;
+}
+
+TokenHeader decodeTokenHeader(string s)
+{
+	string take(char until)
+	{
+		string result;
+		auto p = s.indexOf(until);
+		if (p < 0)
+			result = s,
+			s = null;
+		else
+			result = s[0..p],
+			s = asciiStrip(s[p+1..$]);
+		return result;
+	}
+
+	TokenHeader result;
+	result.value = take(';');
+
+	while (s.length)
+	{
+		string name = take('=').toLower();
+		string value;
+		if (s.length && s[0] == '"')
+		{
+			s = s[1..$];
+			value = take('"');
+			take(';');
+		}
+		else
+			value = take(';');
+		result.properties[name] = value;
+	}
+
+	return result;
+}
