@@ -390,7 +390,7 @@ private struct JsonParser(C)
 
 	char next()
 	{
-		enforce(p < s.length);
+		enforce(p < s.length, "Out of data while parsing JSON stream");
 		return s[p++];
 	}
 
@@ -404,7 +404,7 @@ private struct JsonParser(C)
 
 	char peek()
 	{
-		enforce(p < s.length);
+		enforce(p < s.length, "Out of data while parsing JSON stream");
 		return s[p];
 	}
 
@@ -627,7 +627,7 @@ private struct JsonParser(C)
 		else
 		{
 			ubyte i = readNumber!ubyte();
-			enforce(i < 2);
+			enforce(i < 2, "Bad digit for implicit number-to-bool conversion");
 			return !!i;
 		}
 	}
