@@ -16,8 +16,10 @@ module ae.sys.sqlite3;
 pragma(lib, "sqlite3");
 
 import etc.c.sqlite3;
+import std.exception;
 import std.string : toStringz;
 import std.conv : to;
+import std.traits;
 
 final class SQLite
 {
@@ -182,7 +184,8 @@ final class SQLite
 				while (stmt.step())
 				{
 					scope(failure) stmt.reset();
-					static if (U.length == 1 && is(U[0] V : V[]) && !is(U[0] : string) && !is(V == void))
+					static if (U.length == 1 && is(U[0] V : V[]) &&
+						!is(U[0] : string) && !is(V == void) && !is(V == ubyte))
 					{
 						U[0] result;
 						result.length = stmt.columnCount();
@@ -226,8 +229,17 @@ final class SQLite
 			static if (is(T == string))
 				return (cast(char*)sqlite3_column_blob(stmt, idx))[0..sqlite3_column_bytes(stmt, idx)].idup;
 			else
-			static if (is(T == void[]))
-				return (cast(void*)sqlite3_column_blob(stmt, idx))[0..sqlite3_column_bytes(stmt, idx)].dup;
+			static if (is(T V : V[]) && (is(V == void) || is(V == ubyte)))
+			{
+				auto arr = (cast(V*)sqlite3_column_blob(stmt, idx))[0..sqlite3_column_bytes(stmt, idx)];
+				static if (isStaticArray!T)
+				{
+					enforce(arr.length == T.length, "Wrong size for static array column");
+					return arr[0..T.length];
+				}
+				else
+					return arr.dup;
+			}
 			else
 			static if (is(T == int))
 				return sqlite3_column_int(stmt, idx);
@@ -242,6 +254,18 @@ final class SQLite
 				return sqlite3_column_double(stmt, idx);
 			else
 				static assert(0, "Can't get column with type " ~ T.stringof);
+		}
+
+		unittest
+		{
+			PreparedStatement s;
+			if (false)
+			{
+				s.column!(void[])(0);
+				s.column!(ubyte[])(0);
+				s.column!(void[16])(0);
+				s.column!(ubyte[16])(0);
+			}
 		}
 
 		void columns(T...)(ref T args)
