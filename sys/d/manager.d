@@ -548,8 +548,8 @@ then
 	echo 'int main(){return 0;}' > $testfile
 	if $next -no-pie -c -o$testfile.o $testfile
 	then
-		printf "%s" "-no-pie" > "$flagfile".tmp
-		mv "$flagfile".tmp "$flagfile"
+		printf "%s" "-no-pie" > "$flagfile".$$.tmp
+		mv "$flagfile".$$.tmp "$flagfile"
 	else
 		touch "$flagfile"
 	fi
