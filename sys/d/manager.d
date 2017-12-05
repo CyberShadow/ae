@@ -553,10 +553,10 @@ then
 	else
 		touch "$flagfile"
 	fi
-	rm -f $testfile $testfile.o
+	rm -f "$testfile" "$testfile.o"
 fi
 
-exec $next $(cat "$flagfile") "$@"
+exec "$next" $(cat "$flagfile") "$@"
 EOF");
 					setAttributes(fileName, octal!755);
 				}
