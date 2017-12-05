@@ -62,7 +62,7 @@ struct Repository
 	// Have just some primitives here.
 	// Higher-level functionality can be added using UFCS.
 	void   run  (string[] args...) const { auto owd = pushd(workPath(args[0])); return .run  (commandPrefix ~ args, environment, path); }
-	string query(string[] args...) const { auto owd = pushd(workPath(args[0])); return .query(commandPrefix ~ args, environment, path); }
+	string query(string[] args...) const { auto owd = pushd(workPath(args[0])); return .query(commandPrefix ~ args, environment, path).strip(); }
 	bool   check(string[] args...) const { auto owd = pushd(workPath(args[0])); return spawnProcess(commandPrefix ~ args, environment, Config.none, path).wait() == 0; }
 	auto   pipe (string[] args, Redirect redirect)
 	                               const { auto owd = pushd(workPath(args[0])); return pipeProcess(commandPrefix ~ args, redirect, environment, Config.none, path); }
