@@ -181,7 +181,7 @@ private:
 	{
 		if (zs.next_out && zs.next_out != currentChunk.ptr)
 		{
-			outputChunks ~= currentChunk[0..zs.next_out-currentChunk.ptr];
+			outputChunks ~= currentChunk[0..zs.next_out-cast(ubyte*)currentChunk.ptr];
 			currentChunk = Data();
 		}
 		zs.next_out = null;
