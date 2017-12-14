@@ -1768,10 +1768,12 @@ EOS";
 		override void performStage()
 		{
 			foreach (item; ["web", "dlangspec.tex", "dlangspec.html"])
-				cp(
-					buildPath(sourceDir, item),
-					buildPath(stageDir , item),
-				);
+			{
+				auto src = buildPath(sourceDir, item);
+				auto dst = buildPath(stageDir , item);
+				if (src.exists)
+					cp(src, dst);
+			}
 		}
 	}
 
