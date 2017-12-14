@@ -1718,7 +1718,10 @@ EOS";
 				string[] targets =
 					[
 						config.build.components.website.diffable
-						? ["all", "verbatim", "pdf", "dlangspec.html"]
+						? ["all", "verbatim", "pdf"] ~ (
+							makeFullName.readText.indexOf("diffable-intermediaries") >= 0
+							? ["diffable-intermediaries"]
+							: ["dlangspec.html"])
 						: ["all", "verbatim", "pdf", "kindle"],
 						["test"]
 					][target];
