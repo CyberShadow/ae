@@ -1666,7 +1666,9 @@ EOS";
 			throw new Exception("Can't find any DMD version tags at this point!");
 		}
 
-		private void make(in string[] targets)
+		private enum Target { build, test }
+
+		private void make(Target target)
 		{
 			auto env = baseEnvironment;
 
@@ -1713,6 +1715,14 @@ EOS";
 
 				string[] diffable = null;
 
+				string[] targets =
+					[
+						config.build.components.website.diffable
+						? ["all", "verbatim", "pdf", "dlangspec.html"]
+						: ["all", "verbatim", "pdf", "kindle"],
+						["test"]
+					][target];
+
 				if (config.build.components.website.diffable)
 				{
 					if (makeFullName.readText.indexOf("DIFFABLE") >= 0)
@@ -1747,15 +1757,12 @@ EOS";
 			}
 			getComponent("tools").needSource(); // for changed.d
 
-			if (config.build.components.website.diffable)
-				make(["all", "verbatim", "pdf", "dlangspec.html"]);
-			else
-				make(["all", "verbatim", "pdf", "kindle"]);
+			make(Target.build);
 		}
 
 		override void performTest()
 		{
-			make(["test"]);
+			make(Target.test);
 		}
 
 		override void performStage()
