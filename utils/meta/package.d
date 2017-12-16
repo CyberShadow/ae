@@ -19,6 +19,8 @@ public import ae.utils.meta.proxy;
 public import ae.utils.meta.binding_v1;
 public import ae.utils.meta.binding;
 
+import ae.utils.meta.caps;
+
 // ************************************************************************
 
 import std.traits;
@@ -704,6 +706,7 @@ template functor(alias fun)
 	}
 }
 
+static if (haveAliasStructBinding)
 unittest
 {
 	static void caller(F)(F fun)
