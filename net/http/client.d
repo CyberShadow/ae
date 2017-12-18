@@ -427,14 +427,20 @@ void httpGet(string url, void delegate(string) resultHandler, void delegate(stri
 }
 
 /// ditto
-void httpPost(string url, Data[] postData, string contentType, void delegate(string) resultHandler, void delegate(string) errorHandler)
+void httpPost(string url, Data[] postData, string contentType, void delegate(Data) resultHandler, void delegate(string) errorHandler)
 {
 	auto request = new HttpRequest;
 	request.resource = url;
 	request.method = "POST";
 	request.headers["Content-Type"] = contentType;
 	request.data = postData;
-	httpRequest(request,
+	httpRequest(request, resultHandler, errorHandler);
+}
+
+/// ditto
+void httpPost(string url, Data[] postData, string contentType, void delegate(string) resultHandler, void delegate(string) errorHandler)
+{
+	httpPost(url, postData, contentType,
 		(Data data)
 		{
 			auto result = (cast(char[])data.contents).idup;
