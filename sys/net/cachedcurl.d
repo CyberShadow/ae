@@ -160,12 +160,13 @@ class CachedCurlNetwork : Network
 	override string resolveRedirect(string url)
 	{
 		return
-			cachedReq(url, HTTP.Method.head, null)
-			.metadata
-			.headers
-			.get("location", null)
-			.enforce("Not a redirect: " ~ url)
-			[$-1];
+			url.applyRelativeURL(
+				cachedReq(url, HTTP.Method.head, null)
+				.metadata
+				.headers
+				.get("location", null)
+				.enforce("Not a redirect: " ~ url)
+				[$-1]);
 	}
 
 	override void[] post(string url, in void[] data)
