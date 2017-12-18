@@ -981,8 +981,18 @@ uint hardLinkCount(string fn)
 	}
 }
 
+// http://d.puremagic.com/issues/show_bug.cgi?id=7016
+version (unittest)
+	version (Windows)
+		import ae.sys.windows.misc : getWineVersion;
+
 unittest
 {
+	// FindFirstFileNameW not implemented in Wine
+	version (Windows)
+		if (getWineVersion())
+			return;
+
 	touch("a.test");
 	scope(exit) remove("a.test");
 	assert("a.test".hardLinkCount() == 1);
