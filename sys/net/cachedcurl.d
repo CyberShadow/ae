@@ -64,7 +64,6 @@ class CachedCurlNetwork : Network
 	{
 		with (instance)
 		{
-			http.verbose = true;
 			http.method = method;
 			if (method == HTTP.Method.head)
 				http.maxRedirects = uint.max;
