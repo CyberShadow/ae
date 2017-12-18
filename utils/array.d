@@ -58,6 +58,9 @@ unittest
 
 	ubyte[1] sa = [5];
 	assert(sa.bytes == [5]);
+
+	void[] va = sa[];
+	assert(va.bytes == [5]);
 }
 
 /// Reverse of bytes()
