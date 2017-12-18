@@ -290,6 +290,6 @@ void putTimeImpl(alias fmt, S)(ref S sink, SysTime t)
 
 unittest
 {
-	assert(SysTime.fromUnixTime(0).formatTime!(TimeFormats.STD_DATE) == "Thu Jan 01 00:00:00 GMT+0000 1970");
+	assert(SysTime.fromUnixTime(0, UTC()).formatTime!(TimeFormats.STD_DATE) == "Thu Jan 01 00:00:00 GMT+0000 1970");
 	assert(SysTime(0, new immutable(SimpleTimeZone)(Duration.zero)).formatTime!"T" == "+00:00");
 }
