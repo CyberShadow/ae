@@ -49,6 +49,21 @@ class AENetwork : Network
 		return getData(url).toHeap;
 	}
 
+	override void[] post(string url, in void[] data)
+	{
+		Data result;
+		bool got;
+
+		httpPost(url, [Data(data)], null,
+			(Data data) { result = data; got = true; },
+			(string error) { throw new Exception(error); }
+		);
+
+		socketManager.loop();
+		assert(got);
+		return result.toHeap;
+	}
+
 	override bool urlOK(string url)
 	{
 		bool got, result;

@@ -61,6 +61,11 @@ void test(string moduleName, string className)()
 		auto result = net.resolveRedirect("http://thecybershadow.net/d/nettest/testUrl3");
 		assert(result == "http://thecybershadow.net/d/nettest/testUrl2", result);
 	}
+
+	debug std.stdio.stderr.writeln(" - post");
+	{
+		assert(net.post("http://thecybershadow.net/d/nettest/testUrl4", "Hello world\n") == "Hello world\n");
+	}
 }
 
 unittest

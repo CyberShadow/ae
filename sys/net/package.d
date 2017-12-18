@@ -36,6 +36,14 @@ class Network
 		assert(false);
 	}
 
+	/// Post data to the specified URL.
+	// TODO: Content-Type?
+	void[] post(string url, in void[] data)
+	{
+		notImplemented();
+		assert(false);
+	}
+
 	/// Check if the resource exists and is downloadable.
 	/// E.g. the HTTP status code for a HEAD request should be 200.
 	bool urlOK(string url)
@@ -69,5 +77,6 @@ static this()
 /// UFCS-able global synonym functions.
 void downloadFile(string url, string target) { net.downloadFile(url, target); }
 void[] getFile(string url) { return net.getFile(url); } /// ditto
+void[] post(string url, void[] data) { return net.post(url, data); }
 bool urlOK(string url) { return net.urlOK(url); } /// ditto
 string resolveRedirect(string url) { return net.resolveRedirect(url); } /// ditto

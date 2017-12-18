@@ -169,8 +169,7 @@ class CachedCurlNetwork : Network
 			[$-1];
 	}
 
-	// TODO: convert to Network primitive
-	ubyte[] cachedPost(string url, in void[] data)
+	override void[] post(string url, in void[] data)
 	{
 		return cachedReq(url, HTTP.Method.post, data).responseData;
 	}

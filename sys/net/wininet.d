@@ -84,9 +84,9 @@ protected:
 		return HNet(hReq);
 	}
 
-	final static void sendRequest(ref HNet hReq)
+	final static void sendRequest(ref HNet hReq, string headers = null, in void[] optionalData = null)
 	{
-		HttpSendRequestA(hReq, null, 0, null, 0);
+		HttpSendRequestA(hReq, headers.ptr, headers.length, cast(void*)optionalData.ptr, optionalData.length);
 			.wenforce("HttpSendRequest");
 	}
 
@@ -136,12 +136,8 @@ protected:
 		return results[0];
 	}
 
-	final static void doDownload(string url, void delegate(ubyte[]) sink)
+	final static void doDownload(HNet hUrl, void delegate(ubyte[]) sink)
 	{
-		auto hNet = open();
-		auto hUrl = hNet
-			.I!openUrl(url);
-
 		// Check HTTP status code
 		auto statusCode = hUrl.I!httpQueryNumber(HTTP_QUERY_STATUS_CODE);
 		if (statusCode != 200)
@@ -182,23 +178,29 @@ public:
 	{
 		import std.stdio;
 		auto f = File(target, "wb");
-		doDownload(url,
-			(ubyte[] bytes)
-			{
-				f.rawWrite(bytes);
-			}
-		);
+		auto hNet = open();
+		doDownload(hNet.I!openUrl(url), &f.rawWrite!ubyte);
 	}
 
 	override void[] getFile(string url)
 	{
 		auto result = appender!(ubyte[]);
-		doDownload(url,
-			(ubyte[] bytes)
-			{
-				result.put(bytes);
-			}
-		);
+		auto hNet = open();
+		doDownload(hNet.I!openUrl(url), &result.put!(ubyte[]));
+		return result.data;
+	}
+
+	override void[] post(string url, in void[] data)
+	{
+		auto request = new HttpRequest(url);
+
+		auto hNet = open();
+		auto hCon = hNet.I!connect(request.host, request.port);
+		auto hReq = hCon.I!openRequest("POST", request.resource, urlFlags(url));
+		hReq.I!sendRequest(null, data);
+
+		auto result = appender!(ubyte[]);
+		doDownload(hReq, &result.put!(ubyte[]));
 		return result.data;
 	}
 
