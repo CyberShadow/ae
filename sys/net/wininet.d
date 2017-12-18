@@ -79,14 +79,14 @@ protected:
 
 	final static HNet openRequest(ref HNet hCon, string method, string resource, DWORD flags = 0)
 	{
-		auto hReq = HttpOpenRequestA(hCon, method.toStringz(), resource.toStringz(), null, null, null, flags, 0);
+		auto hReq = HttpOpenRequestA(hCon, method.toStringz(), resource.toStringz(), null, null, null, flags, 0)
 			.wenforce("HttpOpenRequest");
 		return HNet(hReq);
 	}
 
 	final static void sendRequest(ref HNet hReq, string headers = null, in void[] optionalData = null)
 	{
-		HttpSendRequestA(hReq, headers.ptr, headers.length.to!DWORD, cast(void*)optionalData.ptr, optionalData.length.to!DWORD);
+		HttpSendRequestA(hReq, headers.ptr, headers.length.to!DWORD, cast(void*)optionalData.ptr, optionalData.length.to!DWORD)
 			.wenforce("HttpSendRequest");
 	}
 
