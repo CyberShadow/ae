@@ -19,6 +19,7 @@ static import ae.sys.net.ae;
 static import ae.sys.net.curl;
 version(Windows)
 static import ae.sys.net.wininet;
+static import ae.sys.net.cachedcurl;
 
 debug static import std.stdio;
 
@@ -75,4 +76,10 @@ unittest
 	test!("curl", "CurlNetwork");
 	version(Windows)
 	test!("wininet", "WinINetNetwork");
+
+	import ae.utils.meta : classInit;
+	auto cacheDir = classInit!(ae.sys.net.cachedcurl.CachedCurlNetwork).cacheDir;
+	if (cacheDir.exists) cacheDir.rmdirRecurse();
+	scope(exit) if (cacheDir.exists) cacheDir.rmdirRecurse();
+	test!("cachedcurl", "CachedCurlNetwork");
 }
