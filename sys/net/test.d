@@ -64,7 +64,8 @@ void test(string moduleName, string className)()
 
 	debug std.stdio.stderr.writeln(" - post");
 	{
-		assert(net.post("http://thecybershadow.net/d/nettest/testUrl4", "Hello world\n") == "Hello world\n");
+		auto result = cast(string)net.post("http://thecybershadow.net/d/nettest/testUrl4", "Hello world\n");
+		assert(result == "Hello world\n", result);
 	}
 }
 
