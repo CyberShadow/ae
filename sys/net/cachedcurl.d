@@ -17,6 +17,7 @@ module ae.sys.net.cachedcurl;
 // TODO: refactor into an abstract Cached!Network wrapper?
 
 import std.algorithm.comparison;
+import std.conv;
 import std.exception;
 import std.file;
 import std.net.curl;
@@ -89,6 +90,8 @@ class CachedCurlNetwork : Network
 					metadata.statusLine = statusLine;
 				};
 			if (data)
+			{
+				http.addRequestHeader("Content-Length", data.length.text);
 				http.onSend = (void[] buf)
 					{
 						size_t len = min(buf.length, data.length);
@@ -96,6 +99,7 @@ class CachedCurlNetwork : Network
 						data = data[len..$];
 						return len;
 					};
+			}
 			else
 				http.onSend = null;
 			download!HTTP(url, target, http);
