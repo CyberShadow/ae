@@ -86,7 +86,7 @@ protected:
 
 	final static void sendRequest(ref HNet hReq, string headers = null, in void[] optionalData = null)
 	{
-		HttpSendRequestA(hReq, headers.ptr, headers.length, cast(void*)optionalData.ptr, optionalData.length);
+		HttpSendRequestA(hReq, headers.ptr, headers.length.to!DWORD, cast(void*)optionalData.ptr, optionalData.length.to!DWORD);
 			.wenforce("HttpSendRequest");
 	}
 
