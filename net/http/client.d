@@ -432,7 +432,8 @@ void httpPost(string url, Data[] postData, string contentType, void delegate(Dat
 	auto request = new HttpRequest;
 	request.resource = url;
 	request.method = "POST";
-	request.headers["Content-Type"] = contentType;
+	if (contentType)
+		request.headers["Content-Type"] = contentType;
 	request.data = postData;
 	httpRequest(request, resultHandler, errorHandler);
 }
