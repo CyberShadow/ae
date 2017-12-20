@@ -304,6 +304,7 @@ struct XmlParseConfig
 {
 static:
 	NodeCloseMode nodeCloseMode(string tag) { return NodeCloseMode.always; }
+	bool preserveWhitespace(string tag) { return false; }
 	enum optionalParameterValues = false;
 }
 
@@ -330,6 +331,7 @@ static:
 	}
 
 	enum optionalParameterValues = true;
+	bool preserveWhitespace(string tag) { return false; /*TODO*/ }
 }
 
 /// Parse an SGML-ish string into an XmlNode
@@ -398,12 +400,17 @@ void parseInto(Config)(XmlDocument d, ref StringStream s)
 /// Parse an SGML-ish StringStream into an XmlNode
 void parseInto(Config)(XmlNode node, ref StringStream s, string parentTag)
 {
-	node.startPos = s.position;
 	char c;
-	do
-		c = s.read();
-	while (isWhiteChar[c]);
 
+	auto preserveWhitespace = Config.preserveWhitespace(parentTag);
+	if (preserveWhitespace)
+		c = s.read();
+	else
+		do
+			c = s.read();
+		while (isWhiteChar[c]);
+
+	node.startPos = s.position;
 	if (c!='<')  // text node
 	{
 		node.type = XmlNodeType.Text;
@@ -415,6 +422,9 @@ void parseInto(Config)(XmlNode node, ref StringStream s, string parentTag)
 			c = s.read();
 		}
 		s.position--; // rewind to '<'
+		if (!preserveWhitespace)
+			while (text.length && isWhiteChar[text[$-1]])
+				text = text[0..$-1];
 		node.tag = decodeEntities(text);
 		//tag = tag.strip();
 	}
@@ -512,7 +522,8 @@ void parseInto(Config)(XmlNode node, ref StringStream s, string parentTag)
 					{
 						while (true)
 						{
-							skipWhitespace(s);
+							if (!Config.preserveWhitespace(node.tag))
+								skipWhitespace(s);
 							if (peek(s)=='<' && peek(s, 2)=='/')
 								break;
 							try
@@ -637,7 +648,34 @@ unittest
 			`</quote>` ~
 		`</quotes>`;
 	auto doc = new XmlDocument(xmlText);
-	assert(doc.toString() == xmlText);
+	assert(doc.toString() == xmlText, doc.toString());
+}
+
+unittest
+{
+	string testOne(bool preserve)(string s)
+	{
+		static struct ParseConfig
+		{
+		static:
+			NodeCloseMode nodeCloseMode(string tag) { return XmlParseConfig.nodeCloseMode(tag); }
+			bool preserveWhitespace(string tag) { return preserve; }
+			enum optionalParameterValues = XmlParseConfig.optionalParameterValues;
+		}
+		auto node = new XmlNode;
+		auto str = StringStream("<tag>" ~ s ~ "</tag>");
+		parseInto!ParseConfig(node, str, null);
+		// import std.stdio; writeln(preserve, ": ", str.s, " -> ", node.toString);
+		return node.children.length ? node.children[0].tag : null;
+	}
+
+	foreach (tag; ["a", " a", "a ", " a ", " a  a ", " ", ""])
+	{
+		assert(testOne!false(tag) == strip(tag),
+			"Parsing <tag>" ~ tag ~ "</tag> while not preserving whitespace, expecting '" ~ strip(tag) ~ "', got '" ~ testOne!false(tag) ~ "'");
+		assert(testOne!true(tag) == tag,
+			"Parsing <tag>" ~ tag ~ "</tag> while preserving whitespace, expecting '" ~ tag ~ "', got '" ~ testOne!true(tag) ~ "'");
+	}
 }
 
 const dchar[string] entities;
