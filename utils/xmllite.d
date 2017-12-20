@@ -351,16 +351,16 @@ template parseString(Node)
 	{
 		auto ss = StringStream(s);
 		alias f = parseStream!Node;
-		return f!Config(ss, null);
+		return f!Config(ss);
 	}
 }
 
 template parseStream(Node)
 {
-	Node parseStream(Config)(ref StringStream s, string parentTag)
+	Node parseStream(Config)(ref StringStream s)
 	{
 		auto n = new Node;
-		parseInto!Config(n, s, parentTag);
+		parseInto!Config(n, s);
 		return n;
 	}
 }
@@ -398,7 +398,7 @@ void parseInto(Config)(XmlDocument d, ref StringStream s)
 }
 
 /// Parse an SGML-ish StringStream into an XmlNode
-void parseInto(Config)(XmlNode node, ref StringStream s, string parentTag)
+void parseInto(Config)(XmlNode node, ref StringStream s, string parentTag = null)
 {
 	char c;
 
@@ -527,7 +527,11 @@ void parseInto(Config)(XmlNode node, ref StringStream s, string parentTag)
 							if (peek(s)=='<' && peek(s, 2)=='/')
 								break;
 							try
-								node.addChild(parseNode!Config(s, node.tag));
+							{
+								auto child = new XmlNode;
+								parseInto!Config(child, s, parentTag);
+								node.addChild(child);
+							}
 							catch (XmlParseException e)
 								throw new XmlParseException("Error while processing child of "~node.tag, e);
 						}
