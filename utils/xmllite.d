@@ -73,7 +73,7 @@ class XmlNode
 	XmlNodeType type;
 	ulong startPos, endPos;
 
-	this(ref StringStream s) { parseInto!XmlParseConfig(this, s); }
+	this(ref StringStream s) { parseInto!XmlParseConfig(this, s, null); }
 	this(string s) { auto ss = StringStream(s); this(ss); }
 
 	this(XmlNodeType type = XmlNodeType.None, string tag = null)
@@ -349,16 +349,16 @@ template parseString(Node)
 	{
 		auto ss = StringStream(s);
 		alias f = parseStream!Node;
-		return f!Config(ss);
+		return f!Config(ss, null);
 	}
 }
 
 template parseStream(Node)
 {
-	Node parseStream(Config)(ref StringStream s)
+	Node parseStream(Config)(ref StringStream s, string parentTag)
 	{
 		auto n = new Node;
-		parseInto!Config(n, s);
+		parseInto!Config(n, s, parentTag);
 		return n;
 	}
 }
@@ -373,7 +373,7 @@ void parseInto(Config)(XmlDocument d, ref StringStream s)
 		try
 		{
 			auto n = new XmlNode;
-			parseInto!Config(n, s);
+			parseInto!Config(n, s, null);
 			d.addChild(n);
 			skipWhitespace(s);
 		}
@@ -396,7 +396,7 @@ void parseInto(Config)(XmlDocument d, ref StringStream s)
 }
 
 /// Parse an SGML-ish StringStream into an XmlNode
-void parseInto(Config)(XmlNode node, ref StringStream s)
+void parseInto(Config)(XmlNode node, ref StringStream s, string parentTag)
 {
 	node.startPos = s.position;
 	char c;
@@ -516,7 +516,7 @@ void parseInto(Config)(XmlNode node, ref StringStream s)
 							if (peek(s)=='<' && peek(s, 2)=='/')
 								break;
 							try
-								node.addChild(parseNode!Config(s));
+								node.addChild(parseNode!Config(s, node.tag));
 							catch (XmlParseException e)
 								throw new XmlParseException("Error while processing child of "~node.tag, e);
 						}
