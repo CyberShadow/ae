@@ -529,7 +529,7 @@ void parseInto(Config)(XmlNode node, ref StringStream s, string parentTag = null
 							try
 							{
 								auto child = new XmlNode;
-								parseInto!Config(child, s, parentTag);
+								parseInto!Config(child, s, node.tag);
 								node.addChild(child);
 							}
 							catch (XmlParseException e)
