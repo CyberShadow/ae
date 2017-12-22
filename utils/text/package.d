@@ -28,8 +28,6 @@ import ae.utils.array;
 import ae.utils.meta;
 import ae.utils.textout;
 
-public import ae.utils.regex;
-
 alias indexOf = std.string.indexOf;
 
 public import ae.utils.text.ascii : ascii, DecimalSize, toDec, toDecFixed;
