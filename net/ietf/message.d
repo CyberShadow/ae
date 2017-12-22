@@ -31,6 +31,7 @@ import ae.net.ietf.headers;
 import ae.utils.array;
 import ae.utils.iconv;
 import ae.utils.mime;
+import ae.utils.regex;
 import ae.utils.text;
 import ae.utils.time;
 
