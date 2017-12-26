@@ -94,6 +94,22 @@ unittest
 	assert(arr.fromBytes!(S[]) == [S(1, 2)]);
 }
 
+/// Returns an empty, but non-null slice of T.
+auto emptySlice(T)() pure
+{
+	T[0] arr;
+	auto p = arr.ptr;
+	return p[0..0];
+}
+
+unittest
+{
+	int[] arr = emptySlice!int;
+	assert(arr.ptr);
+	immutable int[] iarr = emptySlice!int;
+	assert(iarr.ptr);
+}
+
 int memcmp(in ubyte[] a, in ubyte[] b)
 {
 	assert(a.length == b.length);
