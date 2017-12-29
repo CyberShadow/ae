@@ -44,9 +44,9 @@ if (is(typeof(fun) == function))
 			static if (is(FunctionTypeOf!fun PT == __parameters))
 			{
 				enum name = __traits(identifier, PT);
-				foreach (i, argName; names)
-					static if (name == argName)
-						args[i] = fun(DummyType.init);
+				enum index = argIndex!names(name);
+				static assert(index >= 0, "No such argument: " ~ name);
+				args[index] = fun(DummyType.init);
 			}
 			else
 				static assert(false, "Failed to extract parameter name from " ~ fun.stringof);
@@ -66,6 +66,9 @@ unittest
 	assert(args!(fun) == 15);
 	assert(args!(fun, b=>3) == 16);
 	assert(args!(fun, b=>3, d=>3) == 15);
+
+	static assert(!is(typeof(args!(fun, b=>b)())));
+	static assert(!is(typeof(args!(fun, x=>42)())));
 }
 
 /// Mixing named and positional arguments
@@ -97,9 +100,9 @@ if (is(S == struct))
 			static if (is(FunctionTypeOf!fun PT == __parameters))
 			{
 				enum name = __traits(identifier, PT);
-				foreach (i, field; s.tupleof)
-					static if (__traits(identifier, S.tupleof[i]) == name)
-						s.tupleof[i] = fun(DummyType.init);
+				enum index = fieldIndex!S(name);
+				static assert(index >= 0, "No such field: " ~ name);
+				s.tupleof[index] = fun(DummyType.init);
 			}
 			else
 				static assert(false, "Failed to extract parameter name from " ~ fun.stringof);
@@ -121,4 +124,21 @@ unittest
 	assert(args!(S, b=>3, d=>3).sum == 15);
 
 	static assert(!is(typeof(args!(S, b=>b))));
+	static assert(!is(typeof(args!(S, x=>42))));
+}
+
+private sizediff_t argIndex(names...)(string name)
+{
+	foreach (i, argName; names)
+		if (name == argName)
+			return i;
+	return -1;
+}
+
+private sizediff_t fieldIndex(S)(string name)
+{
+	foreach (i, field; S.init.tupleof)
+		if (__traits(identifier, S.tupleof[i]) == name)
+			return i;
+	return -1;
 }
