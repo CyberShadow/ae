@@ -127,6 +127,17 @@ unittest
 	static assert(!is(typeof(args!(S, x=>42))));
 }
 
+unittest
+{
+	struct S
+	{
+		union { int a, b; }
+	}
+
+	assert(args!(S, a => 1).a == 1);
+	assert(args!(S, b => 1).a == 1);
+}
+
 private sizediff_t argIndex(names...)(string name)
 {
 	foreach (i, argName; names)
@@ -137,7 +148,9 @@ private sizediff_t argIndex(names...)(string name)
 
 private sizediff_t fieldIndex(S)(string name)
 {
-	foreach (i, field; S.init.tupleof)
+	import ae.utils.meta : RangeTuple;
+
+	foreach (i; RangeTuple!(S.tupleof.length))
 		if (__traits(identifier, S.tupleof[i]) == name)
 			return i;
 	return -1;
