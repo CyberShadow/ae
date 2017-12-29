@@ -57,6 +57,16 @@ struct KeyValueStore(K, V)
 		return defaultValue;
 	}
 
+	V getOrAdd()(auto ref K k, lazy V defaultValue)
+	{
+		checkInitialized();
+		foreach (SqlType!V v; sqlGet.iterate(toSqlType(k)))
+			return fromSqlType!V(v);
+		auto v = defaultValue();
+		sqlSet.exec(toSqlType(k), toSqlType(v));
+		return v;
+	}
+
 	bool opIn_r()(auto ref K k)
 	{
 		checkInitialized();
