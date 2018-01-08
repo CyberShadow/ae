@@ -147,6 +147,11 @@ struct OrderedMap(K, V)
 	/// Convert from regular AA
 	this(V[K] aa)
 	{
+		opAssign(aa);
+	}
+
+	void opAssign(V[K] aa)
+	{
 		foreach (ref k, ref v; aa)
 		{
 			index[k] = values.length;
