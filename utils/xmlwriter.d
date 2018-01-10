@@ -229,6 +229,13 @@ struct CustomXmlWriter(WRITER, Formatter)
 		output.put("<!", text, ">");
 		newLine();
 	}
+
+	void comment(string text)
+	{
+		debug assert(!inAttributes, "Tag attributes not ended");
+		output.put("<!--", text, "-->");
+		newLine();
+	}
 }
 
 deprecated template CustomXmlWriter(Writer, bool pretty)
