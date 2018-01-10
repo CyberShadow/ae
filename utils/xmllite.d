@@ -159,7 +159,8 @@ class XmlNode
 				output.newLine();
 				return;
 			case XmlNodeType.Comment:
-				// TODO
+				output.startLine();
+				output.comment(tag);
 				return;
 			case XmlNodeType.CData:
 				output.text(tag);
