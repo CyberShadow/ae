@@ -314,8 +314,14 @@ class OpenSSLAdapter : SSLAdapter
 
 	override void disconnect(string reason, DisconnectType type)
 	{
-		debug(OPENSSL) stderr.writefln("OpenSSL: disconnect called ('%s'), calling SSL_shutdown", reason);
-		SSL_shutdown(sslHandle);
+		debug(OPENSSL) stderr.writefln("OpenSSL: disconnect called ('%s')", reason);
+		if (!SSL_in_init(sslHandle))
+		{
+			debug(OPENSSL) stderr.writefln("OpenSSL: Calling SSL_shutdown");
+			SSL_shutdown(sslHandle);
+		}
+		else
+			debug(OPENSSL) stderr.writefln("OpenSSL: In init, not calling SSL_shutdown");
 		debug(OPENSSL) stderr.writefln("OpenSSL: SSL_shutdown done, flushing");
 		flushWritten();
 		debug(OPENSSL) stderr.writefln("OpenSSL: SSL_shutdown output flushed");
