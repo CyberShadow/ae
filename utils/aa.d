@@ -152,12 +152,20 @@ struct OrderedMap(K, V)
 
 	void opAssign(V[K] aa)
 	{
+		clear();
 		foreach (ref k, ref v; aa)
 		{
 			index[k] = values.length;
 			keys ~= k;
 			values ~= v;
 		}
+	}
+
+	void clear()
+	{
+		keys = null;
+		values = null;
+		index = null;
 	}
 
 	ref inout(V) opIndex()(auto ref K k) inout
