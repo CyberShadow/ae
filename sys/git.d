@@ -383,6 +383,58 @@ struct Repository
 		}
 		return importSubTree(path, path, writer, pathFilter);
 	}
+
+	struct RefWriterImpl
+	{
+		bool initialized;
+		ProcessPipes pipes;
+
+		this(ProcessPipes pipes)
+		{
+			this.pipes = pipes;
+			initialized = true;
+		}
+
+		private void op(string op, bool noDeref, string refName, Hash*[] hashes...)
+		{
+			if (noDeref)
+				pipes.stdin.write("option no-deref\0");
+			pipes.stdin.write(op, " ", refName, '\0');
+			foreach (hash; hashes)
+			{
+				if (hash)
+					pipes.stdin.write((*hash).toString());
+				pipes.stdin.write('\0');
+			}
+			pipes.stdin.flush();
+		}
+
+		void update   (string refName, Hash newValue               , bool noDeref = false) { op("update", noDeref, refName, &newValue, null     ); }
+		void update   (string refName, Hash newValue, Hash oldValue, bool noDeref = false) { op("update", noDeref, refName, &newValue, &oldValue); }
+		void create   (string refName, Hash newValue               , bool noDeref = false) { op("create", noDeref, refName, &newValue           ); }
+		void deleteRef(string refName                              , bool noDeref = false) { op("delete", noDeref, refName,            null     ); }
+		void deleteRef(string refName,                Hash oldValue, bool noDeref = false) { op("delete", noDeref, refName,            &oldValue); }
+		void verify   (string refName                              , bool noDeref = false) { op("verify", noDeref, refName,            null     ); }
+		void verify   (string refName,                Hash oldValue, bool noDeref = false) { op("verify", noDeref, refName,            &oldValue); }
+
+		~this()
+		{
+			if (initialized)
+			{
+				pipes.stdin.close();
+				enforce(pipes.pid.wait() == 0, "git update-ref exited with failure");
+				initialized = false;
+			}
+		}
+	}
+	alias RefWriter = RefCounted!RefWriterImpl;
+
+	/// Spawn a update-ref process which can update git refs on the fly.
+	RefWriter createRefWriter()
+	{
+		auto pipes = this.pipe(`update-ref`, `-z`, `--stdin`);
+		return RefWriter(pipes);
+	}
 }
 
 struct GitObject
