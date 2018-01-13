@@ -13,6 +13,7 @@
 
 module ae.net.ietf.headerparse;
 
+import std.exception;
 import std.string;
 import std.array;
 
@@ -97,6 +98,7 @@ Headers parseHeadersImpl(bool FIRST_LINE)(string headerData, out string firstLin
 	string[] lines = splitAsciiLines(headerData);
 	static if (FIRST_LINE)
 	{
+		enforce(lines.length, "Empty first line in headers");
 		firstLine = lines[0];
 		lines = lines[1 .. lines.length];
 	}
