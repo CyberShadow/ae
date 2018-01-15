@@ -1718,10 +1718,12 @@ EOS";
 				string[] targets =
 					[
 						config.build.components.website.diffable
-						? ["all", "verbatim", "pdf"] ~ (
-							makeSrc.indexOf("diffable-intermediaries") >= 0
-							? ["diffable-intermediaries"]
-							: ["dlangspec.html"])
+						? makeSrc.indexOf("dautotest") >= 0
+							? ["dautotest"]
+							: ["all", "verbatim", "pdf"] ~ (
+								makeSrc.indexOf("diffable-intermediaries") >= 0
+								? ["diffable-intermediaries"]
+								: ["dlangspec.html"])
 						: ["all", "verbatim", "pdf", "kindle"],
 						["test"]
 					][target];
