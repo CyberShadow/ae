@@ -1684,8 +1684,8 @@ EOS";
 					getComponent(dep).submodule.clean = false;
 
 				auto makeFullName = sourceDir.buildPath(makeFileName);
-				makeFullName
-					.readText()
+				auto makeSrc = makeFullName.readText();
+				makeSrc
 					// https://github.com/D-Programming-Language/dlang.org/pull/1011
 					.replace(": modlist.d", ": modlist.d $(DMD)")
 					// https://github.com/D-Programming-Language/dlang.org/pull/1017
@@ -1718,17 +1718,19 @@ EOS";
 				string[] targets =
 					[
 						config.build.components.website.diffable
-						? ["all", "verbatim", "pdf"] ~ (
-							makeFullName.readText.indexOf("diffable-intermediaries") >= 0
-							? ["diffable-intermediaries"]
-							: ["dlangspec.html"])
+						? makeSrc.indexOf("dautotest") >= 0
+							? ["dautotest"]
+							: ["all", "verbatim", "pdf"] ~ (
+								makeSrc.indexOf("diffable-intermediaries") >= 0
+								? ["diffable-intermediaries"]
+								: ["dlangspec.html"])
 						: ["all", "verbatim", "pdf", "kindle"],
 						["test"]
 					][target];
 
 				if (config.build.components.website.diffable)
 				{
-					if (makeFullName.readText.indexOf("DIFFABLE") >= 0)
+					if (makeSrc.indexOf("DIFFABLE") >= 0)
 						diffable = ["DIFFABLE=1"];
 					else
 						diffable = ["NODATETIME=nodatetime.ddoc"];

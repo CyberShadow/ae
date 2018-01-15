@@ -16,6 +16,7 @@ module ae.sys.net.wininet;
 version(Windows):
 
 import std.array;
+import std.conv : to;
 import std.exception;
 import std.string;
 import std.typecons : RefCounted;
@@ -137,6 +138,11 @@ protected:
 	}
 
 	final static void doDownload(HNet hUrl, void delegate(ubyte[]) sink)
+	{
+		doDownload(hUrl, cast(void delegate(const ubyte[])) sink);
+	}
+
+	final static void doDownload(HNet hUrl, void delegate(const ubyte[]) sink)
 	{
 		// Check HTTP status code
 		auto statusCode = hUrl.I!httpQueryNumber(HTTP_QUERY_STATUS_CODE);
