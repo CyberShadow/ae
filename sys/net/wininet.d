@@ -16,6 +16,7 @@ module ae.sys.net.wininet;
 version(Windows):
 
 import std.array;
+import std.conv : to;
 import std.exception;
 import std.string;
 import std.typecons : RefCounted;
