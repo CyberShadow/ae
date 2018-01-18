@@ -2126,8 +2126,8 @@ EOS";
 		bool[string] result;
 		foreach (commit, submoduleCommits; history)
 		{
+			import ae.utils.meta : I;
 			this.submoduleState.submoduleCommits = submoduleCommits;
-
 			result[commit] =
 				requiredSubmodules.all!(submoduleName => submoduleName in submoduleCommits) &&
 				componentNames.all!(componentName =>
