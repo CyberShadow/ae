@@ -1183,6 +1183,17 @@ DFLAGS="-I%@P%/../import" "-L-L%@P%/../lib"
 EOS";
 				buildPath(stageDir, "bin", configFileName).write(ini);
 			}
+			else version (linux)
+			{
+				auto ini = q"EOS
+[Environment32]
+DFLAGS="-I%@P%/../import" "-L-L%@P%/../lib" -L--export-dynamic
+
+[Environment64]
+DFLAGS="-I%@P%/../import" "-L-L%@P%/../lib" -L--export-dynamic -fPIC
+EOS";
+				buildPath(stageDir, "bin", configFileName).write(ini);
+			}
 			else
 			{
 				auto ini = q"EOS
