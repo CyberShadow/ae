@@ -26,6 +26,7 @@ import ae.ui.video.sdl2.video;
 import ae.utils.fps;
 import ae.utils.math;
 import ae.utils.graphics.image;
+import ae.utils.meta;
 
 final class MyApplication : Application
 {
@@ -42,10 +43,10 @@ final class MyApplication : Application
 	enum HISTORY_TOP = 200;
 	enum HISTORY_HEIGHT = 50;
 
-	enum Device : int { keyboard, joypad, mouse, max }
-	enum SampleType : int { precision, duration, max }
+	enum Device : int { keyboard, joypad, mouse }
+	enum SampleType : int { precision, duration }
 
-	int[][Device.max][SampleType.max] history;
+	int[][enumLength!Device][enumLength!SampleType] history;
 	enum SAMPLE_COLORS = [BGRX(0, 0, 255), BGRX(0, 255, 0)];
 
 	/// Some (precise) time value of the moment, in hnsecs.
