@@ -1,5 +1,5 @@
 /**
- * ae.utils.sound.riff
+ * Support for the RIFF file format (used in .wav files).
  *
  * License:
  *   This Source Code Form is subject to the terms of

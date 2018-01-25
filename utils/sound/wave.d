@@ -1,5 +1,5 @@
 /**
- * ae.utils.sound.wave
+ * Some simple wave generator functions.
  *
  * License:
  *   This Source Code Form is subject to the terms of

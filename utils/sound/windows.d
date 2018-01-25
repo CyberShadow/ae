@@ -1,5 +1,5 @@
 /**
- * ae.utils.sound.windows
+ * Play waves using the Windows multimedia API
  *
  * License:
  *   This Source Code Form is subject to the terms of
