@@ -46,7 +46,7 @@ final class MyApplication : Application
 	enum Device : int { keyboard, joypad, mouse }
 	enum SampleType : int { precision, duration }
 
-	int[][enumLength!Device][enumLength!SampleType] history;
+	int[][enumLength!SampleType][enumLength!Device] history;
 	enum SAMPLE_COLORS = [BGRX(0, 0, 255), BGRX(0, 255, 0)];
 
 	/// Some (precise) time value of the moment, in hnsecs.
