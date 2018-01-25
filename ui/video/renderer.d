@@ -128,7 +128,7 @@ class TextureSource
 
 class ImageTextureSource : TextureSource
 {
-	Image!BGRX image;
+	Image!(Renderer.COLOR) image;
 
 	override void drawTo(TextureCanvas dest)
 	{
@@ -138,5 +138,24 @@ class ImageTextureSource : TextureSource
 	override TextureCanvas getPixels()
 	{
 		return image.toRef();
+	}
+}
+
+class ProceduralTextureSource : TextureSource
+{
+	private Image!(Renderer.COLOR) cachedImage;
+
+	abstract void getSize(out int width, out int height);
+
+	override TextureCanvas getPixels()
+	{
+		if (!cachedImage.w)
+		{
+			int w, h;
+			getSize(w, h);
+			cachedImage.size(w, h);
+			drawTo(cachedImage.toRef());
+		}
+		return cachedImage.toRef();
 	}
 }
