@@ -171,6 +171,8 @@ struct Font8x8
 
 static:
 	enum height = 8;
+	enum maxWidth = Glyph.width;
+	enum maxGlyph = 0x80;
 	bool hasGlyph(dchar c) nothrow @nogc { return c < font8x8_basic.length; }
 	Glyph getGlyph(dchar c) nothrow @nogc { return Glyph(font8x8_basic[c][]); }
 }
