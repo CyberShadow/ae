@@ -79,6 +79,7 @@ final class MyApplication : Application
 			foreach (sampleType, samples; deviceSamples)
 			{
 				auto y = HISTORY_TOP + HISTORY_HEIGHT * (device*3 + sampleType*2 + 1);
+				s.line(0, y - HISTORY_HEIGHT, s.width, y - HISTORY_HEIGHT, BGRX.monochrome(0x40));
 				foreach (index, sample; samples)
 				{
 					if (sample > HISTORY_HEIGHT)
