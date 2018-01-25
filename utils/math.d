@@ -15,8 +15,6 @@ module ae.utils.math;
 
 public import std.algorithm : min, max, swap;
 public import std.math;
-import std.traits : Signed, Unsigned;
-import core.bitop : bswap;
 
 typeof(Ta+Tb+Tc) bound(Ta, Tb, Tc)(Ta a, Tb b, Tc c) { return a<b?b:a>c?c:a; }
 bool between(T)(T point, T a, T b) { return a <= point && point <= b; } /// Assumes points are sorted (was there a faster way?)
@@ -26,6 +24,7 @@ void sort2(T)(ref T x, ref T y) { if (x > y) { T z=x; x=y; y=z; } }
 
 T itpl(T, U)(T low, T high, U r, U rLow, U rHigh)
 {
+	import std.traits : Signed;
 	return cast(T)(low + (cast(Signed!T)high-cast(Signed!T)low) * (cast(Signed!U)r - cast(Signed!U)rLow) / (cast(Signed!U)rHigh - cast(Signed!U)rLow));
 }
 
@@ -49,6 +48,7 @@ auto average(T...)(T args) { return sum(args) / args.length; }
 
 T swapBytes(T)(T b)
 {
+	import core.bitop : bswap;
 	static if (b.sizeof == 1)
 		return b;
 	else
