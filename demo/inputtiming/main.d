@@ -45,7 +45,7 @@ final class MyApplication : Application
 	enum BAND_TOP = 50;
 	enum BAND_HEIGHT = 30;
 	enum BAND_HNSECS_PER_PIXEL = 200_000;
-	enum HISTORY_TOP = 200;
+	enum HISTORY_TOP = 150;
 	enum HISTORY_HEIGHT = 50;
 	enum HISTORY_LEFT = 150;
 
