@@ -88,6 +88,10 @@ final class MyApplication : Application
 
 	void keyDown(Device device)
 	{
+		// Skip keyDown events without corresponding keyUp
+		if (history[device][SampleType.precision].length > history[device][SampleType.duration].length)
+			return;
+
 		pressed = now;
 		auto x = cast(int)(pressed / BAND_HNSECS_PER_PIXEL + BAND_WIDTH/2) % BAND_INTERVAL;
 		if (x > BAND_INTERVAL/2)
