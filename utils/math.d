@@ -43,6 +43,31 @@ auto op(string OP, T...)(T args)
 auto sum(T...)(T args) { return op!"+"(args); }
 auto average(T...)(T args) { return sum(args) / args.length; }
 
+template unary(char op)
+{
+	T unary(T)(T value)
+	{
+		// Silence DMD 2.078.0 warning about integer promotion rules
+		// https://dlang.org/changelog/2.078.0.html#fix16997
+		static if ((op == '-' || op == '+' || op == '~') && is(T : int))
+			alias CastT = int;
+		else
+			alias CastT = T;
+		return mixin(`cast(T)` ~ op ~ `cast(CastT)value`);
+	}
+}
+
+/// Like the ~ operator, but without int-promotion.
+alias flipBits = unary!'~';
+
+unittest
+{
+	ubyte b = 0x80;
+	auto b2 = b.flipBits;
+	assert(b2 == 0x7F);
+	static assert(is(typeof(b2) == ubyte));
+}
+
 T swapBytes(T)(T b)
 {
 	import core.bitop : bswap;
