@@ -65,7 +65,7 @@ final class MyApplication : Application
 		foreach (device, deviceSamples; history)
 			foreach (sampleType, samples; deviceSamples)
 			{
-				auto y = HISTORY_TOP + HISTORY_HEIGHT * (device*2 + sampleType + 1);
+				auto y = HISTORY_TOP + HISTORY_HEIGHT * (device*3 + sampleType*2 + 1);
 				foreach (index, sample; samples)
 				{
 					if (sample > HISTORY_HEIGHT)
@@ -92,7 +92,7 @@ final class MyApplication : Application
 		auto x = cast(int)(pressed / BAND_HNSECS_PER_PIXEL + BAND_WIDTH/2) % BAND_INTERVAL;
 		if (x > BAND_INTERVAL/2)
 			x -= BAND_INTERVAL;
-		history[device][SampleType.precision] ~= abs(x);
+		history[device][SampleType.precision] ~= x;
 	}
 
 	void keyUp(Device device)
