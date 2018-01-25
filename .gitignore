@@ -17,10 +17,18 @@ dub.selections.json
 /ae-test-library
 
 # demos - rdmd binaries
+/demo/canvas/main
+/demo/colorcube/colorcube
+/demo/drawsprite/main
 /demo/http/httpserve
+/demo/inputtiming/main
+/demo/irc/irctest
 /demo/pewpew/pewpew
+/demo/portforward/portforward
 /demo/render/main
 /demo/sqlite/exec
+/demo/turtle/main
+/demo/ui/main
 
 # demos - dub binaries
 /demo/canvas/ae-demo-canvas
@@ -28,7 +36,6 @@ dub.selections.json
 /demo/drawsprite/ae-demo-drawsprite
 /demo/http/ae-demo-http
 /demo/inputtiming/ae-demo-inputtiming
-/demo/irc/irctest
 /demo/pewpew/ae-demo-pewpew
 /demo/portforward/ae-demo-portforward
 /demo/render/ae-demo-render
