@@ -13,9 +13,6 @@
 
 module ae.utils.math;
 
-public import std.algorithm : min, max, swap;
-public import std.math;
-
 typeof(Ta+Tb+Tc) bound(Ta, Tb, Tc)(Ta a, Tb b, Tc c) { return a<b?b:a>c?c:a; }
 bool between(T)(T point, T a, T b) { return a <= point && point <= b; } /// Assumes points are sorted (was there a faster way?)
 auto sqr(T)(T x) { return x*x; }
