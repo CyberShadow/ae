@@ -86,7 +86,7 @@ struct Color(FieldTuple...)
 		if (is(typeof(a)))
 	{
 		alias A = typeof(c0.a);
-		A a = ~cast(A)(~c0.a * ~c1.a / A.max);
+		A a = flipBits(cast(A)(c0.a.flipBits * c1.a.flipBits / A.max));
 		if (!a)
 			return typeof(this).init;
 		A x = cast(A)(c1.a * A.max / a);
@@ -166,7 +166,7 @@ struct Color(FieldTuple...)
 		typeof(this) r;
 		foreach (i, f; r.tupleof)
 			static if(r.tupleof[i].stringof != "r.x") // skip padding
-				r.tupleof[i] = cast(typeof(r.tupleof[i])) mixin(op ~ `this.tupleof[i]`);
+				r.tupleof[i] = cast(typeof(r.tupleof[i])) unary!(op[0])(this.tupleof[i]);
 		return r;
 	}
 
@@ -467,4 +467,4 @@ unittest
 // ***************************************************************************
 
 // TODO: deprecate
-T blend(T)(T f, T b, T a) if (is(typeof(f*a+~b))) { return cast(T) ( ((f*a) + (b*~a)) / T.max ); }
+T blend(T)(T f, T b, T a) if (is(typeof(f*a+~b))) { return cast(T) ( ((f*a) + (b*flipBits(a))) / T.max ); }
