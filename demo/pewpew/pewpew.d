@@ -13,6 +13,7 @@
 
 module ae.demo.pewpew.pewpew;
 
+import std.math;
 import std.random;
 import std.datetime;
 import std.algorithm : min;

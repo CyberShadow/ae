@@ -13,6 +13,7 @@
 
 module ae.demo.pewpew.objects;
 
+import std.algorithm.comparison;
 import std.random;
 import std.math;
 

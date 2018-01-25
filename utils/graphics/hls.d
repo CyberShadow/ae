@@ -1,5 +1,7 @@
 module ae.utils.graphics.hls;
 
+import std.algorithm.comparison;
+
 import ae.utils.math;
 
 /// RGB <-> HLS conversion

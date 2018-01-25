@@ -15,6 +15,8 @@ module ae.demo.inputtiming.main;
 
 import core.time;
 
+import std.math;
+
 import ae.ui.app.application;
 import ae.ui.app.main;
 import ae.ui.shell.shell;
@@ -24,8 +26,6 @@ import ae.ui.video.sdl2.video;
 import ae.utils.fps;
 import ae.utils.math;
 import ae.utils.graphics.image;
-
-alias ae.utils.math.abs abs; // Issue 314?
 
 final class MyApplication : Application
 {

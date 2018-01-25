@@ -170,6 +170,7 @@ void line(bool CHECKED=true, V, COLOR)(auto ref V v, int x1, int y1, int x2, int
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
 	mixin FixMath;
+	import std.algorithm.mutation : swap;
 
 	enum DrawLine = q{
 		// Axis-independent part. Mixin context:
@@ -197,6 +198,8 @@ void line(bool CHECKED=true, V, COLOR)(auto ref V v, int x1, int y1, int x2, int
 			mixin(DrawPixel);
 		}
 	};
+
+	import std.math : abs;
 
 	if (abs(x2-x1) > abs(y2-y1))
 	{
@@ -284,6 +287,8 @@ private void floodFillPtr(V, COLOR)(auto ref V v, COLOR* pp, COLOR c, COLOR f)
 void fillCircle(V, COLOR)(auto ref V v, int x, int y, int r, COLOR c)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
+	import std.algorithm.comparison : min;
+
 	int x0 = x>r?x-r:0;
 	int y0 = y>r?y-r:0;
 	int x1 = min(x+r, v.w-1);
@@ -299,6 +304,9 @@ void fillCircle(V, COLOR)(auto ref V v, int x, int y, int r, COLOR c)
 void fillSector(V, COLOR)(auto ref V v, int x, int y, int r0, int r1, real a0, real a1, COLOR c)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
+	import std.algorithm.comparison : min;
+	import std.math : atan2;
+
 	int x0 = x>r1?x-r1:0;
 	int y0 = y>r1?y-r1:0;
 	int x1 = min(x+r1, v.w-1);
@@ -328,6 +336,8 @@ struct Coord { int x, y; string toString() { import std.string; return format("%
 void fillPoly(V, COLOR)(auto ref V v, Coord[] coords, COLOR f)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
+	import std.algorithm.comparison : min, max;
+
 	int minY, maxY;
 	minY = maxY = coords[0].y;
 	foreach (c; coords[1..$])
@@ -657,6 +667,8 @@ void aaFillRect(bool CHECKED=true, F:float, V, COLOR)(auto ref V v, F x1, F y1, 
 void aaLine(bool CHECKED=true, V, COLOR)(auto ref V v, float x1, float y1, float x2, float y2, COLOR color)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
+	import std.math : abs;
+
 	// Simplistic straight-forward implementation. TODO: optimize
 	if (abs(x1-x2) > abs(y1-y2))
 		for (auto x=x1; sign(x1-x2)!=sign(x2-x); x += sign(x2-x1))
@@ -669,6 +681,8 @@ void aaLine(bool CHECKED=true, V, COLOR)(auto ref V v, float x1, float y1, float
 void aaLine(bool CHECKED=true, V, COLOR, frac)(auto ref V v, float x1, float y1, float x2, float y2, COLOR color, frac alpha)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
+	import std.math : abs;
+
 	// ditto
 	if (abs(x1-x2) > abs(y1-y2))
 		for (auto x=x1; sign(x1-x2)!=sign(x2-x); x += sign(x2-x1))
