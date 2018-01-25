@@ -15,15 +15,20 @@ module ae.demo.inputtiming.main;
 
 import core.time;
 
+import std.conv;
+import std.format;
 import std.math;
 
 import ae.ui.app.application;
 import ae.ui.app.main;
 import ae.ui.shell.shell;
 import ae.ui.shell.sdl2.shell;
+import ae.ui.video.bmfont;
 import ae.ui.video.renderer;
 import ae.ui.video.sdl2.video;
 import ae.utils.fps;
+import ae.utils.graphics.fonts.draw;
+import ae.utils.graphics.fonts.font8x8;
 import ae.utils.math;
 import ae.utils.graphics.image;
 import ae.utils.meta;
@@ -42,6 +47,7 @@ final class MyApplication : Application
 	enum BAND_HNSECS_PER_PIXEL = 200_000;
 	enum HISTORY_TOP = 200;
 	enum HISTORY_HEIGHT = 50;
+	enum HISTORY_LEFT = 150;
 
 	enum Device : int { keyboard, joypad, mouse }
 	enum SampleType : int { precision, duration }
@@ -51,6 +57,13 @@ final class MyApplication : Application
 
 	/// Some (precise) time value of the moment, in hnsecs.
 	@property long now() { return TickDuration.currSystemTick.to!("hnsecs", long); }
+
+	FontTextureSource!Font8x8 font;
+
+	this()
+	{
+		font = new FontTextureSource!Font8x8(font8x8, BGRX(128, 128, 128));
+	}
 
 	override void render(Renderer s)
 	{
@@ -70,9 +83,19 @@ final class MyApplication : Application
 				{
 					if (sample > HISTORY_HEIGHT)
 						sample = HISTORY_HEIGHT;
-					s.line(index, y - sample, index, y, SAMPLE_COLORS[sampleType]);
+					s.line(HISTORY_LEFT + index, y - sample, HISTORY_LEFT + index, y, SAMPLE_COLORS[sampleType]);
 				}
 			}
+
+		foreach (Device device, deviceSamples; history)
+			foreach (SampleType sampleType, samples; deviceSamples)
+			{
+				auto y = HISTORY_TOP + HISTORY_HEIGHT * (device*3 + sampleType*2 + 1);
+				if (sampleType == SampleType.duration) y -= HISTORY_HEIGHT/2;
+				y -= font.font.height / 2;
+				font.drawText(s, 2, y.to!int, "%8s %-9s".format(device, sampleType));
+			}
+
 	}
 
 	override int run(string[] args)
