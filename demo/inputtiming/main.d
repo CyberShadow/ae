@@ -169,20 +169,32 @@ final class MyApplication : Application
 		history[device][SampleType.duration] ~= cast(int)(duration / BAND_HNSECS_PER_PIXEL);
 	}
 
+	bool ignoreKeyUp;
+
 	override void handleKeyDown(Key key, dchar character)
 	{
+		ignoreKeyUp = true;
 		if (key == Key.esc)
 			shell.quit();
 		else
 		if (character == 'm')
 			mode++, mode %= enumLength!Mode;
 		else
+		if (character == 's')
+			shell.audio.mixer.playSound(tick);
+		else
+		{
 			keyDown(Device.keyboard);
+			ignoreKeyUp = false;
+		}
 	}
 
 	override void handleKeyUp(Key key)
 	{
-		keyUp  (Device.keyboard);
+		if (ignoreKeyUp)
+			ignoreKeyUp = false;
+		else
+			keyUp(Device.keyboard);
 	}
 
 	override bool needJoystick() { return true; }
