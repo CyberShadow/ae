@@ -21,6 +21,10 @@ import std.math;
 
 import ae.ui.app.application;
 import ae.ui.app.main;
+import ae.ui.audio.mixer.software;
+import ae.ui.audio.sdl2.audio;
+import ae.ui.audio.source.base;
+import ae.ui.audio.source.memory;
 import ae.ui.shell.shell;
 import ae.ui.shell.sdl2.shell;
 import ae.ui.video.bmfont;
@@ -49,31 +53,58 @@ final class MyApplication : Application
 	enum HISTORY_HEIGHT = 50;
 	enum HISTORY_LEFT = 150;
 
+	enum Mode { video, audio }
 	enum Device : int { keyboard, joypad, mouse }
 	enum SampleType : int { precision, duration }
 
 	int[][enumLength!SampleType][enumLength!Device] history;
+	Mode mode;
 	enum SAMPLE_COLORS = [BGRX(0, 0, 255), BGRX(0, 255, 0)];
 
 	/// Some (precise) time value of the moment, in hnsecs.
 	@property long now() { return TickDuration.currSystemTick.to!("hnsecs", long); }
 
 	FontTextureSource!Font8x8 font;
+	MemorySoundSource!SoundSample tick;
 
 	this()
 	{
 		font = new FontTextureSource!Font8x8(font8x8, BGRX(128, 128, 128));
+		tick = memorySoundSource([short.max, short.min], 44100);
 	}
+
+	override bool needSound() { return true; }
+
+	static long lastTick;
 
 	override void render(Renderer s)
 	{
-		auto x = now / BAND_HNSECS_PER_PIXEL;
+		shell.setCaption("Press m to switch mode, Esc to exit, any other key to measure latency");
 
 		s.clear();
-		s.line(BAND_WIDTH/2, BAND_TOP, BAND_WIDTH/2, BAND_TOP + BAND_HEIGHT, BGRX(0, 0, 255));
-		foreach (lx; 0..BAND_WIDTH)
-			if ((lx+x)%BAND_INTERVAL == 0)
-				s.line(lx, BAND_TOP+BAND_HEIGHT, lx, BAND_TOP+BAND_HEIGHT*2, BGRX(0, 255, 0));
+		auto t = now;
+
+		final switch (mode)
+		{
+			case Mode.video:
+			{
+				auto x = t / BAND_HNSECS_PER_PIXEL;
+				s.line(BAND_WIDTH/2, BAND_TOP, BAND_WIDTH/2, BAND_TOP + BAND_HEIGHT, BGRX(0, 0, 255));
+				foreach (lx; 0..BAND_WIDTH)
+					if ((lx+x)%BAND_INTERVAL == 0)
+						s.line(lx, BAND_TOP+BAND_HEIGHT, lx, BAND_TOP+BAND_HEIGHT*2, BGRX(0, 255, 0));
+				break;
+			}
+			case Mode.audio:
+			{
+				auto str = "Press a key when you hear the tick sound";
+				font.drawText(s, (BAND_WIDTH - str.length.to!int * font.font.maxWidth)/2, BAND_TOP+BAND_HEIGHT, str);
+				enum sampleInterval = BAND_HNSECS_PER_PIXEL * BAND_INTERVAL;
+				if (t / sampleInterval != lastTick / sampleInterval)
+					shell.audio.mixer.playSound(tick);
+				break;
+			}
+		}
 
 		foreach (device, deviceSamples; history)
 			foreach (sampleType, samples; deviceSamples)
@@ -97,12 +128,17 @@ final class MyApplication : Application
 				font.drawText(s, 2, y.to!int, "%8s %-9s".format(device, sampleType));
 			}
 
+		lastTick = t;
 	}
 
 	override int run(string[] args)
 	{
 		shell = new SDL2Shell(this);
 		shell.video = new SDL2Video();
+
+		shell.audio = new SDL2Audio();
+		shell.audio.mixer = new SoftwareMixer();
+
 		shell.run();
 		shell.video.shutdown();
 		return 0;
@@ -133,6 +169,9 @@ final class MyApplication : Application
 	{
 		if (key == Key.esc)
 			shell.quit();
+		else
+		if (character == 'm')
+			mode++, mode %= enumLength!Mode;
 		else
 			keyDown(Device.keyboard);
 	}
