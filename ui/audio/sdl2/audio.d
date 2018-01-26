@@ -28,7 +28,7 @@ class SDL2Audio : Audio
 		// TODO: make this customizable
 		spec.freq = 44100;
 		spec.format = AUDIO_S16;
-		spec.channels = 2;
+		spec.channels = 1;
 		spec.samples = 1024;
 		spec.callback = &callback;
 		spec.userdata = cast(void*)this;
