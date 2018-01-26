@@ -14,6 +14,7 @@
 module ae.ui.shell.shell;
 
 import ae.ui.video.video;
+import ae.ui.audio.audio;
 
 /// A "shell" handles OS window management, input handling, and various other platform-dependent tasks.
 class Shell
@@ -35,6 +36,7 @@ class Shell
 	abstract void prod();
 
 	Video video;
+	Audio audio;
 
 protected:
 	bool quitting;

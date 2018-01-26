@@ -81,6 +81,9 @@ final class SDL2Shell : Shell
 		sdlVideo = cast(SDL2CommonVideo)video;
 		assert(sdlVideo, "Video is non-SDL");
 
+		if (audio)
+			audio.start(application);
+
 		video.errorCallback = AppCallback(&quit);
 		quitting = false;
 
@@ -120,6 +123,9 @@ final class SDL2Shell : Shell
 			// wait for renderer to stop
 			video.stop();
 		}
+
+		if (audio)
+			audio.stop();
 	}
 
 	~this()
