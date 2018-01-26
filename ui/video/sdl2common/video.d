@@ -51,7 +51,7 @@ protected:
 	}
 
 	uint getSDLFlags     () { return 0; }
-	uint getRendererFlags() { return 0; }
+	SDL_RendererFlags getRendererFlags() { return cast(SDL_RendererFlags)0; }
 	void prepare() {}
 
 	uint screenWidth, screenHeight;
@@ -59,7 +59,7 @@ protected:
 	/// Main thread initialization.
 	override void initMain(Application application)
 	{
-		uint flags = SDL_WINDOW_SHOWN;
+		SDL_WindowFlags flags = SDL_WINDOW_SHOWN;
 		flags |= getSDLFlags();
 
 		auto settings = application.getShellSettings();
