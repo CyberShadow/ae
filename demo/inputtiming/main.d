@@ -79,10 +79,14 @@ final class MyApplication : Application
 
 	override void render(Renderer s)
 	{
-		shell.setCaption("Press m to switch mode, Esc to exit, any other key to measure latency");
-
 		s.clear();
 		auto t = now;
+
+		if (!lastTick)
+		{
+			shell.setCaption("Press m to switch mode, Esc to exit, any other key to measure latency");
+			lastTick = t;
+		}
 
 		final switch (mode)
 		{
