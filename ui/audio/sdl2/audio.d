@@ -24,6 +24,8 @@ class SDL2Audio : Audio
 {
 	override void start(Application application)
 	{
+		assert(mixer, "No mixer set");
+
 		SDL_AudioSpec spec;
 		// TODO: make this customizable
 		spec.freq = 44100;
