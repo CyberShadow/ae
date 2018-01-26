@@ -191,7 +191,7 @@ final class SDL2Shell : Shell
 					return false;
 				}
 			}+/
-			return application.handleKeyDown(sdlKeys[event.key.keysym.scancode], event.key.keysym.unicode);
+			return application.handleKeyDown(sdlKeys[event.key.keysym.scancode], /*event.key.keysym.unicode*/event.key.keysym.sym); // TODO: Use SDL_TextInputEvent
 		case SDL_KEYUP:
 			return application.handleKeyUp(sdlKeys[event.key.keysym.scancode]);
 
