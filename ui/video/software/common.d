@@ -64,7 +64,9 @@ mixin template SoftwareRenderer()
 	override void draw(int x, int y, TextureSource source, int u0, int v0, int u1, int v1)
 	{
 		auto w = bitmap.crop(x, y, x+(u1-u0), y+(v1-v0));
-		source.drawTo(w.toRef());
+		// TODO: use drawTo when drawing entire image
+		// source.drawTo(w.toRef());
+		source.getPixels.crop(u0, v0, u1, v1).blitTo(w);
 	}
 
 	override void draw(float x0, float y0, float x1, float y1, TextureSource source, int u0, int v0, int u1, int v1)
