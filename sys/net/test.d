@@ -14,6 +14,7 @@
 module ae.sys.net.test;
 
 import std.file;
+import std.process : environment;
 
 static import ae.sys.net.ae;
 static import ae.sys.net.curl;
@@ -72,6 +73,11 @@ void test(string moduleName, string className)()
 
 unittest
 {
+	// Don't do network requests on the project tester.
+	// See https://github.com/CyberShadow/ae/issues/30
+	if ("JENKINS_URL" in environment)
+		return;
+
 	test!("ae", "AENetwork");
 	test!("curl", "CurlNetwork");
 	version(Windows)
