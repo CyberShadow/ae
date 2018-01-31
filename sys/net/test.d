@@ -75,7 +75,7 @@ unittest
 {
 	// Don't do network requests on the project tester.
 	// See https://github.com/CyberShadow/ae/issues/30
-	if ("JENKINS_URL" in environment)
+	if (environment.get("JENKINS_URL"))
 		return;
 
 	test!("ae", "AENetwork");
