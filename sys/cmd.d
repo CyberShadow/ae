@@ -247,3 +247,15 @@ int waitTimeout(Pid pid, Duration time)
 	ok = true;
 	return result;
 }
+
+/// Wait for process to exit asynchronously.
+/// Call callback when it exits.
+/// WARNING: the callback will be invoked in another thread!
+void waitAsync(Pid pid, void delegate(int) callback = null)
+{
+	auto t = new Thread({
+		auto result = pid.wait();
+		if (callback)
+			callback(result);
+	}).start();
+}
