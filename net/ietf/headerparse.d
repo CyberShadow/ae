@@ -64,7 +64,7 @@ bool parseHeadersImpl(bool FIRST_LINE)(ref Data[] data, out string firstLine, ou
 	size_t startFrom = 0;
 	string delim;
 searchAgain:
-	string data0 = cast(string)data[0].contents;
+	auto data0 = cast(const(char)[])data[0].contents;
 	sizediff_t headersEnd;
 	delim = DELIM1; headersEnd = data0[startFrom..$].indexOf(delim);
 	if (headersEnd < 0)
