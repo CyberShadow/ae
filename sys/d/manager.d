@@ -86,6 +86,10 @@ class DManager : ICacheHost
 			/// Additional environment variables.
 			/// Supports %VAR% expansion - see applyEnv.
 			string[string] environment;
+
+			/// Optional cache key.
+			/// Can be used to force a rebuild and bypass the cache for one build.
+			string cacheKey;
 		}
 		Build build; /// ditto
 
@@ -430,6 +434,7 @@ class DManager : ICacheHost
 			string configString;
 			string[] sourceDepCommits;
 			Metadata[] dependencyMetadata;
+			@JSONOptional string cacheKey;
 		}
 
 		Metadata getMetadata() /// ditto
@@ -445,6 +450,7 @@ class DManager : ICacheHost
 				dependencies.map!(
 					dependency => getComponent(dependency).getMetadata()
 				).array(),
+				config.build.cacheKey,
 			);
 		}
 
