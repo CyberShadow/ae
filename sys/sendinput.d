@@ -100,6 +100,7 @@ version (linux)
 
 	float ease(float t, float speed)
 	{
+		import std.math : pow, abs;
 		speed = 0.3f + speed * 0.4f;
 		t = t * 2 - 1;
 		t = (1-pow(1-abs(t), 1/speed)) * sign(t);
