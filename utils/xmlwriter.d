@@ -97,15 +97,24 @@ struct CustomXmlWriter(WRITER, Formatter)
 
 	void text(in char[] s)
 	{
+		escapedText!(EscapeScope.text)(s);
+	}
+
+	alias attrText = escapedText!(EscapeScope.attribute);
+
+	private void escapedText(EscapeScope escapeScope)(in char[] s)
+	{
 		// https://gist.github.com/2192846
 
 		auto start = s.ptr, p = start, end = start+s.length;
 
+		alias E = Escapes!escapeScope;
+
 		while (p < end)
 		{
 			auto c = *p++;
-			if (Escapes.escaped[c])
-				output.put(start[0..p-start-1], Escapes.chars[c]),
+			if (E.escaped[c])
+				output.put(start[0..p-start-1], E.chars[c]),
 				start = p;
 		}
 
@@ -173,7 +182,7 @@ struct CustomXmlWriter(WRITER, Formatter)
 		else
 			output.put(' ', name, `="`);
 
-		text(value);
+		attrText(value);
 		output.put('"');
 	};
 
@@ -251,7 +260,13 @@ alias CustomXmlWriter!(StringBuilder, DefaultXmlFormatter) PrettyXmlWriter;
 
 private:
 
-private struct Escapes
+enum EscapeScope
+{
+	text,
+	attribute,
+}
+
+private struct Escapes(EscapeScope escapeScope)
 {
 	static __gshared string[256] chars;
 	static __gshared bool[256] escaped;
@@ -271,7 +286,8 @@ private struct Escapes
 			if (c=='&')
 				chars[c] = "&amp;";
 			else
-			if (c=='"')
+			if (escapeScope == EscapeScope.attribute &&
+				c=='"')
 				chars[c] = "&quot;";
 			else
 			if (c < 0x20 && c != 0x0D && c != 0x0A && c != 0x09)
