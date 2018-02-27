@@ -971,31 +971,52 @@ import core.stdc.stdio;
 import std.utf;
 import ae.utils.textout;
 
-public string encodeEntities(string str)
+/*private*/ public string encodeEntitiesImpl(bool unicode, alias pred)(string str)
 {
-	foreach (i, c; str)
-		if (c=='<' || c=='>' || c=='"' || c=='\'' || c=='&')
+	size_t i = 0;
+	while (i < str.length)
+	{
+		static if (unicode)
+			dchar c = decode(str, i);
+		else
+			char c = str[i++];
+
+		if (pred(c))
 		{
 			StringBuilder sb;
 			sb.preallocate(str.length * 11 / 10);
 			sb.put(str[0..i]);
-			sb.putEncodedEntities(str[i..$]);
+			sb.putEncodedEntitiesImpl!(unicode, pred)(str[i..$]);
 			return sb.get();
 		}
+	}
 	return str;
 }
 
-public void putEncodedEntities(Sink, S)(ref Sink sink, S str)
+/*private*/ public template putEncodedEntitiesImpl(bool unicode, alias pred)
 {
-	size_t start = 0;
-	foreach (i, c; str)
-		if (c=='<' || c=='>' || c=='"' || c=='\'' || c=='&')
+	void putEncodedEntitiesImpl(Sink, S)(ref Sink sink, S str)
+	{
+		size_t start = 0, i = 0;
+		while (i < str.length)
 		{
-			sink.put(str[start..i], '&', entityNames[c], ';');
-			start = i+1;
+			static if (unicode)
+				dchar c = decode(sink, i);
+			else
+				char c = str[i++];
+
+			if (pred(c))
+			{
+				sink.put(str[start..i], '&', entityNames[c], ';');
+				start = i+1;
+			}
 		}
-	sink.put(str[start..$]);
+		sink.put(str[start..$]);
+	}
 }
+
+public alias encodeEntities = encodeEntitiesImpl!(false, (char c) => c=='<' || c=='>' || c=='"' || c=='\'' || c=='&');
+public alias putEncodedEntities = putEncodedEntitiesImpl!(false, (char c) => c=='<' || c=='>' || c=='"' || c=='\'' || c=='&');
 
 public string encodeAllEntities(string str)
 {
