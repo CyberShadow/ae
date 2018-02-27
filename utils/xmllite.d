@@ -976,6 +976,7 @@ import ae.utils.textout;
 	size_t i = 0;
 	while (i < str.length)
 	{
+		size_t o = i;
 		static if (unicode)
 			dchar c = decode(str, i);
 		else
@@ -985,8 +986,8 @@ import ae.utils.textout;
 		{
 			StringBuilder sb;
 			sb.preallocate(str.length * 11 / 10);
-			sb.put(str[0..i]);
-			sb.putEncodedEntitiesImpl!(unicode, pred)(str[i..$]);
+			sb.put(str[0..o]);
+			sb.putEncodedEntitiesImpl!(unicode, pred)(str[o..$]);
 			return sb.get();
 		}
 	}
@@ -1000,15 +1001,16 @@ import ae.utils.textout;
 		size_t start = 0, i = 0;
 		while (i < str.length)
 		{
+			size_t o = i;
 			static if (unicode)
-				dchar c = decode(sink, i);
+				dchar c = decode(str, i);
 			else
 				char c = str[i++];
 
 			if (pred(c))
 			{
-				sink.put(str[start..i], '&', entityNames[c], ';');
-				start = i+1;
+				sink.put(str[start..o], '&', entityNames[c], ';');
+				start = i;
 			}
 		}
 		sink.put(str[start..$]);
