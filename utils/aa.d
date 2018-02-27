@@ -150,6 +150,13 @@ struct OrderedMap(K, V)
 		opAssign(aa);
 	}
 
+	this(this)
+	{
+		keys = keys.dup;
+		values = values.dup;
+		index = index.dup;
+	}
+
 	void opAssign(V[K] aa)
 	{
 		clear();
@@ -305,6 +312,26 @@ unittest
 	m["b"] = 2;
 	m.remove("a");
 	assert(m["b"] == 2);
+}
+
+unittest
+{
+	OrderedMap!(string, int) m;
+	m["a"] = 1;
+	auto m2 = m;
+	m2.remove("a");
+	m2["b"] = 2;
+	assert(m["a"] == 1);
+}
+
+unittest
+{
+	OrderedMap!(string, int) m;
+	m["a"] = 1;
+	m["b"] = 2;
+	auto m2 = m;
+	m.remove("a");
+	assert(m2["a"] == 1);
 }
 
 // ***************************************************************************
