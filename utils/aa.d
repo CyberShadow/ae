@@ -20,7 +20,7 @@ import std.typecons;
 // ***************************************************************************
 
 /// Get a value from an AA, and throw an exception (not an error) if not found
-ref auto aaGet(AA, K)(AA aa, K key)
+ref auto aaGet(AA, K)(auto ref AA aa, K key)
 	if (is(typeof(key in aa)))
 {
 	import std.conv;
