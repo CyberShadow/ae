@@ -650,7 +650,7 @@ unittest
 		`<?xml version="1.0" encoding="UTF-8"?>` ~
 		`<quotes>` ~
 			`<quote author="Alan Perlis">` ~
-				`When someone says, &quot;I want a programming language in which I need only say what I want done,&quot; give him a lollipop.` ~
+				`When someone says, "I want a programming language in which I need only say what I want done," give him a lollipop.` ~
 			`</quote>` ~
 		`</quotes>`;
 	auto doc = new XmlDocument(xmlText);
