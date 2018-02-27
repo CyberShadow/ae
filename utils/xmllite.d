@@ -231,6 +231,7 @@ class XmlNode
 	}
 
 	final @property size_t length() { return children.length; }
+	alias opDollar = length;
 
 	int opApply(int delegate(ref XmlNode) dg)
 	{
