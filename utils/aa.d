@@ -237,6 +237,9 @@ struct OrderedMap(K, V)
 		index.remove(k);
 		keys = keys.remove(i);
 		values = values.remove(i);
+		foreach (key, ref idx; index)
+			if (idx > i)
+				idx--;
 	}
 
 	@property size_t length() const { return values.length; }
@@ -293,6 +296,15 @@ unittest
 	foreach (k, v; cm)
 		if (k == "x")
 			assert(v == -1);
+}
+
+unittest
+{
+	OrderedMap!(string, int) m;
+	m["a"] = 1;
+	m["b"] = 2;
+	m.remove("a");
+	assert(m["b"] == 2);
 }
 
 // ***************************************************************************
