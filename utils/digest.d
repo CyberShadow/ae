@@ -315,14 +315,15 @@ auto HMAC_SHA256 ()(in ubyte[] key, in ubyte[] message) { import std.digest.sha;
 unittest
 {
 	import std.string : representation;
+	import std.conv : hexString;
 
-	assert(HMAC_MD5([], []) == x"74e6f7298a9c2d168935f58c001bad88".representation);
-	assert(HMAC_SHA1([], []) == x"fbdb1d1b18aa6c08324b7d64b71fb76370690e1d".representation);
-	assert(HMAC_SHA256([], []) == x"b613679a0814d9ec772f95d778c35fc5ff1697c493715653c6c712144292c5ad".representation);
+	assert(HMAC_MD5([], []) == hexString!"74e6f7298a9c2d168935f58c001bad88".representation);
+	assert(HMAC_SHA1([], []) == hexString!"fbdb1d1b18aa6c08324b7d64b71fb76370690e1d".representation);
+	assert(HMAC_SHA256([], []) == hexString!"b613679a0814d9ec772f95d778c35fc5ff1697c493715653c6c712144292c5ad".representation);
 
 	auto message = "The quick brown fox jumps over the lazy dog".representation;
 	auto key = "key".representation;
-	assert(HMAC_MD5   (key, message) == x"80070713463e7749b90c2dc24911e275".representation);
-	assert(HMAC_SHA1  (key, message) == x"de7c9b85b8b78aa6bc8a7a36f70a90701c9db4d9".representation);
-	assert(HMAC_SHA256(key, message) == x"f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8".representation);
+	assert(HMAC_MD5   (key, message) == hexString!"80070713463e7749b90c2dc24911e275".representation);
+	assert(HMAC_SHA1  (key, message) == hexString!"de7c9b85b8b78aa6bc8a7a36f70a90701c9db4d9".representation);
+	assert(HMAC_SHA256(key, message) == hexString!"f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8".representation);
 }
