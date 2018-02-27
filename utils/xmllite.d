@@ -225,7 +225,7 @@ class XmlNode
 		return nodes[index];
 	}
 
-	final XmlNode opIndex(size_t index)
+	final ref XmlNode opIndex(size_t index)
 	{
 		return children[index];
 	}
