@@ -1626,10 +1626,9 @@ EOS";
 		override void performStage()
 		{
 			foreach (os; buildPath(sourceDir, "generated").dirEntries(SpanMode.shallow))
-			{
-				auto dir = os.buildPath(this.model);
-				cp(dir, buildPath(stageDir , "bin"));
-			}
+				foreach (de; os.buildPath(this.model).dirEntries(SpanMode.shallow))
+					if (de.extension == binExt)
+						cp(de, buildPath(stageDir, "bin", de.baseName));
 		}
 	}
 
