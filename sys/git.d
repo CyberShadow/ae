@@ -93,19 +93,20 @@ struct Repository
 		}
 
 		Commit* commit;
-		bool inSig; // PGP signature
+		string currentBlock;
 
 		foreach (line; query([`log`, `--all`, `--pretty=raw`] ~ extraRefs).split('\n'))
 		{
 			if (!line.length)
 			{
-				inSig = false;
+				enforce(currentBlock, "Unexpected blank line");
+				currentBlock = null;
 				continue;
 			}
 
-			if (inSig)
+			if (currentBlock)
 			{
-				enforce(line.startsWith(" "), "Expected GPG signature line in git log");
+				enforce(line.startsWith(" "), "Expected " ~ currentBlock ~ " line in git log");
 				continue;
 			}
 
@@ -139,7 +140,10 @@ struct Repository
 				commit.message ~= line[4..$];
 			else
 			if (line.startsWith("gpgsig "))
-				inSig = true;
+				currentBlock = "GPG signature";
+			else
+			if (line.startsWith("mergetag "))
+				currentBlock = "Tag merge";
 			else
 				enforce(false, "Unknown line in git log: " ~ line);
 		}
