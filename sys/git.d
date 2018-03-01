@@ -99,8 +99,8 @@ struct Repository
 		{
 			if (!line.length)
 			{
-				enforce(currentBlock, "Unexpected blank line");
-				currentBlock = null;
+				if (currentBlock)
+					currentBlock = null;
 				continue;
 			}
 
