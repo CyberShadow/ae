@@ -338,7 +338,7 @@ public:
 			wrapper.references--;
 			debug (DATA_REFCOUNT) debugLog("%p -> %p: Decrementing refcount to %d", cast(void*)&this, cast(void*)wrapper, wrapper.references);
 			if (wrapper.references == 0)
-				delete wrapper;
+				wrapper.destroy();
 
 			wrapper = null;
 		}
