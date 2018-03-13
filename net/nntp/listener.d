@@ -54,6 +54,7 @@ private:
 	void onConnect()
 	{
 		connected = true;
+		queued = 0;
 
 		if (polling)
 		{
