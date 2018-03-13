@@ -150,12 +150,17 @@ struct OrderedMap(K, V)
 		opAssign(aa);
 	}
 
-	this(this)
+	static if (is(typeof(keys.dup && values.dup && index.dup)))
 	{
-		keys = keys.dup;
-		values = values.dup;
-		index = index.dup;
+		this(this)
+		{
+			keys = keys.dup;
+			values = values.dup;
+			index = index.dup;
+		}
 	}
+	else
+		@disable this(this);
 
 	void opAssign(V[K] aa)
 	{
@@ -332,6 +337,21 @@ unittest
 	auto m2 = m;
 	m.remove("a");
 	assert(m2["a"] == 1);
+}
+
+// https://issues.dlang.org/show_bug.cgi?id=18606
+unittest
+{
+	struct S
+	{
+		struct T
+		{
+			int foo;
+			int[] bar;
+		}
+
+		OrderedMap!(int, T) m;
+	}
 }
 
 // ***************************************************************************
