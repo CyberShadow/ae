@@ -269,5 +269,8 @@ shared static this()
 /// Create a logger depending on whether -q or --quiet was passed on the command line.
 Logger createLogger(string name)
 {
-	return quiet ? new FileLogger(name) : new FileAndConsoleLogger(name);
+	version (unittest)
+		return new ConsoleLogger(name);
+	else
+		return quiet ? new FileLogger(name) : new FileAndConsoleLogger(name);
 }
