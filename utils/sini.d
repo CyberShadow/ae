@@ -196,7 +196,7 @@ IniTraversingHandler!S makeIniHandler(S = string, U)(ref U v)
 			delegate IniTraversingHandler!S (S name)
 			{
 				bool found;
-				foreach (i, field; v.tupleof)
+				foreach (i, ref field; v.tupleof)
 				{
 					enum fieldName = to!S(v.tupleof[i].stringof[2..$]);
 					if (name == fieldName)
