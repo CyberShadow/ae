@@ -396,9 +396,10 @@ auto parsePBM(COLOR)(const(void)[] vdata)
 
 unittest
 {
+	import std.conv : hexString;
 	auto data = "P6\n2\n2\n255\n" ~
-		x"000000 FFF000" ~
-		x"000FFF FFFFFF";
+		hexString!"000000 FFF000" ~
+		hexString!"000FFF FFFFFF";
 	auto i = data.parsePBM!RGB();
 	assert(i[0, 0] == RGB.fromHex("000000"));
 	assert(i[0, 1] == RGB.fromHex("000FFF"));
@@ -406,9 +407,10 @@ unittest
 
 unittest
 {
+	import std.conv : hexString;
 	auto data = "P5\n2\n2\n255\n" ~
-		x"00 55" ~
-		x"AA FF";
+		hexString!"00 55" ~
+		hexString!"AA FF";
 	auto i = data.parsePBM!L8();
 	assert(i[0, 0] == L8(0x00));
 	assert(i[0, 1] == L8(0xAA));
@@ -437,8 +439,9 @@ ubyte[] toPBM(SRC)(auto ref SRC src)
 
 unittest
 {
-	assert(onePixel(RGB(1,2,3)).toPBM == "P6\n1 1 255\n" ~ x"01 02 03");
-	assert(onePixel(L8 (1)    ).toPBM == "P5\n1 1 255\n" ~ x"01"      );
+	import std.conv : hexString;
+	assert(onePixel(RGB(1,2,3)).toPBM == "P6\n1 1 255\n" ~ hexString!"01 02 03");
+	assert(onePixel(L8 (1)    ).toPBM == "P5\n1 1 255\n" ~ hexString!"01"      );
 }
 
 // ***************************************************************************
@@ -468,12 +471,13 @@ auto fromPixels(C = InputColor, INPUT)(INPUT[] input, uint w, uint h)
 
 unittest
 {
+	import std.conv : hexString;
 	Image!L8 i;
-	i = x"42".fromPixels!L8(1, 1);
-	i = x"42".fromPixels!L8(1, 1, i);
+	i = hexString!"42".fromPixels!L8(1, 1);
+	i = hexString!"42".fromPixels!L8(1, 1, i);
 	assert(i[0, 0].l == 0x42);
-	i = (cast(L8[])x"42").fromPixels(1, 1);
-	i = (cast(L8[])x"42").fromPixels(1, 1, i);
+	i = (cast(L8[])hexString!"42").fromPixels(1, 1);
+	i = (cast(L8[])hexString!"42").fromPixels(1, 1, i);
 }
 
 // ***************************************************************************
