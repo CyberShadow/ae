@@ -144,11 +144,14 @@ struct Color(FieldTuple...)
 			import std.conv;
 			import std.exception;
 
-			enforce(s.length == 6, "Invalid color string");
+			enforce(s.length == 6 || (is(typeof(this.a) == ubyte) && s.length == 8), "Invalid color string");
 			typeof(this) c;
 			c.r = s[0..2].to!ubyte(16);
 			c.g = s[2..4].to!ubyte(16);
 			c.b = s[4..6].to!ubyte(16);
+			static if (is(typeof(this.a) == ubyte))
+				if (s.length == 8)
+					c.a = s[6..8].to!ubyte(16);
 			return c;
 		}
 
@@ -299,6 +302,9 @@ unittest
 
 	RGB hex = RGB.fromHex("123456");
 	assert(hex.r == 0x12 && hex.g == 0x34 && hex.b == 0x56);
+
+	BGRA hex2 = BGRA.fromHex("12345678");
+	assert(hex2.r == 0x12 && hex2.g == 0x34 && hex2.b == 0x56 && hex2.a == 0x78);
 
 	assert(RGB(1, 2, 3) + RGB(4, 5, 6) == RGB(5, 7, 9));
 
