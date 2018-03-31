@@ -71,12 +71,48 @@ version (linux)
 	else
 		alias Window = uint;
 
-	Image!BGR captureWindow(Window window)
+	auto captureWindow(Window window)
 	{
-		// TODO haveX11
-		auto result = execute(["import", "-window", text(window), "bmp:-"]);
-		enforce(result.status == 0, "ImageMagick import failed");
-		return result.output.parseBMP!BGR();
+		static if (haveX11)
+		{
+			auto g = getWindowGeometry(window);
+			return captureWindowRect(window, Rect!int(0, 0, g.w, g.h));
+		}
+		else
+		{
+			auto result = execute(["import", "-window", text(window), "bmp:-"]);
+			enforce(result.status == 0, "ImageMagick import failed");
+			return result.output.parseBMP!BGR();
+		}
+	}
+
+	auto captureWindowRect(Window window, Rect!int r)
+	{
+		static if (haveX11)
+		{
+			auto dpy = getDisplay();
+			auto ximage = XGetImage(dpy, window, r.x0, r.y0, r.w, r.h, AllPlanes, ZPixmap).xEnforce("XGetImage");
+			scope(exit) XFree(ximage);
+
+			enforce(ximage.format == ZPixmap, "Wrong image format (expected ZPixmap)");
+			enforce(ximage.bits_per_pixel == 32, "Wrong image bits_per_pixel (expected 32)");
+
+			alias COLOR = BGRA;
+			return ImageRef!COLOR(ximage.width, ximage.height, ximage.chars_per_line, cast(COLOR*) ximage.data).copy();
+		}
+		else
+			assert(false, "TODO");
+	}
+
+	auto captureRect(Rect!int r)
+	{
+		static if (haveX11)
+		{
+			auto dpy = getDisplay();
+			return captureWindowRect(RootWindow(dpy, DefaultScreen(dpy)), r);
+		}
+		else
+			assert(false, "TODO");
 	}
 
 	Window findWindowByName(string name)
@@ -93,8 +129,8 @@ version (linux)
 		auto dpy = getDisplay();
 		Window child;
 		XWindowAttributes xwa;
-		XGetWindowAttributes(dpy, window, &xwa);
-		XTranslateCoordinates(dpy, window, XRootWindow(dpy, 0), xwa.x, xwa.y, &xwa.x, &xwa.y, &child);
+		XGetWindowAttributes(dpy, window, &xwa).xEnforce("XGetWindowAttributes");
+		XTranslateCoordinates(dpy, window, XRootWindow(dpy, 0), xwa.x, xwa.y, &xwa.x, &xwa.y, &child).xEnforce("XTranslateCoordinates");
 		return Rect!int(xwa.x, xwa.y, xwa.x + xwa.width, xwa.y + xwa.height);
 	}
 
@@ -106,6 +142,12 @@ version (linux)
 		t = (1-pow(1-abs(t), 1/speed)) * sign(t);
 		t = (t + 1) / 2;
 		return t;
+	}
+
+	static if (haveX11)
+	T xEnforce(T)(T cond, string msg)
+	{
+		return enforce(cond, msg);
 	}
 
 	void easeMousePos(int x0, int y0, int x1, int y1, Duration duration)
