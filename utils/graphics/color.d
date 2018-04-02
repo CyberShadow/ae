@@ -73,11 +73,10 @@ struct Color(FieldTuple...)
 	static typeof(this) itpl(P)(typeof(this) c0, typeof(this) c1, P p, P p0, P p1)
 	{
 		alias TryExpandNumericType!(ChannelType, P.sizeof*8) U;
-		alias Signed!U S;
 		typeof(this) r;
 		foreach (i, f; r.tupleof)
 			static if (r.tupleof[i].stringof != "r.x") // skip padding
-				r.tupleof[i] = cast(ChannelType).itpl(cast(U)c0.tupleof[i], cast(U)c1.tupleof[i], cast(S)p, cast(S)p0, cast(S)p1);
+				r.tupleof[i] = cast(ChannelType).itpl(cast(U)c0.tupleof[i], cast(U)c1.tupleof[i], p, p0, p1);
 		return r;
 	}
 
@@ -468,6 +467,22 @@ unittest
 	assert(grad.get( 5) == L8( 50));
 	assert(grad.get(10) == L8(100));
 	assert(grad.get(15) == L8(100));
+}
+
+unittest
+{
+	Gradient!(float, L8) grad;
+	grad.points = [
+		grad.Point(0.0f, L8( 0)),
+		grad.Point(0.5f, L8(10)),
+		grad.Point(1.0f, L8(30)),
+	];
+
+	assert(grad.get(0.00f) == L8(  0));
+	assert(grad.get(0.25f) == L8(  5));
+	assert(grad.get(0.50f) == L8( 10));
+	assert(grad.get(0.75f) == L8( 20));
+	assert(grad.get(1.00f) == L8( 30));
 }
 
 // ***************************************************************************
