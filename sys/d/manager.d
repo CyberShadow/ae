@@ -959,6 +959,8 @@ EOF");
 			{
 				// Need an older DMD for bootstrapping.
 				string dmdVer = "v2.067.1";
+				if (sourceDir.buildPath("test/compilable/staticforeach.d").exists)
+					dmdVer = "v2.068.0";
 				version (Windows)
 					if (config.build.components.dmd.dmdModel != Component.CommonConfig.defaultModel)
 						dmdVer = "v2.070.2"; // dmd/src/builtin.d needs core.stdc.math.fabsl. 2.068.2 generates a dmd which crashes on building Phobos
