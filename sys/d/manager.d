@@ -948,19 +948,26 @@ EOF");
 			auto env = baseEnvironment;
 			needCC(env, config.build.components.dmd.dmdModel, dmcVer); // Need VC too for VSINSTALLDIR
 
+			auto srcDir = buildPath(sourceDir, "src");
+			string dmdMakeFileName = findMakeFile(srcDir, makeFileName);
+			string dmdMakeFullName = srcDir.buildPath(dmdMakeFileName);
+
 			if (buildPath(sourceDir, "src", "idgen.d").exists ||
 			    buildPath(sourceDir, "src", "ddmd", "idgen.d").exists ||
 			    buildPath(sourceDir, "src", "ddmd", "mars.d").exists ||
 			    buildPath(sourceDir, "src", "dmd", "mars.d").exists)
 			{
-				// Required for bootstrapping.
-				needDMD(env);
-				// Go back to our commit.
+				// Need an older DMD for bootstrapping.
+				string dmdVer = "v2.067.1";
+				version (Windows)
+					if (config.build.components.dmd.dmdModel != Component.CommonConfig.defaultModel)
+						dmdVer = "v2.070.2"; // dmd/src/builtin.d needs core.stdc.math.fabsl. 2.068.2 generates a dmd which crashes on building Phobos
+				needDMD(env, dmdVer);
+
+				// Go back to our commit (in case we bootstrapped from source).
 				needSource();
 				submodule.clean = false;
 			}
-
-			auto srcDir = buildPath(sourceDir, "src");
 
 			if (config.build.components.dmd.useVC) // Mostly obsolete, see useVC ddoc
 			{
@@ -984,9 +991,6 @@ EOF");
 
 			version (Windows)
 				auto scRoot = env.deps.dmcDir.absolutePath();
-
-			string dmdMakeFileName = findMakeFile(srcDir, makeFileName);
-			string dmdMakeFullName = srcDir.buildPath(dmdMakeFileName);
 
 			string modelFlag = config.build.components.dmd.dmdModel;
 			if (dmdMakeFullName.readText().canFind("MODEL=-m32"))
@@ -2172,18 +2176,13 @@ EOS";
 
 	/// Pull in a built DMD as configured.
 	/// Note that this function invalidates the current repository state.
-	void needDMD(ref Environment env)
+	void needDMD(ref Environment env, string dmdVer)
 	{
 		tempError++; scope(success) tempError--;
 
-		auto dmdVer = config.build.components.dmd.bootstrap.ver;
-		if (!dmdVer)
-		{
-			dmdVer = "v2.067.1";
-			version (Windows)
-				if (config.build.components.dmd.dmdModel != Component.CommonConfig.defaultModel)
-					dmdVer = "v2.070.2"; // dmd/src/builtin.d needs core.stdc.math.fabsl. 2.068.2 generates a dmd which crashes on building Phobos
-		}
+		// User setting overrides autodetection
+		if (config.build.components.dmd.bootstrap.ver)
+			dmdVer = config.build.components.dmd.bootstrap.ver;
 
 		if (config.build.components.dmd.bootstrap.fromSource)
 		{
