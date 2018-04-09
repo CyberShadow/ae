@@ -26,25 +26,18 @@ public import ae.sys.install.common;
 
 class WixInstaller : Installer
 {
-	int downloadId = 762938;
-	long fileTime = 130301249355530000;
+	string wixVersion = "3.10.4";
 
 	@property override string[] requiredExecutables() { return ["candle", "dark", "heat", "light", "lit", "lux", "melt", "nit", "pyro", "retina", "shine", "smoke", "torch"]; }
 
 	override void installImpl(string target)
 	{
 		windowsOnly();
-		// CodePlex does not have direct download URLs. Scrape it!
-		"http://wix.codeplex.com/downloads/get/%d"
-			.format(downloadId)
-			.I!verify(null)
-			.I!saveAs("wix-%d.html".format(downloadId))
-			.readText()
-			.match(regex(`<li>Version \d+\.\d+\.\d+\.(\d+)</li>`)).front[1]
-			.to!int
-			.I!buildZipUrl()
-			.I!verify("82fb51e636df7e497fc224152759b9a6b95f19bc")
-			.I!saveAs("wix-%d.zip".format(downloadId))
+		"https://github.com/wixtoolset/wix3/releases/download/wix%srtm/wix%s-binaries.zip"
+			.format(wixVersion.split(".").join(), wixVersion.split(".")[0..2].join())
+			.I!resolveRedirect()
+			.I!verify("147ebb26a67c5621a104f9794deae925908884e7")
+			.I!saveAs("wix-%s.zip".format(wixVersion))
 			.I!unpackTo(target);
 	}
 
@@ -52,12 +45,6 @@ class WixInstaller : Installer
 	{
 		urlDigests[url] = hash;
 		return url;
-	}
-
-	string buildZipUrl(int build)
-	{
-		return "http://download-codeplex.sec.s-msft.com/Download/Release?ProjectName=wix&DownloadId=%d&FileTime=%d&Build=%d"
-			.format(downloadId, fileTime, build);
 	}
 }
 
