@@ -21,27 +21,28 @@ import ae.sys.data;
 
 class ZlibException : Exception
 {
+	private static string getmsg(int err) nothrow @nogc pure @safe
+	{
+		switch (err)
+		{
+			case Z_STREAM_END:      return "stream end";
+			case Z_NEED_DICT:       return "need dict";
+			case Z_ERRNO:           return "errno";
+			case Z_STREAM_ERROR:    return "stream error";
+			case Z_DATA_ERROR:      return "data error";
+			case Z_MEM_ERROR:       return "mem error";
+			case Z_BUF_ERROR:       return "buf error";
+			case Z_VERSION_ERROR:   return "version error";
+			default:                return "unknown error";
+		}
+	}
+
 	this(int err, z_stream* zs)
 	{
 		if (zs.msg)
 			super(to!string(zs.msg));
 		else
-		{
-			string msg;
-			switch (err)
-			{
-				case Z_STREAM_END:      msg = "stream end"; break;
-				case Z_NEED_DICT:       msg = "need dict"; break;
-				case Z_ERRNO:           msg = "errno"; break;
-				case Z_STREAM_ERROR:    msg = "stream error"; break;
-				case Z_DATA_ERROR:      msg = "data error"; break;
-				case Z_MEM_ERROR:       msg = "mem error"; break;
-				case Z_BUF_ERROR:       msg = "buf error"; break;
-				case Z_VERSION_ERROR:   msg = "version error"; break;
-				default:                msg = "unknown error"; break;
-			}
-			super(msg);
-		}
+			super(getmsg(err));
 	}
 
 	this(string msg) { super(msg); }
