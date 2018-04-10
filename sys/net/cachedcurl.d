@@ -130,8 +130,20 @@ class CachedCurlNetwork : Network
 
 		ref Response checkOK()
 		{
-			enforce(ok, "Request failed: " ~ metadata.statusLine.reason);
+			if (!ok)
+				throw new CachedCurlException(metadata);
 			return this;
+		}
+	}
+
+	static class CachedCurlException : Exception
+	{
+		Metadata metadata;
+
+		this(Metadata metadata, string fn = __FILE__, size_t ln = __LINE__)
+		{
+			this.metadata = metadata;
+			super("Request failed: " ~ metadata.statusLine.reason, fn, ln);
 		}
 	}
 
@@ -179,6 +191,8 @@ class CachedCurlNetwork : Network
 		return cachedReq(url, HTTP.Method.post, data).responseData;
 	}
 }
+
+alias CachedCurlException = CachedCurlNetwork.CachedCurlException;
 
 static this()
 {
