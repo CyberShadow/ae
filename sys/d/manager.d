@@ -1577,22 +1577,39 @@ EOS";
 
 		override void performTest()
 		{
+			auto env = baseEnvironment;
 			version (Windows)
-				if (this.model != "32")
+				needDMC(env); // Need DigitalMars Make
+
+			string[] args;
+			if (sourceDir.buildPath(makeFileName).readText.canFind("\ntest_rdmd"))
+				args = getMake(env) ~ ["-f", makeFileName, "test_rdmd", "DFLAGS=-g -m" ~ model] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env, model) ~ dMakeArgs;
+			else
+			{
+				// Legacy (before makefile rules)
+
+				args = ["dmd", "-m" ~ this.model, "-run", "rdmd_test.d"];
+				if (sourceDir.buildPath("rdmd_test.d").readText.canFind("modelSwitch"))
+					args ~= "--model=" ~ this.model;
+				else
 				{
-					// Can't test rdmd on non-32-bit Windows until compiler model matches Phobos model.
-					// rdmd_test does not use -m when building rdmd, thus linking will fail
-					// (because of model mismatch with the phobos we built).
-					log("Can't test rdmd with model " ~ this.model ~ ", skipping");
-					return;
+					version (Windows)
+						if (this.model != "32")
+						{
+							// Can't test rdmd on non-32-bit Windows until compiler model matches Phobos model.
+							// rdmd_test does not use -m when building rdmd, thus linking will fail
+							// (because of model mismatch with the phobos we built).
+							log("Can't test rdmd with model " ~ this.model ~ ", skipping");
+							return;
+						}
 				}
+			}
 
 			foreach (dep; ["dmd", "druntime", "phobos", "phobos-includes"])
 				getComponent(dep).needInstalled();
 
-			auto env = baseEnvironment;
 			getComponent("dmd").updateEnv(env);
-			run(["dmd", "-run", "rdmd_test.d"], env.vars, sourceDir);
+			run(args, env.vars, sourceDir);
 		}
 	}
 
