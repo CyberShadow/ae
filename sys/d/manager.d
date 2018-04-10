@@ -2403,6 +2403,8 @@ EOS";
 		env.deps.sdkDir = vs.directory.buildPath("Program Files", "Microsoft SDKs", "Windows", "v7.1A").absolutePath();
 
 		env.vars["PATH"] ~= pathSeparator ~ vs.modelBinPaths(msvcModelDir(model)).map!(path => vs.directory.buildPath(path).absolutePath()).join(pathSeparator);
+		env.vars["VisualStudioVersion"] = "12"; // Work-around for problem fixed in dmd 38da6c2258c0ff073b0e86e0a1f6ba190f061e5e
+		env.vars["VSINSTALLDIR"] = env.deps.vsDir ~ dirSeparator; // ditto
 		env.vars["VCINSTALLDIR"] = env.deps.vsDir.buildPath("VC") ~ dirSeparator;
 		env.vars["INCLUDE"] = env.deps.vsDir.buildPath("VC", "include") ~ ";" ~ env.deps.sdkDir.buildPath("Include");
 		env.vars["LIB"] = env.deps.vsDir.buildPath("VC", "lib", msvcModelDir(model, "amd64")) ~ ";" ~ env.deps.sdkDir.buildPath("Lib", msvcModelDir(model, "x64"));
