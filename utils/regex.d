@@ -258,44 +258,110 @@ string buildReplaceTransformation(string search, string replacement, string flag
 	return "s/" ~ escapeUnescapedSlashes(search) ~ "/" ~ escapeSlashes(replacement) ~ "/" ~ flags;
 }
 
-private string[] splitRETransformation(string t)
+private struct Transformation
 {
-	enforce(t.length >= 2, "Bad transformation");
-	string[] result = [t[0..1]];
-	auto boundary = t[1];
-	t = t[2..$];
-	size_t start = 0;
-	bool escaped = false;
-	foreach (i, c; t)
-		if (escaped)
-			escaped = false;
-		else
-		if (c=='\\')
-			escaped = true;
-		else
-		if (c == boundary)
+	enum Type
+	{
+		replace,
+	}
+	Type type;
+
+	struct Replace
+	{
+		string search, replacement, flags;
+	}
+
+	union
+	{
+		Replace replace;
+	}
+}
+
+private Transformation[] splitRETransformation(string s)
+{
+	enforce(s.length >= 2, "Bad transformation");
+	Transformation[] result;
+	while (s.length)
+	{
+		Transformation t;
+		switch (s[0])
 		{
-			result ~= t[start..i];
-			start = i+1;
+			case 's':
+			{
+				t.type = Transformation.Type.replace;
+				s = s[1..$];
+
+				auto boundary = s[0];
+				s = s[1..$];
+
+				string readString()
+				{
+					bool escaped = false;
+					foreach (i, c; s)
+						if (escaped)
+							escaped = false;
+						else
+						if (c=='\\')
+							escaped = true;
+						else
+						if (c == boundary)
+						{
+							auto result = s[0..i];
+							s = s[i+1..$];
+							return result;
+						}
+					throw new Exception("Unexpected end of regex replace transformation");
+				}
+
+				t.replace.search = readString();
+				t.replace.replacement = readString();
+				foreach (i, c; s)
+				{
+					if (c == ';')
+					{
+						t.replace.flags = s[0..i];
+						s = s[i+1..$];
+						goto endOfReplace;
+					}
+					else
+					if (c == boundary)
+						throw new Exception("Too many regex replace transformation parameters");
+				}
+				t.replace.flags = s;
+				s = null;
+			endOfReplace:
+				result ~= t;
+				break;
+			}
+			default:
+				throw new Exception("Unsupported regex transformation: " ~ s[0]);
 		}
-	result ~= t[start..$];
+	}
 	return result;
 }
 
 unittest
 {
-	assert(splitRETransformation("s/from/to/") == ["s", "from", "to", ""]);
+	Transformation result = { type : Transformation.Type.replace, replace : { search : "from", replacement : "to", flags : "" } };
+	assert(splitRETransformation("s/from/to/") == [result]);
 }
 
-/// Apply regex transformation (in the form of "s/FROM/TO/FLAGS") to a string.
+/// Apply sed-like regex transformation (in the form of "s/FROM/TO/FLAGS") to a string.
+/// Multiple commands can be separated by ';'.
 string applyRE()(string str, string transformation)
 {
 	import std.regex;
-	auto params = splitRETransformation(transformation);
-	enforce(params[0] == "s", "Unsupported regex transformation");
-	enforce(params.length == 4, "Wrong number of regex transformation parameters");
-	auto r = regex(params[1], params[3]);
-	return replace(str, r, unescapeSlashes(params[2]));
+	auto transformations = splitRETransformation(transformation);
+	foreach (t; transformations)
+		final switch (t.type)
+		{
+			case Transformation.Type.replace:
+			{
+				auto r = regex(t.replace.search, t.replace.flags);
+				str = replace(str, r, unescapeSlashes(t.replace.replacement));
+			}
+		}
+	return str;
 }
 
 unittest
@@ -313,6 +379,8 @@ unittest
 	testSlashes(`a/\b\/c`);
 	testSlashes(`a/\\b\//c`);
 	testSlashes(`a//\b\\/c`);
+
+	assert("babba".applyRE(`s/a/c/g;s/b/a/g;s/c/b/g`) == "abaab");
 }
 
 // ************************************************************************
