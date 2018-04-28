@@ -1781,7 +1781,11 @@ EOS";
 
 				auto args =
 					getMake(env) ~
-					[ "-f", makeFileName ] ~
+					[
+						"-f", makeFileName,
+						"DMD=" ~ dmd,
+						"PHOBOS_LIB=" ~ buildPath(buildDir, "lib", "libphobos2.a").absolutePath(),
+					] ~
 					diffable ~
 					(latest ? ["LATEST=" ~ latest] : []) ~
 					targets ~
