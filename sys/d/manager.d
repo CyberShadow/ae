@@ -1719,6 +1719,11 @@ EOS";
 			{
 				getComponent("dmd").updateEnv(env);
 
+				// Need an in-tree build for SYSCONFDIR.imp, which is
+				// needed to parse .d files for the DMD API
+				// documentation.
+				getComponent("dmd").needBuild();
+
 				needKindleGen(env);
 
 				foreach (dep; dependencies)
