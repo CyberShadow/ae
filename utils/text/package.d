@@ -861,10 +861,10 @@ unittest
 string numberToString(T)(T v)
 	if (isNumeric!T)
 {
-	static if (is(T : real))
-		return fpToString(v);
-	else
+	static if (is(T : ulong))
 		return toDec(v);
+	else
+		return fpToString(v);
 }
 
 // ************************************************************************
