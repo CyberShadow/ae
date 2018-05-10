@@ -70,6 +70,9 @@ public:
 		end = start + arr.length;
 	}
 
+	/// Put elements.
+	/// Accepts any number of items (and will allocate at most once per call).
+	/// Items can be of the element type (I), or arrays.
 	void put(U...)(U items)
 		if (CanPutAll!U)
 	{
@@ -117,7 +120,7 @@ public:
 	}
 
 	/// Unsafe. Use together with preallocate().
-	void uncheckedPut(U...)(U items)
+	void uncheckedPut(U...)(U items) @system
 		if (CanPutAll!U)
 	{
 		auto cursor = this.cursor;
@@ -135,13 +138,17 @@ public:
 		this.cursor = cursor;
 	}
 
+	/// Ensure we can append at least `len` more bytes before allocating.
 	void preallocate(size_t len)
 	{
 		if (end - cursor < len)
 			reserve(len);
 	}
 
-	T[] allocate(size_t len)
+	/// Allocate a number of bytes, without initializing them,
+	/// and return the slice to be filled in.
+	/// The slice reference is temporary, and valid until the next allocation.
+	T[] allocate(size_t len) @system
 	{
 		auto cursorEnd = cursor + len;
 		if (cursorEnd > end)
@@ -174,6 +181,7 @@ public:
 		put(item);
 	}
 
+	/// Get a reference to the buffer.
 	I[] get()
 	{
 		return cast(I[])start[0..cursor-start];
@@ -186,9 +194,12 @@ public:
 
 	static if (is(I == T)) // mutable types only
 	{
+		/// Set the length (up to the current capacity).
 		/// Does not resize. Use preallocate for that.
 		@property void length(size_t value)
 		{
+			if (start + value > end)
+				preallocate(start + value - end);
 			cursor = start + value;
 			assert(cursor <= end);
 		}
