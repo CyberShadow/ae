@@ -180,6 +180,12 @@ struct OrderedMap(K, V)
 		index = null;
 	}
 
+	bool opCast(T)() const
+	if (is(T == bool))
+	{
+		return !!index;
+	}
+
 	ref inout(V) opIndex()(auto ref K k) inout
 	{
 		return values[index[k]];
@@ -237,7 +243,7 @@ struct OrderedMap(K, V)
 		return p ? values[*p] : defaultValue;
 	}
 
-	inout(V)* opIn_r()(auto ref K k) inout
+	inout(V)* opIn_r()(auto ref in K k) inout
 	{
 		auto p = k in index;
 		return p ? &values[*p] : null;
@@ -287,6 +293,23 @@ struct OrderedMap(K, V)
 		result.index = index.dup;
 		return result;
 	}
+
+	alias byKey = keys;
+	alias byValue = values;
+
+	auto byKeyValue(this T)()
+	{
+		auto instance = this;
+		struct Range
+		{
+			size_t index;
+			bool empty() const { return index == instance.values.length; }
+			static struct KeyValue { typeof(instance.keys[0]) key; typeof(instance.values[0]) value; }
+			KeyValue front() { return KeyValue(instance.keys[index], instance.values[index]); }
+			void popFront() { index++; }
+		}
+		return Range();
+	}
 }
 
 unittest
@@ -298,6 +321,21 @@ unittest
 	assert(m.length == 3);
 	assert("a" in m);
 	assert("d" !in m);
+
+	{
+		auto r = m.byKeyValue;
+		assert(!r.empty);
+		assert(r.front.key == "a");
+		r.popFront();
+		assert(!r.empty);
+		assert(r.front.key == "b");
+		r.popFront();
+		assert(!r.empty);
+		assert(r.front.key == "c");
+		r.popFront();
+		assert(r.empty);
+	}
+
 	m.remove("a");
 	assert(m.length == 2);
 	m["x"] -= 1;
@@ -337,6 +375,13 @@ unittest
 	auto m2 = m;
 	m.remove("a");
 	assert(m2["a"] == 1);
+}
+
+unittest
+{
+	class C {}
+	const OrderedMap!(string, C) m;
+	m.byKeyValue;
 }
 
 // https://issues.dlang.org/show_bug.cgi?id=18606
