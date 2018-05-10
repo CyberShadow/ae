@@ -201,3 +201,15 @@ public:
 		}
 	}
 }
+
+unittest
+{
+	FastAppender!char a;
+	assert(a.get == "");
+	a.put('a', "bcd", 'e');
+	assert(a.get == "abcde");
+	a.clear();
+	assert(a.get == "");
+	a.allocate(3)[] = 'x';
+	assert(a.get == "xxx");
+}
