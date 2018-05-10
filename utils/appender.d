@@ -13,10 +13,12 @@
 
 module ae.utils.appender;
 
-import core.memory;
+import std.experimental.allocator : makeArray, stateSize;
+import std.experimental.allocator.common : stateSize;
+import std.experimental.allocator.gc_allocator : GCAllocator;
 import std.traits;
 
-struct FastAppender(I)
+struct FastAppender(I, Allocator = GCAllocator)
 {
 	static assert(T.sizeof == 1, "TODO");
 
@@ -36,7 +38,25 @@ private:
 
 		if (start)
 		{
-			auto extended = GC.extend(start, newSize, newSize * 2);
+			size_t extended = 0;
+			static if (is(Allocator == GCAllocator))
+			{
+				// std.allocator does not have opportunistic extend
+				import core.memory;
+				extended = GC.extend(start, newSize, newSize * 2);
+			}
+			else
+			{
+				static if (is(hasMember!(Allocator, "expand")))
+				{
+					auto buf = start[0..capacity];
+					if (allocator.expand(buf, newSize))
+					{
+						assert(buf.ptr == start);
+						extended = buf.length;
+					}
+				}
+			}
 			if (extended)
 			{
 				end = start + extended;
@@ -46,9 +66,21 @@ private:
 
 		auto newCapacity = newSize < MIN_SIZE ? MIN_SIZE : newSize * 2;
 
-		auto bi = GC.qalloc(newCapacity * T.sizeof, (typeid(T[]).next.flags & 1) ? 0 : GC.BlkAttr.NO_SCAN);
-		auto newStart = cast(T*)bi.base;
-		newCapacity = bi.size;
+		version(none)
+		{
+			auto bi = GC.qalloc(newCapacity * T.sizeof, (typeid(T[]).next.flags & 1) ? 0 : GC.BlkAttr.NO_SCAN);
+			auto newStart = cast(T*)bi.base;
+			newCapacity = bi.size;
+		}
+		else
+		{
+			auto buf = allocator.makeArray!T(newCapacity);
+			assert(buf.length == newCapacity);
+			auto newStart = buf.ptr;
+		}
+
+		// TODO: should we free the old buffer?
+		// (might have references to it!)
 
 		newStart[0..size] = start[0..size];
 		start = newStart;
@@ -57,10 +89,18 @@ private:
 	}
 
 public:
-	/// Preallocate
-	this(size_t capacity)
+	static if (stateSize!Allocator)
+		Allocator allocator;
+	else
+		alias allocator = Allocator.instance;
+
+	static if (stateSize!Allocator == 0)
 	{
-		reserve(capacity);
+		/// Preallocate
+		this(size_t capacity)
+		{
+			reserve(capacity);
+		}
 	}
 
 	/// Start with a given buffer
@@ -215,12 +255,18 @@ public:
 
 unittest
 {
-	FastAppender!char a;
-	assert(a.get == "");
-	a.put('a', "bcd", 'e');
-	assert(a.get == "abcde");
-	a.clear();
-	assert(a.get == "");
-	a.allocate(3)[] = 'x';
-	assert(a.get == "xxx");
+	import std.meta : AliasSeq;
+	import std.experimental.allocator.mallocator;
+
+	foreach (Allocator; AliasSeq!(GCAllocator, Mallocator))
+	{
+		FastAppender!(char, Allocator) a;
+		assert(a.get == "");
+		a.put('a', "bcd", 'e');
+		assert(a.get == "abcde");
+		a.clear();
+		assert(a.get == "");
+		a.allocate(3)[] = 'x';
+		assert(a.get == "xxx");
+	}
 }
