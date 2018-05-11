@@ -11,8 +11,12 @@ License
 =======
 
 *Most* of this library is licensed under the [Mozilla Public License, v. 2.0](http://mozilla.org/MPL/2.0/).
-Some modules may have a different license (e.g. public domain); check the comments at the top of each module for details.
-You can generally expect the library to be GPL-compatible.
+
+Modules under licenses other than MPL are:
+
+- `ae.utils.digest_murmurhash3` - D port of a C MurmurHash3 implementation. **Public Domain**.
+- `ae.utils.graphics.fonts.font8x8` - Data for an 8x8 bitmap font created by Daniel Hepper. **Public Domain**.
+- `ae.utils.graphics.hls` - Code to convert between RGB and HLS. Ported from a Microsoft Knowledge Base article. **License [unclear](https://opensource.stackexchange.com/questions/4779/is-it-legal-to-use-code-from-microsoft-knowledge-base-article-in-an-open-source)**.
 
 Using this library
 ==================
@@ -21,10 +25,13 @@ For a complete-newbie Windows tutorial of setting up *ae* and building an SDL ga
 
 This library is not meant to be compiled as a static (.lib, .a) or shared (.dll, .so) library.
 Do not attempt to do so; you will run into problems with multiple entry points, dependencies you may not need, and other problems.
-Instead, it is intended to be used as a source library, together with a build tool (e.g. [rdmd](http://dlang.org/rdmd.html)).
+Instead, it is intended to be used as a source library, together with a dependency-discovering build tool (e.g. [rdmd](http://dlang.org/rdmd.html)).
 
 The recommended way to use the library is to set it up as a git external in your project's root, as seen [here](https://github.com/CyberShadow/ForumAntiSpam).
 This will link your project with a specific commit of the library, to avoid breakage due to API changes (see below).
+
+Dub is also supported, with the library being split up into subpackages according to the necessary external dependencies.
+See `dub.sdl` for details.
 
 Overview
 ========
@@ -53,7 +60,7 @@ Networking
 
 *ae* uses asynchronous event-based networking.
 A `select`-based event loop dispatches events to connection objects, which then propagate them to higher-level code as necessary.
-The library may eventually move to a generic event loop, allowing for asynchronous processing and multiple event loops for different subsystems.
+`libev` support is also available.
 
 UI
 --
@@ -61,9 +68,9 @@ UI
 Not much here yet.
 There is a working game demo in `ae.demo.pewpew`.
 
-Warning
-=======
+Versioning
+==========
 
-The library is in a constant state of flux, has no version numbers, and may never have a stable API.
-At the moment, it is little more than common code I use in various projects, optimized/organized for however much my time/mood allowed at the moment.
-The library may undergo significant changes, possibly even entire paradigm shifts, as I discover better/more efficient ways to use D.
+Currently, there are no stable/development branches, and versioning is done only according to the number of commits in `master`.
+Breaking changes are prefixed with `[BREAKING]` in the commit message.
+Tags are created regularly for the benefit of Dub packages (e.g. [Digger](https://github.com/CyberShadow/Digger/blob/master/dub.sdl)).
