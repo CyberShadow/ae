@@ -29,12 +29,13 @@ private:
 	alias Unqual!I T;
 
 	T* cursor, start, end;
+	bool unique; // Holding a unique reference to the buffer?
 
 	void reserve(size_t len)
 	{
-		auto size = cursor-start;
-		auto newSize = size + len;
-		auto capacity = end-start;
+		immutable size = cursor-start;
+		immutable newSize = size + len;
+		immutable capacity = end-start;
 
 		if (start)
 		{
@@ -79,13 +80,13 @@ private:
 			auto newStart = buf.ptr;
 		}
 
-		// TODO: should we free the old buffer?
-		// (might have references to it!)
-
 		newStart[0..size] = start[0..size];
+		if (unique)
+			allocator.deallocate(start[0..capacity]);
 		start = newStart;
 		cursor = start + size;
 		end = start + newCapacity;
+		unique = true;
 	}
 
 public:
@@ -108,6 +109,14 @@ public:
 	{
 		start = cursor = cast(T*)arr.ptr;
 		end = start + arr.length;
+	}
+
+	@disable this(this);
+
+	~this()
+	{
+		if (cursor && unique)
+			allocator.deallocate(start[0..end-start]);
 	}
 
 	/// Put elements.
@@ -222,9 +231,32 @@ public:
 	}
 
 	/// Get a reference to the buffer.
+	/// Ownership of the buffer is passed to the caller
+	/// (Appender will not deallocate it after this call).
 	I[] get()
 	{
+		unique = false;
+		return peek();
+	}
+
+	/// As with `get`, but ownership is preserved.
+	/// The return value is valid until the next allocation,
+	/// or until Appender is destroyed.
+	I[] peek()
+	{
 		return cast(I[])start[0..cursor-start];
+	}
+
+	@property size_t capacity()
+	{
+		return end-start;
+	}
+
+	@property void capacity(size_t value)
+	{
+		immutable current = end - start;
+		assert(value >= current, "Cannot shrink capacity");
+		reserve(value - length);
 	}
 
 	@property size_t length()
