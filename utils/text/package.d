@@ -22,6 +22,7 @@ import std.string;
 import std.traits;
 import std.typetuple;
 
+import core.stdc.stdio : sprintf, sscanf;
 import core.stdc.string;
 
 import ae.utils.array;

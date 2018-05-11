@@ -65,7 +65,7 @@ struct JsonWriter(Output)
 			return .put(output, v);
 		else
 		static if (is(Unqual!T : real))
-			return output.put(fpToString!T(v)); // TODO: don't allocate
+			return output.putFP(v);
 		else
 			static assert(0, "Don't know how to write " ~ T.stringof);
 	}
