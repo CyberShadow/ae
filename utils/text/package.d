@@ -771,51 +771,89 @@ unittest
 }
 
 /// How many significant decimal digits does a FP type have
-/// (determined empirically)
+/// (determined empirically - valid for all D FP types on x86/64)
 enum significantDigits(T : real) = 2 + 2 * T.sizeof;
 
 /// Format string for a FP type which includes all necessary
 /// significant digits
 enum fpFormatString(T) = "%." ~ text(significantDigits!T) ~ "g";
+template cWidthString(T)
+{
+	static if (is(T == float))
+		enum cWidthString = "";
+	else
+	static if (is(T == double))
+		enum cWidthString = "l";
+	else
+	static if (is(T == real))
+		enum cWidthString = "L";
+}
+enum fpCFormatString(T) = "%." ~ text(significantDigits!T) ~ cWidthString!T ~ "g";
+
+private auto fpToBuf(F)(F v) @nogc
+{
+	/// Bypass FPU register, which may contain a different precision
+	static F forceType(F d) { static F n; n = d; return n; }
+
+	enum isReal = is(Unqual!F == real);
+
+	StaticBuf!(char, 64) buf = void;
+	buf.pos = sprintf(buf.buf.ptr, fpCFormatString!F.ptr, forceType(v));
+	char[] s = buf.data();
+
+	F parse(char[] s)
+	{
+		char[64] buf = void;
+		buf[0..s.length] = s[];
+		buf[s.length] = 0;
+		F f;
+		enum formatString = "%" ~ cWidthString!F ~ "f";
+		int ret = sscanf(buf.ptr, formatString, &f);
+		return f;
+	}
+
+	if (s != "nan" && s != "-nan" && s != "inf" && s != "-inf")
+	{
+		if (forceType(parse(s)) != v)
+		{
+			static if (isReal)
+			{
+				// Something funny with DM libc real parsing... e.g. 0.6885036635121051783
+				return buf;
+			}
+			else
+			//	assert(false, "Initial conversion fails: " ~ format(fpFormatString!F, parse(s)) ~ " / " ~ s);
+				assert(false, "Initial conversion fails");
+		}
+
+		foreach_reverse (i; 1..s.length)
+			if (s[i]>='0' && s[i]<='8')
+			{
+				s[i]++;
+				if (forceType(parse(s[0..i+1]))==v)
+					s = s[0..i+1];
+				else
+					s[i]--;
+			}
+		while (s.length>2 && s[$-1]!='.' && forceType(parse(s[0..$-1]))==v)
+			s = s[0..$-1];
+	}
+	buf.pos = s.length;
+	return buf;
+}
+
+void putFP(Writer, F)(auto ref Writer writer, F v) @nogc
+{
+	writer.put(fpToBuf(v).data);
+}
+
 
 /// Get shortest string representation of a FP type that still converts to exactly the same number.
 template fpToString(F)
 {
 	string fpToString(F v)
 	{
-		/// Bypass FPU register, which may contain a different precision
-		static F forceType(F d) { static F n; n = d; return n; }
-
-		StaticBuf!(char, 64) buf;
-		formattedWrite(&buf, fpFormatString!F, forceType(v));
-		char[] s = buf.data();
-
-		if (s != "nan" && s != "-nan" && s != "inf" && s != "-inf")
-		{
-			if (forceType(to!F(s)) != v)
-			{
-				static if (is(F == real))
-				{
-					// Something funny with DM libc real parsing... e.g. 0.6885036635121051783
-					return s.idup;
-				}
-				else
-					assert(false, "Initial conversion fails: " ~ format(fpFormatString!F, to!F(s)));
-			}
-
-			foreach_reverse (i; 1..s.length)
-				if (s[i]>='0' && s[i]<='8')
-				{
-					s[i]++;
-					if (forceType(to!F(s[0..i+1]))==v)
-						s = s[0..i+1];
-					else
-						s[i]--;
-				}
-			while (s.length>2 && s[$-1]!='.' && forceType(to!F(s[0..$-1]))==v)
-				s = s[0..$-1];
-		}
-		return s.idup;
+		return fpToBuf(v).data.idup;
 	}
 
 	static if (!is(F == real))
