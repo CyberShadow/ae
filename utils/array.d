@@ -279,11 +279,10 @@ auto splitEmpty(T, S)(T value, S separator)
 	return value.length ? split(value, separator) : null;
 }
 
-import std.random;
-
 /// Select and return a random element from the array.
 auto ref sample(T)(T[] arr)
 {
+	import std.random;
 	return arr[uniform(0, $)];
 }
 
@@ -298,6 +297,7 @@ unittest
 /// and remove it from the array.
 T pluck(T)(ref T[] arr)
 {
+	import std.random;
 	auto pos = uniform(0, arr.length);
 	auto result = arr[pos];
 	arr = arr.remove(pos);
