@@ -22,6 +22,7 @@ import std.string;
 
 import ae.sys.file;
 
+import ae.utils.meta.rcclass;
 import ae.utils.textout;
 import ae.utils.time;
 
@@ -45,7 +46,7 @@ private SysTime getLogTime()
 	return Clock.currTime(UTC());
 }
 
-abstract class Logger
+abstract class CLogger
 {
 public:
 	alias log opCall;
@@ -73,8 +74,9 @@ protected:
 	void open() {}
 	void reopen() {}
 }
+alias RCClass!CLogger Logger;
 
-class RawFileLogger : Logger
+class CRawFileLogger : CLogger
 {
 	bool timestampedFilenames;
 
@@ -140,7 +142,7 @@ protected:
 	}
 }
 
-class FileLogger : RawFileLogger
+class CFileLogger : CRawFileLogger
 {
 	this(string name, bool timestampedFilenames = false)
 	{
@@ -197,8 +199,10 @@ protected:
 		f.flush();
 	}
 }
+alias RCClass!CFileLogger FileLogger;
+alias rcClass!CFileLogger fileLogger;
 
-class ConsoleLogger : Logger
+class CConsoleLogger : CLogger
 {
 	this(string name)
 	{
@@ -211,14 +215,18 @@ class ConsoleLogger : Logger
 		stderr.flush();
 	}
 }
+alias RCClass!CConsoleLogger ConsoleLogger;
+alias rcClass!CConsoleLogger consoleLogger;
 
-class NullLogger : Logger
+class CNullLogger : CLogger
 {
 	this() { super(null); }
 	override void log(in char[] str) {}
 }
+alias RCClass!CNullLogger NullLogger;
+alias rcClass!CNullLogger nullLogger;
 
-class MultiLogger : Logger
+class CMultiLogger : CLogger
 {
 	this(Logger[] loggers ...)
 	{
@@ -247,14 +255,21 @@ class MultiLogger : Logger
 private:
 	Logger[] loggers;
 }
+alias RCClass!CMultiLogger MultiLogger;
+alias rcClass!CMultiLogger multiLogger;
 
-class FileAndConsoleLogger : MultiLogger
+class CFileAndConsoleLogger : CMultiLogger
 {
 	this(string name)
 	{
-		super(new FileLogger(name), new ConsoleLogger(name));
+		Logger f, c;
+		f = fileLogger(name);
+		c = consoleLogger(name);
+		super(f, c);
 	}
 }
+alias RCClass!CFileAndConsoleLogger FileAndConsoleLogger;
+alias rcClass!CFileAndConsoleLogger fileAndConsoleLogger;
 
 bool quiet;
 
@@ -269,8 +284,13 @@ shared static this()
 /// Create a logger depending on whether -q or --quiet was passed on the command line.
 Logger createLogger(string name)
 {
+	Logger result;
 	version (unittest)
-		return new ConsoleLogger(name);
+		result = consoleLogger(name);
 	else
-		return quiet ? new FileLogger(name) : new FileAndConsoleLogger(name);
+		if (quiet)
+			result = fileLogger(name);
+		else
+			result = fileAndConsoleLogger(name);
+	return result;
 }
