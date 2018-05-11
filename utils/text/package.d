@@ -27,6 +27,7 @@ import core.stdc.string;
 
 import ae.utils.array;
 import ae.utils.meta;
+import ae.utils.text.parsefp;
 import ae.utils.textout;
 
 alias indexOf = std.string.indexOf;
@@ -804,12 +805,10 @@ private auto fpToBuf(F)(F v) @nogc
 
 	F parse(char[] s)
 	{
-		char[64] buf = void;
-		buf[0..s.length] = s[];
-		buf[s.length] = 0;
 		F f;
-		enum formatString = "%" ~ cWidthString!F ~ "f";
-		int ret = sscanf(buf.ptr, formatString, &f);
+		auto res = tryParse(s, f);
+		assert(res, "Failed to parse number we created");
+		assert(!s.length, "Failed to completely parse number we created");
 		return f;
 	}
 
