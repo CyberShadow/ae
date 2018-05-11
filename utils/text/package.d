@@ -979,7 +979,7 @@ string selectBestFrom(in string[] items, string target, float threshold = 0.7)
 // ************************************************************************
 
 
-string randomString(int length=20, string chars="abcdefghijklmnopqrstuvwxyz")
+string randomString()(int length=20, string chars="abcdefghijklmnopqrstuvwxyz")
 {
 	import std.random;
 	import std.range;
