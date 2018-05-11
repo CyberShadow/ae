@@ -16,6 +16,7 @@ module ae.net.nntp.listener;
 import ae.net.nntp.client;
 
 import std.datetime;
+import std.typecons;
 
 import ae.sys.timing;
 import ae.sys.log;
@@ -25,7 +26,7 @@ const POLL_PERIOD = 2.seconds;
 class NntpListener
 {
 private:
-	NntpClient client;
+	typeof(scoped!NntpClient(Logger.init)) client;
 	string server;
 	string lastDate;
 	bool[string] oldMessages;
@@ -121,7 +122,7 @@ private:
 public:
 	this(Logger log)
 	{
-		client = new NntpClient(log);
+		client = scoped!NntpClient(log);
 		client.handleDisconnect = &onDisconnect;
 	}
 
