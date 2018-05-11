@@ -792,7 +792,7 @@ template cWidthString(T)
 }
 enum fpCFormatString(T) = "%." ~ text(significantDigits!T) ~ cWidthString!T ~ "g";
 
-private auto fpToBuf(F)(F v) @nogc
+private auto fpToBuf(F)(F val) @nogc
 {
 	/// Bypass FPU register, which may contain a different precision
 	static F forceType(F d) { static F n; n = d; return n; }
@@ -800,6 +800,29 @@ private auto fpToBuf(F)(F v) @nogc
 	enum isReal = is(Unqual!F == real);
 
 	StaticBuf!(char, 64) buf = void;
+
+	// MSVC workaround from std.format:
+	version (CRuntime_Microsoft)
+	{
+		import std.math : isNaN, isInfinity;
+		immutable double v = val; // convert early to get "inf" in case of overflow
+		{
+			string s;
+			if (isNaN(v))
+				s = "nan"; // snprintf writes 1.#QNAN
+			else if (isInfinity(v))
+				s = val >= 0 ? "inf" : "-inf"; // snprintf writes 1.#INF
+			else
+				goto L1;
+			buf.buf[0..s.length] = s;
+			buf.pos = s.length;
+			return buf;
+		L1:
+		}
+	}
+	else
+		alias v = val;
+
 	buf.pos = sprintf(buf.buf.ptr, fpCFormatString!F.ptr, forceType(v));
 	char[] s = buf.data();
 
