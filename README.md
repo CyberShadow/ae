@@ -17,6 +17,7 @@ Modules under licenses other than MPL are:
 - `ae.utils.digest_murmurhash3` - D port of a C MurmurHash3 implementation. **Public Domain**.
 - `ae.utils.graphics.fonts.font8x8` - Data for an 8x8 bitmap font created by Daniel Hepper. **Public Domain**.
 - `ae.utils.graphics.hls` - Code to convert between RGB and HLS. Ported from a Microsoft Knowledge Base article. **License [unclear](https://opensource.stackexchange.com/questions/4779/is-it-legal-to-use-code-from-microsoft-knowledge-base-article-in-an-open-source)**.
+- `ae.utils.text.parsefp` - Parse floating-point values from strings. Adapted from Phobos. **[Boost License 1.0](https://www.boost.org/LICENSE_1_0.txt)**.
 
 Using this library
 ==================
