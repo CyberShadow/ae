@@ -93,7 +93,7 @@ T[] fastReplace(T)(T[] what, T[] from, T[] to)
 			if (!p)
 				return what;
 
-			auto result = what.dup;
+			T[] result = what.dup;
 			auto delta = result.ptr - what.ptr;
 			auto toChar = to[0];
 			auto end = what.ptr + what.length;
@@ -138,7 +138,7 @@ T[] fastReplace(T)(T[] what, T[] from, T[] to)
 		{
 			if (from.length == to.length)
 			{
-				auto result = what.dup;
+				T[] result = what.dup;
 				auto deltaMinusOne = (result.ptr - what.ptr) - 1;
 
 				goto replaceA;
