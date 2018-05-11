@@ -109,12 +109,12 @@ template rcClass(C)
 if (is(C == class))
 {
 	RCClass!C rcClass(Args...)(auto ref Args args)
-	if (is(C == class) && is(typeof(emplace(cast(C)null, args))))
+	if (is(C == class) && is(typeof(emplace!C(null, args))))
 	{
 		RCClass!C c;
 		c._rcClassStore = new RCClassStore!C;
 		c._rcClassStore.refCount = 1;
-		emplace(c._rcClassGet, args);
+		emplace!C(c._rcClassStore.data[], args);
 		return c;
 	}
 }
