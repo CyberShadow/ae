@@ -50,6 +50,6 @@ class MappedDataWrapper : DataWrapper
 
 auto mapFile(string name, MmMode mode, size_t from = 0, size_t to = 0)
 {
-	auto wrapper = new MappedDataWrapper(name, mode, from, to);
+	auto wrapper = unmanagedNew!MappedDataWrapper(name, mode, from, to);
 	return Data(wrapper, mode != MmMode.read);
 }

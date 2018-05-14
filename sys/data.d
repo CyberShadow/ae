@@ -108,7 +108,7 @@ public:
 		if (forceReallocation || GC.addrOf(data.ptr) is null)
 		{
 			// copy to unmanaged memory
-			auto wrapper = new MemoryDataWrapper(data.length, data.length);
+			auto wrapper = unmanagedNew!MemoryDataWrapper(data.length, data.length);
 			this.wrapper = wrapper;
 			wrapper.contents[] = data[];
 			contents = wrapper.contents;
@@ -145,7 +145,7 @@ public:
 
 		if (capacity)
 		{
-			auto wrapper = new MemoryDataWrapper(size, capacity);
+			auto wrapper = unmanagedNew!MemoryDataWrapper(size, capacity);
 			this.wrapper = wrapper;
 			contents = wrapper.contents;
 			mutable = true;
@@ -264,7 +264,7 @@ public:
 
 	private void reallocate(size_t size, size_t capacity)
 	{
-		auto wrapper = new MemoryDataWrapper(size, capacity);
+		auto wrapper = unmanagedNew!MemoryDataWrapper(size, capacity);
 		wrapper.contents[0..this.length] = contents[];
 		//(cast(ubyte[])newWrapper.contents)[this.length..value] = 0;
 
@@ -483,18 +483,7 @@ abstract class DataWrapper
 	abstract void setSize(size_t newSize);
 	abstract @property size_t capacity() const;
 
-	new(size_t sz)
-	{
-		void* p = core.stdc.stdlib.malloc(sz);
-
-		debug(DATA_REFCOUNT) debugLog("? -> %p: Allocating via malloc", p);
-
-		if (!p)
-			throw new OutOfMemoryError();
-
-		//GC.addRange(p, sz);
-		return p;
-	}
+	deprecated new(size_t sz) { return unmanagedAlloc(sz); }
 
 	debug ~this()
 	{
@@ -502,21 +491,56 @@ abstract class DataWrapper
 		assert(references == 0, "Deleting DataWrapper with non-zero reference count");
 	}
 
-	@nogc delete(void* p)
+	@nogc deprecated delete(void* p)
 	{
-		if (p)
-		{
-			debug(DATA_REFCOUNT) debugLog("? -> %p: Deleting via free", p);
-
-			//GC.removeRange(p);
-			core.stdc.stdlib.free(p);
-		}
+		unmanagedFree(p);
 	}
 }
 
 void setGCThreshold(size_t value) { MemoryDataWrapper.collectThreshold = value; }
 
+C unmanagedNew(C, Args...)(auto ref Args args)
+if (is(C == class))
+{
+	import std.conv : emplace;
+	enum size = __traits(classInstanceSize, C);
+	auto p = unmanagedAlloc(size);
+	emplace!C(p[0..size], args);
+	return cast(C)p;
+}
+
+void unmanagedDelete(C)(C c)
+if (is(C == class))
+{
+	c.__xdtor();
+	unmanagedFree(p);
+}
+
 private:
+
+void* unmanagedAlloc(size_t sz)
+{
+	auto p = core.stdc.stdlib.malloc(sz);
+
+	debug(DATA_REFCOUNT) debugLog("? -> %p: Allocating via malloc", p);
+
+	if (!p)
+		throw new OutOfMemoryError();
+
+	//GC.addRange(p, sz);
+	return p;
+}
+
+void unmanagedFree(void* p) @nogc
+{
+	if (p)
+	{
+		debug(DATA_REFCOUNT) debugLog("? -> %p: Deleting via free", p);
+
+		//GC.removeRange(p);
+		core.stdc.stdlib.free(p);
+	}
+}
 
 version (Windows)
 	import core.sys.windows.windows;
