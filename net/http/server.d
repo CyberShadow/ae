@@ -316,15 +316,15 @@ private:
 
 		if (server.log) server.log(([
 			"", // align IP to tab
-			request.remoteHosts(remoteAddress.toAddrString())[0],
+			request ? request.remoteHosts(remoteAddress.toAddrString())[0] : remoteAddress.toAddrString(),
 			response ? text(cast(ushort)response.status) : "-",
-			format("%9.2f ms", request.age.total!"usecs" / 1000f),
-			request.method,
-			formatAddress(protocol, localAddress, request.host, request.port) ~ request.resource,
+			request ? format("%9.2f ms", request.age.total!"usecs" / 1000f) : "-",
+			request ? request.method : "-",
+			request ? formatAddress(protocol, localAddress, request.host, request.port) ~ request.resource : "-",
 			response ? response.headers.get("Content-Type", "-") : "-",
 		] ~ (DEBUG ? [] : [
-			request.headers.get("Referer", "-"),
-			request.headers.get("User-Agent", "-"),
+			request ? request.headers.get("Referer", "-") : "-",
+			request ? request.headers.get("User-Agent", "-") : "-",
 		])).join("\t"));
 	}
 
@@ -347,16 +347,17 @@ public:
 			statusMessage = HttpResponse.getStatusMessage(status);
 
 		StringBuilder respMessage;
-		respMessage.put("HTTP/", currentRequest.protocolVersion, " ");
+		auto protocolVersion = currentRequest ? currentRequest.protocolVersion : "1.0";
+		respMessage.put("HTTP/", protocolVersion, " ");
 
 		if ("X-Powered-By" !in headers)
 			headers["X-Powered-By"] = "ae.net.http.server (+https://github.com/CyberShadow/ae)";
 
 		headers["Date"] = httpTime(Clock.currTime());
-		if (persistent && currentRequest.protocolVersion=="1.0")
+		if (persistent && protocolVersion=="1.0")
 			headers["Connection"] = "Keep-Alive";
 		else
-		if (!persistent && currentRequest.protocolVersion=="1.1")
+		if (!persistent && protocolVersion=="1.1")
 			headers["Connection"] = "close";
 		else
 			headers.remove("Connection");
@@ -388,15 +389,19 @@ public:
 			response.data = [Data("Internal Server Error")];
 		}
 
-		response.optimizeData(currentRequest.headers);
-		response.sliceData(currentRequest.headers);
+		if (currentRequest)
+		{
+			response.optimizeData(currentRequest.headers);
+			response.sliceData(currentRequest.headers);
+		}
 
 		if ("Content-Length" !in response.headers)
 			response.headers["Content-Length"] = text(response.data.bytes.length);
 
 		sendHeaders(response);
 
-		if (response && response.data.length && currentRequest.method != "HEAD")
+		bool isHead = currentRequest ? currentRequest.method == "HEAD" : false;
+		if (response && response.data.length && !isHead)
 			sendData(response.data);
 
 		debug (HTTP) debugLog("Sent response (%d bytes data)",
@@ -507,6 +512,33 @@ b=7654321"));
 	socketManager.loop();
 
 	assert(replies == [777777, 8888888]);
+
+	// Test bad headers
+	s.handleRequest = (HttpRequest request, HttpServerConnection conn) {
+		auto response = new HttpResponseEx;
+		conn.sendResponse(response.serveText("OK"));
+		if (--closeAfter == 0)
+			s.close();
+	};
+	closeAfter = 1;
+
+	port = s.listen(0, "127.0.0.1");
+	c = new TcpConnection;
+	c.handleConnect = {
+		c.send(Data("\n\n\n\n\n"));
+		c.disconnect();
+
+		// Now send a valid request to end the loop
+		c = new TcpConnection;
+		c.handleConnect = {
+			c.send(Data("GET / HTTP/1.0\n\n"));
+			c.disconnect();
+		};
+		c.connect("127.0.0.1", port);
+	};
+	c.connect("127.0.0.1", port);
+
+	socketManager.loop();
 
 /+
 	void testFile(string fn)
