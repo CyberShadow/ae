@@ -73,6 +73,7 @@ enum Sound
 	fire,
 	warpIn,
 	torpedoHit,
+	enemyFire,
 }
 Sound[] sounds;
 
@@ -800,6 +801,7 @@ class PlasmaOrb : Enemy
 		vx *= f;
 		vy *= f;
 		add(Plane.PlasmaOrbs);
+		sounds ~= Sound.enemyFire;
 	}
 
 	override void step(uint deltaTicks)

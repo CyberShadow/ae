@@ -58,7 +58,7 @@ final class MyApplication : Application
 
 	int[InputSource.max][GameKey.max] inputMatrix;
 
-	MemorySoundSource!short sndShoot, sndWarpIn, sndTorpedoHit;
+	MemorySoundSource!short sndShoot, sndWarpIn, sndTorpedoHit, sndEnemyFire;
 
 	override void render(Renderer s)
 	{
@@ -119,6 +119,7 @@ final class MyApplication : Application
 				case Sound.fire      : shell.audio.mixer.playSound(sndShoot     ); break;
 				case Sound.warpIn    : shell.audio.mixer.playSound(sndWarpIn    ); break;
 				case Sound.torpedoHit: shell.audio.mixer.playSound(sndTorpedoHit); break;
+				case Sound.enemyFire : shell.audio.mixer.playSound(sndEnemyFire ); break;
 			}
 		sounds = null;
 	}
@@ -226,6 +227,8 @@ final class MyApplication : Application
 		sndTorpedoHit = (sr*2/3).I!(dur => dur.iota.map!(n => short(whiteNoise!short[cast(size_t)(n / (n / 10000.0 + 5))] / 2))).fade
 			.array.memorySoundSource(sr);
 
+		sndEnemyFire = (sr/3).iota.map!(n => short(squareWave!short(n / 1500.0 + 30)[n] / 4)).fade
+			.array.memorySoundSource(sr);
 	}
 
 	override int run(string[] args)
