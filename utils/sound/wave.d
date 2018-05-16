@@ -52,6 +52,13 @@ auto whiteNoise(T)()
 		.map!(n => cast(T)Xorshift(cast(uint)n).front);
 }
 
+auto whiteNoiseSqr(T)()
+{
+	import std.random;
+	return infiniteIota!size_t
+		.map!(n => Xorshift(cast(uint)n).front % 2 ? T.max : T.min);
+}
+
 // Fade out this wave (multiply samples by a linearly descending factor).
 auto fade(W)(W w)
 {
