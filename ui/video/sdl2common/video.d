@@ -51,7 +51,7 @@ protected:
 	}
 
 	uint getSDLFlags     () { return 0; }
-	SDL_RendererFlags getRendererFlags() { return cast(SDL_RendererFlags)0; }
+	SDL_RendererFlags getRendererFlags() { return SDL_RENDERER_PRESENTVSYNC; }
 	void prepare() {}
 
 	uint screenWidth, screenHeight;
