@@ -72,6 +72,7 @@ enum Sound
 {
 	fire,
 	warpIn,
+	torpedoHit,
 }
 Sound[] sounds;
 
@@ -563,6 +564,7 @@ class Torpedo : GameObject
 				frand()*sin(a)*0.000_300f - 0.000_100f,
 				0.003f));
 		}
+		sounds ~= Sound.torpedoHit;
 	}
 
 	override void render()
