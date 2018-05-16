@@ -63,7 +63,7 @@ class SoftwareMixer : Mixer
 				buffer[0..samples.length] += samples[]; // Fast vector math!
 
 				if (samples.length < buffer.length) // EOF?
-					streams.remove(i);
+					streams = streams.remove(i);
 			}
 			stream.pos += buffer.length;
 		}
