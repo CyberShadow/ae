@@ -14,7 +14,7 @@
 module ae.utils.sound.windows;
 version (Windows):
 
-import ae.utils.sound.riff;
+import ae.utils.sound.riff.writer;
 
 import core.time;
 
