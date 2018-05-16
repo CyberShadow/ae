@@ -52,7 +52,8 @@ template WaveSoundSource(Wave)
 
 		override size_t copySamples(size_t channel, size_t start, Sample[] buffer) const nothrow
 		{
-			auto remaining = copy(wave.drop(start).take(buffer.length), buffer);
+			auto w = cast(Wave)wave; // Break constness because Map.save is not const
+			auto remaining = copy(w.drop(start).take(buffer.length), buffer);
 			return buffer.length - remaining.length;
 		}
 
