@@ -74,6 +74,7 @@ enum Sound
 	warpIn,
 	torpedoHit,
 	enemyFire,
+	explosion,
 }
 Sound[] sounds;
 
@@ -895,6 +896,7 @@ class Splode : GameEntity
 {
 	float x, y, r, cr;
 	bool growing;
+	static uint index;
 
 	this(float x, float y, float r)
 	{
@@ -904,6 +906,8 @@ class Splode : GameEntity
 		this.cr = 0;
 		this.growing = true;
 		add(Plane.Explosions);
+		if (index++ % 16 == 0)
+			sounds ~= Sound.explosion;
 	}
 
 	override void step(uint deltaTicks)

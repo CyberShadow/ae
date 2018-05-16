@@ -27,6 +27,7 @@ import ae.ui.app.posix.main;
 import ae.ui.audio.mixer.software;
 import ae.ui.audio.sdl2.audio;
 import ae.ui.audio.source.memory;
+import ae.ui.audio.source.wave;
 import ae.ui.shell.shell;
 import ae.ui.shell.sdl2.shell;
 import ae.ui.video.video;
@@ -120,6 +121,7 @@ final class MyApplication : Application
 				case Sound.warpIn    : shell.audio.mixer.playSound(sndWarpIn    ); break;
 				case Sound.torpedoHit: shell.audio.mixer.playSound(sndTorpedoHit); break;
 				case Sound.enemyFire : shell.audio.mixer.playSound(sndEnemyFire ); break;
+				case Sound.explosion : playExplosion();                            break;
 			}
 		sounds = null;
 	}
@@ -229,6 +231,14 @@ final class MyApplication : Application
 
 		sndEnemyFire = (sr/3).iota.map!(n => short(squareWave!short(n / 1500.0 + 30)[n] / 4)).fade
 			.array.memorySoundSource(sr);
+	}
+
+	private final void playExplosion()
+	{
+		enum sr = 44100;
+		auto freq = uniform(50, 100);
+		auto w = (sr*2).I!(dur => dur.iota.map!(n => short(whiteNoise!short[cast(size_t)(n / (n / 10000.0 + freq))] / 4))).fade;
+		shell.audio.mixer.playSound(w.waveSoundSource(sr));
 	}
 
 	override int run(string[] args)
