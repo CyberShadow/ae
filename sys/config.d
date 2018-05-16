@@ -131,6 +131,8 @@ class Config
 			enforce(RegQueryValueExW(key, toUTFz!LPCWSTR(name), null, null, null, &size) == ERROR_SUCCESS);
 			return size;
 		}
+
+		void save() {}
 	}
 	else // POSIX
 	{
