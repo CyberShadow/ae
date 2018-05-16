@@ -57,10 +57,21 @@ template aSoundFormat(T)
 void playWave(Wave)(Wave wave, int sampleRate = 44100)
 {
 	alias Sample = typeof(wave.front);
+	static if (is(Sample C : C[channels_], size_t channels_))
+	{
+		alias ChannelSample = C;
+		enum channels = channels_;
+	}
+	else
+	{
+		alias ChannelSample = Sample;
+		enum channels = 1;
+	}
 	auto p = pipe();
 	auto pid = spawnProcess([
 			"aplay",
-			"--format", aSoundFormat!Sample,
+			"--format", aSoundFormat!ChannelSample,
+			"--channels", text(channels),
 			"--rate", text(sampleRate),
 		], p.readEnd());
 	while (!wave.empty)
