@@ -565,3 +565,12 @@ unittest
 	list(name, null, value) = "NAME=VALUE".findSplit("=");
 	assert(name == "NAME" && value == "VALUE");
 }
+
+version(LittleEndian)
+unittest
+{
+	uint onlyValue;
+	ubyte[] data = [ubyte(42), 0, 0, 0];
+	list(onlyValue) = cast(uint[])data;
+	assert(onlyValue == 42);
+}
