@@ -71,6 +71,7 @@ mixin FixMath;
 enum Sound
 {
 	fire,
+	warpIn,
 }
 Sound[] sounds;
 
@@ -315,6 +316,7 @@ class Ship : GameObject
 		add(Plane.Ship);
 		ship = this;
 		dead = spawning = true;
+		sounds ~= Sound.warpIn;
 	}
 
 	override void step(uint deltaTicks)

@@ -58,7 +58,7 @@ final class MyApplication : Application
 
 	int[InputSource.max][GameKey.max] inputMatrix;
 
-	MemorySoundSource!short sndShoot;
+	MemorySoundSource!short sndShoot, sndWarpIn;
 
 	override void render(Renderer s)
 	{
@@ -118,6 +118,9 @@ final class MyApplication : Application
 			{
 				case Sound.fire:
 					shell.audio.mixer.playSound(sndShoot);
+					break;
+				case Sound.warpIn:
+					shell.audio.mixer.playSound(sndWarpIn);
 					break;
 			}
 		sounds = null;
@@ -216,6 +219,11 @@ final class MyApplication : Application
 				dur.iota.map!(n =>
 					cast(short)(whiteNoise!short[cast(size_t)(n / (n / 10000.0 + 5))] / 4)
 			)).retro.fade.array.memorySoundSource(sr);
+		{
+			enum freq = 1000;
+			sndWarpIn = (sr*3).I!(dur => dur.iota.map!(n => n % freq < (freq * n / dur) ? short.init : short.max))
+				.array.memorySoundSource(sr);
+		}
 	}
 
 	override int run(string[] args)
