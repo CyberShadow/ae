@@ -1,5 +1,5 @@
 /**
- * Support for the RIFF file format (used in .wav files).
+ * Write support for the RIFF file format (used in .wav files).
  *
  * License:
  *   This Source Code Form is subject to the terms of
@@ -11,11 +11,13 @@
  *   Vladimir Panteleev <vladimir@thecybershadow.net>
  */
 
-module ae.utils.sound.riff;
+module ae.utils.sound.riff.writer;
 
 import std.algorithm;
 import std.conv;
 import std.range;
+
+import ae.utils.sound.riff.common;
 
 struct ValueReprRange(T)
 {
@@ -47,16 +49,6 @@ auto riffChunk(R)(char[4] name, R data)
 		valueReprRange(data.length.to!uint),
 		data
 	);
-}
-
-struct WaveFmt
-{
-	ushort format;
-	ushort numChannels;
-	uint sampleRate;
-	uint byteRate;
-	ushort blockAlign;
-	ushort bitsPerSample;
 }
 
 auto makeRiff(R)(R r, uint sampleRate = 44100)
