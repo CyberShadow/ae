@@ -106,3 +106,15 @@ unittest
 	assert(equal(pairwise!"a+b"([1, 2, 3]), [3, 5]));
 	assert(equal(pairwise!"b-a"([1, 2, 3]), [1, 1]));
 }
+
+// ************************************************************************
+
+struct InfiniteIota(T)
+{
+	T front;
+	enum empty = false;
+	void popFront() { front++; }
+	T opIndex(T offset) { return front + offset; }
+	InfiniteIota save() { return this; }
+}
+InfiniteIota!T infiniteIota(T)() { return InfiniteIota!T.init; }
