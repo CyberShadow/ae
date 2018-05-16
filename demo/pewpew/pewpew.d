@@ -64,6 +64,7 @@ final class MyApplication : Application
 
 	MemorySoundSource!short sndShoot, sndWarpIn, sndTorpedoHit, sndEnemyFire;
 	FontTextureSource!Font8x8 font;
+	int highScore;
 
 	override void render(Renderer s)
 	{
@@ -120,8 +121,14 @@ final class MyApplication : Application
 			}
 		}
 
-		auto str = "Score: %08d".format(score);
-		font.drawText(s, 4, 4, str);
+		if (highScore < score)
+		{
+			highScore = score;
+			config.write("HighScore", highScore);
+			config.save();
+		}
+		font.drawText(s, 4,  4, "     Score: %08d".format(    score));
+		font.drawText(s, 4, 12, "High Score: %08d".format(highScore));
 		
 		foreach (sound; sounds)
 			final switch (sound)
@@ -254,6 +261,7 @@ final class MyApplication : Application
 	{
 		genSounds();
 		font = new FontTextureSource!Font8x8(font8x8, BGRX(128, 128, 128));
+		highScore = config.read("HighScore", 0);
 
 		shell = new SDL2Shell(this);
 		shell.video = new SDL2SoftwareVideo();
