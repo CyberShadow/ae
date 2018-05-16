@@ -906,7 +906,7 @@ class Splode : GameEntity
 		this.cr = 0;
 		this.growing = true;
 		add(Plane.Explosions);
-		if (index++ % 16 == 0)
+		if (index++ % 32 == 0)
 			sounds ~= Sound.explosion;
 	}
 

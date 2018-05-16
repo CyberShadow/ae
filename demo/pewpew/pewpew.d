@@ -217,7 +217,7 @@ final class MyApplication : Application
 		sndShoot = (sr*2/3)
 			.I!(dur =>
 				dur.iota.map!(n =>
-					cast(short)(whiteNoise!short[cast(size_t)(n / (n / 10000.0 + 5))] / 4)
+					cast(short)(whiteNoiseSqr!short[cast(size_t)(n / (n / 10000.0 + 5))] / 8)
 			)).retro.fade.array.memorySoundSource(sr);
 
 		{
@@ -226,7 +226,7 @@ final class MyApplication : Application
 				.array.memorySoundSource(sr);
 		}
 		
-		sndTorpedoHit = (sr*2/3).I!(dur => dur.iota.map!(n => short(whiteNoise!short[cast(size_t)(n / (n / 10000.0 + 5))] / 2))).fade
+		sndTorpedoHit = (sr*2/3).I!(dur => dur.iota.map!(n => short(whiteNoiseSqr!short[cast(size_t)(n / (n / 10000.0 + 5))] / 4))).fade
 			.array.memorySoundSource(sr);
 
 		sndEnemyFire = (sr/3).iota.map!(n => short(squareWave!short(n / 1500.0 + 30)[n] / 4)).fade
@@ -237,7 +237,7 @@ final class MyApplication : Application
 	{
 		enum sr = 44100;
 		auto freq = uniform(50, 100);
-		auto w = (sr*2).I!(dur => dur.iota.map!(n => short(whiteNoise!short[cast(size_t)(n / (n / 10000.0 + freq))] / 4))).fade;
+		auto w = (sr*2).I!(dur => dur.iota.map!(n => short(whiteNoiseSqr!short[cast(size_t)(n / (n / 10000.0 + freq))] / 8))).fade;
 		shell.audio.mixer.playSound(w.waveSoundSource(sr));
 	}
 
