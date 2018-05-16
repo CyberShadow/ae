@@ -78,6 +78,8 @@ enum Sound
 }
 Sound[] sounds;
 
+int score;
+
 // *********************************************************
 
 class GameEntity
@@ -405,6 +407,7 @@ class Ship : GameObject
 	{
 		new Explosion(this, 0.150f);
 		dead = true;
+		score = 0;
 	}
 
 	override void render()
@@ -567,6 +570,7 @@ class Torpedo : GameObject
 				0.003f));
 		}
 		sounds ~= Sound.torpedoHit;
+		score += 10;
 	}
 
 	override void render()
@@ -827,6 +831,8 @@ class PlasmaOrb : Enemy
 	override void die()
 	{
 		dead = true;
+		if (ship && !ship.dead)
+			score -= 5; // These are worth less
 	}
 
 	override void render()

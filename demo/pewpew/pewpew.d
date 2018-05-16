@@ -14,6 +14,7 @@
 module ae.demo.pewpew.pewpew;
 
 import std.algorithm.iteration;
+import std.format : format;
 import std.math;
 import std.random;
 import std.datetime;
@@ -30,10 +31,12 @@ import ae.ui.audio.source.memory;
 import ae.ui.audio.source.wave;
 import ae.ui.shell.shell;
 import ae.ui.shell.sdl2.shell;
+import ae.ui.video.bmfont;
 import ae.ui.video.video;
 import ae.ui.video.sdl2.video;
 import ae.ui.video.renderer;
 import ae.utils.graphics.draw;
+import ae.utils.graphics.fonts.font8x8;
 import ae.utils.graphics.gamma;
 import ae.utils.fps;
 import ae.utils.meta;
@@ -60,60 +63,66 @@ final class MyApplication : Application
 	int[InputSource.max][GameKey.max] inputMatrix;
 
 	MemorySoundSource!short sndShoot, sndWarpIn, sndTorpedoHit, sndEnemyFire;
+	FontTextureSource!Font8x8 font;
 
 	override void render(Renderer s)
 	{
 		fps.tick(&shell.setCaption);
 
-		auto screenCanvas = s.lock();
-		scope(exit) s.unlock();
-
-		if (initializing)
 		{
-			gamma = MyGamma(ColorSpace.sRGB);
-			new Game();
-			foreach (i; 0..1000) step(10);
-			ticks = currentTick();
-			initializing = false;
+			auto screenCanvas = s.lock();
+			scope(exit) s.unlock();
+
+			if (initializing)
+			{
+				gamma = MyGamma(ColorSpace.sRGB);
+				new Game();
+				foreach (i; 0..1000) step(10);
+				ticks = currentTick();
+				initializing = false;
+			}
+
+			foreach (i, key; EnumMembers!GameKey[0..$-1])
+			{
+				enum name = __traits(allMembers, GameKey)[i];
+				bool pressed;
+				foreach (input; inputMatrix[key])
+					if (input)
+						pressed = true;
+				mixin(name ~ " = pressed;");
+			}
+
+			//auto destTicks = ticks+deltaTicks;
+			uint destTicks = currentTick();
+			// step(deltaTicks);
+			while (ticks < destTicks)
+				ticks++,
+				step(1);
+
+			auto canvasSize = min(screenCanvas.w, screenCanvas.h);
+			canvas.size(canvasSize, canvasSize);
+			canvas.fill(canvas.COLOR.init);
+			foreach (ref plane; planes)
+				foreach (obj; plane)
+					obj.render();
+
+			auto x = (screenCanvas.w-canvasSize)/2;
+			auto y = (screenCanvas.h-canvasSize)/2;
+			auto dest = screenCanvas.crop(x, y, x+canvasSize, y+canvasSize);
+
+			import std.parallelism;
+			import std.range;
+			foreach (j; taskPool.parallel(iota(canvasSize)))
+			{
+				auto src = canvas.crop(0, j, canvasSize, j+1);
+				auto ramp = gamma.lum2pixValues.ptr;
+				src.colorMap!(c => Renderer.COLOR.monochrome(ramp[c.l])).blitTo(dest, 0, j);
+			}
 		}
 
-		foreach (i, key; EnumMembers!GameKey[0..$-1])
-		{
-			enum name = __traits(allMembers, GameKey)[i];
-			bool pressed;
-			foreach (input; inputMatrix[key])
-				if (input)
-					pressed = true;
-			mixin(name ~ " = pressed;");
-		}
-
-		//auto destTicks = ticks+deltaTicks;
-		uint destTicks = currentTick();
-		// step(deltaTicks);
-		while (ticks < destTicks)
-			ticks++,
-			step(1);
-
-		auto canvasSize = min(screenCanvas.w, screenCanvas.h);
-		canvas.size(canvasSize, canvasSize);
-		canvas.fill(canvas.COLOR.init);
-		foreach (ref plane; planes)
-			foreach (obj; plane)
-				obj.render();
-
-		auto x = (screenCanvas.w-canvasSize)/2;
-		auto y = (screenCanvas.h-canvasSize)/2;
-		auto dest = screenCanvas.crop(x, y, x+canvasSize, y+canvasSize);
-
-		import std.parallelism;
-		import std.range;
-		foreach (j; taskPool.parallel(iota(canvasSize)))
-		{
-			auto src = canvas.crop(0, j, canvasSize, j+1);
-			auto ramp = gamma.lum2pixValues.ptr;
-			src.colorMap!(c => Renderer.COLOR.monochrome(ramp[c.l])).blitTo(dest, 0, j);
-		}
-
+		auto str = "Score: %08d".format(score);
+		font.drawText(s, 4, 4, str);
+		
 		foreach (sound; sounds)
 			final switch (sound)
 			{
@@ -244,6 +253,7 @@ final class MyApplication : Application
 	override int run(string[] args)
 	{
 		genSounds();
+		font = new FontTextureSource!Font8x8(font8x8, BGRX(128, 128, 128));
 
 		shell = new SDL2Shell(this);
 		shell.video = new SDL2SoftwareVideo();
