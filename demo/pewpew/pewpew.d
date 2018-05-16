@@ -13,15 +13,20 @@
 
 module ae.demo.pewpew.pewpew;
 
+import std.algorithm.iteration;
 import std.math;
 import std.random;
 import std.datetime;
 import std.algorithm : min;
 import std.conv;
+import std.range;
 import std.traits, std.typecons;
 
 import ae.ui.app.application;
 import ae.ui.app.posix.main;
+import ae.ui.audio.mixer.software;
+import ae.ui.audio.sdl2.audio;
+import ae.ui.audio.source.memory;
 import ae.ui.shell.shell;
 import ae.ui.shell.sdl2.shell;
 import ae.ui.video.video;
@@ -30,6 +35,8 @@ import ae.ui.video.renderer;
 import ae.utils.graphics.draw;
 import ae.utils.graphics.gamma;
 import ae.utils.fps;
+import ae.utils.meta;
+import ae.utils.sound.wave;
 
 import ae.demo.pewpew.objects;
 
@@ -50,6 +57,8 @@ final class MyApplication : Application
 	enum GameKey { up, down, left, right, fire, none }
 
 	int[InputSource.max][GameKey.max] inputMatrix;
+
+	MemorySoundSource!short sndShoot;
 
 	override void render(Renderer s)
 	{
@@ -103,6 +112,15 @@ final class MyApplication : Application
 			auto ramp = gamma.lum2pixValues.ptr;
 			src.colorMap!(c => Renderer.COLOR.monochrome(ramp[c.l])).blitTo(dest, 0, j);
 		}
+
+		foreach (sound; sounds)
+			final switch (sound)
+			{
+				case Sound.fire:
+					shell.audio.mixer.playSound(sndShoot);
+					break;
+			}
+		sounds = null;
 	}
 
 	void step(uint deltaTicks)
@@ -190,10 +208,26 @@ final class MyApplication : Application
 		inputMatrix[GameKey.fire][InputSource.joystick]--;
 	}
 
+	private final void genSounds()
+	{
+		enum sr = 44100;
+		sndShoot = (sr*2/3)
+			.I!(dur =>
+				dur.iota.map!(n =>
+					cast(short)(whiteNoise!short[cast(size_t)(n / (n / 10000.0 + 5))] / 4)
+			)).retro.fade.array.memorySoundSource(sr);
+	}
+
 	override int run(string[] args)
 	{
+		genSounds();
+
 		shell = new SDL2Shell(this);
 		shell.video = new SDL2SoftwareVideo();
+
+		shell.audio = new SDL2Audio();
+		shell.audio.mixer = new SoftwareMixer();
+
 		shell.run();
 		shell.video.shutdown();
 		return 0;

@@ -68,6 +68,12 @@ float frands2() { return ssqr(frands()); }
 
 mixin FixMath;
 
+enum Sound
+{
+	fire,
+}
+Sound[] sounds;
+
 // *********************************************************
 
 class GameEntity
@@ -357,6 +363,7 @@ class Ship : GameObject
 			{
 				new Torpedo(-0.034f, -0.020f);
 				new Torpedo(+0.034f, -0.020f);
+				sounds ~= Sound.fire;
 			}
 			wasFiring = !!fire;
 
