@@ -109,6 +109,8 @@ class Config
 				static assert(0, "Can't write values of type " ~ T.stringof);
 		}
 
+		void save() {}
+
 	private:
 		HKEY key;
 
@@ -131,8 +133,6 @@ class Config
 			enforce(RegQueryValueExW(key, toUTFz!LPCWSTR(name), null, null, null, &size) == ERROR_SUCCESS);
 			return size;
 		}
-
-		void save() {}
 	}
 	else // POSIX
 	{
