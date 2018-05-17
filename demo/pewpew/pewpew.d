@@ -24,7 +24,7 @@ import std.range;
 import std.traits, std.typecons;
 
 import ae.ui.app.application;
-import ae.ui.app.posix.main;
+import ae.ui.app.main;
 import ae.ui.audio.mixer.software;
 import ae.ui.audio.sdl2.audio;
 import ae.ui.audio.source.memory;
