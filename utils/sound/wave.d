@@ -63,7 +63,7 @@ auto whiteNoiseSqr(T)()
 auto fade(W)(W w)
 {
 	alias T = typeof(w.front);
-	long dur = w.length;
+	sizediff_t dur = w.length;
 	return dur.iota.map!(p => cast(T)(w[p] * (dur-p) / dur));
 }
 
