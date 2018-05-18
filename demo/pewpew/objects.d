@@ -322,6 +322,7 @@ class Ship : GameObject
 		ship = this;
 		dead = spawning = true;
 		sounds ~= Sound.warpIn;
+		score = 0;
 	}
 
 	override void step(uint deltaTicks)
@@ -407,7 +408,6 @@ class Ship : GameObject
 	{
 		new Explosion(this, 0.150f);
 		dead = true;
-		score = 0;
 	}
 
 	override void render()
