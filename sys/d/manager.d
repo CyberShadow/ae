@@ -964,7 +964,7 @@ EOF");
 				version (Windows)
 					if (config.build.components.dmd.dmdModel != Component.CommonConfig.defaultModel)
 						dmdVer = "v2.070.2"; // dmd/src/builtin.d needs core.stdc.math.fabsl. 2.068.2 generates a dmd which crashes on building Phobos
-				if (dmdMakeFullName.readText().canFind(" -mv=")) // 2.079 is needed since 2.080 for converting backend to D
+				if (sourceDir.buildPath("src/dmd/backend/dvec.d").exists) // 2.079 is needed since 2.080
 					dmdVer = "v2.079.0";
 				needDMD(env, dmdVer);
 
