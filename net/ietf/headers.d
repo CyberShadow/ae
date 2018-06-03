@@ -28,6 +28,19 @@ struct Headers
 
 	private Header[][CIAsciiString] headers;
 
+	this(string[string] aa)
+	{
+		foreach (k, v; aa)
+			this.add(k, v);
+	}
+
+	this(string[][string] aa)
+	{
+		foreach (k, vals; aa)
+			foreach (v; vals)
+				this.add(k, v);
+	}
+
 	/// If multiple headers with this name are present,
 	/// only the first one is returned.
 	ref inout(string) opIndex(string name) inout
