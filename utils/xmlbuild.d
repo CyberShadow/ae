@@ -109,6 +109,9 @@ struct XmlBuildInfo
 	XmlBuildNode[] children;
 }
 
+version(unittest) import std.array : split;
+version(unittest) import std.algorithm.sorting : sort;
+
 unittest
 {
 	auto svg = newXml().svg();
@@ -118,7 +121,14 @@ unittest
 	text = "I love SVG";
 
 	auto s = svg.toString();
-	string s1 = `<svg xmlns="http://www.w3.org/2000/svg" version="1.1"><text fill="red" x="0" y="15">I love SVG</text></svg>`;
-	string s2 = `<svg xmlns="http://www.w3.org/2000/svg" version="1.1"><text x="0" y="15" fill="red">I love SVG</text></svg>`;
-	assert(s == s1 || s == s2, s);
+
+	enum start = `<svg xmlns="http://www.w3.org/2000/svg" version="1.1"><text `;
+	assert(s[0..start.length] == start);
+	s = s[start.length..$];
+
+	enum end = `>I love SVG</text></svg>`;
+	assert(s[$-end.length..$] == end);
+	s = s[0..$-end.length];
+
+	assert(s.split.sort == `x="0" y="15" fill="red"`.split.sort);
 }
