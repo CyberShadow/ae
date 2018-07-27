@@ -340,7 +340,7 @@ class OpenSSLAdapter : SSLAdapter
 		debug(OPENSSL) stderr.writeln("OpenSSL: onDisconnect finished");
 	}
 
-	alias send = super.send;
+	alias send = typeof(super).send;
 
 	void sslError(int ret, string msg)
 	{
