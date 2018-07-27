@@ -13,6 +13,7 @@
 
 module ae.sys.database;
 
+import std.conv;
 import std.exception;
 
 import ae.sys.sqlite3;
@@ -72,7 +73,7 @@ struct Database
 			enforce(userVersion <= schema.length, "Database schema version newer than latest supported by this program!");
 			foreach (upgradeInstruction; schema[userVersion..$])
 				instance.exec(upgradeInstruction);
-			stmt!"PRAGMA user_version = ?".exec(schema.length);
+			instance.exec("PRAGMA user_version = " ~ text(schema.length));
 		}
 
 		return instance;
