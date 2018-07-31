@@ -25,7 +25,7 @@ struct Database
 	string dbFileName;
 	string[] schema;
 
-	this(string dbFileName, string[] schema)
+	this(string dbFileName, string[] schema = null)
 	{
 		this.dbFileName = dbFileName;
 		this.schema = schema;
@@ -67,13 +67,16 @@ struct Database
 		// line or cron
 		instance.exec("PRAGMA busy_timeout = 100;");
 
-		auto userVersion = stmt!"PRAGMA user_version".iterate().selectValue!int;
-		if (userVersion != schema.length)
+		if (schema !is null)
 		{
-			enforce(userVersion <= schema.length, "Database schema version newer than latest supported by this program!");
-			foreach (upgradeInstruction; schema[userVersion..$])
-				instance.exec(upgradeInstruction);
-			instance.exec("PRAGMA user_version = " ~ text(schema.length));
+			auto userVersion = stmt!"PRAGMA user_version".iterate().selectValue!int;
+			if (userVersion != schema.length)
+			{
+				enforce(userVersion <= schema.length, "Database schema version newer than latest supported by this program!");
+				foreach (upgradeInstruction; schema[userVersion..$])
+					instance.exec(upgradeInstruction);
+				instance.exec("PRAGMA user_version = " ~ text(schema.length));
+			}
 		}
 
 		return instance;
