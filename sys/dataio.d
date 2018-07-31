@@ -38,7 +38,7 @@ template readStreamData()
 
 static import std.stdio;
 
-Data readFileData(ref std.stdio.File f)
+Data readFileData(std.stdio.File f)
 {
 	Data result;
 	auto size = f.size;
