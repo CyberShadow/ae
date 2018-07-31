@@ -13,6 +13,7 @@ sourcePaths "sys" "utils" "net"
 importPaths "sys" "utils" "net"
 
 # In ae:sqlite
+excludedSourceFiles "sys/database.d"
 excludedSourceFiles "sys/sqlite3.d"
 excludedSourceFiles "sys/persistence/keyvalue.d"
 
@@ -62,6 +63,7 @@ subPackage {
 	systemDependencies "SQLite 3"
 	dependency "ae" version="*" path="."
 	sourceFiles \
+		"sys/database.d" \
 		"sys/sqlite3.d" \
 		"sys/persistence/keyvalue.d"
 }
