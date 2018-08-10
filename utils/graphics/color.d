@@ -149,8 +149,12 @@ struct Color(FieldTuple...)
 			c.g = s[2..4].to!ubyte(16);
 			c.b = s[4..6].to!ubyte(16);
 			static if (is(typeof(this.a) == ubyte))
+			{
 				if (s.length == 8)
 					c.a = s[6..8].to!ubyte(16);
+				else
+					c.a = ubyte.max;
+			}
 			return c;
 		}
 
