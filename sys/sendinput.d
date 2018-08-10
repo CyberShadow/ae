@@ -115,6 +115,17 @@ version (linux)
 			assert(false, "TODO");
 	}
 
+	auto getPixel(int x, int y)
+	{
+		static if (haveX11)
+		{
+			auto r = captureRect(Rect!int(x, y, x+1, y+1));
+			return r[0, 0];
+		}
+		else
+			assert(false, "TODO");
+	}
+
 	Window findWindowByName(string name)
 	{
 		// TODO haveX11
