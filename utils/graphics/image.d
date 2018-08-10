@@ -32,7 +32,7 @@ struct ImageRef(COLOR)
 	COLOR* pixels;
 
 	/// Returns an array for the pixels at row y.
-	COLOR[] scanline(int y)
+	inout(COLOR)[] scanline(int y) inout
 	{
 		assert(y>=0 && y<h, "Scanline out-of-bounds");
 		assert(pitch, "Pitch not set");
@@ -75,7 +75,7 @@ struct Image(COLOR)
 	COLOR[] pixels;
 
 	/// Returns an array for the pixels at row y.
-	COLOR[] scanline(int y)
+	inout(COLOR)[] scanline(int y) inout
 	{
 		assert(y>=0 && y<h, "Scanline out-of-bounds");
 		auto start = w*y;

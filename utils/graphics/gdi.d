@@ -55,7 +55,7 @@ struct GDICanvas(COLOR)
 	int w, h;
 	COLOR* pixels;
 
-	COLOR[] scanline(int y)
+	inout(COLOR)[] scanline(int y) inout
 	{
 		assert(y>=0 && y<h);
 		return pixels[w*y..w*(y+1)];

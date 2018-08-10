@@ -44,10 +44,11 @@ enum isDirectView(T) =
 /// existing direct view primitives.
 mixin template DirectView()
 {
-	alias COLOR = typeof(scanline(0)[0]);
+	import std.traits : Unqual;
+	alias COLOR = Unqual!(typeof(scanline(0)[0]));
 
 	/// Implements the view[x, y] operator.
-	ref COLOR opIndex(int x, int y)
+	ref inout(COLOR) opIndex(int x, int y) inout
 	{
 		return scanline(y)[x];
 	}
