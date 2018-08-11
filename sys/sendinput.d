@@ -44,13 +44,21 @@ version (linux)
 	import std.process;
 
 	static if (haveX11)
-	private Display* getDisplay()
 	{
-		static Display* dpy;
-		if (!dpy)
-			dpy = XOpenDisplay(null);
-		enforce(dpy, "Can't open display!");
-		return dpy;
+		private static Display* dpy;
+		private Display* getDisplay()
+		{
+			if (!dpy)
+				dpy = XOpenDisplay(null);
+			enforce(dpy, "Can't open display!");
+			return dpy;
+		}
+		static ~this()
+		{
+			if (dpy)
+				XCloseDisplay(dpy);
+			dpy = null;
+		}
 	}
 
 	void setMousePos(int x, int y)
