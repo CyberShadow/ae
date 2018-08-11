@@ -37,6 +37,7 @@ version (linux)
 
 		import deimos.X11.X;
 		import deimos.X11.Xlib;
+		import deimos.X11.Xutil;
 	}
 
 	import std.conv;
@@ -92,7 +93,7 @@ version (linux)
 		{
 			auto dpy = getDisplay();
 			auto ximage = XGetImage(dpy, window, r.x0, r.y0, r.w, r.h, AllPlanes, ZPixmap).xEnforce("XGetImage");
-			scope(exit) XFree(ximage);
+			scope(exit) XDestroyImage(ximage);
 
 			enforce(ximage.format == ZPixmap, "Wrong image format (expected ZPixmap)");
 			enforce(ximage.bits_per_pixel == 32, "Wrong image bits_per_pixel (expected 32)");
