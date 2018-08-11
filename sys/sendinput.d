@@ -87,7 +87,7 @@ version (linux)
 		}
 	}
 
-	auto captureWindowRect(Window window, Rect!int r)
+	void captureWindowRect(Window window, Rect!int r, ref Image!BGRA image)
 	{
 		static if (haveX11)
 		{
@@ -99,7 +99,25 @@ version (linux)
 			enforce(ximage.bits_per_pixel == 32, "Wrong image bits_per_pixel (expected 32)");
 
 			alias COLOR = BGRA;
-			return ImageRef!COLOR(ximage.width, ximage.height, ximage.chars_per_line, cast(COLOR*) ximage.data).copy();
+			ImageRef!COLOR(ximage.width, ximage.height, ximage.chars_per_line, cast(COLOR*) ximage.data).copy(image);
+		}
+		else
+			assert(false, "TODO");
+	}
+
+	auto captureWindowRect(Window window, Rect!int r)
+	{
+		Image!BGRA image;
+		captureWindowRect(window, r, image);
+		return image;
+	}
+
+	auto captureRect(Rect!int r, ref Image!BGRA image)
+	{
+		static if (haveX11)
+		{
+			auto dpy = getDisplay();
+			return captureWindowRect(RootWindow(dpy, DefaultScreen(dpy)), r, image);
 		}
 		else
 			assert(false, "TODO");
@@ -107,20 +125,17 @@ version (linux)
 
 	auto captureRect(Rect!int r)
 	{
-		static if (haveX11)
-		{
-			auto dpy = getDisplay();
-			return captureWindowRect(RootWindow(dpy, DefaultScreen(dpy)), r);
-		}
-		else
-			assert(false, "TODO");
+		Image!BGRA image;
+		captureRect(r, image);
+		return image;
 	}
 
 	auto getPixel(int x, int y)
 	{
 		static if (haveX11)
 		{
-			auto r = captureRect(Rect!int(x, y, x+1, y+1));
+			static Image!BGRA r;
+			captureRect(Rect!int(x, y, x+1, y+1), r);
 			return r[0, 0];
 		}
 		else
