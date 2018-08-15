@@ -53,9 +53,9 @@ final class MyApplication : Application
 			return;
 
 		s.clear();
-		this.height = s.height;
+		this.height = s.height / zoom;
 
-		shell.setCaption(format("Offset = 0x%08X Width=0x%X (%d)", offset, width, width));
+		shell.setCaption(format("Offset = 0x%08X Width=0x%X (%d) BPP=%d", offset, width, width, bpp));
 
 		auto start = min(offset, f.length);
 		auto length = width * height;
@@ -69,10 +69,23 @@ final class MyApplication : Application
 			auto bytes = cast(ubyte[])data[i * bpp .. (i+1) * bpp];
 			if (bytes.canFind!identity) // leave 0 as black
 			{
-				auto c = crc32Of(bytes);
+				BGRX p;
+				if (bpp > 3)
+				{
+					auto c = crc32Of(bytes);
+					p = BGRX(c[0], c[1], c[2]);
+				}
+				else
+				{
+					ubyte[3] channels;
+					foreach (n, ref c; channels)
+						c = bytes[n % $];
+					p = BGRX(channels[0], channels[1], channels[2]);
+				}
+
 				auto x = cast(int)(i % width);
 				auto y = cast(int)(i / width);
-				s.fillRect(x * zoom, y * zoom, (x+1) * zoom, (y+1) * zoom, BGRX(c[0], c[1], c[2]));
+				s.fillRect(x * zoom, y * zoom, (x+1) * zoom, (y+1) * zoom, p);
 			}
 		}
 
@@ -84,10 +97,18 @@ final class MyApplication : Application
 	override int run(string[] args)
 	{
 		shell = new SDL2Shell(this);
-		shell.video = new SDL2Video();
+		shell.video = new SDL2SoftwareVideo();
 		shell.run();
 		shell.video.shutdown();
 		return 0;
+	}
+
+	void navigate(uint bytes, bool forward)
+	{
+		if (forward)
+			offset = min(offset + bytes, f.length);
+		else
+			offset = offset > bytes ? offset - bytes : 0;
 	}
 
 	override void handleKeyDown(Key key, dchar character)
@@ -97,30 +118,14 @@ final class MyApplication : Application
 			case Key.esc:
 				shell.quit();
 				break;
-			case Key.left:
-				offset = offset > 0            ? offset - 1            : 0;
-				break;
-			case Key.right:
-				offset += 1;
-				break;
-			case Key.up:
-				offset = offset > width        ? offset - width        : 0;
-				break;
-			case Key.down:
-				offset += width;
-				break;
-			case Key.pageUp:
-				offset = offset > width*height ? offset - width*height : 0;
-				break;
-			case Key.pageDown:
-				offset += width*height;
-				break;
-			case Key.home:
-				width = width ? width-1 : 0;
-				break;
-			case Key.end:
-				width++;
-				break;
+			case Key.left    : navigate(          1         , false); break;
+			case Key.right   : navigate(          1         , true ); break;
+			case Key.up      : navigate(width * bpp         , false); break;
+			case Key.down    : navigate(width * bpp         , true ); break;
+			case Key.pageUp  : navigate(width * height * bpp, false); break;
+			case Key.pageDown: navigate(width * height * bpp, true ); break;
+			case Key.home    : width = width ? width-1 : 0; break;
+			case Key.end     : width++; break;
 			default:
 				switch (character)
 				{
@@ -130,6 +135,7 @@ final class MyApplication : Application
 						bpp = character - '0';
 						break;
 					case '+':
+					case '=':
 						zoom++;
 						break;
 					case '-':
