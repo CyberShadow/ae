@@ -45,6 +45,7 @@ final class MyApplication : Application
 	uint dirty = 3;
 	uint lastWidth, lastHeight;
 	uint bpp = 1;
+	uint zoom = 4;
 
 	override void render(Renderer s)
 	{
@@ -69,7 +70,9 @@ final class MyApplication : Application
 			if (bytes.canFind!identity) // leave 0 as black
 			{
 				auto c = crc32Of(bytes);
-				s.putPixel(cast(int)(i % width), cast(int)(i / width), BGRX(c[0], c[1], c[2]));
+				auto x = cast(int)(i % width);
+				auto y = cast(int)(i / width);
+				s.fillRect(x * zoom, y * zoom, (x+1) * zoom, (y+1) * zoom, BGRX(c[0], c[1], c[2]));
 			}
 		}
 
@@ -125,6 +128,13 @@ final class MyApplication : Application
 						..
 					case '9':
 						bpp = character - '0';
+						break;
+					case '+':
+						zoom++;
+						break;
+					case '-':
+						if (zoom > 1)
+							zoom--;
 						break;
 					default:
 						return;
