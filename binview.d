@@ -2,7 +2,9 @@ import core.runtime;
 import core.time;
 
 import std.algorithm.comparison;
+import std.algorithm.searching;
 import std.conv;
+import std.digest.crc;
 import std.exception;
 import std.format;
 import std.math;
@@ -42,6 +44,7 @@ final class MyApplication : Application
 
 	uint dirty = 3;
 	uint lastWidth, lastHeight;
+	uint bpp = 1;
 
 	override void render(Renderer s)
 	{
@@ -55,12 +58,20 @@ final class MyApplication : Application
 
 		auto start = min(offset, f.length);
 		auto length = width * height;
-		auto end = min(offset + length, f.length);
+		auto end = min(offset + length * bpp, f.length);
 
 		auto data = f[start .. end];
+		data = data[0 .. $ - $ % bpp];
 
-		foreach (i, b; cast(ubyte[])data)
-			s.putPixel(cast(int)(i % width), cast(int)(i / width), BGRX(b, b, b));
+		foreach (i; 0..length)
+		{
+			auto bytes = cast(ubyte[])data[i * bpp .. (i+1) * bpp];
+			if (bytes.canFind!identity) // leave 0 as black
+			{
+				auto c = crc32Of(bytes);
+				s.putPixel(cast(int)(i % width), cast(int)(i / width), BGRX(c[0], c[1], c[2]));
+			}
+		}
 
 		dirty--;
 		lastWidth = s.width;
@@ -108,7 +119,16 @@ final class MyApplication : Application
 				width++;
 				break;
 			default:
-				return;
+				switch (character)
+				{
+					case '1':
+						..
+					case '9':
+						bpp = character - '0';
+						break;
+					default:
+						return;
+				}
 		}
 		dirty = 3;
 	}
