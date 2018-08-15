@@ -64,7 +64,7 @@ final class MyApplication : Application
 		auto data = f[start .. end];
 		data = data[0 .. $ - $ % bpp];
 
-		foreach (i; 0..length)
+		foreach (i; 0 .. data.length / bpp)
 		{
 			auto bytes = cast(ubyte[])data[i * bpp .. (i+1) * bpp];
 			if (bytes.canFind!identity) // leave 0 as black
