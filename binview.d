@@ -149,6 +149,13 @@ final class MyApplication : Application
 		dirty = 3;
 	}
 
+	override void handleMouseMove(uint x, uint y, MouseButtons buttons)
+	{
+		auto addr = offset + ((y / zoom) * width + (x / zoom)) * bpp;
+		shell.setCaption(format("x=%d y=%d addr=%08X data=%(%02X %)",
+				x / zoom, y / zoom, addr, (addr+bpp) < f.length ? cast(ubyte[])f[addr..addr+bpp] : null));
+	}
+
 	override void handleQuit()
 	{
 		shell.quit();
