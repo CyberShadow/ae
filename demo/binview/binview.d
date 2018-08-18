@@ -1,3 +1,18 @@
+/**
+ * View binary file as image
+ *
+ * License:
+ *   This Source Code Form is subject to the terms of
+ *   the Mozilla Public License, v. 2.0. If a copy of
+ *   the MPL was not distributed with this file, You
+ *   can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * Authors:
+ *   Vladimir Panteleev <vladimir@thecybershadow.net>
+ */
+
+module ae.demo.binview.binview;
+
 import core.runtime;
 import core.time;
 
@@ -26,7 +41,7 @@ import ae.utils.meta;
 
 final class MyApplication : Application
 {
-	override string getName() { return "Albion/BinView"; }
+	override string getName() { return "Demo/BinView"; }
 	override string getCompanyName() { return "CyberShadow"; }
 
 	Shell shell;

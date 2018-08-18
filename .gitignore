@@ -17,6 +17,7 @@ dub.selections.json
 /ae-test-library
 
 # demos - rdmd binaries
+/demo/binview/binview
 /demo/canvas/main
 /demo/colorcube/colorcube
 /demo/drawsprite/main
