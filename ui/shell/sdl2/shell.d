@@ -262,10 +262,14 @@ Key[SDL_NUM_SCANCODES] sdlKeys;
 
 shared static this()
 {
-	sdlKeys[SDL_SCANCODE_UP    ] = Key.up   ;
-	sdlKeys[SDL_SCANCODE_DOWN  ] = Key.down ;
-	sdlKeys[SDL_SCANCODE_LEFT  ] = Key.left ;
-	sdlKeys[SDL_SCANCODE_RIGHT ] = Key.right;
-	sdlKeys[SDL_SCANCODE_SPACE ] = Key.space;
-	sdlKeys[SDL_SCANCODE_ESCAPE] = Key.esc  ;
+	sdlKeys[SDL_SCANCODE_UP      ] = Key.up      ;
+	sdlKeys[SDL_SCANCODE_DOWN    ] = Key.down    ;
+	sdlKeys[SDL_SCANCODE_LEFT    ] = Key.left    ;
+	sdlKeys[SDL_SCANCODE_RIGHT   ] = Key.right   ;
+	sdlKeys[SDL_SCANCODE_PAGEUP  ] = Key.pageUp  ;
+	sdlKeys[SDL_SCANCODE_PAGEDOWN] = Key.pageDown;
+	sdlKeys[SDL_SCANCODE_HOME    ] = Key.home    ;
+	sdlKeys[SDL_SCANCODE_END     ] = Key.end     ;
+	sdlKeys[SDL_SCANCODE_SPACE   ] = Key.space   ;
+	sdlKeys[SDL_SCANCODE_ESCAPE  ] = Key.esc     ;
 }

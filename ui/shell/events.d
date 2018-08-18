@@ -41,6 +41,10 @@ enum Key
 	down,
 	left,
 	right,
+	pageUp,
+	pageDown,
+	home,
+	end,
 	space
 }
 
