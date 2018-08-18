@@ -30,7 +30,7 @@ class Renderer
 		COLOR* pixels;
 		int w, h, stride;
 
-		COLOR[] scanline(int y)
+		inout(COLOR)[] scanline(int y) inout
 		{
 			assert(y>=0 && y<h);
 			return pixels[stride*y..stride*(y+1)];
