@@ -243,10 +243,24 @@ public import std.digest.md;
 /// Similar to the old std.md5.getDigestString.
 template getDigestString(Digest)
 {
-	string getDigestString(T)(in T[][] data...)
+	string getDigestString(T)(const(T)[][] data...)
 		if (!hasIndirections!T)
 	{
-		return getDigestStringImpl(cast(const(ubyte[])[])data);
+		return getDigestStringImpl(arrOfArrCastInPlace!(const(ubyte))(data));
+	}
+
+	// A dirty hack to fix the array lengths right on the stack, to avoid an allocation.
+	T[][] arrOfArrCastInPlace(T, S)(S[][] arrs)
+	{
+		static struct Array
+		{
+			size_t length;
+			void* ptr;
+		}
+		auto rawArrs = cast(Array[])arrs;
+		foreach (ref ra; rawArrs)
+			ra.length = ra.length * S.sizeof / T.sizeof;
+		return cast(T[][])rawArrs;
 	}
 
 	string getDigestStringImpl(in ubyte[][] data)
