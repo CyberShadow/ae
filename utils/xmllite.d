@@ -503,7 +503,8 @@ void parseInto(Config)(XmlNode node, ref StringStream s, string parentTag = null
 		else
 		{
 			node.type = XmlNodeType.Node;
-			node.tag = c~readWord(s);
+			s.position--;
+			node.tag = readWord(s);
 			while (true)
 			{
 				skipWhitespace(s);
