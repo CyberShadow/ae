@@ -481,6 +481,135 @@ unittest
 
 // ***************************************************************************
 
+struct OrderedSet(T)
+{
+	T[] items;
+	size_t[T] index;
+
+	this(R)(R r)
+	if (isInputRange!R)
+	{
+		foreach (k; r)
+			add(k);
+	}
+
+	static if (is(typeof(items.dup && index.dup)))
+	{
+		this(this)
+		{
+			items = items.dup;
+			index = index.dup;
+		}
+	}
+	else
+		@disable this(this);
+
+	void clear()
+	{
+		items = null;
+		index = null;
+	}
+
+	bool opCast(T)() const
+	if (is(T == bool))
+	{
+		return !!index;
+	}
+
+	ref inout(T) opIndex()(size_t i) inout
+	{
+		return items[i];
+	}
+
+	ref T opIndexAssign()(auto ref T v, size_t i)
+	{
+		assert(i < items.length);
+		index.remove(items[i]);
+		items[i] = v;
+		index[v] = i;
+		return items[i];
+	}
+
+	bool opIn_r()(auto ref in T v) inout
+	{
+		return !!(v in index);
+	}
+
+	ref T add()(auto ref T v)
+	{
+		auto pi = v in index;
+		if (pi)
+		{
+			auto pv = &items[*pi];
+			*pv = v;
+			return *pv;
+		}
+
+		index[v] = items.length;
+		items ~= v;
+		return items[$-1];
+	}
+
+	void remove()(auto ref T v)
+	{
+		auto i = index[v];
+		index.remove(v);
+		items = items.remove(i);
+		foreach (key, ref idx; index)
+			if (idx > i)
+				idx--;
+	}
+
+	@property size_t length() const { return items.length; }
+
+	@property typeof(this) dup()
+	{
+		typeof(this) result;
+		result.items = items.dup;
+		result.index = index.dup;
+		return result;
+	}
+}
+
+unittest
+{
+	OrderedSet!int set;
+
+	assert(1 !in set);
+	set.add(1);
+	assert(1 in set);
+	set.remove(1);
+	assert(1 !in set);
+
+	set.add(1);
+	set.clear();
+	assert(1 !in set);
+
+	set = set.init;
+	assert(!set);
+	set.add(1);
+	assert(!!set);
+
+	assert(set[0] == 1);
+	set[0] = 2;
+	assert(set[0] == 2);
+	assert(1 !in set);
+	assert(2 in set);
+
+	assert(set.length == 1);
+	set.remove(2);
+	assert(set.length == 0);
+
+	set.add(1);
+	auto set2 = set;
+	set.remove(1);
+	set.add(2);
+	assert(1 !in set && 2 in set);
+	assert(1 in set2 && 2 !in set2);
+}
+
+// ***************************************************************************
+
 /// An object which acts mostly as an associative array,
 /// with the added property of being able to hold keys with
 /// multiple values. These are only exposed explicitly and
