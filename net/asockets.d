@@ -924,7 +924,7 @@ public:
 		return false;
 	}
 
-	final bool queuePresent(int priority)
+	final bool queuePresent(int priority = DEFAULT_PRIORITY)
 	{
 		if (partiallySent[priority])
 		{
@@ -933,6 +933,19 @@ public:
 		}
 		else
 			return outQueue[priority].length > 0;
+	}
+
+	final size_t packetsQueued(int priority = DEFAULT_PRIORITY)
+	{
+		return outQueue[priority].length;
+	}
+
+	final size_t bytesQueued(int priority = DEFAULT_PRIORITY)
+	{
+		size_t bytes;
+		foreach (datum; outQueue[priority])
+			bytes += datum.length;
+		return bytes;
 	}
 
 public:
