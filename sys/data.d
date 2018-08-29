@@ -26,6 +26,9 @@
  *  $(LI Small objects may be stored inefficiently, as the module requests
  *       entire pages of memory from the OS. Considering allocating one large
  *       object and use slices (Data instances) for individual objects.)
+ *  $(LI Incorrect usage (i.e. retaining/escaping references to wrapped memory
+ *       without keeping a reference to its corresponding DataWrapper) can
+ *       result in dangling pointers and hard-to-debug memory corruption.)
  * )
  *
  * License:
