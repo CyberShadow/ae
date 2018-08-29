@@ -1366,6 +1366,203 @@ public:
 
 // ***************************************************************************
 
+/// An asynchronous UDP stream.
+/// UDP does not have connections, so this class encapsulates a socket
+/// with a fixed destination (sendto) address, and optionally bound to
+/// a local address.
+/// Currently received packets' address is not exposed.
+class UdpConnection : Connection
+{
+protected:
+	this(Socket conn)
+	{
+		super(conn);
+	}
+
+	/// Called when a socket is writable.
+	override void onWritable()
+	{
+		//scope(success) updateFlags();
+		onWritableImpl();
+		updateFlags();
+	}
+
+	// Work around scope(success) breaking debugger stack traces
+	final private void onWritableImpl()
+	{
+		foreach (priority, ref queue; outQueue)
+			while (queue.length)
+			{
+				auto pdata = queue.ptr; // pointer to first data
+
+				auto sent = conn.sendTo(pdata.contents, remoteAddress);
+
+				if (sent == Socket.ERROR)
+				{
+					if (wouldHaveBlocked())
+						return;
+					else
+						return onError("send() error: " ~ lastSocketError);
+				}
+				else
+				if (sent < pdata.length)
+				{
+					return onError("Sent only %d/%d bytes of the datagram!".format(sent, pdata.length));
+				}
+				else
+				{
+					assert(sent == pdata.length);
+					//debug writefln("[%s] Sent data:", remoteAddress);
+					//debug writefln("%s", hexDump(pdata.contents[0..sent]));
+					pdata.clear();
+					queue = queue[1..$];
+					if (queue.length == 0)
+						queue = null;
+				}
+			}
+
+		// outQueue is now empty
+		if (bufferFlushedHandler)
+			bufferFlushedHandler();
+		if (state == ConnectionState.disconnecting)
+		{
+			debug (ASOCKETS) writefln("Closing @ %s (Delayed disconnect - buffer flushed)", cast(void*)this);
+			close();
+		}
+	}
+
+	override sizediff_t doSend(in void[] buffer)
+	{
+		assert(false); // never called (called only from overridden methods)
+	}
+
+	override sizediff_t doReceive(void[] buffer)
+	{
+		return conn.receive(buffer);
+	}
+
+public:
+	/// Default constructor
+	this()
+	{
+		debug (ASOCKETS) writefln("New UdpConnection @ %s", cast(void*)this);
+	}
+
+	/// Initialize with the given AddressFamily, without binding to an address.
+	final void initialize(AddressFamily family, SocketType type = SocketType.DGRAM, ProtocolType protocol = ProtocolType.UDP)
+	{
+		initializeImpl(family, type, protocol);
+		if (connectHandler)
+			connectHandler();
+	}
+
+	final void initializeImpl(AddressFamily family, SocketType type, ProtocolType protocol)
+	{
+		assert(state == ConnectionState.disconnected, "Attempting to initialize a %s socket".format(state));
+		assert(!conn);
+
+		conn = new Socket(family, type, protocol);
+		conn.blocking = false;
+		socketManager.register(this);
+		state = ConnectionState.connected;
+		updateFlags();
+	}
+
+	/// Bind to a local address in order to receive packets sent there.
+	final ushort bind(string host, ushort port)
+	{
+		assert(host.length, "Empty host");
+
+		debug (ASOCKETS) writefln("Connecting to %s:%s", host, port);
+
+		state = ConnectionState.resolving;
+
+		AddressInfo addressInfo;
+		try
+		{
+			auto addresses = getAddress(host, port);
+			enforce(addresses.length, "No addresses found");
+			debug (ASOCKETS)
+			{
+				writefln("Resolved to %s addresses:", addresses.length);
+				foreach (address; addresses)
+					writefln("- %s", address.toString());
+			}
+
+			Address address;
+			if (addresses.length > 1)
+			{
+				import std.random : uniform;
+				address = addresses[uniform(0, $)];
+			}
+			else
+				address = addresses[0];
+			addressInfo = AddressInfo(address.addressFamily, SocketType.DGRAM, ProtocolType.UDP, address, host);
+		}
+		catch (SocketException e)
+		{
+			onError("Lookup error: " ~ e.msg);
+			return 0;
+		}
+
+		state = ConnectionState.disconnected;
+		return bind(addressInfo);
+	}
+
+	/// ditto
+	final ushort bind(AddressInfo addressInfo)
+	{
+		initialize(addressInfo.family, addressInfo.type, addressInfo.protocol);
+		conn.bind(addressInfo.address);
+
+		auto address = conn.localAddress();
+		auto port = to!ushort(address.toPortString());
+
+		if (connectHandler)
+			connectHandler();
+
+		return port;
+	}
+
+public:
+	/// Where to send packets to.
+	Address remoteAddress;
+}
+
+///
+unittest
+{
+	auto server = new UdpConnection();
+	auto serverPort = server.bind("localhost", 0);
+
+	auto client = new UdpConnection();
+	client.initialize(server.localAddress.addressFamily);
+
+	string[] packets = ["Hello", "there"];
+	client.remoteAddress = server.localAddress;
+	client.send({
+		Data[] data;
+		foreach (packet; packets)
+			data ~= Data(packet);
+		return data;
+	}());
+
+	server.handleReadData = (Data data)
+	{
+		assert(data.contents == packets[0]);
+		packets = packets[1..$];
+		if (!packets.length)
+		{
+			server.close();
+			client.close();
+		}
+	};
+	socketManager.loop();
+	assert(!packets.length);
+}
+
+// ***************************************************************************
+
 /// Base class for a connection adapter.
 /// By itself, does nothing.
 class ConnectionAdapter : IConnection
