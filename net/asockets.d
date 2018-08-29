@@ -717,7 +717,7 @@ protected:
 
 	/// The send buffers.
 	Data[][MAX_PRIORITY+1] outQueue;
-	/// Whether the first item from each queue has been partially sent (and thus can't be cancelled).
+	/// Whether the first item from each queue has been partially sent (and thus can't be canceled).
 	bool[MAX_PRIORITY+1] partiallySent;
 
 	/// Constructor used by a ServerSocket for new connections
