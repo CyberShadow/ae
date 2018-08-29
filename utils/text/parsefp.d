@@ -602,7 +602,7 @@ if (is(Target == string) &&
         return f;
     }
 
-    static foreach (Float; AliasSeq!(float, double, real))
+    /*static*/ foreach (Float; AliasSeq!(float, double, real))
     {
         assert(to!Float("123") == Literal!Float(123));
         assert(to!Float("+123") == Literal!Float(+123));
