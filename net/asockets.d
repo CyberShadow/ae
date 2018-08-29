@@ -693,7 +693,7 @@ interface IConnection
 
 // ***************************************************************************
 
-class StreamConnection : GenericSocket, IConnection
+class Connection : GenericSocket, IConnection
 {
 private:
 	/// Blocks of data larger than this value are passed as unmanaged memory
@@ -703,9 +703,6 @@ private:
 	/// small objects is wasted slack space due to the page size alignment
 	/// requirement.
 	enum UNMANAGED_THRESHOLD = 256;
-
-	/// Queue of addresses to try connecting to.
-	AddressInfo[] addressQueue;
 
 	ConnectionState _state;
 	final @property ConnectionState state(ConnectionState value) { return _state = value; }
@@ -748,7 +745,7 @@ protected:
 	override void onReadable()
 	{
 		// TODO: use FIONREAD when Phobos gets ioctl support (issue 6649)
-		static ubyte[0x10000] inBuffer;
+		static ubyte[0x10000] inBuffer = void;
 		auto received = doReceive(inBuffer);
 
 		if (received == 0)
@@ -801,88 +798,6 @@ protected:
 					readDataHandler(Data(inBuffer[0 .. received], true));
 				}
 			}
-		}
-	}
-
-	/// Called when a socket is writable.
-	override void onWritable()
-	{
-		//scope(success) updateFlags();
-		onWritableImpl();
-		updateFlags();
-	}
-
-	// Work around scope(success) breaking debugger stack traces
-	final private void onWritableImpl()
-	{
-		if (state == ConnectionState.connecting)
-		{
-			state = ConnectionState.connected;
-
-			//debug writefln("[%s] Connected", remoteAddress);
-			try
-				setKeepAlive();
-			catch (Exception e)
-				return disconnect(e.msg, DisconnectType.error);
-			if (connectHandler)
-				connectHandler();
-			return;
-		}
-		//debug writefln(remoteAddress(), ": Writable - handler ", handleBufferFlushed?"OK":"not set", ", outBuffer.length=", outBuffer.length);
-
-		foreach (priority, ref queue; outQueue)
-			while (queue.length)
-			{
-				auto pdata = queue.ptr; // pointer to first data
-
-				ptrdiff_t sent = 0;
-				if (pdata.length)
-				{
-					sent = doSend(pdata.contents);
-					debug (ASOCKETS) writefln("\t\t%s: sent %d/%d bytes", this, sent, pdata.length);
-				}
-				else
-				{
-					debug (ASOCKETS) writefln("\t\t%s: empty Data object", this);
-				}
-
-				if (sent == Socket.ERROR)
-				{
-					if (wouldHaveBlocked())
-						return;
-					else
-						return onError("send() error: " ~ lastSocketError);
-				}
-				else
-				if (sent < pdata.length)
-				{
-					if (sent > 0)
-					{
-						*pdata = (*pdata)[sent..pdata.length];
-						partiallySent[priority] = true;
-					}
-					return;
-				}
-				else
-				{
-					assert(sent == pdata.length);
-					//debug writefln("[%s] Sent data:", remoteAddress);
-					//debug writefln("%s", hexDump(pdata.contents[0..sent]));
-					pdata.clear();
-					queue = queue[1..$];
-					partiallySent[priority] = false;
-					if (queue.length == 0)
-						queue = null;
-				}
-			}
-
-		// outQueue is now empty
-		if (bufferFlushedHandler)
-			bufferFlushedHandler();
-		if (state == ConnectionState.disconnecting)
-		{
-			debug (ASOCKETS) writefln("Closing @ %s (Delayed disconnect - buffer flushed)", cast(void*)this);
-			close();
 		}
 	}
 
@@ -1039,6 +954,103 @@ public:
 	@property final void handleBufferFlushed(BufferFlushedHandler value) { bufferFlushedHandler = value; updateFlags(); }
 }
 
+class StreamConnection : Connection
+{
+protected:
+	this()
+	{
+		super();
+	}
+
+	/// Called when a socket is writable.
+	override void onWritable()
+	{
+		//scope(success) updateFlags();
+		onWritableImpl();
+		updateFlags();
+	}
+
+	// Work around scope(success) breaking debugger stack traces
+	final private void onWritableImpl()
+	{
+		if (state == ConnectionState.connecting)
+		{
+			state = ConnectionState.connected;
+
+			//debug writefln("[%s] Connected", remoteAddress);
+			try
+				setKeepAlive();
+			catch (Exception e)
+				return disconnect(e.msg, DisconnectType.error);
+			if (connectHandler)
+				connectHandler();
+			return;
+		}
+		//debug writefln(remoteAddress(), ": Writable - handler ", handleBufferFlushed?"OK":"not set", ", outBuffer.length=", outBuffer.length);
+
+		foreach (priority, ref queue; outQueue)
+			while (queue.length)
+			{
+				auto pdata = queue.ptr; // pointer to first data
+
+				ptrdiff_t sent = 0;
+				if (pdata.length)
+				{
+					sent = doSend(pdata.contents);
+					debug (ASOCKETS) writefln("\t\t%s: sent %d/%d bytes", this, sent, pdata.length);
+				}
+				else
+				{
+					debug (ASOCKETS) writefln("\t\t%s: empty Data object", this);
+				}
+
+				if (sent == Socket.ERROR)
+				{
+					if (wouldHaveBlocked())
+						return;
+					else
+						return onError("send() error: " ~ lastSocketError);
+				}
+				else
+				if (sent < pdata.length)
+				{
+					if (sent > 0)
+					{
+						*pdata = (*pdata)[sent..pdata.length];
+						partiallySent[priority] = true;
+					}
+					return;
+				}
+				else
+				{
+					assert(sent == pdata.length);
+					//debug writefln("[%s] Sent data:", remoteAddress);
+					//debug writefln("%s", hexDump(pdata.contents[0..sent]));
+					pdata.clear();
+					queue = queue[1..$];
+					partiallySent[priority] = false;
+					if (queue.length == 0)
+						queue = null;
+				}
+			}
+
+		// outQueue is now empty
+		if (bufferFlushedHandler)
+			bufferFlushedHandler();
+		if (state == ConnectionState.disconnecting)
+		{
+			debug (ASOCKETS) writefln("Closing @ %s (Delayed disconnect - buffer flushed)", cast(void*)this);
+			close();
+		}
+	}
+
+public:
+	this(Socket conn)
+	{
+		super(conn);
+	}
+}
+
 // ***************************************************************************
 
 /// A POSIX file stream.
@@ -1075,6 +1087,9 @@ protected:
 class TcpConnection : StreamConnection
 {
 protected:
+	/// Queue of addresses to try connecting to.
+	AddressInfo[] addressQueue;
+
 	this(Socket conn)
 	{
 		super(conn);
