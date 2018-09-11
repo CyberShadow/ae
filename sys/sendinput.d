@@ -46,7 +46,7 @@ version (linux)
 	static if (haveX11)
 	{
 		private static Display* dpy;
-		private Display* getDisplay()
+		Display* getDisplay()
 		{
 			if (!dpy)
 				dpy = XOpenDisplay(null);
