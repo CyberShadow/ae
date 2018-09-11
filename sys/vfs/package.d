@@ -46,6 +46,9 @@ void rename(string from, string to)
 /// Returns an array of file/directory names only.
 string[] listDir(string path) { return getVFS(path).listDir(path); }
 
+/// Remove a directory and all its contents recursively.
+void rmdirRecurse(string path) { return getVFS(path).rmdirRecurse(path); }
+
 /// Get MD5 digest of file at location.
 ubyte[16] mdFile(string path) { return getVFS(path).mdFile(path); }
 
@@ -142,6 +145,9 @@ class VFS
 
 	/// Enumerate directory entries.
 	string[] listDir(string path) { assert(false, "Not implemented"); }
+
+	/// Remove a directory and all its contents recursively.
+	void rmdirRecurse(string path) { assert(false, "Not implemented"); }
 }
 
 VFS[string] registry;
@@ -222,6 +228,8 @@ class FS : VFS
 		import std.algorithm, std.path, std.array;
 		return std.file.dirEntries(path, std.file.SpanMode.shallow).map!(de => de.baseName).array;
 	}
+
+	override void rmdirRecurse(string path) { std.file.rmdirRecurse(path); }
 
 	static this()
 	{
