@@ -105,16 +105,16 @@ enum haveAliasCtxInference = __traits(compiles, TestAliasCtxInference.test());
 
 // ************************************************************************
 
-struct S(alias fun)
-{
-	void call(T)(T t)
-	{
-		fun(t);
-	}
-}
-
 struct TestAliasStructBinding
 {
+	struct S(alias fun)
+	{
+		void call(T)(T t)
+		{
+			fun(t);
+		}
+	}
+
 	static void test()()
 	{
 		int n;
