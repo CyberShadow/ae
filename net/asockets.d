@@ -1288,6 +1288,13 @@ public:
 
 		auto addressInfos = getAddressInfo(addr, to!string(port), AddressInfoFlags.PASSIVE, SocketType.STREAM, ProtocolType.TCP);
 
+		debug (ASOCKETS)
+		{
+			writefln("Resolved to %s addresses:", addressInfos.length);
+			foreach (ref addressInfo; addressInfos)
+				writefln("- %s", addressInfo);
+		}
+
 		// listen on random ports only on IPv4 for now
 		if (port == 0)
 		{
