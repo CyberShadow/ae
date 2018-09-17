@@ -27,4 +27,5 @@ else
 {
 	import ae.sys.net.ae;
 	import ae.net.ssl.openssl;
+	mixin SSLUseLib;
 }
