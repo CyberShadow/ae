@@ -97,6 +97,72 @@ string findExecutable(string name, string[] dirs)
 	return null;
 }
 
+// ************************************************************************
+
+/**
+   Find a program's "home" directory, based on the presence of a file.
+
+   This can be a directory containing files that are included with or
+   created by the program, and should be accessible no matter how the
+   program is built/invoked of which current directory it is invoked
+   from.
+
+   Use a set of individually-unreliable methods to find the path. This
+   is necessary, because:
+
+   - __FILE__ by itself is insufficient, because it may not be an
+     absolute path, and the compiled binary may have been moved after
+     being built;
+
+   - The executable's directory by itself is insufficient, because
+     build tools such as rdmd can place it in a temporary directory;
+
+   - The current directory by itself is insufficient, because the
+     program can be launched in more than one way, e.g.:
+
+     - Running the program from the same directory as the source file
+       containing main() (e.g. rdmd program.d)
+
+     - Running the program from the upper directory containing all
+       packages and dependencies, so that there is no need to specify
+       include dirs (e.g. rdmd ae/demo/http/httpserve.d)
+
+     - Running the program from a cronjob or another location, in
+       which the current directory can be unrelated altogether.
+
+    Params:
+      testFile = Relative path to a file or directory, the presence of
+                 which indicates that the "current" directory (base of
+                 the relative path) is the sought-after program root
+                 directory.
+      sourceFile = Path to a source file part of the program's code
+                   base. Defaults to the __FILE__ of the caller.
+
+    Returns:
+      Path to the sought root directory, or `null` if one was not found.
+*/
+string findProgramDirectory(string testFile, string sourceFile = __FILE__)
+{
+	import std.file : thisExePath, getcwd, exists;
+	import core.runtime : Runtime;
+	import std.range : only;
+
+	foreach (path; only(Runtime.args[0].absolutePath().dirName(), thisExePath.dirName, sourceFile.dirName, null))
+	{
+		path = path.absolutePath().buildNormalizedPath();
+		while (true)
+		{
+			auto indicator = path.buildPath(testFile);
+			if (indicator.exists)
+				return path;
+			auto parent = dirName(path);
+			if (parent == path)
+				break;
+			path = parent;
+		}
+	}
+	return null;
+}
 
 // ************************************************************************
 
