@@ -16,7 +16,6 @@ importPaths "sys" "utils" "net"
 excludedSourceFiles "sys/database.d"
 excludedSourceFiles "sys/sqlite3.d"
 excludedSourceFiles "sys/persistence/keyvalue.d"
-excludedSourceFiles "sys/database.d"
 
 # In ae:openssl
 excludedSourceFiles "net/ssl/openssl.d"
