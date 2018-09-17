@@ -29,18 +29,21 @@ import std.string;
 import deimos.openssl.ssl;
 import deimos.openssl.err;
 
-version(Win64)
+mixin template SSLUseLib()
 {
-	pragma(lib, "ssleay32");
-	pragma(lib, "libeay32");
-}
-else
-{
-	pragma(lib, "ssl");
-	version(Windows)
-		{ pragma(lib, "eay"); }
+	version(Win64)
+	{
+		pragma(lib, "ssleay32");
+		pragma(lib, "libeay32");
+	}
 	else
-		{ pragma(lib, "crypto"); }
+	{
+		pragma(lib, "ssl");
+		version(Windows)
+			{ pragma(lib, "eay"); }
+		else
+			{ pragma(lib, "crypto"); }
+	}
 }
 
 debug(OPENSSL) import std.stdio : stderr;
