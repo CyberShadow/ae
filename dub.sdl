@@ -65,8 +65,7 @@ subPackage {
 	sourceFiles \
 		"sys/database.d" \
 		"sys/sqlite3.d" \
-		"sys/persistence/keyvalue.d" \
-                "sys/database.d"
+		"sys/persistence/keyvalue.d"
 }
 
 ---------------------------
