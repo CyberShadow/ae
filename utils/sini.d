@@ -506,3 +506,122 @@ struct IniWriter(O)
 
 /// Insert a blank line before each section
 string prettifyIni(string ini) { return ini.replace("\n[", "\n\n["); }
+
+// ***************************************************************************
+
+/**
+   Adds or updates a value in an INI file.
+
+   If the value is already in the INI file, then it is updated
+   in-place; otherwise, a new one is added to the matching section.
+
+   Whitespace and comments on other lines are preserved.
+
+   Params:
+     lines = INI file lines (as in parseIni)
+     name = fully-qualified name of the value to update
+            (use `.` to specify section path)
+     value = new value to write
+*/
+
+void updateIni(S)(ref S[] lines, S name, S value)
+{
+	size_t valueLine = size_t.max;
+	S valueLineSection;
+
+	S currentSection = null;
+	auto pathPrefix() { return chain(currentSection, repeat(typeof(name[0])('.'), currentSection is null ? 0 : 1)); }
+
+	size_t bestSectionEnd;
+	S bestSection;
+	bool inBestSection = true;
+
+	foreach (i, line; lines)
+	{
+		auto lex = lexIniLine(line);
+		final switch (lex.type)
+		{
+			case lex.Type.empty:
+				break;
+			case lex.Type.value:
+				if (equal(chain(pathPrefix, lex.name), name))
+				{
+					valueLine = i;
+					valueLineSection = currentSection;
+				}
+				break;
+			case lex.type.section:
+				if (inBestSection)
+					bestSectionEnd = i;
+				inBestSection = false;
+
+				currentSection = lex.name;
+				if (name.startsWith(pathPrefix) && currentSection.length > bestSection.length)
+				{
+					bestSection = currentSection;
+					inBestSection = true;
+				}
+				break;
+		}
+	}
+
+	if (inBestSection)
+		bestSectionEnd = lines.length;
+
+	S genLine(S section) { return name[section.length ? section.length + 1 : 0 .. $] ~ '=' ~ value; }
+
+	if (valueLine != size_t.max)
+		lines[valueLine] = genLine(valueLineSection);
+	else
+		lines = lines[0..bestSectionEnd] ~ genLine(bestSection) ~ lines[bestSectionEnd..$];
+}
+
+unittest
+{
+	auto ini = q"<
+		a=1
+		a=2
+	>".splitLines();
+	updateIni(ini, "a", "3");
+	struct S { int a; }
+	assert(parseIni!S(ini).a == 3);
+}
+
+unittest
+{
+	auto ini = q"<
+		a=1
+		[s]
+		a=2
+		[t]
+		a=3
+	>".strip.splitLines.map!strip.array;
+	updateIni(ini, "a", "4");
+	updateIni(ini, "s.a", "5");
+	updateIni(ini, "t.a", "6");
+	assert(equal(ini, q"<
+		a=4
+		[s]
+		a=5
+		[t]
+		a=6
+	>".strip.splitLines.map!strip), text(ini));
+}
+
+unittest
+{
+	auto ini = q"<
+		[s]
+		[t]
+	>".strip.splitLines.map!strip.array;
+	updateIni(ini, "a", "1");
+	updateIni(ini, "s.a", "2");
+	updateIni(ini, "t.a", "3");
+	assert(equal(ini, q"<
+		a=1
+		[s]
+		a=2
+		[t]
+		a=3
+	>".strip.splitLines.map!strip));
+}
