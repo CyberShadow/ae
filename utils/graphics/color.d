@@ -58,7 +58,10 @@ struct Color(FieldTuple...)
 	{
 		typeof(this) r;
 		foreach (i, f; r.tupleof)
-			r.tupleof[i] = value;
+			static if (__traits(identifier, r.tupleof[i]) == "a")
+				r.tupleof[i] = typeof(r.tupleof[i]).max;
+			else
+				r.tupleof[i] = value;
 		return r;
 	}
 
