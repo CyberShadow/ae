@@ -625,3 +625,21 @@ unittest
 		a=3
 	>".strip.splitLines.map!strip));
 }
+
+void updateIniFile(S)(string fileName, S name, S value)
+{
+	import std.file, std.stdio, std.utf;
+	auto lines = fileName.exists ? fileName.readText.splitLines : null;
+	updateIni(lines, name, value);
+	lines.map!(l => chain(l.byCodeUnit, only(typeof(S.init[0])('\n')))).joiner.toFile(fileName);
+}
+
+unittest
+{
+	import std.file;
+	enum fn = "temp.ini";
+	std.file.write(fn, "a=b\n");
+	scope(exit) remove(fn);
+	updateIniFile(fn, "a", "c");
+	assert(read(fn) == "a=c\n");
+}
