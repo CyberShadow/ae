@@ -35,6 +35,49 @@ struct IniHandler(S)
 	IniHandler delegate(S name) nodeHandler;
 }
 
+struct IniLine(S)
+{
+	enum Type
+	{
+		empty,
+		section,
+		value
+	}
+
+	Type type;
+	S name; // section or value
+	S value;
+}
+
+IniLine!S lexIniLine(S)(S line)
+if (isSomeString!S)
+{
+	IniLine!S result;
+
+	line = line.chomp().stripLeft();
+	if (line.empty)
+		return result;
+	if (line[0] == '#' || line[0] == ';')
+		return result;
+
+	if (line[0] == '[')
+	{
+		line = line.stripRight();
+		enforce(line[$-1] == ']', "Malformed section line (no ']')");
+		result.type = result.Type.section;
+		result.name = line[1..$-1];
+	}
+	else
+	{
+		auto pos = line.indexOf('=');
+		enforce(pos > 0, "Malformed value line (no '=')");
+		result.type = result.Type.value;
+		result.name = line[0..pos].strip;
+		result.value = line[pos+1..$].strip;
+	}
+	return result;
+}
+
 /// Parse a structured INI from a range of lines, through the given handler.
 void parseIni(R, H)(R r, H rootHandler)
 	if (isInputRange!R && isSomeString!(ElementType!R))
@@ -47,40 +90,33 @@ void parseIni(R, H)(R r, H rootHandler)
 		lineNumber++;
 		mixin(exceptionContext(q{"Error while parsing INI line %s:".format(lineNumber)}));
 
-		auto line = r.front.chomp().stripLeft();
 		scope(success) r.popFront();
-		if (line.empty)
-			continue;
-		if (line[0] == '#' || line[0] == ';')
-			continue;
-
-		if (line[0] == '[')
+		auto line = lexIniLine(r.front);
+		final switch (line.type)
 		{
-			line = line.stripRight();
-			enforce(line[$-1] == ']', "Malformed section line (no ']')");
-			auto section = line[1..$-1];
-
-			currentHandler = rootHandler;
-			foreach (segment; section.split("."))
-				currentHandler = currentHandler.nodeHandler
-					.enforce("This group may not have any nodes.")
-					(segment);
-		}
-		else
-		{
-			auto pos = line.indexOf('=');
-			enforce(pos > 0, "Malformed value line (no '=')");
-			auto name = line[0..pos].strip;
-			auto handler = currentHandler;
-			auto segments = name.split(".");
-			enforce(segments.length, "Malformed value line (empty name)");
-			foreach (segment; segments[0..$-1])
-				handler = handler.nodeHandler
-					.enforce("This group may not have any nodes.")
-					(segment);
-			handler.leafHandler
-				.enforce("This group may not have any values.")
-				(segments[$-1], line[pos+1..$].strip);
+			case line.Type.empty:
+				break;
+			case line.Type.section:
+				currentHandler = rootHandler;
+				foreach (segment; line.name.split("."))
+					currentHandler = currentHandler.nodeHandler
+						.enforce("This group may not have any nodes.")
+						(segment);
+				break;
+			case line.Type.value:
+			{
+				auto handler = currentHandler;
+				auto segments = line.name.split(".");
+				enforce(segments.length, "Malformed value line (empty name)");
+				foreach (segment; segments[0..$-1])
+					handler = handler.nodeHandler
+						.enforce("This group may not have any nodes.")
+						(segment);
+				handler.leafHandler
+					.enforce("This group may not have any values.")
+					(segments[$-1], line.value);
+				break;
+			}
 		}
 	}
 }
