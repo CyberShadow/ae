@@ -148,6 +148,8 @@ static assert(isRandomAccessRange!(EmptyRange!uint));
 
 /// Like `only`, but evaluates the argument lazily, i.e. when the
 /// range's "front" is evaluated.
+/// DO NOT USE before this bug is fixed:
+/// https://issues.dlang.org/show_bug.cgi?id=11044
 auto onlyLazy(E)(lazy E value)
 {
 	struct Lazy
