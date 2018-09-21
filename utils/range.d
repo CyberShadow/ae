@@ -13,6 +13,8 @@
 
 module ae.utils.range;
 
+import std.range.primitives;
+
 import ae.utils.meta : isDebug;
 
 /// An equivalent of an array range, but which maintains
@@ -118,3 +120,26 @@ struct InfiniteIota(T)
 	InfiniteIota save() { return this; }
 }
 InfiniteIota!T infiniteIota(T)() { return InfiniteIota!T.init; }
+
+// ************************************************************************
+
+/// Empty range of type E.
+struct EmptyRange(E)
+{
+	@property E front() { assert(false); }
+	void popFront() { assert(false); }
+	@property E back() { assert(false); }
+	void popBack() { assert(false); }
+	E opIndex(size_t) { assert(false); }
+	enum empty = true;
+	enum save = typeof(this).init;
+	enum size_t length = 0;
+}
+
+/// ditto
+EmptyRange!E emptyRange(E)() { return EmptyRange!E.init; }
+
+static assert(isInputRange!(EmptyRange!uint));
+static assert(isForwardRange!(EmptyRange!uint));
+static assert(isBidirectionalRange!(EmptyRange!uint));
+static assert(isRandomAccessRange!(EmptyRange!uint));
