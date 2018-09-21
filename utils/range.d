@@ -143,3 +143,39 @@ static assert(isInputRange!(EmptyRange!uint));
 static assert(isForwardRange!(EmptyRange!uint));
 static assert(isBidirectionalRange!(EmptyRange!uint));
 static assert(isRandomAccessRange!(EmptyRange!uint));
+
+// ************************************************************************
+
+/// Like `only`, but evaluates the argument lazily, i.e. when the
+/// range's "front" is evaluated.
+auto onlyLazy(E)(lazy E value)
+{
+	struct Lazy
+	{
+		bool empty = false;
+		@property E front() { assert(!empty); return value; }
+		void popFront() { assert(!empty); empty = true; }
+		alias back = front;
+		alias popBack = popFront;
+		@property size_t length() { return empty ? 0 : 1; }
+		E opIndex(size_t i) { assert(!empty); assert(i == 0); return value; }
+		@property typeof(this) save() { return this; }
+	}
+	return Lazy();
+}
+
+static assert(isInputRange!(typeof(onlyLazy(1))));
+static assert(isForwardRange!(typeof(onlyLazy(1))));
+static assert(isBidirectionalRange!(typeof(onlyLazy(1))));
+static assert(isRandomAccessRange!(typeof(onlyLazy(1))));
+
+unittest
+{
+	import std.algorithm.comparison;
+	import std.range;
+
+	int i;
+	auto r = onlyLazy(i);
+	i = 1; assert(equal(r, 1.only));
+	i = 2; assert(equal(r, 2.only));
+}
