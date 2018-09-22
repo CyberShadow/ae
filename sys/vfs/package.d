@@ -30,7 +30,10 @@ void write(string path, const(void)[] data) { return getVFS(path).write(path, da
 /// Delete file at location.
 void remove(string path) { return getVFS(path).remove(path); }
 
-/// Create directory ( and parents as necessary) at location, if it does not exist.
+/// Create an empty directory.
+void mkdir(string path) { return getVFS(path).mkdir(path); }
+
+/// Create directory (and parents as necessary) at location, if it does not exist.
 void mkdirRecurse(string path) { return getVFS(path).mkdirRecurse(path); }
 
 /// Rename file at location. Clobber destination, if it exists.
@@ -137,6 +140,9 @@ class VFS
 	/// Rename file at location. Clobber destination, if it exists.
 	void rename(string from, string to) { copy(from, to); remove(from); }
 
+	/// Create an empty directory.
+	void mkdir(string path) { assert(false, "Not implemented"); }
+
 	/// Create directory (and parents as necessary) at location, if it does not exist.
 	abstract void mkdirRecurse(string path);
 
@@ -229,6 +235,7 @@ class FS : VFS
 		return std.file.dirEntries(path, std.file.SpanMode.shallow).map!(de => de.baseName).array;
 	}
 
+	override void mkdir(string path) { std.file.mkdir(path); }
 	override void rmdirRecurse(string path) { std.file.rmdirRecurse(path); }
 
 	static this()
