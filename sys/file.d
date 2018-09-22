@@ -501,6 +501,19 @@ void recreateEmptyDirectory()(string dir)
 	mkdir(dir);
 }
 
+void copyRecurse(DirEntry src, string dst)
+{
+	version (Posix)
+		if (src.isSymlink)
+			return symlink(dst, readLink(src));
+	if (src.isFile)
+		return copy(src, dst, PreserveAttributes.yes);
+	dst.mkdir();
+	foreach (de; src.dirEntries(SpanMode.shallow))
+		copyRecurse(de, dst.buildPath(de.baseName));
+}
+void copyRecurse(string src, string dst) { copyRecurse(DirEntry(src), dst); }
+
 bool isHidden()(string fn)
 {
 	if (baseName(fn).startsWith("."))
