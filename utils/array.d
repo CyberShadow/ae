@@ -425,11 +425,15 @@ T[] skipUntil(T, D)(ref T[] source, D delim, bool orUntilEnd = false)
 	else
 		enum delimLength = 1;
 
+	static import std.string;
+
 	static if (is(typeof(ae.utils.array.indexOf(source, delim))))
 		alias indexOf = ae.utils.array.indexOf;
 	else
 	static if (is(typeof(std.string.indexOf(source, delim))))
 		alias indexOf = std.string.indexOf;
+	else
+		static assert(false, "No suitable indexOf overload found");
 
 	auto i = indexOf(source, delim);
 	if (i < 0)
