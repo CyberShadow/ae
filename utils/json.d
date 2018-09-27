@@ -230,7 +230,7 @@ struct CustomJsonSerializer(Writer)
 			}
 		}
 		else
-		static if (is(typeof(T.init.keys)) && is(typeof(T.init.values)) && is(typeof(T.init.keys[0])==string))
+		static if (is(typeof(T.init.keys)) && is(typeof(T.init.values)) && is(typeof({string s = T.init.keys[0];})))
 		{
 			writer.beginObject();
 			bool first = true;
@@ -951,7 +951,7 @@ unittest
 	M m;
 	m["one"] = 1;
 	m["two"] = 2;
-	auto j = m.toJson();
+	auto j = (cast(const)m).toJson();
 	assert(j == `{"one":1,"two":2}`, j);
 	assert(j.jsonParse!M == m);
 }
