@@ -181,3 +181,45 @@ unittest
 	i = 1; assert(equal(r, 1.only));
 	i = 2; assert(equal(r, 2.only));
 }
+
+// ************************************************************************
+
+/// Defer range construction until first empty/front call.
+auto lazyInitRange(R)(R delegate() constructor)
+{
+	bool initialized;
+	R r = void;
+
+	ref R getRange()
+	{
+		if (!initialized)
+		{
+			r = constructor();
+			initialized = true;
+		}
+		return r;
+	}
+
+	struct LazyRange
+	{
+		bool empty() { return getRange().empty; }
+		auto ref front() { return getRange().front; }
+		void popFront() { return getRange().popFront; }
+	}
+	return LazyRange();
+}
+
+///
+unittest
+{
+	import std.algorithm.iteration;
+	import std.range;
+
+	int[] todo, done;
+	chain(
+		only({ todo = [1, 2, 3]; }),
+		// eager will fail: todo.map!(n => { done ~= n; }),
+		lazyInitRange(() => todo.map!(n => { done ~= n; })),
+	).each!(dg => dg());
+	assert(done == [1, 2, 3]);
+}
