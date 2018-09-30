@@ -332,7 +332,7 @@ class SQLiteException : Exception
 	this(sqlite3* db, int code)
 	{
 		this.code = code;
-		super(to!string(sqlite3_errmsg(db)));
+		super(to!string(sqlite3_errmsg(db)) ~ " (" ~ to!string(code) ~ ")");
 	}
 }
 
