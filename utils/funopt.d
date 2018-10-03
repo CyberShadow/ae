@@ -224,10 +224,8 @@ if (isFunction!FUN)
 		auto shorthand = optionShorthand!(Params[i]);
 		if (shorthand)
 			variants ~= [shorthand];
-		enum words = names[i].splitByCamelCase();
-		variants ~= words.join().toLower();
-		if (words.length > 1)
-			variants ~= words.join("-").toLower();
+		enum keywords = names[i].identifierToCommandLineKeywords();
+		variants ~= keywords;
 		return variants.join("|");
 	}
 
@@ -345,6 +343,12 @@ unittest
 
 // ***************************************************************************
 
+private string canonicalizeCommandLineArgument(string s) { return s.replace("-", ""); }
+private string canonicalizeIdentifier(string s) { return s.toLower(); }
+private string identifierToCommandLineKeyword(string s) { return s.splitByCamelCase.join("-").toLower(); }
+private string identifierToCommandLineParam  (string s) { return s.splitByCamelCase.join("-").toUpper(); }
+private string[] identifierToCommandLineKeywords(string s) { auto words = s.splitByCamelCase(); return [words.join().toLower()] ~ (words.length > 1 ? [words.join("-").toLower()] : []); } /// for getopt
+
 private string getProgramName(string program)
 {
 	auto programName = program.baseName();
@@ -381,10 +385,10 @@ string getUsageFormatString(alias FUN)()
 	{
 		alias Param = Params[i];
 		static if (isParameter!Param)
-			return names[i].splitByCamelCase().join("-").toUpper();
+			return names[i].identifierToCommandLineParam();
 		else
 		{
-			string switchText = "--" ~ names[i].splitByCamelCase().join("-").toLower();
+			string switchText = "--" ~ names[i].identifierToCommandLineKeyword();
 			static if (is(Param == OptionImpl!Args, Args...))
 				static if (Param.type == OptionType.option)
 					switchText ~= (optionPlaceholder!Param.canFind('=') ? ' ' : '=') ~ optionPlaceholder!Param;
@@ -400,7 +404,7 @@ string getUsageFormatString(alias FUN)()
 				result ~= " ";
 				static if (!is(defaults[i] == void))
 					result ~= "[";
-				result ~= names[i].splitByCamelCase().join("-").toUpper();
+				result ~= names[i].identifierToCommandLineParam();
 				static if (!is(defaults[i] == void))
 					result ~= "]";
 			}
@@ -560,7 +564,7 @@ auto funoptDispatch(alias Actions, FunOptConfig config = FunOptConfig.init, alia
 
 	auto fun(string action, string[] actionArguments = [])
 	{
-		action = action.replace("-", "");
+		action = action.canonicalizeCommandLineArgument();
 
 		static void descUsageFun(string description)(string usage)
 		{
@@ -572,7 +576,7 @@ auto funoptDispatch(alias Actions, FunOptConfig config = FunOptConfig.init, alia
 			static if (is(typeof(hasAttribute!(string, __traits(getMember, Actions, m)))))
 			{
 				alias member = I!(__traits(getMember, Actions, m));
-				enum name = m.toLower();
+				enum name = m.canonicalizeIdentifier();
 				if (name == action)
 				{
 					static if (hasAttribute!(string, member))
@@ -612,13 +616,16 @@ private string genActionList(alias Actions)()
 	foreach (m; __traits(allMembers, Actions))
 		static if (is(typeof(hasAttribute!(string, __traits(getMember, Actions, m)))))
 			static if (hasAttribute!(string, __traits(getMember, Actions, m)))
-				longestAction = max(longestAction, m.splitByCamelCase.join("-").length);
+			{
+				enum length = m.identifierToCommandLineKeyword().length;
+				longestAction = max(longestAction, length);
+			}
 
 	foreach (m; __traits(allMembers, Actions))
 		static if (is(typeof(hasAttribute!(string, __traits(getMember, Actions, m)))))
 			static if (hasAttribute!(string, __traits(getMember, Actions, m)))
 			{
-				enum name = m.splitByCamelCase.join("-").toLower();
+				enum name = m.identifierToCommandLineKeyword();
 				//__traits(comment, __traits(getMember, Actions, m)) // https://github.com/D-Programming-Language/dmd/pull/3531
 				result ~= optionWrap(getAttribute!(string, __traits(getMember, Actions, m)), name, longestAction);
 			}
