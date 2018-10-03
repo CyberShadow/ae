@@ -24,7 +24,7 @@ import std.string;
 import std.traits;
 import std.typetuple;
 
-import ae.utils.meta : structFields, hasAttribute, getAttribute, RangeTuple;
+import ae.utils.meta : structFields, hasAttribute, getAttribute, RangeTuple, I;
 import ae.utils.text;
 
 private enum OptionType { switch_, option, parameter }
@@ -194,6 +194,7 @@ void defaultUsageFun(string usage)
 /// Parse the given arguments according to FUN's parameters, and call FUN.
 /// Throws GetOptException on errors.
 auto funopt(alias FUN, FunOptConfig config = FunOptConfig.init, alias usageFun = defaultUsageFun)(string[] args)
+if (isFunction!FUN)
 {
 	alias Params = staticMap!(Unqual, ParameterTypeTuple!FUN);
 	Params values;
@@ -570,19 +571,23 @@ auto funoptDispatch(alias Actions, FunOptConfig config = FunOptConfig.init, alia
 		foreach (m; __traits(allMembers, Actions))
 			static if (is(typeof(hasAttribute!(string, __traits(getMember, Actions, m)))))
 			{
+				alias member = I!(__traits(getMember, Actions, m));
 				enum name = m.toLower();
 				if (name == action)
 				{
-					static if (hasAttribute!(string, __traits(getMember, Actions, m)))
+					static if (hasAttribute!(string, member))
 					{
-						enum description = getAttribute!(string, __traits(getMember, Actions, m));
+						enum description = getAttribute!(string, member);
 						alias myUsageFun = descUsageFun!description;
 					}
 					else
 						alias myUsageFun = usageFun;
 
 					auto args = [getProgramName(program) ~ " " ~ action] ~ actionArguments;
-					return funopt!(__traits(getMember, Actions, m), config, myUsageFun)(args);
+					static if (is(member == struct))
+						return funoptDispatch!(member, config, usageFun)(args);
+					else
+						return funopt!(member, config, myUsageFun)(args);
 				}
 			}
 
@@ -627,13 +632,22 @@ unittest
 	{
 		@(`Perform action f1`)
 		static void f1(bool verbose) {}
+
+		@(`An action sub-group`)
+		struct subGroup
+		{
+			@(`Perform sub-group action x`)
+			static void x() {}
+		}
 	}
 
 	funoptDispatch!Actions(["program", "f1", "--verbose"]);
+	funoptDispatch!Actions(["program", "sub-group", "x"]);
 
 	assert(genActionList!Actions() == "
 Actions:
-  f1  Perform action f1
+  f1         Perform action f1
+  sub-group  An action sub-group
 ");
 
 	static string usage;
