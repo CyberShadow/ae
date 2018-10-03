@@ -344,10 +344,10 @@ unittest
 // ***************************************************************************
 
 private string canonicalizeCommandLineArgument(string s) { return s.replace("-", ""); }
-private string canonicalizeIdentifier(string s) { return s.toLower(); }
-private string identifierToCommandLineKeyword(string s) { return s.splitByCamelCase.join("-").toLower(); }
-private string identifierToCommandLineParam  (string s) { return s.splitByCamelCase.join("-").toUpper(); }
-private string[] identifierToCommandLineKeywords(string s) { auto words = s.splitByCamelCase(); return [words.join().toLower()] ~ (words.length > 1 ? [words.join("-").toLower()] : []); } /// for getopt
+private string canonicalizeIdentifier(string s) { return s.chomp("_").toLower(); }
+private string identifierToCommandLineKeyword(string s) { return s.chomp("_").splitByCamelCase.join("-").toLower(); }
+private string identifierToCommandLineParam  (string s) { return s.chomp("_").splitByCamelCase.join("-").toUpper(); }
+private string[] identifierToCommandLineKeywords(string s) { auto words = s.chomp("_").splitByCamelCase(); return [words.join().toLower()] ~ (words.length > 1 ? [words.join("-").toLower()] : []); } /// for getopt
 
 private string getProgramName(string program)
 {
@@ -641,20 +641,26 @@ unittest
 		static void f1(bool verbose) {}
 
 		@(`An action sub-group`)
-		struct subGroup
+		struct fooBar
 		{
-			@(`Perform sub-group action x`)
-			static void x() {}
+			@(`Create a new foobar`)
+			static void new_() {}
 		}
 	}
 
 	funoptDispatch!Actions(["program", "f1", "--verbose"]);
-	funoptDispatch!Actions(["program", "sub-group", "x"]);
 
 	assert(genActionList!Actions() == "
 Actions:
-  f1         Perform action f1
-  sub-group  An action sub-group
+  f1       Perform action f1
+  foo-bar  An action sub-group
+");
+
+	funoptDispatch!Actions(["program", "foo-bar", "new"]);
+
+	assert(genActionList!(Actions.fooBar)() == "
+Actions:
+  new  Create a new foobar
 ");
 
 	static string usage;
