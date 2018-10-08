@@ -279,6 +279,66 @@ auto splitEmpty(T, S)(T value, S separator)
 	return value.length ? split(value, separator) : null;
 }
 
+/// Include delimiter in result chunks as suffix
+H[] splitWithSuffix(H, S)(H haystack, S separator)
+{
+	H[] result;
+	while (haystack.length)
+	{
+		auto pos = haystack._indexOf(separator);
+		if (pos < 0)
+			pos = haystack.length;
+		else
+		{
+			static if (is(typeof(haystack[0] == separator)))
+				pos += 1;
+			else
+			static if (is(typeof(haystack[0..1] == separator)))
+				pos += separator.length;
+			else
+				static assert(false, "Don't know how to split " ~ H.stringof ~ " by " ~ S.stringof);
+		}
+		result ~= haystack[0..pos];
+		haystack = haystack[pos..$];
+	}
+	return result;
+}
+
+unittest
+{
+	assert("a\nb".splitWithSuffix('\n') == ["a\n", "b"]);
+	assert([1, 0, 2].splitWithSuffix(0) == [[1, 0], [2]]);
+
+	assert("a\r\nb".splitWithSuffix("\r\n") == ["a\r\n", "b"]);
+	assert([1, 0, 0, 2].splitWithSuffix([0, 0]) == [[1, 0, 0], [2]]);
+}
+
+/// Include delimiter in result chunks as prefix
+H[] splitWithPrefix(H, S)(H haystack, S separator)
+{
+	H[] result;
+	while (haystack.length)
+	{
+		auto pos = haystack[1..$]._indexOf(separator);
+		if (pos < 0)
+			pos = haystack.length;
+		else
+			pos++;
+		result ~= haystack[0..pos];
+		haystack = haystack[pos..$];
+	}
+	return result;
+}
+
+unittest
+{
+	assert("a\nb".splitWithPrefix('\n') == ["a", "\nb"]);
+	assert([1, 0, 2].splitWithPrefix(0) == [[1], [0, 2]]);
+
+	assert("a\r\nb".splitWithPrefix("\r\n") == ["a", "\r\nb"]);
+	assert([1, 0, 0, 2].splitWithPrefix([0, 0]) == [[1], [0, 0, 2]]);
+}
+
 /// Select and return a random element from the array.
 auto ref sample(T)(T[] arr)
 {
