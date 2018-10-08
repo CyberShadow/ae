@@ -407,6 +407,19 @@ bool eat(T)(ref T[] arr, T[] prefix)
 	return false;
 }
 
+// Overload disambiguator
+private sizediff_t _indexOf(H, N)(H haystack, N needle)
+{
+	static if (is(typeof(ae.utils.array.indexOf(haystack, needle))))
+		alias indexOf = ae.utils.array.indexOf;
+	else
+	static if (is(typeof(std.string.indexOf(haystack, needle))))
+		alias indexOf = std.string.indexOf;
+	else
+		static assert(false, "No suitable indexOf overload found");
+	return indexOf(haystack, needle);
+}
+
 /// Returns the slice of source up to the first occurrence of delim,
 /// and fast-forwards source to the point after delim.
 /// If delim is not found, the behavior depends on orUntilEnd:
@@ -427,15 +440,7 @@ T[] skipUntil(T, D)(ref T[] source, D delim, bool orUntilEnd = false)
 
 	static import std.string;
 
-	static if (is(typeof(ae.utils.array.indexOf(source, delim))))
-		alias indexOf = ae.utils.array.indexOf;
-	else
-	static if (is(typeof(std.string.indexOf(source, delim))))
-		alias indexOf = std.string.indexOf;
-	else
-		static assert(false, "No suitable indexOf overload found");
-
-	auto i = indexOf(source, delim);
+	auto i = _indexOf(source, delim);
 	if (i < 0)
 	{
 		if (orUntilEnd)
