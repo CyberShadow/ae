@@ -196,6 +196,21 @@ bool contains(T, V)(in T[] arr, auto ref in V val)
 	return arr.indexOfElement(val) >= 0;
 }
 
+/// Ditto, for substrings
+bool contains(T, U)(T[] str, U[] what)
+if (is(Unqual!T == Unqual!U))
+{
+	return str._indexOf(what) >= 0;
+}
+
+unittest
+{
+	assert( "abc".contains('b'));
+	assert(!"abc".contains('x'));
+	assert( "abc".contains("b"));
+	assert(!"abc".contains("x"));
+}
+
 /// Like startsWith, but with an offset.
 bool containsAt(T)(in T[] haystack, in T[] needle, size_t offset)
 {

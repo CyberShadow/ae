@@ -33,15 +33,9 @@ import ae.utils.textout;
 alias indexOf = std.string.indexOf;
 
 public import ae.utils.text.ascii : ascii, DecimalSize, toDec, toDecFixed;
+public import ae.utils.array : contains;
 
 // ************************************************************************
-
-/// Convenience helper
-bool contains(T, U)(T[] str, U[] what)
-	if (is(Unqual!T == Unqual!U))
-{
-	return str.indexOf(what)>=0;
-}
 
 /// CTFE helper
 string formatAs(T)(auto ref T obj, string fmt)
