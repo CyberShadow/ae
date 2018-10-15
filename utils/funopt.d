@@ -598,7 +598,7 @@ auto funoptDispatch(alias Actions, FunOptConfig config = FunOptConfig.init, alia
 		throw new GetOptException("Unknown action: " ~ action);
 	}
 
-	static void myUsageFun(string usage) { usageFun(usage ~ genActionList!Actions()); }
+	static void myUsageFun(string usage) { usageFun(usage ~ funoptDispatchUsage!Actions()); }
 
 	const FunOptConfig myConfig = (){
 		auto c = config;
@@ -608,7 +608,7 @@ auto funoptDispatch(alias Actions, FunOptConfig config = FunOptConfig.init, alia
 	return funopt!(fun, myConfig, myUsageFun)(args);
 }
 
-private string genActionList(alias Actions)()
+string funoptDispatchUsage(alias Actions)()
 {
 	string result = "\nActions:\n";
 
@@ -650,7 +650,7 @@ unittest
 
 	funoptDispatch!Actions(["program", "f1", "--verbose"]);
 
-	assert(genActionList!Actions() == "
+	assert(funoptDispatchUsage!Actions() == "
 Actions:
   f1       Perform action f1
   foo-bar  An action sub-group
@@ -658,7 +658,7 @@ Actions:
 
 	funoptDispatch!Actions(["program", "foo-bar", "new"]);
 
-	assert(genActionList!(Actions.fooBar)() == "
+	assert(funoptDispatchUsage!(Actions.fooBar)() == "
 Actions:
   new  Create a new foobar
 ");
