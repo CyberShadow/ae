@@ -96,6 +96,11 @@ final class SQLite
 		return sqlite3_last_insert_rowid(db);
 	}
 
+	@property int changes()
+	{
+		return sqlite3_changes(db);
+	}
+
 	final class PreparedStatement
 	{
 		sqlite3_stmt* stmt;
