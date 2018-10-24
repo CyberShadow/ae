@@ -1,7 +1,5 @@
 ﻿/**
- * Light read-only XML library
- * May be deprecated in the future.
- * See other XML modules for better implementations.
+ * Shared XML code.
  *
  * License:
  *   This Source Code Form is subject to the terms of
@@ -14,7 +12,8 @@
  *   Simon Arlott
  */
 
-module ae.utils.xmllite;
+module ae.utils.xml.common;
 
-public import ae.utils.xml.lite;
-public import ae.utils.xml.entities;
+import ae.utils.exception;
+
+mixin DeclareException!q{XmlParseException};
