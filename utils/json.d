@@ -52,6 +52,9 @@ struct JsonWriter(Output)
 	/// Write a value of a simple type.
 	void putValue(T)(T v)
 	{
+		static if (is(typeof(v is null)))
+			if (v is null)
+				return output.put("null");
 		static if (is(T == typeof(null)))
 			return output.put("null");
 		else
@@ -954,6 +957,12 @@ unittest
 	auto j = (cast(const)m).toJson();
 	assert(j == `{"one":1,"two":2}`, j);
 	assert(j.jsonParse!M == m);
+}
+
+unittest
+{
+	assert(string.init.toJson.jsonParse!string  is null);
+	assert(""         .toJson.jsonParse!string !is null);
 }
 
 // ************************************************************************
