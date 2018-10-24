@@ -59,7 +59,8 @@ enum XmlNodeType
 	Meta,
 	DocType,
 	CData,
-	Text
+	Text,
+	Raw, // Never created during parsing. Programs can put raw XML fragments in `Raw` nodes to emit it as-is.
 }
 
 alias XmlAttributes = OrderedMap!(string, string);
@@ -172,6 +173,11 @@ class XmlNode
 			case XmlNodeType.CData:
 				output.text(tag);
 				return;
+			case XmlNodeType.Raw:
+				output.startLine();
+				output.output.put(tag);
+				output.newLine();
+				return;
 		}
 	}
 
@@ -196,6 +202,8 @@ class XmlNode
 			case XmlNodeType.Meta:
 			case XmlNodeType.DocType:
 				return null;
+			case XmlNodeType.Raw:
+				assert(false, "Can't extract text from Raw nodes");
 		}
 	}
 
