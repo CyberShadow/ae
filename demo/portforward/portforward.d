@@ -133,10 +133,10 @@ void main(string[] args)
 		return;
 	}
 
-	log = quiet ? new FileLogger("PortForward") : new FileAndConsoleLogger("PortForward");
+	log = createLogger("PortForward");
 	if (record)
 	{
-		recordLog = new RawFileLogger("PortForwardRecord", true);
+		recordLog = rawFileLogger("PortForwardRecord", true);
 		recordLog(format("%d S", Clock.currStdTime()));
 	}
 
