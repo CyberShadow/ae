@@ -141,6 +141,8 @@ protected:
 		f = File(fileName, "ab");
 	}
 }
+alias RCClass!CRawFileLogger RawFileLogger;
+alias rcClass!CRawFileLogger rawFileLogger;
 
 class CFileLogger : CRawFileLogger
 {
