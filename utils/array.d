@@ -485,6 +485,8 @@ bool eat(T)(ref T[] arr, T[] prefix)
 // Overload disambiguator
 private sizediff_t _indexOf(H, N)(H haystack, N needle)
 {
+	static import std.string;
+
 	static if (is(typeof(ae.utils.array.indexOf(haystack, needle))))
 		alias indexOf = ae.utils.array.indexOf;
 	else
