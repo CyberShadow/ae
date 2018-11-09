@@ -14,6 +14,7 @@
 
 module ae.utils.text.ascii;
 
+import std.ascii;
 import std.algorithm : max;
 import std.traits : Unqual, isSigned;
 
@@ -245,3 +246,26 @@ bool isSignedInteger(string s)
 {
 	return s.length && isUnsignedInteger(s[0] == '-' ? s[1..$] : s);
 }
+
+// ************************************************************************
+
+private __gshared char[256] asciiLower, asciiUpper;
+
+shared static this()
+{
+	foreach (c; 0..256)
+	{
+		asciiLower[c] = cast(char)std.ascii.toLower(c);
+		asciiUpper[c] = cast(char)std.ascii.toUpper(c);
+	}
+}
+
+void xlat(alias TABLE, T)(T[] buf)
+{
+	foreach (ref c; buf)
+		c = TABLE[c];
+}
+
+/// Mutates buffer in-place
+alias xlat!(asciiLower, char) asciiToLower;
+alias xlat!(asciiUpper, char) asciiToUpper; /// ditto

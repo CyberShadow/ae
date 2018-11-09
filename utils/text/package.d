@@ -32,7 +32,7 @@ import ae.utils.textout;
 
 alias indexOf = std.string.indexOf;
 
-public import ae.utils.text.ascii : ascii, DecimalSize, toDec, toDecFixed;
+public import ae.utils.text.ascii : ascii, DecimalSize, toDec, toDecFixed, asciiToLower, asciiToUpper;
 public import ae.utils.array : contains;
 
 // ************************************************************************
@@ -416,28 +416,6 @@ unittest
 {
 	assert("parse-IP-string".split('-').camelCaseJoin() == "parseIPString");
 }
-
-// ************************************************************************
-
-private __gshared char[256] asciiLower, asciiUpper;
-
-shared static this()
-{
-	foreach (c; 0..256)
-	{
-		asciiLower[c] = cast(char)std.ascii.toLower(c);
-		asciiUpper[c] = cast(char)std.ascii.toUpper(c);
-	}
-}
-
-void xlat(alias TABLE, T)(T[] buf)
-{
-	foreach (ref c; buf)
-		c = TABLE[c];
-}
-
-alias xlat!(asciiLower, char) asciiToLower;
-alias xlat!(asciiUpper, char) asciiToUpper;
 
 // ************************************************************************
 
