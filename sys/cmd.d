@@ -203,27 +203,28 @@ void setEnvironment(string[string] env)
 			environment.remove(k);
 }
 
-import ae.utils.array;
-import ae.utils.regex;
-import std.regex;
-
-string expandEnvVars(alias RE)(string s, string[string] env = std.process.environment.toAA)
+string expandWindowsEnvVars(alias getenv = environment.get)(string s)
 {
-	string result;
-	size_t last = 0;
-	foreach (c; s.matchAll(RE))
-	{
-		result ~= s[last..s.sliceIndex(c[1])];
-		auto var = c[2];
-		string value = env.get(var, c[1]);
-		result ~= value;
-		last = s.sliceIndex(c[1]) + c[1].length;
-	}
-	result ~= s[last..$];
-	return result;
-}
+	import std.array;
+	auto buf = appender!string();
 
-alias expandWindowsEnvVars = expandEnvVars!(re!`(%(.*?)%)`);
+	size_t lastPercent = 0;
+	bool inPercent = false;
+
+	foreach (i, c; s)
+		if (c == '%')
+		{
+			if (inPercent)
+				buf.put(lastPercent == i ? "%" : getenv(s[lastPercent .. i]));
+			else
+				buf.put(s[lastPercent .. i]);
+			inPercent = !inPercent;
+			lastPercent = i + 1;
+		}
+	enforce(!inPercent, "Unterminated environment variable name");
+	buf.put(s[lastPercent .. $]);
+	return buf.data;
+}
 
 unittest
 {
