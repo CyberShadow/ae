@@ -841,6 +841,12 @@ version (linux)
 		mixin("alias removeFun = " ~ funPrefix ~ "removexattr;");
 		mixin("alias listFun = " ~ funPrefix ~ "listxattr;");
 
+		bool supported()
+		{
+			auto size = getFun(obj, "\x01", null, 0);
+			return size >= 0 || errno != EOPNOTSUPP;
+		}
+
 		void[] opIndex(string key)
 		{
 			auto cKey = key.toStringz();
