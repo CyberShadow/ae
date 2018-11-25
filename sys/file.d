@@ -924,6 +924,13 @@ version (linux)
 
 	unittest
 	{
+		if (!xAttrs(".").supported)
+		{
+			import std.stdio;
+			stderr.writeln("ae.sys.file: xattrs not supported on current filesystem, skipping test.");
+			return;
+		}
+
 		enum fn = "test.txt";
 		std.file.write(fn, "test");
 		scope(exit) remove(fn);
