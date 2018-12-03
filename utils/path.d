@@ -23,6 +23,28 @@ string rebasePath(string path, string oldBase, string newBase)
 	return buildPath(newBase, path.absolutePath.relativePath(oldBase.absolutePath));
 }
 
+/// Like std.path.relativePath,
+/// but does not allocate if path starts with base.
+string fastRelativePath(string path, string base)
+{
+	if (base.length && path.length > base.length &&
+		path[0..base.length] == base)
+	{
+		if (base[$-1].isDirSeparator)
+			return path[base.length..$];
+		if (path[base.length].isDirSeparator)
+			return path[base.length+1..$];
+	}
+	return relativePath(path, base);
+}
+
+unittest
+{
+	assert(fastRelativePath("/a/b/c", "/a") == "b/c");
+	assert(fastRelativePath("/a/b/c", "/a/") == "b/c");
+	assert(fastRelativePath("/a/b/c", "/a/d") == "../b/c");
+}
+
 /// Like Pascal's IncludeTrailingPathDelimiter
 string includeTrailingPathSeparator(string path)
 {
