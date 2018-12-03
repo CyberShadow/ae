@@ -40,9 +40,19 @@ string fastRelativePath(string path, string base)
 
 unittest
 {
-	assert(fastRelativePath("/a/b/c", "/a") == "b/c");
-	assert(fastRelativePath("/a/b/c", "/a/") == "b/c");
-	assert(fastRelativePath("/a/b/c", "/a/d") == "../b/c");
+	version(Windows)
+	{
+		assert(fastRelativePath(`C:\a\b\c`, `C:\a`) == `b\c`);
+		assert(fastRelativePath(`C:\a\b\c`, `C:\a\`) == `b\c`);
+		assert(fastRelativePath(`C:\a\b\c`, `C:\a/`) == `b\c`);
+		assert(fastRelativePath(`C:\a\b\c`, `C:\a\d`) == `..\b\c`);
+	}
+	else
+	{
+		assert(fastRelativePath("/a/b/c", "/a") == "b/c");
+		assert(fastRelativePath("/a/b/c", "/a/") == "b/c");
+		assert(fastRelativePath("/a/b/c", "/a/d") == "../b/c");
+	}
 }
 
 /// Like Pascal's IncludeTrailingPathDelimiter
