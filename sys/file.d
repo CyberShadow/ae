@@ -843,7 +843,7 @@ version (linux)
 
 		bool supported()
 		{
-			auto size = getFun(obj, "\x01", null, 0);
+			auto size = getFun(obj, "user.\x01", null, 0);
 			return size >= 0 || errno != EOPNOTSUPP;
 		}
 
