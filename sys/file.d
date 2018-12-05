@@ -20,6 +20,7 @@ import std.array;
 import std.conv;
 import std.file;
 import std.path;
+import std.range.primitives;
 import std.stdio : File;
 import std.string;
 import std.typecons;
@@ -161,6 +162,723 @@ version (Posix)
 }
 else
 	static assert(0, "TODO");
+
+// ************************************************************************
+
+version (Windows)
+{
+	mixin(importWin32!(q{winnt}, null, q{WCHAR}));
+	mixin(importWin32!(q{winbase}, null, q{WIN32_FIND_DATAW}));
+	import ae.utils.range : nullTerminated;
+}
+
+/// The OS's "native" filesystem character type (private in Phobos).
+version (Windows)
+	alias FSChar = WCHAR;
+else version (Posix)
+	alias FSChar = char;
+else
+	static assert(0);
+
+/// Reads a time field from a stat_t with full precision (private in Phobos).
+SysTime statTimeToStdTime(string which)(ref const stat_t statbuf)
+{
+	auto unixTime = mixin(`statbuf.st_` ~ which ~ `time`);
+	auto stdTime = unixTimeToStdTime(unixTime);
+
+	static if (is(typeof(mixin(`statbuf.st_` ~ which ~ `tim`))))
+		stdTime += mixin(`statbuf.st_` ~ which ~ `tim.tv_nsec`) / 100;
+	else
+	static if (is(typeof(mixin(`statbuf.st_` ~ which ~ `timensec`))))
+		stdTime += mixin(`statbuf.st_` ~ which ~ `timensec`) / 100;
+	else
+	static if (is(typeof(mixin(`statbuf.st_` ~ which ~ `time_nsec`))))
+		stdTime += mixin(`statbuf.st_` ~ which ~ `time_nsec`) / 100;
+	else
+	static if (is(typeof(mixin(`statbuf.__st_` ~ which ~ `timensec`))))
+		stdTime += mixin(`statbuf.__st_` ~ which ~ `timensec`) / 100;
+
+	return SysTime(stdTime);
+}
+
+version (OSX)
+    version = Darwin;
+else version (iOS)
+    version = Darwin;
+else version (TVOS)
+    version = Darwin;
+else version (WatchOS)
+    version = Darwin;
+
+private
+version (Posix)
+{
+	// TODO: upstream into Druntime
+	extern (C)
+	{
+		int dirfd(DIR *dirp) pure nothrow @nogc;
+		int openat(int fd, const char *path, int oflag, ...) nothrow @nogc;
+
+		version (Darwin)
+		{
+			pragma(mangle, "fstatat$INODE64")
+			int fstatat(int fd, const char *path, stat_t *buf, int flag) nothrow @nogc;
+
+			pragma(mangle, "fdopendir$INODE64")
+			DIR *fdopendir(int fd) nothrow @nogc;
+		}
+		else
+		{
+			int fstatat(int fd, const(char)* path, stat_t* buf, int flag) nothrow @nogc;
+			DIR *fdopendir(int fd) nothrow @nogc;
+		}
+	}
+	version (linux)
+	{
+		enum AT_SYMLINK_NOFOLLOW = 0x100;
+		enum O_DIRECTORY = 0x10000;
+	}
+	version (Darwin)
+	{
+		enum AT_SYMLINK_NOFOLLOW = 0x20;
+		enum O_DIRECTORY = 0x100000;
+	}
+	version (FreeBSD)
+	{
+		enum AT_SYMLINK_NOFOLLOW = 0x200;
+		enum O_DIRECTORY = 0x20000;
+	}
+}
+
+/// Fast templated directory iterator
+template listDir(alias handler)
+{
+	/*non-static*/ struct Context
+	{
+		// Tether to handler alias context
+		void callHandler(Entry* e) { handler(e); }
+
+		bool timeToStop = false;
+
+		version (Windows)
+		{
+			FSChar[] pathBuf;
+		}
+	}
+
+	static struct Entry
+	{
+		version (Posix)
+		{
+			dirent* ent;
+
+			stat_t[enumLength!StatTarget] statBuf;
+			enum StatResult : int
+			{
+				noInfo = 0,
+				statOK = int.max,
+				unknownError = int.min,
+				// other values are the same as errno
+			}
+		}
+		version (Windows)
+		{
+			WIN32_FIND_DATAW findData;
+			size_t pathTailPos;
+		}
+
+		// Cleared (memset to 0) for every directory entry.
+		struct Data
+		{
+			FSChar[] baseNameFS;
+			string baseName;
+			string fullName;
+
+			version (Posix)
+			{
+				StatResult[enumLength!StatTarget] statResult;
+			}
+		}
+		Data data;
+
+		// Recursion
+
+		Entry* parent;
+		Context* context;
+
+		version (Posix)
+		{
+			int dirFD;
+
+			void recurse()
+			{
+				import core.sys.posix.fcntl;
+				int flags = O_RDONLY;
+				static if (is(typeof(O_DIRECTORY)))
+					flags |= O_DIRECTORY;
+				auto fd = openat(dirFD, this.ent.d_name.ptr, flags);
+				errnoEnforce(fd >= 0,
+					"Failed to open %s as subdirectory of directory %s"
+					.format(this.baseNameFS, this.parent.fullName));
+				auto subdir = fdopendir(fd);
+				errnoEnforce(subdir,
+					"Failed to open subdirectory %s of directory %s as directory"
+					.format(this.baseNameFS, this.parent.fullName));
+				scan(subdir, fd, &this);
+			}
+		}
+		version (Windows)
+		{
+			void recurse()
+			{
+				this.pathTailPos = appendPath(context.pathBuf,
+					parent.pathTailPos, baseNameFSPtr.nullTerminated);
+				scan(&this);
+			}
+		}
+
+		void stop() { context.timeToStop = true; }
+
+		// Name
+
+		const(FSChar)* baseNameFSPtr() pure nothrow @nogc // fastest
+		{
+			version (Posix) return ent.d_name.ptr;
+			version (Windows) return findData.cFileName.ptr;
+		}
+
+		// Bounded variant of std.string.fromStringz for static arrays.
+		private static T[] fromStringz(T, size_t n)(ref T[n] buf)
+		{
+			foreach (i, c; buf)
+				if (!c)
+					return buf[0 .. i];
+			// This should only happen in case of an OS / libc bug.
+			assert(false, "File name buffer is not null-terminated");
+		}
+
+		const(FSChar)[] baseNameFS() pure nothrow @nogc // fast
+		{
+			if (!data.baseNameFS)
+			{
+				version (Posix) data.baseNameFS = fromStringz(ent.d_name);
+				version (Windows) data.baseNameFS = fromStringz(findData.cFileName);
+			}
+			return data.baseNameFS;
+		}
+
+		string baseName() // allocates
+		{
+			if (!data.baseName)
+				data.baseName = baseNameFS.to!string;
+			return data.baseName;
+		}
+
+		string fullName() // allocates
+		{
+			if (!data.fullName)
+			{
+				version (Posix)
+				{
+					auto parentName = parent.fullName;
+					data.fullName = text(
+						parentName,
+						!parentName.length || isDirSeparator(parentName[$-1]) ? "" : dirSeparator,
+						baseNameFS);
+				}
+				version (Windows)
+				{
+					auto end = appendString(context.pathBuf, parent.pathTailPos,
+						baseNameFSPtr().nullTerminated);
+					data.fullName = context.pathBuf[0 .. end].to!string;
+				}
+			}
+			return data.fullName;
+		}
+
+		// Attributes
+
+		version (Posix)
+		{
+			enum StatTarget
+			{
+				dirEntry,   // do not dereference (lstat)
+				linkTarget, // dereference
+			}
+			private bool tryStat(StatTarget target)() nothrow @nogc
+			{
+				if (data.statResult[target] == StatResult.noInfo)
+				{
+					// If we already did the other kind of stat, can we reuse its result?
+					if (data.statResult[1 - target] != StatResult.noInfo)
+					{
+						// Yes, if we know this isn't a link from the directory entry.
+						static if (__traits(compiles, ent.d_type))
+							if (ent.d_type != DT_UNKNOWN && ent.d_type != DT_LNK)
+								goto reuse;
+						// Yes, if we already found out this isn't a link from an lstat call.
+						static if (target == StatTarget.linkTarget)
+							if (data.statResult[StatTarget.dirEntry] == StatResult.statOK
+								&& (statBuf[StatTarget.dirEntry].st_mode & S_IFMT) != S_IFLNK)
+								goto reuse;
+					}
+
+					if (false)
+					{
+					reuse:
+						statBuf[target] = statBuf[1 - target];
+						data.statResult[target] = data.statResult[1 - target];
+					}
+					else
+					{
+						int flags = target == StatTarget.dirEntry ? AT_SYMLINK_NOFOLLOW : 0;
+						auto res = fstatat(dirFD, ent.d_name.ptr, &statBuf[target], flags);
+						if (res)
+						{
+							auto error = errno;
+							data.statResult[target] = cast(StatResult)error;
+							if (error == StatResult.noInfo || error == StatResult.statOK)
+								data.statResult[target] = StatResult.unknownError; // unknown error?
+						}
+						else
+							data.statResult[target] = StatResult.statOK; // no error
+					}
+				}
+				return data.statResult[target] == StatResult.statOK;
+			}
+
+			ErrnoException statError(StatTarget target)()
+			{
+				errno = data.statResult[target];
+				return new ErrnoException("Failed to stat " ~
+					(target == StatTarget.linkTarget ? "link target" : "directory entry") ~
+					": " ~ fullName);
+			}
+
+			stat_t* needStat(StatTarget target)()
+			{
+				if (!tryStat!target)
+					throw statError!target();
+				return &statBuf[target];
+			}
+
+			// Check if this is an object of the given type.
+			private bool deIsType(typeof(DT_REG) dType, typeof(S_IFREG) statType)
+			{
+				static if (__traits(compiles, ent.d_type))
+					if (ent.d_type != DT_UNKNOWN)
+						return ent.d_type == dType;
+
+				return (needStat!(StatTarget.dirEntry)().st_mode & S_IFMT) == statType;
+			}
+
+			/// Returns true if this is a symlink.
+			@property bool isSymlink()
+			{
+				return deIsType(DT_LNK, S_IFLNK);
+			}
+
+			/// Returns true if this is a directory.
+			/// You probably want to use this one to decide whether to recurse.
+			@property bool entryIsDir()
+			{
+				return deIsType(DT_DIR, S_IFDIR);
+			}
+
+			// Check if this is an object of the given type, or a link pointing to one.
+			private bool ltIsType(typeof(DT_REG) dType, typeof(S_IFREG) statType)
+			{
+				static if (__traits(compiles, ent.d_type))
+					if (ent.d_type != DT_UNKNOWN && ent.d_type != DT_LNK)
+						return ent.d_type == dType;
+
+				if (tryStat!(StatTarget.linkTarget)())
+					return (statBuf[StatTarget.linkTarget].st_mode & S_IFMT) == statType;
+
+				if (isSymlink()) // broken symlink?
+					return false; // a broken symlink does not point at anything.
+
+				throw statError!(StatTarget.linkTarget)();
+			}
+
+			/// Returns true if this is a file, or a link pointing to one.
+			@property bool isFile()
+			{
+				return ltIsType(DT_REG, S_IFREG);
+			}
+
+			/// Returns true if this is a directory, or a link pointing to one.
+			@property bool isDir()
+			{
+				return ltIsType(DT_DIR, S_IFDIR);
+			}
+
+			@property uint attributes()
+			{
+				return needStat!(StatTarget.linkTarget)().st_mode;
+			}
+
+			@property uint linkAttributes()
+			{
+				return needStat!(StatTarget.dirEntry)().st_mode;
+			}
+
+			// Other attributes
+
+			@property SysTime timeStatusChanged()
+			{
+				return statTimeToStdTime!"c"(*needStat!(StatTarget.linkTarget)());
+			}
+
+			@property SysTime timeLastAccessed()
+			{
+				return statTimeToStdTime!"a"(*needStat!(StatTarget.linkTarget)());
+			}
+
+			@property SysTime timeLastModified()
+			{
+				return statTimeToStdTime!"m"(*needStat!(StatTarget.linkTarget)());
+			}
+
+			static if (is(typeof(&statTimeToStdTime!"birth")))
+			@property SysTime timeCreated()
+			{
+				return statTimeToStdTime!"m"(*needStat!(StatTarget.linkTarget)());
+			}
+
+			@property ulong size()
+			{
+				return needStat!(StatTarget.linkTarget)().st_size;
+			}
+
+			@property ulong fileID()
+			{
+				static if (__traits(compiles, ent.d_ino))
+					return ent.d_ino;
+				else
+					return needStat!(StatTarget.linkTarget)().st_ino;
+			}
+		}
+
+		version (Windows)
+		{
+			@property bool isDir() const pure nothrow
+			{
+				return (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+			}
+
+			@property bool isFile() const pure nothrow
+			{
+				return !isDir;
+			}
+
+			@property bool isSymlink() const pure nothrow
+			{
+				return (findData.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+			}
+
+			@property bool entryIsDir() const pure nothrow
+			{
+				return isDir && !isSymlink;
+			}
+
+			@property ulong size() const pure nothrow
+			{
+				return makeUlong(findData.nFileSizeLow, findData.nFileSizeHigh);
+			}
+
+			@property SysTime timeCreated() const
+			{
+				return FILETIMEToSysTime(&findData.ftCreationTime);
+			}
+
+			@property SysTime timeLastAccessed() const
+			{
+				return FILETIMEToSysTime(&findData.ftLastAccessTime);
+			}
+
+			@property SysTime timeLastModified() const
+			{
+				return FILETIMEToSysTime(&findData.ftLastWriteTime);
+			}
+
+			@property ulong fileID()
+			{
+				return getFileID(fullName);
+			}
+		}
+	}
+
+	version (Posix)
+	{
+		static void scan(DIR* dir, int dirFD, Entry* parentEntry)
+		{
+			Entry entry = void;
+			entry.parent = parentEntry;
+			entry.context = entry.parent.context;
+			entry.dirFD = dirFD;
+
+			scope(exit) closedir(dir);
+
+			dirent* ent;
+			while ((ent = readdir(dir)) != null)
+			{
+				// Apparently happens on some OS X versions.
+				enforce(ent.d_name[0],
+					"Empty dir entry name (OS bug?)");
+
+				// Skip "." and ".."
+				if (ent.d_name[0] == '.' && (
+						ent.d_name[1] == 0 ||
+						(ent.d_name[1] == '.' && ent.d_name[2] == 0)))
+					continue;
+
+				entry.ent = ent;
+				entry.data = Entry.Data.init;
+				entry.context.callHandler(&entry);
+				if (entry.context.timeToStop)
+					break;
+			}
+		}
+	}
+
+	enum isPath(Path) = (isForwardRange!Path || isSomeString!Path) &&
+		isSomeChar!(ElementEncodingType!Path);
+
+	version (Windows)
+	{
+		import core.stdc.stdlib : malloc, realloc, free;
+		mixin(importWin32!(q{winbase}));
+		import ae.sys.windows.misc : makeUlong;
+
+		// The length of the buffer on the stack.
+		enum initialPathBufLength = MAX_PATH;
+
+		enum FIND_FIRST_EX_LARGE_FETCH = 2;
+		enum FindExInfoBasic = cast(FINDEX_INFO_LEVELS)1;
+
+		static FSChar[] reallocPathBuf(FSChar[] buf, size_t newLength)
+		{
+			if (buf.length == initialPathBufLength) // current buffer is on stack
+			{
+				auto ptr = cast(FSChar*) malloc(newLength * FSChar.sizeof);
+				ptr[0 .. buf.length] = buf[];
+				return ptr[0 .. newLength];
+			}
+			else // current buffer on C heap (malloc'd above)
+			{
+				auto ptr = cast(FSChar*) realloc(buf.ptr, newLength * FSChar.sizeof);
+				return ptr[0 .. newLength];
+			}
+		}
+
+		// Append a string to the buffer, reallocating as necessary.
+		// Returns the new length of the string in the buffer.
+		static size_t appendString(Str)(ref FSChar[] buf, size_t pos, Str str)
+		if (isPath!Str)
+		{
+			static if (ElementEncodingType!Str.sizeof == FSChar.sizeof
+				&& is(typeof(str.length)))
+			{
+				// No transcoding needed and length known
+				auto remainingSpace = buf.length - pos;
+				if (str.length > remainingSpace)
+					buf = reallocPathBuf(buf, (pos + str.length) * 3 / 2);
+				buf[pos .. pos + str.length] = str[];
+				pos += str.length;
+			}
+			else
+			{
+				// Need to transcode
+				auto p = buf.ptr + pos;
+				auto bufEnd = buf.ptr + buf.length;
+				foreach (c; byUTF!FSChar(str))
+				{
+					if (p == bufEnd) // out of room
+					{
+						auto newBuf = reallocPathBuf(buf, buf.length * 3 / 2);
+
+						// Update pointers to point into the new buffer.
+						p = newBuf.ptr + (p - buf.ptr);
+						buf = newBuf;
+						bufEnd = buf.ptr + buf.length;
+					}
+					*p++ = c;
+				}
+				pos = p - buf.ptr;
+			}
+			return pos;
+		}
+
+		// Append a path fragment.
+		// tailPos is the current path length, without any suffix.
+		// Returns the new path length, without the "\*.*" suffix.
+		static size_t appendPath(Path)(ref FSChar[] buf, size_t tailPos, Path path)
+		if (isPath!Path)
+		{
+			auto endPos = appendString(buf, tailPos, path);
+			bool needSeparator = endPos > 0 && !buf[endPos - 1].isDirSeparator();
+			const WCHAR[] tailString = needSeparator ? "\\*.*\0"w : "*.*\0"w;
+			appendString(buf, endPos, tailString);
+			if (needSeparator)
+				endPos++; // include separator in prefix
+			return endPos;
+		}
+
+		static void scan(Entry* parentEntry)
+		{
+			Entry entry = void;
+			entry.parent = parentEntry;
+			entry.context = parentEntry.context;
+
+			HANDLE hFind = FindFirstFileExW(
+				entry.context.pathBuf.ptr,
+				FindExInfoBasic,
+				&entry.findData,
+				FINDEX_SEARCH_OPS.FindExSearchNameMatch,
+				null,
+				FIND_FIRST_EX_LARGE_FETCH, // https://blogs.msdn.microsoft.com/oldnewthing/20131024-00/?p=2843
+			);
+			if (hFind == INVALID_HANDLE_VALUE)
+				throw new WindowsException(GetLastError(),
+					text("FindFirstFileW: ", entry.context.pathBuf[0 .. parentEntry.pathTailPos]));
+			scope(exit) FindClose(hFind);
+			do
+			{
+				// Skip "." and ".."
+				auto fn = entry.findData.cFileName.ptr;
+				if (fn[0] == '.' && (
+						fn[1] == 0 ||
+						(fn[1] == '.' && fn[2] == 0)))
+					continue;
+
+				entry.data = Entry.Data.init;
+				entry.context.callHandler(&entry);
+				if (entry.context.timeToStop)
+					break;
+			}
+			while (FindNextFileW(hFind, &entry.findData));
+			if (GetLastError() != ERROR_NO_MORE_FILES)
+				throw new WindowsException(GetLastError(),
+					text("FindNextFileW: ", entry.context.pathBuf[0 .. parentEntry.pathTailPos]));
+		}
+	}
+
+	void listDir(Path)(Path dirPath)
+	if (isPath!Path)
+	{
+		import std.internal.cstring;
+
+		Context context;
+
+		Entry rootEntry = void;
+		rootEntry.context = &context;
+
+		version (Posix)
+		{
+			rootEntry.parent = null;
+			rootEntry.data.fullName = dirPath.to!string;
+
+			auto dir = opendir(tempCString(dirPath));
+			errnoEnforce(dir, "Failed to open directory " ~ dirPath);
+
+			scan(dir, dirfd(dir), &rootEntry);
+		}
+		else
+		version (Windows)
+		{
+			FSChar[initialPathBufLength] pathBufStore = void;
+			context.pathBuf = pathBufStore[];
+			scope (exit)
+			{
+				if (context.pathBuf.length != initialPathBufLength)
+					free(context.pathBuf.ptr);
+			}
+
+			rootEntry.pathTailPos = appendPath(context.pathBuf, 0, dirPath);
+
+			scan(&rootEntry);
+		}
+	}
+}
+
+unittest
+{
+	auto tmpDir = deleteme;
+	mkdirRecurse(deleteme);
+	scope(exit) rmdirRecurse(deleteme);
+
+	touch(deleteme ~ "/a");
+	touch(deleteme ~ "/b");
+	mkdir(deleteme ~ "/c");
+	touch(deleteme ~ "/c/1");
+	touch(deleteme ~ "/c/2");
+
+	string[] entries;
+	listDir!((e) {
+		entries ~= e.fullName.fastRelativePath(deleteme);
+		if (e.entryIsDir)
+			e.recurse();
+	})(deleteme);
+
+	assert(equal(
+		entries.sort,
+		["a", "b", "c", "c/1", "c/2"].map!(name => name.replace("/", dirSeparator)),
+	), text(entries));
+
+	entries = null;
+	import std.ascii : isDigit;
+	listDir!((e) {
+		entries ~= e.fullName.fastRelativePath(deleteme);
+		if (e.baseNameFS[0].isDigit)
+			e.stop();
+		else
+		if (e.entryIsDir)
+			e.recurse();
+	})(deleteme);
+
+	assert(entries.length < 5 && entries[$-1][$-1].isDigit, text(entries));
+
+	// Symlink test
+	(){
+		// Wine's implementation of symlinks/junctions is incomplete
+		version (Windows)
+			if (getWineVersion())
+				return;
+
+		dirLink("c", deleteme ~ "/d");
+		dirLink("x", deleteme ~ "/e");
+
+		string[] entries;
+		listDir!((e) {
+			entries ~= e.fullName.fastRelativePath(deleteme);
+			if (e.entryIsDir)
+				e.recurse();
+		})(deleteme);
+
+		assert(equal(
+			entries.sort,
+			["a", "b", "c", "c/1", "c/2", "d", "e"].map!(name => name.replace("/", dirSeparator)),
+		));
+
+		// Recurse into symlinks
+
+		entries = null;
+		listDir!((e) {
+			entries ~= e.fullName.fastRelativePath(deleteme);
+			if (e.isDir)
+				try
+					e.recurse();
+				catch (Exception e) // broken junctions on Windows throw
+					{}
+		})(deleteme);
+
+		assert(equal(
+			entries.sort,
+			["a", "b", "c", "c/1", "c/2", "d", "d/1", "d/2", "e"].map!(name => name.replace("/", dirSeparator)),
+		));
+	}();
+}
 
 // ************************************************************************
 
