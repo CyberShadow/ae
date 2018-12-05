@@ -230,12 +230,18 @@ template listDir(alias handler)
 			FSChar[] baseNameFS;
 			string baseName;
 			string fullName;
-			int[enumLength!StatTarget] statResult; // errno, or int.max (statOK) for no error
+			StatResult[enumLength!StatTarget] statResult;
 		}
 		Data data;
 
 		stat_t[enumLength!StatTarget] statBuf;
-		enum int statOK = int.max;
+		enum StatResult : int
+		{
+			noInfo = 0,
+			statOK = int.max,
+			unknownError = int.min,
+			// other values are the same as errno
+		}
 
 		// Recursion
 
@@ -305,10 +311,10 @@ template listDir(alias handler)
 		}
 		private bool tryStat(StatTarget target)() nothrow @nogc
 		{
-			if (!data.statResult[target])
+			if (data.statResult[target] == StatResult.noInfo)
 			{
 				// If we already did the other kind of stat, can we reuse its result?
-				if (data.statResult[1 - target])
+				if (data.statResult[1 - target] != StatResult.noInfo)
 				{
 					// Yes, if we know this isn't a link from the directory entry.
 					static if (__traits(compiles, ent.d_type))
@@ -316,7 +322,7 @@ template listDir(alias handler)
 							goto reuse;
 					// Yes, if we already found out this isn't a link from an lstat call.
 					static if (target == StatTarget.linkTarget)
-						if (data.statResult[StatTarget.dirEntry] == statOK
+						if (data.statResult[StatTarget.dirEntry] == StatResult.statOK
 							&& (statBuf[StatTarget.dirEntry].st_mode & S_IFMT) != S_IFLNK)
 							goto reuse;
 				}
@@ -333,15 +339,15 @@ template listDir(alias handler)
 					if (res)
 					{
 						auto error = errno;
-						data.statResult[target] = error;
-						if (error == 0 || error == statOK)
-							data.statResult[target] = int.min; // unknown error?
+						data.statResult[target] = cast(StatResult)error;
+						if (error == StatResult.noInfo || error == StatResult.statOK)
+							data.statResult[target] = StatResult.unknownError; // unknown error?
 					}
 					else
-						data.statResult[target] = statOK; // no error
+						data.statResult[target] = StatResult.statOK; // no error
 				}
 			}
-			return data.statResult[target] == statOK;
+			return data.statResult[target] == StatResult.statOK;
 		}
 
 		ErrnoException statError(StatTarget target)()
