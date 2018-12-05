@@ -335,7 +335,8 @@ template listDir(alias handler)
 				}
 				else
 				{
-					auto res = fstatat(dirFD, ent.d_name.ptr, &statBuf[target], target == StatTarget.dirEntry ? AT_SYMLINK_NOFOLLOW : 0);
+					int flags = target == StatTarget.dirEntry ? AT_SYMLINK_NOFOLLOW : 0;
+					auto res = fstatat(dirFD, ent.d_name.ptr, &statBuf[target], flags);
 					if (res)
 					{
 						auto error = errno;
@@ -353,7 +354,9 @@ template listDir(alias handler)
 		ErrnoException statError(StatTarget target)()
 		{
 			errno = data.statResult[target];
-			return new ErrnoException("Failed to stat " ~ (target == StatTarget.linkTarget ? "link target" : "directory entry") ~ ": " ~ fullName);
+			return new ErrnoException("Failed to stat " ~
+				(target == StatTarget.linkTarget ? "link target" : "directory entry") ~
+				": " ~ fullName);
 		}
 
 		stat_t* needStat(StatTarget target)()
@@ -509,7 +512,11 @@ unittest
 	dirLink("x", deleteme ~ "/e");
 
 	string[] entries;
-	listDir!((e) { entries ~= e.fullName.fastRelativePath(deleteme); if (e.entryIsDir) e.recurse(); })(deleteme);
+	listDir!((e) {
+		entries ~= e.fullName.fastRelativePath(deleteme);
+		if (e.entryIsDir)
+			e.recurse();
+	})(deleteme);
 
 	assert(equal(
 		entries.sort,
