@@ -88,6 +88,35 @@ unittest
 
 // ************************************************************************
 
+/// Presents a null-terminated pointer (C-like string) as a range.
+struct NullTerminated(E)
+{
+	E* ptr;
+	bool empty() { return !*ptr; }
+	ref E front() { return *ptr; }
+	void popFront() { ptr++; }
+	auto save() { return this; }
+}
+auto nullTerminated(E)(E* ptr)
+{
+	return NullTerminated!E(ptr);
+}
+
+unittest
+{
+	void test(S)(S s)
+	{
+		import std.utf, std.algorithm.comparison;
+		assert(equal(s.byCodeUnit, s.ptr.nullTerminated));
+	}
+	// String literals are null-terminated
+	test("foo");
+	test("foo"w);
+	test("foo"d);
+}
+
+// ************************************************************************
+
 /// Apply a predicate over each consecutive pair.
 template pairwise(alias pred)
 {
