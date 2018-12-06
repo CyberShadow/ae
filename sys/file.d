@@ -763,6 +763,21 @@ unittest
 		entries.sort,
 		["a", "b", "c", "c/1", "c/2", "d", "e"].map!(name => name.replace("/", dirSeparator)),
 	));
+
+	// Recurse into symlinks
+
+	entries = null;
+	listDir!((e) {
+		entries ~= e.fullName.fastRelativePath(deleteme);
+		if (e.isDir)
+			e.recurse();
+	})(deleteme);
+
+	assert(equal(
+		entries.sort,
+		["a", "b", "c", "c/1", "c/2", "d", "d/1", "d/2", "e"].map!(name => name.replace("/", dirSeparator)),
+	));
+
 }
 
 // ************************************************************************
