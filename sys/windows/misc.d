@@ -25,17 +25,17 @@ mixin(importWin32!q{winuser});
 import ae.sys.windows.exception;
 import ae.sys.windows.text;
 
-LARGE_INTEGER largeInteger(long n)
+LARGE_INTEGER largeInteger(long n) pure nothrow @nogc
 {
 	LARGE_INTEGER li; li.QuadPart = n; return li;
 }
 
-ULARGE_INTEGER ulargeInteger(ulong n)
+ULARGE_INTEGER ulargeInteger(ulong n) pure nothrow @nogc
 {
 	ULARGE_INTEGER li; li.QuadPart = n; return li;
 }
 
-ulong makeUlong(DWORD dwLow, DWORD dwHigh)
+ulong makeUlong(DWORD dwLow, DWORD dwHigh) pure nothrow @nogc
 {
 	ULARGE_INTEGER li;
 	li.LowPart  = dwLow;
