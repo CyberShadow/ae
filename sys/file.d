@@ -20,6 +20,7 @@ import std.array;
 import std.conv;
 import std.file;
 import std.path;
+import std.range.primitives;
 import std.stdio : File;
 import std.string;
 import std.typecons;
@@ -164,9 +165,16 @@ else
 
 // ************************************************************************
 
+version (Windows)
+{
+	mixin(importWin32!(q{winnt}, null, q{WCHAR}));
+	mixin(importWin32!(q{winbase}, null, q{WIN32_FIND_DATAW}));
+	import ae.utils.range : nullTerminated;
+}
+
 /// The OS's "native" filesystem character type (private in Phobos).
 version (Windows)
-	alias FSChar = wchar;
+	alias FSChar = WCHAR;
 else version (Posix)
 	alias FSChar = char;
 else
@@ -213,16 +221,37 @@ version (Posix)
 /// Fast templated directory iterator
 template listDir(alias handler)
 {
-	// Tether to handler alias context
-	/*non-static*/ struct HandlerPtr
+	/*non-static*/ struct Context
 	{
+		// Tether to handler alias context
 		void callHandler(Entry* e) { handler(e); }
+
+		version (Windows)
+		{
+			FSChar[] pathBuf;
+		}
 	}
 
 	static struct Entry
 	{
-		Entry* parent;
-		dirent* ent;
+		version (Posix)
+		{
+			dirent* ent;
+
+			stat_t[enumLength!StatTarget] statBuf;
+			enum StatResult : int
+			{
+				noInfo = 0,
+				statOK = int.max,
+				unknownError = int.min,
+				// other values are the same as errno
+			}
+		}
+		version (Windows)
+		{
+			WIN32_FIND_DATAW findData;
+			size_t pathTailPos;
+		}
 
 		// Cleared (memset to 0) for every directory entry.
 		struct Data
@@ -230,54 +259,76 @@ template listDir(alias handler)
 			FSChar[] baseNameFS;
 			string baseName;
 			string fullName;
-			StatResult[enumLength!StatTarget] statResult;
+
+			version (Posix)
+			{
+				StatResult[enumLength!StatTarget] statResult;
+			}
 		}
 		Data data;
 
-		stat_t[enumLength!StatTarget] statBuf;
-		enum StatResult : int
-		{
-			noInfo = 0,
-			statOK = int.max,
-			unknownError = int.min,
-			// other values are the same as errno
-		}
-
 		// Recursion
 
-		HandlerPtr handlerPtr;
-		int dirFD;
+		Entry* parent;
+		Context* context;
 
-		void recurse()
+		version (Posix)
 		{
-			int flags = O_RDONLY;
-			version(linux) enum O_DIRECTORY = 0x10000;
-			static if (is(typeof(O_DIRECTORY)))
-				flags |= O_DIRECTORY;
-			auto fd = openat(dirFD, this.ent.d_name.ptr, flags);
-			errnoEnforce(fd >= 0,
-				"Failed to open %s as subdirectory of directory %s"
-				.format(this.baseNameFS, this.parent.fullName));
-			auto subdir = fdopendir(fd);
-			errnoEnforce(subdir,
-				"Failed to open subdirectory %s of directory %s as directory"
-				.format(this.baseNameFS, this.parent.fullName));
-			scan(subdir, fd, &this);
+			int dirFD;
+
+			void recurse()
+			{
+				import core.sys.posix.fcntl;
+				int flags = O_RDONLY;
+				version(linux) enum O_DIRECTORY = 0x10000;
+				static if (is(typeof(O_DIRECTORY)))
+					flags |= O_DIRECTORY;
+				auto fd = openat(dirFD, this.ent.d_name.ptr, flags);
+				errnoEnforce(fd >= 0,
+					"Failed to open %s as subdirectory of directory %s"
+					.format(this.baseNameFS, this.parent.fullName));
+				auto subdir = fdopendir(fd);
+				errnoEnforce(subdir,
+					"Failed to open subdirectory %s of directory %s as directory"
+					.format(this.baseNameFS, this.parent.fullName));
+				scan(subdir, fd, &this);
+			}
+		}
+		version (Windows)
+		{
+			void recurse()
+			{
+				this.pathTailPos = parent.pathTailPos;
+				appendPath(context.pathBuf, this.pathTailPos,
+					baseNameFSPtr.nullTerminated);
+				scan(&this);
+			}
 		}
 
 		// Name
 
 		const(FSChar)* baseNameFSPtr() pure nothrow @nogc // fastest
 		{
-			return ent.d_name.ptr;
+			version (Posix) return ent.d_name.ptr;
+			version (Windows) return findData.cFileName.ptr;
+		}
+
+		// Bounded variant of std.string.fromStringz for static arrays.
+		private static T[] fromStringz(T, size_t n)(ref T[n] buf)
+		{
+			foreach (i, c; buf)
+				if (!c)
+					return buf[0 .. i];
+			// This should only happen in case of an OS / libc bug.
+			assert(false, "File name buffer is not null-terminated");
 		}
 
 		const(FSChar)[] baseNameFS() pure nothrow @nogc // fast
 		{
 			if (!data.baseNameFS)
 			{
-				size_t len = core.stdc.string.strlen(ent.d_name.ptr);
-				data.baseNameFS = ent.d_name[0 .. len];
+				version (Posix) data.baseNameFS = fromStringz(ent.d_name);
+				version (Windows) data.baseNameFS = fromStringz(findData.cFileName);
 			}
 			return data.baseNameFS;
 		}
@@ -293,207 +344,392 @@ template listDir(alias handler)
 		{
 			if (!data.fullName)
 			{
-				auto parentName = parent.fullName;
-				data.fullName = text(
-					parentName,
-					!parentName.length || isDirSeparator(parentName[$-1]) ? "" : dirSeparator,
-					baseNameFS);
+				version (Posix)
+				{
+					auto parentName = parent.fullName;
+					data.fullName = text(
+						parentName,
+						!parentName.length || isDirSeparator(parentName[$-1]) ? "" : dirSeparator,
+						baseNameFS);
+				}
+				version (Windows)
+				{
+					auto end = appendString(context.pathBuf, this.pathTailPos,
+						baseNameFSPtr().nullTerminated);
+					data.fullName = context.pathBuf[0 .. end].to!string;
+				}
 			}
 			return data.fullName;
 		}
 
 		// Attributes
 
-		enum StatTarget
+		version (Posix)
 		{
-			dirEntry,   // do not dereference (lstat)
-			linkTarget, // dereference
-		}
-		private bool tryStat(StatTarget target)() nothrow @nogc
-		{
-			if (data.statResult[target] == StatResult.noInfo)
+			enum StatTarget
 			{
-				// If we already did the other kind of stat, can we reuse its result?
-				if (data.statResult[1 - target] != StatResult.noInfo)
+				dirEntry,   // do not dereference (lstat)
+				linkTarget, // dereference
+			}
+			private bool tryStat(StatTarget target)() nothrow @nogc
+			{
+				if (data.statResult[target] == StatResult.noInfo)
 				{
-					// Yes, if we know this isn't a link from the directory entry.
-					static if (__traits(compiles, ent.d_type))
-						if (ent.d_type != DT_UNKNOWN && ent.d_type != DT_LNK)
-							goto reuse;
-					// Yes, if we already found out this isn't a link from an lstat call.
-					static if (target == StatTarget.linkTarget)
-						if (data.statResult[StatTarget.dirEntry] == StatResult.statOK
-							&& (statBuf[StatTarget.dirEntry].st_mode & S_IFMT) != S_IFLNK)
-							goto reuse;
-				}
-
-				if (false)
-				{
-				reuse:
-					statBuf[target] = statBuf[1 - target];
-					data.statResult[target] = data.statResult[1 - target];
-				}
-				else
-				{
-					int flags = target == StatTarget.dirEntry ? AT_SYMLINK_NOFOLLOW : 0;
-					auto res = fstatat(dirFD, ent.d_name.ptr, &statBuf[target], flags);
-					if (res)
+					// If we already did the other kind of stat, can we reuse its result?
+					if (data.statResult[1 - target] != StatResult.noInfo)
 					{
-						auto error = errno;
-						data.statResult[target] = cast(StatResult)error;
-						if (error == StatResult.noInfo || error == StatResult.statOK)
-							data.statResult[target] = StatResult.unknownError; // unknown error?
+						// Yes, if we know this isn't a link from the directory entry.
+						static if (__traits(compiles, ent.d_type))
+							if (ent.d_type != DT_UNKNOWN && ent.d_type != DT_LNK)
+								goto reuse;
+						// Yes, if we already found out this isn't a link from an lstat call.
+						static if (target == StatTarget.linkTarget)
+							if (data.statResult[StatTarget.dirEntry] == StatResult.statOK
+								&& (statBuf[StatTarget.dirEntry].st_mode & S_IFMT) != S_IFLNK)
+								goto reuse;
+					}
+
+					if (false)
+					{
+					reuse:
+						statBuf[target] = statBuf[1 - target];
+						data.statResult[target] = data.statResult[1 - target];
 					}
 					else
-						data.statResult[target] = StatResult.statOK; // no error
+					{
+						int flags = target == StatTarget.dirEntry ? AT_SYMLINK_NOFOLLOW : 0;
+						auto res = fstatat(dirFD, ent.d_name.ptr, &statBuf[target], flags);
+						if (res)
+						{
+							auto error = errno;
+							data.statResult[target] = cast(StatResult)error;
+							if (error == StatResult.noInfo || error == StatResult.statOK)
+								data.statResult[target] = StatResult.unknownError; // unknown error?
+						}
+						else
+							data.statResult[target] = StatResult.statOK; // no error
+					}
 				}
+				return data.statResult[target] == StatResult.statOK;
 			}
-			return data.statResult[target] == StatResult.statOK;
+
+			ErrnoException statError(StatTarget target)()
+			{
+				errno = data.statResult[target];
+				return new ErrnoException("Failed to stat " ~
+					(target == StatTarget.linkTarget ? "link target" : "directory entry") ~
+					": " ~ fullName);
+			}
+
+			stat_t* needStat(StatTarget target)()
+			{
+				if (!tryStat!target)
+					throw statError!target();
+				return &statBuf[target];
+			}
+
+			// Check if this is an object of the given type.
+			private bool deIsType(typeof(DT_REG) dType, typeof(S_IFREG) statType)
+			{
+				static if (__traits(compiles, ent.d_type))
+					if (ent.d_type != DT_UNKNOWN)
+						return ent.d_type == dType;
+
+				return (needStat!(StatTarget.dirEntry)().st_mode & S_IFMT) == statType;
+			}
+
+			/// Returns true if this is a symlink.
+			@property bool isSymlink()
+			{
+				return deIsType(DT_LNK, S_IFLNK);
+			}
+
+			/// Returns true if this is a directory.
+			/// You probably want to use this one to decide whether to recurse.
+			@property bool entryIsDir()
+			{
+				return deIsType(DT_DIR, S_IFDIR);
+			}
+
+			// Check if this is an object of the given type, or a link pointing to one.
+			private bool ltIsType(typeof(DT_REG) dType, typeof(S_IFREG) statType)
+			{
+				static if (__traits(compiles, ent.d_type))
+					if (ent.d_type != DT_UNKNOWN && ent.d_type != DT_LNK)
+						return ent.d_type == dType;
+
+				if (tryStat!(StatTarget.linkTarget)())
+					return (statBuf[StatTarget.linkTarget].st_mode & S_IFMT) == statType;
+
+				if (isSymlink()) // broken symlink?
+					return false; // a broken symlink does not point at anything.
+
+				throw statError!(StatTarget.linkTarget)();
+			}
+
+			/// Returns true if this is a file, or a link pointing to one.
+			@property bool isFile()
+			{
+				return ltIsType(DT_REG, S_IFREG);
+			}
+
+			/// Returns true if this is a directory, or a link pointing to one.
+			@property bool isDir()
+			{
+				return ltIsType(DT_DIR, S_IFDIR);
+			}
+
+			@property uint attributes()
+			{
+				return needStat!(StatTarget.linkTarget)().st_mode;
+			}
+
+			@property uint linkAttributes()
+			{
+				return needStat!(StatTarget.dirEntry)().st_mode;
+			}
+
+			// Other attributes
+
+			@property SysTime timeStatusChanged()
+			{
+				return statTimeToStdTime!'c'(*needStat!(StatTarget.linkTarget)());
+			}
+
+			@property SysTime timeLastAccessed()
+			{
+				return statTimeToStdTime!'a'(*needStat!(StatTarget.linkTarget)());
+			}
+
+			@property SysTime timeLastModified()
+			{
+				return statTimeToStdTime!'m'(*needStat!(StatTarget.linkTarget)());
+			}
+
+			@property ulong size()
+			{
+				return needStat!(StatTarget.linkTarget)().st_size;
+			}
+
+			@property ulong fileID()
+			{
+				return needStat!(StatTarget.linkTarget)().st_ino;
+			}
 		}
 
-		ErrnoException statError(StatTarget target)()
+		version (Windows)
 		{
-			errno = data.statResult[target];
-			return new ErrnoException("Failed to stat " ~
-				(target == StatTarget.linkTarget ? "link target" : "directory entry") ~
-				": " ~ fullName);
-		}
+			@property bool isDir() const pure nothrow
+			{
+				return (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+			}
 
-		stat_t* needStat(StatTarget target)()
-		{
-			if (!tryStat!target)
-				throw statError!target();
-			return &statBuf[target];
-		}
+			@property bool isFile() const pure nothrow
+			{
+				return !isDir;
+			}
 
-		// Check if this is an object of the given type.
-		private bool deIsType(typeof(DT_REG) dType, typeof(S_IFREG) statType)
-		{
-			static if (__traits(compiles, ent.d_type))
-				if (ent.d_type != DT_UNKNOWN)
-					return ent.d_type == dType;
+			@property bool isSymlink() const pure nothrow
+			{
+				return (findData.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+			}
 
-			return (needStat!(StatTarget.dirEntry)().st_mode & S_IFMT) == statType;
-		}
+			@property bool entryIsDir() const pure nothrow
+			{
+				return isDir && !isSymlink;
+			}
 
-		/// Returns true if this is a symlink.
-		@property bool isSymlink()
-		{
-			return deIsType(DT_LNK, S_IFLNK);
-		}
+			@property ulong size() const pure nothrow
+			{
+				return makeUlong(findData.nFileSizeLow, findData.nFileSizeHigh);
+			}
 
-		/// Returns true if this is a directory.
-		/// You probably want to use this one to decide whether to recurse.
-		@property bool entryIsDir()
-		{
-			return deIsType(DT_DIR, S_IFDIR);
-		}
+			@property SysTime timeCreated() const
+			{
+				return FILETIMEToSysTime(&findData.ftCreationTime);
+			}
 
-		// Check if this is an object of the given type, or a link pointing to one.
-		private bool ltIsType(typeof(DT_REG) dType, typeof(S_IFREG) statType)
-		{
-			static if (__traits(compiles, ent.d_type))
-				if (ent.d_type != DT_UNKNOWN && ent.d_type != DT_LNK)
-					return ent.d_type == dType;
+			@property SysTime timeLastAccessed() const
+			{
+				return FILETIMEToSysTime(&findData.ftLastAccessTime);
+			}
 
-			if (tryStat!(StatTarget.linkTarget)())
-				return (statBuf[StatTarget.linkTarget].st_mode & S_IFMT) == statType;
-
-			if (isSymlink()) // broken symlink?
-				return false; // a broken symlink does not point at anything.
-
-			throw statError!(StatTarget.linkTarget)();
-		}
-
-		/// Returns true if this is a file, or a link pointing to one.
-		@property bool isFile()
-		{
-			return ltIsType(DT_REG, S_IFREG);
-		}
-
-		/// Returns true if this is a directory, or a link pointing to one.
-		@property bool isDir()
-		{
-			return ltIsType(DT_DIR, S_IFDIR);
-		}
-
-		@property uint attributes()
-		{
-			return needStat!(StatTarget.linkTarget)().st_mode;
-		}
-
-		@property uint linkAttributes()
-		{
-			return needStat!(StatTarget.dirEntry)().st_mode;
-		}
-
-		// Other attributes
-
-		@property SysTime timeStatusChanged()
-		{
-			return statTimeToStdTime!'c'(*needStat!(StatTarget.linkTarget)());
-		}
-
-		@property SysTime timeLastAccessed()
-		{
-			return statTimeToStdTime!'a'(*needStat!(StatTarget.linkTarget)());
-		}
-
-		@property SysTime timeLastModified()
-		{
-			return statTimeToStdTime!'m'(*needStat!(StatTarget.linkTarget)());
-		}
-
-		@property ulong size()
-		{
-			return needStat!(StatTarget.linkTarget)().st_size;
-		}
-
-		@property ulong fileID()
-		{
-			return needStat!(StatTarget.linkTarget)().st_ino;
+			@property SysTime timeLastModified() const
+			{
+				return FILETIMEToSysTime(&findData.ftLastWriteTime);
+			}
 		}
 	}
 
-	import core.sys.posix.fcntl;
-
-	static void scan(DIR* dir, int dirFD, Entry* parentEntry)
+	version (Posix)
 	{
-		Entry entry = void;
-		entry.parent = parentEntry;
-		entry.handlerPtr = entry.parent.handlerPtr;
-		entry.dirFD = dirFD;
-
-		scope(exit) closedir(dir);
-
-		dirent* ent;
-		while ((ent = readdir(dir)) != null)
+		static void scan(DIR* dir, int dirFD, Entry* parentEntry)
 		{
-			// Skip "." and ".."
-			if (ent.d_name[0] == '.' && (
-					ent.d_name[1] == 0 ||
-					(ent.d_name[1] == '.' && ent.d_name[2] == 0)))
-				continue;
+			Entry entry = void;
+			entry.parent = parentEntry;
+			entry.context = entry.parent.context;
+			entry.dirFD = dirFD;
 
-			entry.ent = ent;
-			entry.data = Entry.Data.init;
-			entry.handlerPtr.callHandler(&entry);
+			scope(exit) closedir(dir);
+
+			dirent* ent;
+			while ((ent = readdir(dir)) != null)
+			{
+				// Skip "." and ".."
+				if (ent.d_name[0] == '.' && (
+						ent.d_name[1] == 0 ||
+						(ent.d_name[1] == '.' && ent.d_name[2] == 0)))
+					continue;
+
+				entry.ent = ent;
+				entry.data = Entry.Data.init;
+				entry.context.callHandler(&entry);
+			}
 		}
 	}
 
-	void listDir(string dirPath)
+	enum isPath(Path) = (isForwardRange!Path || isSomeString!Path) &&
+		isSomeChar!(ElementEncodingType!Path);
+
+	version (Windows)
+	{
+		import core.stdc.stdlib : malloc, realloc, free;
+		mixin(importWin32!(q{winbase}));
+		import ae.sys.windows.misc : makeUlong;
+
+		// The length of the buffer on the stack.
+		enum initialPathBufLength = MAX_PATH;
+
+		static FSChar[] reallocPathBuf(FSChar[] buf, size_t newLength)
+		{
+			if (buf.length == initialPathBufLength) // current buffer is on stack
+			{
+				auto ptr = cast(FSChar*) malloc(newLength * FSChar.sizeof);
+				ptr[0 .. buf.length] = buf[];
+				return ptr[0 .. newLength];
+			}
+			else // current buffer on C heap (malloc'd above)
+			{
+				auto ptr = cast(FSChar*) realloc(buf.ptr, newLength * FSChar.sizeof);
+				return ptr[0 .. newLength];
+			}
+		}
+
+		// Append a string to the buffer, reallocating as necessary.
+		// Returns the new length of the string in the buffer.
+		static size_t appendString(Str)(ref FSChar[] buf, size_t pos, Str str)
+		if (isPath!Str)
+		{
+			static if (ElementEncodingType!Str.sizeof == FSChar.sizeof
+				&& is(typeof(str.length)))
+			{
+				// No transcoding needed and length known
+				auto remainingSpace = buf.length - pos;
+				if (str.length > remainingSpace)
+					reallocPathBuf(buf, (pos + str.length) * 3 / 2);
+				buf[pos .. pos + str.length] = str[];
+				pos += str.length;
+			}
+			else
+			{
+				// Need to transcode
+				auto p = buf.ptr + pos;
+				auto bufEnd = buf.ptr + buf.length;
+				foreach (c; byUTF!FSChar(str))
+				{
+					if (p == bufEnd) // out of room
+					{
+						auto newBuf = reallocPathBuf(buf, buf.length * 3 / 2);
+
+						// Update pointers to point into the new buffer.
+						p = newBuf.ptr + (p - buf.ptr);
+						buf = newBuf;
+						bufEnd = buf.ptr + buf.length;
+					}
+					*p++ = c;
+				}
+				pos = p - buf.ptr;
+			}
+			return pos;
+		}
+
+		// Append a path fragment.
+		// tailPos is the current path length, without any suffix.
+		// Returns the new path length, without the "\*.*" suffix.
+		static size_t appendPath(Path)(ref FSChar[] buf, size_t tailPos, Path path)
+		if (isPath!Path)
+		{
+			auto endPos = appendString(buf, tailPos, path);
+			bool needSeparator = endPos > 0 && !buf[endPos - 1].isDirSeparator();
+			const WCHAR[] tailString = needSeparator ? "\\*.*\0"w : "*.*\0"w;
+			appendString(buf, endPos, tailString);
+			return endPos;
+		}
+
+		static void scan(Entry* parentEntry)
+		{
+			Entry entry = void;
+			entry.context = entry.parent.context;
+
+			HANDLE hFind = FindFirstFileW(entry.context.pathBuf.ptr, &entry.findData);
+			if (hFind == INVALID_HANDLE_VALUE)
+				throw new WindowsException(GetLastError(),
+					text("FindFirstFileW: ", entry.context.pathBuf[0 .. parentEntry.pathTailPos]));
+			scope(exit) FindClose(hFind);
+			do
+			{
+				// Skip "." and ".."
+				auto fn = entry.findData.cFileName.ptr;
+				if (fn[0] == '.' && (
+						fn[1] == 0 ||
+						(fn[1] == '.' && fn[2] == 0)))
+					continue;
+
+				entry.data = Entry.Data.init;
+				entry.context.callHandler(&entry);
+			}
+			while (FindNextFileW(hFind, &entry.findData));
+			if (GetLastError() != ERROR_NO_MORE_FILES)
+				throw new WindowsException(GetLastError(),
+					text("FindNextFileW: ", entry.context.pathBuf[0 .. parentEntry.pathTailPos]));
+		}
+	}
+
+	void listDir(Path)(Path dirPath)
+	if (isPath!Path)
 	{
 		import std.internal.cstring;
 
-		auto dir = opendir(tempCString(dirPath));
-		errnoEnforce(dir, "Failed to open directory " ~ dirPath);
+		Context context;
 
 		Entry rootEntry = void;
-		rootEntry.parent = null;
-		rootEntry.handlerPtr = HandlerPtr();
-		rootEntry.data.fullName = dirPath;
+		rootEntry.context = &context;
 
-		scan(dir, dirfd(dir), &rootEntry);
+		version (Posix)
+		{
+			rootEntry.parent = null;
+			rootEntry.data.fullName = dirPath.to!string;
+
+			auto dir = opendir(tempCString(dirPath));
+			errnoEnforce(dir, "Failed to open directory " ~ dirPath);
+
+			scan(dir, dirfd(dir), &rootEntry);
+		}
+		else
+		version (Windows)
+		{
+			FSChar[initialPathBufLength] pathBufStore = void;
+			context.pathBuf = pathBufStore[];
+			scope (exit)
+			{
+				if (context.pathBuf.length != initialPathBufLength)
+					free(context.pathBuf.ptr);
+			}
+
+			rootEntry.pathTailPos = appendPath(context.pathBuf, 0, dirPath);
+
+			scan(&rootEntry);
+		}
 	}
 }
 
