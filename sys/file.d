@@ -202,6 +202,15 @@ SysTime statTimeToStdTime(char which)(ref const stat_t statbuf)
 	return SysTime(stdTime);
 }
 
+version (OSX)
+    version = Darwin;
+else version (iOS)
+    version = Darwin;
+else version (TVOS)
+    version = Darwin;
+else version (WatchOS)
+    version = Darwin;
+
 private
 version (Posix)
 {
@@ -211,7 +220,40 @@ version (Posix)
 		int dirfd(DIR *dirp) pure nothrow @nogc;
 		int openat(int fd, const char *path, int oflag, ...) nothrow @nogc;
 		DIR *fdopendir(int fd) nothrow @nogc;
-		int fstatat(int fd, const(char)* path, stat_t* buf, int flag) nothrow @nogc;
+
+		version (Darwin)
+		{
+			// Mac OS changed stat_t in 10.5 to have 64-bit inodes.
+			// fstatat is available only as this newer variant.
+
+			alias uint64_t  __darwin_ino64_t;
+			struct stat64_t
+			{
+				dev_t            st_dev;
+				mode_t           st_mode;
+				nlink_t          st_nlink;
+				__darwin_ino64_t st_ino;
+				uid_t            st_uid;
+				gid_t            st_gid;
+				dev_t            st_rdev;
+				timespec         st_atimespec;
+				timespec         st_mtimespec;
+				timespec         st_ctimespec;
+				timespec         st_birthtimespec;
+				off_t            st_size;
+				blkcnt_t         st_blocks;
+				blksize_t        st_blksize;
+				uint32_t         st_flags;
+				uint32_t         st_gen;
+				int32_t          st_lspare;
+				int64_t[2]       st_qspare;
+			}
+
+			pragma(mangle, "fstatat$INODE64")
+			int fstatat(int fd, const char *path, stat64_t *buf, int flag) nothrow @nogc;
+		}
+		else
+			int fstatat(int fd, const(char)* path, stat_t* buf, int flag) nothrow @nogc;
 	}
 	version (linux)
 	{
