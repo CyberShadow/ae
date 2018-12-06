@@ -251,9 +251,14 @@ version (Posix)
 
 			pragma(mangle, "fstatat$INODE64")
 			int fstatat(int fd, const char *path, stat64_t *buf, int flag) nothrow @nogc;
+
+			alias statat_t = stat64_t;
 		}
 		else
+		{
 			int fstatat(int fd, const(char)* path, stat_t* buf, int flag) nothrow @nogc;
+			alias statat_t = stat_t;
+		}
 	}
 	version (linux)
 	{
@@ -285,7 +290,7 @@ template listDir(alias handler)
 		{
 			dirent* ent;
 
-			stat_t[enumLength!StatTarget] statBuf;
+			statat_t[enumLength!StatTarget] statBuf;
 			enum StatResult : int
 			{
 				noInfo = 0,
@@ -468,7 +473,7 @@ template listDir(alias handler)
 					": " ~ fullName);
 			}
 
-			stat_t* needStat(StatTarget target)()
+			statat_t* needStat(StatTarget target)()
 			{
 				if (!tryStat!target)
 					throw statError!target();
