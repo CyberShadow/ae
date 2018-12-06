@@ -205,6 +205,7 @@ SysTime statTimeToStdTime(char which)(ref const stat_t statbuf)
 private
 version (Posix)
 {
+	// TODO: upstream into Druntime
 	extern (C)
 	{
 		int dirfd(DIR *dirp) pure nothrow @nogc;
@@ -215,6 +216,10 @@ version (Posix)
 	version (linux)
 	{
 		enum AT_SYMLINK_NOFOLLOW = 0x100;
+	}
+	version (Darwin)
+	{
+		enum AT_SYMLINK_NOFOLLOW = 0x20;
 	}
 }
 
