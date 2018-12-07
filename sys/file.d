@@ -807,6 +807,17 @@ template listDir(alias handler)
 
 unittest
 {
+	// This test fails on macOS, only on Travis.
+	// dirent.d_name after readdir is blank,
+	// which I can only explain as an OS bug.
+
+	version (Darwin)
+	{{
+		import std.process;
+		if (environment.get("TRAVIS"))
+			return;
+	}}
+
 	auto tmpDir = deleteme;
 	mkdirRecurse(deleteme);
 	scope(exit) rmdirRecurse(deleteme);
@@ -833,35 +844,20 @@ unittest
 
 	// Recurse into symlinks
 
-	// This test fails on macOS, only on Travis.
-	// dirent.d_name after readdir is blank,
-	// which I can only explain as an OS bug.
+	entries = null;
+	listDir!((e) {
+		entries ~= e.fullName.fastRelativePath(deleteme);
+		if (e.isDir)
+			try
+				e.recurse();
+			catch (Exception e) // broken junctions on Windows throw
+				{}
+	})(deleteme);
 
-	bool skipTest = false;
-	version (Darwin)
-	{{
-		import std.process;
-		if (environment.get("TRAVIS"))
-			skipTest = true;
-	}}
-
-	if (!skipTest)
-	{
-		entries = null;
-		listDir!((e) {
-			entries ~= e.fullName.fastRelativePath(deleteme);
-			if (e.isDir)
-				try
-					e.recurse();
-				catch (Exception e) // broken junctions on Windows throw
-					{}
-		})(deleteme);
-
-		assert(equal(
-			entries.sort,
-			["a", "b", "c", "c/1", "c/2", "d", "d/1", "d/2", "e"].map!(name => name.replace("/", dirSeparator)),
-		));
-	}
+	assert(equal(
+		entries.sort,
+		["a", "b", "c", "c/1", "c/2", "d", "d/1", "d/2", "e"].map!(name => name.replace("/", dirSeparator)),
+	));
 }
 
 // ************************************************************************
