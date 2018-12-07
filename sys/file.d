@@ -825,6 +825,36 @@ template listDir(alias handler)
 
 unittest
 {
+	auto tmpDir = deleteme;
+	mkdirRecurse(deleteme);
+	scope(exit) rmdirRecurse(deleteme);
+
+	touch(deleteme ~ "/a");
+	touch(deleteme ~ "/b");
+	mkdir(deleteme ~ "/c");
+	touch(deleteme ~ "/c/1");
+	touch(deleteme ~ "/c/2");
+
+	string[] entries;
+	listDir!((e) {
+		entries ~= e.fullName.fastRelativePath(deleteme);
+		if (e.entryIsDir)
+			e.recurse();
+	})(deleteme);
+
+	assert(equal(
+		entries.sort,
+		["a", "b", "c", "c/1", "c/2"].map!(name => name.replace("/", dirSeparator)),
+	), text(entries));
+}
+
+unittest
+{
+	// Wine's implementation of symlinks/junctions is incomplete
+	version (Windows)
+		if (getWineVersion())
+			return;
+
 	// This test fails on macOS, only on Travis.
 	// dirent.d_name after readdir is blank,
 	// which I can only explain as an OS bug.
