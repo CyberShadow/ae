@@ -649,12 +649,6 @@ template listDir(alias handler)
 			while ((ent = readdir(dir)) != null)
 			{
 				// Apparently happens on some OS X versions.
-				if (!ent.d_name[0])
-					foreach (i, ref val; ent.tupleof)
-					{
-						import std.stdio;
-						stderr.writefln("%s: %(%s%)", __traits(identifier, dirent.tupleof[i]), [val]);
-					}
 				enforce(ent.d_name[0],
 					"Empty dir entry name (OS bug?)");
 
@@ -821,7 +815,6 @@ template listDir(alias handler)
 
 unittest
 {
-/*	
 	// This test fails on macOS, only on Travis.
 	// dirent.d_name after readdir is blank,
 	// which I can only explain as an OS bug.
@@ -832,7 +825,6 @@ unittest
 		if (environment.get("TRAVIS"))
 			return;
 	}}
-*/
 
 	auto tmpDir = deleteme;
 	mkdirRecurse(deleteme);
