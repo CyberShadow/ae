@@ -382,10 +382,11 @@ template listDir(alias handler)
 			assert(false, "File name buffer is not null-terminated");
 		}
 
-		const(FSChar)[] baseNameFS() pure nothrow @nogc // fast
+		const(FSChar)[] baseNameFS() // pure nothrow @nogc // fast
 		{
 			if (!data.baseNameFS)
 			{
+				debug { import std.stdio; writefln("%(%s%)", [ent.d_name[]]); }
 				version (Posix) data.baseNameFS = fromStringz(ent.d_name);
 				version (Windows) data.baseNameFS = fromStringz(findData.cFileName);
 			}
