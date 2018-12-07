@@ -382,15 +382,11 @@ template listDir(alias handler)
 			assert(false, "File name buffer is not null-terminated");
 		}
 
-		const(FSChar)[] baseNameFS() // pure nothrow @nogc // fast
+		const(FSChar)[] baseNameFS() pure nothrow @nogc // fast
 		{
 			if (!data.baseNameFS)
 			{
-				version (Posix) {
-					//debug { import std.stdio; writefln("baseNameFS: %(%s%)", [ent.d_name[]]); }
-					data.baseNameFS = fromStringz(ent.d_name);
-					debug { import std.stdio; writefln("baseNameFS: -> %(%s%)", [this.baseNameFS]); }
-				}
+				version (Posix) data.baseNameFS = fromStringz(ent.d_name);
 				version (Windows) data.baseNameFS = fromStringz(findData.cFileName);
 			}
 			return data.baseNameFS;
@@ -410,9 +406,6 @@ template listDir(alias handler)
 				version (Posix)
 				{
 					auto parentName = parent.fullName;
-					{ import std.stdio; writefln("%(%s%)", [parentName,
-						!parentName.length || isDirSeparator(parentName[$-1]) ? "" : dirSeparator,
-						baseNameFS]); }
 					data.fullName = text(
 						parentName,
 						!parentName.length || isDirSeparator(parentName[$-1]) ? "" : dirSeparator,
@@ -647,7 +640,6 @@ template listDir(alias handler)
 			dirent* ent;
 			while ((ent = readdir(dir)) != null)
 			{
-				{ import std.stdio; writefln("readdir: %(%s%)", [ent.d_name.ptr.fromStringz]); }
 				// Skip "." and ".."
 				if (ent.d_name[0] == '.' && (
 						ent.d_name[1] == 0 ||
@@ -833,7 +825,7 @@ unittest
 	assert(equal(
 		entries.sort,
 		["a", "b", "c", "c/1", "c/2", "d", "e"].map!(name => name.replace("/", dirSeparator)),
-	), text(entries));
+	));
 
 	// Recurse into symlinks
 
