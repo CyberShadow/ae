@@ -578,7 +578,10 @@ template listDir(alias handler)
 
 			@property ulong fileID()
 			{
-				return needStat!(StatTarget.linkTarget)().st_ino;
+				static if (__traits(compiles, ent.d_ino))
+					return ent.d_ino;
+				else
+					return needStat!(StatTarget.linkTarget)().st_ino;
 			}
 		}
 
@@ -622,6 +625,11 @@ template listDir(alias handler)
 			@property SysTime timeLastModified() const
 			{
 				return FILETIMEToSysTime(&findData.ftLastWriteTime);
+			}
+
+			@property ulong fileID()
+			{
+				return getFileID(fullName);
 			}
 		}
 	}
