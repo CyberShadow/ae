@@ -181,23 +181,31 @@ else
 	static assert(0);
 
 /// Reads a time field from a stat_t with full precision (private in Phobos).
-version (Posix)
-SysTime statTimeToStdTime(char which)(ref const stat_t statbuf)
+SysTime statTimeToStdTime(string which, stat_t)(ref const stat_t statbuf)
 {
-	auto unixTime = mixin(`statbuf.st_` ~ which ~ `time`);
-	long stdTime = unixTimeToStdTime(unixTime);
+	long stdTime;
+	static if (is(typeof(mixin(`statbuf.st_` ~ which ~ `timespec`))))
+	{
+		auto timeSpec = mixin(`&statbuf.st_` ~ which ~ `timespec`);
+		stdTime = unixTimeToStdTime(timeSpec.tv_sec) + timeSpec.tv_nsec / 100;
+	}
+	else
+	{
+		auto unixTime = mixin(`statbuf.st_` ~ which ~ `time`);
+		stdTime = unixTimeToStdTime(unixTime);
 
-	static if (is(typeof(mixin(`statbuf.st_` ~ which ~ `tim`))))
-		stdTime += mixin(`statbuf.st_` ~ which ~ `tim.tv_nsec`) / 100;
-	else
-	static if (is(typeof(mixin(`statbuf.st_` ~ which ~ `timensec`))))
-		stdTime += mixin(`statbuf.st_` ~ which ~ `timensec`) / 100;
-	else
-	static if (is(typeof(mixin(`statbuf.st_` ~ which ~ `time_nsec`))))
-		stdTime += mixin(`statbuf.st_` ~ which ~ `time_nsec`) / 100;
-	else
-	static if (is(typeof(mixin(`statbuf.__st_` ~ which ~ `timensec`))))
-		stdTime += mixin(`statbuf.__st_` ~ which ~ `timensec`) / 100;
+		static if (is(typeof(mixin(`statbuf.st_` ~ which ~ `tim`))))
+			stdTime += mixin(`statbuf.st_` ~ which ~ `tim.tv_nsec`) / 100;
+		else
+		static if (is(typeof(mixin(`statbuf.st_` ~ which ~ `timensec`))))
+			stdTime += mixin(`statbuf.st_` ~ which ~ `timensec`) / 100;
+		else
+		static if (is(typeof(mixin(`statbuf.st_` ~ which ~ `time_nsec`))))
+			stdTime += mixin(`statbuf.st_` ~ which ~ `time_nsec`) / 100;
+		else
+		static if (is(typeof(mixin(`statbuf.__st_` ~ which ~ `timensec`))))
+			stdTime += mixin(`statbuf.__st_` ~ which ~ `timensec`) / 100;
+	}
 
 	return SysTime(stdTime);
 }
@@ -544,17 +552,23 @@ template listDir(alias handler)
 
 			@property SysTime timeStatusChanged()
 			{
-				return statTimeToStdTime!'c'(*needStat!(StatTarget.linkTarget)());
+				return statTimeToStdTime!"c"(*needStat!(StatTarget.linkTarget)());
 			}
 
 			@property SysTime timeLastAccessed()
 			{
-				return statTimeToStdTime!'a'(*needStat!(StatTarget.linkTarget)());
+				return statTimeToStdTime!"a"(*needStat!(StatTarget.linkTarget)());
 			}
 
 			@property SysTime timeLastModified()
 			{
-				return statTimeToStdTime!'m'(*needStat!(StatTarget.linkTarget)());
+				return statTimeToStdTime!"m"(*needStat!(StatTarget.linkTarget)());
+			}
+
+			static if (is(typeof(&statTimeToStdTime!"birth")))
+			@property SysTime timeCreated()
+			{
+				return statTimeToStdTime!"m"(*needStat!(StatTarget.linkTarget)());
 			}
 
 			@property ulong size()
