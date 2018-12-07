@@ -1327,7 +1327,7 @@ version (Windows)
 		mkdir(link);
 		scope(failure) rmdir(link);
 
-		auto target = `\??\` ~ original.idup.absolutePath();
+		auto target = `\??\` ~ (cast(string)original).absolutePath((cast(string)link.dirName).absolutePath).buildNormalizedPath;
 		if (target[$-1] != '\\')
 			target ~= '\\';
 
