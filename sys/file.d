@@ -406,6 +406,9 @@ template listDir(alias handler)
 				version (Posix)
 				{
 					auto parentName = parent.fullName;
+					{ import std.stdio; writefln("%(%s%)", [parentName,
+						!parentName.length || isDirSeparator(parentName[$-1]) ? "" : dirSeparator,
+						baseNameFS]); }
 					data.fullName = text(
 						parentName,
 						!parentName.length || isDirSeparator(parentName[$-1]) ? "" : dirSeparator,
