@@ -825,7 +825,7 @@ unittest
 	assert(equal(
 		entries.sort,
 		["a", "b", "c", "c/1", "c/2", "d", "e"].map!(name => name.replace("/", dirSeparator)),
-	));
+	), text(entries));
 
 	// Recurse into symlinks
 
