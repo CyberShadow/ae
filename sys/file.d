@@ -387,7 +387,7 @@ template listDir(alias handler)
 			if (!data.baseNameFS)
 			{
 				version (Posix) {
-					debug { import std.stdio; writefln("baseNameFS: %(%s%)", [ent.d_name[]]); }
+					//debug { import std.stdio; writefln("baseNameFS: %(%s%)", [ent.d_name[]]); }
 					data.baseNameFS = fromStringz(ent.d_name);
 					debug { import std.stdio; writefln("baseNameFS: -> %(%s%)", [this.baseNameFS]); }
 				}
@@ -647,6 +647,7 @@ template listDir(alias handler)
 			dirent* ent;
 			while ((ent = readdir(dir)) != null)
 			{
+				{ import std.stdio; writefln("readdir: %(%s%)", [ent.d_name.ptr.fromStringz]); }
 				// Skip "." and ".."
 				if (ent.d_name[0] == '.' && (
 						ent.d_name[1] == 0 ||
