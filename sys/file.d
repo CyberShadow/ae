@@ -386,8 +386,11 @@ template listDir(alias handler)
 		{
 			if (!data.baseNameFS)
 			{
-				debug { import std.stdio; writefln("%(%s%)", [ent.d_name[]]); }
-				version (Posix) data.baseNameFS = fromStringz(ent.d_name);
+				version (Posix) {
+					debug { import std.stdio; writefln("baseNameFS: %(%s%)", [ent.d_name[]]); }
+					data.baseNameFS = fromStringz(ent.d_name);
+					debug { import std.stdio; writefln("baseNameFS: -> %(%s%)", [this.baseNameFS]); }
+				}
 				version (Windows) data.baseNameFS = fromStringz(findData.cFileName);
 			}
 			return data.baseNameFS;
