@@ -677,6 +677,9 @@ template listDir(alias handler)
 		// The length of the buffer on the stack.
 		enum initialPathBufLength = MAX_PATH;
 
+		enum FIND_FIRST_EX_LARGE_FETCH = 2;
+		enum FindExInfoBasic = cast(FINDEX_INFO_LEVELS)1;
+
 		static FSChar[] reallocPathBuf(FSChar[] buf, size_t newLength)
 		{
 			if (buf.length == initialPathBufLength) // current buffer is on stack
@@ -751,7 +754,14 @@ template listDir(alias handler)
 			entry.parent = parentEntry;
 			entry.context = parentEntry.context;
 
-			HANDLE hFind = FindFirstFileW(entry.context.pathBuf.ptr, &entry.findData);
+			HANDLE hFind = FindFirstFileExW(
+				entry.context.pathBuf.ptr,
+				FindExInfoBasic,
+				&entry.findData,
+				FINDEX_SEARCH_OPS.FindExSearchNameMatch,
+				null,
+				FIND_FIRST_EX_LARGE_FETCH, // https://blogs.msdn.microsoft.com/oldnewthing/20131024-00/?p=2843
+			);
 			if (hFind == INVALID_HANDLE_VALUE)
 				throw new WindowsException(GetLastError(),
 					text("FindFirstFileW: ", entry.context.pathBuf[0 .. parentEntry.pathTailPos]));
