@@ -640,6 +640,10 @@ template listDir(alias handler)
 			dirent* ent;
 			while ((ent = readdir(dir)) != null)
 			{
+				// Apparently happens on some OS X versions.
+				enforce(ent.d_name[0],
+					"Empty dir entry name (OS bug?)");
+
 				// Skip "." and ".."
 				if (ent.d_name[0] == '.' && (
 						ent.d_name[1] == 0 ||
