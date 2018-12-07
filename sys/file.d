@@ -350,9 +350,8 @@ template listDir(alias handler)
 		{
 			void recurse()
 			{
-				this.pathTailPos = parent.pathTailPos;
-				appendPath(context.pathBuf, this.pathTailPos,
-					baseNameFSPtr.nullTerminated);
+				this.pathTailPos = appendPath(context.pathBuf,
+					parent.pathTailPos, baseNameFSPtr.nullTerminated);
 				scan(&this);
 			}
 		}
@@ -406,7 +405,7 @@ template listDir(alias handler)
 				}
 				version (Windows)
 				{
-					auto end = appendString(context.pathBuf, this.pathTailPos,
+					auto end = appendString(context.pathBuf, parent.pathTailPos,
 						baseNameFSPtr().nullTerminated);
 					data.fullName = context.pathBuf[0 .. end].to!string;
 				}
@@ -678,7 +677,7 @@ template listDir(alias handler)
 				// No transcoding needed and length known
 				auto remainingSpace = buf.length - pos;
 				if (str.length > remainingSpace)
-					reallocPathBuf(buf, (pos + str.length) * 3 / 2);
+					buf = reallocPathBuf(buf, (pos + str.length) * 3 / 2);
 				buf[pos .. pos + str.length] = str[];
 				pos += str.length;
 			}
@@ -715,13 +714,16 @@ template listDir(alias handler)
 			bool needSeparator = endPos > 0 && !buf[endPos - 1].isDirSeparator();
 			const WCHAR[] tailString = needSeparator ? "\\*.*\0"w : "*.*\0"w;
 			appendString(buf, endPos, tailString);
+			if (needSeparator)
+				endPos++; // include separator in prefix
 			return endPos;
 		}
 
 		static void scan(Entry* parentEntry)
 		{
 			Entry entry = void;
-			entry.context = entry.parent.context;
+			entry.parent = parentEntry;
+			entry.context = parentEntry.context;
 
 			HANDLE hFind = FindFirstFileW(entry.context.pathBuf.ptr, &entry.findData);
 			if (hFind == INVALID_HANDLE_VALUE)
@@ -817,14 +819,16 @@ unittest
 	listDir!((e) {
 		entries ~= e.fullName.fastRelativePath(deleteme);
 		if (e.isDir)
-			e.recurse();
+			try
+				e.recurse();
+			catch (Exception e) // broken junctions on Windows throw
+				{}
 	})(deleteme);
 
 	assert(equal(
 		entries.sort,
 		["a", "b", "c", "c/1", "c/2", "d", "d/1", "d/2", "e"].map!(name => name.replace("/", dirSeparator)),
 	));
-
 }
 
 // ************************************************************************
