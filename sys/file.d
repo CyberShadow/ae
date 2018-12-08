@@ -230,45 +230,15 @@ version (Posix)
 
 		version (Darwin)
 		{
-			// Mac OS changed stat_t in 10.5 to have 64-bit inodes.
-			// fstatat is available only as this newer variant.
-
-			alias uint64_t  __darwin_ino64_t;
-			struct stat64_t
-			{
-				dev_t            st_dev;
-				mode_t           st_mode;
-				nlink_t          st_nlink;
-				__darwin_ino64_t st_ino;
-				uid_t            st_uid;
-				gid_t            st_gid;
-				dev_t            st_rdev;
-				timespec         st_atimespec;
-				timespec         st_mtimespec;
-				timespec         st_ctimespec;
-				timespec         st_birthtimespec;
-				off_t            st_size;
-				blkcnt_t         st_blocks;
-				blksize_t        st_blksize;
-				uint32_t         st_flags;
-				uint32_t         st_gen;
-				int32_t          st_lspare;
-				int64_t[2]       st_qspare;
-			}
-
 			pragma(mangle, "fstatat$INODE64")
-			int fstatat(int fd, const char *path, stat64_t *buf, int flag) nothrow @nogc;
+			int fstatat(int fd, const char *path, stat_t *buf, int flag) nothrow @nogc;
 
 			pragma(mangle, "fdopendir$INODE64")
 			DIR *fdopendir(int fd) nothrow @nogc;
-
-			alias statat_t = stat64_t;
 		}
 		else
 		{
 			int fstatat(int fd, const(char)* path, stat_t* buf, int flag) nothrow @nogc;
-			alias statat_t = stat_t;
-
 			DIR *fdopendir(int fd) nothrow @nogc;
 		}
 	}
@@ -311,7 +281,7 @@ template listDir(alias handler)
 		{
 			dirent* ent;
 
-			statat_t[enumLength!StatTarget] statBuf;
+			stat_t[enumLength!StatTarget] statBuf;
 			enum StatResult : int
 			{
 				noInfo = 0,
@@ -494,7 +464,7 @@ template listDir(alias handler)
 					": " ~ fullName);
 			}
 
-			statat_t* needStat(StatTarget target)()
+			stat_t* needStat(StatTarget target)()
 			{
 				if (!tryStat!target)
 					throw statError!target();
