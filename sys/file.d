@@ -292,6 +292,8 @@ template listDir(alias handler)
 		// Tether to handler alias context
 		void callHandler(Entry* e) { handler(e); }
 
+		bool timeToStop = false;
+
 		version (Windows)
 		{
 			FSChar[] pathBuf;
@@ -368,6 +370,8 @@ template listDir(alias handler)
 				scan(&this);
 			}
 		}
+
+		void stop() { context.timeToStop = true; }
 
 		// Name
 
@@ -666,6 +670,8 @@ template listDir(alias handler)
 				entry.ent = ent;
 				entry.data = Entry.Data.init;
 				entry.context.callHandler(&entry);
+				if (entry.context.timeToStop)
+					break;
 			}
 		}
 	}
@@ -782,6 +788,8 @@ template listDir(alias handler)
 
 				entry.data = Entry.Data.init;
 				entry.context.callHandler(&entry);
+				if (entry.context.timeToStop)
+					break;
 			}
 			while (FindNextFileW(hFind, &entry.findData));
 			if (GetLastError() != ERROR_NO_MORE_FILES)
@@ -851,6 +859,18 @@ unittest
 		entries.sort,
 		["a", "b", "c", "c/1", "c/2"].map!(name => name.replace("/", dirSeparator)),
 	), text(entries));
+
+	entries = null;
+	listDir!((e) {
+		entries ~= e.fullName.fastRelativePath(deleteme);
+		if (entries.length == 3)
+			e.stop();
+		else
+		if (e.entryIsDir)
+			e.recurse();
+	})(deleteme);
+
+	assert(entries.length == 3, text(entries));
 
 	// Symlink test
 	(){
