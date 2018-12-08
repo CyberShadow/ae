@@ -282,6 +282,11 @@ version (Posix)
 		enum AT_SYMLINK_NOFOLLOW = 0x20;
 		enum O_DIRECTORY = 0x100000;
 	}
+	version (FreeBSD)
+	{
+		enum AT_SYMLINK_NOFOLLOW = 0x200;
+		enum O_DIRECTORY = 0x20000;
+	}
 }
 
 /// Fast templated directory iterator
