@@ -860,17 +860,6 @@ unittest
 		if (getWineVersion())
 			return;
 
-	// This test fails on macOS, only on Travis.
-	// dirent.d_name after readdir is blank,
-	// which I can only explain as an OS bug.
-
-	version (Darwin)
-	{{
-		import std.process;
-		if (environment.get("TRAVIS"))
-			return;
-	}}
-
 	auto tmpDir = deleteme;
 	mkdirRecurse(deleteme);
 	scope(exit) rmdirRecurse(deleteme);
