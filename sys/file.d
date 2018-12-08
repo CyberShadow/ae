@@ -861,16 +861,17 @@ unittest
 	), text(entries));
 
 	entries = null;
+	import std.ascii : isDigit;
 	listDir!((e) {
 		entries ~= e.fullName.fastRelativePath(deleteme);
-		if (entries.length == 3)
+		if (e.baseNameFS[0].isDigit)
 			e.stop();
 		else
 		if (e.entryIsDir)
 			e.recurse();
 	})(deleteme);
 
-	assert(entries.length == 3, text(entries));
+	assert(entries.length < 5 && entries[$-1][$-1].isDigit, text(entries));
 
 	// Symlink test
 	(){
