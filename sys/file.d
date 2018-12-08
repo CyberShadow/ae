@@ -275,10 +275,12 @@ version (Posix)
 	version (linux)
 	{
 		enum AT_SYMLINK_NOFOLLOW = 0x100;
+		enum O_DIRECTORY = 0x10000;
 	}
 	version (Darwin)
 	{
 		enum AT_SYMLINK_NOFOLLOW = 0x20;
+		enum O_DIRECTORY = 0x100000;
 	}
 }
 
@@ -344,7 +346,6 @@ template listDir(alias handler)
 			{
 				import core.sys.posix.fcntl;
 				int flags = O_RDONLY;
-				version(linux) enum O_DIRECTORY = 0x10000;
 				static if (is(typeof(O_DIRECTORY)))
 					flags |= O_DIRECTORY;
 				auto fd = openat(dirFD, this.ent.d_name.ptr, flags);
