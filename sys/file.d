@@ -181,31 +181,22 @@ else
 	static assert(0);
 
 /// Reads a time field from a stat_t with full precision (private in Phobos).
-SysTime statTimeToStdTime(string which, stat_t)(ref const stat_t statbuf)
+SysTime statTimeToStdTime(string which)(ref const stat_t statbuf)
 {
-	long stdTime;
-	static if (is(typeof(mixin(`statbuf.st_` ~ which ~ `timespec`))))
-	{
-		auto timeSpec = mixin(`&statbuf.st_` ~ which ~ `timespec`);
-		stdTime = unixTimeToStdTime(timeSpec.tv_sec) + timeSpec.tv_nsec / 100;
-	}
-	else
-	{
-		auto unixTime = mixin(`statbuf.st_` ~ which ~ `time`);
-		stdTime = unixTimeToStdTime(unixTime);
+	auto unixTime = mixin(`statbuf.st_` ~ which ~ `time`);
+	auto stdTime = unixTimeToStdTime(unixTime);
 
-		static if (is(typeof(mixin(`statbuf.st_` ~ which ~ `tim`))))
-			stdTime += mixin(`statbuf.st_` ~ which ~ `tim.tv_nsec`) / 100;
-		else
-		static if (is(typeof(mixin(`statbuf.st_` ~ which ~ `timensec`))))
-			stdTime += mixin(`statbuf.st_` ~ which ~ `timensec`) / 100;
-		else
-		static if (is(typeof(mixin(`statbuf.st_` ~ which ~ `time_nsec`))))
-			stdTime += mixin(`statbuf.st_` ~ which ~ `time_nsec`) / 100;
-		else
-		static if (is(typeof(mixin(`statbuf.__st_` ~ which ~ `timensec`))))
-			stdTime += mixin(`statbuf.__st_` ~ which ~ `timensec`) / 100;
-	}
+	static if (is(typeof(mixin(`statbuf.st_` ~ which ~ `tim`))))
+		stdTime += mixin(`statbuf.st_` ~ which ~ `tim.tv_nsec`) / 100;
+	else
+	static if (is(typeof(mixin(`statbuf.st_` ~ which ~ `timensec`))))
+		stdTime += mixin(`statbuf.st_` ~ which ~ `timensec`) / 100;
+	else
+	static if (is(typeof(mixin(`statbuf.st_` ~ which ~ `time_nsec`))))
+		stdTime += mixin(`statbuf.st_` ~ which ~ `time_nsec`) / 100;
+	else
+	static if (is(typeof(mixin(`statbuf.__st_` ~ which ~ `timensec`))))
+		stdTime += mixin(`statbuf.__st_` ~ which ~ `timensec`) / 100;
 
 	return SysTime(stdTime);
 }
