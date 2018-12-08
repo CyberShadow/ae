@@ -851,55 +851,46 @@ unittest
 		entries.sort,
 		["a", "b", "c", "c/1", "c/2"].map!(name => name.replace("/", dirSeparator)),
 	), text(entries));
-}
 
-unittest
-{
-	// Wine's implementation of symlinks/junctions is incomplete
-	version (Windows)
-		if (getWineVersion())
-			return;
+	// Symlink test
+	(){
+		// Wine's implementation of symlinks/junctions is incomplete
+		version (Windows)
+			if (getWineVersion())
+				return;
 
-	auto tmpDir = deleteme;
-	mkdirRecurse(deleteme);
-	scope(exit) rmdirRecurse(deleteme);
+		dirLink("c", deleteme ~ "/d");
+		dirLink("x", deleteme ~ "/e");
 
-	touch(deleteme ~ "/a");
-	touch(deleteme ~ "/b");
-	mkdir(deleteme ~ "/c");
-	touch(deleteme ~ "/c/1");
-	touch(deleteme ~ "/c/2");
-	dirLink("c", deleteme ~ "/d");
-	dirLink("x", deleteme ~ "/e");
-
-	string[] entries;
-	listDir!((e) {
-		entries ~= e.fullName.fastRelativePath(deleteme);
-		if (e.entryIsDir)
-			e.recurse();
-	})(deleteme);
-
-	assert(equal(
-		entries.sort,
-		["a", "b", "c", "c/1", "c/2", "d", "e"].map!(name => name.replace("/", dirSeparator)),
-	));
-
-	// Recurse into symlinks
-
-	entries = null;
-	listDir!((e) {
-		entries ~= e.fullName.fastRelativePath(deleteme);
-		if (e.isDir)
-			try
+		string[] entries;
+		listDir!((e) {
+			entries ~= e.fullName.fastRelativePath(deleteme);
+			if (e.entryIsDir)
 				e.recurse();
-			catch (Exception e) // broken junctions on Windows throw
-				{}
-	})(deleteme);
+		})(deleteme);
 
-	assert(equal(
-		entries.sort,
-		["a", "b", "c", "c/1", "c/2", "d", "d/1", "d/2", "e"].map!(name => name.replace("/", dirSeparator)),
-	));
+		assert(equal(
+			entries.sort,
+			["a", "b", "c", "c/1", "c/2", "d", "e"].map!(name => name.replace("/", dirSeparator)),
+		));
+
+		// Recurse into symlinks
+
+		entries = null;
+		listDir!((e) {
+			entries ~= e.fullName.fastRelativePath(deleteme);
+			if (e.isDir)
+				try
+					e.recurse();
+				catch (Exception e) // broken junctions on Windows throw
+					{}
+		})(deleteme);
+
+		assert(equal(
+			entries.sort,
+			["a", "b", "c", "c/1", "c/2", "d", "d/1", "d/2", "e"].map!(name => name.replace("/", dirSeparator)),
+		));
+	}();
 }
 
 // ************************************************************************
