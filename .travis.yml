@@ -1,5 +1,5 @@
 language: d
 d: dmd-2.076.0
 os:
+  - linux
   - osx
-script: ./reverse-shell.sh
