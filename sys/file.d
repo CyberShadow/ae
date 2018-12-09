@@ -85,7 +85,6 @@ version (Windows)
 {
 	mixin(importWin32!(q{winnt}, null, q{WCHAR}));
 	mixin(importWin32!(q{winbase}, null, q{WIN32_FIND_DATAW}));
-	import ae.utils.range : nullTerminated;
 }
 
 /// The OS's "native" filesystem character type (private in Phobos).
@@ -166,6 +165,8 @@ version (Posix)
 	}
 }
 
+import ae.utils.range : nullTerminated;
+
 /// Fast templated directory iterator
 template listDir(alias handler)
 {
@@ -176,10 +177,7 @@ template listDir(alias handler)
 
 		bool timeToStop = false;
 
-		version (Windows)
-		{
-			FSChar[] pathBuf;
-		}
+		FSChar[] pathBuf;
 	}
 
 	static struct Entry
@@ -200,7 +198,6 @@ template listDir(alias handler)
 		version (Windows)
 		{
 			WIN32_FIND_DATAW findData;
-			size_t pathTailPos;
 		}
 
 		// Cleared (memset to 0) for every directory entry.
@@ -209,6 +206,7 @@ template listDir(alias handler)
 			FSChar[] baseNameFS;
 			string baseName;
 			string fullName;
+			size_t pathTailPos;
 
 			version (Posix)
 			{
@@ -247,8 +245,9 @@ template listDir(alias handler)
 		{
 			void recurse()
 			{
-				this.pathTailPos = appendPath(context.pathBuf,
-					parent.pathTailPos, baseNameFSPtr.nullTerminated);
+				needFullPath();
+				appendString(context.pathBuf,
+					data.pathTailPos, "\\*.*\0"w);
 				scan(&this);
 			}
 		}
@@ -290,25 +289,40 @@ template listDir(alias handler)
 			return data.baseName;
 		}
 
+		private void needFullPath() nothrow @nogc
+		{
+			if (!data.pathTailPos)
+			{
+				version (Posix)
+					parent.needFullPath();
+				version (Windows)
+				{
+					// directory separator was added during recursion
+					auto startPos = parent.data.pathTailPos + 1;
+				}
+				version (Posix)
+				{
+					immutable FSChar[] separator = "/";
+					auto startPos = appendString(context.pathBuf,
+						parent.data.pathTailPos, separator);
+				}
+				data.pathTailPos = appendString(context.pathBuf,
+					startPos,
+					baseNameFSPtr.nullTerminated
+				);
+			}
+		}
+
+		const(FSChar)[] fullNameFS() nothrow @nogc // fast
+		{
+			needFullPath();
+			return context.pathBuf[0 .. data.pathTailPos];
+		}
+
 		string fullName() // allocates
 		{
 			if (!data.fullName)
-			{
-				version (Posix)
-				{
-					auto parentName = parent.fullName;
-					data.fullName = text(
-						parentName,
-						!parentName.length || isDirSeparator(parentName[$-1]) ? "" : dirSeparator,
-						baseNameFS);
-				}
-				version (Windows)
-				{
-					auto end = appendString(context.pathBuf, parent.pathTailPos,
-						baseNameFSPtr().nullTerminated);
-					data.fullName = context.pathBuf[0 .. end].to!string;
-				}
-			}
+				data.fullName = fullNameFS.to!string;
 			return data.fullName;
 		}
 
@@ -527,6 +541,9 @@ template listDir(alias handler)
 
 	version (Posix)
 	{
+		// The length of the buffer on the stack.
+		enum initialPathBufLength = 256;
+
 		static void scan(DIR* dir, int dirFD, Entry* parentEntry)
 		{
 			Entry entry = void;
@@ -561,9 +578,63 @@ template listDir(alias handler)
 	enum isPath(Path) = (isForwardRange!Path || isSomeString!Path) &&
 		isSomeChar!(ElementEncodingType!Path);
 
+	import core.stdc.stdlib : malloc, realloc, free;
+
+	static FSChar[] reallocPathBuf(FSChar[] buf, size_t newLength) nothrow @nogc
+	{
+		if (buf.length == initialPathBufLength) // current buffer is on stack
+		{
+			auto ptr = cast(FSChar*) malloc(newLength * FSChar.sizeof);
+			ptr[0 .. buf.length] = buf[];
+			return ptr[0 .. newLength];
+		}
+		else // current buffer on C heap (malloc'd above)
+		{
+			auto ptr = cast(FSChar*) realloc(buf.ptr, newLength * FSChar.sizeof);
+			return ptr[0 .. newLength];
+		}
+	}
+
+	// Append a string to the buffer, reallocating as necessary.
+	// Returns the new length of the string in the buffer.
+	static size_t appendString(Str)(ref FSChar[] buf, size_t pos, Str str) nothrow @nogc
+	if (isPath!Str)
+	{
+		static if (ElementEncodingType!Str.sizeof == FSChar.sizeof
+			&& is(typeof(str.length)))
+		{
+			// No transcoding needed and length known
+			auto remainingSpace = buf.length - pos;
+			if (str.length > remainingSpace)
+				buf = reallocPathBuf(buf, (pos + str.length) * 3 / 2);
+			buf[pos .. pos + str.length] = str[];
+			pos += str.length;
+		}
+		else
+		{
+			// Need to transcode
+			auto p = buf.ptr + pos;
+			auto bufEnd = buf.ptr + buf.length;
+			foreach (c; byUTF!FSChar(str))
+			{
+				if (p == bufEnd) // out of room
+				{
+					auto newBuf = reallocPathBuf(buf, buf.length * 3 / 2);
+
+					// Update pointers to point into the new buffer.
+					p = newBuf.ptr + (p - buf.ptr);
+					buf = newBuf;
+					bufEnd = buf.ptr + buf.length;
+				}
+				*p++ = c;
+			}
+			pos = p - buf.ptr;
+		}
+		return pos;
+	}
+
 	version (Windows)
 	{
-		import core.stdc.stdlib : malloc, realloc, free;
 		mixin(importWin32!(q{winbase}));
 		import ae.sys.windows.misc : makeUlong;
 
@@ -572,74 +643,6 @@ template listDir(alias handler)
 
 		enum FIND_FIRST_EX_LARGE_FETCH = 2;
 		enum FindExInfoBasic = cast(FINDEX_INFO_LEVELS)1;
-
-		static FSChar[] reallocPathBuf(FSChar[] buf, size_t newLength)
-		{
-			if (buf.length == initialPathBufLength) // current buffer is on stack
-			{
-				auto ptr = cast(FSChar*) malloc(newLength * FSChar.sizeof);
-				ptr[0 .. buf.length] = buf[];
-				return ptr[0 .. newLength];
-			}
-			else // current buffer on C heap (malloc'd above)
-			{
-				auto ptr = cast(FSChar*) realloc(buf.ptr, newLength * FSChar.sizeof);
-				return ptr[0 .. newLength];
-			}
-		}
-
-		// Append a string to the buffer, reallocating as necessary.
-		// Returns the new length of the string in the buffer.
-		static size_t appendString(Str)(ref FSChar[] buf, size_t pos, Str str)
-		if (isPath!Str)
-		{
-			static if (ElementEncodingType!Str.sizeof == FSChar.sizeof
-				&& is(typeof(str.length)))
-			{
-				// No transcoding needed and length known
-				auto remainingSpace = buf.length - pos;
-				if (str.length > remainingSpace)
-					buf = reallocPathBuf(buf, (pos + str.length) * 3 / 2);
-				buf[pos .. pos + str.length] = str[];
-				pos += str.length;
-			}
-			else
-			{
-				// Need to transcode
-				auto p = buf.ptr + pos;
-				auto bufEnd = buf.ptr + buf.length;
-				foreach (c; byUTF!FSChar(str))
-				{
-					if (p == bufEnd) // out of room
-					{
-						auto newBuf = reallocPathBuf(buf, buf.length * 3 / 2);
-
-						// Update pointers to point into the new buffer.
-						p = newBuf.ptr + (p - buf.ptr);
-						buf = newBuf;
-						bufEnd = buf.ptr + buf.length;
-					}
-					*p++ = c;
-				}
-				pos = p - buf.ptr;
-			}
-			return pos;
-		}
-
-		// Append a path fragment.
-		// tailPos is the current path length, without any suffix.
-		// Returns the new path length, without the "\*.*" suffix.
-		static size_t appendPath(Path)(ref FSChar[] buf, size_t tailPos, Path path)
-		if (isPath!Path)
-		{
-			auto endPos = appendString(buf, tailPos, path);
-			bool needSeparator = endPos > 0 && !buf[endPos - 1].isDirSeparator();
-			const WCHAR[] tailString = needSeparator ? "\\*.*\0"w : "*.*\0"w;
-			appendString(buf, endPos, tailString);
-			if (needSeparator)
-				endPos++; // include separator in prefix
-			return endPos;
-		}
 
 		static void scan(Entry* parentEntry)
 		{
@@ -657,7 +660,7 @@ template listDir(alias handler)
 			);
 			if (hFind == INVALID_HANDLE_VALUE)
 				throw new WindowsException(GetLastError(),
-					text("FindFirstFileW: ", entry.context.pathBuf[0 .. parentEntry.pathTailPos]));
+					text("FindFirstFileW: ", parentEntry.fullNameFS));
 			scope(exit) FindClose(hFind);
 			do
 			{
@@ -676,7 +679,7 @@ template listDir(alias handler)
 			while (FindNextFileW(hFind, &entry.findData));
 			if (GetLastError() != ERROR_NO_MORE_FILES)
 				throw new WindowsException(GetLastError(),
-					text("FindNextFileW: ", entry.context.pathBuf[0 .. parentEntry.pathTailPos]));
+					text("FindNextFileW: ", parentEntry.fullNameFS));
 		}
 	}
 
@@ -687,14 +690,23 @@ template listDir(alias handler)
 
 		Context context;
 
+		FSChar[initialPathBufLength] pathBufStore = void;
+		context.pathBuf = pathBufStore[];
+
+		scope (exit)
+		{
+			if (context.pathBuf.length != initialPathBufLength)
+				free(context.pathBuf.ptr);
+		}
+
 		Entry rootEntry = void;
 		rootEntry.context = &context;
 
+		auto endPos = appendString(context.pathBuf, 0, dirPath);
+		rootEntry.data.pathTailPos = endPos - (endPos > 0 && context.pathBuf[endPos - 1].isDirSeparator() ? 1 : 0);
+
 		version (Posix)
 		{
-			rootEntry.parent = null;
-			rootEntry.data.fullName = dirPath.to!string;
-
 			auto dir = opendir(tempCString(dirPath));
 			errnoEnforce(dir, "Failed to open directory " ~ dirPath);
 
@@ -703,15 +715,8 @@ template listDir(alias handler)
 		else
 		version (Windows)
 		{
-			FSChar[initialPathBufLength] pathBufStore = void;
-			context.pathBuf = pathBufStore[];
-			scope (exit)
-			{
-				if (context.pathBuf.length != initialPathBufLength)
-					free(context.pathBuf.ptr);
-			}
-
-			rootEntry.pathTailPos = appendPath(context.pathBuf, 0, dirPath);
+			const WCHAR[] tailString = endPos == 0 || context.pathBuf[endPos - 1].isDirSeparator() ? "*.*\0"w : "\\*.*\0"w;
+			appendString(context.pathBuf, endPos, tailString);
 
 			scan(&rootEntry);
 		}
@@ -732,6 +737,7 @@ unittest
 
 	string[] entries;
 	listDir!((e) {
+		assert(equal(e.fullNameFS, e.fullName));
 		entries ~= e.fullName.fastRelativePath(deleteme);
 		if (e.entryIsDir)
 			e.recurse();
