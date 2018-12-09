@@ -43,125 +43,41 @@ version (Windows)
 	// Work around std.file overload
 	mixin(importWin32!(q{winnt}, null, q{FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_REPARSE_POINT}));
 }
-
-// ************************************************************************
-
-version(Windows)
-{
-	string[] fastListDir(bool recursive = false, bool symlinks=false)(string pathname, string pattern = null)
-	{
-		import core.sys.windows.windows;
-
-		static if (recursive)
-			enforce(!pattern, "TODO: recursive fastListDir with pattern");
-
-		string[] result;
-		string c;
-		HANDLE h;
-
-		c = buildPath(pathname, pattern ? pattern : "*.*");
-		WIN32_FIND_DATAW fileinfo;
-
-		h = FindFirstFileW(toUTF16z(c), &fileinfo);
-		if (h != INVALID_HANDLE_VALUE)
-		{
-			scope(exit) FindClose(h);
-
-			do
-			{
-				// Skip "." and ".."
-				if (wcscmp(fileinfo.cFileName.ptr, ".") == 0 ||
-					wcscmp(fileinfo.cFileName.ptr, "..") == 0)
-					continue;
-
-				static if (!symlinks)
-				{
-					if (fileinfo.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
-						continue;
-				}
-
-				size_t clength = wcslen(fileinfo.cFileName.ptr);
-				string name = std.utf.toUTF8(fileinfo.cFileName[0 .. clength]);
-				string path = buildPath(pathname, name);
-
-				static if (recursive)
-				{
-					if (fileinfo.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-					{
-						result ~= fastListDir!recursive(path);
-						continue;
-					}
-				}
-
-				result ~= path;
-			} while (FindNextFileW(h,&fileinfo) != FALSE);
-		}
-		return result;
-	}
-}
-else
 version (Posix)
 {
 	private import core.stdc.errno;
 	private import core.sys.posix.dirent;
 	private import core.stdc.string;
-
-	string[] fastListDir(bool recursive=false, bool symlinks=false)(string pathname, string pattern = null)
-	{
-		string[] result;
-		DIR* h;
-		dirent* fdata;
-
-		h = opendir(toStringz(pathname));
-		if (h)
-		{
-			try
-			{
-				while((fdata = readdir(h)) != null)
-				{
-					// Skip "." and ".."
-					if (!core.stdc.string.strcmp(fdata.d_name.ptr, ".") ||
-						!core.stdc.string.strcmp(fdata.d_name.ptr, ".."))
-							continue;
-
-					static if (!symlinks)
-					{
-						if (fdata.d_type == DT_LNK)
-							continue;
-					}
-
-					size_t len = core.stdc.string.strlen(fdata.d_name.ptr);
-					string name = fdata.d_name[0 .. len].idup;
-					if (pattern && !globMatch(name, pattern))
-						continue;
-					string path = pathname ~ (pathname.length && pathname[$-1] != '/' ? "/" : "") ~ name;
-
-					static if (recursive)
-					{
-						if (fdata.d_type & DT_DIR)
-						{
-							result ~= fastListDir!(recursive, symlinks)(path);
-							continue;
-						}
-					}
-
-					result ~= path;
-				}
-			}
-			finally
-			{
-				closedir(h);
-			}
-		}
-		else
-		{
-			throw new std.file.FileException(pathname, errno);
-		}
-		return result;
-	}
 }
-else
-	static assert(0, "TODO");
+
+// ************************************************************************
+
+deprecated string[] fastListDir(bool recursive = false, bool symlinks=false)(string pathname, string pattern = null)
+{
+	string[] result;
+
+	listDir!((e) {
+		static if (!symlinks)
+		{
+			// Note: shouldn't this just skip recursion?
+			if (e.isSymlink)
+				return;
+		}
+
+		static if (recursive)
+		{
+			if (e.entryIsDir)
+			{
+				// Note: why exclude directories from results?
+				e.recurse();
+				return;
+			}
+		}
+
+		result ~= e.fullName;
+	})(pathname);
+	return result;
+}
 
 // ************************************************************************
 
@@ -922,7 +838,7 @@ DirEntry[] fileList(string pattern0, string[] patterns...)
 }
 
 /// ditto
-string[] fastFileList(string pattern)
+deprecated string[] fastFileList(string pattern)
 {
 	auto components = cast(string[])array(pathSplitter(pattern));
 	foreach (i, component; components[0..$-1])
@@ -950,7 +866,7 @@ string[] fastFileList(string pattern)
 }
 
 /// ditto
-string[] fastFileList(string pattern0, string[] patterns...)
+deprecated string[] fastFileList(string pattern0, string[] patterns...)
 {
 	string[] result;
 	foreach (pattern; [pattern0] ~ patterns)
