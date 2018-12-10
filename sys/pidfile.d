@@ -19,12 +19,12 @@ import std.file : thisExePath, tempDir;
 import std.path : baseName, buildPath;
 import std.process : thisProcessID;
 import std.stdio : File;
-import std.string : fromStringz;
 
 version (Posix)
 {
 	import core.sys.posix.unistd : getlogin, geteuid;
 	import std.process : environment;
+	import std.string : fromStringz;
 }
 version (Windows)
 {
@@ -33,6 +33,7 @@ version (Windows)
 	import core.sys.windows.windef : DWORD;
 	import core.sys.windows.winnt : WCHAR;
 	import ae.sys.windows.exception : wenforce;
+	import ae.sys.windows.text : fromWString;
 }
 
 static File pidFile;
@@ -59,7 +60,7 @@ string defaultPidFileName()
 		WCHAR[UNLEN + 1] buf;
 		DWORD len = buf.length;
 		GetUserNameW(buf.ptr, &len).wenforce("GetUserNameW");
-		auto userName = buf.ptr.fromStringz();
+		auto userName = buf[].fromWString();
 	}
 
 	return text(userName, "-", thisExePath.baseName, ".pid");
