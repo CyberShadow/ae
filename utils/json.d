@@ -29,8 +29,26 @@ struct JsonWriter(Output)
 	/// You can set this to something to e.g. write to another buffer.
 	Output output;
 
+	private void putChars(S...)(S strings)
+	{
+		static if (is(typeof(output.put(strings))))
+			output.put(strings);
+		else
+			foreach (str; strings)
+				static if (is(typeof(output.put(str))))
+					output.put(str);
+				else
+					foreach (dchar c; str)
+					{
+						alias C = char; // TODO: get char type of output
+						C[4 / C.sizeof] buf = void;
+						auto size = encode(buf, c);
+						output.put(buf[0..size]);
+					}
+	}
+
 	/// Write a string literal.
-	private void putString(in char[] s)
+	private void putString(C)(in C[] s)
 	{
 		// TODO: escape Unicode characters?
 		// TODO: Handle U+2028 and U+2029 ( http://timelessrepo.com/json-isnt-a-javascript-subset )
@@ -42,11 +60,13 @@ struct JsonWriter(Output)
 		{
 			auto c = *p++;
 			if (Escapes.escaped[c])
-				output.put(start[0..p-start-1], Escapes.chars[c]),
+			{
+				putChars(start[0..p-start-1], Escapes.chars[c]);
 				start = p;
+			}
 		}
 
-		output.put(start[0..p-start], '"');
+		putChars(start[0..p-start], '"');
 	}
 
 	/// Write a value of a simple type.
@@ -58,7 +78,7 @@ struct JsonWriter(Output)
 		static if (is(T == typeof(null)))
 			return output.put("null");
 		else
-		static if (is(T : const(char)[]))
+		static if (isSomeString!T)
 			putString(v);
 		else
 		static if (is(Unqual!T == bool))
@@ -193,7 +213,7 @@ struct CustomJsonSerializer(Writer)
 		static if (is(T == enum))
 			put(to!string(v));
 		else
-		static if (is(T : const(char)[]) || is(Unqual!T : real))
+		static if (isSomeString!T || is(Unqual!T : real))
 			writer.putValue(v);
 		else
 		static if (is(T U : U[]))
@@ -391,7 +411,7 @@ private struct JsonParser(C)
 	C[] s;
 	size_t p;
 
-	char next()
+	Unqual!C next()
 	{
 		enforce(p < s.length, "Out of data while parsing JSON stream");
 		return s[p++];
@@ -405,7 +425,7 @@ private struct JsonParser(C)
 		return r;
 	}
 
-	char peek()
+	Unqual!C peek()
 	{
 		enforce(p < s.length, "Out of data while parsing JSON stream");
 		return s[p];
@@ -419,10 +439,10 @@ private struct JsonParser(C)
 			p++;
 	}
 
-	void expect(char c)
+	void expect(C c)
 	{
 		auto n = next();
-		enforce(n==c, "Expected " ~ c ~ ", got " ~ n);
+		enforce(n==c, text("Expected ", c, ", got ", n));
 	}
 
 	T read(T)()
@@ -433,8 +453,8 @@ private struct JsonParser(C)
 		static if (is(T==enum))
 			return readEnum!(T)();
 		else
-		static if (is(T==string))
-			return readString();
+		static if (isSomeString!T)
+			return readString().to!T;
 		else
 		static if (is(T==bool))
 			return readBool();
@@ -528,14 +548,14 @@ private struct JsonParser(C)
 		return s[start..p-1];
 	}
 
-	string readString()
+	C[] readString()
 	{
 		skipWhitespace();
 		auto c = peek();
 		if (c == '"')
 		{
 			next(); // '"'
-			string result;
+			C[] result;
 			auto start = p;
 			while (true)
 			{
@@ -567,7 +587,7 @@ private struct JsonParser(C)
 							Unicode_start:
 								buf ~= cast(wchar)fromHex!ushort(readN(4));
 							}
-							result ~= toUTF8(buf);
+							result ~= buf.to!(C[]);
 							break;
 						}
 						default: enforce(false, "Unknown escape");
@@ -603,7 +623,7 @@ private struct JsonParser(C)
 			auto start = p;
 			while (numeric[c = peek()])
 				p++;
-			return s[start..p].idup;
+			return s[start..p].dup;
 		}
 		else
 		{
@@ -639,9 +659,9 @@ private struct JsonParser(C)
 	{
 		skipWhitespace();
 		T v;
-		const(char)[] n;
+		const(C)[] n;
 		auto start = p;
-		char c = peek();
+		Unqual!C c = peek();
 		if (c == '"')
 			n = readSimpleString();
 		else
@@ -650,7 +670,7 @@ private struct JsonParser(C)
 			{
 				p++;
 				if (eof) break;
-				c=peek();
+				c = peek();
 			}
 			n = s[start..p];
 		}
@@ -797,7 +817,7 @@ private struct JsonParser(C)
 	void skipValue()
 	{
 		skipWhitespace();
-		char c = peek();
+		C c = peek();
 		switch (c)
 		{
 			case '"':
@@ -848,7 +868,7 @@ private struct JsonParser(C)
 					expect(l);
 				break;
 			default:
-				throw new Exception("Can't parse: " ~ c);
+				throw new Exception(text("Can't parse: ", c));
 		}
 	}
 }
@@ -874,6 +894,26 @@ unittest
 	assert(jsonParse!(Tuple!(int, string))(`[42, "banana"]`) == tuple(42, "banana"));
 
 	assert(jsonParse!(string[string])(`null`) is null);
+}
+
+unittest
+{
+	struct T { string s; wstring w; dstring d; }
+	T t;
+	auto s = t.toJson;
+	assert(s == `{"s":null,"w":null,"d":null}`, s);
+
+	t.s = "foo";
+	t.w = "bar"w;
+	t.d = "baz"d;
+	s = t.toJson;
+	assert(s == `{"s":"foo","w":"bar","d":"baz"}`, s);
+
+	jsonParse!T(s);
+	jsonParse!T(cast(char[]) s);
+	jsonParse!T(cast(const(char)[]) s);
+	jsonParse!T(s.to!wstring);
+	jsonParse!T(s.to!dstring);
 }
 
 // ************************************************************************
