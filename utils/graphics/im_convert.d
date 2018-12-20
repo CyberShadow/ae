@@ -29,6 +29,12 @@ auto parseViaIMConvert(C = TargetColor, TARGET)(const(void)[] data, auto ref TAR
 		convertFlags ~= ["-type", "TrueColor"];
 		convertFlags ~= ["-alpha", "off"];
 	}
+	else
+	static if (is(ViewColor!TARGET : BGRA))
+	{
+		convertFlags ~= ["-type", "TrueColor"];
+		convertFlags ~= ["-alpha", "on"];
+	}
 	return pipe(["convert".imageMagickBinary()] ~ convertFlags ~ ["-[0]", "bmp:-"], data).parseBMP(target);
 }
 
