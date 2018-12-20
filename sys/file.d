@@ -688,6 +688,9 @@ template listDir(alias handler)
 	{
 		import std.internal.cstring;
 
+		if (dirPath.empty)
+			return listDir(".");
+
 		Context context;
 
 		FSChar[initialPathBufLength] pathBufStore = void;
@@ -704,6 +707,7 @@ template listDir(alias handler)
 
 		auto endPos = appendString(context.pathBuf, 0, dirPath);
 		rootEntry.data.pathTailPos = endPos - (endPos > 0 && context.pathBuf[endPos - 1].isDirSeparator() ? 1 : 0);
+		assert(rootEntry.data.pathTailPos > 0);
 
 		version (Posix)
 		{
