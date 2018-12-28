@@ -64,6 +64,9 @@ deprecated string[] fastListDir(bool recursive = false, bool symlinks=false)(str
 				return;
 		}
 
+		if (pattern && !globMatch(e.baseName, pattern))
+			return;
+
 		static if (recursive)
 		{
 			if (e.entryIsDir)
