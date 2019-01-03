@@ -505,12 +505,11 @@ template bitmapBitCount(COLOR)
 	return pixelStride;
 }
 
-/// Parses a Windows bitmap (.bmp) file.
-auto parseBMP(C = TargetColor, TARGET)(const(void)[] data, auto ref TARGET target)
-	if (isWritableView!TARGET && isTargetColor!(C, TARGET))
+/// Returns a view representing a BMP file.
+/// Does not copy pixel data.
+auto viewBMP(COLOR, V)(V data)
+if (is(V : const(void)[]))
 {
-	alias COLOR = ViewColor!TARGET;
-
 	import ae.utils.graphics.bitmap;
 	alias BitmapHeader!3 Header;
 	enforce(data.length > Header.sizeof);
@@ -520,33 +519,50 @@ auto parseBMP(C = TargetColor, TARGET)(const(void)[] data, auto ref TARGET targe
 		.format(header.bfSize, data.length));
 	enforce(header.bcSize >= Header.sizeof - header.bcSize.offsetof);
 
-	auto w = header.bcWidth;
-	auto h = header.bcHeight;
+	static struct BMP
+	{
+		int w, h;
+		typeof(data.ptr) pixelData;
+		int pixelStride;
+
+		inout(COLOR)[] scanline(int y) inout // TODO constness
+		{
+			assert(y >= 0 && y < h, "BMP scanline out of bounds");
+			return (cast(COLOR*)(pixelData + y * pixelStride))[0..w];
+		}
+
+		mixin DirectView;
+	}
+	BMP bmp;
+
+	bmp.w = header.bcWidth;
+	bmp.h = header.bcHeight;
 	enforce(header.bcPlanes==1, "Multiplane BMPs not supported");
 
 	enforce(header.bcBitCount == bitmapBitCount!COLOR,
 		"Mismatching BMP bcBitCount - trying to load a %d-bit .BMP file to a %d-bit Image"
 		.format(header.bcBitCount, bitmapBitCount!COLOR));
 
-	auto pixelData = data[header.bfOffBits..$];
-	auto pixelStride = bitmapPixelStride!COLOR(w);
-	size_t pos = 0;
+	bmp.pixelData = data[header.bfOffBits..$].ptr;
+	bmp.pixelStride = bitmapPixelStride!COLOR(bmp.w);
 
-	if (h < 0)
-		h = -h;
+	if (bmp.h < 0)
+		bmp.h = -bmp.h;
 	else
 	{
-		pos = pixelStride*(h-1);
-		pixelStride = -pixelStride;
+		bmp.pixelData += bmp.pixelStride * (bmp.h - 1);
+		bmp.pixelStride = -bmp.pixelStride;
 	}
 
-	target.size(w, h);
-	foreach (y; 0..h)
-	{
-		target.scanline(y)[] = (cast(COLOR*)(pixelData.ptr+pos))[0..w];
-		pos += pixelStride;
-	}
+	return bmp;
+}
 
+/// Parses a Windows bitmap (.bmp) file.
+auto parseBMP(C = TargetColor, TARGET)(const(void)[] data, auto ref TARGET target)
+	if (isWritableView!TARGET && isTargetColor!(C, TARGET))
+{
+	alias COLOR = ViewColor!TARGET;
+	viewBMP!COLOR(data).copy(target);
 	return target;
 }
 /// ditto
