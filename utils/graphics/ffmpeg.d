@@ -46,7 +46,7 @@ private struct VideoInputStreamImpl
 		if (pHeader.bcBitCount == 32)
 		{
 			// discard alpha
-			frameBuf.parseBMP!BGRA(frameAlpha);
+			auto frameAlpha = frameBuf.viewBMP!BGRA();
 			frameAlpha.colorMap!(c => BGR(c.b, c.g, c.r)).copy(frame);
 		}
 		else
@@ -122,7 +122,6 @@ private:
 	alias BitmapHeader!3 Header;
 	ubyte[] frameBuf;
 	Image!BGR frame;
-	Image!BGRA frameAlpha;
 }
 
 struct VideoInputStream
