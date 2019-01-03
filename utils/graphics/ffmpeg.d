@@ -43,7 +43,14 @@ private struct VideoInputStreamImpl
 		auto dataBuf = frameBuf[Header.sizeof..$];
 		enforce(output.readExactly(dataBuf), "Unexpected end of stream");
 
-		frameBuf.parseBMP!BGR(frame);
+		if (pHeader.bcBitCount == 32)
+		{
+			// discard alpha
+			frameBuf.parseBMP!BGRA(frameAlpha);
+			frameAlpha.colorMap!(c => BGR(c.b, c.g, c.r)).copy(frame);
+		}
+		else
+			frameBuf.parseBMP!BGR(frame);
 	}
 
 	@disable this(this);
@@ -115,6 +122,7 @@ private:
 	alias BitmapHeader!3 Header;
 	ubyte[] frameBuf;
 	Image!BGR frame;
+	Image!BGRA frameAlpha;
 }
 
 struct VideoInputStream
