@@ -87,7 +87,7 @@ private struct VideoInputStreamImpl
 			// Be quiet
 			"-loglevel", "panic",
 			// Specify input
-			"-i", "-",
+			"-i", fn,
 			// No audio
 			"-an",
 			// Specify output codec
@@ -97,7 +97,7 @@ private struct VideoInputStreamImpl
 			// Additional arguments
 			] ~ ffmpegArgs ~ [
 			// Specify output
-			fn
+			"-"
 		], f, pipes.writeEnd);
 
 		frameBuf.length = Header.sizeof;
