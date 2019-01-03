@@ -89,7 +89,7 @@ private struct VideoInputStreamImpl
 	{
 		auto pipes = pipe();
 		output = pipes.readEnd();
-		pid = spawnProcess([
+		auto args = [
 			"ffmpeg",
 			// Be quiet
 			"-loglevel", "panic",
@@ -105,7 +105,9 @@ private struct VideoInputStreamImpl
 			] ~ ffmpegArgs ~ [
 			// Specify output
 			"-"
-		], f, pipes.writeEnd);
+		];
+		debug(FFMPEG) stderr.writeln(args.escapeShellCommand);
+		pid = spawnProcess(args, f, pipes.writeEnd);
 
 		frameBuf.length = Header.sizeof;
 
@@ -160,7 +162,7 @@ struct VideoOutputStream
 	{
 		auto pipes = pipe();
 		output = pipes.writeEnd;
-		pid = spawnProcess([
+		auto args = [
 			"ffmpeg",
 			// Additional input arguments (such as -framerate)
 			] ~ inputArgs ~ [
@@ -174,7 +176,9 @@ struct VideoOutputStream
 			] ~ ffmpegArgs ~ [
 			// Specify output
 			fn
-		], pipes.readEnd, f);
+		];
+		debug(FFMPEG) stderr.writeln(args.escapeShellCommand);
+		pid = spawnProcess(args, pipes.readEnd, f);
 	}
 
 	this(File f, string[] ffmpegArgs = null, string[] inputArgs = null)
