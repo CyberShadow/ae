@@ -307,6 +307,96 @@ unittest
 
 // ***************************************************************************
 
+/// Downscaling copy (averages colors in source per one pixel in target).
+auto downscaleTo(SRC, TARGET)(auto ref SRC src, auto ref TARGET target)
+if (isDirectView!SRC && isWritableView!TARGET)
+{
+	alias lr = target;
+	alias hr = src;
+	alias COLOR = ViewColor!SRC;
+
+	void impl(uint EXPAND_BYTES)()
+	{
+		foreach (y; 0..lr.h)
+			foreach (x; 0..lr.w)
+			{
+				static if (is(typeof(COLOR.init.a))) // downscale with alpha
+					static assert(false, "Downscaling with alpha is not implemented");
+				else
+				{
+					ExpandChannelType!(ViewColor!SRC, EXPAND_BYTES) sum;
+					auto x0 =  x    * hr.w / lr.w;
+					auto x1 = (x+1) * hr.w / lr.w;
+					auto y0 =  y    * hr.h / lr.h;
+					auto y1 = (y+1) * hr.h / lr.h;
+
+					// When upscaling (across one or two axes),
+					// fall back to nearest neighbor
+					if (x0 == x1) x1++;
+					if (y0 == y1) y1++;
+
+					foreach (j; y0 .. y1)
+						foreach (p; hr.scanline(j)[x0 .. x1])
+							sum += p;
+					auto area = (x1 - x0) * (y1 - y0);
+					auto avg = sum / area;
+					lr[x, y] = cast(ViewColor!SRC)(avg);
+				}
+			}
+	}
+
+	auto perPixelArea = (hr.w / lr.w + 1) * (hr.h / lr.h + 1);
+
+	if (perPixelArea <= 0x100)
+		impl!1();
+	else
+	if (perPixelArea <= 0x10000)
+		impl!2();
+	else
+	if (perPixelArea <= 0x1000000)
+		impl!3();
+	else
+		assert(false, "Downscaling too much");
+
+	return target;
+}
+
+/// Downscales an image to a certain size.
+auto downscaleTo(SRC)(auto ref SRC src, int w, int h)
+if (isView!SRC)
+{
+	ViewImage!SRC target;
+	target.size(w, h);
+	return src.downscaleTo(target);
+}
+
+unittest
+{
+	onePixel(RGB.init).nearestNeighbor(4, 4).copy.downscaleTo(2, 2);
+//	onePixel(RGBA.init).nearestNeighbor(4, 4).copy.downscaleTo(2, 2);
+
+	Image!ubyte i;
+	i.size(6, 1);
+	i.pixels[] = [1, 2, 3, 4, 5, 6];
+	assert(i.downscaleTo(6, 1).pixels == [1, 2, 3, 4, 5, 6]);
+	assert(i.downscaleTo(3, 1).pixels == [1, 3, 5]);
+	assert(i.downscaleTo(2, 1).pixels == [2, 5]);
+	assert(i.downscaleTo(1, 1).pixels == [3]);
+
+	i.size(3, 3);
+	i.pixels[] = [
+		1, 2, 3,
+		4, 5, 6,
+		7, 8, 9];
+	assert(i.downscaleTo(2, 2).pixels == [1, 2, 5, 7]);
+
+	i.size(1, 1);
+	i.pixels = [1];
+	assert(i.downscaleTo(2, 2).pixels == [1, 1, 1, 1]);
+}
+
+// ***************************************************************************
+
 /// Copy the indicated row of src to a COLOR buffer.
 void copyScanline(SRC, COLOR)(auto ref SRC src, int y, COLOR[] dst)
 	if (isView!SRC && is(COLOR == ViewColor!SRC))
