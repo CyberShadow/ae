@@ -24,6 +24,7 @@ import std.exception;
 import std.format;
 import std.math;
 import std.mmfile;
+import std.stdio;
 
 import ae.ui.app.application;
 import ae.ui.app.main;
@@ -57,14 +58,17 @@ final class MyApplication : Application
 	size_t offset = 0;
 	uint width = 256, height;
 
-	uint dirty = 3;
+	enum maxFramesToRender = 3; // include possible back-buffers
+	uint dirty = maxFramesToRender;
 	uint lastWidth, lastHeight;
 	uint bpp = 1;
 	uint zoom = 4;
 
 	override void render(Renderer s)
 	{
-		if (dirty == 0 && s.width == lastWidth && s.height == lastHeight)
+		if (s.width != lastWidth && s.height != lastHeight)
+			dirty = maxFramesToRender;
+		if (dirty == 0)
 			return;
 
 		s.clear();
@@ -161,7 +165,7 @@ final class MyApplication : Application
 						return;
 				}
 		}
-		dirty = 3;
+		dirty = maxFramesToRender;
 	}
 
 	override void handleMouseMove(uint x, uint y, MouseButtons buttons)
