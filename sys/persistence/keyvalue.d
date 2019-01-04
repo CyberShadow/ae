@@ -121,7 +121,13 @@ private:
 			return cast(T) v;
 		else
 		static if (is(T U : U[]) && !hasIndirections!U) // void[]
-			return cast(T) v;
+			static if (is(T V : V[N], size_t N))
+			{
+				assert(v.length == N, "Static array length mismatch");
+				return cast(T) v[0..N];
+			}
+			else
+				return cast(T) v;
 		else
 			return jsonParse!T(cast(string) v);
 	}
@@ -238,4 +244,13 @@ unittest
 	assert("key" !in store);
 	assert("key2" in store);
 	assert(store.get("key", null) is null);
+}
+
+unittest
+{
+	if (false)
+	{
+		KeyValueStore!(string, ubyte[20]) kv;
+		ubyte[20] s = kv[""];
+	}
 }
