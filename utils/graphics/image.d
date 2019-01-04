@@ -218,6 +218,7 @@ template downscale(int HRX, int HRY=HRX)
 	{
 		alias lr = target;
 		alias hr = src;
+		alias COLOR = ViewColor!SRC;
 
 		assert(hr.w % HRX == 0 && hr.h % HRY == 0, "Size mismatch");
 
@@ -235,34 +236,39 @@ template downscale(int HRX, int HRY=HRX)
 					static assert(0);
 				static if (is(typeof(COLOR.init.a))) // downscale with alpha
 				{
-					ExpandType!(COLOR, EXPAND_BYTES+COLOR.init.a.sizeof) sum;
-					ExpandType!(typeof(COLOR.init.a), EXPAND_BYTES) alphaSum;
-					auto start = y*HRY*hr.stride + x*HRX;
-					foreach (j; 0..HRY)
+					version (none) // TODO: broken
 					{
-						foreach (p; hr.pixels[start..start+HRX])
+						ExpandChannelType!(COLOR, EXPAND_BYTES+COLOR.init.a.sizeof) sum;
+						ExpandChannelType!(typeof(COLOR.init.a), EXPAND_BYTES) alphaSum;
+						auto start = y*HRY*hr.stride + x*HRX;
+						foreach (j; 0..HRY)
 						{
-							foreach (i, f; p.tupleof)
-								static if (p.tupleof[i].stringof != "p.a")
-								{
-									enum FIELD = p.tupleof[i].stringof[2..$];
-									mixin("sum."~FIELD~" += cast(typeof(sum."~FIELD~"))p."~FIELD~" * p.a;");
-								}
-							alphaSum += p.a;
+							foreach (p; hr.pixels[start..start+HRX])
+							{
+								foreach (i, f; p.tupleof)
+									static if (p.tupleof[i].stringof != "p.a")
+									{
+										enum FIELD = p.tupleof[i].stringof[2..$];
+										mixin("sum."~FIELD~" += cast(typeof(sum."~FIELD~"))p."~FIELD~" * p.a;");
+									}
+								alphaSum += p.a;
+							}
+							start += hr.stride;
 						}
-						start += hr.stride;
-					}
-					if (alphaSum)
-					{
-						auto result = cast(COLOR)(sum / alphaSum);
-						result.a = cast(typeof(result.a))(alphaSum / (HRX*HRY));
-						lr[x, y] = result;
+						if (alphaSum)
+						{
+							auto result = cast(COLOR)(sum / alphaSum);
+							result.a = cast(typeof(result.a))(alphaSum / (HRX*HRY));
+							lr[x, y] = result;
+						}
+						else
+						{
+							static assert(COLOR.init.a == 0);
+							lr[x, y] = COLOR.init;
+						}
 					}
 					else
-					{
-						static assert(COLOR.init.a == 0);
-						lr[x, y] = COLOR.init;
-					}
+						static assert(false, "Downscaling with alpha is not implemented");
 				}
 				else
 				{
@@ -290,6 +296,7 @@ template downscale(int HRX, int HRY=HRX)
 unittest
 {
 	onePixel(RGB.init).nearestNeighbor(4, 4).copy.downscale!(2, 2)();
+//	onePixel(RGBA.init).nearestNeighbor(4, 4).copy.downscale!(2, 2)();
 }
 
 // ***************************************************************************
