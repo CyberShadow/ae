@@ -148,7 +148,14 @@ final class SDL2Shell : Shell
 
 	override void setCaption(string caption)
 	{
-		runInMainThread({ SDL_SetWindowTitle(sdlVideo.window, toStringz(caption)); });
+		runInMainThread({
+			static string oldCaption;
+			if (caption != oldCaption)
+			{
+				oldCaption = caption;
+				SDL_SetWindowTitle(sdlVideo.window, toStringz(caption));
+			}
+		});
 	}
 
 	MouseButton translateMouseButton(ubyte sdlButton)
