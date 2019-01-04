@@ -297,6 +297,12 @@ unittest
 {
 	onePixel(RGB.init).nearestNeighbor(4, 4).copy.downscale!(2, 2)();
 //	onePixel(RGBA.init).nearestNeighbor(4, 4).copy.downscale!(2, 2)();
+
+	Image!ubyte i;
+	i.size(4, 1);
+	i.pixels[] = [1, 3, 5, 7];
+	auto d = i.downscale!(2, 1);
+	assert(d.pixels == [2, 6]);
 }
 
 // ***************************************************************************
