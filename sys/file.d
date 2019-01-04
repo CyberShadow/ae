@@ -715,7 +715,7 @@ template listDir(alias handler)
 		version (Posix)
 		{
 			auto dir = opendir(tempCString(dirPath));
-			errnoEnforce(dir, "Failed to open directory " ~ dirPath);
+			checkDir(dir, dirPath);
 
 			scan(dir, dirfd(dir), &rootEntry);
 		}
@@ -727,6 +727,13 @@ template listDir(alias handler)
 
 			scan(&rootEntry);
 		}
+	}
+
+	// Workaround for https://github.com/ldc-developers/ldc/issues/2960
+	version (Posix)
+	private void checkDir(Path)(DIR* dir, auto ref Path dirPath)
+	{
+		errnoEnforce(dir, "Failed to open directory " ~ dirPath);
 	}
 }
 
