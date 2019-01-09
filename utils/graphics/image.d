@@ -784,7 +784,7 @@ align(1)
 struct PNGHeader
 {
 align(1):
-	uint width, height;
+	ubyte[4] width, height;
 	ubyte colourDepth;
 	PNGColourType colourType;
 	PNGCompressionMethod compressionMethod;
@@ -800,7 +800,7 @@ ubyte[] toPNG(SRC)(auto ref SRC src, int compressionLevel = 5)
 	if (isView!SRC)
 {
 	import std.zlib : compress;
-	import ae.utils.math : swapBytes; // TODO: proper endianness support
+	import std.bitmanip : nativeToBigEndian, swapEndian;
 
 	alias COLOR = ViewColor!SRC;
 	static if (!is(COLOR == struct))
@@ -822,8 +822,8 @@ ubyte[] toPNG(SRC)(auto ref SRC src, int compressionLevel = 5)
 
 	PNGChunk[] chunks;
 	PNGHeader header = {
-		width : swapBytes(src.w),
-		height : swapBytes(src.h),
+		width : nativeToBigEndian(src.w),
+		height : nativeToBigEndian(src.h),
 		colourDepth : ChannelType!COLOR.sizeof * 8,
 		colourType : COLOUR_TYPE,
 		compressionMethod : PNGCompressionMethod.DEFLATE,
@@ -839,9 +839,10 @@ ubyte[] toPNG(SRC)(auto ref SRC src, int compressionLevel = 5)
 		auto rowPixels = cast(COLOR[])idatData[y*idatStride+1..(y+1)*idatStride];
 		src.copyScanline(y, rowPixels);
 
-		static if (ChannelType!COLOR.sizeof > 1)
-			foreach (ref p; cast(ChannelType!COLOR[])rowPixels)
-				p = swapBytes(p);
+		version (LittleEndian)
+			static if (ChannelType!COLOR.sizeof > 1)
+				foreach (ref p; cast(ChannelType!COLOR[])rowPixels)
+					p = swapEndian(p);
 	}
 	chunks ~= PNGChunk("IDAT", compress(idatData, compressionLevel));
 	chunks ~= PNGChunk("IEND", null);
@@ -851,7 +852,7 @@ ubyte[] toPNG(SRC)(auto ref SRC src, int compressionLevel = 5)
 
 ubyte[] makePNG(PNGChunk[] chunks)
 {
-	import ae.utils.math : swapBytes; // TODO: proper endianness support
+	import std.bitmanip : nativeToBigEndian;
 
 	uint totalSize = 8;
 	foreach (chunk; chunks)
@@ -865,10 +866,10 @@ ubyte[] makePNG(PNGChunk[] chunks)
 		uint i = pos;
 		uint chunkLength = to!uint(chunk.data.length);
 		pos += 12 + chunkLength;
-		*cast(uint*)&data[i] = swapBytes(chunkLength);
+		*cast(ubyte[4]*)&data[i] = nativeToBigEndian(chunkLength);
 		(cast(char[])data[i+4 .. i+8])[] = chunk.type[];
 		data[i+8 .. i+8+chunk.data.length] = (cast(ubyte[])chunk.data)[];
-		*cast(uint*)&data[i+8+chunk.data.length] = swapBytes(chunk.crc32());
+		*cast(ubyte[4]*)&data[i+8+chunk.data.length] = nativeToBigEndian(chunk.crc32());
 		assert(pos == i+12+chunk.data.length);
 	}
 
