@@ -270,7 +270,7 @@ Image!COLOR decodePNG(COLOR)(ubyte[] data)
 	// Channels
 
 	static if (!is(COLOR == struct))
-		enum channels = ["g"];
+		enum channels = ["l"];
 	else
 	{
 		import ae.utils.meta : structFields;
