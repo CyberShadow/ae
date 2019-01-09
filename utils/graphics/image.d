@@ -749,49 +749,48 @@ unittest
 
 // ***************************************************************************
 
-private // https://issues.dlang.org/show_bug.cgi?id=16563
+enum ulong PNGSignature = 0x0a1a0a0d474e5089;
+
+struct PNGChunk
 {
-	struct PNGChunk
+	char[4] type;
+	const(void)[] data;
+
+	uint crc32()
 	{
-		char[4] type;
-		const(void)[] data;
-
-		uint crc32()
-		{
-			import std.digest.crc;
-			CRC32 crc;
-			crc.put(cast(ubyte[])(type[]));
-			crc.put(cast(ubyte[])data);
-			ubyte[4] hash = crc.finish();
-			return *cast(uint*)hash.ptr;
-		}
-
-		this(string type, const(void)[] data)
-		{
-			this.type[] = type[];
-			this.data = data;
-		}
+		import std.digest.crc;
+		CRC32 crc;
+		crc.put(cast(ubyte[])(type[]));
+		crc.put(cast(ubyte[])data);
+		ubyte[4] hash = crc.finish();
+		return *cast(uint*)hash.ptr;
 	}
 
-	enum PNGColourType : ubyte { G, RGB=2, PLTE, GA, RGBA=6 }
-	enum PNGCompressionMethod : ubyte { DEFLATE }
-	enum PNGFilterMethod : ubyte { ADAPTIVE }
-	enum PNGInterlaceMethod : ubyte { NONE, ADAM7 }
-
-	enum PNGFilterAdaptive : ubyte { NONE, SUB, UP, AVERAGE, PAETH }
-
-	align(1)
-	struct PNGHeader
+	this(string type, const(void)[] data)
 	{
-	align(1):
-		uint width, height;
-		ubyte colourDepth;
-		PNGColourType colourType;
-		PNGCompressionMethod compressionMethod;
-		PNGFilterMethod filterMethod;
-		PNGInterlaceMethod interlaceMethod;
-		static assert(PNGHeader.sizeof == 13);
+		this.type[] = type[];
+		this.data = data;
 	}
+}
+
+enum PNGColourType : ubyte { G, RGB=2, PLTE, GA, RGBA=6 }
+enum PNGCompressionMethod : ubyte { DEFLATE }
+enum PNGFilterMethod : ubyte { ADAPTIVE }
+enum PNGInterlaceMethod : ubyte { NONE, ADAM7 }
+
+enum PNGFilterAdaptive : ubyte { NONE, SUB, UP, AVERAGE, PAETH }
+
+align(1)
+struct PNGHeader
+{
+align(1):
+	uint width, height;
+	ubyte colourDepth;
+	PNGColourType colourType;
+	PNGCompressionMethod compressionMethod;
+	PNGFilterMethod filterMethod;
+	PNGInterlaceMethod interlaceMethod;
+	static assert(PNGHeader.sizeof == 13);
 }
 
 /// Creates a PNG file.
@@ -802,8 +801,6 @@ ubyte[] toPNG(SRC)(auto ref SRC src, int compressionLevel = 5)
 {
 	import std.zlib : compress;
 	import ae.utils.math : swapBytes; // TODO: proper endianness support
-
-	enum : ulong { SIGNATURE = 0x0a1a0a0d474e5089 }
 
 	alias COLOR = ViewColor!SRC;
 	static if (!is(COLOR == struct))
@@ -849,12 +846,19 @@ ubyte[] toPNG(SRC)(auto ref SRC src, int compressionLevel = 5)
 	chunks ~= PNGChunk("IDAT", compress(idatData, compressionLevel));
 	chunks ~= PNGChunk("IEND", null);
 
+	return makePNG(chunks);
+}
+
+ubyte[] makePNG(PNGChunk[] chunks)
+{
+	import ae.utils.math : swapBytes; // TODO: proper endianness support
+
 	uint totalSize = 8;
 	foreach (chunk; chunks)
 		totalSize += 8 + chunk.data.length + 4;
 	ubyte[] data = new ubyte[totalSize];
 
-	*cast(ulong*)data.ptr = SIGNATURE;
+	*cast(ulong*)data.ptr = PNGSignature;
 	uint pos = 8;
 	foreach(chunk;chunks)
 	{
