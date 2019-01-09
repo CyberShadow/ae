@@ -410,9 +410,11 @@ unittest
 		import ae.utils.meta : ArrayToTuple;
 		alias COLOR = Color!(ChannelType, ArrayToTuple!fields);
 
-		static void testPNG(ubyte pngDepth, bool pngPaletted, bool pngColor, bool pngAlpha, bool pngTrns, int pngBkgd)
+		enum Bkgd { none, black, white }
+
+		static void testPNG(ubyte pngDepth, bool pngPaletted, bool pngColor, bool pngAlpha, bool pngTrns, Bkgd pngBkgd)
 		{
-			debug(LIBPNG) stderr.writefln("   > PNG depth=%2d palette=%d color=%d alpha=%d trns=%d bkgd=%2d",
+			debug(LIBPNG) stderr.writefln("   > PNG depth=%2d palette=%d color=%d alpha=%d trns=%d bkgd=%-5s",
 				pngDepth, pngPaletted, pngColor, pngAlpha, pngTrns, pngBkgd);
 
 			void skip(string msg) { debug(LIBPNG) stderr.writefln("     >> Skipped: %s", msg); }
@@ -448,7 +450,7 @@ unittest
 
 			ulong pngChannelMax = (1 << pngChannelSize) - 1;
 			ulong pngChannelMed = pngChannelMax / 2;
-			ulong bkgdColor = [pngChannelMed, 0, pngChannelMax][1 + pngBkgd];
+			ulong bkgdColor = [pngChannelMed, 0, pngChannelMax][pngBkgd];
 			ulong[4][numPixels] pixels = [
 				[            0,             0,             0, pngChannelMax], // black
 				[pngChannelMax, pngChannelMax, pngChannelMax, pngChannelMax], // white
@@ -515,7 +517,7 @@ unittest
 				chunks ~= PNGChunk("tRNS", trns.buf);
 			}
 
-			if (pngBkgd >= 0)
+			if (pngBkgd != Bkgd.none)
 			{
 				BitWriter bkgd;
 				if (pngPaletted)
@@ -664,7 +666,7 @@ unittest
 					static if (alpha == PNGReader.Alpha.filler)
 						assert(c.x == 0);
 
-					ulong[3] bg = pngBkgd >= 0 ? [bkgdColor, bkgdColor, bkgdColor] : bgColor;
+					ulong[3] bg = pngBkgd != Bkgd.none ? [bkgdColor, bkgdColor, bkgdColor] : bgColor;
 					ChannelType[3] cbg;
 					foreach (i; 0..3)
 						cbg[i] = cast(ChannelType)(bg[i] * ChannelType.max / pngChannelMax);
@@ -673,7 +675,7 @@ unittest
 				}
 			}
 
-			if ((pngTrns || pngAlpha) && pngBkgd > 0 && alpha == PNGReader.Alpha.filler)
+			if ((pngTrns || pngAlpha) && pngBkgd == Bkgd.white && alpha == PNGReader.Alpha.filler)
 			{} // libpng bug!
 			else
 			if (pngAlpha || (pngTrns && pngPaletted))
@@ -683,7 +685,7 @@ unittest
 
 			if (pngTrns && !pngPaletted)
 			{
-				if (pngBkgd >= 0)
+				if (pngBkgd != Bkgd.none)
 				{} // libpng bug!
 				else
 					checkTransparent(5, [1,2,3]);
@@ -697,7 +699,7 @@ unittest
 				foreach (pngColor; [false, true])
 					foreach (pngAlpha; [false, true])
 						foreach (pngTrns; [false, true])
-							foreach (pngBkgd; [-1, 0, 1]) // absent, white, black
+							foreach (pngBkgd; [EnumMembers!Bkgd]) // absent, black, white
 								testPNG(pngDepth, pngPaletted, pngColor, pngAlpha, pngTrns, pngBkgd);
 	}
 
