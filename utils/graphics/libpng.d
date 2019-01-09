@@ -681,11 +681,13 @@ unittest
 			else
 				checkSolid(4, [0,0,0]);
 
-			if (pngDepth != depth)
-			{} // libpng bug!
-			else
 			if (pngTrns && !pngPaletted)
-				checkTransparent(5, [1,2,3]);
+			{
+				if (pngBkgd >= 0)
+				{} // libpng bug!
+				else
+					checkTransparent(5, [1,2,3]);
+			}
 			else
 				checkSolid(5, [1,2,3]);
 		}
