@@ -13,6 +13,7 @@
 
 module ae.net.sync;
 
+import core.atomic;
 import core.sync.semaphore;
 import core.thread;
 
@@ -21,7 +22,6 @@ import std.socket;
 import std.typecons : Flag, Yes;
 
 import ae.net.asockets;
-import ae.utils.array;
 
 /**
 	An object which allows calling a function in a different thread.
@@ -59,10 +59,16 @@ private:
 		Semaphore* semaphore;
 	}
 
+	enum queueSize = 1024;
+
 	final static class AnchorSocket : TcpConnection
 	{
 		Socket pinger;
-		Command[] queue;
+
+		// Ensure the GC can reach delegates
+		// Must be preallocated - can't allocate in signal handlers
+		Command[queueSize] queue;
+		shared size_t writeIndex;
 
 		this(bool daemon)
 		{
@@ -76,12 +82,10 @@ private:
 
 		void onReadData(Data data)
 		{
-			import ae.utils.array;
-
-			foreach (idx; cast(bool[])data.contents)
+			foreach (index; cast(size_t[])data.contents)
 			{
-				Command command;
-				synchronized(this) command = queue.queuePop;
+				auto command = queue[index];
+				queue[index] = Command.init;
 				command.dg();
 				if (command.semaphore)
 					command.semaphore.notify();
@@ -91,16 +95,27 @@ private:
 
 	AnchorSocket socket;
 
-	void ping() nothrow @nogc
+	void sendCommand(size_t index) nothrow @nogc
 	{
 		// https://github.com/dlang/phobos/pull/4273
-		(cast(void delegate() nothrow @nogc)&pingImpl)();
+		(cast(void delegate(size_t index) nothrow @nogc)&sendCommandImpl)(index);
 	}
 
-	void pingImpl()
+	void sendCommandImpl(size_t index)
 	{
-		ubyte[1] data;
+		size_t[1] data;
+		data[0] = index;
 		socket.pinger.send(data[]);
+	}
+
+	void runCommand(Command command) nothrow @nogc
+	{
+		assert(command.dg);
+		auto index = (socket.writeIndex.atomicOp!"+="(1)-1) % queueSize;
+		if (socket.queue[index].dg !is null)
+			assert(false, "ThreadAnchor queue overrun");
+		socket.queue[index] = command;
+		sendCommand(index);
 	}
 
 public:
@@ -109,18 +124,15 @@ public:
 		socket = new AnchorSocket(daemon);
 	}
 
-	void runAsync(Dg dg)
+	void runAsync(Dg dg) nothrow @nogc
 	{
-		synchronized(socket) socket.queue.queuePush(Command(dg));
-		ping();
+		runCommand(Command(dg));
 	}
 
 	void runWait(Dg dg)
 	{
 		scope semaphore = new Semaphore();
-		synchronized(socket) socket.queue.queuePush(Command(dg, &semaphore));
-		ping();
-
+		runCommand(Command(dg, &semaphore));
 		semaphore.wait();
 	}
 
