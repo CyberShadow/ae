@@ -30,7 +30,7 @@ struct PNGReader
 {
 	// Settings
 
-	bool strict; // Throw on corrupt / invalid data vs. ignore errors as much as possible
+	bool strict = true; // Throw on corrupt / invalid data vs. ignore errors as much as possible
 	enum Depth { d8, d16 } Depth depth;
 	enum Channels { gray, rgb, bgr } Channels channels;
 	enum Alpha { none, alpha, filler } Alpha alpha;
@@ -251,11 +251,12 @@ private:
 	}
 }
 
-Image!COLOR decodePNG(COLOR)(ubyte[] data)
+Image!COLOR decodePNG(COLOR)(ubyte[] data, bool strict = true)
 {
 	Image!COLOR img;
 
 	PNGReader reader;
+	reader.strict = strict;
 	reader.init();
 
 	// Depth
