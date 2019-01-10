@@ -13,7 +13,7 @@
 
 module ae.net.sync;
 
-import core.atomic;
+import core.sync.semaphore;
 import core.thread;
 
 import std.exception;
@@ -21,6 +21,7 @@ import std.socket;
 import std.typecons : Flag, Yes;
 
 import ae.net.asockets;
+import ae.utils.array;
 
 /**
 	An object which allows calling a function in a different thread.
@@ -50,23 +51,18 @@ import ae.net.asockets;
 final class ThreadAnchor : TcpConnection
 {
 private:
-	enum Command : ubyte
-	{
-		none,
-		runWait,
-		runAsync,
-		runWaitDone,
-	}
-
 	alias Dg = void delegate();
 
-	enum queueSize = 1024;
+	static struct Command
+	{
+		Dg dg;
+		Semaphore* semaphore;
+	}
 
 	final static class AnchorSocket : TcpConnection
 	{
 		Socket pinger;
-		Dg[queueSize] queue;
-		shared size_t readIndex, writeIndex;
+		Command[] queue;
 
 		this(bool daemon)
 		{
@@ -82,42 +78,28 @@ private:
 		{
 			import ae.utils.array;
 
-			foreach (cmd; cast(Command[])data.contents)
+			foreach (idx; cast(bool[])data.contents)
 			{
-				Dg* pdg = &queue[(readIndex.atomicOp!"+="(1)-1) % $];
-				Dg dg = *pdg;
-				*pdg = null;
-				switch (cmd)
-				{
-					case Command.runAsync:
-						dg();
-						break;
-					case Command.runWait:
-					{
-						dg();
-						Command[] reply = [Command.runWaitDone];
-						this.send(Data(reply));
-						break;
-					}
-					default:
-						assert(false);
-				}
+				Command command;
+				synchronized(this) command = queue.queuePop;
+				command.dg();
+				if (command.semaphore)
+					command.semaphore.notify();
 			}
 		}
 	}
 
 	AnchorSocket socket;
 
-	void sendCommand(Command command) nothrow @nogc
+	void ping() nothrow @nogc
 	{
 		// https://github.com/dlang/phobos/pull/4273
-		(cast(void delegate(Command) nothrow @nogc)&sendCommandImpl)(command);
+		(cast(void delegate() nothrow @nogc)&pingImpl)();
 	}
 
-	void sendCommandImpl(Command command)
+	void pingImpl()
 	{
-		Command[1] data;
-		data[0] = command;
+		ubyte[1] data;
 		socket.pinger.send(data[]);
 	}
 
@@ -127,20 +109,19 @@ public:
 		socket = new AnchorSocket(daemon);
 	}
 
-	void runAsync(Dg dg) nothrow @nogc
+	void runAsync(Dg dg)
 	{
-		socket.queue[(socket.writeIndex.atomicOp!"+="(1)-1) % $] = dg;
-		sendCommand(Command.runAsync);
+		synchronized(socket) socket.queue.queuePush(Command(dg));
+		ping();
 	}
 
 	void runWait(Dg dg)
 	{
-		socket.queue[(socket.writeIndex.atomicOp!"+="(1)-1) % $] = dg;
-		sendCommand(Command.runWait);
+		scope semaphore = new Semaphore();
+		synchronized(socket) socket.queue.queuePush(Command(dg, &semaphore));
+		ping();
 
-		Command[] data = [Command.none];
-		data = data[0..socket.pinger.receive(data)];
-		enforce(data.length && data[0] == Command.runWaitDone, "runWait error");
+		semaphore.wait();
 	}
 
 	void close()
