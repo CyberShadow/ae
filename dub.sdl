@@ -86,17 +86,15 @@ subPackage {
 
 ---------------------------
 
-# Needs new libpng tag
-#
-# subPackage {
-# 	name "libpng"
-# 	targetType "sourceLibrary"
-# 	systemDependencies "libpng"
-# 	dependency "ae" version="*" path="."
-# 	dependency "libpng" version="~>1.6"
-# 	sourceFiles \
-# 		"utils/graphics/libpng.d"
-# }
+subPackage {
+	name "libpng"
+	targetType "sourceLibrary"
+	systemDependencies "libpng"
+	dependency "ae" version="*" path="."
+	dependency "libpng" version="==1.6.17"
+	sourceFiles \
+		"utils/graphics/libpng.d"
+}
 
 ---------------------------
 
