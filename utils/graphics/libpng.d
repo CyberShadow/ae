@@ -128,7 +128,7 @@ private:
 				break;
 		}
 
-		if (self.alpha == Alpha.none)
+		if (self.alpha != Alpha.alpha)
 		{
 			png_set_strip_alpha(png_ptr);
 
@@ -157,7 +157,8 @@ private:
 					cast(png_const_color_16p)self.defaultColor.ptr,
 					PNG_BACKGROUND_GAMMA_SCREEN, 0/*do not expand*/, 1);
 		}
-		else
+
+		if (self.alpha != Alpha.none)
 		{
 			int location;
 			final switch (self.alphaLocation)
@@ -604,10 +605,7 @@ unittest
 				else
 				static if (alpha == PNGReader.Alpha.filler)
 				{
-					if (pngTrns || pngAlpha) // libpng bug / optimization?
-						assert(c.x == ChannelType.max);
-					else
-						assert(c.x == 0);
+					assert(c.x == 0);
 				}
 				else
 				static if (alpha == PNGReader.Alpha.alpha)
@@ -675,9 +673,6 @@ unittest
 				}
 			}
 
-			if ((pngTrns || pngAlpha) && pngBkgd == Bkgd.white && alpha == PNGReader.Alpha.filler)
-			{} // libpng bug!
-			else
 			if (pngAlpha || (pngTrns && pngPaletted))
 				checkTransparent(4, [0,0,0]);
 			else
