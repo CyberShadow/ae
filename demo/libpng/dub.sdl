@@ -1,0 +1,6 @@
+name "ae-demo-pngtobmp"
+mainSourceFile "pngtobmp.d"
+targetType "executable"
+
+dependency "ae" version="*" path="../../"
+dependency "ae:libpng" version="*" path="../../"

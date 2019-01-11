@@ -15,6 +15,7 @@
 .dub
 dub.selections.json
 /ae-test-library
+/ae-*-test-library
 
 # demos - rdmd binaries
 /demo/binview/binview
@@ -24,6 +25,7 @@ dub.selections.json
 /demo/http/httpserve
 /demo/inputtiming/main
 /demo/irc/irctest
+/demo/libpng/pngtobmp
 /demo/pewpew/pewpew
 /demo/portforward/portforward
 /demo/render/main
@@ -37,6 +39,7 @@ dub.selections.json
 /demo/drawsprite/ae-demo-drawsprite
 /demo/http/ae-demo-http
 /demo/inputtiming/ae-demo-inputtiming
+/demo/libpng/ae-demo-pngtobmp
 /demo/pewpew/ae-demo-pewpew
 /demo/portforward/ae-demo-portforward
 /demo/render/ae-demo-render
