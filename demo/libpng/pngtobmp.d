@@ -24,7 +24,7 @@ import ae.utils.graphics.libpng;
 import ae.utils.main;
 import ae.utils.meta;
 
-void pngtobmp(bool strict, bool alpha, bool gray, bool rgb, string[] files)
+void pngtobmp(bool strict, bool alpha, bool padding, bool gray, bool rgb, string[] files)
 {
 	enforce(files.length, "No PNG files specified");
 
@@ -45,12 +45,15 @@ void pngtobmp(bool strict, bool alpha, bool gray, bool rgb, string[] files)
 	void cv1(string[] colorChannels)()
 	{
 		if (alpha)
+		{
+			enforce(!padding, "Can't use --alpha with --padding");
 			cv3!(Color!(ubyte, ArrayToTuple!(colorChannels ~ "a")))();
+		}
 		else
-			static if (colorChannels.length == 1)
-				cv3!(Color!(ubyte, ArrayToTuple!(colorChannels ~ "x")))();
-			else
-				cv3!(Color!(ubyte, ArrayToTuple!colorChannels))();
+		if (padding)
+			cv3!(Color!(ubyte, ArrayToTuple!(colorChannels ~ "x")))();
+		else
+			cv3!(Color!(ubyte, ArrayToTuple!colorChannels))();
 	}
 
 	if (gray)
