@@ -46,7 +46,7 @@ private struct VideoInputStreamImpl
 		if (pHeader.bcBitCount == 32)
 		{
 			// discard alpha
-			auto frameAlpha = frameBuf.viewBMP!BGRA();
+			auto frameAlpha = frameBuf.viewBMP!BGRX();
 			frameAlpha.colorMap!(c => BGR(c.b, c.g, c.r)).copy(frame);
 		}
 		else

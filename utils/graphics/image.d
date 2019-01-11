@@ -587,7 +587,7 @@ unittest
 
 static import ae.utils.graphics.bitmap;
 
-enum bitmapNeedV4Header(COLOR) = !is(COLOR == BGR);
+enum bitmapNeedV4Header(COLOR) = !is(COLOR == BGR) && !is(COLOR == BGRX);
 
 uint[4] bitmapChannelMasks(COLOR)()
 {
