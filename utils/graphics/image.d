@@ -587,18 +587,45 @@ unittest
 
 static import ae.utils.graphics.bitmap;
 
-template bitmapBitCount(COLOR)
+enum bitmapNeedV4Header(COLOR) = !is(COLOR == BGR);
+
+uint[4] bitmapChannelMasks(COLOR)()
 {
-	static if (is(COLOR == BGR))
-		enum bitmapBitCount = 24;
-	else
-	static if (is(COLOR == BGRX) || is(COLOR == BGRA))
-		enum bitmapBitCount = 32;
-	else
-	static if (is(COLOR == L8))
-		enum bitmapBitCount = 8;
-	else
-		static assert(false, "Unsupported BMP color type: " ~ COLOR.stringof);
+	uint[4] result;
+	foreach (i, f; COLOR.init.tupleof)
+	{
+		enum channelName = __traits(identifier, COLOR.tupleof[i]);
+		static if (channelName != "x")
+			static assert((COLOR.tupleof[i].offsetof + COLOR.tupleof[i].sizeof) * 8 <= 32,
+				"Color " ~ COLOR.stringof ~ " (channel " ~ channelName ~ ") is too large for BMP");
+
+		enum MASK = (cast(uint)typeof(COLOR.tupleof[i]).max) << (COLOR.tupleof[i].offsetof*8);
+		static if (channelName == "r")
+			result[0] |= MASK;
+		else
+		static if (channelName == "g")
+			result[1] |= MASK;
+		else
+		static if (channelName == "b")
+			result[2] |= MASK;
+		else
+		static if (channelName == "a")
+			result[3] |= MASK;
+		else
+		static if (channelName == "l")
+		{
+			result[0] |= MASK;
+			result[1] |= MASK;
+			result[2] |= MASK;
+		}
+		else
+		static if (channelName == "x")
+		{
+		}
+		else
+			static assert(false, "Don't know how to encode channelNamenel " ~ channelName);
+	}
+	return result;
 }
 
 @property int bitmapPixelStride(COLOR)(int w)
@@ -615,7 +642,7 @@ if (is(V : const(void)[]))
 {
 	import ae.utils.graphics.bitmap;
 	alias BitmapHeader!3 Header;
-	enforce(data.length > Header.sizeof);
+	enforce(data.length > Header.sizeof, "Not enough data for header");
 	Header* header = cast(Header*) data.ptr;
 	enforce(header.bfType == "BM", "Invalid signature");
 	enforce(header.bfSize == data.length, "Incorrect file size (%d in header, %d in file)"
@@ -642,9 +669,26 @@ if (is(V : const(void)[]))
 	bmp.h = header.bcHeight;
 	enforce(header.bcPlanes==1, "Multiplane BMPs not supported");
 
-	enforce(header.bcBitCount == bitmapBitCount!COLOR,
+	enforce(header.bcBitCount == COLOR.sizeof * 8,
 		"Mismatching BMP bcBitCount - trying to load a %d-bit .BMP file to a %d-bit Image"
-		.format(header.bcBitCount, bitmapBitCount!COLOR));
+		.format(header.bcBitCount, COLOR.sizeof * 8));
+
+	static if (bitmapNeedV4Header!COLOR)
+		enforce(header.VERSION >= 4, "Need a V4+ header to load a %s image".format(COLOR.stringof));
+	if (header.VERSION >= 4)
+	{
+		enforce(data.length > BitmapHeader!4.sizeof, "Not enough data for header");
+		auto header4 = cast(BitmapHeader!4*) data.ptr;
+		uint[4] fileMasks = [
+			header4.bV4RedMask,
+			header4.bV4GreenMask,
+			header4.bV4BlueMask,
+			header4.bV4AlphaMask];
+		static immutable expectedMasks = bitmapChannelMasks!COLOR();
+		enforce(fileMasks == expectedMasks,
+			"Channel format mask mismatch.\nExpected: [%(%32b, %)]\nIn file : [%(%32b, %)]"
+			.format(expectedMasks, fileMasks));
+	}
 
 	bmp.pixelData = data[header.bfOffBits..$].ptr;
 	bmp.pixelStride = bitmapPixelStride!COLOR(bmp.w);
@@ -687,7 +731,7 @@ ubyte[] toBMP(SRC)(auto ref SRC src)
 	alias COLOR = ViewColor!SRC;
 
 	import ae.utils.graphics.bitmap;
-	static if (COLOR.sizeof > 3)
+	static if (bitmapNeedV4Header!COLOR)
 		alias BitmapHeader!4 Header;
 	else
 		alias BitmapHeader!3 Header;
@@ -703,29 +747,16 @@ ubyte[] toBMP(SRC)(auto ref SRC src)
 	header.bcHeight = -src.h;
 	header.bcPlanes = 1;
 	header.biSizeImage = bitmapDataSize;
-	header.bcBitCount = bitmapBitCount!COLOR;
+	header.bcBitCount = COLOR.sizeof * 8;
 
 	static if (header.VERSION >= 4)
 	{
 		header.biCompression = BI_BITFIELDS;
-
-		COLOR c;
-		foreach (i, f; c.tupleof)
-		{
-			enum CHAN = c.tupleof[i].stringof[2..$];
-			enum MASK = (cast(uint)typeof(c.tupleof[i]).max) << (c.tupleof[i].offsetof*8);
-			static if (CHAN=="r")
-				header.bV4RedMask   |= MASK;
-			else
-			static if (CHAN=="g")
-				header.bV4GreenMask |= MASK;
-			else
-			static if (CHAN=="b")
-				header.bV4BlueMask  |= MASK;
-			else
-			static if (CHAN=="a")
-				header.bV4AlphaMask |= MASK;
-		}
+		static immutable masks = bitmapChannelMasks!COLOR();
+		header.bV4RedMask   = masks[0];
+		header.bV4GreenMask = masks[1];
+		header.bV4BlueMask  = masks[2];
+		header.bV4AlphaMask = masks[3];
 	}
 
 	auto pixelData = data[header.bfOffBits..$];
