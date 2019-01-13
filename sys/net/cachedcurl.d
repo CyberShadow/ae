@@ -55,23 +55,35 @@ class CachedCurlNetwork : Network
 		http = HTTP();
 	}
 
-	private struct Metadata
+	static struct Metadata
 	{
 		HTTP.StatusLine statusLine;
 		string[][string] headers;
 	}
 
-	/*private*/ static void req(CachedCurlNetwork instance, string url, HTTP.Method method, const(void)[] data, string target, string metadataPath)
+	static struct Request
+	{
+		string url;
+		HTTP.Method method = HTTP.Method.get;
+		const(void)[] data;
+
+		int maxRedirects = int.min; // choose depending or method
+	}
+
+	/*private*/ static void req(CachedCurlNetwork instance, in ref Request request, string target, string metadataPath)
 	{
 		with (instance)
 		{
 			http.clearRequestHeaders();
-			http.method = method;
-			if (method == HTTP.Method.head)
+			http.method = request.method;
+			if (request.maxRedirects != int.min)
+				http.maxRedirects = request.maxRedirects;
+			else
+			if (request.method == HTTP.Method.head)
 				http.maxRedirects = uint.max;
 			else
 				http.maxRedirects = 10;
-			auto host = url.split("/")[2];
+			auto host = request.url.split("/")[2];
 			if (cookieDir)
 			{
 				auto cookiePath = buildPath(cookieDir, host ~ cookieExt);
@@ -89,8 +101,9 @@ class CachedCurlNetwork : Network
 				{
 					metadata.statusLine = statusLine;
 				};
-			if (data)
+			if (request.data)
 			{
+				const(void)[] data = request.data;
 				http.addRequestHeader("Content-Length", data.length.text);
 				http.onSend = (void[] buf)
 					{
@@ -102,12 +115,12 @@ class CachedCurlNetwork : Network
 			}
 			else
 				http.onSend = null;
-			download!HTTP(url, target, http);
+			download!HTTP(request.url, target, http);
 			write(metadataPath, metadata.toJson);
 		}
 	}
 
-	private struct Response
+	static struct Response
 	{
 		string responsePath;
 		string metadataPath;
@@ -147,16 +160,22 @@ class CachedCurlNetwork : Network
 		}
 	}
 
-	private Response cachedReq(string url, HTTP.Method method, in void[] data = null)
+	Response cachedReq(in ref Request request)
 	{
-		auto hash = getDigestString!MD5(url ~ cast(char)method ~ data);
+		auto hash = getDigestString!MD5(request.url ~ cast(char)request.method ~ request.data);
 		auto path = buildPath(cacheDir, hash[0..2], hash);
 		ensurePathExists(path);
 		auto metadataPath = path ~ ".metadata";
 		if (path.exists && path.timeLastModified.stdTime < epoch)
 			path.remove();
-		cached!req(this, url, method, data, path, metadataPath);
+		cached!req(this, request, path, metadataPath);
 		return Response(path, metadataPath);
+	}
+
+	Response cachedReq(string url, HTTP.Method method, in void[] data = null)
+	{
+		auto req = Request(url, method, data);
+		return cachedReq(req);
 	}
 
 	override void downloadFile(string url, string target)
