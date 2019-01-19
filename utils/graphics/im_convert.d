@@ -18,11 +18,10 @@ import ae.sys.imagemagick;
 import ae.utils.graphics.color;
 import ae.utils.graphics.image;
 
-auto parseViaIMConvert(C = TargetColor, TARGET)(const(void)[] data, auto ref TARGET target)
-	if (isWritableView!TARGET && isTargetColor!(C, TARGET))
+auto parseViaIMConvert(COLOR)(const(void)[] data)
 {
 	string[] convertFlags;
-	static if (is(ViewColor!TARGET : BGR))
+	static if (is(COLOR : BGR))
 	{
 	//	convertFlags ~= ["-colorspace", "rgb"];
 	//	convertFlags ~= ["-depth", "24"];
@@ -30,16 +29,28 @@ auto parseViaIMConvert(C = TargetColor, TARGET)(const(void)[] data, auto ref TAR
 		convertFlags ~= ["-alpha", "off"];
 	}
 	else
-	static if (is(ViewColor!TARGET : BGRA))
+	static if (is(COLOR : BGRA))
 	{
 		convertFlags ~= ["-type", "TrueColor"];
 		convertFlags ~= ["-alpha", "on"];
 	}
-	return pipe(["convert".imageMagickBinary()] ~ convertFlags ~ ["-[0]", "bmp:-"], data).parseBMP(target);
+	return pipe(["convert".imageMagickBinary()] ~ convertFlags ~ ["-[0]", "bmp:-"], data).viewBMP!COLOR();
 }
 
-auto parseViaIMConvert(COLOR)(const(void)[] data)
+auto parseViaIMConvert(C = TargetColor, TARGET)(const(void)[] data, auto ref TARGET target)
+	if (isWritableView!TARGET && isTargetColor!(C, TARGET))
 {
-	Image!COLOR target;
-	return data.parseViaIMConvert(target);
+	return data.parseViaIMConvert!(ViewColor!TARGET)().copy(target);
+}
+
+unittest
+{
+	if (false)
+	{
+		void[] data;
+		parseViaIMConvert!BGR(data);
+
+		Image!BGR i;
+		parseViaIMConvert!BGR(data, i);
+	}
 }
