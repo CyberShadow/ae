@@ -26,8 +26,10 @@ struct LongInt(uint bits, bool signed)
 		TypeForBits!bits high;
 }
 
-alias Cent = LongInt!(64, true);
-alias UCent = LongInt!(64, false);
+alias LongInt(T) = LongInt!(T.sizeof * 8, isSigned!T);
+
+alias Cent = LongInt!long;
+alias UCent = LongInt!ulong;
 
 version (X86)
 	version = Intel;
@@ -46,7 +48,7 @@ version (Intel)
 	enum x86SignedOpPrefix(T) = isSigned!T ? "i" : "";
 }
 
-LongInt!(T.sizeof * 8, isSigned!T) longMul(T)(T a, T b)
+LongInt!T longMul(T)(T a, T b)
 if (is(T : long) && T.sizeof >= 2)
 {
 	T low = void, high = void;
@@ -67,27 +69,27 @@ if (is(T : long) && T.sizeof >= 2)
 
 unittest
 {
-	assert(longMul(1, 1) == LongInt!(32, true)(1, 0));
-	assert(longMul(1, 2) == LongInt!(32, true)(2, 0));
-	assert(longMul(0x1_0000, 0x1_0000) == LongInt!(32, true)(0, 1));
+	assert(longMul(1, 1) == LongInt!int(1, 0));
+	assert(longMul(1, 2) == LongInt!int(2, 0));
+	assert(longMul(0x1_0000, 0x1_0000) == LongInt!int(0, 1));
 
-	assert(longMul(short(1), short(1)) == LongInt!(16, true)(1, 0));
-	assert(longMul(short(0x100), short(0x100)) == LongInt!(16, true)(0, 1));
+	assert(longMul(short(1), short(1)) == LongInt!short(1, 0));
+	assert(longMul(short(0x100), short(0x100)) == LongInt!short(0, 1));
 
-	assert(longMul(short(1), short(-1)) == LongInt!(16, true)(cast(ushort)-1, -1));
-	assert(longMul(ushort(1), cast(ushort)-1) == LongInt!(16, false)(cast(ushort)-1, 0));
+	assert(longMul(short(1), short(-1)) == LongInt!short(cast(ushort)-1, -1));
+	assert(longMul(ushort(1), cast(ushort)-1) == LongInt!ushort(cast(ushort)-1, 0));
 
 	version(X86_64)
 	{
-		assert(longMul(1L, 1L) == LongInt!(64, true)(1, 0));
-		assert(longMul(0x1_0000_0000L, 0x1_0000_0000L) == LongInt!(64, true)(0, 1));
+		assert(longMul(1L, 1L) == LongInt!long(1, 0));
+		assert(longMul(0x1_0000_0000L, 0x1_0000_0000L) == LongInt!long(0, 1));
 	}
 }
 
 struct DivResult(T) { T quotient, remainder; }
 
 DivResult!T longDiv(T, L)(L a, T b)
-if (is(T : long) && T.sizeof >= 2 && is(L == LongInt!(T.sizeof * 8, isSigned!T)))
+if (is(T : long) && T.sizeof >= 2 && is(L == LongInt!T))
 {
 	auto low = a.low;
 	auto high = a.high;
@@ -111,19 +113,19 @@ if (is(T : long) && T.sizeof >= 2 && is(L == LongInt!(T.sizeof * 8, isSigned!T))
 
 unittest
 {
-	assert(longDiv(LongInt!(32, true)(1, 0), 1) == DivResult!int(1, 0));
-	assert(longDiv(LongInt!(32, true)(5, 0), 2) == DivResult!int(2, 1));
-	assert(longDiv(LongInt!(32, true)(0, 1), 0x1_0000) == DivResult!int(0x1_0000, 0));
+	assert(longDiv(LongInt!int(1, 0), 1) == DivResult!int(1, 0));
+	assert(longDiv(LongInt!int(5, 0), 2) == DivResult!int(2, 1));
+	assert(longDiv(LongInt!int(0, 1), 0x1_0000) == DivResult!int(0x1_0000, 0));
 
-	assert(longDiv(LongInt!(16, true)(1, 0), short(1)) == DivResult!short(1, 0));
-	assert(longDiv(LongInt!(16, true)(0, 1), short(0x100)) == DivResult!short(0x100, 0));
+	assert(longDiv(LongInt!short(1, 0), short(1)) == DivResult!short(1, 0));
+	assert(longDiv(LongInt!short(0, 1), short(0x100)) == DivResult!short(0x100, 0));
 
-	assert(longDiv(LongInt!(16, true)(cast(ushort)-1, -1), short(-1)) == DivResult!short(1));
-	assert(longDiv(LongInt!(16, false)(cast(ushort)-1, 0), cast(ushort)-1) == DivResult!ushort(1));
+	assert(longDiv(LongInt!short(cast(ushort)-1, -1), short(-1)) == DivResult!short(1));
+	assert(longDiv(LongInt!ushort(cast(ushort)-1, 0), cast(ushort)-1) == DivResult!ushort(1));
 
 	version(X86_64)
 	{
-		assert(longDiv(LongInt!(64, true)(1, 0), 1L) == DivResult!long(1));
-		assert(longDiv(LongInt!(64, true)(0, 1), 0x1_0000_0000L) == DivResult!long(0x1_0000_0000));
+		assert(longDiv(LongInt!long(1, 0), 1L) == DivResult!long(1));
+		assert(longDiv(LongInt!long(0, 1), 0x1_0000_0000L) == DivResult!long(0x1_0000_0000));
 	}
 }
