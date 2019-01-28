@@ -43,6 +43,21 @@ auto op(string OP, T...)(T args)
 auto sum(T...)(T args) { return op!"+"(args); }
 auto average(T...)(T args) { return sum(args) / args.length; }
 
+T rangeIntersection(T)(T a0, T a1, T b0, T b1)
+{
+	import std.algorithm.comparison : min, max;
+
+	auto x0 = max(a0, b0);
+	auto x1 = min(a1, b1);
+	return x0 < x1 ? x1 - x0 : 0;
+}
+
+unittest
+{
+	assert(rangeIntersection(0, 2, 1, 3) == 1);
+	assert(rangeIntersection(0, 1, 2, 3) == 0);
+}
+
 template unary(char op)
 {
 	T unary(T)(T value)
