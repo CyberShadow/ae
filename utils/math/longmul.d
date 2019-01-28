@@ -39,11 +39,25 @@ version (X86_64)
 
 version (Intel)
 {
-	enum x86RegSizePrefix(T) =
-		T.sizeof == 2 ? "" :
-		T.sizeof == 4 ? "E" :
-		T.sizeof == 8 ? "R" :
-		"?"; // force syntax error
+	version (LDC)
+	{
+		enum x86RegSizePrefix(T) =
+			T.sizeof == 2 ? "" :
+			T.sizeof == 4 ? "e" :
+			T.sizeof == 8 ? "r" :
+			"?"; // force syntax error
+		enum x86SizeOpSuffix(T) =
+			T.sizeof == 2 ? "w" :
+			T.sizeof == 4 ? "l" :
+			T.sizeof == 8 ? "q" :
+			"?"; // force syntax error
+	}
+	else
+		enum x86RegSizePrefix(T) =
+			T.sizeof == 2 ? "" :
+			T.sizeof == 4 ? "E" :
+			T.sizeof == 8 ? "R" :
+			"?"; // force syntax error
 
 	enum x86SignedOpPrefix(T) = isSigned!T ? "i" : "";
 }
@@ -51,20 +65,36 @@ version (Intel)
 LongInt!T longMul(T)(T a, T b)
 if (is(T : long) && T.sizeof >= 2)
 {
-	T low = void, high = void;
 	version (Intel)
-		mixin(`
-			asm
-			{
-				mov `~x86RegSizePrefix!T~`AX, a;
-				`~x86SignedOpPrefix!T~`mul b;
-				mov low, `~x86RegSizePrefix!T~`AX;
-				mov high, `~x86RegSizePrefix!T~`DX;
-			}
-		`);
+	{
+		version (LDC)
+		{
+			import ldc.llvmasm;
+			auto t = __asmtuple!(T, T)(
+				x86SignedOpPrefix!T~`mul`~x86SizeOpSuffix!T~` $3`,
+				// Technically, the last one should be "rm", but that generates suboptimal code in many cases
+				`={`~x86RegSizePrefix!T~`ax},={`~x86RegSizePrefix!T~`dx},{`~x86RegSizePrefix!T~`ax},r`,
+				a, b
+			);
+			return typeof(return)(t.v[0], t.v[1]);
+		}
+		else
+		{
+			T low = void, high = void;
+			mixin(`
+				asm
+				{
+					mov `~x86RegSizePrefix!T~`AX, a;
+					`~x86SignedOpPrefix!T~`mul b;
+					mov low, `~x86RegSizePrefix!T~`AX;
+					mov high, `~x86RegSizePrefix!T~`DX;
+				}
+			`);
+			return typeof(return)(low, high);
+		}
+	}
 	else
 		static assert(false, "Not implemented on this architecture");
-	return typeof(return)(low, high);
 }
 
 unittest
@@ -91,24 +121,40 @@ struct DivResult(T) { T quotient, remainder; }
 DivResult!T longDiv(T, L)(L a, T b)
 if (is(T : long) && T.sizeof >= 2 && is(L == LongInt!T))
 {
-	auto low = a.low;
-	auto high = a.high;
-	T quotient = void;
-	T remainder = void;
 	version (Intel)
-		mixin(`
-			asm
-			{
-				mov `~x86RegSizePrefix!T~`AX, low;
-				mov `~x86RegSizePrefix!T~`DX, high;
-				`~x86SignedOpPrefix!T~`div b;
-				mov quotient, `~x86RegSizePrefix!T~`AX;
-				mov remainder, `~x86RegSizePrefix!T~`DX;
-			}
-		`);
+	{
+		version (LDC)
+		{
+			import ldc.llvmasm;
+			auto t = __asmtuple!(T, T)(
+				x86SignedOpPrefix!T~`div`~x86SizeOpSuffix!T~` $4`,
+				// Technically, the last one should be "rm", but that generates suboptimal code in many cases
+				`={`~x86RegSizePrefix!T~`ax},={`~x86RegSizePrefix!T~`dx},{`~x86RegSizePrefix!T~`ax},{`~x86RegSizePrefix!T~`dx},r`,
+				a.low, a.high, b
+			);
+			return typeof(return)(t.v[0], t.v[1]);
+		}
+		else
+		{
+			auto low = a.low;
+			auto high = a.high;
+			T quotient = void;
+			T remainder = void;
+			mixin(`
+				asm
+				{
+					mov `~x86RegSizePrefix!T~`AX, low;
+					mov `~x86RegSizePrefix!T~`DX, high;
+					`~x86SignedOpPrefix!T~`div b;
+					mov quotient, `~x86RegSizePrefix!T~`AX;
+					mov remainder, `~x86RegSizePrefix!T~`DX;
+				}
+			`);
+			return typeof(return)(quotient, remainder);
+		}
+	}
 	else
 		static assert(false, "Not implemented on this architecture");
-	return typeof(return)(quotient, remainder);
 }
 
 unittest
