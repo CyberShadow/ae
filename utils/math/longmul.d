@@ -39,7 +39,13 @@ version (X86_64)
 
 version (Intel)
 {
-	version (LDC)
+	version (DigitalMars)
+		enum x86RegSizePrefix(T) =
+			T.sizeof == 2 ? "" :
+			T.sizeof == 4 ? "E" :
+			T.sizeof == 8 ? "R" :
+			"?"; // force syntax error
+	else
 	{
 		enum x86RegSizePrefix(T) =
 			T.sizeof == 2 ? "" :
@@ -52,12 +58,6 @@ version (Intel)
 			T.sizeof == 8 ? "q" :
 			"?"; // force syntax error
 	}
-	else
-		enum x86RegSizePrefix(T) =
-			T.sizeof == 2 ? "" :
-			T.sizeof == 4 ? "E" :
-			T.sizeof == 8 ? "R" :
-			"?"; // force syntax error
 
 	enum x86SignedOpPrefix(T) = isSigned!T ? "i" : "";
 }
@@ -77,6 +77,20 @@ if (is(T : long) && T.sizeof >= 2)
 				a, b
 			);
 			return typeof(return)(t.v[0], t.v[1]);
+		}
+		else
+		version (GNU)
+		{
+			T low = void, high = void;
+			mixin(`
+				asm
+				{
+					"`~x86SignedOpPrefix!T~`mul`~x86SizeOpSuffix!T~` %3"
+					: "=a" low, "=d" high
+					: "a" a, "rm" b;
+				}
+			`);
+			return typeof(return)(low, high);
 		}
 		else
 		{
@@ -133,6 +147,22 @@ if (is(T : long) && T.sizeof >= 2 && is(L == LongInt!T))
 				a.low, a.high, b
 			);
 			return typeof(return)(t.v[0], t.v[1]);
+		}
+		else
+		version (GNU)
+		{
+			T low = a.low, high = a.high;
+			T quotient = void;
+			T remainder = void;
+			mixin(`
+				asm
+				{
+					"`~x86SignedOpPrefix!T~`div`~x86SizeOpSuffix!T~` %4"
+					: "=a" quotient, "=d" remainder
+					: "a" low, "d" high, "rm" b;
+				}
+			`);
+			return typeof(return)(quotient, remainder);
 		}
 		else
 		{
