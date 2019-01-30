@@ -775,14 +775,15 @@ private struct JsonParser(C)
 			p++;
 			return v;
 		}
+		alias K = typeof(v.keys[0]);
 
 		while (true)
 		{
-			string jsonField = readString();
+			auto jsonField = readString();
 			skipWhitespace();
 			expect(':');
 
-			v[jsonField] = read!(typeof(v.values[0]))();
+			v[jsonField.to!K] = read!(typeof(v.values[0]))();
 
 			skipWhitespace();
 			if (peek()=='}')
@@ -1003,6 +1004,12 @@ unittest
 {
 	assert(string.init.toJson.jsonParse!string  is null);
 	assert(""         .toJson.jsonParse!string !is null);
+}
+
+unittest
+{
+	char[] s = "{}".dup;
+	assert(s.jsonParse!(string[string]) == null);
 }
 
 // ************************************************************************
