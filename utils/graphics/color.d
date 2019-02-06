@@ -236,13 +236,18 @@ struct Color(FieldTuple...)
 		return r;
 	}
 
-	T opCast(T)()
-		if (is(T==struct) && structFields!T == structFields!Fields)
+	T opCast(T)() const
+	if (is(T==struct) && structFields!T == structFields!Fields)
 	{
-		T t;
-		foreach (i, f; this.tupleof)
-			t.tupleof[i] = cast(typeof(t.tupleof[i])) this.tupleof[i];
-		return t;
+		static if (is(T == typeof(this)))
+			return this;
+		else
+		{
+			T t;
+			foreach (i, f; this.tupleof)
+				t.tupleof[i] = cast(typeof(t.tupleof[i])) this.tupleof[i];
+			return t;
+		}
 	}
 
 	/// Sum of all channels
@@ -375,6 +380,12 @@ unittest
 unittest
 {
 	Color!(real, "r", "g", "b") c;
+}
+
+unittest
+{
+	const RGB c;
+	RGB x = cast(RGB)c;
 }
 
 /// Obtains the type of each channel for homogenous colors.
