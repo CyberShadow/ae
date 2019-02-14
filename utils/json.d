@@ -306,16 +306,16 @@ struct CustomJsonSerializer(Writer)
 	}
 }
 
-alias CustomJsonSerializer!(JsonWriter!StringBuilder) JsonSerializer;
+alias JsonSerializer = CustomJsonSerializer!(JsonWriter!StringBuilder);
 
 private struct Escapes
 {
-	static __gshared string[256] chars;
-	static __gshared bool[256] escaped;
+	static immutable  string[256] chars;
+	static immutable bool[256] escaped;
 
 	shared static this()
 	{
-		import std.string;
+		import std.string : format;
 
 		escaped[] = true;
 		foreach (c; 0..256)
@@ -658,7 +658,6 @@ private struct JsonParser(C)
 	T readNumber(T)()
 	{
 		skipWhitespace();
-		T v;
 		const(C)[] n;
 		auto start = p;
 		Unqual!C c = peek();
@@ -809,7 +808,7 @@ private struct JsonParser(C)
 			enforce(readN(4) == "null", "Null expected");
 			return null;
 		}
-		alias typeof(*T.init) S;
+		alias S = typeof(*T.init);
 		T v = new S;
 		*v = read!S();
 		return v;
@@ -933,10 +932,10 @@ unittest
 template NonSerialized(fields...)
 {
 	import ae.utils.meta : stringofArray;
-	mixin(NonSerializedFields(stringofArray!fields()));
+	mixin(mixNonSerializedFields(stringofArray!fields()));
 }
 
-string NonSerializedFields(string[] fields)
+string mixNonSerializedFields(string[] fields)
 {
 	string result;
 	foreach (field; fields)
@@ -990,7 +989,7 @@ unittest // Issue 49
 
 unittest
 {
-	import ae.utils.aa;
+	import ae.utils.aa : OrderedMap;
 	alias M = OrderedMap!(string, int);
 	M m;
 	m["one"] = 1;
@@ -1060,7 +1059,6 @@ struct JSONFragment { string json; }
 
 unittest
 {
-	import std.conv;
 	JSONFragment[] arr = [JSONFragment(`1`), JSONFragment(`true`), JSONFragment(`"foo"`), JSONFragment(`[55]`)];
 	assert(arr.toJson == `[1,true,"foo",[55]]`);
 	assert(arr.toJson.jsonParse!(JSONFragment[]) == arr);
