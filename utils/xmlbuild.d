@@ -52,7 +52,14 @@ final class XmlBuildNode
 		return value;
 	}
 
+	/// Get/set inner text via node[]
+	ref string opSlice()
+	{
+		return _xmlbuild_info.text;
+	}
+
 	/// Set inner text via assigning a string
+	deprecated ("Use `node[] = str` instead of node = str")
 	void opAssign(string text)
 	{
 		_xmlbuild_info.text = text;
@@ -118,7 +125,7 @@ unittest
 	svg.xmlns = "http://www.w3.org/2000/svg";
 	svg["version"] = "1.1";
 	auto text = svg.text(["x" : "0", "y" : "15", "fill" : "red"]);
-	text = "I love SVG";
+	text[] = "I love SVG";
 
 	auto s = svg.toString();
 
