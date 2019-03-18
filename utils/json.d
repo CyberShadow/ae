@@ -829,6 +829,7 @@ private struct JsonParser(C)
 				break;
 			case '{':
 				next();
+				skipWhitespace();
 				bool first = true;
 				while (peek() != '}')
 				{
@@ -837,13 +838,16 @@ private struct JsonParser(C)
 					else
 						expect(',');
 					skipValue(); // key
+					skipWhitespace();
 					expect(':');
 					skipValue(); // value
+					skipWhitespace();
 				}
 				expect('}');
 				break;
 			case '[':
 				next();
+				skipWhitespace();
 				bool first = true;
 				while (peek() != ']')
 				{
@@ -852,6 +856,7 @@ private struct JsonParser(C)
 					else
 						expect(',');
 					skipValue();
+					skipWhitespace();
 				}
 				expect(']');
 				break;
