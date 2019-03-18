@@ -47,7 +47,7 @@ ulong makeUlong(DWORD dwLow, DWORD dwHigh) pure nothrow @nogc
 
 // Messages
 
-void processWindowsMessages()
+void processWindowsMessages()()
 {
 	MSG m;
 	while (PeekMessageW(&m, null, 0, 0, PM_REMOVE))
@@ -57,7 +57,7 @@ void processWindowsMessages()
 	}
 }
 
-void messageLoop()
+void messageLoop()()
 {
 	MSG m;
 	while (GetMessageW(&m, null, 0, 0))
@@ -69,12 +69,12 @@ void messageLoop()
 
 // ***************************************************************************
 
-int messageBox(string message, string title, int style=0)
+int messageBox()(string message, string title, int style=0)
 {
 	return MessageBoxW(null, toWStringz(message), toWStringz(title), style);
 }
 
-uint getLastInputInfo()
+uint getLastInputInfo()()
 {
 	LASTINPUTINFO lii = { LASTINPUTINFO.sizeof };
 	wenforce(GetLastInputInfo(&lii), "GetLastInputInfo");
@@ -84,7 +84,7 @@ uint getLastInputInfo()
 // ***************************************************************************
 
 /// Hides the console window, but only if we are the owner.
-void hideOwnConsoleWindow()
+void hideOwnConsoleWindow()()
 {
 	HWND w = GetConsoleWindow();
 	if (!w)
