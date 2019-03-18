@@ -739,23 +739,24 @@ template listDir(alias handler)
 
 unittest
 {
-	auto tmpDir = deleteme;
-	mkdirRecurse(deleteme);
-	scope(exit) rmdirRecurse(deleteme);
+	auto tmpDir = deleteme ~ "-dir";
+	if (tmpDir.exists) tmpDir.removeRecurse();
+	mkdirRecurse(tmpDir);
+	scope(exit) rmdirRecurse(tmpDir);
 
-	touch(deleteme ~ "/a");
-	touch(deleteme ~ "/b");
-	mkdir(deleteme ~ "/c");
-	touch(deleteme ~ "/c/1");
-	touch(deleteme ~ "/c/2");
+	touch(tmpDir ~ "/a");
+	touch(tmpDir ~ "/b");
+	mkdir(tmpDir ~ "/c");
+	touch(tmpDir ~ "/c/1");
+	touch(tmpDir ~ "/c/2");
 
 	string[] entries;
 	listDir!((e) {
 		assert(equal(e.fullNameFS, e.fullName));
-		entries ~= e.fullName.fastRelativePath(deleteme);
+		entries ~= e.fullName.fastRelativePath(tmpDir);
 		if (e.entryIsDir)
 			e.recurse();
-	})(deleteme);
+	})(tmpDir);
 
 	assert(equal(
 		entries.sort,
@@ -765,13 +766,13 @@ unittest
 	entries = null;
 	import std.ascii : isDigit;
 	listDir!((e) {
-		entries ~= e.fullName.fastRelativePath(deleteme);
+		entries ~= e.fullName.fastRelativePath(tmpDir);
 		if (e.baseNameFS[0].isDigit)
 			e.stop();
 		else
 		if (e.entryIsDir)
 			e.recurse();
-	})(deleteme);
+	})(tmpDir);
 
 	assert(entries.length < 5 && entries[$-1][$-1].isDigit, text(entries));
 
@@ -782,15 +783,15 @@ unittest
 			if (getWineVersion())
 				return;
 
-		dirLink("c", deleteme ~ "/d");
-		dirLink("x", deleteme ~ "/e");
+		dirLink("c", tmpDir ~ "/d");
+		dirLink("x", tmpDir ~ "/e");
 
 		string[] entries;
 		listDir!((e) {
-			entries ~= e.fullName.fastRelativePath(deleteme);
+			entries ~= e.fullName.fastRelativePath(tmpDir);
 			if (e.entryIsDir)
 				e.recurse();
-		})(deleteme);
+		})(tmpDir);
 
 		assert(equal(
 			entries.sort,
@@ -801,13 +802,13 @@ unittest
 
 		entries = null;
 		listDir!((e) {
-			entries ~= e.fullName.fastRelativePath(deleteme);
+			entries ~= e.fullName.fastRelativePath(tmpDir);
 			if (e.isDir)
 				try
 					e.recurse();
 				catch (Exception e) // broken junctions on Windows throw
 					{}
-		})(deleteme);
+		})(tmpDir);
 
 		assert(equal(
 			entries.sort,
