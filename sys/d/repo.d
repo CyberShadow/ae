@@ -136,7 +136,7 @@ class ManagedRepository
 			needRepo();
 			log("Updating " ~ name ~ "...");
 			git.run("-c", "fetch.recurseSubmodules=false", "remote", "update", "--prune");
-			git.run("-c", "fetch.recurseSubmodules=false", "fetch", "--tags");
+			git.run("-c", "fetch.recurseSubmodules=false", "fetch", "--force", "--tags");
 		}
 	}
 
