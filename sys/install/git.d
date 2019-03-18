@@ -27,7 +27,7 @@ public import ae.sys.install.common;
 
 class GitInstaller : Installer
 {
-	string url = "https://github.com/msysgit/msysgit/releases/download/Git-1.9.4-preview20140815/PortableGit-1.9.4-preview20140815.7z";
+	string url = "https://github.com/git-for-windows/git/releases/download/v2.21.0.windows.1/PortableGit-2.21.0-32-bit.7z.exe";
 
 	@property override string[] requiredExecutables() { return ["git"]; }
 	@property override string[] binPaths() { return ["cmd"]; }
@@ -42,7 +42,7 @@ class GitInstaller : Installer
 
 	static this()
 	{
-		urlDigests["https://github.com/msysgit/msysgit/releases/download/Git-1.9.4-preview20140815/PortableGit-1.9.4-preview20140815.7z"] = "4deafc5fede624437c68d101a660a78bdb56f899";
+		urlDigests["https://github.com/git-for-windows/git/releases/download/v2.21.0.windows.1/PortableGit-2.21.0-32-bit.7z.exe"] = "db083fde82c743a26dbd7fbd597d3a6321522936";
 	}
 }
 
