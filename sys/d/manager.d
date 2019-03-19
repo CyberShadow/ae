@@ -1464,6 +1464,7 @@ EOS";
 				}
 				else
 				{
+					string[] makeArgs;
 					if (phobosMakeFullName.readText().canFind("DRUNTIME = $(DRUNTIME_PATH)/lib/libdruntime-$(OS)$(MODEL).a") &&
 						getComponent("druntime").sourceDir.buildPath("lib").dirEntries(SpanMode.shallow).walkLength == 0 &&
 						exists(getComponent("druntime").sourceDir.buildPath("generated")))
@@ -1474,7 +1475,7 @@ EOS";
 						auto soFile = dir.dirEntries("libdruntime.so.a", SpanMode.depth);
 						if (!soFile.empty) makeArgs ~= ["DRUNTIMESO=" ~ soFile.front];
 					}
-					runMake(env, model);
+					runMake(env, model, makeArgs);
 					targets ~= sourceDir
 						.buildPath("generated")
 						.dirEntries(SpanMode.depth)
@@ -1533,7 +1534,7 @@ EOS";
 			}
 		}
 
-		private final void runMake(ref Environment env, string model, string target = null)
+		private final void runMake(ref Environment env, string model, string[] makeArgs...)
 		{
 			// Work around https://github.com/dlang/druntime/pull/2438
 			bool quotePaths = !(isVersion!"Windows" && model != "32" && sourceDir.buildPath("win64.mak").readText().canFind(`"$(CC)"`));
@@ -1541,7 +1542,7 @@ EOS";
 			string[] args =
 				getMake(env) ~
 				["-f", makeFileNameModel(model)] ~
-				(target ? [target] : []) ~
+				makeArgs ~
 				["DMD=" ~ dmd] ~
 				config.build.components.common.makeArgs ~
 				getPlatformMakeVars(env, model, quotePaths) ~
