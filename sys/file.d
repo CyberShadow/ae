@@ -1730,10 +1730,10 @@ File openFile()(string fn, string mode = "rb")
 		{
 			case "r" : access = GENERIC_READ                ; creation = OPEN_EXISTING; break;
 			case "r+": access = GENERIC_READ | GENERIC_WRITE; creation = OPEN_EXISTING; break;
-			case "w" : access =                GENERIC_WRITE; creation = OPEN_ALWAYS  ; break;
-			case "w+": access = GENERIC_READ | GENERIC_WRITE; creation = OPEN_ALWAYS  ; break;
-			case "a" : access =                GENERIC_WRITE; creation = OPEN_ALWAYS  ; append = true; break;
-			case "a+": assert(false, "Not implemented"); // requires two file pointers
+			case "w" : access =                GENERIC_WRITE; creation = CREATE_ALWAYS; break;
+			case "w+": access = GENERIC_READ | GENERIC_WRITE; creation = CREATE_ALWAYS; break;
+			case "a" : access =                GENERIC_WRITE; creation = OPEN_ALWAYS  ; version (CRuntime_Microsoft) append = true; break;
+			case "a+": access = GENERIC_READ | GENERIC_WRITE; creation = OPEN_ALWAYS  ; version (CRuntime_Microsoft) assert(false, "MSVCRT can't fdopen with a+"); else break;
 			default: assert(false, "Bad file mode: " ~ mode);
 		}
 
@@ -1749,6 +1749,132 @@ File openFile()(string fn, string mode = "rb")
 	else
 		f.open(fn, mode);
 	return f;
+}
+
+unittest
+{
+	enum Existence { any, mustExist, mustNotExist }
+	enum Pos { none /* not readable/writable */, start, end, empty }
+	static struct Behavior
+	{
+		Existence existence;
+		bool truncating;
+		Pos read, write;
+	}
+
+	void test(string mode, in Behavior expected)
+	{
+		version (CRuntime_Microsoft)
+			if (mode == "a+")
+				return;
+
+		Behavior behavior;
+
+		static int counter;
+		auto fn = text(deleteme, counter++);
+
+		collectException(fn.remove());
+		bool mustExist    = !!collectException(openFile(fn, mode));
+		touch(fn);
+		bool mustNotExist = !!collectException(openFile(fn, mode));
+
+		if (!mustExist)
+			if (!mustNotExist)
+				behavior.existence = Existence.any;
+			else
+				behavior.existence = Existence.mustNotExist;
+		else
+			if (!mustNotExist)
+				behavior.existence = Existence.mustExist;
+			else
+				assert(false, "Can't open file whether it exists or not");
+
+		void create()
+		{
+			if (mustNotExist)
+				collectException(fn.remove());
+			else
+				write(fn, "foo");
+		}
+
+		create();
+		openFile(fn, mode);
+		behavior.truncating = getSize(fn) == 0;
+
+		create();
+		{
+			auto f = openFile(fn, mode);
+			ubyte[] buf;
+			if (collectException(f.rawRead(new ubyte[1]), buf))
+			{
+				behavior.read = Pos.none;
+				// Work around https://issues.dlang.org/show_bug.cgi?id=19751
+				f.reopen(fn, mode);
+			}
+			else
+			if (buf.length)
+				behavior.read = Pos.start;
+			else
+			if (f.size)
+				behavior.read = Pos.end;
+			else
+				behavior.read = Pos.empty;
+		}
+
+		create();
+		{
+			string s;
+			{
+				auto f = openFile(fn, mode);
+				if (collectException(f.rawWrite("b")))
+				{
+					s = null;
+					// Work around https://issues.dlang.org/show_bug.cgi?id=19751
+					f.reopen(fn, mode);
+				}
+				else
+				{
+					f.close();
+					s = fn.readText;
+				}
+			}
+
+			if (s is null)
+				behavior.write = Pos.none;
+			else
+			if (s == "b")
+				behavior.write = Pos.empty;
+			else
+			if (s.endsWith("b"))
+				behavior.write = Pos.end;
+			else
+			if (s.startsWith("b"))
+				behavior.write = Pos.start;
+			else
+				assert(false, "Can't detect write position");
+		}
+
+
+		if (behavior != expected)
+		{
+			import ae.utils.array : isOneOf;
+			version (Windows)
+				if (getWineVersion() && mode.isOneOf("w", "a"))
+				{
+					// Ignore bug in Wine msvcrt implementation
+					return;
+				}
+
+			assert(false, text(mode, ": expected ", expected, ", got ", behavior));
+		}
+	}
+
+	test("r" , Behavior(Existence.mustExist   , false, Pos.start, Pos.none ));
+	test("r+", Behavior(Existence.mustExist   , false, Pos.start, Pos.start));
+	test("w" , Behavior(Existence.any         , true , Pos.none , Pos.empty));
+	test("w+", Behavior(Existence.any         , true , Pos.empty, Pos.empty));
+	test("a" , Behavior(Existence.any         , false, Pos.none , Pos.end  ));
+	test("a+", Behavior(Existence.any         , false, Pos.start, Pos.end  ));
 }
 
 auto fileDigest(Digest)(string fn)
