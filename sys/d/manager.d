@@ -34,6 +34,7 @@ import ae.utils.aa;
 import ae.utils.array;
 import ae.utils.digest;
 import ae.utils.json;
+import ae.utils.meta;
 import ae.utils.regex;
 
 alias ensureDirExists = ae.sys.file.ensureDirExists;
@@ -758,7 +759,7 @@ EOF");
 			assert(dDoTestEscape(`C:\Foo boo bar\baz quuz\derp.exe`) == `C:\"Foo boo bar"\"baz quuz"\derp.exe`);
 		}
 
-		string[] getPlatformMakeVars(in ref Environment env, string model)
+		string[] getPlatformMakeVars(in ref Environment env, string model, bool quote = true)
 		{
 			string[] args;
 
@@ -769,9 +770,12 @@ EOF");
 				{
 					args ~= "VCDIR="  ~ env.deps.vsDir.buildPath("VC").absolutePath();
 					args ~= "SDKDIR=" ~ env.deps.sdkDir.absolutePath();
-					args ~= "CC=" ~ '"' ~ env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(model), "cl.exe").absolutePath() ~ '"';
-					args ~= "LD=" ~ '"' ~ env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(model), "link.exe").absolutePath() ~ '"';
-					args ~= "AR=" ~ '"' ~ env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(model), "lib.exe").absolutePath() ~ '"';
+
+					// Work around https://github.com/dlang/druntime/pull/2438
+					auto quoteStr = quote ? `"` : ``;
+					args ~= "CC=" ~ quoteStr ~ env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(model), "cl.exe").absolutePath() ~ quoteStr;
+					args ~= "LD=" ~ quoteStr ~ env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(model), "link.exe").absolutePath() ~ quoteStr;
+					args ~= "AR=" ~ quoteStr ~ env.deps.vsDir.buildPath("VC", "bin", msvcModelDir(model), "lib.exe").absolutePath() ~ quoteStr;
 				}
 
 			return args;
@@ -1366,13 +1370,16 @@ EOS";
 
 		private final void runMake(ref Environment env, string model, string target = null)
 		{
+			// Work around https://github.com/dlang/druntime/pull/2438
+			bool quotePaths = !(isVersion!"Windows" && model != "32" && sourceDir.buildPath("win64.mak").readText().canFind(`"$(CC)"`));
+
 			string[] args =
 				getMake(env) ~
 				["-f", makeFileNameModel(model)] ~
 				(target ? [target] : []) ~
 				["DMD=" ~ dmd] ~
 				config.build.components.common.makeArgs ~
-				getPlatformMakeVars(env, model) ~
+				getPlatformMakeVars(env, model, quotePaths) ~
 				dMakeArgs;
 			run(args, env.vars, sourceDir);
 		}
@@ -1528,13 +1535,16 @@ EOS";
 
 		private final void runMake(ref Environment env, string model, string target = null)
 		{
+			// Work around https://github.com/dlang/druntime/pull/2438
+			bool quotePaths = !(isVersion!"Windows" && model != "32" && sourceDir.buildPath("win64.mak").readText().canFind(`"$(CC)"`));
+
 			string[] args =
 				getMake(env) ~
 				["-f", makeFileNameModel(model)] ~
 				(target ? [target] : []) ~
 				["DMD=" ~ dmd] ~
 				config.build.components.common.makeArgs ~
-				getPlatformMakeVars(env, model) ~
+				getPlatformMakeVars(env, model, quotePaths) ~
 				dMakeArgs;
 			run(args, env.vars, sourceDir);
 		}
