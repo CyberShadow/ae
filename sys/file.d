@@ -1764,7 +1764,7 @@ unittest
 
 	void test(string mode, in Behavior expected)
 	{
-		version (CRuntime_Microsoft)
+		static if (isVersion!q{CRuntime_Microsoft} || isVersion!q{OSX})
 			if (mode == "a+")
 				return;
 
