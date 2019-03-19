@@ -1338,8 +1338,8 @@ EOS";
 				setTimes(sourceDir.buildPath("src", "rt", "minit.obj"), Clock.currTime(), Clock.currTime()); // Don't rebuild
 				submodule.saveFileState("src/rt/minit.obj");
 
-				run(getMake(env) ~ ["-f", makeFileNameModel(model), "import", "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env, model) ~ dMakeArgs, env.vars, sourceDir);
-				run(getMake(env) ~ ["-f", makeFileNameModel(model)          , "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env, model) ~ dMakeArgs, env.vars, sourceDir);
+				runMake(env, model, "import");
+				runMake(env, model);
 			}
 		}
 
@@ -1360,8 +1360,21 @@ EOS";
 			{
 				auto env = baseEnvironment;
 				needCC(env, model);
-				run(getMake(env) ~ ["-f", makeFileNameModel(model), "unittest", "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env, model) ~ dMakeArgs, env.vars, sourceDir);
+				runMake(env, model, "unittest");
 			}
+		}
+
+		private final void runMake(ref Environment env, string model, string target = null)
+		{
+			string[] args =
+				getMake(env) ~
+				["-f", makeFileNameModel(model)] ~
+				(target ? [target] : []) ~
+				["DMD=" ~ dmd] ~
+				config.build.components.common.makeArgs ~
+				getPlatformMakeVars(env, model) ~
+				dMakeArgs;
+			run(args, env.vars, sourceDir);
 		}
 	}
 
