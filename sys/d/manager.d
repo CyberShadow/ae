@@ -1448,12 +1448,10 @@ EOS";
 				string phobosMakeFileName = findMakeFile(sourceDir, makeFileNameModel(model));
 				string phobosMakeFullName = sourceDir.buildPath(phobosMakeFileName);
 
-				auto makeArgs = getMake(env) ~ ["-f", phobosMakeFileName, "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env, model) ~ dMakeArgs;
-
 				version (Windows)
 				{
 					auto lib = "phobos%s.lib".format(modelSuffix(model));
-					run(makeArgs ~ lib, env.vars, sourceDir);
+					runMake(env, model, lib);
 					enforce(sourceDir.buildPath(lib).exists);
 					targets ~= ["phobos%s.lib".format(modelSuffix(model))];
 				}
@@ -1469,7 +1467,7 @@ EOS";
 						auto soFile = dir.dirEntries("libdruntime.so.a", SpanMode.depth);
 						if (!soFile.empty) makeArgs ~= ["DRUNTIMESO=" ~ soFile.front];
 					}
-					run(makeArgs, env.vars, sourceDir);
+					runMake(env, model);
 					targets ~= sourceDir
 						.buildPath("generated")
 						.dirEntries(SpanMode.depth)
@@ -1524,8 +1522,21 @@ EOS";
 					if (model == "32")
 						getComponent("extras").needInstalled();
 				}
-				run(getMake(env) ~ ["-f", makeFileNameModel(model), "unittest", "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env, model) ~ dMakeArgs, env.vars, sourceDir);
+				runMake(env, model, "unittest");
 			}
+		}
+
+		private final void runMake(ref Environment env, string model, string target = null)
+		{
+			string[] args =
+				getMake(env) ~
+				["-f", makeFileNameModel(model)] ~
+				(target ? [target] : []) ~
+				["DMD=" ~ dmd] ~
+				config.build.components.common.makeArgs ~
+				getPlatformMakeVars(env, model) ~
+				dMakeArgs;
+			run(args, env.vars, sourceDir);
 		}
 	}
 
