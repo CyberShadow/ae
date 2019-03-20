@@ -1585,7 +1585,7 @@ version (linux)
 	{
 		if (!xAttrs(".").supported)
 		{
-			import std.stdio;
+			import std.stdio : stderr;
 			stderr.writeln("ae.sys.file: xattrs not supported on current filesystem, skipping test.");
 			return;
 		}
