@@ -1505,13 +1505,15 @@ version (linux)
 		void[] opIndex(string key)
 		{
 			auto cKey = key.toStringz();
-			auto size = getFun(obj, cKey, null, 0);
-			errnoEnforce(size >= 0);
-			auto result = new void[size];
-			// TODO: race condition, retry
-			size = getFun(obj, cKey, result.ptr, result.length);
-			errnoEnforce(size == result.length);
-			return result;
+			size_t size = 0;
+			void[] buf;
+			do
+			{
+				buf.length = size;
+				size = getFun(obj, cKey, buf.ptr, buf.length);
+				errnoEnforce(size >= 0);
+			} while (size != buf.length);
+			return buf;
 		}
 
 		bool opIn_r(string key)
@@ -1542,12 +1544,14 @@ version (linux)
 
 		string[] keys()
 		{
-			auto size = listFun(obj, null, 0);
-			errnoEnforce(size >= 0);
-			auto buf = new char[size];
-			// TODO: race condition, retry
-			size = listFun(obj, buf.ptr, buf.length);
-			errnoEnforce(size == buf.length);
+			size_t size = 0;
+			char[] buf;
+			do
+			{
+				buf.length = size;
+				size = listFun(obj, buf.ptr, buf.length);
+				errnoEnforce(size >= 0);
+			} while (size != buf.length);
 
 			char[][] result;
 			size_t start;
