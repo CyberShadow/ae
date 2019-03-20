@@ -1511,7 +1511,7 @@ version (linux)
 			{
 				buf.length = size;
 				size = getFun(obj, cKey, buf.ptr, buf.length);
-				errnoEnforce(size >= 0);
+				errnoEnforce(size >= 0, __traits(identifier, getFun));
 			} while (size != buf.length);
 			return buf;
 		}
@@ -1526,20 +1526,20 @@ version (linux)
 			if (errno == ENOATTR)
 				return false;
 			else
-				errnoEnforce(false, "Error reading file xattrs");
+				errnoEnforce(false, __traits(identifier, getFun));
 			assert(false);
 		}
 
 		void opIndexAssign(in void[] value, string key)
 		{
 			auto ret = setFun(obj, key.toStringz(), value.ptr, value.length, 0);
-			errnoEnforce(ret == 0);
+			errnoEnforce(ret == 0, __traits(identifier, setFun));
 		}
 
 		void remove(string key)
 		{
 			auto ret = removeFun(obj, key.toStringz());
-			errnoEnforce(ret == 0);
+			errnoEnforce(ret == 0, __traits(identifier, removeFun));
 		}
 
 		string[] keys()
@@ -1550,7 +1550,7 @@ version (linux)
 			{
 				buf.length = size;
 				size = listFun(obj, buf.ptr, buf.length);
-				errnoEnforce(size >= 0);
+				errnoEnforce(size >= 0, __traits(identifier, listFun));
 			} while (size != buf.length);
 
 			char[][] result;
