@@ -170,6 +170,9 @@ version (Posix)
 
 import ae.utils.range : nullTerminated;
 
+// http://d.puremagic.com/issues/show_bug.cgi?id=7016
+version (Windows) static import ae.sys.windows.misc;
+
 /// Fast templated directory iterator
 template listDir(alias handler)
 {
