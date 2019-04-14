@@ -19,7 +19,6 @@ excludedSourceFiles "sys/persistence/keyvalue.d"
 
 # In ae:openssl
 excludedSourceFiles "net/ssl/openssl.d"
-excludedSourceFiles "sys/net/system.d"
 
 # In ae:sdl2
 excludedSourceFiles "utils/graphics/sdl2image.d"
@@ -88,8 +87,7 @@ subPackage {
 	dependency "ae" version="*" path="."
 	dependency "openssl" version="~>1.1"
 	sourceFiles \
-		"net/ssl/openssl.d" \
-		"sys/net/system.d"
+		"net/ssl/openssl.d"
 }
 
 ---------------------------
