@@ -167,15 +167,9 @@ subPackage {
 	targetType "sourceLibrary"
 	dependency "ae" version="*" path="."
 	sourceFiles "sys/net/system.d"
-	configuration "windows" {
-		platforms "windows"
-		dependency "ae:sys-net-wininet" version="*" path="."
-	}
-	configuration "posix" {
-		platforms "posix"
-		dependency "ae:sys-net-ae" version="*" path="."
-		dependency "ae:openssl" version="*" path="."
-	}
+	dependency "ae:sys-net-wininet" version="*" path="." platform="windows"
+	dependency "ae:sys-net-ae" version="*" path="." platform="posix"
+	dependency "ae:openssl" version="*" path="." platform="posix"
 }
 
 subPackage {
