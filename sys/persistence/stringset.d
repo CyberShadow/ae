@@ -74,6 +74,7 @@ unittest
 	import std.file, std.conv, core.thread;
 
 	enum FN = "test.txt";
+	if (FN.exists) remove(FN);
 	scope(exit) if (FN.exists) remove(FN);
 
 	{
