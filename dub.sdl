@@ -39,6 +39,14 @@ excludedSourceFiles "sys/windows/pe/pe.d"
 excludedSourceFiles "sys/windows/pe/resources.d"
 excludedSourceFiles "sys/windows/pe/versioninfo.d"
 
+# In ae:sys-net-*
+excludedSourceFiles "sys/net/ae.d"
+excludedSourceFiles "sys/net/cachedcurl.d"
+excludedSourceFiles "sys/net/curl.d"
+excludedSourceFiles "sys/net/system.d"
+excludedSourceFiles "sys/net/wininet.d"
+excludedSourceFiles "sys/net/test.d"
+
 # Triggers on import
 excludedSourceFiles "sys/benchmark.d"
 
@@ -124,6 +132,67 @@ subPackage {
 		"sys/windows/pe/pe.d" \
 		"sys/windows/pe/resources.d" \
 		"sys/windows/pe/versioninfo.d"
+}
+
+---------------------------
+
+# These modules provide a unified interface using different network backends.
+# They are self-registering, so, have to be in different Dub packages
+# (as Dub includes all modules whether they are imported or not).
+
+subPackage {
+	name "sys-net-ae"
+	targetType "sourceLibrary"
+	dependency "ae" version="*" path="."
+	sourceFiles "sys/net/ae.d"
+}
+
+subPackage {
+	name "sys-net-cachedcurl"
+	targetType "sourceLibrary"
+	dependency "ae" version="*" path="."
+	sourceFiles "sys/net/cachedcurl.d"
+}
+
+subPackage {
+	name "sys-net-curl"
+	targetType "sourceLibrary"
+	dependency "ae" version="*" path="."
+	sourceFiles "sys/net/curl.d"
+}
+
+subPackage {
+	name "sys-net-system"
+	targetType "sourceLibrary"
+	dependency "ae" version="*" path="."
+	sourceFiles "sys/net/system.d"
+	configuration "windows" {
+		platforms "windows"
+		dependency "ae:sys-net-wininet" version="*" path="."
+	}
+	configuration "posix" {
+		platforms "posix"
+		dependency "ae:sys-net-ae" version="*" path="."
+		dependency "ae:openssl" version="*" path="."
+	}
+}
+
+subPackage {
+	name "sys-net-wininet"
+	targetType "sourceLibrary"
+	dependency "ae" version="*" path="."
+	sourceFiles "sys/net/wininet.d"
+}
+
+subPackage {
+	name "sys-net-test"
+	targetType "sourceLibrary"
+	dependency "ae" version="*" path="."
+	dependency "ae:sys-net-ae" version="*" path="."
+	dependency "ae:sys-net-curl" version="*" path="."
+	dependency "ae:sys-net-wininet" version="*" path="."
+	dependency "ae:sys-net-cachedcurl" version="*" path="."
+	sourceFiles "sys/net/test.d"
 }
 
 ---------------------------
