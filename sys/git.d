@@ -39,6 +39,8 @@ struct Repository
 	string[string] environment;
 	string[] commandPrefix;
 
+	static string[] globalOptions; // per-thread
+
 	this(string path)
 	{
 		path = path.absolutePath();
@@ -48,7 +50,7 @@ struct Repository
 			gitDir = path.buildNormalizedPath(gitDir.readText().strip()[8..$]);
 		//path = path.replace(`\`, `/`);
 		this.path = path;
-		this.commandPrefix = ["git", "-c", "core.autocrlf=false", "-C", path];
+		this.commandPrefix = ["git", "-c", "core.autocrlf=false", "-C", path] ~ globalOptions;
 		version (Windows) {} else
 			this.environment["GIT_CONFIG_NOSYSTEM"] = "1";
 		this.environment["HOME"] = gitDir;
