@@ -74,8 +74,10 @@ void test(string moduleName, string className)()
 unittest
 {
 	// Don't do network requests on the project tester.
-	// See https://github.com/CyberShadow/ae/issues/30
-	if (environment.get("JENKINS_URL"))
+	// See:
+	// - https://github.com/CyberShadow/ae/issues/30
+	// - https://github.com/dlang/dmd/pull/9618#issuecomment-483214780
+	if (environment.get("BUILDKITE_AGENT_NAME"))
 		return;
 
 	test!("ae", "AENetwork");
