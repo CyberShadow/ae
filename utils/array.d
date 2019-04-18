@@ -354,6 +354,16 @@ unittest
 	assert([1, 0, 0, 2].splitWithPrefix([0, 0]) == [[1], [0, 0, 2]]);
 }
 
+/// Ensure that arr is non-null if empty.
+T nonNull(T)(T arr)
+{
+	if (arr !is null)
+		return arr;
+	typeof(arr[0])[0] v;
+	auto p = v.ptr;
+	return p[0..0];
+}
+
 /// If arr is null, return null. Otherwise, return a non-null
 /// transformation dg over arr.
 template mapNull(alias dg)
@@ -362,15 +372,7 @@ template mapNull(alias dg)
 	{
 		if (arr is null)
 			return null;
-		auto r = dg(arr);
-		if (r !is null)
-			return r;
-		else
-		{
-			typeof(r[0])[0] v;
-			auto p = v.ptr;
-			return p[0..0];
-		}
+		return dg(arr).nonNull;
 	}
 }
 
