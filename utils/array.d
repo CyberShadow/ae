@@ -354,6 +354,34 @@ unittest
 	assert([1, 0, 0, 2].splitWithPrefix([0, 0]) == [[1], [0, 0, 2]]);
 }
 
+/// If arr is null, return null. Otherwise, return a non-null
+/// transformation dg over arr.
+template mapNull(alias dg)
+{
+	auto mapNull(T)(T arr)
+	{
+		if (arr is null)
+			return null;
+		auto r = dg(arr);
+		if (r !is null)
+			return r;
+		else
+		{
+			typeof(r[0])[0] v;
+			auto p = v.ptr;
+			return p[0..0];
+		}
+	}
+}
+
+unittest
+{
+	assert(string.init.mapNull!(s => s          )  is null);
+	assert(string.init.mapNull!(s => ""         )  is null);
+	assert(""         .mapNull!(s => s          ) !is null);
+	assert(""         .mapNull!(s => string.init) !is null);
+}
+
 /// Select and return a random element from the array.
 auto ref sample(T)(T[] arr)
 {
