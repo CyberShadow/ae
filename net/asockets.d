@@ -666,7 +666,7 @@ interface IConnection
 	{
 		Data[1] data;
 		data[0] = datum;
-		this.send(data);
+		this.send(data, priority);
 		data[] = Data.init;
 	}
 
