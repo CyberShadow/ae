@@ -136,6 +136,30 @@ void blitTo(SRC, DST)(auto ref SRC src, auto ref DST dst, int x, int y)
 	src.blitTo(dst.crop(x, y, x+src.w, y+src.h));
 }
 
+void safeBlitTo(SRC, DST)(auto ref SRC src, auto ref DST dst, int x, int y)
+{
+	// TODO: refactor into safeCrop
+	int sx0, sy0, sx1, sy1, dx0, dy0, dx1, dy1;
+	sx1 = src.w;
+	sy1 = src.h;
+	dx0 = x;
+	dy0 = y;
+	dx1 = x + src.w;
+	dy1 = y + src.h;
+	if (dx0 < 0) { auto v = -dx0; sx0 += v; dx0 += v; }
+	if (dy0 < 0) { auto v = -dy0; sy0 += v; dy0 += v; }
+	if (dx1 > dst.w) { auto v = dx1 - dst.w; sx1 -= v; dx1 -= v; }
+	if (dy1 > dst.h) { auto v = dy1 - dst.h; sy1 -= v; dy1 -= v; }
+	if (dx0 > dx1) { dx1 = dx0; sx1 = sx0; }
+	if (dy0 > dy1) { dy1 = dy0; sy1 = sy0; }
+	assert(sx1 - sx0 == dx1 - dx0);
+	assert(sy1 - sy0 == dy1 - dy0);
+	blitTo(
+		src.crop(sx0, sy0, sx1, sy1),
+		dst.crop(dx0, dy0, dx1, dy1),
+	);
+}
+
 /// Default implementation for the .size method.
 /// Asserts that the view has the desired size.
 void size(V)(auto ref V src, int w, int h)
