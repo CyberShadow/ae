@@ -1085,20 +1085,21 @@ struct Modes
 
 mixin template CommonModes()
 {
-	immutable Type[char.max] modeTypes;
+//static immutable:
+	Type[char.max] modeTypes;
 	string supported()       pure { return modeTypes.length.iota.filter!(m => modeTypes[m]        ).map!(m => cast(char)m).array; }
 	string byType(Type type) pure { return modeTypes.length.iota.filter!(m => modeTypes[m] == type).map!(m => cast(char)m).array; }
 }
 
 struct ChannelModes
 {
-static:
+static immutable:
 	enum Type { none, flag, member, mask, str, number }
 	mixin CommonModes;
 	IrcServer.Channel.Member.Mode[char.max] memberModes;
 	char[IrcServer.Channel.Member.Mode.max] memberModeChars, memberModePrefixes;
 
-	static this()
+	shared static this()
 	{
 		foreach (c; "ntpsP")
 			modeTypes[c] = Type.flag;
@@ -1119,13 +1120,13 @@ static:
 
 struct UserModes
 {
-static:
+static immutable:
 	enum Type { none, flag }
 	mixin CommonModes;
 	Type[char.max] modeTypes;
 	bool[char.max] isSettable;
 
-	static this()
+	shared static this()
 	{
 		foreach (c; "io")
 			modeTypes[c] = Type.flag;
