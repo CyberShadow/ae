@@ -1098,7 +1098,7 @@ static:
 	IrcServer.Channel.Member.Mode[char.max] memberModes;
 	char[IrcServer.Channel.Member.Mode.max] memberModeChars, memberModePrefixes;
 
-	static this()
+	shared static this()
 	{
 		foreach (c; "ntpsP")
 			modeTypes[c] = Type.flag;
@@ -1108,7 +1108,10 @@ static:
 			modeTypes[c] = Type.mask;
 		foreach (c; "k")
 			modeTypes[c] = Type.str;
+	}
 
+	static this()
+	{
 		memberModes['o'] = IrcServer.Channel.Member.Mode.op;
 		memberModes['v'] = IrcServer.Channel.Member.Mode.voice;
 
