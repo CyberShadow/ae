@@ -47,7 +47,7 @@ class Connection
 
 	void onInnerConnect()
 	{
-		log("Connected to " ~ inner.remoteAddress().toString());
+		log("Connected to " ~ remoteAddressString(inner));
 		if (record) recordLog(format("%d C %d %s", Clock.currStdTime(), index, inner.remoteAddress()));
 		outer.handleReadData = &onOuterData;
 		outer.handleDisconnect = &onOuterDisconnect;
@@ -62,7 +62,7 @@ class Connection
 
 	void onOuterDisconnect(string reason, DisconnectType type)
 	{
-		log("Outer connection from " ~ outer.remoteAddress().toString() ~ " disconnected: " ~ reason);
+		log("Outer connection from " ~ outer.remoteAddressString() ~ " disconnected: " ~ reason);
 		if (record) recordLog(format("%d [ %d %s", Clock.currStdTime(), index, reason));
 		if (type != DisconnectType.requested)
 			inner.disconnect();
@@ -77,7 +77,7 @@ class Connection
 
 	void onInnerDisconnect(string reason, DisconnectType type)
 	{
-		log("Inner connection to " ~ inner.remoteAddress().toString() ~ " disconnected: " ~ reason);
+		log("Inner connection to " ~ remoteAddressString(inner) ~ " disconnected: " ~ reason);
 		if (record) recordLog(format("%d ] %d %s", Clock.currStdTime(), index, reason));
 		if (type != DisconnectType.requested)
 			outer.disconnect();
@@ -105,7 +105,7 @@ class PortForwarder
 
 	void onAccept(TcpConnection incoming)
 	{
-		log(format("Accepted connection from %s on port %d, forwarding to %s:%d", incoming.remoteAddress(), localPort, remoteHost, remotePort));
+		log(format("Accepted connection from %s on port %d, forwarding to %s:%d", incoming.remoteAddressString(), localPort, remoteHost, remotePort));
 		if (record) recordLog(format("%d A %d %d", Clock.currStdTime(), Connection.counter, localPort));
 		new Connection(incoming, remoteHost, remotePort);
 	}
@@ -160,4 +160,15 @@ string hexEscape(const(void)[] data)
 		else
 			s ~= cast(char)b;
 	return s;
+}
+
+string remoteAddressString(TcpConnection c)
+{
+	try
+	{
+		auto remoteAddress = c.remoteAddress();
+		return remoteAddress ? remoteAddress.toString()  : "(null)";
+	}
+	catch (Exception e)
+		return "(error)";
 }
