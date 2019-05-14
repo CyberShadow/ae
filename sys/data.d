@@ -486,17 +486,10 @@ abstract class DataWrapper
 	abstract void setSize(size_t newSize);
 	abstract @property size_t capacity() const;
 
-	deprecated new(size_t sz) { return unmanagedAlloc(sz); }
-
 	debug ~this()
 	{
 		debug(DATA_REFCOUNT) debugLog("%.*s.~this, references==%d", this.classinfo.name.length, this.classinfo.name.ptr, references);
 		assert(references == 0, "Deleting DataWrapper with non-zero reference count");
-	}
-
-	@nogc deprecated delete(void* p)
-	{
-		unmanagedFree(p);
 	}
 }
 
