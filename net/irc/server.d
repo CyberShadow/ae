@@ -887,7 +887,7 @@ class IrcServer
 
 		void sendReply(string command, string[] parameters...)
 		{
-			return sendCommand(server.hostname, [command, nickname] ~ parameters);
+			return sendCommand(server.hostname, [command, nickname ? nickname : "*"] ~ parameters);
 		}
 
 		void sendServerNotice(string text)
