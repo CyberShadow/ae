@@ -105,7 +105,7 @@ class IrcServer
 
 				enforce(line.indexOf('\0')<0 && line.indexOf('\r')<0 && line.indexOf('\n')<0, "Forbidden character");
 
-				auto parameters = line.strip.ircSplit();
+				auto parameters = line.ircSplit();
 				if (!parameters.length)
 					return;
 
