@@ -156,6 +156,8 @@ class IrcServer
 						break;
 
 					case "PING":
+						if (!registered)
+							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered"); // KVIrc needs this.
 						sendReply("PONG", parameters);
 						break;
 					case "PONG":
