@@ -1127,7 +1127,6 @@ struct UserModes
 static immutable:
 	enum Type { none, flag }
 	mixin CommonModes;
-	Type[char.max] modeTypes;
 	bool[char.max] isSettable;
 
 	shared static this()
