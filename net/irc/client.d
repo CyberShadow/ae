@@ -325,6 +325,8 @@ private:
 			{
 				assert(!(channel in channels));
 				channels[channel] = Channel();
+				if (autoWho)
+					who(channel);
 			}
 			else
 			{
