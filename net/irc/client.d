@@ -111,8 +111,7 @@ private:
 		}
 		if (log) log("< " ~ line);
 		string nick, username, hostname;
-		auto colon = line.indexOf(':');
-		if (colon == 0)
+		if (line.startsWith(":"))
 		{
 			auto space = line.indexOf(' ');
 			string target = line[1 .. space];
@@ -126,17 +125,16 @@ private:
 				userptr.hostname = hostname;
 			}
 			line = line[space + 1 .. line.length];
-			colon = line.indexOf(':');
 		}
 
 		string[] params;
+		auto colon = line.indexOf(" :");
 		if (colon == -1)
 			params = split(line);
 		else
 		{
 			params = split(line[0 .. colon]);
-			params.length = params.length + 1;
-			params[$-1] = line[colon + 1 .. line.length];
+			params ~= line[colon + 2 .. line.length];
 		}
 
 		string command = toUpper(params[0]);
