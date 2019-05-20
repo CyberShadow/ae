@@ -296,7 +296,7 @@ class IrcServer
 								continue;
 							foreach (member; channel.members)
 								if (inChannel || !member.client.modes.flags['i'])
-									if (!mask || channel.name.maskMatch(mask) || member.client.publicPrefix.maskMatch(mask))
+									if (!mask || channel.name.maskMatch(mask) || member.client.nickname.maskMatch(mask) || member.client.publicHostname.maskMatch(mask))
 									{
 										auto phit = member.client.nickname in result;
 										if (phit)
@@ -308,7 +308,7 @@ class IrcServer
 
 						foreach (client; server.nicknames)
 							if (!client.modes.flags['i'])
-								if (!mask || client.publicPrefix.maskMatch(mask))
+								if (!mask || client.nickname.maskMatch(mask) || client.publicHostname.maskMatch(mask))
 									if (client.nickname !in result)
 										result[client.nickname] = "*";
 
