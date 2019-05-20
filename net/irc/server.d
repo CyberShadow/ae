@@ -287,7 +287,7 @@ class IrcServer
 					{
 						if (!registered)
 							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
-						auto mask = parameters.length ? parameters[0] != "*" && parameters[0] != "0" ? parameters[0] : null : null;
+						auto mask = parameters.length ? parameters[0].among("", "*", "0") ? null : parameters[0] : null;
 						string[string] result;
 						foreach (channel; server.channels)
 						{
