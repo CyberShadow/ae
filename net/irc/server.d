@@ -318,7 +318,7 @@ class IrcServer
 							sendReply(Reply.RPL_WHOREPLY,
 								channel,
 								client.username,
-								this is client ? client.realHostname : client.publicHostname,
+								safeHostname(this is client ? client.realHostname : client.publicHostname),
 								server.hostname,
 								nickname,
 								"H",
@@ -1067,6 +1067,14 @@ bool maskMatch(string subject, string mask)
 	return globMatch!(CaseSensitive.no)(subject, mask);
 }
 
+
+string safeHostname(string s)
+{
+	assert(s.length);
+	if (s[0] == ':')
+		s = '0' ~ s;
+	return s;
+}
 
 alias rfc1459toUpper normalized;
 
