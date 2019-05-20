@@ -28,8 +28,6 @@ import ae.utils.text;
 
 public import ae.net.irc.common;
 
-debug(IRC) import std.stdio;
-
 /// An IRC client class.
 class IrcClient
 {
@@ -113,7 +111,6 @@ private:
 		}
 		if (log) log("< " ~ line);
 		string nick, username, hostname;
-		debug (IRC) std.stdio.writefln("< %s", line);
 		auto colon = line.indexOf(':');
 		if (colon == 0)
 		{
@@ -627,7 +624,6 @@ public:
 	/// Send raw string to server.
 	void sendRaw(in char[] message)
 	{
-		debug (IRC) std.stdio.writefln("> %s", message);
 		enforce(!message.contains("\n"), "Newline in outgoing IRC line: " ~ message);
 		if (log) log("> " ~ message);
 		conn.send(encoder(message));
