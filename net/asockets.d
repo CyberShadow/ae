@@ -1001,53 +1001,52 @@ protected:
 
 		foreach (sendPartial; [true, false])
 			foreach (int priority, ref queue; outQueue)
-				if (!sendPartial || priority == partiallySent)
-					while (queue.length)
+				while (queue.length && (!sendPartial || priority == partiallySent))
+				{
+					assert(partiallySent == -1 || partiallySent == priority);
+
+					auto pdata = queue.ptr; // pointer to first data
+
+					ptrdiff_t sent = 0;
+					if (pdata.length)
 					{
-						assert(partiallySent == -1 || partiallySent == priority);
-
-						auto pdata = queue.ptr; // pointer to first data
-
-						ptrdiff_t sent = 0;
-						if (pdata.length)
-						{
-							sent = doSend(pdata.contents);
-							debug (ASOCKETS) writefln("\t\t%s: sent %d/%d bytes", this, sent, pdata.length);
-						}
-						else
-						{
-							debug (ASOCKETS) writefln("\t\t%s: empty Data object", this);
-						}
-
-						if (sent == Socket.ERROR)
-						{
-							if (wouldHaveBlocked())
-								return;
-							else
-								return onError("send() error: " ~ lastSocketError);
-						}
-						else
-						if (sent < pdata.length)
-						{
-							if (sent > 0)
-							{
-								*pdata = (*pdata)[sent..pdata.length];
-								partiallySent = priority;
-							}
-							return;
-						}
-						else
-						{
-							assert(sent == pdata.length);
-							//debug writefln("[%s] Sent data:", remoteAddress);
-							//debug writefln("%s", hexDump(pdata.contents[0..sent]));
-							pdata.clear();
-							queue = queue[1..$];
-							partiallySent = -1;
-							if (queue.length == 0)
-								queue = null;
-						}
+						sent = doSend(pdata.contents);
+						debug (ASOCKETS) writefln("\t\t%s: sent %d/%d bytes", this, sent, pdata.length);
 					}
+					else
+					{
+						debug (ASOCKETS) writefln("\t\t%s: empty Data object", this);
+					}
+
+					if (sent == Socket.ERROR)
+					{
+						if (wouldHaveBlocked())
+							return;
+						else
+							return onError("send() error: " ~ lastSocketError);
+					}
+					else
+					if (sent < pdata.length)
+					{
+						if (sent > 0)
+						{
+							*pdata = (*pdata)[sent..pdata.length];
+							partiallySent = priority;
+						}
+						return;
+					}
+					else
+					{
+						assert(sent == pdata.length);
+						//debug writefln("[%s] Sent data:", remoteAddress);
+						//debug writefln("%s", hexDump(pdata.contents[0..sent]));
+						pdata.clear();
+						queue = queue[1..$];
+						partiallySent = -1;
+						if (queue.length == 0)
+							queue = null;
+					}
+				}
 
 		// outQueue is now empty
 		if (bufferFlushedHandler)
