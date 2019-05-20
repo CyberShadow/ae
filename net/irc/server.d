@@ -872,6 +872,8 @@ class IrcServer
 		void sendCommand(string from, string[] parameters...)
 		{
 			assert(parameters.length, "At least one parameter expected");
+			foreach (parameter; parameters[0..$-1])
+				assert(parameter.length && parameter[0] != ':' && parameter.indexOf(' ') < 0, "Invalid parameter: " ~ parameter);
 			if (parameters[$-1] is null)
 				parameters = parameters[0..$-1];
 			else
