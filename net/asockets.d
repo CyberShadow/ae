@@ -717,8 +717,8 @@ protected:
 
 	/// The send buffers.
 	Data[][MAX_PRIORITY+1] outQueue;
-	/// Whether the first item from each queue has been partially sent (and thus can't be canceled).
-	bool[MAX_PRIORITY+1] partiallySent;
+	/// Whether the first item from this queue (if any) has been partially sent (and thus can't be canceled).
+	int partiallySent = -1;
 
 	/// Constructor used by a ServerSocket for new connections
 	this(Socket conn)
@@ -894,7 +894,7 @@ public:
 
 	final void clearQueue(int priority)
 	{
-		if (partiallySent[priority])
+		if (priority == partiallySent)
 		{
 			assert(outQueue[priority].length > 0);
 			outQueue[priority] = outQueue[priority][0..1];
@@ -908,10 +908,8 @@ public:
 	private final void discardQueues()
 	{
 		foreach (priority; 0..MAX_PRIORITY+1)
-		{
 			outQueue[priority] = null;
-			partiallySent[priority] = false;
-		}
+		partiallySent = -1;
 		updateFlags();
 	}
 
@@ -926,7 +924,7 @@ public:
 
 	final bool queuePresent(int priority = DEFAULT_PRIORITY)
 	{
-		if (partiallySent[priority])
+		if (priority == partiallySent)
 		{
 			assert(outQueue[priority].length > 0);
 			return outQueue[priority].length > 1;
@@ -1001,7 +999,7 @@ protected:
 		}
 		//debug writefln(remoteAddress(), ": Writable - handler ", handleBufferFlushed?"OK":"not set", ", outBuffer.length=", outBuffer.length);
 
-		foreach (priority, ref queue; outQueue)
+		foreach (int priority, ref queue; outQueue)
 			while (queue.length)
 			{
 				auto pdata = queue.ptr; // pointer to first data
@@ -1030,7 +1028,7 @@ protected:
 					if (sent > 0)
 					{
 						*pdata = (*pdata)[sent..pdata.length];
-						partiallySent[priority] = true;
+						partiallySent = priority;
 					}
 					return;
 				}
@@ -1041,7 +1039,7 @@ protected:
 					//debug writefln("%s", hexDump(pdata.contents[0..sent]));
 					pdata.clear();
 					queue = queue[1..$];
-					partiallySent[priority] = false;
+					partiallySent = -1;
 					if (queue.length == 0)
 						queue = null;
 				}
