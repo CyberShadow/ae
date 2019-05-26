@@ -34,7 +34,21 @@ import ae.utils.time : StdTime;
 class ManagedRepository
 {
 	/// Git repository we manage.
-	public Repository git;
+	public @property ref const(Repository) git()
+	{
+		if (!gitRepo.path)
+		{
+			gitRepo = getRepo();
+			assert(gitRepo.path, "No repository");
+			foreach (person; ["AUTHOR", "COMMITTER"])
+			{
+				gitRepo.environment["GIT_%s_DATE".format(person)] = "Thu, 01 Jan 1970 00:00:00 +0000";
+				gitRepo.environment["GIT_%s_NAME".format(person)] = "ae.sys.d";
+				gitRepo.environment["GIT_%s_EMAIL".format(person)] = "ae.sys.d\x40thecybershadow.net";
+			}
+		}
+		return gitRepo;
+	}
 
 	/// Should we fetch the latest stuff?
 	public bool offline;
@@ -42,13 +56,12 @@ class ManagedRepository
 	/// Verify working tree state to make sure we don't clobber user changes?
 	public bool verify;
 
-	/// Ensure we have a repository.
-	public void needRepo()
-	{
-		assert(git.path, "No repository");
-	}
+	private Repository gitRepo;
 
-	public @property string name() { needRepo(); return git.path.baseName; }
+	/// Repository provider
+	abstract protected Repository getRepo();
+
+	public @property string name() { return git.path.baseName; }
 
 	// Head
 
@@ -133,7 +146,6 @@ class ManagedRepository
 	{
 		if (!offline)
 		{
-			needRepo();
 			log("Updating " ~ name ~ "...");
 			git.run("-c", "fetch.recurseSubmodules=false", "remote", "update", "--prune");
 			git.run("-c", "fetch.recurseSubmodules=false", "fetch", "--force", "--tags");
@@ -159,7 +171,6 @@ class ManagedRepository
 		clearState();
 
 		log("Cleaning repository %s...".format(name));
-		needRepo();
 		try
 		{
 			git.run("reset", "--hard");
@@ -202,25 +213,10 @@ class ManagedRepository
 
 	private @property string mergeCachePath()
 	{
-		needRepo();
 		return buildPath(git.gitDir, "ae-sys-d-mergecache.json");
 	}
 
 	// Merge
-
-	private void setupGitEnv()
-	{
-		string[string] mergeEnv;
-		foreach (person; ["AUTHOR", "COMMITTER"])
-		{
-			mergeEnv["GIT_%s_DATE".format(person)] = "Thu, 01 Jan 1970 00:00:00 +0000";
-			mergeEnv["GIT_%s_NAME".format(person)] = "ae.sys.d";
-			mergeEnv["GIT_%s_EMAIL".format(person)] = "ae.sys.d\x40thecybershadow.net";
-		}
-		foreach (k, v; mergeEnv)
-			environment[k] = v;
-		// TODO: restore environment
-	}
 
 	/// Returns the hash of the merge between the base and branch commits.
 	/// Performs the merge if necessary. Caches the result.
@@ -286,7 +282,6 @@ class ManagedRepository
 
 		void doMerge()
 		{
-			setupGitEnv();
 			if (!revert)
 				git.run("merge", "--no-ff", "-m", mergeCommitMessage, branch);
 			else
@@ -358,7 +353,6 @@ class ManagedRepository
 	/// Fetches the remote first, unless offline mode is on.
 	string getRemoteRef(string remote, string remoteRef, string localRef)
 	{
-		needRepo();
 		if (!offline)
 		{
 			log("Fetching from %s (%s -> %s) ...".format(remote, remoteRef, localRef));
@@ -474,7 +468,6 @@ class ManagedRepository
 	RepositoryState getState()
 	{
 		assert(verify);
-		needRepo();
 		auto files = git.query(["ls-files"]).splitLines();
 		RepositoryState state;
 		foreach (file; files)
@@ -485,7 +478,6 @@ class ManagedRepository
 	private @property string workTreeStatePath()
 	{
 		assert(verify);
-		needRepo();
 		return buildPath(git.gitDir, "ae-sys-d-worktree.json");
 	}
 

@@ -208,7 +208,7 @@ class DManager : ICacheHost
 
 	class MetaRepository : DManagerRepository
 	{
-		override void needRepo()
+		protected override Repository getRepo()
 		{
 			needGit();
 
@@ -218,8 +218,7 @@ class DManager : ICacheHost
 				atomic!performClone(config.local.repoUrl, repoDir);
 			}
 
-			if (!git.path)
-				git = Repository(repoDir);
+			return Repository(repoDir);
 		}
 
 		static void performClone(string url, string target)
@@ -243,7 +242,6 @@ class DManager : ICacheHost
 				return (*pcacheEntry).dup;
 
 			string[string] result;
-			needRepo();
 			foreach (line; git.query("ls-tree", head).splitLines())
 			{
 				auto parts = line.split();
@@ -299,12 +297,10 @@ class DManager : ICacheHost
 	{
 		string dir;
 
-		override void needRepo()
+		protected override Repository getRepo()
 		{
-			getMetaRepo().needRepo();
-
-			if (!git.path)
-				git = Repository(dir);
+			getMetaRepo().git; // ensure meta-repository is cloned
+			return Repository(dir);
 		}
 
 		override void needHead(string hash)
@@ -355,7 +351,6 @@ class DManager : ICacheHost
 		assert(name, "This component is not associated with a submodule");
 		if (name !in submodules)
 		{
-			getMetaRepo().needRepo();
 			enforce(name in getMetaRepo().getSubmoduleCommits(getMetaRepo().getRef("origin/master")),
 				"Unknown submodule: " ~ name);
 
@@ -474,7 +469,7 @@ class DManager : ICacheHost
 			);
 		}
 
-		@property string sourceDir() { submodule.needRepo(); return submodule.git.path; }
+		@property string sourceDir() { return submodule.git.path; }
 
 		/// Directory to which built files are copied to.
 		/// This will then be atomically added to the cache.
@@ -1727,7 +1722,6 @@ EOS";
 		string getLatest()
 		{
 			auto dmd = getComponent("dmd").submodule;
-			dmd.needRepo();
 
 			auto t = dmd.git.query(["log", "--pretty=format:%ct"]).splitLines.map!(to!int).filter!(n => n > 0).front;
 
@@ -2591,7 +2585,6 @@ EOS";
 	private string[] getComponentKeyOrder(string componentName)
 	{
 		auto submodule = getComponent(componentName).submodule;
-		submodule.needRepo();
 		return submodule
 			.git.query("log", "--pretty=format:%H", "--all", "--topo-order")
 			.splitLines()
@@ -2686,7 +2679,6 @@ EOS";
 	/// Gets the D merge log (newest first).
 	LogEntry[] getLog(string refName = "refs/remotes/origin/master")
 	{
-		getMetaRepo().needRepo();
 		auto history = getMetaRepo().git.getHistory();
 		LogEntry[] logs;
 		auto master = history.commits[history.refs[refName]];
@@ -2711,7 +2703,6 @@ EOS";
 	/// Config structure to be parsed from an .ini file.
 	SubmoduleState parseSpec(string spec)
 	{
-		getMetaRepo().needRepo();
 		auto rev = getMetaRepo().getRef("refs/tags/" ~ spec);
 		log("Resolved " ~ spec ~ " to " ~ rev);
 		return begin(rev);
