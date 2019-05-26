@@ -1373,6 +1373,29 @@ version (Windows)
 
 		wenforce(CreateHardLinkW(toUTF16z(dst), toUTF16z(src), null), "CreateHardLink failed: " ~ src ~ " -> " ~ dst);
 	}
+
+	/// Deletes a file, which might be a read-only hard link
+	/// (thus, deletes the read-only file/link without affecting other links to it).
+	void deleteHardLink()(string fn)
+	{
+		mixin(importWin32!q{winbase});
+
+		auto fnW = toUTF16z(fn);
+
+		DWORD attrs = GetFileAttributesW(fnW);
+		wenforce(attrs != INVALID_FILE_ATTRIBUTES, "GetFileAttributesW failed: " ~ fn);
+
+		if (attrs & FILE_ATTRIBUTE_READONLY)
+			SetFileAttributesW(fnW, attrs & ~FILE_ATTRIBUTE_READONLY)
+			.wenforce("SetFileAttributesW failed: " ~ fn);
+		HANDLE h = CreateFileW(fnW, GENERIC_READ|GENERIC_WRITE, 7, null, OPEN_EXISTING,
+					FILE_FLAG_DELETE_ON_CLOSE, null);
+		wenforce(h != INVALID_HANDLE_VALUE, "CreateFileW failed: " ~ fn);
+		if (attrs & FILE_ATTRIBUTE_READONLY)
+			SetFileAttributesW(fnW, attrs)
+			.wenforce("SetFileAttributesW failed: " ~ fn);
+		CloseHandle(h).wenforce("CloseHandle failed: " ~ fn);
+	}
 }
 version (Posix)
 {
@@ -1381,6 +1404,17 @@ version (Posix)
 		import core.sys.posix.unistd;
 		enforce(link(toUTFz!(const char*)(src), toUTFz!(const char*)(dst)) == 0, "link() failed: " ~ dst);
 	}
+
+	alias deleteHardLink = remove;
+}
+
+unittest
+{
+	write("a", "foo"); scope(exit) remove("a");
+	hardLink("a", "b");
+	assert("b".readText == "foo");
+	deleteHardLink("b");
+	assert(!"b".exists);
 }
 
 version (Posix)
