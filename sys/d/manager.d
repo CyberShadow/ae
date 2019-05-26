@@ -546,12 +546,13 @@ set -eu
 
 tool=$(basename "$0")
 next=/usr/bin/$tool
-flagfile=$TMP/nopie-flag-$tool
+tmpdir=${TMP:-/tmp}
+flagfile=$tmpdir/nopie-flag-$tool
 
 if [ ! -e "$flagfile" ]
 then
 	echo 'Testing for -no-pie...' 1>&2
-	testfile=$TMP/test-$$.c
+	testfile=$tmpdir/test-$$.c
 	echo 'int main(){return 0;}' > $testfile
 	if $next -no-pie -c -o$testfile.o $testfile
 	then
