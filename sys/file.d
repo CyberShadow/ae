@@ -1346,6 +1346,11 @@ version(Windows) version(unittest) static mixin(importWin32!q{winnt});
 
 unittest
 {
+	// Wine's implementation of symlinks/junctions is incomplete
+	version (Windows)
+		if (getWineVersion())
+			return;
+
 	mkdir("a"); scope(exit) rmdir("a"[]);
 	touch("a/f"); scope(exit) remove("a/f");
 	dirLink("a", "b"); scope(exit) version(Windows) rmdir("b"); else remove("b");
