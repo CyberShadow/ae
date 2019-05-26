@@ -85,7 +85,7 @@ struct Repository
 		}
 	}
 
-	History getHistory(string[] extraRefs = null)
+	History getHistory(string[] extraRefs = null) const
 	{
 		History history;
 
