@@ -89,7 +89,7 @@ struct PE
 		{
 			PE* pe;
 
-			ubyte opIndex(size_t offset)
+			ref ubyte opIndex(size_t offset)
 			{
 				return pe.data[pe.imageToFile(offset)];
 			}
