@@ -22,12 +22,13 @@ import std.format;
 import std.path;
 import std.process;
 import std.string;
-import std.typecons;
+import std.typecons : RefCounted;
 import std.utf;
 
 import ae.sys.cmd;
 import ae.sys.file;
 import ae.utils.aa;
+import ae.utils.array;
 import ae.utils.meta;
 import ae.utils.text;
 
@@ -455,7 +456,7 @@ struct GitObject
 		Hash tree;
 		Hash[] parents;
 		string author, committer; /// entire lines - name, email and date
-		string[] message;
+		string[] message, gpgsig;
 	}
 
 	ParsedCommit parseCommit()
@@ -463,11 +464,12 @@ struct GitObject
 		enforce(type == "commit", "Wrong object type");
 		ParsedCommit result;
 		auto lines = (cast(string)data).split('\n');
-		foreach (n, line; lines)
+		while (lines.length)
 		{
+			auto line = lines.shift();
 			if (line == "")
 			{
-				result.message = lines[n+1..$];
+				result.message = lines;
 				break; // commit message begins
 			}
 			auto parts = line.findSplit(" ");
@@ -487,8 +489,17 @@ struct GitObject
 				case "committer":
 					result.committer = line;
 					break;
+				case "gpgsig":
+				{
+					auto p = lines.countUntil!(line => !line.startsWith(" "));
+					if (p < 0)
+						p = lines.length;
+					result.gpgsig = [line] ~ lines[0 .. p].apply!(each!((ref line) => line.skipOver(" ").enforce("gpgsig line without leading space")));
+					lines = lines[p .. $];
+					break;
+				}
 				default:
-					throw new Exception("Unknown commit field: " ~ field);
+					throw new Exception("Unknown commit field: " ~ field ~ "\n" ~ cast(string)data);
 			}
 		}
 		return result;
