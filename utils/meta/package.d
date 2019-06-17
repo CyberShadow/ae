@@ -322,7 +322,7 @@ unittest
 /// Inspired by http://clhs.lisp.se/Body/s_progn.htm
 Args[$-1] progn(Args...)(lazy Args args)
 {
-	foreach (n; RangeTuple!(Args.length-1))
+	foreach (n; RangeTuple!(Args[1..$].length))
 		cast(void)args[n];
 	return args[$-1];
 }
