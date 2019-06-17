@@ -317,6 +317,28 @@ unittest
 	assert(test.b == 42);
 }
 
+// ************************************************************************
+
+/// Call a predicate with the given value. Return the value.
+/// Intended to be used in UFCS chains using functions which mutate their argument,
+/// such as skipOver and each.
+template apply(alias dg)
+{
+	auto ref T apply(T)(auto ref T v)
+	{
+		dg(v);
+		return v;
+	}
+}
+
+///
+unittest
+{
+	int i = 7;
+	int j = i.apply!((ref v) => v++);
+	assert(j == 8);
+}
+
 /// Evaluate all arguments and return the last argument.
 /// Can be used instead of the comma operator.
 /// Inspired by http://clhs.lisp.se/Body/s_progn.htm
