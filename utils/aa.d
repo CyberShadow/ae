@@ -562,6 +562,29 @@ struct OrderedSet(T)
 
 	@property size_t length() const { return items.length; }
 
+	private int opApplyImpl(this This, Dg)(Dg dg)
+	{
+		int result = 0;
+
+		foreach (i, ref v; items)
+		{
+			result = dg(v);
+			if (result)
+				break;
+		}
+		return result;
+	}
+
+	int opApply(int delegate(ref T k) dg)
+	{
+		return opApplyImpl(dg);
+	}
+
+	int opApply(int delegate(const ref T k) dg) const
+	{
+		return opApplyImpl(dg);
+	}
+
 	@property typeof(this) dup()
 	{
 		typeof(this) result;
@@ -606,6 +629,9 @@ unittest
 	set.add(2);
 	assert(1 !in set && 2 in set);
 	assert(1 in set2 && 2 !in set2);
+
+	foreach (v; set)
+		assert(v == 2);
 }
 
 // ***************************************************************************
