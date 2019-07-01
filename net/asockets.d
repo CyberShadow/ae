@@ -428,14 +428,14 @@ else // Use select
 				if (!conn.socket)
 					writefln("\t\t%s is unset", conn);
 				else
-				if (readset.isSet(conn.socket))
-					writefln("\t\t%s is readable", conn);
-				else
-				if (writeset.isSet(conn.socket))
-					writefln("\t\t%s is writable", conn);
-				else
-				if (errorset.isSet(conn.socket))
-					writefln("\t\t%s is errored", conn);
+				{
+					if (readset.isSet(conn.socket))
+						writefln("\t\t%s is readable", conn);
+					if (writeset.isSet(conn.socket))
+						writefln("\t\t%s is writable", conn);
+					if (errorset.isSet(conn.socket))
+						writefln("\t\t%s is errored", conn);
+				}
 			}
 		}
 
