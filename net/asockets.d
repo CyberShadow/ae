@@ -20,6 +20,8 @@ import ae.sys.timing;
 import ae.utils.math;
 public import ae.sys.data;
 
+import core.stdc.stdint : int32_t;
+
 import std.exception;
 import std.socket;
 import std.string : format;
