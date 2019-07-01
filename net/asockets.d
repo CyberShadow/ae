@@ -986,6 +986,11 @@ protected:
 	{
 		if (state == ConnectionState.connecting)
 		{
+			int32_t error;
+			conn.getOption(SocketOptionLevel.SOCKET, SocketOption.ERROR, error);
+			if (error)
+				return disconnect(formatSocketError(error), DisconnectType.error);
+
 			state = ConnectionState.connected;
 
 			//debug writefln("[%s] Connected", remoteAddress);
