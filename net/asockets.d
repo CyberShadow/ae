@@ -1807,9 +1807,9 @@ protected:
 	override void onConnect()
 	{
 		debug (ASOCKETS) writefln("TimeoutAdapter.onConnect @ %s", cast(void*)this);
-		super.onConnect();
 		if (idleTask)
 			resumeIdleTimeout();
+		super.onConnect();
 	}
 
 	override void onReadData(Data data)
