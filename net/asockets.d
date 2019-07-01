@@ -1760,7 +1760,6 @@ class TimeoutAdapter : ConnectionAdapter
 	void resumeIdleTimeout()
 	{
 		debug (ASOCKETS) writefln("TimeoutAdapter.resumeIdleTimeout @ %s", cast(void*)this);
-		assert(state == ConnectionState.connected);
 		assert(idleTask !is null);
 		assert(!idleTask.isWaiting());
 		mainTimer.add(idleTask);
@@ -1770,6 +1769,8 @@ class TimeoutAdapter : ConnectionAdapter
 	{
 		debug (ASOCKETS) writefln("TimeoutAdapter.setIdleTimeout @ %s", cast(void*)this);
 		assert(duration > Duration.zero);
+
+		// Configure idleTask
 		if (idleTask is null)
 		{
 			idleTask = new TimerTask(duration);
@@ -1781,17 +1782,16 @@ class TimeoutAdapter : ConnectionAdapter
 				idleTask.cancel();
 			idleTask.delay = duration;
 		}
-		if (state == ConnectionState.connected)
-			mainTimer.add(idleTask);
+
+		mainTimer.add(idleTask);
 	}
 
 	void markNonIdle()
 	{
 		debug (ASOCKETS) writefln("TimeoutAdapter.markNonIdle @ %s", cast(void*)this);
-		assert(idleTask !is null);
 		if (handleNonIdle)
 			handleNonIdle();
-		if (idleTask.isWaiting())
+		if (idleTask && idleTask.isWaiting())
 			idleTask.restart();
 	}
 
@@ -1807,8 +1807,7 @@ protected:
 	override void onConnect()
 	{
 		debug (ASOCKETS) writefln("TimeoutAdapter.onConnect @ %s", cast(void*)this);
-		if (idleTask)
-			resumeIdleTimeout();
+		markNonIdle();
 		super.onConnect();
 	}
 
@@ -1828,24 +1827,20 @@ protected:
 	}
 
 private:
-	TimerTask idleTask;
+	TimerTask idleTask; // non-null if an idle timeout has been set
 
 	final void onTask_Idle(Timer timer, TimerTask task)
 	{
 		if (state == ConnectionState.disconnecting)
 			return disconnect("Delayed disconnect - time-out", DisconnectType.error);
 
-		if (state != ConnectionState.connected)
+		if (state == ConnectionState.disconnected)
 			return;
 
 		if (handleIdleTimeout)
 		{
+			resumeIdleTimeout(); // reschedule (by default)
 			handleIdleTimeout();
-			if (state == ConnectionState.connected)
-			{
-				assert(!idleTask.isWaiting());
-				mainTimer.add(idleTask);
-			}
 		}
 		else
 			disconnect("Time-out", DisconnectType.error);
