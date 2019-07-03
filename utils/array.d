@@ -475,7 +475,7 @@ T queuePop(T)(ref T[] arr)
 	return ret;
 }
 
-T shift(T)(ref T[] arr) { T result = arr[0]; arr = arr[1..$]; return result; }
+ref T shift(T)(ref T[] arr) { auto oldArr = arr; arr = arr[1..$]; return oldArr[0]; }
 T[] shift(T)(ref T[] arr, size_t n) { T[] result = arr[0..n]; arr = arr[n..$]; return result; }
 T[N] shift(size_t N, T)(ref T[] arr) { T[N] result = cast(T[N])(arr[0..N]); arr = arr[N..$]; return result; }
 void unshift(T)(ref T[] arr, T value) { arr.insertInPlace(0, value); }
