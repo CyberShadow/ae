@@ -456,11 +456,10 @@ string formatAddress(string protocol, Address address, string vhost = null, usho
 		(port is null || port == "80" ? "" : ":" ~ port);
 }
 
+version (unittest) import ae.net.http.client;
+version (unittest) import ae.net.http.responseex;
 unittest
 {
-	import ae.net.http.client;
-	import ae.net.http.responseex;
-
 	int[] replies;
 	int closeAfter;
 
