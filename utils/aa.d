@@ -61,6 +61,40 @@ unittest
 	assert(aa.getOrAdd(1, 4) == 3);
 }
 
+/// If key is not in aa, add it with the given value, and return true.
+/// Otherwise, return false.
+bool addNew(K, V)(ref V[K] aa, auto ref K key, auto ref V value)
+{
+	static if (__traits(hasMember, object, "update"))
+	{
+		bool added = void;
+		aa.update(key,
+			delegate V(       ) { added = true ; return value; },
+			delegate V(ref V v) { added = false; return v    ; },
+		);
+		return added;
+	}
+	else
+	{
+		auto p = key in aa;
+		if (!p)
+		{
+			aa[key] = value;
+			return true;
+		}
+		else
+			return false;
+	}
+}
+
+unittest
+{
+	int[int] aa;
+	assert( aa.addNew(1, 2));
+	assert(!aa.addNew(1, 3));
+	assert(aa[1] == 2);
+}
+
 struct KeyValuePair(K, V) { K key; V value; }
 
 /// Get key/value pairs from AA
