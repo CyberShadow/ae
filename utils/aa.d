@@ -39,13 +39,18 @@ ref auto aaGet(AA, K)(auto ref AA aa, K key)
 /// Returns a reference to the value corresponding to key.
 ref V getOrAdd(K, V)(ref V[K] aa, K key, V defaultValue = V.init)
 {
-	auto p = key in aa;
-	if (!p)
+	static if (__traits(hasMember, object, "require"))
+		return aa.require(key, defaultValue);
+	else
 	{
-		aa[key] = defaultValue;
-		p = key in aa;
+		auto p = key in aa;
+		if (!p)
+		{
+			aa[key] = defaultValue;
+			p = key in aa;
+		}
+		return *p;
 	}
-	return *p;
 }
 
 unittest
