@@ -33,7 +33,7 @@ class MappedDataWrapper : DataWrapper
 		mmFile = scoped!MmFile(name, mode, 0, null);
 		mappedData = (from || to) ? mmFile.Scoped_payload[from..(to ? to : mmFile.length)] : mmFile.Scoped_payload[];
 
-		debug(DATA_REFCOUNT) writefln("? -> %s: Created MappedDataWrapper", cast(void*)this);
+		debug(DATA_REFCOUNT) writefln("? -> %s [%s..%s]: Created MappedDataWrapper", cast(void*)this, contents.ptr, contents.ptr + contents.length);
 	}
 
 	debug(DATA_REFCOUNT)

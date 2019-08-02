@@ -187,6 +187,12 @@ public:
 		(cast(void delegate() pure)&clear)();
 	}
 
+	debug(DATA) invariant
+	{
+		if (wrapper)
+			assert(wrapper.references > 0, "Data referencing DataWrapper with bad reference count");
+	}
+
 /*
 	/// Create new instance as a slice over an existing DataWrapper.
 	private this(DataWrapper wrapper, size_t start = 0, size_t end = size_t.max)
@@ -527,7 +533,7 @@ void* unmanagedAlloc(size_t sz)
 {
 	auto p = core.stdc.stdlib.malloc(sz);
 
-	debug(DATA_REFCOUNT) debugLog("? -> %p: Allocating via malloc", p);
+	debug(DATA_REFCOUNT) debugLog("? -> %p: Allocating via malloc (%d bytes)", p, cast(uint)sz);
 
 	if (!p)
 		throw new OutOfMemoryError();
