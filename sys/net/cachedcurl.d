@@ -178,9 +178,14 @@ class CachedCurlNetwork : Network
 		return cachedReq(req);
 	}
 
+	string downloadFile(string url)
+	{
+		return cachedReq(url, HTTP.Method.get).checkOK.responsePath;
+	}
+
 	override void downloadFile(string url, string target)
 	{
-		std.file.copy(cachedReq(url, HTTP.Method.get).checkOK.responsePath, target);
+		std.file.copy(downloadFile(url), target);
 	}
 
 	override void[] getFile(string url)
