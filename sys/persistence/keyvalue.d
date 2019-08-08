@@ -67,7 +67,8 @@ struct KeyValueStore(K, V)
 		return v;
 	}
 
-	bool opIn_r()(auto ref K k)
+	bool opBinaryRight(string op)(auto ref K k)
+	if (op == "in")
 	{
 		checkInitialized();
 		foreach (int count; sqlExists.iterate(toSqlType(k)))

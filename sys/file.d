@@ -1558,7 +1558,8 @@ version (linux)
 			return buf;
 		}
 
-		bool opIn_r(string key)
+		bool opBinaryRight(string op)(string key)
+		if (op == "in")
 		{
 			auto cKey = key.toStringz();
 			auto size = getFun(obj, cKey, null, 0);

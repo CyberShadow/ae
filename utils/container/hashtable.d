@@ -57,7 +57,11 @@ struct HashTable(K, V, uint SIZE, alias ALLOCATOR, alias HASHFUNC="k")
 			return null;
 		}
 
-		V* opIn_r(in K k) { return get(k); } // Issue 11842
+		V* opBinaryRight(string op)(in K k)
+		if (op == "in")
+		{
+			return get(k); // Issue 11842
+		}
 
 		V get(in K k, V def)
 		{

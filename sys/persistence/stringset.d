@@ -46,7 +46,8 @@ struct PersistentStringSet
 
 	this(string fileName) { cache = Cache(fileName); }
 
-	auto opIn_r(string key)
+	auto opBinaryRight(string op)(string key)
+	if (op == "in")
 	{
 		return key in cache;
 	}

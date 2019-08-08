@@ -54,7 +54,8 @@ struct Headers
 		return value;
 	}
 
-	inout(string)* opIn_r(string name) inout @nogc
+	inout(string)* opBinaryRight(string op)(string name) inout @nogc
+	if (op == "in")
 	{
 		auto pvalues = CIAsciiString(name) in headers;
 		if (pvalues && (*pvalues).length)

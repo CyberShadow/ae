@@ -282,7 +282,8 @@ struct OrderedMap(K, V)
 		return p ? values[*p] : defaultValue;
 	}
 
-	inout(V)* opIn_r()(auto ref in K k) inout
+	inout(V)* opBinaryRight(string op)(auto ref in K k) inout
+	if (op == "in")
 	{
 		auto p = k in index;
 		return p ? &values[*p] : null;
@@ -569,7 +570,8 @@ struct OrderedSet(T)
 		return items[i];
 	}
 
-	bool opIn_r()(auto ref in T v) inout
+	bool opBinaryRight(string op)(auto ref in T v) inout
+	if (op == "in")
 	{
 		return !!(v in index);
 	}
@@ -696,7 +698,8 @@ struct MultiAA(K, V)
 		return value;
 	}
 
-	inout(V)* opIn_r(K key) inout @nogc
+	inout(V)* opBinaryRight(string op)(K key) inout @nogc
+	if (op == "in")
 	{
 		auto pvalues = key in items;
 		if (pvalues && (*pvalues).length)
