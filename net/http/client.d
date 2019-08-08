@@ -305,7 +305,8 @@ class HttpsClient : HttpClient
 	override void request(HttpRequest request)
 	{
 		super.request(request);
-		adapter.setHostName(request.host);
+		if (conn.state == ConnectionState.connecting)
+			adapter.setHostName(request.host);
 	}
 }
 
