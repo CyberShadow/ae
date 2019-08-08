@@ -359,15 +359,18 @@ public:
 		return result;
 	}
 
-	Data opCat(T)(const(T)[] data)
+	template opBinary(string op) if (op == "~")
+	{
+		Data opBinary(T)(const(T)[] data)
 		if (!hasIndirections!T)
-	{
-		return concat(data);
-	}
+		{
+			return concat(data);
+		}
 
-	Data opCat()(Data data)
-	{
-		return concat(data.contents);
+		Data opBinary()(Data data)
+		{
+			return concat(data.contents);
+		}
 	}
 
 	Data prepend(const(void)[] data)
@@ -378,10 +381,13 @@ public:
 		return result;
 	}
 
-	Data opCat_r(T)(const(T)[] data)
-		if (!hasIndirections!T)
+	template opBinaryRight(string op) if (op == "~")
 	{
-		return prepend(data);
+		Data opBinaryRight(T)(const(T)[] data)
+		if (!hasIndirections!T)
+		{
+			return prepend(data);
+		}
 	}
 
 	private static size_t getPreallocSize(size_t length)
@@ -404,21 +410,24 @@ public:
 		return this;
 	}
 
-	/// Note that unlike opCat (a ~ b), opCatAssign (a ~= b) will preallocate.
-	Data opCatAssign(T)(const(T)[] data)
+	/// Note that unlike concatenation (a ~ b), appending (a ~= b) will preallocate.
+	template opOpAssign(string op) if (op == "~")
+	{
+		Data opOpAssign(T)(const(T)[] data)
 		if (!hasIndirections!T)
-	{
-		return append(data);
-	}
+		{
+			return append(data);
+		}
 
-	Data opCatAssign()(Data data)
-	{
-		return append(data.contents);
-	}
+		Data opOpAssign()(Data data)
+		{
+			return append(data.contents);
+		}
 
-	Data opCatAssign()(ubyte value) // hack?
-	{
-		return append((&value)[0..1]);
+		Data opOpAssign()(ubyte value) // hack?
+		{
+			return append((&value)[0..1]);
+		}
 	}
 
 	Data opSlice()
