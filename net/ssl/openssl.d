@@ -50,6 +50,37 @@ debug(OPENSSL) import std.stdio : stderr;
 
 // ***************************************************************************
 
+private enum isOpenSSL11 = OPENSSL_VERSION_NUMBER >= OPENSSL_MAKE_VERSION(1, 1, 0, 0);
+
+// Patch up incomplete Deimos bindings.
+
+static if (isOpenSSL11)
+private
+{
+	alias SSLv23_client_method = TLS_client_method;
+	alias SSLv23_server_method = TLS_server_method;
+	void SSL_load_error_strings() {}
+	struct OPENSSL_INIT_SETTINGS;
+	extern(C) void OPENSSL_init_ssl(uint64_t opts, const OPENSSL_INIT_SETTINGS *settings) nothrow;
+	void SSL_library_init() { OPENSSL_init_ssl(0, null); }
+	void OpenSSL_add_all_algorithms() { SSL_library_init(); }
+	extern(C) BIGNUM *BN_get_rfc3526_prime_1536(BIGNUM *bn) nothrow;
+	alias get_rfc3526_prime_1536 = BN_get_rfc3526_prime_1536;
+	extern(C) BIGNUM *BN_get_rfc3526_prime_2048(BIGNUM *bn) nothrow;
+	alias get_rfc3526_prime_2048 = BN_get_rfc3526_prime_2048;
+	extern(C) BIGNUM *BN_get_rfc3526_prime_3072(BIGNUM *bn) nothrow;
+	alias get_rfc3526_prime_3072 = BN_get_rfc3526_prime_3072;
+	extern(C) BIGNUM *BN_get_rfc3526_prime_4096(BIGNUM *bn) nothrow;
+	alias get_rfc3526_prime_4096 = BN_get_rfc3526_prime_4096;
+	extern(C) BIGNUM *BN_get_rfc3526_prime_6144(BIGNUM *bn) nothrow;
+	alias get_rfc3526_prime_6144 = BN_get_rfc3526_prime_6144;
+	extern(C) BIGNUM *BN_get_rfc3526_prime_8192(BIGNUM *bn) nothrow;
+	alias get_rfc3526_prime_8192 = BN_get_rfc3526_prime_8192;
+	extern(C) int SSL_in_init(const SSL *s) nothrow;
+}
+
+// ***************************************************************************
+
 shared static this()
 {
 	SSL_load_error_strings();
