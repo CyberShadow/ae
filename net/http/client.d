@@ -406,6 +406,14 @@ void httpRequest(HttpRequest request, void delegate(Data) resultHandler, void de
 }
 
 /// ditto
+void httpGet(string url, void delegate(HttpResponse response, string disconnectReason) responseHandler)
+{
+	auto request = new HttpRequest;
+	request.resource = url;
+	httpRequest(request, responseHandler);
+}
+
+/// ditto
 void httpGet(string url, void delegate(Data) resultHandler, void delegate(string) errorHandler)
 {
 	auto request = new HttpRequest;
