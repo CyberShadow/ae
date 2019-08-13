@@ -354,6 +354,47 @@ unittest
 	assert([1, 0, 0, 2].splitWithPrefix([0, 0]) == [[1], [0, 0, 2]]);
 }
 
+/// Include delimiters in result chunks as prefix/suffix
+S[] splitWithPrefixAndSuffix(S)(S haystack, S prefix, S suffix)
+{
+	S[] result;
+	auto separator = suffix ~ prefix;
+	while (haystack.length)
+	{
+		auto pos = haystack._indexOf(separator);
+		if (pos < 0)
+			pos = haystack.length;
+		else
+			pos += suffix.length;
+		result ~= haystack[0..pos];
+		haystack = haystack[pos..$];
+	}
+	return result;
+}
+
+///
+unittest
+{
+	auto s = q"EOF
+Section 1:
+10
+11
+12
+Section 2:
+21
+22
+23
+Section 3:
+31
+32
+33
+EOF";
+	auto parts = s.splitWithPrefixAndSuffix("Section ", "\n");
+	assert(parts.length == 3 && parts.join == s);
+	foreach (part; parts)
+		assert(part.startsWith("Section ") && part.endsWith("\n"));
+}
+
 /// Ensure that arr is non-null if empty.
 T nonNull(T)(T arr)
 {
