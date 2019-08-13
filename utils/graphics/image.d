@@ -587,7 +587,10 @@ unittest
 
 static import ae.utils.graphics.bitmap;
 
-enum bitmapNeedV4Header(COLOR) = !is(COLOR == BGR) && !is(COLOR == BGRX);
+// Different software have different standards regarding alpha without a V4 header.
+// ImageMagick will write BMPs with alpha without a V4 header, but not all software will read them.
+enum bitmapNeedV4HeaderForWrite(COLOR) = !is(COLOR == BGR) && !is(COLOR == BGRX);
+enum bitmapNeedV4HeaderForRead (COLOR) = !is(COLOR == BGR) && !is(COLOR == BGRX) && !is(COLOR == BGRA);
 
 uint[4] bitmapChannelMasks(COLOR)()
 {
@@ -673,7 +676,7 @@ if (is(V : const(void)[]))
 		"Mismatching BMP bcBitCount - trying to load a %d-bit .BMP file to a %d-bit Image"
 		.format(header.bcBitCount, COLOR.sizeof * 8));
 
-	static if (bitmapNeedV4Header!COLOR)
+	static if (bitmapNeedV4HeaderForRead!COLOR)
 		enforce(header.VERSION >= 4, "Need a V4+ header to load a %s image".format(COLOR.stringof));
 	if (header.VERSION >= 4)
 	{
@@ -731,7 +734,7 @@ ubyte[] toBMP(SRC)(auto ref SRC src)
 	alias COLOR = ViewColor!SRC;
 
 	import ae.utils.graphics.bitmap;
-	static if (bitmapNeedV4Header!COLOR)
+	static if (bitmapNeedV4HeaderForWrite!COLOR)
 		alias BitmapHeader!4 Header;
 	else
 		alias BitmapHeader!3 Header;
