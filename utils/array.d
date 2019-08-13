@@ -660,7 +660,7 @@ auto list(Args...)(auto ref Args args)
 {
 	struct List
 	{
-		auto dummy() { return args[0]; }
+		auto dummy() { return args[0]; } // https://issues.dlang.org/show_bug.cgi?id=11886
 		void opAssign(T)(auto ref T t)
 		{
 			assert(t.length == args.length,
