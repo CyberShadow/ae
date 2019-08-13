@@ -31,7 +31,7 @@ auto parseViaIMConvert(COLOR)(const(void)[] data)
 	else
 	static if (is(COLOR : BGRA))
 	{
-		convertFlags ~= ["-type", "TrueColor"];
+		convertFlags ~= ["-type", "TrueColorAlpha"];
 		convertFlags ~= ["-alpha", "on"];
 	}
 	return pipe(["convert".imageMagickBinary()] ~ convertFlags ~ ["-[0]", "bmp:-"], data).viewBMP!COLOR();
