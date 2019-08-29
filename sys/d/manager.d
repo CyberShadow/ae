@@ -2008,9 +2008,10 @@ EOS";
 	// **************************** Customization ****************************
 
 	/// Fetch latest D history.
-	void update()
+	/// Return true if any updates were fetched.
+	bool update()
 	{
-		getMetaRepo().update();
+		return getMetaRepo().update();
 	}
 
 	struct SubmoduleState

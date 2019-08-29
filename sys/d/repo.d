@@ -142,14 +142,20 @@ class ManagedRepository
 	}
 
 	/// Update the remote.
-	public void update()
+	/// Return true if any updates were fetched.
+	public bool update()
 	{
 		if (!offline)
 		{
 			log("Updating " ~ name ~ "...");
+			auto oldRefs = git.query(["show-ref"]);
 			git.run("-c", "fetch.recurseSubmodules=false", "remote", "update", "--prune");
 			git.run("-c", "fetch.recurseSubmodules=false", "fetch", "--force", "--tags");
+			auto newRefs = git.query(["show-ref"]);
+			return oldRefs != newRefs;
 		}
+		else
+			return false;
 	}
 
 	// Clean
