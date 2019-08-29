@@ -73,9 +73,15 @@ struct Database
 			if (userVersion != schema.length)
 			{
 				enforce(userVersion <= schema.length, "Database schema version newer than latest supported by this program!");
-				foreach (upgradeInstruction; schema[userVersion..$])
+				while (userVersion < schema.length)
+				{
+					auto upgradeInstruction = schema[userVersion];
+					instance.exec("BEGIN TRANSACTION;");
 					instance.exec(upgradeInstruction);
-				instance.exec("PRAGMA user_version = " ~ text(schema.length));
+					userVersion++;
+					instance.exec("PRAGMA user_version = " ~ text(userVersion));
+					instance.exec("COMMIT TRANSACTION;");
+				}
 			}
 		}
 
