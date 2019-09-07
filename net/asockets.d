@@ -138,6 +138,7 @@ version(LIBEV)
 			}
 		}
 
+	public:
 		/// Register a socket with the manager.
 		void register(GenericSocket socket)
 		{
@@ -159,7 +160,6 @@ version(LIBEV)
 			count--;
 		}
 
-	public:
 		size_t size()
 		{
 			return count;
@@ -231,6 +231,9 @@ else // Use select
 		/// Debug AA to check for dangling socket references.
 		debug GenericSocket[socket_t] socketHandles;
 
+		void delegate()[] idleHandlers;
+
+	public:
 		/// Register a socket with the manager.
 		void register(GenericSocket conn)
 		{
@@ -271,9 +274,6 @@ else // Use select
 			assert(false, "Socket not registered");
 		}
 
-		void delegate()[] idleHandlers;
-
-	public:
 		size_t size()
 		{
 			return sockets.length;
@@ -514,7 +514,7 @@ SocketManager socketManager;
 // ***************************************************************************
 
 /// General methods for an asynchronous socket.
-private abstract class GenericSocket
+abstract class GenericSocket
 {
 	/// Declares notifyRead and notifyWrite.
 	mixin SocketMixin;
