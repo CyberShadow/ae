@@ -741,6 +741,7 @@ protected:
 			notifyWrite = writePending;
 
 		notifyRead = state == ConnectionState.connected && readDataHandler;
+		debug(ASOCKETS) stderr.writefln("[%s] updateFlags: %s %s", conn ? conn.handle : -1, notifyRead, notifyWrite);
 	}
 
 	/// Called when a socket is readable.
@@ -986,6 +987,7 @@ protected:
 	// Work around scope(success) breaking debugger stack traces
 	final private void onWritableImpl()
 	{
+		debug(ASOCKETS) stderr.writefln("[%s] onWritableImpl (we are %s)", conn ? conn.handle : -1, state);
 		if (state == ConnectionState.connecting)
 		{
 			int32_t error;
