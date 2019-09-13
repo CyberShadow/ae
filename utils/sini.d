@@ -78,9 +78,13 @@ if (isSomeString!S)
 	return result;
 }
 
+/// Evaluates to `true` if H is a valid INI handler for a string type S.
+enum isIniHandler(H, S) =
+	is(typeof((H handler, S s) { handler.nodeHandler(s); handler.leafHandler(s); }));
+
 /// Parse a structured INI from a range of lines, through the given handler.
 void parseIni(R, H)(R r, H rootHandler)
-	if (isInputRange!R && isSomeString!(ElementType!R))
+	if (isInputRange!R && isSomeString!(ElementType!R) && isIniHandler!(H, ElementType!R))
 {
 	auto currentHandler = rootHandler;
 
