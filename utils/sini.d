@@ -174,12 +174,12 @@ struct IniTraversingHandler(S)
 	{
 		// Don't reference "this" from a lambda,
 		// as it can be a temporary on the stack
-		IniTraversingHandler thisCopy = this;
+		IniTraversingHandler self = this;
 		return IniHandler!S
 		(
 			(S name, S value)
 			{
-				thisCopy
+				self
 					.nodeHandler
 					.enforce("This group may not have any nodes.")
 					(name)
@@ -189,7 +189,7 @@ struct IniTraversingHandler(S)
 			},
 			(S name)
 			{
-				return thisCopy
+				return self
 					.nodeHandler
 					.enforce("This group may not have any nodes.")
 					(name)
