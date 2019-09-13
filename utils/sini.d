@@ -177,6 +177,7 @@ struct IniTraversingHandler(S)
 		IniTraversingHandler self = this;
 		return IniHandler!S
 		(
+			self.nodeHandler is null ? null :
 			(S name, S value)
 			{
 				self
@@ -187,6 +188,7 @@ struct IniTraversingHandler(S)
 					.enforce("This group may not have a value.")
 					(value);
 			},
+			self.nodeHandler is null ? null :
 			(S name)
 			{
 				return self
