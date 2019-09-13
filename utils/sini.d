@@ -29,7 +29,7 @@ alias std.string.indexOf indexOf;
 struct IniHandler(S)
 {
 	/// User callback for parsing a value at this node.
-	void delegate(S name, S value) leafHandler;
+	void delegate(S value) leafHandler;
 
 	/// User callback for obtaining a child node from this node.
 	IniHandler delegate(S name) nodeHandler;
@@ -108,13 +108,13 @@ void parseIni(R, H)(R r, H rootHandler)
 				auto handler = currentHandler;
 				auto segments = line.name.split(".");
 				enforce(segments.length, "Malformed value line (empty name)");
-				foreach (segment; segments[0..$-1])
+				foreach (segment; segments)
 					handler = handler.nodeHandler
 						.enforce("This group may not have any nodes.")
 						(segment);
 				handler.leafHandler
 					.enforce("This group may not have any values.")
-					(segments[$-1], line.value);
+					(line.value);
 				break;
 			}
 		}
@@ -122,10 +122,51 @@ void parseIni(R, H)(R r, H rootHandler)
 }
 
 /// Helper which creates an INI handler out of delegates.
-IniHandler!S iniHandler(S)(void delegate(S, S) leafHandler, IniHandler!S delegate(S) nodeHandler = null)
+IniHandler!S iniHandler(S)(void delegate(S) leafHandler, IniHandler!S delegate(S) nodeHandler = null)
 {
 	return IniHandler!S(leafHandler, nodeHandler);
 }
+
+/// Alternative API for IniHandler, where each leaf accepts name/value
+/// pairs instead of single values.
+struct IniThickLeafHandler(S)
+{
+	/// User callback for parsing a value at this node.
+	void delegate(S name, S value) leafHandler;
+
+	/// User callback for obtaining a child node from this node.
+	IniThickLeafHandler delegate(S name) nodeHandler;
+
+	private IniHandler!S conv(S currentName = null)
+	{
+		// Don't reference "this" from a lambda,
+		// as it can be a temporary on the stack
+		IniThickLeafHandler self = this;
+		return IniHandler!S
+		(
+			!currentName || !self.leafHandler ? null :
+			(S value)
+			{
+				self.leafHandler(currentName, value);
+			},
+			(currentName ? !self.nodeHandler : !self.nodeHandler && !self.leafHandler) ? null :
+			(S name)
+			{
+				if (!currentName)
+					return self.conv(name);
+				else
+					return self.nodeHandler(currentName).conv(name);
+			}
+		);
+	}
+}
+
+/// Helper which creates an IniThinkLeafHandler.
+IniHandler!S iniHandler(S)(void delegate(S, S) leafHandler, IniThickLeafHandler!S delegate(S) nodeHandler = null)
+{
+	return IniThickLeafHandler!S(leafHandler, nodeHandler).conv(null);
+}
+
 
 unittest
 {
@@ -161,55 +202,15 @@ unittest
 	assert(count==2);
 }
 
-/// Alternative API for IniHandler, where each leaf is a node
-struct IniTraversingHandler(S)
-{
-	/// User callback for parsing a value at this node.
-	void delegate(S value) leafHandler;
-
-	/// User callback for obtaining a child node from this node.
-	IniTraversingHandler delegate(S name) nodeHandler;
-
-	private IniHandler!S conv()
-	{
-		// Don't reference "this" from a lambda,
-		// as it can be a temporary on the stack
-		IniTraversingHandler self = this;
-		return IniHandler!S
-		(
-			self.nodeHandler is null ? null :
-			(S name, S value)
-			{
-				self
-					.nodeHandler
-					.enforce("This group may not have any nodes.")
-					(name)
-					.leafHandler
-					.enforce("This group may not have a value.")
-					(value);
-			},
-			self.nodeHandler is null ? null :
-			(S name)
-			{
-				return self
-					.nodeHandler
-					.enforce("This group may not have any nodes.")
-					(name)
-					.conv();
-			}
-		);
-	}
-}
-
 enum isNestingType(T) = isAssociativeArray!T || is(T == struct);
 
-IniTraversingHandler!S makeIniHandler(S = string, U)(ref U v)
+IniHandler!S makeIniHandler(S = string, U)(ref U v)
 {
 	static if (!is(U == Unqual!U))
 		return makeIniHandler!S(*cast(Unqual!U*)&v);
 	else
 	static if (is(typeof((ref U v){alias V=typeof(v[S.init]); v[S.init] = V.init; *(S.init in v) = V.init;})))
-		return IniTraversingHandler!S
+		return IniHandler!S
 		(
 			null,
 			(S name)
@@ -228,10 +229,10 @@ IniTraversingHandler!S makeIniHandler(S = string, U)(ref U v)
 		);
 	else
 	static if (is(U == struct))
-		return IniTraversingHandler!S
+		return IniHandler!S
 		(
 			null,
-			delegate IniTraversingHandler!S (S name)
+			delegate IniHandler!S (S name)
 			{
 				bool found;
 				foreach (i, ref field; v.tupleof)
@@ -253,7 +254,7 @@ IniTraversingHandler!S makeIniHandler(S = string, U)(ref U v)
 		);
 	else
 	static if (isAssociativeArray!U)
-		return IniTraversingHandler!S
+		return IniHandler!S
 		(
 			null,
 			(S name)
@@ -274,7 +275,7 @@ IniTraversingHandler!S makeIniHandler(S = string, U)(ref U v)
 		);
 	else
 	static if (is(typeof(to!U(string.init))))
-		return IniTraversingHandler!S
+		return IniHandler!S
 		(
 			(S value)
 			{
@@ -306,7 +307,7 @@ T parseIni(T, R)(R r)
 void parseIniInto(R, T)(R r, ref T result)
 	if (isInputRange!R && isSomeString!(ElementType!R))
 {
-	parseIni(r, makeIniHandler!(ElementType!R)(result).conv());
+	parseIni(r, makeIniHandler!(ElementType!R)(result));
 }
 
 unittest
@@ -442,9 +443,7 @@ unittest
 
 // ***************************************************************************
 
-deprecated alias StructuredIniHandler = IniHandler;
 deprecated alias parseStructuredIni = parseIni;
-deprecated alias StructuredIniTraversingHandler = IniTraversingHandler;
 deprecated alias makeStructuredIniHandler = makeIniHandler;
 
 // ***************************************************************************
