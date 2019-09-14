@@ -21,6 +21,7 @@ import std.string;
 import std.traits;
 
 import ae.utils.exception;
+import ae.utils.meta : boxVoid, unboxVoid;
 
 alias std.string.indexOf indexOf;
 
@@ -208,29 +209,49 @@ unittest
 
 enum isNestingType(T) = isAssociativeArray!T || is(T == struct);
 
+private enum isAALike(U, S) = is(typeof(
+	(ref U v)
+	{
+		alias K = typeof(v.keys[0]);
+		alias V = typeof(v[K.init]);
+		v.require(K.init);
+	}
+));
+
 IniHandler!S makeIniHandler(S = string, U)(ref U v)
 {
 	static if (!is(U == Unqual!U))
 		return makeIniHandler!S(*cast(Unqual!U*)&v);
 	else
-	static if (is(typeof((ref U v){alias V=typeof(v[S.init]); v[S.init] = V.init; *(S.init in v) = V.init;})))
+	static if (isAALike!(U, S))
 		return IniHandler!S
 		(
 			null,
 			(S name)
 			{
-				auto pField = name in v;
-				if (!pField)
+				alias K = typeof(v.keys[0]);
+				alias V = typeof(v[K.init]);
+
+				auto key = name.to!K;
+
+				auto update(T)(T delegate(ref V) dg)
 				{
-					v[name] = typeof(v[name]).init;
-					pField = name in v;
+					static if (!isNestingType!U)
+						if (key in v)
+							throw new Exception("Duplicate value: " ~ to!string(name));
+					return dg(v.require(key));
 				}
-				else
-				static if (!isNestingType!U)
-					throw new Exception("Duplicate value: " ~ to!string(name));
-				return makeIniHandler!S(*pField);
+
+				return IniHandler!S
+				(
+					(S value) => update((ref V v) => makeIniHandler!S(v).leafHandler(value)),
+					(S name2) => update((ref V v) => makeIniHandler!S(v).nodeHandler(name2)),
+				);
 			}
 		);
+	else
+	static if (isAssociativeArray!U)
+		static assert(false, "Unsupported associative array type " ~ U.stringof);
 	else
 	static if (is(U == struct))
 		return IniHandler!S
@@ -254,37 +275,6 @@ IniHandler!S makeIniHandler(S = string, U)(ref U v)
 					return v.parseSection(name);
 				else
 					throw new Exception("Unknown field " ~ to!string(name));
-			}
-		);
-	else
-	static if (isAssociativeArray!U)
-		return IniHandler!S
-		(
-			null,
-			(S name)
-			{
-				return IniHandler!S
-				(
-					(S value)
-					{
-						alias K = typeof(v.keys[0]);
-						alias V = typeof(v.values[0]);
-						auto key = to!K(name);
-						v.update(
-							key,
-							{
-								return value.to!V;
-							},
-							(ref V v)
-							{
-								static if (!isNestingType!U)
-									throw new Exception("Duplicate value: " ~ to!string(name));
-								else
-									return value.to!V;
-							}
-						);
-					}
-				);
 			}
 		);
 	else
@@ -391,7 +381,10 @@ unittest
 {
 	import ae.utils.aa;
 
-	auto o = parseIni!(OrderedMap!(string, string))
+	alias M = OrderedMap!(string, string);
+	static assert(isAALike!(M, string));
+
+	auto o = parseIni!M
 	(
 		q"<
 			b=b
@@ -407,8 +400,10 @@ unittest
 	import ae.utils.aa;
 
 	static struct S { string x; }
+	alias M = OrderedMap!(string, S);
+	static assert(isAALike!(M, string));
 
-	auto o = parseIni!(OrderedMap!(string, S))
+	auto o = parseIni!M
 	(
 		q"<
 			b.x=b
