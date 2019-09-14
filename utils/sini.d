@@ -113,11 +113,19 @@ void parseIni(R, H)(R r, H rootHandler)
 				auto handler = currentHandler;
 				auto segments = line.name.split(".");
 				enforce(segments.length, "Malformed value line (empty name)");
-				foreach (segment; segments)
-					handler = handler.nodeHandler
-						.enforce("This group may not have any nodes.")
-						(segment);
-				handler.leafHandler
+				enforce(handler.nodeHandler, "This group may not have any nodes.");
+				while (segments.length > 1)
+				{
+					auto next = handler.nodeHandler(segments[0]);
+					if (!next.nodeHandler)
+						break;
+					handler = next;
+					segments = segments[1..$];
+				}
+				handler.nodeHandler
+					.enforce("This group may not have any nodes.")
+					(segments.join("."))
+					.leafHandler
 					.enforce("This group may not have any values.")
 					(line.value);
 				break;
@@ -242,10 +250,17 @@ IniHandler!S makeIniHandler(S = string, U)(ref U v)
 					return dg(v.require(key));
 				}
 
+				// To know if the value handler will accept leafs or nodes requires constructing the handler.
+				// To construct the handler we must have a pointer to the object it will handle.
+				// To have a pointer to the object means to allocate it in the AA...
+				// but, we can't do that until we know it's going to be written to.
+				// So, introspect what the handler for this type can handle at compile-time instead.
+				static immutable dummyHandler = { V dummy; return makeIniHandler!S(dummy); }();
+
 				return IniHandler!S
 				(
-					(S value) => update((ref V v) => makeIniHandler!S(v).leafHandler(value)),
-					(S name2) => update((ref V v) => makeIniHandler!S(v).nodeHandler(name2)),
+					!dummyHandler.leafHandler ? null : (S value) => update((ref V v) => makeIniHandler!S(v).leafHandler(value)),
+					!dummyHandler.nodeHandler ? null : (S name2) => update((ref V v) => makeIniHandler!S(v).nodeHandler(name2)),
 				);
 			}
 		);
@@ -448,6 +463,18 @@ unittest
 		assert(s.x == "x");
 		assert(s.y == "v");
 	}
+}
+
+unittest
+{
+	auto r = parseIni!(string[string])
+	(
+		q"<
+			a.b.c=d.e.f
+		>".splitLines()
+	);
+
+	assert(r == ["a.b.c" : "d.e.f"]);
 }
 
 // ***************************************************************************
