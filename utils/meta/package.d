@@ -221,6 +221,55 @@ unittest
 
 // ************************************************************************
 
+/// What to use instead of void for boxVoid/unboxVoid.
+/// Use void[0] instead of an empty struct as this one has a .sizeof
+/// of 0, unlike the struct.
+alias BoxedVoid = void[0];
+
+/// D does not allow void variables or parameters.
+/// As such, there is no "common type" for functions that return void
+/// and non-void.
+/// To allow generic metaprogramming in such cases, this function will
+/// "box" a void expression to a different type.
+auto boxVoid(T)(lazy T expr)
+{
+	static if (is(T == void))
+	{
+		expr;
+		return BoxedVoid.init;
+	}
+	else
+		return expr;
+}
+
+/// Inverse of boxVoid.
+/// Can be used in a return statement, i.e.:
+/// return unboxVoid(someBoxedVoid);
+auto ref unboxVoid(T)(auto ref T value)
+{
+	static if (is(T == BoxedVoid))
+		return;
+	else
+		return value;
+}
+
+unittest
+{
+	auto process(T)(T delegate() dg)
+	{
+		auto result = dg().boxVoid;
+		return result.unboxVoid;
+	}
+
+	int fun() { return 5; }
+	assert(process(&fun) == 5);
+
+	void gun() { }
+	static assert(is(typeof(process(&gun)) == void));
+}
+
+// ************************************************************************
+
 // http://d.puremagic.com/issues/show_bug.cgi?id=7805
 static template stringofArray(Args...)
 {
