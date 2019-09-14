@@ -263,18 +263,25 @@ IniHandler!S makeIniHandler(S = string, U)(ref U v)
 			null,
 			(S name)
 			{
-				alias K = typeof(v.keys[0]);
-				auto key = to!K(name);
-				auto pField = key in v;
-				if (!pField)
-				{
-					v[key] = typeof(v[key]).init;
-					pField = key in v;
-				}
-				else
-				static if (!isNestingType!U)
-					throw new Exception("Duplicate value: " ~ to!string(name));
-				return makeIniHandler!S(*pField);
+				return IniHandler!S
+				(
+					(S value)
+					{
+						alias K = typeof(v.keys[0]);
+						alias V = typeof(v.values[0]);
+						auto key = to!K(name);
+						auto pField = key in v;
+						if (!pField)
+						{
+							v[key] = typeof(v[key]).init;
+							pField = key in v;
+						}
+						else
+						static if (!isNestingType!U)
+							throw new Exception("Duplicate value: " ~ to!string(name));
+						*pField = value.to!V;
+					}
+				);
 			}
 		);
 	else
