@@ -248,16 +248,16 @@ struct OrderedMap(K, V)
 
 	private enum bool haveObjectRequire = is(typeof({ int[int] aa; aa.require(1, 2); }));
 
-	ref V getOrAdd()(auto ref K k)
+	ref V getOrAdd()(auto ref K key)
 	{
 		V* pv;
 		static if (haveObjectRequire)
 		{
 			index.update(
-				k,
+				key,
 				{
 					auto i = values.length;
-					keys ~= k;
+					keys ~= key;
 					values ~= V.init;
 					pv = &values[i];
 					return i;
@@ -271,13 +271,13 @@ struct OrderedMap(K, V)
 		}
 		else
 		{
-			auto pi = k in index;
+			auto pi = key in index;
 			if (pi)
 				pv = &values[*pi];
 			else
 			{
-				index[k] = values.length;
-				keys ~= k;
+				index[key] = values.length;
+				keys ~= key;
 				values ~= V.init;
 				pv = &values[$-1];
 			}
