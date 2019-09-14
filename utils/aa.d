@@ -285,6 +285,44 @@ struct OrderedMap(K, V)
 		return *pv;
 	}
 
+	void update(C, U)(auto ref K key, scope C create, scope U update)
+	if (is(typeof(create()) : V) && is(typeof(update(*(V*).init)) : V))
+	{
+		static if (haveObjectRequire)
+		{
+			index.update(
+				key,
+				{
+					auto i = values.length;
+					keys ~= key;
+					values ~= create();
+					return i;
+				},
+				(ref size_t i)
+				{
+					auto pv = &values[i];
+					*pv = update(*pv);
+					return i;
+				}
+			);
+		}
+		else
+		{
+			auto pi = key in index;
+			if (pi)
+			{
+				auto pv = &values[*pi];
+				*pv = update(*pv);
+			}
+			else
+			{
+				index[key] = values.length;
+				keys ~= key;
+				values ~= create();
+			}
+		}
+	}
+
 	ref V getOrAdd()(auto ref K key)
 	{
 		return require(key);
@@ -450,6 +488,21 @@ unittest
 	class C {}
 	const OrderedMap!(string, C) m;
 	m.byKeyValue;
+}
+
+unittest
+{
+	OrderedMap!(int, int) m;
+	m.update(10,
+		{ return 20; },
+		(ref int k) { k++; return 30; },
+	);
+	assert(m.length == 1 && m[10] == 20);
+	m.update(10,
+		{ return 40; },
+		(ref int k) { k++; return 50; },
+	);
+	assert(m.length == 1 && m[10] == 50);
 }
 
 // https://issues.dlang.org/show_bug.cgi?id=18606
