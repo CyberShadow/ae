@@ -245,7 +245,7 @@ auto boxVoid(T)(lazy T expr)
 /// Inverse of boxVoid.
 /// Can be used in a return statement, i.e.:
 /// return unboxVoid(someBoxedVoid);
-auto ref unboxVoid(T)(auto ref T value)
+auto unboxVoid(T)(T value)
 {
 	static if (is(T == BoxedVoid))
 		return;
@@ -255,14 +255,16 @@ auto ref unboxVoid(T)(auto ref T value)
 
 unittest
 {
+	struct S { void* p; }
+
 	auto process(T)(T delegate() dg)
 	{
 		auto result = dg().boxVoid;
 		return result.unboxVoid;
 	}
 
-	int fun() { return 5; }
-	assert(process(&fun) == 5);
+	S fun() { return S(); }
+	assert(process(&fun) == S.init);
 
 	void gun() { }
 	static assert(is(typeof(process(&gun)) == void));
