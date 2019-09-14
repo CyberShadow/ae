@@ -246,18 +246,41 @@ struct OrderedMap(K, V)
 		return values[$-1];
 	}
 
+	private enum bool haveObjectRequire = is(typeof({ int[int] aa; aa.require(1, 2); }));
+
 	ref V getOrAdd()(auto ref K k)
 	{
-		auto pi = k in index;
 		V* pv;
-		if (pi)
-			pv = &values[*pi];
+		static if (haveObjectRequire)
+		{
+			index.update(
+				k,
+				{
+					auto i = values.length;
+					keys ~= k;
+					values ~= V.init;
+					pv = &values[i];
+					return i;
+				},
+				(ref size_t i)
+				{
+					pv = &values[i];
+					return i;
+				}
+			);
+		}
 		else
 		{
-			index[k] = values.length;
-			keys ~= k;
-			values ~= V.init;
-			pv = &values[$-1];
+			auto pi = k in index;
+			if (pi)
+				pv = &values[*pi];
+			else
+			{
+				index[k] = values.length;
+				keys ~= k;
+				values ~= V.init;
+				pv = &values[$-1];
+			}
 		}
 		return *pv;
 	}
