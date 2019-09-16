@@ -1,5 +1,5 @@
 install:
-  - ps: Start-FileDownload 'http://downloads.dlang.org/releases/2.x/2.076.0/dmd.2.076.0.windows.7z' -FileName 'dmd2.7z'
+  - ps: Start-FileDownload 'http://downloads.dlang.org/releases/2.x/2.082.1/dmd.2.082.1.windows.7z' -FileName 'dmd2.7z'
   - 7z x dmd2.7z > nul
   - set PATH=%CD%\dmd2\windows\bin;%CD%\dmd2\windows\bin64;%PATH%
   - dmd.exe --version

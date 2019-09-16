@@ -1,5 +1,5 @@
 language: d
-d: dmd-2.076.0
+d: dmd-2.082.1
 os:
   - linux
   - osx
