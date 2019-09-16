@@ -169,3 +169,26 @@ static assert(is(TypeForBits!8 == ubyte));
 static assert(is(TypeForBits!9 == ushort));
 static assert(is(TypeForBits!64 == ulong));
 static assert(!is(TypeForBits!65));
+
+void minimize(T, Args...)(ref T v, Args args)
+if (is(typeof({ import std.algorithm.comparison : min; v = min(v, args); })))
+{
+	import std.algorithm.comparison : min;
+	v = min(v, args);
+}
+
+void maximize(T, Args...)(ref T v, Args args)
+if (is(typeof({ import std.algorithm.comparison : max; v = max(v, args); })))
+{
+	import std.algorithm.comparison : max;
+	v = max(v, args);
+}
+
+unittest
+{
+	int i = 5;
+	i.minimize(2); assert(i == 2);
+	i.minimize(5); assert(i == 2);
+	i.maximize(5); assert(i == 5);
+	i.maximize(2); assert(i == 5);
+}
