@@ -18,6 +18,7 @@ files=$(echo "$files" | grep -v  '^utils/serialization/') # Needs __traits(child
 files=$(echo "$files" | grep -vxF 'utils/alloc.d') # Needs alias template parameter binding
 files=$(echo "$files" | grep -vxF 'utils/container/list.d') # Needs ae.utils.alloc
 files=$(echo "$files" | grep -vxF 'utils/container/package.d') # Needs ae.utils.container.list
+files=$(echo "$files" | grep -vxF 'utils/container/hashtable.d') # Needs ae.utils.alloc
 files=$(echo "$files" | grep -vxF 'utils/xmldom.d') # Needs ae.utils.alloc
 
 files=$(echo "$files" | grep -vxF 'sys/vfs_curl.d') # Deprecated redirect
