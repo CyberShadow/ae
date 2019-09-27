@@ -541,6 +541,12 @@ struct HashSet(T)
 		data[k] = v;
 	}
 
+	bool addNew(T k)
+	{
+		void[0] v;
+		return data.addNew(k, v);
+	}
+
 	void remove(T k)
 	{
 		data.remove(k);
