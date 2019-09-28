@@ -131,3 +131,32 @@ struct TestAliasStructBinding
 /// Does this compiler support binding lambdas via struct template alias parameters?
 /// https://github.com/dlang/dmd/pull/5518
 enum haveAliasStructBinding = __traits(compiles, TestAliasStructBinding.test());
+
+// ************************************************************************
+
+struct TestDualContext
+{
+	struct S
+	{
+		int i;
+		void call(alias f)()
+		{
+			f(i);
+		}
+	}
+
+	static void test()()
+	{
+		int n;
+		void fun(int i) { n = i; }
+		S s;
+		s.call!fun();
+	}
+}
+
+/// Does this compiler support dual context pointers?
+/// https://github.com/dlang/dmd/pull/9282
+version (DMD)
+	enum haveDualContext = __traits(compiles, TestDualContext.test());
+else
+	enum haveDualContext = false; // https://github.com/ldc-developers/ldc/commit/d93087ad90664e9be87b79cf70c0f3d26f30f107#commitcomment-35276701
