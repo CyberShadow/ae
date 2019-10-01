@@ -42,7 +42,7 @@ void addSignalHandler(int signum, SignalHandler fn)
 	{
 		alias sigfn_t = typeof(signal(0, null));
 		auto old = signal(signum, cast(sigfn_t)&sighandle);
-		assert(old == SIG_DFL, "A signal handler was already set");
+		assert(old == SIG_DFL || old == SIG_IGN, "A signal handler was already set");
 	}
 	handlers[signum] ~= fn;
 }
