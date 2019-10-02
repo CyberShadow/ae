@@ -436,6 +436,50 @@ unittest
 	assert(a==11 && b==21 && c == 31 && d == 10);
 }
 
+enum bool haveCommonType(T...) = is(CommonType!T) && !is(CommonType!T == void);
+
+/// Lazily evaluate and return first true-ish result; otherwise return last result.
+CommonType!Args or(Args...)(lazy Args args)
+if (haveCommonType!Args)
+{
+	foreach (n; RangeTuple!(Args.length-1))
+	{
+		auto r = args[n];
+		if (r)
+			return r;
+	}
+	return args[$-1];
+}
+
+unittest
+{
+	assert(or(0, 7, 5) == 7);
+	assert(or(0, 0, 0) == 0);
+	int fun() { assert(false); }
+	assert(or(0, 7, fun) == 7);
+}
+
+/// Lazily evaluate and return first false-ish result; otherwise return last result.
+CommonType!Args and(Args...)(lazy Args args)
+if (haveCommonType!Args)
+{
+	foreach (n; RangeTuple!(Args.length-1))
+	{
+		auto r = args[n];
+		if (!r)
+			return r;
+	}
+	return args[$-1];
+}
+
+unittest
+{
+	assert(and(7, 5, 0) == 0);
+	assert(and(7, 5, 3) == 3);
+	int fun() { assert(false); }
+	assert(and(7, 0, fun) == 0);
+}
+
 // ************************************************************************
 
 // Using a compiler with UDA support?
