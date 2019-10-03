@@ -27,7 +27,7 @@ import std.socket;
 import std.string : format;
 public import std.socket : Address, AddressInfo, Socket;
 
-debug(ASOCKETS) import std.stdio;
+debug(ASOCKETS) import std.stdio : stderr;
 debug(PRINTDATA) static import std.stdio;
 debug(PRINTDATA) import ae.utils.text : hexDump;
 private import std.conv : to;
@@ -237,7 +237,7 @@ else // Use select
 		/// Register a socket with the manager.
 		void register(GenericSocket conn)
 		{
-			debug (ASOCKETS) writefln("Registering %s (%d total)", conn, sockets.length + 1);
+			debug (ASOCKETS) stderr.writefln("Registering %s (%d total)", conn, sockets.length + 1);
 			assert(!conn.socket.blocking, "Trying to register a blocking socket");
 			sockets ~= conn;
 
@@ -253,7 +253,7 @@ else // Use select
 		/// Unregister a socket with the manager.
 		void unregister(GenericSocket conn)
 		{
-			debug (ASOCKETS) writefln("Unregistering %s (%d total)", conn, sockets.length - 1);
+			debug (ASOCKETS) stderr.writefln("Unregistering %s (%d total)", conn, sockets.length - 1);
 
 			debug
 			{
@@ -282,7 +282,7 @@ else // Use select
 		/// Loop continuously until no sockets are left.
 		void loop()
 		{
-			debug (ASOCKETS) writeln("Starting event loop.");
+			debug (ASOCKETS) stderr.writeln("Starting event loop.");
 
 			SocketSet readset, writeset, errorset;
 			size_t sockcount;
@@ -305,7 +305,7 @@ else // Use select
 
 				if (setSize < minSize)
 				{
-					debug (ASOCKETS) writefln("Resizing SocketSets: %d => %d", setSize, minSize*2);
+					debug (ASOCKETS) stderr.writefln("Resizing SocketSets: %d => %d", setSize, minSize*2);
 					setSize = minSize * 2;
 					readset  = new SocketSet(setSize);
 					writeset = new SocketSet(setSize);
@@ -320,7 +320,7 @@ else // Use select
 
 				sockcount = 0;
 				bool haveActive;
-				debug (ASOCKETS) writeln("Populating sets");
+				debug (ASOCKETS) stderr.writeln("Populating sets");
 				foreach (GenericSocket conn; sockets)
 				{
 					if (!conn.socket)
@@ -329,38 +329,38 @@ else // Use select
 					if (!conn.daemon)
 						haveActive = true;
 
-					debug (ASOCKETS) writef("\t%s:", conn);
+					debug (ASOCKETS) stderr.writef("\t%s:", conn);
 					if (conn.notifyRead)
 					{
 						readset.add(conn.socket);
-						debug (ASOCKETS) write(" READ");
+						debug (ASOCKETS) stderr.write(" READ");
 					}
 					if (conn.notifyWrite)
 					{
 						writeset.add(conn.socket);
-						debug (ASOCKETS) write(" WRITE");
+						debug (ASOCKETS) stderr.write(" WRITE");
 					}
 					errorset.add(conn.socket);
-					debug (ASOCKETS) writeln();
+					debug (ASOCKETS) stderr.writeln();
 				}
 				debug (ASOCKETS)
 				{
-					writefln("Sets populated as follows:");
+					stderr.writefln("Sets populated as follows:");
 					printSets(readset, writeset, errorset);
 				}
 
-				debug (ASOCKETS) writefln("Waiting (%d sockets, %s timer events, %d idle handlers)...",
+				debug (ASOCKETS) stderr.writefln("Waiting (%d sockets, %s timer events, %d idle handlers)...",
 					sockcount,
 					mainTimer.isWaiting() ? "with" : "no",
 					idleHandlers.length,
 				);
 				if (!haveActive && !mainTimer.isWaiting())
 				{
-					debug (ASOCKETS) writeln("No more sockets or timer events, exiting loop.");
+					debug (ASOCKETS) stderr.writeln("No more sockets or timer events, exiting loop.");
 					break;
 				}
 
-				debug (ASOCKETS) { stdout.flush(); stderr.flush(); }
+				debug (ASOCKETS) stderr.flush();
 
 				int events;
 				if (idleHandlers.length)
@@ -394,7 +394,7 @@ else // Use select
 				else
 					events = Socket.select(readset, writeset, errorset);
 
-				debug (ASOCKETS) writefln("%d events fired.", events);
+				debug (ASOCKETS) stderr.writefln("%d events fired.", events);
 
 				if (events > 0)
 				{
@@ -428,15 +428,15 @@ else // Use select
 			foreach (GenericSocket conn; sockets)
 			{
 				if (!conn.socket)
-					writefln("\t\t%s is unset", conn);
+					stderr.writefln("\t\t%s is unset", conn);
 				else
 				{
 					if (readset.isSet(conn.socket))
-						writefln("\t\t%s is readable", conn);
+						stderr.writefln("\t\t%s is readable", conn);
 					if (writeset.isSet(conn.socket))
-						writefln("\t\t%s is writable", conn);
+						stderr.writefln("\t\t%s is writable", conn);
 					if (errorset.isSet(conn.socket))
-						writefln("\t\t%s is errored", conn);
+						stderr.writefln("\t\t%s is errored", conn);
 				}
 			}
 		}
@@ -445,7 +445,7 @@ else // Use select
 		{
 			debug (ASOCKETS)
 			{
-				writefln("\tSelect results:");
+				stderr.writefln("\tSelect results:");
 				printSets(readset, writeset, errorset);
 			}
 
@@ -456,19 +456,19 @@ else // Use select
 
 				if (readset.isSet(conn.socket))
 				{
-					debug (ASOCKETS) writefln("\t%s - calling onReadable", conn);
+					debug (ASOCKETS) stderr.writefln("\t%s - calling onReadable", conn);
 					return conn.onReadable();
 				}
 				else
 				if (writeset.isSet(conn.socket))
 				{
-					debug (ASOCKETS) writefln("\t%s - calling onWritable", conn);
+					debug (ASOCKETS) stderr.writefln("\t%s - calling onWritable", conn);
 					return conn.onWritable();
 				}
 				else
 				if (errorset.isSet(conn.socket))
 				{
-					debug (ASOCKETS) writefln("\t%s - calling onError", conn);
+					debug (ASOCKETS) stderr.writefln("\t%s - calling onError", conn);
 					return conn.onError("select() error: " ~ conn.socket.getErrorText());
 				}
 			}
@@ -775,12 +775,12 @@ protected:
 
 			if (state == ConnectionState.disconnecting)
 			{
-				debug (ASOCKETS) writefln("\t\t%s: Discarding received data because we are disconnecting", this);
+				debug (ASOCKETS) stderr.writefln("\t\t%s: Discarding received data because we are disconnecting", this);
 			}
 			else
 			if (!readDataHandler)
 			{
-				debug (ASOCKETS) writefln("\t\t%s: Discarding received data because there is no data handler", this);
+				debug (ASOCKETS) stderr.writefln("\t\t%s: Discarding received data because there is no data handler", this);
 			}
 			else
 			{
@@ -809,7 +809,7 @@ protected:
 	{
 		if (state == ConnectionState.disconnecting)
 		{
-			debug (ASOCKETS) writefln("Socket error while disconnecting @ %s: %s".format(cast(void*)this, reason));
+			debug (ASOCKETS) stderr.writefln("Socket error while disconnecting @ %s: %s".format(cast(void*)this, reason));
 			return close();
 		}
 
@@ -835,7 +835,7 @@ public:
 			{
 				assert(conn, "Attempting to disconnect on an uninitialized socket");
 				// queue disconnect after all data is sent
-				debug (ASOCKETS) writefln("[%s] Queueing disconnect: %s", remoteAddressStr, reason);
+				debug (ASOCKETS) stderr.writefln("[%s] Queueing disconnect: %s", remoteAddressStr, reason);
 				state = ConnectionState.disconnecting;
 				//setIdleTimeout(30.seconds);
 				if (disconnectHandler)
@@ -847,7 +847,7 @@ public:
 				discardQueues();
 		}
 
-		debug (ASOCKETS) writefln("Disconnecting @ %s: %s", cast(void*)this, reason);
+		debug (ASOCKETS) stderr.writefln("Disconnecting @ %s: %s", cast(void*)this, reason);
 
 		if ((state == ConnectionState.connecting && conn) || state == ConnectionState.connected)
 			close();
@@ -1020,11 +1020,11 @@ protected:
 					if (pdata.length)
 					{
 						sent = doSend(pdata.contents);
-						debug (ASOCKETS) writefln("\t\t%s: sent %d/%d bytes", this, sent, pdata.length);
+						debug (ASOCKETS) stderr.writefln("\t\t%s: sent %d/%d bytes", this, sent, pdata.length);
 					}
 					else
 					{
-						debug (ASOCKETS) writefln("\t\t%s: empty Data object", this);
+						debug (ASOCKETS) stderr.writefln("\t\t%s: empty Data object", this);
 					}
 
 					if (sent == Socket.ERROR)
@@ -1062,7 +1062,7 @@ protected:
 			bufferFlushedHandler();
 		if (state == ConnectionState.disconnecting)
 		{
-			debug (ASOCKETS) writefln("Closing @ %s (Delayed disconnect - buffer flushed)", cast(void*)this);
+			debug (ASOCKETS) stderr.writefln("Closing @ %s (Delayed disconnect - buffer flushed)", cast(void*)this);
 			close();
 		}
 	}
@@ -1141,7 +1141,7 @@ protected:
 
 			socketManager.register(this);
 			updateFlags();
-			debug (ASOCKETS) writefln("Attempting connection to %s", addressInfo.address.toString());
+			debug (ASOCKETS) stderr.writefln("Attempting connection to %s", addressInfo.address.toString());
 			conn.connect(addressInfo.address);
 		}
 		catch (SocketException e)
@@ -1167,7 +1167,7 @@ public:
 	/// Default constructor
 	this()
 	{
-		debug (ASOCKETS) writefln("New TcpConnection @ %s", cast(void*)this);
+		debug (ASOCKETS) stderr.writefln("New TcpConnection @ %s", cast(void*)this);
 	}
 
 	/// Start establishing a connection.
@@ -1176,7 +1176,7 @@ public:
 		assert(host.length, "Empty host");
 		assert(port, "No port specified");
 
-		debug (ASOCKETS) writefln("Connecting to %s:%s", host, port);
+		debug (ASOCKETS) stderr.writefln("Connecting to %s:%s", host, port);
 		assert(state == ConnectionState.disconnected, "Attempting to connect on a %s socket".format(state));
 
 		state = ConnectionState.resolving;
@@ -1188,9 +1188,9 @@ public:
 			enforce(addresses.length, "No addresses found");
 			debug (ASOCKETS)
 			{
-				writefln("Resolved to %s addresses:", addresses.length);
+				stderr.writefln("Resolved to %s addresses:", addresses.length);
 				foreach (address; addresses)
-					writefln("- %s", address.toString());
+					stderr.writefln("- %s", address.toString());
 			}
 
 			if (addresses.length > 1)
@@ -1234,7 +1234,7 @@ private:
 	{
 		this(Socket conn)
 		{
-			debug (ASOCKETS) writefln("New Listener @ %s", cast(void*)this);
+			debug (ASOCKETS) stderr.writefln("New Listener @ %s", cast(void*)this);
 			this.conn = conn;
 			socketManager.register(this);
 		}
@@ -1242,13 +1242,13 @@ private:
 		/// Called when a socket is readable.
 		override void onReadable()
 		{
-			debug (ASOCKETS) writefln("Accepting connection from listener @ %s", cast(void*)this);
+			debug (ASOCKETS) stderr.writefln("Accepting connection from listener @ %s", cast(void*)this);
 			Socket acceptSocket = conn.accept();
 			acceptSocket.blocking = false;
 			if (handleAccept)
 			{
 				TcpConnection connection = new TcpConnection(acceptSocket);
-				debug (ASOCKETS) writefln("\tAccepted connection %s from %s", connection, connection.remoteAddress);
+				debug (ASOCKETS) stderr.writefln("\tAccepted connection %s from %s", connection, connection.remoteAddress);
 				connection.setKeepAlive();
 				//assert(connection.connected);
 				//connection.connected = true;
@@ -1293,16 +1293,16 @@ public:
 	/// Start listening on this socket.
 	ushort listen(ushort port, string addr = null)
 	{
-		debug(ASOCKETS) writefln("Attempting to listen on %s:%d", addr, port);
+		debug(ASOCKETS) stderr.writefln("Attempting to listen on %s:%d", addr, port);
 		//assert(!listening, "Attempting to listen on a listening socket");
 
 		auto addressInfos = getAddressInfo(addr, to!string(port), AddressInfoFlags.PASSIVE, SocketType.STREAM, ProtocolType.TCP);
 
 		debug (ASOCKETS)
 		{
-			writefln("Resolved to %s addresses:", addressInfos.length);
+			stderr.writefln("Resolved to %s addresses:", addressInfos.length);
 			foreach (ref addressInfo; addressInfos)
-				writefln("- %s", addressInfo);
+				stderr.writefln("- %s", addressInfo);
 		}
 
 		// listen on random ports only on IPv4 for now
@@ -1345,8 +1345,8 @@ public:
 			}
 			catch (SocketException e)
 			{
-				debug(ASOCKETS) writefln("Unable to listen node \"%s\" service \"%s\"", addressInfo.address.toAddrString(), addressInfo.address.toPortString());
-				debug(ASOCKETS) writeln(e.msg);
+				debug(ASOCKETS) stderr.writefln("Unable to listen node \"%s\" service \"%s\"", addressInfo.address.toAddrString(), addressInfo.address.toPortString());
+				debug(ASOCKETS) stderr.writeln(e.msg);
 			}
 		}
 
@@ -1456,7 +1456,7 @@ protected:
 			bufferFlushedHandler();
 		if (state == ConnectionState.disconnecting)
 		{
-			debug (ASOCKETS) writefln("Closing @ %s (Delayed disconnect - buffer flushed)", cast(void*)this);
+			debug (ASOCKETS) stderr.writefln("Closing @ %s (Delayed disconnect - buffer flushed)", cast(void*)this);
 			close();
 		}
 	}
@@ -1475,7 +1475,7 @@ public:
 	/// Default constructor
 	this()
 	{
-		debug (ASOCKETS) writefln("New UdpConnection @ %s", cast(void*)this);
+		debug (ASOCKETS) stderr.writefln("New UdpConnection @ %s", cast(void*)this);
 	}
 
 	/// Initialize with the given AddressFamily, without binding to an address.
@@ -1503,7 +1503,7 @@ public:
 	{
 		assert(host.length, "Empty host");
 
-		debug (ASOCKETS) writefln("Connecting to %s:%s", host, port);
+		debug (ASOCKETS) stderr.writefln("Connecting to %s:%s", host, port);
 
 		state = ConnectionState.resolving;
 
@@ -1514,9 +1514,9 @@ public:
 			enforce(addresses.length, "No addresses found");
 			debug (ASOCKETS)
 			{
-				writefln("Resolved to %s addresses:", addresses.length);
+				stderr.writefln("Resolved to %s addresses:", addresses.length);
 				foreach (address; addresses)
-					writefln("- %s", address.toString());
+					stderr.writefln("- %s", address.toString());
 			}
 
 			Address address;
@@ -1750,13 +1750,13 @@ class TimeoutAdapter : ConnectionAdapter
 {
 	this(IConnection next)
 	{
-		debug (ASOCKETS) writefln("New TimeoutAdapter @ %s", cast(void*)this);
+		debug (ASOCKETS) stderr.writefln("New TimeoutAdapter @ %s", cast(void*)this);
 		super(next);
 	}
 
 	void cancelIdleTimeout()
 	{
-		debug (ASOCKETS) writefln("TimeoutAdapter.cancelIdleTimeout @ %s", cast(void*)this);
+		debug (ASOCKETS) stderr.writefln("TimeoutAdapter.cancelIdleTimeout @ %s", cast(void*)this);
 		assert(idleTask !is null);
 		assert(idleTask.isWaiting());
 		idleTask.cancel();
@@ -1764,7 +1764,7 @@ class TimeoutAdapter : ConnectionAdapter
 
 	void resumeIdleTimeout()
 	{
-		debug (ASOCKETS) writefln("TimeoutAdapter.resumeIdleTimeout @ %s", cast(void*)this);
+		debug (ASOCKETS) stderr.writefln("TimeoutAdapter.resumeIdleTimeout @ %s", cast(void*)this);
 		assert(idleTask !is null);
 		assert(!idleTask.isWaiting());
 		mainTimer.add(idleTask);
@@ -1772,7 +1772,7 @@ class TimeoutAdapter : ConnectionAdapter
 
 	final void setIdleTimeout(Duration duration)
 	{
-		debug (ASOCKETS) writefln("TimeoutAdapter.setIdleTimeout @ %s", cast(void*)this);
+		debug (ASOCKETS) stderr.writefln("TimeoutAdapter.setIdleTimeout @ %s", cast(void*)this);
 		assert(duration > Duration.zero);
 
 		// Configure idleTask
@@ -1793,7 +1793,7 @@ class TimeoutAdapter : ConnectionAdapter
 
 	void markNonIdle()
 	{
-		debug (ASOCKETS) writefln("TimeoutAdapter.markNonIdle @ %s", cast(void*)this);
+		debug (ASOCKETS) stderr.writefln("TimeoutAdapter.markNonIdle @ %s", cast(void*)this);
 		if (handleNonIdle)
 			handleNonIdle();
 		if (idleTask && idleTask.isWaiting())
@@ -1811,21 +1811,21 @@ class TimeoutAdapter : ConnectionAdapter
 protected:
 	override void onConnect()
 	{
-		debug (ASOCKETS) writefln("TimeoutAdapter.onConnect @ %s", cast(void*)this);
+		debug (ASOCKETS) stderr.writefln("TimeoutAdapter.onConnect @ %s", cast(void*)this);
 		markNonIdle();
 		super.onConnect();
 	}
 
 	override void onReadData(Data data)
 	{
-		debug (ASOCKETS) writefln("TimeoutAdapter.onReadData @ %s", cast(void*)this);
+		debug (ASOCKETS) stderr.writefln("TimeoutAdapter.onReadData @ %s", cast(void*)this);
 		markNonIdle();
 		super.onReadData(data);
 	}
 
 	override void onDisconnect(string reason, DisconnectType type)
 	{
-		debug (ASOCKETS) writefln("TimeoutAdapter.onDisconnect @ %s", cast(void*)this);
+		debug (ASOCKETS) stderr.writefln("TimeoutAdapter.onDisconnect @ %s", cast(void*)this);
 		if (idleTask && idleTask.isWaiting())
 			idleTask.cancel();
 		super.onDisconnect(reason, type);
