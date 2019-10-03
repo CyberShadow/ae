@@ -329,6 +329,8 @@ unittest
 	assert(findParameter(["a", "b", "c"], "x/c", "fun") == 2);
 }
 
+// ************************************************************************
+
 /// Generates a function which passes its arguments to a struct, which is
 /// returned. Preserves field names (as parameter names) and default values.
 template structFun(S)
@@ -366,6 +368,28 @@ unittest
 	Test test = structFun!Test("banana");
 	assert(test.a is "banana");
 	assert(test.b == 42);
+}
+
+/// Generates a struct containing fields with names, types, and default values
+/// corresponding to a function's parameter list.
+struct StructFromParams(alias fun, bool voidInitializeRequired = false)
+{
+	static foreach (i, T; ParameterTypeTuple!fun)
+		static if (is(ParameterDefaultValueTuple!fun[i] == void))
+			static if (voidInitializeRequired)
+				mixin(`T ` ~ ParameterIdentifierTuple!fun[i] ~ ` = void;`);
+			else
+				mixin(`T ` ~ ParameterIdentifierTuple!fun[i] ~ `;`);
+		else
+			mixin(`T ` ~ ParameterIdentifierTuple!fun[i] ~ ` = ParameterDefaultValueTuple!fun[i];`);
+}
+
+unittest
+{
+	static void fun(string a, int b = 42) {}
+	alias S = StructFromParams!fun;
+	static assert(is(typeof(S.a) == string));
+	static assert(S.init.b == 42);
 }
 
 // ************************************************************************
