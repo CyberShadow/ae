@@ -1104,6 +1104,86 @@ protected:
 	}
 }
 
+/// Separates reading and writing, e.g. for stdin/stdout.
+class Duplex : IConnection
+{
+	IConnection reader, writer;
+
+	this(IConnection reader, IConnection writer)
+	{
+		this.reader = reader;
+		this.writer = writer;
+		reader.handleConnect = &onConnect;
+		writer.handleConnect = &onConnect;
+		reader.handleDisconnect = &onDisconnect;
+		writer.handleDisconnect = &onDisconnect;
+	}
+
+	@property ConnectionState state()
+	{
+		if (reader.state == ConnectionState.disconnecting || writer.state == ConnectionState.disconnecting)
+			return ConnectionState.disconnecting;
+		else
+			return reader.state < writer.state ? reader.state : writer.state;
+	}
+
+	/// Queue Data for sending.
+	void send(Data[] data, int priority)
+	{
+		writer.send(data, priority);
+	}
+
+	alias send = IConnection.send; /// ditto
+
+	/// Terminate the connection.
+	/// Note: this isn't quite fleshed out - applications may want to
+	/// wait and send some more data even after stdin is closed, but
+	/// such an interface can't be fitted into an IConnection
+	void disconnect(string reason = defaultDisconnectReason, DisconnectType type = DisconnectType.requested)
+	{
+		if (reader.state > ConnectionState.disconnected && reader.state < ConnectionState.disconnecting)
+			reader.disconnect(reason, type);
+		if (writer.state > ConnectionState.disconnected && writer.state < ConnectionState.disconnecting)
+			writer.disconnect(reason, type);
+		debug(ASOCKETS) stderr.writefln("Duplex.disconnect(%(%s%), %s), states are %s / %s", [reason], type, reader.state, writer.state);
+	}
+
+	protected void onConnect()
+	{
+		if (connectHandler && reader.state == ConnectionState.connected && writer.state == ConnectionState.connected)
+			connectHandler();
+	}
+
+	protected void onDisconnect(string reason, DisconnectType type)
+	{
+		debug(ASOCKETS) stderr.writefln("Duplex.onDisconnect(%(%s%), %s), states are %s / %s", [reason], type, reader.state, writer.state);
+		if (disconnectHandler)
+		{
+			disconnectHandler(reason, type);
+			disconnectHandler = null; // don't call it twice for the other connection
+		}
+		// It is our responsibility to disconnect the other connection
+		// Use DisconnectType.requested to ensure that any written data is flushed
+		disconnect("Other side of Duplex connection closed (" ~ reason ~ ")", DisconnectType.requested);
+	}
+
+	/// Callback for when a connection has been established.
+	@property void handleConnect(ConnectHandler value) { connectHandler = value; }
+	private ConnectHandler connectHandler;
+
+	/// Callback setter for when new data is read.
+	@property void handleReadData(ReadDataHandler value) { reader.handleReadData = value; }
+
+	/// Callback setter for when a connection was closed.
+	@property void handleDisconnect(DisconnectHandler value) { disconnectHandler = value; }
+	private DisconnectHandler disconnectHandler;
+
+	/// Callback setter for when all queued data has been written.
+	@property void handleBufferFlushed(BufferFlushedHandler value) { writer.handleBufferFlushed = value; }
+}
+
+unittest { if (false) new Duplex(null, null); }
+
 // ***************************************************************************
 
 /// An asynchronous TCP connection.
