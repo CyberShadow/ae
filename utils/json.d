@@ -75,6 +75,12 @@ struct JsonWriter(Output)
 		static if (is(typeof(v is null)))
 			if (v is null)
 				return output.put("null");
+		static if (is(T X == Nullable!X))
+			if (v.isNull)
+				return output.put("null");
+			else
+				return putValue(v.get);
+		else
 		static if (is(T == typeof(null)))
 			return output.put("null");
 		else
@@ -976,14 +982,17 @@ unittest
 
 	b = jsonParse!B("true");
 	assert(!b.isNull);
-	assert(b == true);
+	assert(b.get == true);
+	assert(b.toJson == "true");
 
 	b = jsonParse!B("false");
 	assert(!b.isNull);
-	assert(b == false);
+	assert(b.get == false);
+	assert(b.toJson == "false");
 
 	b = jsonParse!B("null");
 	assert(b.isNull);
+	assert(b.toJson == "null");
 }
 
 unittest // Issue 49
