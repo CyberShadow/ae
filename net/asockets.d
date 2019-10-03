@@ -1604,6 +1604,7 @@ class ConnectionAdapter : IConnection
 		this.next = next;
 		next.handleConnect = &onConnect;
 		next.handleDisconnect = &onDisconnect;
+		next.handleBufferFlushed = &onBufferFlushed;
 	}
 
 	@property ConnectionState state() { return next.state; }
