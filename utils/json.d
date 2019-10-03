@@ -1060,7 +1060,11 @@ unittest
 /// string verbatim, without any validation.
 /// When deserialized, will contain the raw JSON of one JSON object of
 /// any type.
-struct JSONFragment { string json; }
+struct JSONFragment
+{
+	string json;
+	bool opCast(T)() const if (is(T==bool)) { return !!json; }
+}
 
 unittest
 {
