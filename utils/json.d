@@ -75,12 +75,6 @@ struct JsonWriter(Output)
 		static if (is(typeof(v is null)))
 			if (v is null)
 				return output.put("null");
-		static if (is(T X == Nullable!X))
-			if (v.isNull)
-				return output.put("null");
-			else
-				return putValue(v.get);
-		else
 		static if (is(T == typeof(null)))
 			return output.put("null");
 		else
@@ -216,6 +210,12 @@ struct CustomJsonSerializer(Writer)
 
 	void put(T)(T v)
 	{
+		static if (is(T X == Nullable!X))
+			if (v.isNull)
+				writer.putValue(null);
+			else
+				put(v.get);
+		else
 		static if (is(T == enum))
 			put(to!string(v));
 		else
@@ -993,6 +993,10 @@ unittest
 	b = jsonParse!B("null");
 	assert(b.isNull);
 	assert(b.toJson == "null");
+
+	struct S {}
+	alias NS = Nullable!S;
+	assert(NS.init.toJson == "null");
 }
 
 unittest // Issue 49
