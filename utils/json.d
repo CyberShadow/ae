@@ -222,6 +222,9 @@ struct CustomJsonSerializer(Writer)
 		static if (isSomeString!T || is(Unqual!T : real))
 			writer.putValue(v);
 		else
+		static if (is(T == typeof(null)))
+			writer.putValue(null);
+		else
 		static if (is(T U : U[]))
 		{
 			writer.beginArray();
@@ -453,6 +456,9 @@ private struct JsonParser(C)
 
 	T read(T)()
 	{
+		static if (is(T == typeof(null)))
+			return readNull();
+		else
 		static if (is(T X == Nullable!X))
 			return readNullable!X();
 		else
@@ -523,14 +529,20 @@ private struct JsonParser(C)
 		}
 	}
 
+	typeof(null) readNull()
+	{
+		expect('n');
+		expect('u');
+		expect('l');
+		expect('l');
+		return null;
+	}
+
 	auto readNullable(T)()
 	{
 		if (peek() == 'n')
 		{
-			next();
-			expect('u');
-			expect('l');
-			expect('l');
+			readNull();
 			return Nullable!T();
 		}
 		else
@@ -765,13 +777,7 @@ private struct JsonParser(C)
 		skipWhitespace();
 		static if (is(typeof(T.init is null)))
 			if (peek() == 'n')
-			{
-				next();
-				expect('u');
-				expect('l');
-				expect('l');
-				return null;
-			}
+				return readNull();
 		expect('{');
 		skipWhitespace();
 		T v;
@@ -1027,6 +1033,12 @@ unittest
 {
 	char[] s = "{}".dup;
 	assert(s.jsonParse!(string[string]) == null);
+}
+
+unittest
+{
+	typeof(null) n;
+	assert(n.toJson.jsonParse!(typeof(null)) is null);
 }
 
 // ************************************************************************
