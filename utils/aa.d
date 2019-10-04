@@ -547,9 +547,9 @@ struct HashSet(T)
 		return data.addNew(k, v);
 	}
 
-	void remove(T k)
+	bool remove(T k)
 	{
-		data.remove(k);
+		return data.remove(k);
 	}
 
 	@property HashSet!T dup() const
@@ -794,9 +794,9 @@ struct MultiAA(K, V)
 		return null;
 	}
 
-	void remove(K key)
+	bool remove(K key)
 	{
-		items.remove(key);
+		return items.remove(key);
 	}
 
 	// D forces these to be "ref"
