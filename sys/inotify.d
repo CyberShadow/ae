@@ -113,7 +113,6 @@ private:
 			auto end = inotify_event.sizeof + pheader.len;
 			enforce(data.length >= end, "Insufficient bytes for inotify name");
 			auto name = cast(char[])data.contents[inotify_event.sizeof .. end];
-			data = data[end..$];
 
 			auto p = name.indexOf('\0');
 			if (p >= 0)
@@ -122,6 +121,7 @@ private:
 			auto phandler = pheader.wd in handlers;
 			enforce(phandler, "Unregistered inotify watch descriptor");
 			(*phandler)(name, cast(Mask)pheader.mask, pheader.cookie);
+			data = data[end..$];
 		}
 	}
 }
