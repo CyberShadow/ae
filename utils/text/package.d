@@ -753,23 +753,25 @@ enum significantDigits(T : real) = 2 + 2 * T.sizeof;
 enum fpFormatString(T) = "%." ~ text(significantDigits!T) ~ "g";
 template cWidthString(T)
 {
-	static if (is(T == float))
+	static if (is(Unqual!T == float))
 		enum cWidthString = "";
 	else
-	static if (is(T == double))
+	static if (is(Unqual!T == double))
 		enum cWidthString = "l";
 	else
-	static if (is(T == real))
+	static if (is(Unqual!T == real))
 		enum cWidthString = "L";
 }
 enum fpCFormatString(T) = "%." ~ text(significantDigits!T) ~ cWidthString!T ~ "g";
 
-private auto fpToBuf(F)(F val) @nogc
+private auto fpToBuf(Q)(Q val) @nogc
 {
+	alias F = Unqual!Q;
+
 	/// Bypass FPU register, which may contain a different precision
 	static F forceType(F d) { static F n; n = d; return n; }
 
-	enum isReal = is(Unqual!F == real);
+	enum isReal = is(F == real);
 
 	StaticBuf!(char, 64) buf = void;
 
@@ -851,14 +853,14 @@ template fpToString(F)
 		return fpToBuf(v).data.idup;
 	}
 
-	static if (!is(F == real))
+	static if (!is(Unqual!F == real))
 	unittest
 	{
 		union U
 		{
 			ubyte[F.sizeof] bytes;
-			F d;
-			string toString() { return (fpFormatString!F ~ " %a [%(%02X %)]").format(d, d, bytes[]); }
+			Unqual!F d;
+			string toString() const { return (fpFormatString!F ~ " %a [%(%02X %)]").format(d, d, bytes[]); }
 		}
 		import std.random : Xorshift, uniform;
 		import std.stdio : stderr;
@@ -868,7 +870,7 @@ template fpToString(F)
 			U u;
 			foreach (ref b; u.bytes[])
 				b = uniform!ubyte(rng);
-			static if (is(F == real))
+			static if (is(Unqual!F == real))
 				u.bytes[7] |= 0x80; // require normalized value
 			scope(failure) stderr.writeln("Input:\t", u);
 			auto s = fpToString(u.d);
@@ -889,6 +891,7 @@ unittest
 {
 	alias floatToString = fpToString!float;
 	alias realToString = fpToString!real;
+	alias crealToString = fpToString!(const(real));
 }
 
 string numberToString(T)(T v)
