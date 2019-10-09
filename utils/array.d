@@ -97,8 +97,13 @@ unittest
 /// Returns an empty, but non-null slice of T.
 auto emptySlice(T)() pure
 {
-	T[0] arr;
-	auto p = arr.ptr;
+	static if (false) // LDC optimizes this out
+	{
+		T[0] arr;
+		auto p = arr.ptr;
+	}
+	else
+		auto p = cast(T*)1;
 	return p[0..0];
 }
 
@@ -400,9 +405,7 @@ T nonNull(T)(T arr)
 {
 	if (arr !is null)
 		return arr;
-	typeof(arr[0])[0] v;
-	auto p = v.ptr;
-	return p[0..0];
+	return emptySlice!(typeof(arr[0]));
 }
 
 /// If arr is null, return null. Otherwise, return a non-null
