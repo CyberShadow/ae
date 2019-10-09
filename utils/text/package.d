@@ -22,7 +22,7 @@ import std.string;
 import std.traits;
 import std.typetuple;
 
-import core.stdc.stdio : sprintf, sscanf;
+import core.stdc.stdio : snprintf, sscanf;
 import core.stdc.string;
 
 import ae.utils.array;
@@ -764,7 +764,12 @@ template cWidthString(T)
 }
 enum fpCFormatString(T) = "%." ~ text(significantDigits!T) ~ cWidthString!T ~ "g";
 
-private auto fpToBuf(Q)(Q val) @nogc
+private auto safeSprintf(size_t N, Args...)(ref char[N] buf, auto ref Args args) @trusted @nogc
+{
+	return snprintf(buf.ptr, N, args);
+}
+
+private auto fpToBuf(Q)(Q val) @safe nothrow @nogc
 {
 	alias F = Unqual!Q;
 
@@ -797,7 +802,7 @@ private auto fpToBuf(Q)(Q val) @nogc
 	else
 		alias v = val;
 
-	buf.pos = sprintf(buf.buf.ptr, fpCFormatString!F.ptr, forceType(v));
+	buf.pos = safeSprintf(buf.buf, &fpCFormatString!F[0], forceType(v));
 	char[] s = buf.data();
 
 	F parse(char[] s)
@@ -848,7 +853,7 @@ void putFP(Writer, F)(auto ref Writer writer, F v) @nogc
 /// Get shortest string representation of a FP type that still converts to exactly the same number.
 template fpToString(F)
 {
-	string fpToString(F v)
+	string fpToString(F v) @safe nothrow
 	{
 		return fpToBuf(v).data.idup;
 	}
