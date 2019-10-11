@@ -57,7 +57,7 @@ struct StaticBuf(T, size_t size)
 	size_t pos;
 	void put(T v) { buf[pos++] = v; }
 	void put(in T[] v) { buf[pos..pos+v.length] = v[]; pos+=v.length; }
-	T[] data() { return buf[0..pos]; }
+	inout(T)[] data() inout { return buf[0..pos]; }
 }
 
 // **************************************************************************
