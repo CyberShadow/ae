@@ -899,6 +899,40 @@ unittest
 	alias crealToString = fpToString!(const(real));
 }
 
+/// Wraps the result of a fpToString in a non-allocating stringifiable struct.
+struct FPAsString(T)
+{
+	typeof(fpToBuf(T.init)) buf;
+
+	this(T f)
+	{
+		buf = fpToBuf(f);
+	}
+
+	string toString() const pure nothrow
+	{
+		return buf.data.idup;
+	}
+
+	void toString(W)(ref W w) const
+	{
+		static if (is(typeof(w.put(buf.data))))
+			w.put(buf.data);
+		else
+			foreach (c; buf.data)
+				w.put(c);
+	}
+}
+FPAsString!T fpAsString(T)(T f) { return FPAsString!T(f); } /// ditto
+
+@safe //nothrow @nogc
+unittest
+{
+	StaticBuf!(char, 1024) buf;
+	buf.formattedWrite!"%s"(fpAsString(0.1));
+	assert(buf.data == "0.1");
+}
+
 string numberToString(T)(T v)
 	if (isNumeric!T)
 {
