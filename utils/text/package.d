@@ -745,6 +745,18 @@ unittest
 	assert(buf == "01234567");
 }
 
+char[T.sizeof*2] toHex(T : ulong)(T n)
+{
+	char[T.sizeof*2] buf;
+	toHex(n, buf);
+	return buf;
+}
+
+unittest
+{
+	assert(toHex(0x01234567) == "01234567");
+}
+
 /// How many significant decimal digits does a FP type have
 /// (determined empirically - valid for all D FP types on x86/64)
 enum significantDigits(T : real) = 2 + 2 * T.sizeof;
