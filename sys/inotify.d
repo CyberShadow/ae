@@ -118,9 +118,18 @@ private:
 			if (p >= 0)
 				name = name[0..p];
 
-			auto phandler = pheader.wd in handlers;
-			enforce(phandler, "Unregistered inotify watch descriptor");
-			(*phandler)(name, cast(Mask)pheader.mask, pheader.cookie);
+			if (pheader.wd == -1)
+			{
+				// Overflow - notify all watch descriptors
+				foreach (wd, handler; handlers)
+					handler(name, cast(Mask)pheader.mask, pheader.cookie);
+			}
+			else
+			{
+				auto phandler = pheader.wd in handlers;
+				enforce(phandler, "Unregistered inotify watch descriptor");
+				(*phandler)(name, cast(Mask)pheader.mask, pheader.cookie);
+			}
 			data = data[end..$];
 		}
 	}
