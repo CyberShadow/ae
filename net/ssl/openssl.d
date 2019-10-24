@@ -50,7 +50,10 @@ debug(OPENSSL) import std.stdio : stderr;
 
 // ***************************************************************************
 
-private enum isOpenSSL11 = OPENSSL_VERSION_NUMBER >= OPENSSL_MAKE_VERSION(1, 1, 0, 0);
+static if (is(typeof(OPENSSL_MAKE_VERSION)))
+	private enum isOpenSSL11 = OPENSSL_VERSION_NUMBER >= OPENSSL_MAKE_VERSION(1, 1, 0, 0);
+else
+	private enum isOpenSSL11 = false;
 
 // Patch up incomplete Deimos bindings.
 
