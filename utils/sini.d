@@ -274,7 +274,6 @@ IniHandler!S makeIniHandler(S = string, U)(ref U v)
 			null,
 			delegate IniHandler!S (S name)
 			{
-				bool found;
 				foreach (i, ref field; v.tupleof)
 				{
 					enum fieldName = to!S(v.tupleof[i].stringof[2..$]);
