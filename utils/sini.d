@@ -20,6 +20,7 @@ import std.range;
 import std.string;
 import std.traits;
 
+import ae.utils.aa : getOrAdd;
 import ae.utils.exception;
 import ae.utils.meta : boxVoid, unboxVoid;
 
@@ -222,7 +223,6 @@ private enum isAALike(U, S) = is(typeof(
 	{
 		alias K = typeof(v.keys[0]);
 		alias V = typeof(v[K.init]);
-		v.require(K.init);
 	}
 ));
 
@@ -247,7 +247,7 @@ IniHandler!S makeIniHandler(S = string, U)(ref U v)
 					static if (!isNestingType!U)
 						if (key in v)
 							throw new Exception("Duplicate value: " ~ to!string(name));
-					return dg(v.require(key));
+					return dg(v.getOrAdd(key));
 				}
 
 				// To know if the value handler will accept leafs or nodes requires constructing the handler.
