@@ -61,6 +61,9 @@ unittest
 
 	m.value = 1;
 	assert(read(fn) == [ubyte(1)]);
-	write(fn, [ubyte(2)]);
-	assert(m.value == 2);
+	version (Posix)
+	{
+		write(fn, [ubyte(2)]);
+		assert(m.value == 2);
+	}
 }
