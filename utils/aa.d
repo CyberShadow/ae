@@ -20,7 +20,7 @@ import std.typecons;
 // ***************************************************************************
 
 /// Get a value from an AA, and throw an exception (not an error) if not found
-ref auto aaGet(AA, K)(auto ref AA aa, K key)
+ref auto aaGet(AA, K)(auto ref AA aa, auto ref K key)
 	if (is(typeof(key in aa)))
 {
 	import std.conv;
@@ -37,7 +37,7 @@ ref auto aaGet(AA, K)(auto ref AA aa, K key)
 
 /// If key is not in aa, add it with defaultValue.
 /// Returns a reference to the value corresponding to key.
-ref V getOrAdd(K, V)(ref V[K] aa, K key, V defaultValue = V.init)
+ref V getOrAdd(K, V)(ref V[K] aa, auto ref K key, auto ref V defaultValue)
 {
 	static if (__traits(hasMember, object, "require"))
 		return aa.require(key, defaultValue);
@@ -51,6 +51,12 @@ ref V getOrAdd(K, V)(ref V[K] aa, K key, V defaultValue = V.init)
 		}
 		return *p;
 	}
+}
+
+/// ditto
+ref V getOrAdd(K, V)(ref V[K] aa, auto ref K key)
+{
+	return getOrAdd(aa, key, V.init);
 }
 
 unittest
