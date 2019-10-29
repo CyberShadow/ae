@@ -255,12 +255,19 @@ IniHandler!S makeIniHandler(S = string, U)(ref U v)
 				// To have a pointer to the object means to allocate it in the AA...
 				// but, we can't do that until we know it's going to be written to.
 				// So, introspect what the handler for this type can handle at compile-time instead.
-				static immutable dummyHandler = { V dummy; return makeIniHandler!S(dummy); }();
+				enum dummyHandlerCaps = {
+					V dummy;
+					auto h = makeIniHandler!S(dummy);
+					return [
+						h.leafHandler !is null,
+						h.nodeHandler !is null,
+					];
+				}();
 
 				return IniHandler!S
 				(
-					!dummyHandler.leafHandler ? null : (S value) => update((ref V v) => makeIniHandler!S(v).leafHandler(value)),
-					!dummyHandler.nodeHandler ? null : (S name2) => update((ref V v) => makeIniHandler!S(v).nodeHandler(name2)),
+					!dummyHandlerCaps[0] ? null : (S value) => update((ref V v) => makeIniHandler!S(v).leafHandler(value)),
+					!dummyHandlerCaps[1] ? null : (S name2) => update((ref V v) => makeIniHandler!S(v).nodeHandler(name2)),
 				);
 			}
 		);
