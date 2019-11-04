@@ -1041,6 +1041,12 @@ unittest
 	assert(n.toJson.jsonParse!(typeof(null)) is null);
 }
 
+unittest
+{
+	double f = 1.5;
+	assert(f.toJson() == "1.5");
+}
+
 // ************************************************************************
 
 /// User-defined attribute - specify name for JSON object field.
