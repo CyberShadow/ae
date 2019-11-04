@@ -857,7 +857,7 @@ private auto fpToBuf(Q)(Q val) @safe nothrow @nogc
 	return buf;
 }
 
-void putFP(Writer, F)(auto ref Writer writer, F v) @nogc
+void putFP(Writer, F)(auto ref Writer writer, F v)
 {
 	writer.put(fpToBuf(v).data);
 }
