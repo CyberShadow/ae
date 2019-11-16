@@ -56,8 +56,8 @@ unittest
 	}
 
 	enum fn = "test.bin";
-	auto m = Mapped!S(fn);
 	scope(success) remove(fn);
+	auto m = Mapped!S(fn);
 
 	m.value = 1;
 	assert(read(fn) == [ubyte(1)]);
