@@ -1943,7 +1943,7 @@ template mdFile()
 version (HAVE_WIN32)
 unittest
 {
-	import std.digest.digest : toHexString;
+	import std.digest : toHexString;
 	write("test.txt", "Hello, world!");
 	scope(exit) remove("test.txt");
 	assert(mdFile("test.txt").toHexString() == "6CD3556DEB0DA54BCA060B4C39479839");
@@ -1968,7 +1968,7 @@ template mdFileCached()
 version (HAVE_WIN32)
 unittest
 {
-	import std.digest.digest : toHexString;
+	import std.digest : toHexString;
 	write("test.txt", "Hello, world!");
 	scope(exit) remove("test.txt");
 	assert(mdFileCached("test.txt").toHexString() == "6CD3556DEB0DA54BCA060B4C39479839");

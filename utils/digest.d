@@ -55,7 +55,7 @@ uint fastCRC(in void[] data, uint start = cast(uint)-1)
 	return crc;
 }
 
-// TODO: reimplement via std.digest.digest
+// TODO: reimplement via std.digest
 
 // Struct (for streaming)
 struct MurmurHash2A

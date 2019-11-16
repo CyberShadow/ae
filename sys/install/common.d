@@ -199,7 +199,7 @@ final:
 				return;
 			log("Verifying " ~ target.baseName() ~ "...");
 
-			import std.digest.sha, std.digest.digest, std.stdio;
+			import std.digest.sha, std.digest, std.stdio;
 			SHA1 sha;
 			sha.start();
 			foreach (chunk; File(target, "rb").byChunk(0x10000))
