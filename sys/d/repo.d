@@ -91,7 +91,7 @@ class ManagedRepository
 	/// Returns the SHA1 of the given named ref.
 	public string getRef(string name)
 	{
-		return git.query("rev-parse", name);
+		return git.query("rev-parse", "--verify", "--quiet", name);
 	}
 
 	/// Return the commit the repository HEAD is pointing at.
