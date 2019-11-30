@@ -477,7 +477,9 @@ class ManagedRepository
 		auto files = git.query(["ls-files"]).splitLines();
 		RepositoryState state;
 		foreach (file; files)
-			state[file] = getFileState(file);
+			try
+				state[file] = getFileState(file);
+			catch (Exception e) {}
 		return state;
 	}
 
