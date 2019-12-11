@@ -38,26 +38,18 @@ version(FreeBSD) private
 
 void addSignalHandler(int signum, SignalHandler fn)
 {
-	if (handlers[signum].length == 0)
-	{
+	handlers[signum].add(fn, {
 		alias sigfn_t = typeof(signal(0, null));
 		auto old = signal(signum, cast(sigfn_t)&sighandle);
 		assert(old == SIG_DFL || old == SIG_IGN, "A signal handler was already set");
-	}
-	handlers[signum] ~= fn;
+	});
 }
 
 void removeSignalHandler(int signum, SignalHandler fn)
 {
-	foreach (i, lfn; handlers[signum])
-		if (lfn is fn)
-		{
-			handlers[signum] = handlers[signum][0..i] ~ handlers[signum][i+1..$];
-			if (handlers[signum].length == 0)
-				signal(signum, SIG_DFL);
-			return;
-		}
-	assert(0);
+	handlers[signum].remove(fn, {
+		signal(signum, SIG_DFL);
+	});
 }
 
 // ***************************************************************************
@@ -107,11 +99,40 @@ bool collectSignal(int signum, void delegate() code)
 private:
 
 enum SIGMAX = 100;
-shared SignalHandler[][SIGMAX] handlers;
+
+synchronized class HandlerSet
+{
+	alias T = SignalHandler;
+	private T[] handlers;
+
+	void add(T fn, scope void delegate() register)
+	{
+		if (handlers.length == 0)
+			register();
+		handlers ~= cast(shared)fn;
+	}
+	void remove(T fn, scope void delegate() deregister)
+	{
+		foreach (i, lfn; handlers)
+			if (lfn is fn)
+			{
+				handlers = handlers[0..i] ~ handlers[i+1..$];
+				if (handlers.length == 0)
+					deregister();
+				return;
+			}
+		assert(0);
+	}
+	const(T)[] get() pure nothrow @nogc { return cast(const(T[]))handlers; }
+}
+
+shared HandlerSet[SIGMAX] handlers;
+
+shared static this() { foreach (ref h; handlers) h = new HandlerSet; }
 
 extern(C) void sighandle(int signum) nothrow @system
 {
 	if (signum >= 0 && signum < handlers.length)
-		foreach (fn; handlers[signum])
+		foreach (fn; handlers[signum].get())
 			fn();
 }

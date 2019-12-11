@@ -23,15 +23,13 @@ module ae.sys.shutdown;
 /// Warning: the delegate may be called in an arbitrary thread.
 void addShutdownHandler(void delegate() fn)
 {
-	if (handlers.length == 0)
-		register();
-	handlers ~= fn;
+	handlers.add(fn);
 }
 
 /// Calls all registered handlers.
 void shutdown()
 {
-	foreach (fn; handlers)
+	foreach (fn; handlers.get())
 		fn();
 }
 
@@ -123,4 +121,19 @@ void register()
 	}
 }
 
-shared void delegate()[] handlers;
+synchronized class HandlerSet
+{
+	alias T = void delegate();
+	private T[] handlers;
+
+	void add(T fn)
+	{
+		if (handlers.length == 0)
+			register();
+		handlers ~= cast(shared)fn;
+	}
+	const(T)[] get() { return cast(const(T[]))handlers; }
+}
+
+shared HandlerSet handlers;
+shared static this() { handlers = new HandlerSet; }
