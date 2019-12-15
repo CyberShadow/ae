@@ -39,32 +39,38 @@ mixin template main(alias realMain)
 				return realMain(args);
 	}
 
+	int runCatchingException(E, string message)(string[] args)
+	{
+		try
+			return run(args);
+		catch (E e)
+		{
+			version (Windows)
+			{
+				import core.sys.windows.windows;
+				auto h = GetStdHandle(STD_ERROR_HANDLE);
+				if (!h || h == INVALID_HANDLE_VALUE)
+				{
+					import ae.sys.windows : messageBox;
+					messageBox(e.msg, message, MB_ICONERROR);
+					return 1;
+				}
+			}
+
+			import std.stdio : stderr;
+			stderr.writefln("%s: %s", message, e.msg);
+			return 1;
+		}
+	}
+
 	int main(string[] args)
 	{
 		debug
-			return run(args);
-		else
-		{
-			try
+			static if(is(std.getopt.GetOptException))
+				return runCatchingException!(std.getopt.GetOptException, "Usage error")(args);
+			else
 				return run(args);
-			catch (Throwable e)
-			{
-				version (Windows)
-				{
-					import core.sys.windows.windows;
-					auto h = GetStdHandle(STD_ERROR_HANDLE);
-					if (!h || h == INVALID_HANDLE_VALUE)
-					{
-						import ae.sys.windows : messageBox;
-						messageBox(e.msg, "Fatal error", MB_ICONERROR);
-						return 1;
-					}
-				}
-
-				import std.stdio;
-				stderr.writefln("Fatal error: %s", e.msg);
-				return 1;
-			}
-		}
+		else
+			return runCatchingException!(Throwable, "Fatal error")(args);
 	}
 }
