@@ -372,24 +372,29 @@ unittest
 
 /// Generates a struct containing fields with names, types, and default values
 /// corresponding to a function's parameter list.
-struct StructFromParams(alias fun, bool voidInitializeRequired = false)
+static if (haveStaticForeach)
 {
-	static foreach (i, T; ParameterTypeTuple!fun)
-		static if (is(ParameterDefaultValueTuple!fun[i] == void))
-			static if (voidInitializeRequired)
-				mixin(`T ` ~ ParameterIdentifierTuple!fun[i] ~ ` = void;`);
-			else
-				mixin(`T ` ~ ParameterIdentifierTuple!fun[i] ~ `;`);
-		else
-			mixin(`T ` ~ ParameterIdentifierTuple!fun[i] ~ ` = ParameterDefaultValueTuple!fun[i];`);
-}
+	mixin(q{
+		struct StructFromParams(alias fun, bool voidInitializeRequired = false)
+		{
+			static foreach (i, T; ParameterTypeTuple!fun)
+				static if (is(ParameterDefaultValueTuple!fun[i] == void))
+					static if (voidInitializeRequired)
+						mixin(`T ` ~ ParameterIdentifierTuple!fun[i] ~ ` = void;`);
+					else
+						mixin(`T ` ~ ParameterIdentifierTuple!fun[i] ~ `;`);
+				else
+					mixin(`T ` ~ ParameterIdentifierTuple!fun[i] ~ ` = ParameterDefaultValueTuple!fun[i];`);
+		}
+	});
 
-unittest
-{
-	static void fun(string a, int b = 42) {}
-	alias S = StructFromParams!fun;
-	static assert(is(typeof(S.a) == string));
-	static assert(S.init.b == 42);
+	unittest
+	{
+		static void fun(string a, int b = 42) {}
+		alias S = StructFromParams!fun;
+		static assert(is(typeof(S.a) == string));
+		static assert(S.init.b == 42);
+	}
 }
 
 // ************************************************************************
