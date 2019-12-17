@@ -161,3 +161,7 @@ version (DMD)
 	enum haveDualContext = __traits(compiles, TestDualContext.test());
 else
 	enum haveDualContext = false; // https://github.com/ldc-developers/ldc/commit/d93087ad90664e9be87b79cf70c0f3d26f30f107#commitcomment-35276701
+
+// ************************************************************************
+
+enum haveStaticForeach = is(typeof(mixin(q{(){ static foreach (x; []) {}}})));
