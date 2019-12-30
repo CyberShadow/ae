@@ -87,6 +87,8 @@ enum TimeFormatElement : char
 	millisecondsAlt             = 'E',
 	/// Microseconds within second, 6 digits
 	microseconds                = 'u',
+	/// Nanoseconds within second, 9 digits (ae extension)
+	nanoseconds                 = '9',
 
 	/// Timezone identifier
 	timezoneName                = 'e',
@@ -195,6 +197,9 @@ size_t timeFormatSize(string fmt)
 				case TimeFormatElement.microseconds:
 				case TimeFormatElement.timezoneOffsetWithColon:
 					size += 6;
+					break;
+				case TimeFormatElement.nanoseconds:
+					size += 9;
 					break;
 				case TimeFormatElement.timezoneAbbreviation:
 					size += 32;

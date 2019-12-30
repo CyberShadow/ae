@@ -182,6 +182,9 @@ private void putToken(alias c, alias context, alias sink)()
 				case TimeFormatElement.millisecondsAlt: // not standard
 					sink.put(toDecFixed!3(cast(uint)t.fracSecs.split!"msecs".msecs));
 					break;
+				case TimeFormatElement.nanoseconds: // not standard
+					sink.put(toDecFixed!9(cast(uint)t.fracSecs.split!"nsecs".nsecs));
+					break;
 
 				// Timezone
 				case TimeFormatElement.timezoneName:

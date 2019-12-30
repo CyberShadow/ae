@@ -26,7 +26,7 @@ import ae.utils.time.common;
 
 private struct ParseContext(Char, bool checked)
 {
-	int year=0, month=1, day=1, hour=0, minute=0, second=0, usecs=0;
+	int year=0, month=1, day=1, hour=0, minute=0, second=0, nsecs=0;
 	int hour12 = 0; bool pm;
 	TimeZone tz_;
 	int dow = -1;
@@ -204,12 +204,14 @@ private void parseToken(alias c, alias context)()
 			case TimeFormatElement.second:
 				second = takeNumber!2;
 				break;
-			case TimeFormatElement.microseconds:
-				usecs = takeNumber!6;
-				break;
 			case TimeFormatElement.milliseconds:
 			case TimeFormatElement.millisecondsAlt: // not standard
-				usecs = 1000 * takeNumber!3;
+				nsecs = takeNumber!3 * 1_000_000;
+			case TimeFormatElement.microseconds:
+				nsecs = takeNumber!6 * 1_000;
+				break;
+			case TimeFormatElement.nanoseconds: // not standard
+				nsecs = takeNumber!9;
 				break;
 
 			// Timezone
@@ -318,9 +320,9 @@ private SysTime parseTimeImpl(alias fmt, bool checked, C)(C[] t, immutable TimeZ
 
 		// Compatibility with both <=2.066 and >=2.067
 		static if (__traits(hasMember, SysTime, "fracSecs"))
-			auto frac = dur!"usecs"(usecs);
+			auto frac = dur!"nsecs"(nsecs);
 		else
-			auto frac = FracSec.from!"usecs"(usecs);
+			auto frac = FracSec.from!"hnsecs"(nsecs / 100);
 
 		SysTime result = SysTime(
 			DateTime(year, month, day, hour, minute, second),
