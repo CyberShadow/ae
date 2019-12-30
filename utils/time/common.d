@@ -13,6 +13,8 @@
 
 module ae.utils.time.common;
 
+import core.stdc.time : time_t;
+
 import ae.utils.text;
 
 /// Based on php.net/date
@@ -230,7 +232,7 @@ size_t timeFormatSize(string fmt)
 					size += timeFormatSize(TimeFormats.RFC2822);
 					break;
 				case TimeFormatElement.dateTimeUNIX:
-					size += DecimalSize!int;
+					size += DecimalSize!time_t;
 					break;
 
 				// Escape next character

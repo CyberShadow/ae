@@ -19,6 +19,12 @@ public import ae.utils.time.fpdur;
 public import ae.utils.time.parse;
 public import ae.utils.time.parsedur;
 
+unittest
+{
+	enum f = `U\.9`;
+	assert("123456789012.123456789".parseTime!f.formatTime!f == "123456789012.123456700");
+}
+
 // ***************************************************************************
 
 import std.datetime;

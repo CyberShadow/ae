@@ -13,6 +13,7 @@
 
 module ae.utils.time.parse;
 
+import core.stdc.time : time_t;
 import core.time : minutes, seconds, dur;
 
 import std.exception : enforce;
@@ -272,7 +273,7 @@ private void parseToken(alias c, alias context)()
 			//case TimeFormatElement.dateTimeRFC2822: TODO
 			case TimeFormatElement.dateTimeUNIX:
 			{
-				auto unixTime = takeNumber!(1, 20);
+				auto unixTime = takeNumber!(1, 20, time_t);
 				auto d = SysTime.fromUnixTime(unixTime).to!DateTime;
 				year = d.year;
 				month = d.month;
