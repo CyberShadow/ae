@@ -66,6 +66,7 @@ class CachedCurlNetwork : Network
 		string url;
 		HTTP.Method method = HTTP.Method.get;
 		const(void)[] data;
+		const(string[2])[] headers;
 
 		int maxRedirects = int.min; // choose depending or method
 	}
@@ -90,6 +91,8 @@ class CachedCurlNetwork : Network
 				if (cookiePath.exists)
 					http.addRequestHeader("Cookie", cookiePath.readText.chomp());
 			}
+			foreach (header; request.headers)
+				http.addRequestHeader(header[0], header[1]);
 			Metadata metadata;
 			http.onReceiveHeader =
 				(in char[] key, in char[] value)
