@@ -1002,12 +1002,14 @@ EOF");
 
 			version (Windows)
 			{
-				// A make argument is insufficient,
-				// because of recursive make invocations
 				auto m = dmdMakeFullName.readText();
 				m = m
+					// A make argument is insufficient,
+					// because of recursive make invocations
 					.replace(`CC=\dm\bin\dmc`, `CC=dmc`)
 					.replace(`SCROOT=$D\dm`, `SCROOT=` ~ scRoot)
+					// Debug crashes in build.d
+					.replaceAll(re!(`^(	\$\(HOST_DC\) .*) (build\.d)$`, "m"), "$1 -g $2")
 				;
 				dmdMakeFullName.write(m);
 			}
