@@ -1487,7 +1487,7 @@ EOS";
 
 		override void performStage()
 		{
-			assert(targets.length, "Druntime stage without build");
+			assert(targets.length, "Phobos stage without build");
 			foreach (lib; targets)
 				cp(
 					buildPath(sourceDir, lib),
