@@ -126,13 +126,16 @@ class ManagedRepository
 				"Unexpected object type");
 		}
 
-		if (offline)
+		try
 			check();
-		else
+		catch (Exception e)
 		{
-			try
-				check();
-			catch (Exception e)
+			if (offline)
+			{
+				log("Don't have commit " ~ hash ~ " and in offline mode, can't proceed.");
+				throw new Exception("Giving up");
+			}
+			else
 			{
 				log("Don't have commit " ~ hash ~ ", updating and retrying...");
 				update();
