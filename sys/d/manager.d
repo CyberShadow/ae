@@ -1042,7 +1042,7 @@ EOF");
 					auto buildD = buildDPath.readText();
 					buildD = buildD
 						// https://github.com/dlang/dmd/pull/10491
-						// PATH issue worked around here (see baseEnvironment()), but still fails under Wine, as its wmic outputs UTF-16.
+						// Needs WBEM PATH entry, and also fails under Wine as its wmic outputs UTF-16.
 						.replace(`["wmic", "OS", "get", "OSArchitecture"].execute.output`, isWin64 ? `"64-bit"` : `"32-bit"`)
 					;
 					buildDPath.write(buildD);
@@ -2527,9 +2527,6 @@ EOS";
 			auto winDir = buf[0..GetWindowsDirectory(buf.ptr, buf.length)].toUTF8();
 			auto sysDir = buf[0..GetSystemDirectory (buf.ptr, buf.length)].toUTF8();
 			newPaths ~= [sysDir, winDir];
-
-			// For wmic.exe, used by build.d
-			newPaths ~= sysDir.buildPath("wbem");
 		}
 		else
 		{
