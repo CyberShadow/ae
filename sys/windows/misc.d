@@ -97,6 +97,20 @@ void hideOwnConsoleWindow()()
 
 // ***************************************************************************
 
+/// Returns true if the host Windows OS is 64-bit.
+bool isWin64()
+{
+	version (D_LP64)
+		return true; // host must be 64-bit if this compiles
+	else
+	{
+		import core.sys.windows.winbase : IsWow64Process, GetCurrentProcess;
+		int is64;
+		IsWow64Process(GetCurrentProcess(), &is64).wenforce("IsWow64Process");
+		return !!is64;
+	}
+}
+
 /// Returns Wine version, or null if not running under Wine.
 string getWineVersion()
 {
