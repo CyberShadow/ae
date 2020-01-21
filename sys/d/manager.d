@@ -2527,6 +2527,8 @@ EOS";
 			auto winDir = buf[0..GetWindowsDirectory(buf.ptr, buf.length)].toUTF8();
 			auto sysDir = buf[0..GetSystemDirectory (buf.ptr, buf.length)].toUTF8();
 			newPaths ~= [sysDir, winDir];
+
+			newPaths ~= gitInstaller.binDirs; // For git-describe and such
 		}
 		else
 		{
