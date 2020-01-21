@@ -45,6 +45,8 @@ version (Windows)
 	import ae.sys.install.msys;
 	import ae.sys.install.vs;
 
+	import ae.sys.windows.misc;
+
 	extern(Windows) void SetErrorMode(int);
 }
 
@@ -1030,6 +1032,23 @@ EOF");
 			}
 
 			submodule.saveFileState("src/" ~ dmdMakeFileName);
+
+			version (Windows)
+			{
+				auto buildDFileName = "build.d";
+				auto buildDPath = srcDir.buildPath(buildDFileName);
+				if (buildDPath.exists)
+				{
+					auto buildD = buildDPath.readText();
+					buildD = buildD
+						// https://github.com/dlang/dmd/pull/10491
+						// PATH issue worked around here (see baseEnvironment()), but still fails under Wine, as its wmic outputs UTF-16.
+						.replace(`["wmic", "OS", "get", "OSArchitecture"].execute.output`, isWin64 ? `"64-bit"` : `"32-bit"`)
+					;
+					buildDPath.write(buildD);
+					submodule.saveFileState("src/" ~ buildDFileName);
+				}
+			}
 
 			// Fix compilation error of older DMDs with glibc >= 2.25
 			version (linux)
