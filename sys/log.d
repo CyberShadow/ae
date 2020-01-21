@@ -30,8 +30,6 @@ string logDir;
 
 private void init()
 {
-	import core.runtime;
-
 	if (!logDir)
 		logDir = getcwd().buildPath("logs");
 }
@@ -277,7 +275,7 @@ bool quiet;
 
 shared static this()
 {
-	import core.runtime;
+	import core.runtime : Runtime;
 	foreach (arg; Runtime.args[1..$])
 		if (arg == "-q" || arg == "--quiet")
 			quiet = true;
@@ -290,9 +288,11 @@ Logger createLogger(string name)
 	version (unittest)
 		result = consoleLogger(name);
 	else
+	{
 		if (quiet)
 			result = fileLogger(name);
 		else
 			result = fileAndConsoleLogger(name);
+	}
 	return result;
 }
