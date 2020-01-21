@@ -1149,7 +1149,7 @@ EOF");
 
 				auto ini = q"EOS
 [Environment]
-LIB="%@P%\..\lib"
+LIB=%@P%\..\lib
 DFLAGS="-I%@P%\..\import"
 DMC=__DMC__
 LINKCMD=%DMC%\link.exe
@@ -1162,26 +1162,26 @@ EOS"
 					ini ~= q"EOS
 
 [Environment64]
-LIB="%@P%\..\lib"
+LIB=%@P%\..\lib
 DFLAGS=%DFLAGS% -L/OPT:NOICF
 VSINSTALLDIR=__VS__\
 VCINSTALLDIR=%VSINSTALLDIR%VC\
 PATH=%PATH%;%VCINSTALLDIR%\bin\__MODELDIR__;%VCINSTALLDIR%\bin
 WindowsSdkDir=__SDK__
 LINKCMD=%VCINSTALLDIR%\bin\__MODELDIR__\link.exe
-LIB=%LIB%;"%VCINSTALLDIR%\lib\amd64"
-LIB=%LIB%;"%WindowsSdkDir%\Lib\x64"
+LIB=%LIB%;%VCINSTALLDIR%\lib\amd64
+LIB=%LIB%;%WindowsSdkDir%\Lib\x64
 
 [Environment32mscoff]
-LIB="%@P%\..\lib"
+LIB=%@P%\..\lib
 DFLAGS=%DFLAGS% -L/OPT:NOICF
 VSINSTALLDIR=__VS__\
 VCINSTALLDIR=%VSINSTALLDIR%VC\
 PATH=%PATH%;%VCINSTALLDIR%\bin
 WindowsSdkDir=__SDK__
 LINKCMD=%VCINSTALLDIR%\bin\link.exe
-LIB=%LIB%;"%VCINSTALLDIR%\lib"
-LIB=%LIB%;"%WindowsSdkDir%\Lib"
+LIB=%LIB%;%VCINSTALLDIR%\lib
+LIB=%LIB%;%WindowsSdkDir%\Lib
 EOS"
 						.replace("__VS__"      , env.deps.vsDir .absolutePath())
 						.replace("__SDK__"     , env.deps.sdkDir.absolutePath())
