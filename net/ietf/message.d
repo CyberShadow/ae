@@ -353,22 +353,23 @@ class Rfc850Message
 				xref ~= Xref(segs[0], to!int(segs[1]));
 			}
 		}
-
-		/*
-		if ("List-ID" in headers && !xref.length)
+		else
+		if (headers.get("Sender", null).canFind("-bounces@"))
+			xref = [Xref(headers["Sender"].findSplit(" <")[0].replace(`"`, ``))];
+		else
+		if ("List-Unsubscribe" in headers)
+			xref = headers["List-Unsubscribe"].split(", ").filter!(s => s.canFind("/options/")).map!(s => Xref(s.split("/")[$-1].stripRight('>'))).array();
+		else
+		if ("List-ID" in headers)
 		{
 			auto listID = headers["List-ID"];
-			listID = listID.findSplit(" <")[0];
-			listID = listID.replace(`"`, ``);
+			auto parts = listID.findSplit(" <");
+			if (parts[1].length)
+				listID = parts[2].findSplit(".")[0];
+			else
+				listID = parts[0].replace(`"`, ``);
 			xref = [Xref(listID)];
 		}
-		*/
-
-		if (headers.get("Sender", null).canFind("-bounces@"))
-			xref ~= Xref(headers["Sender"].findSplit(" <")[0].replace(`"`, ``));
-
-		if ("List-Unsubscribe" in headers && !xref.length)
-			xref = headers["List-Unsubscribe"].split(", ").filter!(s => s.canFind("/options/")).map!(s => Xref(s.split("/")[$-1].stripRight('>'))).array();
 
 		// Decode message ID
 
@@ -556,6 +557,9 @@ unittest
 
 	post = new Rfc850Message("Date: Tue, 06 Sep 2011 14:52 -0700\n\nText");
 	assert(post.time.year == 2011);
+
+	post = new Rfc850Message("List-ID: phobos\nSubject: [phobos] Subject\n\nText");
+	assert(post.xref == [Xref("phobos")]);
 }
 
 private:
