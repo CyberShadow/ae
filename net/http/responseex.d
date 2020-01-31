@@ -130,6 +130,7 @@ public:
 					html ~= `<li><a href="` ~ encodeUrlParameter(name) ~ suffix ~ `">` ~ encodeEntities(name) ~ suffix ~ `</a></li>`;
 				}
 				html ~= `</ul>`;
+				setStatus(HttpStatusCode.OK);
 				writePage(title, html);
 				return this;
 			}
