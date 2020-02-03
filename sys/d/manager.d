@@ -2528,7 +2528,7 @@ EOS";
 			auto sysDir = buf[0..GetSystemDirectory (buf.ptr, buf.length)].toUTF8();
 			newPaths ~= [sysDir, winDir];
 
-			newPaths ~= gitInstaller.binDirs; // For git-describe and such
+			newPaths ~= gitInstaller.exePath("git").absolutePath().dirName; // For git-describe and such
 		}
 		else
 		{
