@@ -141,7 +141,7 @@ public:
 	{
 		assert(capacity == 0 || size <= capacity);
 	}
-	body
+	do
 	{
 		if (!capacity)
 			capacity = size;
@@ -287,7 +287,7 @@ public:
 	{
 		assert(length == newSize);
 	}
-	body
+	do
 	{
 		if (newCapacity <= capacity)
 		{
@@ -324,7 +324,7 @@ public:
 	{
 		assert(wrapper is null);
 	}
-	body
+	do
 	{
 		if (wrapper)
 		{
@@ -437,7 +437,7 @@ public:
 //	{
 //		assert(result.length == y-x);
 //	}
-	body
+	do
 	{
 		if (x == y)
 			return Data();
@@ -455,7 +455,7 @@ public:
 	{
 		assert(size <= length);
 	}
-	body
+	do
 	{
 		Data result = this;
 		result.contents = contents[0..size];
