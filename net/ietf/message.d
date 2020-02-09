@@ -354,8 +354,8 @@ class Rfc850Message
 			}
 		}
 		else
-		if (headers.get("Sender", null).canFind("-bounces@"))
-			xref = [Xref(headers["Sender"].findSplit(" <")[0].replace(`"`, ``))];
+		if (headers.get("Sender", null).canFind("-bounces@") && !headers["Sender"].representation.any!(c => c.among('<', '>', '"')))
+			xref = [Xref(headers["Sender"].findSplit("-bounces@")[0])];
 		else
 		if ("List-Unsubscribe" in headers)
 			xref = headers["List-Unsubscribe"].split(", ").filter!(s => s.canFind("/options/")).map!(s => Xref(s.split("/")[$-1].stripRight('>'))).array();
@@ -560,6 +560,9 @@ unittest
 
 	post = new Rfc850Message("List-ID: phobos\nSubject: [phobos] Subject\n\nText");
 	assert(post.xref == [Xref("phobos")]);
+
+	post = new Rfc850Message("Sender: dmd-beta-bounces@puremagic.com\n\nText");
+	assert(post.xref == [Xref("dmd-beta")]);
 }
 
 private:
