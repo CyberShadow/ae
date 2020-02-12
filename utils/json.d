@@ -454,78 +454,73 @@ private struct JsonParser(C)
 		enforce(n==c, text("Expected ", c, ", got ", n));
 	}
 
-	T read(T)()
+	void read(T)(ref T value)
 	{
 		static if (is(T == typeof(null)))
-			return readNull();
+			value = readNull();
 		else
 		static if (is(T X == Nullable!X))
-			return readNullable!X();
+			readNullable!X(value);
 		else
 		static if (is(T==enum))
-			return readEnum!(T)();
+			value = readEnum!(T)();
 		else
 		static if (isSomeString!T)
-			return readString().to!T;
+			value = readString().to!T;
 		else
 		static if (is(T==bool))
-			return readBool();
+			value = readBool();
 		else
 		static if (is(T : real))
-			return readNumber!(T)();
+			value = readNumber!(T)();
 		else
 		static if (isDynamicArray!T)
-			return readArray!(typeof(T.init[0]))();
+			value = readArray!(typeof(T.init[0]))();
 		else
 		static if (isStaticArray!T)
-		{
-			T result = readArray!(typeof(T.init[0]))()[];
-			return result;
-		}
+			readStaticArray(value);
 		else
 		static if (isTuple!T)
-			return readTuple!T();
+			readTuple!T(value);
 		else
 		static if (is(typeof(T.init.keys)) && is(typeof(T.init.values)) && is(typeof(T.init.keys[0])==string))
-			return readAA!(T)();
+			readAA!(T)(value);
 		else
 		static if (is(T==JSONFragment))
 		{
 			auto start = p;
 			skipValue();
-			return JSONFragment(s[start..p]);
+			value = JSONFragment(s[start..p]);
 		}
 		else
 		static if (is(T==struct))
-			return readObject!(T)();
+			readObject!(T)(value);
 		else
 		static if (is(T U : U*))
-			return readPointer!T();
+			value = readPointer!T();
 		else
 			static assert(0, "Can't decode " ~ T.stringof ~ " from JSON");
 	}
 
-	auto readTuple(T)()
+	void readTuple(T)(ref T value)
 	{
 		// TODO: serialize as object if tuple has names
 		enum N = T.expand.length;
 		static if (N == 0)
-			return T();
+			return;
 		else
 		static if (N == 1)
-			return T(read!(typeof(T.expand[0])));
+			read(value.expand[0]);
 		else
 		{
-			T v;
 			expect('[');
-			foreach (n, ref f; v.expand)
+			foreach (n, ref f; value.expand)
 			{
 				static if (n)
 					expect(',');
-				f = read!(typeof(f));
+				read(f);
 			}
 			expect(']');
-			return v;
 		}
 	}
 
@@ -538,15 +533,24 @@ private struct JsonParser(C)
 		return null;
 	}
 
-	auto readNullable(T)()
+	void readNullable(T)(ref Nullable!T value)
 	{
 		if (peek() == 'n')
 		{
 			readNull();
-			return Nullable!T();
+			value = Nullable!T();
 		}
 		else
-			return Nullable!T(read!T);
+		{
+			if (value.isNull)
+			{
+				T subvalue;
+				read!T(subvalue);
+				value = subvalue;
+			}
+			else
+				read!T(value.get());
+		}
 	}
 
 	C[] readSimpleString() /// i.e. without escapes
@@ -710,7 +714,10 @@ private struct JsonParser(C)
 		}
 		while(true)
 		{
-			result ~= read!(T)();
+			T subvalue;
+			read!T(subvalue);
+			result ~= subvalue;
+
 			skipWhitespace();
 			if (peek()==']')
 			{
@@ -722,16 +729,29 @@ private struct JsonParser(C)
 		}
 	}
 
-	T readObject(T)()
+	void readStaticArray(T, size_t n)(ref T[n] value)
+	{
+		skipWhitespace();
+		expect('[');
+		skipWhitespace();
+		foreach (i, ref subvalue; value)
+		{
+			if (i)
+				expect(',');
+			read(subvalue);
+		}
+		expect(']');
+	}
+
+	void readObject(T)(ref T v)
 	{
 		skipWhitespace();
 		expect('{');
 		skipWhitespace();
-		T v;
 		if (peek()=='}')
 		{
 			p++;
-			return v;
+			return;
 		}
 
 		while (true)
@@ -747,7 +767,7 @@ private struct JsonParser(C)
 				enum name = getJsonName!(T, v.tupleof[i].stringof[2..$]);
 				if (name == jsonField)
 				{
-					field = read!(typeof(v.tupleof[i]))();
+					read(field);
 					found = true;
 					break;
 				}
@@ -765,26 +785,28 @@ private struct JsonParser(C)
 			if (peek()=='}')
 			{
 				p++;
-				return v;
+				return;
 			}
 			else
 				expect(',');
 		}
 	}
 
-	T readAA(T)()
+	void readAA(T)(ref T v)
 	{
 		skipWhitespace();
 		static if (is(typeof(T.init is null)))
 			if (peek() == 'n')
-				return readNull();
+			{
+				v = readNull();
+				return;
+			}
 		expect('{');
 		skipWhitespace();
-		T v;
 		if (peek()=='}')
 		{
 			p++;
-			return v;
+			return;
 		}
 		alias K = typeof(v.keys[0]);
 
@@ -794,13 +816,16 @@ private struct JsonParser(C)
 			skipWhitespace();
 			expect(':');
 
-			v[jsonField.to!K] = read!(typeof(v.values[0]))();
+			// TODO: elide copy
+			typeof(v.values[0]) subvalue;
+			read(subvalue);
+			v[jsonField.to!K] = subvalue;
 
 			skipWhitespace();
 			if (peek()=='}')
 			{
 				p++;
-				return v;
+				return;
 			}
 			else
 				expect(',');
@@ -822,7 +847,7 @@ private struct JsonParser(C)
 		}
 		alias S = typeof(*T.init);
 		T v = new S;
-		*v = read!S();
+		read!S(*v);
 		return v;
 	}
 
@@ -894,7 +919,9 @@ T jsonParse(T, C)(C[] s)
 {
 	auto parser = JsonParser!C(s);
 	mixin(exceptionContext(q{format("Error at position %d", parser.p)}));
-	return parser.read!T();
+	T result;
+	parser.read!T(result);
+	return result;
 }
 
 unittest
@@ -931,6 +958,22 @@ unittest
 	jsonParse!T(cast(const(char)[]) s);
 	jsonParse!T(s.to!wstring);
 	jsonParse!T(s.to!dstring);
+}
+
+void jsonParse(T, C)(C[] s, ref T result)
+{
+	auto parser = JsonParser!C(s);
+	mixin(exceptionContext(q{format("Error at position %d", parser.p)}));
+	parser.read!T(result);
+}
+
+unittest
+{
+	struct S { int a, b; }
+	S s;
+	s.a = 1;
+	jsonParse(`{"b":2}`, s);
+	assert(s == S(1, 2));
 }
 
 // ************************************************************************
@@ -978,7 +1021,12 @@ unittest
 	struct S { int i1, i2; S[] arr1, arr2; string[string] dic; En en; mixin NonSerialized!(i2, arr2); }
 	S s = S(42, 5, [S(1), S(2)], [S(3), S(4)], ["apple":"fruit", "pizza":"vegetable"], En.two);
 	auto s2 = jsonParse!S(toJson(s));
-	assert(s.i1 == s2.i1 && s2.i2 is int.init && s.arr1 == s2.arr1 && s2.arr2 is null && s.dic == s2.dic && s.en == En.two);
+	assert(s.i1 == s2.i1);
+	assert(s2.i2 is int.init);
+	assert(s.arr1 == s2.arr1);
+	assert(s2.arr2 is null);
+	assert(s.dic == s2.dic, s2.dic.text);
+	assert(s.en == En.two);
 }
 
 unittest
