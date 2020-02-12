@@ -21,6 +21,7 @@ import std.string;
 import std.traits;
 
 import ae.utils.aa : getOrAdd;
+import ae.utils.array : nonNull;
 import ae.utils.exception;
 import ae.utils.meta : boxVoid, unboxVoid;
 import ae.utils.appender : FastAppender;
@@ -554,32 +555,34 @@ string prettifyIni(string ini) { return ini.replace("\n[", "\n\n["); }
 // ***************************************************************************
 
 /// Walks a data structure and calls visitor with each field and its path.
-void visitWithPath(alias visitor, S = string, U)(S[] path, ref U v)
+template visitWithPath(alias visitor, S = string)
 {
-	static if (isAALike!(U, S))
-		foreach (ref vk, ref vv; v)
-			visitWithPath!visitor(path ~ vk.to!S, vv);
-	else
-	static if (is(U == struct))
+	void visitWithPath(U)(S[] path, ref U v)
 	{
-		foreach (i, ref field; v.tupleof)
-			if (field !is typeof(field).init)
+		static if (isAALike!(U, S))
+			foreach (ref vk, ref vv; v)
+				visitWithPath(path ~ vk.to!S, vv);
+		else
+		static if (is(U == struct))
+		{
+			foreach (i, ref field; v.tupleof)
 			{
 				enum fieldName = to!S(v.tupleof[i].stringof[2..$]);
-				visitWithPath!visitor(path ~ fieldName, field);
+				visitWithPath(path ~ fieldName, field);
 			}
+		}
+		else
+		static if (is(U V : V*))
+		{
+			if (v)
+				visitWithPath(path, *v);
+		}
+		else
+		static if (is(typeof(v.to!S())))
+			visitor(path, v is U.init ? null : v.to!S().nonNull);
+		else
+			static assert(false, "Can't serialize " ~ U.stringof);
 	}
-	else
-	static if (is(U V : V*))
-	{
-		if (v)
-			visitWithPath!visitor(path, *v);
-	}
-	else
-	static if (is(typeof(v.to!S())))
-		visitor(path, v.to!S());
-	else
-		static assert(false, "Can't serialize " ~ U.stringof);
 }
 
 /// Formats a data structure as a structured .ini file.
@@ -591,6 +594,8 @@ S formatIni(S = string, T)(
 	S[] lastSection;
 	void visitor(S[] path, S value)
 	{
+		if (!value)
+			return;
 		auto sectionLength = getSectionLength(path);
 		if (sectionLength == 0 && lastSection.length != 0)
 			sectionLength = 1; // can't go back to top-level after starting a section
@@ -786,4 +791,41 @@ unittest
 	scope(exit) remove(fn);
 	updateIniFile(fn, "a", "c");
 	assert(read(fn) == "a=c\n");
+}
+
+/// Updates an entire INI file.
+/// Like formatIni, but tries to preserve
+/// existing field order and comments.
+void updateIni(S, T)(ref S[] lines, auto ref T value)
+{
+	T oldValue = parseIni!T(lines);
+	S[S[]] oldIni;
+	void oldVisitor(S[] path, S value)
+	{
+		if (value)
+			oldIni[path.idup] = value;
+	}
+	visitWithPath!(oldVisitor, S)(null, oldValue);
+
+	void visitor(S[] path, S value)
+	{
+		if (oldIni.get(path, null) != value)
+			updateIni(lines, path.join('.'), value);
+	}
+
+	visitWithPath!(visitor, S)(null, value);
+}
+
+unittest
+{
+	struct S { int a, b, c; }
+	auto ini = q"<
+		b=2
+		c=3
+	>".strip.splitLines.map!strip.array;
+	updateIni(ini, S(1, 2));
+	assert(ini == [
+		"b=2",
+		"a=1",
+	]);
 }
