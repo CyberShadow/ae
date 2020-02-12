@@ -23,6 +23,7 @@ import std.traits;
 import ae.utils.aa : getOrAdd;
 import ae.utils.exception;
 import ae.utils.meta : boxVoid, unboxVoid;
+import ae.utils.appender : FastAppender;
 
 alias std.string.indexOf indexOf;
 
@@ -551,6 +552,87 @@ struct IniWriter(O)
 string prettifyIni(string ini) { return ini.replace("\n[", "\n\n["); }
 
 // ***************************************************************************
+
+/// Walks a data structure and calls visitor with each field and its path.
+void visitWithPath(alias visitor, S = string, U)(S[] path, ref U v)
+{
+	static if (isAALike!(U, S))
+		foreach (ref vk, ref vv; v)
+			visitWithPath!visitor(path ~ vk.to!S, vv);
+	else
+	static if (is(U == struct))
+	{
+		foreach (i, ref field; v.tupleof)
+			if (field !is typeof(field).init)
+			{
+				enum fieldName = to!S(v.tupleof[i].stringof[2..$]);
+				visitWithPath!visitor(path ~ fieldName, field);
+			}
+	}
+	else
+	static if (is(U V : V*))
+	{
+		if (v)
+			visitWithPath!visitor(path, *v);
+	}
+	else
+	static if (is(typeof(v.to!S())))
+		visitor(path, v.to!S());
+	else
+		static assert(false, "Can't serialize " ~ U.stringof);
+}
+
+/// Formats a data structure as a structured .ini file.
+S formatIni(S = string, T)(
+	auto ref T value,
+	size_t delegate(S[] path) getSectionLength = (S[] path) => path.length > 1 ? 1 : 0)
+{
+	IniWriter!(FastAppender!(typeof(S.init[0]))) writer;
+	S[] lastSection;
+	void visitor(S[] path, S value)
+	{
+		auto sectionLength = getSectionLength(path);
+		if (sectionLength == 0 && lastSection.length != 0)
+			sectionLength = 1; // can't go back to top-level after starting a section
+		enforce(sectionLength < path.length, "Bad section length");
+		auto section = path[0 .. sectionLength];
+		if (section != lastSection)
+		{
+			writer.startSection(section.join("."));
+			lastSection = section;
+		}
+		auto subPath = path[sectionLength .. $];
+		writer.writeValue(subPath.join("."), value);
+	}
+
+	visitWithPath!(visitor, S)(null, value);
+	return writer.writer.get().prettifyIni;
+}
+
+unittest
+{
+	struct S { int i; S* next; }
+	assert(formatIni(S(1, new S(2))) == q"EOF
+i=1
+
+[next]
+i=2
+EOF");
+}
+
+unittest
+{
+	assert(formatIni(["one" : 1]) == q"EOF
+one=1
+EOF");
+}
+
+unittest
+{
+	assert(formatIni(["one" : 1]) == q"EOF
+one=1
+EOF");
+}
 
 /**
    Adds or updates a value in an INI file.
