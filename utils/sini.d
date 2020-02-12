@@ -639,6 +639,7 @@ EOF");
 
    If the value is already in the INI file, then it is updated
    in-place; otherwise, a new one is added to the matching section.
+   Setting value to null removes the line if it is present.
 
    Whitespace and comments on other lines are preserved.
 
@@ -693,12 +694,18 @@ void updateIni(S)(ref S[] lines, S name, S value)
 	if (inBestSection)
 		bestSectionEnd = lines.length;
 
-	S genLine(S section) { return name[section.length ? section.length + 1 : 0 .. $] ~ '=' ~ value; }
+	if (value)
+	{
+		S genLine(S section) { return name[section.length ? section.length + 1 : 0 .. $] ~ '=' ~ value; }
 
-	if (valueLine != size_t.max)
-		lines[valueLine] = genLine(valueLineSection);
+		if (valueLine != size_t.max)
+			lines[valueLine] = genLine(valueLineSection);
+		else
+			lines = lines[0..bestSectionEnd] ~ genLine(bestSection) ~ lines[bestSectionEnd..$];
+	}
 	else
-		lines = lines[0..bestSectionEnd] ~ genLine(bestSection) ~ lines[bestSectionEnd..$];
+		if (valueLine != size_t.max)
+			lines = lines[0..valueLine] ~ lines[valueLine+1..$];
 }
 
 unittest
@@ -748,6 +755,18 @@ unittest
 		a=2
 		[t]
 		a=3
+	>".strip.splitLines.map!strip));
+}
+
+unittest
+{
+	auto ini = q"<
+		a=1
+		b=2
+	>".strip.splitLines.map!strip.array;
+	updateIni(ini, "a", null);
+	assert(equal(ini, q"<
+		b=2
 	>".strip.splitLines.map!strip));
 }
 
