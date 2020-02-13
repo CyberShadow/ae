@@ -362,7 +362,7 @@ TimerTask setTimeout(Args...)(void delegate(Args) handler, Duration delay, Args 
 	return task;
 }
 
-TimerTask setInterval(Args...)(void delegate() handler, Duration delay, Args args)
+TimerTask setInterval(Args...)(void delegate(Args) handler, Duration delay, Args args)
 {
 	auto task = new TimerTask(delay, (Timer timer, TimerTask task) { mainTimer.add(task); handler(args); });
 	mainTimer.add(task);
