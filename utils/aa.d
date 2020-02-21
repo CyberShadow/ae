@@ -526,6 +526,24 @@ unittest
 	}
 }
 
+/// Like assocArray
+auto orderedMap(R)(R input)
+if (input.front.length == 2)
+{
+	alias K = typeof(input.front[0]);
+	alias V = typeof(input.front[1]);
+	OrderedMap!(K, V) map;
+	foreach (ref pair; input)
+		map[pair[0]] = pair[1];
+	return map;
+}
+
+unittest
+{
+	auto map = 3.iota.map!(n => tuple(n, n + 1)).orderedMap;
+	assert(map.length == 3 && map[1] == 2);
+}
+
 // ***************************************************************************
 
 /// Helper/wrapper for void[0][T]
