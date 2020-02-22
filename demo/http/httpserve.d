@@ -26,39 +26,35 @@ import ae.net.http.common;
 import ae.net.http.responseex;
 import ae.net.ietf.headers;
 import ae.net.asockets;
+import ae.utils.funopt;
+import ae.utils.main;
 
-class FileServer
+void httpserve(ushort port = 0, string host = null)
 {
 	HttpServer server;
 
-	this(ushort port)
-	{
-		server = new HttpServer();
-		server.log = new ConsoleLogger("Web");
-		server.handleRequest = &onRequest;
-		port = server.listen(port);
-		addShutdownHandler({ server.close(); });
-	}
+	server = new HttpServer();
+	server.log = consoleLogger("Web");
+	server.handleRequest =
+		(HttpRequest request, HttpServerConnection conn)
+		{
+			auto response = new HttpResponseEx();
+			response.status = HttpStatusCode.OK;
 
-	void onRequest(HttpRequest request, HttpServerConnection conn)
-	{
-		auto response = new HttpResponseEx();
-		response.status = HttpStatusCode.OK;
+			try
+				response.serveFile(
+					decodeUrlParameter(request.resource[1..$]),
+					"",
+					true,
+					formatAddress("http", conn.localAddress, request.host, request.port) ~ "/");
+			catch (Exception e)
+				response.writeError(HttpStatusCode.InternalServerError, e.msg);
+			conn.sendResponse(response);
+		};
+	server.listen(port, host);
+	addShutdownHandler({ server.close(); });
 
-		try
-			response.serveFile(
-				decodeUrlParameter(request.resource[1..$]),
-				"",
-				true,
-				formatAddress("http", conn.localAddress, request.host, request.port) ~ "/");
-		catch (Exception e)
-			response.writeError(HttpStatusCode.InternalServerError, e.msg);
-		conn.sendResponse(response);
-	}
-}
-
-void main(string[] args)
-{
-	new FileServer(args.length > 1 ? to!ushort(args[1]) : 0);
 	socketManager.loop();
 }
+
+mixin main!(funopt!httpserve);
