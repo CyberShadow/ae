@@ -21,6 +21,7 @@ import std.file;
 import std.path;
 
 public import ae.net.http.common;
+import ae.net.ietf.headers;
 import ae.sys.data;
 import ae.sys.dataio;
 import ae.utils.array;
@@ -79,6 +80,28 @@ public:
 		if (path.length && (path.contains("..") || path[0]=='/' || path[0]=='\\' || path.contains("//") || path.contains("\\\\")))
 			return false;
 		return true;
+	}
+
+	static void detectMime(string name, ref Headers headers)
+	{
+		// Special case: .svgz
+		if (name.endsWith(".svgz"))
+			name = name[0 .. $ - 1] ~ ".gz";
+
+		if (name.endsWith(".gz"))
+		{
+			auto mimeType = guessMime(name[0 .. $-3]);
+			if (mimeType)
+			{
+				headers["Content-Type"] = mimeType;
+				headers["Content-Encoding"] = "gzip";
+				return;
+			}
+		}
+
+		auto mimeType = guessMime(name);
+		if (mimeType)
+			headers["Content-Type"] = mimeType;
 	}
 
 	/// Send a file from the disk
@@ -142,15 +165,7 @@ public:
 			return this;
 		}
 
-		auto mimeType = guessMime(filename);
-		if (mimeType)
-			headers["Content-Type"] = mimeType;
-		else
-		if (filename.endsWith(".svgz"))
-		{
-			headers["Content-Type"] = "image/svg+xml";
-			headers["Content-Encoding"] = "gzip";
-		}
+		detectMime(filename, headers);
 
 		headers["Last-Modified"] = httpTime(timeLastModified(filename));
 		//data = [mapFile(filename, MmMode.read)];
