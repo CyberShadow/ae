@@ -13,27 +13,42 @@
 
 module ae.demo.http.httpserve;
 
-import std.stdio;
 import std.conv;
 import std.datetime;
 import std.exception;
+import std.stdio;
 import std.string;
 
-import ae.sys.log;
-import ae.sys.shutdown;
-import ae.net.http.server;
+import ae.net.asockets;
 import ae.net.http.common;
 import ae.net.http.responseex;
+import ae.net.http.server;
 import ae.net.ietf.headers;
-import ae.net.asockets;
+import ae.net.ssl.openssl;
+import ae.sys.log;
+import ae.sys.shutdown;
 import ae.utils.funopt;
 import ae.utils.main;
 
-void httpserve(ushort port = 0, string host = null)
+mixin SSLUseLib;
+
+void httpserve(
+	ushort port = 0, string host = null,
+	string sslCert = null, string sslKey = null,
+)
 {
 	HttpServer server;
 
-	server = new HttpServer();
+	if (sslCert || sslKey)
+	{
+		auto https = new HttpsServer();
+		https.ctx.setCertificate(sslCert);
+		https.ctx.setPrivateKey(sslKey);
+		server = https;
+	}
+	else
+		server = new HttpServer();
+
 	server.log = consoleLogger("Web");
 	server.handleRequest =
 		(HttpRequest request, HttpServerConnection conn)
