@@ -32,6 +32,8 @@ string guessMime(string fileName, string defaultResult = null)
 			return "text/html";
 		case ".js":
 			return "text/javascript";
+		case ".json":
+			return "application/json";
 		case ".css":
 			return "text/css";
 		case ".png":
