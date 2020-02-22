@@ -145,6 +145,12 @@ public:
 		auto mimeType = guessMime(filename);
 		if (mimeType)
 			headers["Content-Type"] = mimeType;
+		else
+		if (filename.endsWith(".svgz"))
+		{
+			headers["Content-Type"] = "image/svg+xml";
+			headers["Content-Encoding"] = "gzip";
+		}
 
 		headers["Last-Modified"] = httpTime(timeLastModified(filename));
 		//data = [mapFile(filename, MmMode.read)];
