@@ -13,6 +13,7 @@
 
 module ae.demo.http.httpserve;
 
+import std.base64;
 import std.conv;
 import std.datetime;
 import std.exception;
@@ -35,6 +36,7 @@ mixin SSLUseLib;
 void httpserve(
 	ushort port = 0, string host = null,
 	string sslCert = null, string sslKey = null,
+	string userName = null, string password = null,
 )
 {
 	HttpServer server;
@@ -54,6 +56,15 @@ void httpserve(
 		(HttpRequest request, HttpServerConnection conn)
 		{
 			auto response = new HttpResponseEx();
+
+			if ((userName || password) &&
+				(request.headers.get("Authorization", null) !=
+					"Basic " ~ Base64.encode((userName ~ ":" ~ password).representation)))
+			{
+				response.headers["WWW-Authenticate"] = `Basic`;
+				return conn.sendResponse(response.writeError(HttpStatusCode.Unauthorized));
+			}
+
 			response.status = HttpStatusCode.OK;
 
 			try
