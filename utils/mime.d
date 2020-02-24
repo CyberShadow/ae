@@ -71,6 +71,41 @@ string guessMime(string fileName, string defaultResult = null)
 		case ".di":
 			return "text/x-dhdr";
 
+		// https://pki-tutorial.readthedocs.io/en/latest/mime.html
+
+		case ".p8":
+		// case ".key":
+			return "application/pkcs8";
+		case ".p10":
+		// case ".csr":
+			return "application/pkcs10";
+		// case ".cer":
+		// 	return "application/pkix-cert";
+		// case ".crl":
+		// 	return "application/pkix-crl";
+		case ".p7c":
+			return "application/pkcs7-mime";
+
+		// case ".crt":
+		// case ".der":
+		// 	return "application/x-x509-ca-cert";
+		// case ".crt":
+		// 	return "application/x-x509-user-cert";
+		// case ".crl":
+		// 	return "application/x-pkcs7-crl";
+
+		case ".pem":
+			return "application/x-pem-file";
+		case ".p12":
+		case ".pfx":
+			return "application/x-pkcs12";
+
+		case ".p7b":
+		case ".spc":
+			return "application/x-pkcs7-certificates";
+		case ".p7r":
+			return "application/x-pkcs7-certreqresp";
+
 		default:
 			return defaultResult;
 	}
