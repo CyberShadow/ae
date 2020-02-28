@@ -14,6 +14,8 @@
 
 module ae.net.http.responseex;
 
+import std.algorithm.searching : skipOver, findSplit;
+import std.base64;
 import std.exception;
 import std.string;
 import std.conv;
@@ -283,6 +285,46 @@ public:
 		c.headers = this.headers.dup;
 		c.data = this.data.dup;
 		return c;
+	}
+
+	/**
+	   Usage:
+	   ---
+	   if (!response.authorize(request,
+	                           (username, password) => username == "JohnSmith" && password == "hunter2"))
+	       return conn.serveResponse(response);
+	   ---
+	*/
+	bool authorize(HttpRequest request, bool delegate(string username, string password) authenticator)
+	{
+		bool check()
+		{
+			auto authorization = request.headers.get("Authorization", null);
+			if (!authorization)
+				return false; // No authorization header
+			if (!authorization.skipOver("Basic "))
+				return false; // Unknown authentication algorithm
+			try
+				authorization = cast(string)Base64.decode(authorization);
+			catch (Base64Exception)
+				return false; // Bad encoding
+			auto parts = authorization.findSplit(":");
+			if (!parts[1].length)
+				return false; // Bad username/password formatting
+			auto username = parts[0];
+			auto password = parts[2];
+			if (!authenticator(username, password))
+				return false; // Unknown username/password
+			return true;
+		}
+
+		if (!check())
+		{
+			headers["WWW-Authenticate"] = `Basic`;
+			writeError(HttpStatusCode.Unauthorized);
+			return false;
+		}
+		return true;
 	}
 
 	static pageTemplate =
