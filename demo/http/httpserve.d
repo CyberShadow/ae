@@ -58,12 +58,8 @@ void httpserve(
 			auto response = new HttpResponseEx();
 
 			if ((userName || password) &&
-				(request.headers.get("Authorization", null) !=
-					"Basic " ~ Base64.encode((userName ~ ":" ~ password).representation)))
-			{
-				response.headers["WWW-Authenticate"] = `Basic`;
-				return conn.sendResponse(response.writeError(HttpStatusCode.Unauthorized));
-			}
+				!response.authorize(request, (reqUser, reqPass) => reqUser == userName && reqPass == password))
+				return conn.sendResponse(response);
 
 			response.status = HttpStatusCode.OK;
 
