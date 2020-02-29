@@ -169,6 +169,7 @@ public:
 private:
 	Data[] inBuffer;
 	sizediff_t expect;
+	size_t responseSize;
 	bool requestProcessing; // user code is asynchronously processing current request
 	bool timeoutActive;
 	string protocol;
@@ -404,8 +405,8 @@ public:
 		if (response && response.data.length && !isHead)
 			sendData(response.data);
 
-		debug (HTTP) debugLog("Sent response (%d bytes data)",
-			response ? response.data.bytes.length : 0);
+		responseSize = response ? response.data.bytes.length : 0;
+		debug (HTTP) debugLog("Sent response (%d bytes data)", responseSize);
 
 		closeResponse();
 
@@ -426,7 +427,9 @@ public:
 			conn.handleReadData = &onNewRequest;
 			if (!timeoutActive)
 			{
-				timer.resumeIdleTimeout();
+				// Give the client time to download large requests.
+				// Assume a minimal speed of 1kb/s.
+				timer.setIdleTimeout(server.timeout + (responseSize / 1024).seconds);
 				timeoutActive = true;
 			}
 			if (inBuffer.bytes.length) // a second request has been pipelined
