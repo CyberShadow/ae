@@ -945,6 +945,13 @@ struct MultiAA(K, V)
 			result[k] ~= v;
 		return result;
 	}
+
+	@property typeof(this) dup()
+	{
+		typeof(this) result;
+		result.items = items.dup;
+		return result;
+	}
 }
 
 unittest
