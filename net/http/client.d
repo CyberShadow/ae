@@ -58,12 +58,15 @@ protected:
 	{
 		if ("User-Agent" !in request.headers && agent)
 			request.headers["User-Agent"] = agent;
-		if (!compat) {
+		if (!compat)
+		{
 			if ("Accept-Encoding" !in request.headers)
 				request.headers["Accept-Encoding"] = "gzip, deflate, *;q=0";
 			if (request.data)
 				request.headers["Content-Length"] = to!string(request.data.bytes.length);
-		} else {
+		}
+		else
+		{
 			if ("Pragma" !in request.headers)
 				request.headers["Pragma"] = "No-Cache";
 		}
