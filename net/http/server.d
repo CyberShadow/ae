@@ -92,6 +92,8 @@ public:
 	/// Callback for an incoming request.
 	void delegate(HttpRequest request, HttpServerConnection conn) handleRequest;
 
+	string banner = "ae.net.http.server (+https://github.com/CyberShadow/ae)";
+
 protected:
 	TcpServer conn;
 	Duration timeout;
@@ -351,17 +353,20 @@ public:
 		auto protocolVersion = currentRequest ? currentRequest.protocolVersion : "1.0";
 		respMessage.put("HTTP/", protocolVersion, " ");
 
-		if ("X-Powered-By" !in headers)
-			headers["X-Powered-By"] = "ae.net.http.server (+https://github.com/CyberShadow/ae)";
+		if (server.banner && "X-Powered-By" !in headers)
+			headers["X-Powered-By"] = server.banner;
 
-		headers["Date"] = httpTime(Clock.currTime());
-		if (persistent && protocolVersion=="1.0")
-			headers["Connection"] = "Keep-Alive";
-		else
-		if (!persistent && protocolVersion=="1.1")
-			headers["Connection"] = "close";
-		else
-			headers.remove("Connection");
+		if ("Date" !in headers)
+			headers["Date"] = httpTime(Clock.currTime());
+
+		if ("Connection" !in headers)
+		{
+			if (persistent && protocolVersion=="1.0")
+				headers["Connection"] = "Keep-Alive";
+			else
+			if (!persistent && protocolVersion=="1.1")
+				headers["Connection"] = "close";
+		}
 
 		respMessage.put("%d %s\r\n".format(status, statusMessage));
 		foreach (string header, string value; headers)
