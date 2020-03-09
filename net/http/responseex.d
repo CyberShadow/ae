@@ -115,12 +115,12 @@ public:
 			return this;
 		}
 
-		assert(fsBase=="" || fsBase.endsWith("/"), "Invalid fsBase specified to serveFile");
+		assert(fsBase == "" || fsBase.endsWith("/"), "Invalid fsBase specified to serveFile");
 		assert(urlBase.endsWith("/"), "Invalid urlBase specified to serveFile");
 
 		string filename = fsBase ~ path;
 
-		if ((filename=="" || isDir(filename)))
+		if (filename == "" || isDir(filename))
 		{
 			if (filename.length && !filename.endsWith("/"))
 				return redirect("/" ~ path ~ "/");
@@ -183,9 +183,9 @@ public:
 
 	static string parseTemplate(string data, string[string] dictionary)
 	{
-		import ae.utils.textout;
+		import ae.utils.textout : StringBuilder;
 		StringBuilder sb;
-		for(;;)
+		while (true)
 		{
 			auto startpos = data.indexOf("<?");
 			if(startpos==-1)
