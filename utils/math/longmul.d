@@ -1,5 +1,5 @@
 /**
- * Wrapper for long integer multiplication / division operands
+ * Wrapper for long integer multiplication / division opcodes
  *
  * License:
  *   This Source Code Form is subject to the terms of
