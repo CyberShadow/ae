@@ -24,6 +24,7 @@ import std.conv;
 import std.ascii;
 import std.exception;
 import std.datetime;
+import std.typecons : tuple;
 
 import ae.net.ietf.headers;
 import ae.sys.data;
@@ -263,20 +264,20 @@ public:
 	/// Decodes submitted form data, and returns an AA of values.
 	UrlParameters decodePostData()
 	{
-		auto data = cast(string)data.joinToHeap();
-		if (data.length is 0)
-			return UrlParameters(null);
+		auto contentType = headers.get("Content-Type", "").decodeTokenHeader;
 
-		string contentType = headers.get("Content-Type", "");
-
-		switch (contentType.findSplit(";")[0])
+		switch (contentType.value)
 		{
 			case "application/x-www-form-urlencoded":
-				return decodeUrlParameters(data);
+				return decodeUrlParameters(cast(string)data.joinToHeap());
+			case "multipart/form-data":
+				return decodeMultipart(data.joinData, contentType.properties.get("boundary", null))
+					.map!(part => tuple(part.headers.get("Content-Disposition", null).decodeTokenHeader.properties.get("name", null), cast(string)part.data.toHeap()))
+					.UrlParameters;
 			case "":
 				throw new Exception("No Content-Type");
 			default:
-				throw new Exception("Unknown Content-Type: " ~ contentType);
+				throw new Exception("Unknown Content-Type: " ~ contentType.value);
 		}
 	}
 
