@@ -892,6 +892,14 @@ struct MultiAA(K, V)
 				add(key, value);
 	}
 
+	/// Like assocArray
+	this(R)(R range)
+	if (is(typeof(range.front[0]) : K) && is(typeof(range.front[1]) : V))
+	{
+		foreach (pair; range)
+			add(pair[0], pair[1]);
+	}
+
 	@property auto keys() inout { return items.keys; }
 
 	// https://issues.dlang.org/show_bug.cgi?id=14626
@@ -956,5 +964,6 @@ struct MultiAA(K, V)
 
 unittest
 {
-	MultiAA!(string, string) aa;
+	alias MASS = MultiAA!(string, int);
+	auto aa = MASS([tuple("foo", 42)]);
 }
