@@ -654,7 +654,7 @@ public import ae.net.ietf.url : UrlParameters, encodeUrlParameter, encodeUrlPara
 
 struct MultipartPart
 {
-	string[string] headers;
+	Headers headers;
 	Data data;
 }
 
@@ -705,8 +705,8 @@ MultipartPart[] decodeMultipart(Data data, string boundary)
 unittest
 {
 	auto parts = [
-		MultipartPart(["Foo" : "bar"], Data.init),
-		MultipartPart(["Baz" : "quux", "Frob" : "xyzzy"], Data("Content goes here\xFF")),
+		MultipartPart(Headers(["Foo" : "bar"]), Data.init),
+		MultipartPart(Headers(["Baz" : "quux", "Frob" : "xyzzy"]), Data("Content goes here\xFF")),
 	];
 	auto boundary = "abcde";
 	auto parts2 = parts.encodeMultipart(boundary).decodeMultipart(boundary);
