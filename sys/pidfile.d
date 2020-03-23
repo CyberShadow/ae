@@ -20,21 +20,9 @@ import std.path : baseName, buildPath;
 import std.process : thisProcessID;
 import std.stdio : File;
 
-version (Posix)
-{
-	import core.sys.posix.unistd : getlogin, geteuid;
-	import std.process : environment;
-	import std.string : fromStringz;
-}
-version (Windows)
-{
-	import core.sys.windows.lmcons : UNLEN;
-	import core.sys.windows.winbase : GetUserNameW;
-	import core.sys.windows.windef : DWORD;
-	import core.sys.windows.winnt : WCHAR;
-	import ae.sys.windows.exception : wenforce;
-	import ae.sys.windows.text : fromWString;
-}
+import ae.sys.process : getCurrentUser;
+
+version (Posix) import core.sys.posix.unistd : geteuid;
 
 static File pidFile;
 
@@ -53,17 +41,7 @@ void createPidFile(
 
 string defaultPidFileName()
 {
-	version (Posix)
-		auto userName = environment.get("LOGNAME", cast(string)getlogin().fromStringz);
-	version (Windows)
-	{
-		WCHAR[UNLEN + 1] buf;
-		DWORD len = buf.length;
-		GetUserNameW(buf.ptr, &len).wenforce("GetUserNameW");
-		auto userName = buf[].fromWString();
-	}
-
-	return text(userName, "-", thisExePath.baseName, ".pid");
+	return text(getCurrentUser(), "-", thisExePath.baseName, ".pid");
 }
 
 string defaultPidFilePath()

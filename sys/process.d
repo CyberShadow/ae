@@ -13,6 +13,38 @@
 
 module ae.sys.process;
 
+version (Posix)
+{
+	import core.sys.posix.unistd : getlogin;
+	import std.process : environment;
+	import std.string : fromStringz;
+}
+version (Windows)
+{
+	import core.sys.windows.lmcons : UNLEN;
+	import core.sys.windows.winbase : GetUserNameW;
+	import core.sys.windows.windef : DWORD;
+	import core.sys.windows.winnt : WCHAR;
+	import ae.sys.windows.exception : wenforce;
+	import ae.sys.windows.text : fromWString;
+}
+
+/// Get the name of the user that the current process is running under.
+// Note: Windows does not have numeric user IDs, which is why this
+// cross-platform function always returns a string.
+string getCurrentUser()
+{
+	version (Posix)
+		return environment.get("LOGNAME", cast(string)getlogin().fromStringz);
+	version (Windows)
+	{
+		WCHAR[UNLEN + 1] buf;
+		DWORD len = buf.length;
+		GetUserNameW(buf.ptr, &len).wenforce("GetUserNameW");
+		return buf[].fromWString();
+	}
+}
+
 version(Posix):
 
 import ae.net.sync;
