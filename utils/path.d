@@ -121,6 +121,9 @@ string findExecutable(string name, string[] dirs)
 	foreach (dir; dirs)
 		foreach (suffix; executableSuffixes)
 		{
+			version (Posix)
+				if (dir == "")
+					dir = ".";
 			auto fn = buildPath(dir, name) ~ suffix;
 			if (fn.exists)
 				return fn;
