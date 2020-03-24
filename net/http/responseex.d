@@ -238,7 +238,7 @@ public:
 			case 404: return "The resource you are trying to access does not exist on the server.";
 
 			case 500: return "An unexpected error has occured within the server software.";
-			case 501: return "The resource you are trying to access represents an unimplemented functionality.";
+			case 501: return "The resource you are trying to access represents unimplemented functionality.";
 			default: return "";
 		}
 	}
