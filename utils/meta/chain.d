@@ -22,6 +22,7 @@
 /// Functors return a bool (true if iteration should
 /// stop, false if it should continue).
 
+deprecated("Use ae.utils.meta.tuplerange")
 module ae.utils.meta.chain;
 
 import ae.utils.meta.caps;
