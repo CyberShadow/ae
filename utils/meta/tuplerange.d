@@ -193,6 +193,44 @@ unittest
 	assert(results == [0, 6]);
 }
 
+/// Like trFilter, but evaluates pred at compile-time with each
+/// element's type.
+auto trCTFilter(alias pred, R)(auto ref R r)
+{
+	struct Result
+	{
+		R r; this(R r) { this.r = r; }
+
+		bool opCall(Next)(Next next)
+		{
+			struct Handler
+			{
+				bool opCall(T)(auto ref T value)
+				{
+					static if (!pred!T)
+						return false; // keep going
+					else
+						return next(value);
+				}
+			}
+			Handler handler;
+			return r(handler);
+		}
+	}
+	return Result(r);
+}
+
+///
+unittest
+{
+	enum isNumeric(T) = is(typeof(cast(int)T.init));
+	int[] results;
+	trOnly(1, 2., "3", '\x04')
+		.trCTFilter!isNumeric
+		.trEach!((n) { results ~= cast(int)n; });
+	assert(results == [1, 2, 4]);
+}
+
 /// Transforms values using the given predicate before passing them to
 /// the next layer.
 auto trMap(alias pred, R)(auto ref R r)
