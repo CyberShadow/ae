@@ -236,6 +236,7 @@ public:
 			case 401: return "You are not authorized to access this resource.";
 			case 403: return "You have tried to access a restricted or unavailable resource, or attempted to circumvent server security.";
 			case 404: return "The resource you are trying to access does not exist on the server.";
+			case 405: return "The resource you are trying to access is not available using the method used in this request.";
 
 			case 500: return "An unexpected error has occured within the server software.";
 			case 501: return "The resource you are trying to access represents unimplemented functionality.";
