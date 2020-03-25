@@ -1306,7 +1306,7 @@ public:
 // ***************************************************************************
 
 /// An asynchronous TCP connection server.
-final class TcpServer
+class TcpServer
 {
 private:
 	/// Class that actually performs listening on a certain address family
@@ -1371,7 +1371,7 @@ private:
 
 public:
 	/// Start listening on this socket.
-	ushort listen(ushort port, string addr = null)
+	final ushort listen(ushort port, string addr = null)
 	{
 		debug(ASOCKETS) stderr.writefln("Attempting to listen on %s:%d", addr, port);
 		//assert(!listening, "Attempting to listen on a listening socket");
@@ -1406,7 +1406,7 @@ public:
 	}
 
 	/// ditto
-	void listen(AddressInfo[] addressInfos)
+	final void listen(AddressInfo[] addressInfos)
 	{
 		foreach (ref addressInfo; addressInfos)
 		{
@@ -1438,7 +1438,7 @@ public:
 		updateFlags();
 	}
 
-	@property Address[] localAddresses()
+	final @property Address[] localAddresses()
 	{
 		Address[] result;
 		foreach (listener; listeners)
@@ -1446,13 +1446,13 @@ public:
 		return result;
 	}
 
-	@property bool isListening()
+	final @property bool isListening()
 	{
 		return listening;
 	}
 
 	/// Stop listening on this socket.
-	void close()
+	final void close()
 	{
 		foreach (listener;listeners)
 			listener.closeListener();
