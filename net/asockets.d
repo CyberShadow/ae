@@ -643,6 +643,14 @@ enum ConnectionState
 	disconnecting,
 }
 
+/// Returns true if this is a connection state for which disconnecting is valid.
+/// Generally, applications should be aware of the life cycle of their sockets,
+/// so checking the state of a connection is unnecessary (and a code smell).
+/// However, unconditionally disconnecting some connected sockets can be useful
+/// when it needs to occur "out-of-bound" (not tied to the application normal life cycle),
+/// such as in response to a signal.
+bool disconnectable(ConnectionState state) { return state >= ConnectionState.resolving && state <= ConnectionState.connected; }
+
 /// Common interface for connections and adapters.
 interface IConnection
 {
@@ -827,7 +835,7 @@ public:
 	void disconnect(string reason = defaultDisconnectReason, DisconnectType type = DisconnectType.requested)
 	{
 		//scope(success) updateFlags(); // Work around scope(success) breaking debugger stack traces
-		assert(state == ConnectionState.resolving || state == ConnectionState.connecting || state == ConnectionState.connected, "Attempting to disconnect on a %s socket".format(state));
+		assert(state.disconnectable, "Attempting to disconnect on a %s socket".format(state));
 
 		if (writePending)
 		{
