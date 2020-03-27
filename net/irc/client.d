@@ -614,9 +614,7 @@ public:
 	/// Cancel a connection.
 	void disconnect(string reason = null, DisconnectType type = DisconnectType.requested)
 	{
-		assert(conn.state == ConnectionState.connected);
-
-		if (reason)
+		if (conn.state == ConnectionState.connected && reason)
 			command("QUIT", reason);
 		conn.disconnect(reason, type);
 	}
