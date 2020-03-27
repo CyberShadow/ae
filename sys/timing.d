@@ -75,6 +75,7 @@ private:
 
 	void add(TimerTask task, TimerTask start)
 	{
+		debug (TIMER_VERBOSE) writefln("Adding a task which waits for %s.", task.delay);
 		debug(TIMER_TRACK) task.additionStackTrace = getStackTrace();
 
 		auto now = MonoTime.currTime();
