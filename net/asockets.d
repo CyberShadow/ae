@@ -1916,6 +1916,7 @@ private:
 
 	final void onTask_Idle(Timer timer, TimerTask task)
 	{
+		debug (ASOCKETS) stderr.writefln("TimeoutAdapter.onTask_Idle @ %s", cast(void*)this);
 		if (state == ConnectionState.disconnecting)
 			return disconnect("Delayed disconnect - time-out", DisconnectType.error);
 
