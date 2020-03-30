@@ -25,6 +25,7 @@ import std.traits;
 import std.typetuple;
 
 import ae.utils.meta : structFields, hasAttribute, getAttribute, RangeTuple, I;
+import ae.utils.array : split1;
 import ae.utils.text;
 
 private enum OptionType { switch_, option, parameter }
@@ -455,8 +456,7 @@ string optionWrap(string text, string firstIndent, size_t indentWidth)
 {
 	enum width = 79;
 	auto padding = " ".replicate(2 + indentWidth + 2);
-	auto paragraphs = text.split("\n");
-	if (!paragraphs.length) paragraphs = [""];
+	auto paragraphs = text.split1("\n");
 	auto result = wrap(
 		paragraphs[0],
 		width,
