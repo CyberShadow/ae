@@ -289,7 +289,8 @@ if (isFunction!FUN)
 						if (origArgs.length == 1)
 							printUsage();
 
-						throw new GetOptException("No " ~ names[i] ~ " specified.");
+						enum plainName = names[i].identifierToPlainText;
+						throw new GetOptException("No " ~ plainName ~ " specified.");
 					}
 				}
 			}
@@ -347,6 +348,7 @@ private string canonicalizeCommandLineArgument(string s) { return s.replace("-",
 private string canonicalizeIdentifier(string s) { return s.chomp("_").toLower(); }
 private string identifierToCommandLineKeyword(string s) { return s.chomp("_").splitByCamelCase.join("-").toLower(); }
 private string identifierToCommandLineParam  (string s) { return s.chomp("_").splitByCamelCase.join("-").toUpper(); }
+private string identifierToPlainText         (string s) { return s.chomp("_").splitByCamelCase.join(" ").toLower(); }
 private string[] identifierToCommandLineKeywords(string s) { auto words = s.chomp("_").splitByCamelCase(); return [words.join().toLower()] ~ (words.length > 1 ? [words.join("-").toLower()] : []); } /// for getopt
 
 private string getProgramName(string program)
