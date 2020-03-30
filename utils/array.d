@@ -299,6 +299,13 @@ auto splitEmpty(T, S)(T value, S separator)
 	return value.length ? split(value, separator) : null;
 }
 
+/// Like std.array.split, but always returns a non-empty array.
+auto split1(T, S)(T value, S separator)
+{
+	auto result = split(value, separator);
+	return result.length ? result : [value];
+}
+
 /// Include delimiter in result chunks as suffix
 H[] splitWithSuffix(H, S)(H haystack, S separator)
 {
