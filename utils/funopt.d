@@ -454,6 +454,7 @@ string optionWrap(string text, string firstIndent, size_t indentWidth)
 	enum width = 79;
 	auto padding = " ".replicate(2 + indentWidth + 2);
 	auto paragraphs = text.split("\n");
+	if (!paragraphs.length) paragraphs = [""];
 	auto result = wrap(
 		paragraphs[0],
 		width,
