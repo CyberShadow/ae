@@ -1740,9 +1740,17 @@ unittest
 	}
 }
 
-void toFile(in void[] data, in char[] name)
+static if (is(typeof({ import std.stdio : toFile; })))
 {
-	std.file.write(name, data);
+	static import std.stdio;
+	alias toFile = std.stdio.toFile;
+}
+else
+{
+	void toFile(in void[] data, in char[] name)
+	{
+		std.file.write(name, data);
+	}
 }
 
 /// Uses UNC paths to open a file.
