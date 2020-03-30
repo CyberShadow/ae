@@ -16,6 +16,7 @@ module ae.utils.graphics.image;
 import std.algorithm;
 import std.conv : to;
 import std.exception;
+import std.math : abs;
 import std.range;
 import std.string : format;
 
@@ -25,18 +26,18 @@ public import ae.utils.graphics.view;
 /// already existing elsewhere in memory.
 /// Assumes that pixels are stored row-by-row,
 /// with a known distance between each row.
-struct ImageRef(COLOR)
+struct ImageRef(COLOR, StorageType = PlainStorageUnit!COLOR)
 {
 	int w, h;
 	size_t pitch; /// In bytes, not COLORs
-	COLOR* pixels;
+	StorageType* pixels;
 
 	/// Returns an array for the pixels at row y.
-	inout(COLOR)[] scanline(int y) inout
+	inout(StorageType)[] scanline(int y) inout
 	{
 		assert(y>=0 && y<h, "Scanline out-of-bounds");
 		assert(pitch, "Pitch not set");
-		auto row = cast(COLOR*)(cast(ubyte*)pixels + y*pitch);
+		auto row = cast(StorageType*)(cast(ubyte*)pixels + y*pitch);
 		return row[0..w];
 	}
 
@@ -69,13 +70,13 @@ unittest
 
 /// An in-memory image.
 /// Pixels are stored in a flat array.
-struct Image(COLOR)
+struct Image(COLOR, StorageType = PlainStorageUnit!COLOR)
 {
 	int w, h;
-	COLOR[] pixels;
+	StorageType[] pixels;
 
 	/// Returns an array for the pixels at row y.
-	inout(COLOR)[] scanline(int y) inout
+	inout(StorageType)[] scanline(int y) inout
 	{
 		assert(y>=0 && y<h, "Scanline out-of-bounds");
 		auto start = w*y;
@@ -276,8 +277,9 @@ template downscale(int HRX, int HRY=HRX)
 					auto x0 = x*HRX;
 					auto x1 = x0+HRX;
 					foreach (j; y*HRY..(y+1)*HRY)
-						foreach (p; hr.scanline(j)[x0..x1])
-							sum += p;
+						foreach (s; hr.scanline(j)[x0..x1])
+							foreach (p; s)
+								sum += p;
 					lr[x, y] = cast(ViewColor!SRC)(sum / (HRX*HRY));
 				}
 			}
@@ -300,9 +302,9 @@ unittest
 
 	Image!ubyte i;
 	i.size(4, 1);
-	i.pixels[] = [1, 3, 5, 7];
+	i.pixels[] = [[1], [3], [5], [7]];
 	auto d = i.downscale!(2, 1);
-	assert(d.pixels == [2, 6]);
+	assert(d.pixels == [[2], [6]]);
 }
 
 // ***************************************************************************
@@ -336,8 +338,9 @@ if (isDirectView!SRC && isWritableView!TARGET)
 					if (y0 == y1) y1++;
 
 					foreach (j; y0 .. y1)
-						foreach (p; hr.scanline(j)[x0 .. x1])
-							sum += p;
+						foreach (s; hr.scanline(j)[x0 .. x1])
+							foreach (p; s)
+								sum += p;
 					auto area = (x1 - x0) * (y1 - y0);
 					auto avg = sum / area;
 					lr[x, y] = cast(ViewColor!SRC)(avg);
@@ -377,47 +380,50 @@ unittest
 
 	Image!ubyte i;
 	i.size(6, 1);
-	i.pixels[] = [1, 2, 3, 4, 5, 6];
-	assert(i.downscaleTo(6, 1).pixels == [1, 2, 3, 4, 5, 6]);
-	assert(i.downscaleTo(3, 1).pixels == [1, 3, 5]);
-	assert(i.downscaleTo(2, 1).pixels == [2, 5]);
-	assert(i.downscaleTo(1, 1).pixels == [3]);
+	i.pixels[] = [[1], [2], [3], [4], [5], [6]];
+	assert(i.downscaleTo(6, 1).pixels == [[1], [2], [3], [4], [5], [6]]);
+	assert(i.downscaleTo(3, 1).pixels == [[1], [3], [5]]);
+	assert(i.downscaleTo(2, 1).pixels == [[2], [5]]);
+	assert(i.downscaleTo(1, 1).pixels == [[3]]);
 
 	i.size(3, 3);
 	i.pixels[] = [
-		1, 2, 3,
-		4, 5, 6,
-		7, 8, 9];
-	assert(i.downscaleTo(2, 2).pixels == [1, 2, 5, 7]);
+		[1], [2], [3],
+		[4], [5], [6],
+		[7], [8], [9]];
+	assert(i.downscaleTo(2, 2).pixels == [[1], [2], [5], [7]]);
 
 	i.size(1, 1);
-	i.pixels = [1];
-	assert(i.downscaleTo(2, 2).pixels == [1, 1, 1, 1]);
+	i.pixels = [[1]];
+	assert(i.downscaleTo(2, 2).pixels == [[1], [1], [1], [1]]);
 }
 
 // ***************************************************************************
 
-/// Copy the indicated row of src to a COLOR buffer.
-void copyScanline(SRC, COLOR)(auto ref SRC src, int y, COLOR[] dst)
-	if (isView!SRC && is(COLOR == ViewColor!SRC))
+/// Copy the indicated row of src to a StorageType buffer.
+void copyScanline(SRC, StorageType)(auto ref SRC src, int y, StorageType[] dst)
+if (isView!SRC && is(StorageColor!StorageType == ViewColor!SRC))
 {
-	static if (isDirectView!SRC)
+	static if (isDirectView!SRC && is(ViewStorageType!SRC == StorageType))
 		dst[] = src.scanline(y)[];
 	else
 	{
-		assert(src.w == dst.length);
+		auto storageUnitsPerRow = (src.w + StorageType.length - 1) / StorageType.length;
+		assert(storageUnitsPerRow == dst.length);
 		foreach (x; 0..src.w)
-			dst[x] = src[x, y];
+			dst[x / StorageType.length][x % StorageType.length] = src[x, y];
 	}
 }
 
-/// Copy a view's pixels (top-to-bottom) to a COLOR buffer.
-void copyPixels(SRC, COLOR)(auto ref SRC src, COLOR[] dst)
-	if (isView!SRC && is(COLOR == ViewColor!SRC))
+/// Copy a view's pixels (top-to-bottom) to a StorageType buffer.
+/// Rows are assumed to be StorageType.sizeof-aligned.
+void copyPixels(SRC, StorageType)(auto ref SRC src, StorageType[] dst)
+if (isView!SRC && is(StorageColor!StorageType == ViewColor!SRC))
 {
-	assert(dst.length == src.w * src.h);
+	auto storageUnitsPerRow = src.w + (StorageType.length - 1) / StorageType.length;
+	assert(dst.length == storageUnitsPerRow * src.h);
 	foreach (y; 0..src.h)
-		src.copyScanline(y, dst[y*src.w..(y+1)*src.w]);
+		src.copyScanline(y, dst[y*storageUnitsPerRow..(y+1)*storageUnitsPerRow]);
 }
 
 // ***************************************************************************
@@ -482,7 +488,7 @@ auto parsePBM(C = TargetColor, TARGET)(const(void)[] vdata, auto ref TARGET targ
 	target.size(to!uint(fields[1]), to!uint(fields[2]));
 	enforce(data.length / COLOR.sizeof == target.w * target.h,
 		"Dimension / filesize mismatch");
-	target.pixels[] = cast(COLOR[])data;
+	target.pixels[] = cast(PlainStorageUnit!COLOR[])data;
 
 	static if (COLOR.tupleof[0].sizeof > 1)
 		foreach (ref pixel; pixels)
@@ -524,6 +530,7 @@ ubyte[] toPBM(SRC)(auto ref SRC src)
 	if (isView!SRC)
 {
 	alias COLOR = ViewColor!SRC;
+	alias StorageType = PlainStorageUnit!COLOR;
 
 	auto length = src.w * src.h;
 	ubyte[] header = cast(ubyte[])"%s\n%d %d %d\n"
@@ -531,7 +538,7 @@ ubyte[] toPBM(SRC)(auto ref SRC src)
 	ubyte[] data = new ubyte[header.length + length * COLOR.sizeof];
 
 	data[0..header.length] = header;
-	src.copyPixels(cast(COLOR[])data[header.length..$]);
+	src.copyPixels(cast(StorageType[])data[header.length..$]);
 
 	static if (ChannelType!COLOR.sizeof > 1)
 		foreach (ref p; cast(ChannelType!COLOR[])data[header.length..$])
@@ -557,7 +564,7 @@ auto fromPixels(C = InputColor, INPUT, TARGET)(INPUT[] input, uint w, uint h,
 {
 	alias COLOR = ViewColor!TARGET;
 
-	auto pixels = cast(COLOR[])input;
+	auto pixels = cast(PlainStorageUnit!COLOR[])input;
 	enforce(pixels.length == w*h, "Dimension / filesize mismatch");
 	target.size(w, h);
 	target.pixels[] = pixels;
@@ -589,8 +596,8 @@ static import ae.utils.graphics.bitmap;
 
 // Different software have different standards regarding alpha without a V4 header.
 // ImageMagick will write BMPs with alpha without a V4 header, but not all software will read them.
-enum bitmapNeedV4HeaderForWrite(COLOR) = !is(COLOR == BGR) && !is(COLOR == BGRX);
-enum bitmapNeedV4HeaderForRead (COLOR) = !is(COLOR == BGR) && !is(COLOR == BGRX) && !is(COLOR == BGRA);
+enum bitmapNeedV4HeaderForWrite(COLOR) = is(COLOR == struct) && !is(COLOR == BGR) && !is(COLOR == BGRX);
+enum bitmapNeedV4HeaderForRead (COLOR) = is(COLOR == struct) && !is(COLOR == BGR) && !is(COLOR == BGRX) && !is(COLOR == BGRA);
 
 uint[4] bitmapChannelMasks(COLOR)()
 {
@@ -631,11 +638,19 @@ uint[4] bitmapChannelMasks(COLOR)()
 	return result;
 }
 
-@property int bitmapPixelStride(COLOR)(int w)
+@property size_t bitmapPixelStride(StorageType)(int w)
 {
-	int pixelStride = w * cast(uint)COLOR.sizeof;
-	pixelStride = (pixelStride+3) & ~3;
-	return pixelStride;
+	auto rowBits = w * storageColorBits!StorageType;
+	rowBits = (rowBits + 0x1f) & ~0x1f;
+	return rowBits / 8;
+}
+
+template BMPStorageType(COLOR)
+{
+	static if (is(COLOR == bool))
+		alias BMPStorageType = OneBitStorageBE;
+	else
+		alias BMPStorageType = PlainStorageUnit!COLOR;
 }
 
 /// Returns a view representing a BMP file.
@@ -652,16 +667,20 @@ if (is(V : const(void)[]))
 		.format(header.bfSize, data.length));
 	enforce(header.bcSize >= Header.sizeof - header.bcSize.offsetof);
 
+	alias StorageType = BMPStorageType!COLOR;
+
 	static struct BMP
 	{
 		int w, h;
 		typeof(data.ptr) pixelData;
-		int pixelStride;
+		sizediff_t pixelStride;
 
-		inout(COLOR)[] scanline(int y) inout // TODO constness
+		inout(StorageType)[] scanline(int y) inout
 		{
 			assert(y >= 0 && y < h, "BMP scanline out of bounds");
-			return (cast(COLOR*)(pixelData + y * pixelStride))[0..w];
+			auto row = cast(void*)pixelData + y * pixelStride;
+			auto storageUnitsPerRow = (w + StorageType.length - 1) / StorageType.length;
+			return (cast(inout(StorageType)*)row)[0 .. storageUnitsPerRow];
 		}
 
 		mixin DirectView;
@@ -672,9 +691,10 @@ if (is(V : const(void)[]))
 	bmp.h = header.bcHeight;
 	enforce(header.bcPlanes==1, "Multiplane BMPs not supported");
 
-	enforce(header.bcBitCount == COLOR.sizeof * 8,
+	enum storageBits = StorageType.sizeof * 8 / StorageType.length;
+	enforce(header.bcBitCount == storageBits,
 		"Mismatching BMP bcBitCount - trying to load a %d-bit .BMP file to a %d-bit Image"
-		.format(header.bcBitCount, COLOR.sizeof * 8));
+		.format(header.bcBitCount, storageBits));
 
 	static if (bitmapNeedV4HeaderForRead!COLOR)
 		enforce(header.VERSION >= 4, "Need a V4+ header to load a %s image".format(COLOR.stringof));
@@ -682,19 +702,26 @@ if (is(V : const(void)[]))
 	{
 		enforce(data.length > BitmapHeader!4.sizeof, "Not enough data for header");
 		auto header4 = cast(BitmapHeader!4*) data.ptr;
-		uint[4] fileMasks = [
-			header4.bV4RedMask,
-			header4.bV4GreenMask,
-			header4.bV4BlueMask,
-			header4.bV4AlphaMask];
-		static immutable expectedMasks = bitmapChannelMasks!COLOR();
-		enforce(fileMasks == expectedMasks,
-			"Channel format mask mismatch.\nExpected: [%(%32b, %)]\nIn file : [%(%32b, %)]"
-			.format(expectedMasks, fileMasks));
+		static if (is(COLOR == struct))
+		{
+			uint[4] fileMasks = [
+				header4.bV4RedMask,
+				header4.bV4GreenMask,
+				header4.bV4BlueMask,
+				header4.bV4AlphaMask];
+			static immutable expectedMasks = bitmapChannelMasks!COLOR();
+			enforce(fileMasks == expectedMasks,
+				"Channel format mask mismatch.\nExpected: [%(%32b, %)]\nIn file : [%(%32b, %)]"
+				.format(expectedMasks, fileMasks));
+		}
+		else
+			throw new Exception("Unexpected V4 header with basic COLOR type " ~ COLOR.stringof);
 	}
 
-	bmp.pixelData = data[header.bfOffBits..$].ptr;
-	bmp.pixelStride = bitmapPixelStride!COLOR(bmp.w);
+	auto pixelData = data[header.bfOffBits..$];
+	bmp.pixelData = pixelData.ptr;
+	bmp.pixelStride = bitmapPixelStride!StorageType(bmp.w);
+	enforce(bmp.pixelStride * abs(bmp.h) <= pixelData.length, "Insufficient data for pixels");
 
 	if (bmp.h < 0)
 		bmp.h = -bmp.h;
@@ -718,13 +745,14 @@ auto parseBMP(C = TargetColor, TARGET)(const(void)[] data, auto ref TARGET targe
 /// ditto
 auto parseBMP(COLOR)(const(void)[] data)
 {
-	Image!COLOR target;
+	Image!(COLOR, BMPStorageType!COLOR) target;
 	return data.parseBMP(target);
 }
 
 unittest
 {
 	alias parseBMP!BGR parseBMP24;
+	alias parseBMP!bool parseBMP1;
 }
 
 /// Creates a Windows bitmap (.bmp) file.
@@ -732,6 +760,7 @@ ubyte[] toBMP(SRC)(auto ref SRC src)
 	if (isView!SRC)
 {
 	alias COLOR = ViewColor!SRC;
+	alias StorageType = BMPStorageType!COLOR;
 
 	import ae.utils.graphics.bitmap;
 	static if (bitmapNeedV4HeaderForWrite!COLOR)
@@ -739,18 +768,19 @@ ubyte[] toBMP(SRC)(auto ref SRC src)
 	else
 		alias BitmapHeader!3 Header;
 
-	auto pixelStride = bitmapPixelStride!COLOR(src.w);
+	auto pixelStride = bitmapPixelStride!StorageType(src.w);
 	auto bitmapDataSize = src.h * pixelStride;
 	ubyte[] data = new ubyte[Header.sizeof + bitmapDataSize];
 	auto header = cast(Header*)data.ptr;
 	*header = Header.init;
-	header.bfSize = to!uint(data.length);
+	header.bfSize = data.length.to!uint;
 	header.bfOffBits = Header.sizeof;
 	header.bcWidth = src.w;
 	header.bcHeight = -src.h;
 	header.bcPlanes = 1;
-	header.biSizeImage = bitmapDataSize;
-	header.bcBitCount = COLOR.sizeof * 8;
+	header.biSizeImage = bitmapDataSize.to!uint;
+	enum storageBits = StorageType.sizeof * 8 / StorageType.length;
+	header.bcBitCount = storageBits;
 
 	static if (header.VERSION >= 4)
 	{
@@ -765,10 +795,11 @@ ubyte[] toBMP(SRC)(auto ref SRC src)
 	auto pixelData = data[header.bfOffBits..$];
 	auto ptr = pixelData.ptr;
 	size_t pos = 0;
+	auto storageUnitsPerRow = (src.w + StorageType.length - 1) / StorageType.length;
 
 	foreach (y; 0..src.h)
 	{
-		src.copyScanline(y, (cast(COLOR*)ptr)[0..src.w]);
+		src.copyScanline(y, (cast(StorageType*)ptr)[0..storageUnitsPerRow]);
 		ptr += pixelStride;
 	}
 
@@ -854,23 +885,34 @@ ubyte[] toPNG(SRC)(auto ref SRC src, int compressionLevel = 5)
 	else
 		static assert(0, "Unsupported PNG color type: " ~ COLOR.stringof);
 
+	static if (is(COLOR == bool))
+		alias StorageType = OneBitStorageBE;
+	else
+		alias StorageType = PlainStorageUnit!COLOR;
+
+	static if (is(COLOR == struct))
+		enum numChannels = structFields!COLOR.length;
+	else
+		enum numChannels = 1;
+
 	PNGChunk[] chunks;
 	PNGHeader header = {
 		width : nativeToBigEndian(src.w),
 		height : nativeToBigEndian(src.h),
-		colourDepth : ChannelType!COLOR.sizeof * 8,
+		colourDepth : StorageType.sizeof * 8 / StorageType.length / numChannels,
 		colourType : COLOUR_TYPE,
 		compressionMethod : PNGCompressionMethod.DEFLATE,
 		filterMethod : PNGFilterMethod.ADAPTIVE,
 		interlaceMethod : PNGInterlaceMethod.NONE,
 	};
 	chunks ~= PNGChunk("IHDR", cast(void[])[header]);
-	uint idatStride = to!uint(src.w * COLOR.sizeof+1);
+	auto storageUnitsPerRow = (src.w + StorageType.length - 1) / StorageType.length;
+	size_t idatStride = 1 + (storageUnitsPerRow * StorageType.sizeof);
 	ubyte[] idatData = new ubyte[src.h * idatStride];
 	for (uint y=0; y<src.h; y++)
 	{
-		idatData[y*idatStride] = PNGFilterAdaptive.NONE;
-		auto rowPixels = cast(COLOR[])idatData[y*idatStride+1..(y+1)*idatStride];
+		idatData[y * idatStride] = PNGFilterAdaptive.NONE;
+		auto rowPixels = cast(StorageType[])idatData[1 + (y * idatStride) .. (y + 1) * idatStride];
 		src.copyScanline(y, rowPixels);
 
 		version (LittleEndian)
@@ -914,4 +956,5 @@ unittest
 {
 	onePixel(RGB(1,2,3)).toPNG();
 	onePixel(5).toPNG();
+	onePixel(true).toPNG();
 }

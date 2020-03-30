@@ -441,6 +441,64 @@ unittest
 	assert(rgbf.b == 3f);
 }
 
+
+// ***************************************************************************
+
+/// Color storage unit for as-is storage.
+alias PlainStorageUnit(Color) = Color[1];
+
+/// Color storage unit description for packed bit colors
+/// (1-bit, 2-bit, 4-bit etc.)
+struct BitStorageUnit(ValueType, size_t valueBits, StorageType, bool bigEndian)
+{
+	StorageType storageValue;
+
+	enum length = StorageType.sizeof * 8 / valueBits;
+	static assert(length * valueBits == StorageType.sizeof * 8, "Slack bits?");
+
+	ValueType opIndex(size_t index) const
+	{
+		static if (bigEndian)
+			index = length - 1 - index;
+		auto shift = index * valueBits;
+		return cast(ValueType)((storageValue >> shift) & valueMask);
+	}
+
+	ValueType opIndexAssign(ValueType value, size_t index)
+	{
+		static if (bigEndian)
+			index = length - 1 - index;
+		auto shift = index * valueBits;
+		StorageType mask = flipBits(cast(StorageType)(valueMask << shift));
+		storageValue = (storageValue & mask) | cast(StorageType)(cast(StorageType)value << shift);
+		return value;
+	}
+private:
+	enum StorageType valueMask = ((cast(StorageType)1) << valueBits) - 1;
+}
+
+/// 8 monochrome bits packed into a byte, in the usual big-endian order.
+alias OneBitStorageBE = BitStorageUnit!(bool, 1, ubyte, true);
+/// As above, but in little-endian order.
+alias OneBitStorageLE = BitStorageUnit!(bool, 1, ubyte, false);
+
+/// Get the color value of a storage unit type.
+alias StorageColor(StorageType) = typeof(StorageType.init[0]);
+
+/// The number of bits that one individual color takes up.
+enum size_t storageColorBits(StorageType) = StorageType.sizeof * 8 / StorageType.length;
+
+/// True when we can take the address of an individual color within a storage unit.
+enum bool isStorageColorLValue(StorageType) = is(typeof({ StorageType s = void; return &s[0]; }()));
+
+StorageType solidStorageUnit(StorageType)(StorageColor!StorageType color)
+{
+	StorageType s;
+	foreach (i; 0 .. StorageType.length)
+		s[i] = color;
+	return s;
+}
+
 // ***************************************************************************
 
 /// Calculate an interpolated color on a gradient with multiple points

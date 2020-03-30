@@ -18,6 +18,7 @@ import std.traits;
 
 import ae.utils.geometry : TAU;
 import ae.utils.graphics.view;
+import ae.utils.graphics.color : solidStorageUnit;
 import ae.utils.math;
 import ae.utils.meta : structFields, SignedBitsType, UnsignedBitsType;
 
@@ -84,9 +85,9 @@ unittest
 
 /// Gets a pixel's address from a direct view.
 ViewColor!V* pixelPtr(V)(auto ref V v, int x, int y)
-	if (isDirectView!V)
+if (isDirectView!V && is(typeof(&v.scanline(0)[0][0])))
 {
-	return &v.scanline(y)[x];
+	return &v.scanline(y)[x][0];
 }
 
 unittest
@@ -102,11 +103,15 @@ void fill(V, COLOR)(auto ref V v, COLOR c)
 	if (isWritableView!V
 	 && is(COLOR : ViewColor!V))
 {
-	foreach (y; 0..v.h)
+	static if (isDirectView!V)
 	{
-		static if (isDirectView!V)
-			v.scanline(y)[] = c;
-		else
+		auto s = solidStorageUnit!(ViewStorageType!V)(c);
+		foreach (y; 0..v.h)
+			v.scanline(y)[] = s;
+	}
+	else
+	{
+		foreach (y; 0..v.h)
 			foreach (x; 0..v.w)
 				v[x, y] = c;
 	}
@@ -151,8 +156,11 @@ void hline(bool CHECKED=true, V, COLOR)(auto ref V v, int x1, int x2, int y, COL
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
 	mixin(CheckHLine);
-	static if (isDirectView!V)
-		v.scanline(y)[x1..x2] = c;
+	static if (isDirectView!V && ViewStorageType!V.length == 1)
+	{
+		auto s = solidStorageUnit!(ViewStorageType!V)(c);
+		v.scanline(y)[x1..x2] = s;
+	}
 	else
 		foreach (x; x1..x2)
 			v[x, y] = c;
@@ -510,7 +518,7 @@ private template softRoundShape(bool RING)
 
 		for (int cy=y1;cy<y2;cy++)
 		{
-			auto row = v.scanline(cy);
+			auto row = v[cy];
 			for (int cx=x1;cx<x2;cx++)
 			{
 				alias SignedBitsType!(2*(8 + COLOR.channelBits)) SqrType; // fit the square of radius expressed as fixed-point
@@ -617,10 +625,11 @@ void hline(bool CHECKED=true, V, COLOR, frac)(auto ref V v, int x1, int x2, int 
 		return;
 	else
 	if (alpha==frac.max)
-		v.scanline(y)[x1..x2] = color;
+		.hline!CHECKED(v, x1, x2, y, color);
 	else
-		foreach (ref p; v.scanline(y)[x1..x2])
-			p = COLOR.op!q{.blend(a, b, c)}(color, p, alpha);
+		foreach (ref s; v.scanline(y)[x1..x2])
+			foreach (ref p; s)
+				p = COLOR.op!q{.blend(a, b, c)}(color, p, alpha);
 }
 
 void vline(bool CHECKED=true, V, COLOR, frac)(auto ref V v, int x, int y1, int y2, COLOR color, frac alpha)

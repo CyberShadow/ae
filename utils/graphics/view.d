@@ -38,32 +38,48 @@ enum isWritableView(T) =
 /// access. We call these "direct views".
 enum isDirectView(T) =
 	isView!T &&
-	is(typeof(T.init.scanline(0)) : ViewColor!T[]);
+	is(typeof(T.init.scanline(0)[0][0]) : ViewColor!T);
 
 /// Mixin which implements view primitives on top of
 /// existing direct view primitives.
 mixin template DirectView()
 {
 	import std.traits : Unqual;
-	alias COLOR = Unqual!(typeof(scanline(0)[0]));
+	alias StorageType = Unqual!(typeof(scanline(0)[0]));
+	alias COLOR = Unqual!(typeof(StorageType.init[0]));
 
 	/// Implements the view[x, y] operator.
-	ref inout(COLOR) opIndex(int x, int y) inout
+	auto ref inout(COLOR) opIndex(int x, int y) inout
 	{
-		return scanline(y)[x];
+		return scanline(y)[x / StorageType.length][x % StorageType.length];
 	}
 
 	/// Allows array-like view[y][x] access.
-	auto opIndex(int y)
+	static struct Row
 	{
-		return scanline(y);
+		StorageType[] scanline;
+		auto ref inout(COLOR) opIndex(int x) inout
+		{
+			return scanline[x / StorageType.length][x % StorageType.length];
+		}
+	}
+	Row opIndex(int y) /// ditto
+	{
+		return Row(scanline(y));
 	}
 
 	/// Implements the view[x, y] = c operator.
 	COLOR opIndexAssign(COLOR value, int x, int y)
 	{
-		return scanline(y)[x] = value;
+		return scanline(y)[x / StorageType.length][x % StorageType.length] = value;
 	}
+}
+
+/// Get the storage type of a direct view.
+template ViewStorageType(V)
+if (isDirectView!V)
+{
+	alias ViewStorageType = typeof({ V v = void; return v.scanline(0)[0]; }());
 }
 
 // ***************************************************************************
@@ -120,7 +136,7 @@ void blitTo(SRC, DST)(auto ref SRC src, auto ref DST dst)
 	assert(src.w == dst.w && src.h == dst.h, "View size mismatch");
 	foreach (y; 0..src.h)
 	{
-		static if (isDirectView!SRC && isDirectView!DST)
+		static if (isDirectView!SRC && isDirectView!DST && is(ViewStorageType!SRC == ViewStorageType!DST))
 			dst.scanline(y)[] = src.scanline(y)[];
 		else
 		{
@@ -218,7 +234,7 @@ auto crop(V)(auto ref V src, int x0, int y0, int x1, int y1)
 		}
 
 		static if (isDirectView!V)
-		ViewColor!V[] scanline(int y)
+		auto scanline(int y)
 		{
 			return src.scanline(y0+y)[x0..x1];
 		}
@@ -345,7 +361,7 @@ template warp(string xExpr, string yExpr)
 			static if (xExpr == "x" &&
 				__traits(compiles, testWarpY()) &&
 				isDirectView!V)
-			ViewColor!V[] scanline(int y)
+			auto scanline(int y)
 			{
 				return src.scanline(mixin(yExpr));
 			}
@@ -468,7 +484,7 @@ auto vjoiner(V)(V[] views)
 		}
 
 		static if (isDirectView!V)
-		ViewColor!V[] scanline(int y)
+		auto scanline(int y)
 		{
 			auto child = &children[index[y]];
 			return child.view.scanline(y - child.y);
