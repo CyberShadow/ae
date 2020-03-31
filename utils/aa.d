@@ -25,12 +25,9 @@ static if (!__traits(hasMember, object, "require"))
 ref V require(K, V)(ref V[K] aa, K key, lazy V value = V.init)
 {
 	auto p = key in aa;
-	if (!p)
-	{
-		aa[key] = value;
-		p = key in aa;
-	}
-	return *p;
+	if (p)
+		return *p;
+	return aa[key] = value;
 }
 
 /// Polyfill for object.update
