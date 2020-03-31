@@ -255,251 +255,804 @@ unittest
 
 // ***************************************************************************
 
-/// An associative array which retains the order in which elements were added.
-struct OrderedMap(K, V)
+/// Base type for ordered/unordered single-value/multi-value map/set
+/*private*/ struct HashCollection(K, V, bool ordered, bool multi)
 {
-	K[] keys;
-	V[] values;
-	size_t[K] index;
+//private:
+	enum bool haveValues = !is(V == void); // Not a set
 
-	/// Convert from regular AA
-	this(V[K] aa)
+	static if (ordered)
 	{
-		opAssign(aa);
-	}
+		enum bool canDup = is(typeof(lookup.dup)) && is(typeof(items.dup));
 
-	static if (is(typeof(keys.dup && values.dup && index.dup)))
-	{
-		this(this)
-		{
-			keys = keys.dup;
-			values = values.dup;
-			index = index.dup;
-		}
+		static if (multi)
+			alias Indexes = size_t[];
+		else
+			alias Indexes = size_t[1];
 	}
 	else
-		@disable this(this);
+	{
+		static if (haveValues)
+		{
+			static if (multi)
+				alias ValueStorageType = V[];
+			else
+				alias ValueStorageType = V[1];
+		}
+		else
+		{
+			static if (multi)
+				alias ValueStorageType = size_t;
+			else
+				alias ValueStorageType = void[0];
+		}
 
-	void opAssign(V[K] aa)
+		enum bool canDup = is(typeof(items.dup));
+	}
+
+	static if (haveValues)
+	{
+		alias ValueVarType = V;
+		alias ReturnType(Fallback) = V;
+		alias SingleIterationType = V;
+		alias OpIndexKeyType = K;
+		alias OpIndexValueType = V;
+	}
+	else
+	{
+		alias ValueVarType = void[0];
+		static if (ordered)
+		{
+			alias OpIndexKeyType = size_t;
+			alias OpIndexValueType = K;
+			alias ReturnType(Fallback) = K;
+		}
+		else
+		{
+			alias OpIndexKeyType = void;
+			alias OpIndexValueType = void;
+			alias ReturnType(Fallback) = Fallback;
+		}
+		alias SingleIterationType = const(K);
+	}
+	enum haveReturnType = !is(ReturnType!void == void);
+	enum haveIndexing = haveValues || ordered;
+
+	alias IK = OpIndexKeyType;
+	alias IV = OpIndexValueType;
+
+	// The contract we try to follow is that adding/removing items in
+	// one copy of the object will not affect other copies.
+	// Therefore, when we have array fields, make sure they are dup'd
+	// on copy, so that we don't trample older copies' data.
+	enum bool needDupOnCopy = ordered;
+
+	// *** Data ***
+
+	static if (ordered)
+	{
+		Indexes[K] lookup;
+		// K[] keys;
+		// static if (haveValues)
+		// 	V[] values;
+
+		struct Item
+		{
+			K key;
+			ValueVarType value;
+
+			static if (haveValues)
+				private alias returnValue = value;
+			else
+				private alias returnValue = key;
+		}
+		Item[] items;
+	}
+	else
+		ValueStorageType[K] items;
+
+public:
+
+	// *** Lifetime ***
+
+	/// Postblit
+	static if (needDupOnCopy)
+	{
+		static if (canDup)
+			this(this)
+			{
+				lookup = lookup.dup;
+				items = items.dup;
+			}
+		else
+			@disable this(this);
+	}
+
+	/// Create shallow copy
+	static if (canDup)
+	typeof(this) dup()
+	{
+		static if (needDupOnCopy)
+			return this;
+		else
+		{
+			typeof(this) copy;
+			static if (ordered)
+				copy.lookup = lookup.dup;
+			copy.items = items.dup;
+			return copy;
+		}
+	}
+	
+	// *** Conversions (from) ***
+
+	/// Construct from something else
+	this(Input)(Input input)
+	if (is(typeof(opAssign(input))))
+	{
+		opAssign(input);
+	}
+
+	/// Null assignment
+	ref typeof(this) opAssign(typeof(null) _)
+	{
+		clear();
+		return this;
+	}
+
+	/// Convert from an associative type
+	ref typeof(this) opAssign(AA)(AA aa)
+	if (haveValues
+		&& !is(AA : typeof(this))
+		&& is(typeof({ foreach (ref k, ref v; aa) add(k, v); })))
 	{
 		clear();
 		foreach (ref k, ref v; aa)
-		{
-			index[k] = values.length;
-			keys ~= k;
-			values ~= v;
-		}
+			add(k, v);
+		return this;
 	}
 
-	void clear()
+	/// Convert from a range of tuples
+	ref typeof(this) opAssign(R)(R input)
+	if (haveValues
+		&& is(typeof({ foreach (ref pair; input) add(pair[0], pair[1]); }))
+		&& !is(typeof({ foreach (ref k, ref v; input) add(k, v); }))
+		&& input.front.length == 2)
 	{
-		keys = null;
-		values = null;
-		index = null;
+		clear();
+		foreach (ref pair; input)
+			add(pair[0], pair[1]);
+		return this;
 	}
 
+	/// Convert from a range of values
+	ref typeof(this) opAssign(R)(R input)
+	if (!haveValues
+		&& !is(R : typeof(this))
+		&& is(typeof({ foreach (ref v; input) add(v); })))
+	{
+		clear();
+		foreach (ref v; input)
+			add(v);
+		return this;
+	}
+
+	// *** Conversions (to) ***
+
+	/// Convert to bool (true if non-null)
 	bool opCast(T)() const
 	if (is(T == bool))
 	{
-		return !!index;
+		return items !is null;
 	}
 
-	ref inout(V) opIndex()(auto ref K k) inout
+	// *** Query (basic) ***
+
+	/// True when there are no items.
+	bool empty() pure const nothrow @nogc @safe
 	{
-		return values[index[k]];
+		static if (ordered)
+			return items.length == 0;
+		else
+			return items.byKey.empty;
 	}
 
-	ref V opIndexAssign()(auto ref V v, auto ref K k)
+	/// Total number of items, including with duplicate keys.
+	size_t length() pure const nothrow @nogc @safe
 	{
-		auto pi = k in index;
-		if (pi)
+		return items.length;
+	}
+
+	// *** Query (by key) ***
+
+	/// Check if item with this key has been added.
+	/// When applicable, return a pointer to the last value added with this key.
+	Select!(haveReturnType, inout(ReturnType!void)*, bool) opBinaryRight(string op : "in")(auto ref in K key) inout
+	{
+		static if (ordered)
 		{
-			auto pv = &values[*pi];
-			*pv = v;
-			return *pv;
-		}
-
-		index[k] = values.length;
-		keys ~= k;
-		values ~= v;
-		return values[$-1];
-	}
-
-	private enum bool haveObjectRequire = is(typeof({ int[int] aa; aa.require(1, 2); }));
-
-	ref V require()(auto ref K key, lazy V value = V.init)
-	{
-		V* pv;
-		static if (haveObjectRequire)
-		{
-			index.update(
-				key,
-				{
-					auto i = values.length;
-					keys ~= key;
-					values ~= value;
-					pv = &values[i];
-					return i;
-				},
-				(ref size_t i)
-				{
-					pv = &values[i];
-					return i;
-				}
-			);
+			auto p = key in lookup;
+			if (!p)
+				return null;
+			return &items[(*p)[$-1]].returnValue;
 		}
 		else
 		{
-			auto pi = key in index;
-			if (pi)
-				pv = &values[*pi];
+			auto p = key in items;
+			static if (haveValues)
+				return (*p)[$-1];
 			else
-			{
-				index[key] = values.length;
-				keys ~= key;
-				values ~= value;
-				pv = &values[$-1];
-			}
+				return !!p;
 		}
-		return *pv;
 	}
 
-	void update(C, U)(auto ref K key, scope C create, scope U update)
-	if (is(typeof(create()) : V) && is(typeof(update(*(V*).init)) : V))
+	/// Index operator.
+	/// The key must exist. Indexing with a key which does not exist
+	/// is an error.
+	static if (haveIndexing)
+	ref inout(IV) opIndex()(auto ref IK k) inout
 	{
-		static if (haveObjectRequire)
+		static if (haveValues)
 		{
-			index.update(
-				key,
-				{
-					auto i = values.length;
-					keys ~= key;
-					values ~= create();
-					return i;
-				},
-				(ref size_t i)
-				{
-					auto pv = &values[i];
-					*pv = update(*pv);
-					return i;
-				}
-			);
+			static if (ordered)
+				return items[lookup[k][0]].returnValue;
+			else
+				return items[k][$-1];
+		}
+		else
+			return items[k].returnValue;
+	}
+
+	/// Retrieve last value associated with key, or `defaultValue` if none.
+	static if (haveIndexing)
+	auto ref inout(IV) get()(auto ref IK k, auto ref inout(IV) defaultValue) inout
+	{
+		static if (haveValues)
+		{
+			static if (ordered)
+			{
+				auto p = k in lookup;
+				return p ? items[(*p)[0]].returnValue : defaultValue;
+			}
+			else
+				return lookup.get(k, (&defaultValue)[0..1])[$-1];
+		}
+		else
+			return k < items.length ? items[k].returnValue : defaultValue;
+	}
+
+	// *** Query (ranges) ***
+
+	/// Return a range which iterates over key/value pairs.
+	static if (haveValues)
+	auto byKeyValue(this This)()
+	{
+		static if (ordered)
+			return items;
+		else
+		{
+			return items
+				.byKeyValue
+				.map!(pair =>
+					pair
+					.value
+					.map!(value => KeyValuePair!(K, V)(pair.key, value))
+				)
+				.joiner;
+		}
+	}
+
+	/// Return a range which iterates over all keys.
+	/// Duplicate keys will occur several times in the range.
+	auto byKey(this This)()
+	{
+		static if (ordered)
+		{
+			static ref getKey(MItem)(ref MItem item) { return item.key; }
+			return items.map!getKey;
 		}
 		else
 		{
-			auto pi = key in index;
-			if (pi)
+			size_t keyCount(in ref ValueStorageType vs)
 			{
-				auto pv = &values[*pi];
-				*pv = update(*pv);
+				static if (haveValues)
+					return vs.length;
+				else
+				static if (multi)
+					return vs;
+				else
+					return 1;
 			}
+
+			return items
+				.byKeyValue
+				.map!(pair =>
+					pair.key.repeat(keyCount(pair.value))
+				)
+				.joiner;
+		}
+	}
+
+	/// Return a range which iterates over all values.
+	static if (haveValues)
+	auto byValue(this This)()
+	{
+		static if (ordered)
+		{
+			static ref getValue(MItem)(ref MItem item) { return item.value; }
+			return items.map!getValue;
+		}
+		else
+		{
+			return items
+				.byKeyValue
+				.map!(pair =>
+					pair
+					.value
+				)
+				.joiner;
+		}
+	}
+
+	@property auto keys(this This)() { return byKey.array; }
+	@property auto values(this This)() { return byValue.array; }
+
+	// *** Query (search by key) ***
+
+	static if (ordered)
+	private size_t[] indicesOf()(auto ref K k)
+	{
+		static if (multi)
+			return lookup.get(k, null);
+		else
+		{
+			auto p = k in lookup;
+			return p ? (*p)[] : null;
+		}
+	}
+
+	/// Return the number of items with the given key.
+	/// When multi==false, always returns 0 or 1.
+	size_t count()(auto ref K k)
+	{
+		static if (ordered)
+			return indicesOf(k).length;
+		else
+		static if (haveValues)
+			return valuesOf(k).length;
+		else
+		static if (multi)
+			return items.get(k, 0);
+		else
+			return k in items ? 1 : 0;
+	}
+
+	/// Return a range with all values with the given key.
+	/// If the key is not present, returns an empty range.
+	static if (haveValues)
+	auto byValueOf(this This)(auto ref K k)
+	{
+		static if (ordered)
+			return indicesOf(k).map!(index => items[index].value);
+		else
+			return valuesOf(k);
+	}
+
+	/// Return an array with all values with the given key.
+	/// If the key is not present, returns an empty array.
+	static if (haveValues)
+	V[] valuesOf()(auto ref K k)
+	{
+		static if (ordered)
+			return byValueOf(k).array;
+		else
+		{
+			static if (multi)
+				return items.get(k, null);
 			else
 			{
-				index[key] = values.length;
-				keys ~= key;
-				values ~= create();
+				auto p = k in items;
+				return p ? (*p)[] : null;
 			}
 		}
 	}
 
-	ref V getOrAdd()(auto ref K key)
-	{
-		return require(key);
-	}
+	static if (haveValues)
+	deprecated alias getAll = valuesOf;
 
-	ref V opIndexUnary(string op)(auto ref K k)
-	{
-		auto pv = &getOrAdd(k);
-		mixin("(*pv) " ~ op ~ ";");
-		return *pv;
-	}
-
-	ref V opIndexOpAssign(string op)(auto ref V v, auto ref K k)
-	{
-		auto pv = &getOrAdd(k);
-		mixin("(*pv) " ~ op ~ "= v;");
-		return *pv;
-	}
-
-	inout(V) get()(auto ref K k, inout(V) defaultValue) inout
-	{
-		auto p = k in index;
-		return p ? values[*p] : defaultValue;
-	}
-
-	inout(V)* opBinaryRight(string op)(auto ref in K k) inout
-	if (op == "in")
-	{
-		auto p = k in index;
-		return p ? &values[*p] : null;
-	}
-
-	void remove()(auto ref K k)
-	{
-		auto i = index[k];
-		index.remove(k);
-		keys = keys.remove(i);
-		values = values.remove(i);
-		foreach (key, ref idx; index)
-			if (idx > i)
-				idx--;
-	}
-
-	@property size_t length() const { return values.length; }
+	// *** Iteration ***
 
 	private int opApplyImpl(this This, Dg)(Dg dg)
 	{
+		enum single = arity!dg == 1;
+
 		int result = 0;
 
-		foreach (i, ref v; values)
+		static if (ordered)
 		{
-			result = dg(keys[i], v);
-			if (result)
-				break;
+			foreach (ref item; items)
+			{
+				static if (single)
+					result = dg(item.returnValue);
+				else
+					result = dg(item.key, item.value);
+				if (result)
+					break;
+			}
+		}
+		else
+		{
+			foreach (ref key, ref values; items)
+				static if (haveValues)
+				{
+					foreach (ref value; values)
+					{
+						static if (single)
+							result = dg(value);
+						else
+							result = dg(key, value);
+						if (result)
+							break;
+					}
+				}
+				else
+				{
+					static if (multi)
+						size_t iterations = values;
+					else
+						enum size_t iterations = 1;
+					foreach (iteration; 0 .. iterations)
+					{
+						static assert(single);
+						result = dg(key);
+						if (result)
+							break;
+					}
+				}
 		}
 		return result;
 	}
 
-	int opApply(int delegate(ref K k, ref V v) dg)
+	/// Iterate over keys (sets) / values (maps).
+	int opApply(int delegate(ref SingleIterationType x) dg)
 	{
 		return opApplyImpl(dg);
 	}
 
-	int opApply(int delegate(const ref K k, const ref V v) dg) const
+	/// ditto
+	int opApply(int delegate(const ref SingleIterationType x) dg) const
 	{
 		return opApplyImpl(dg);
 	}
 
-	@property typeof(this) dup()
+	static if (haveValues)
 	{
-		typeof(this) result;
-		result.keys = keys.dup;
-		result.values = values.dup;
-		result.index = index.dup;
-		return result;
-	}
-
-	alias byKey = keys;
-	alias byValue = values;
-
-	auto byKeyValue(this T)()
-	{
-		auto instance = this;
-		struct Range
+		/// Iterate over keys and values.
+		int opApply(int delegate(const ref K k, ref V v) dg)
 		{
-			size_t index;
-			bool empty() const { return index == instance.values.length; }
-			static struct KeyValue { typeof(instance.keys[0]) key; typeof(instance.values[0]) value; }
-			KeyValue front() { return KeyValue(instance.keys[index], instance.values[index]); }
-			void popFront() { index++; }
+			return opApplyImpl(dg);
 		}
-		return Range();
+
+		/// ditto
+		int opApply(int delegate(const ref K k, const ref V v) dg) const
+		{
+			return opApplyImpl(dg);
+		}
+	}
+
+	// *** Mutation (addition) ***
+
+	private enum AddMode
+	{
+		add,     /// Always add value
+		replace, /// Replace all previous values
+		require, /// Only add value if it did not exist before
+	}
+
+	private ref ReturnType!void addImpl(AddMode mode, AK, GV)(ref AK key, scope GV getValue)
+	if (is(AK : K))
+	{
+		static if (ordered)
+		{
+			size_t addedIndex;
+
+			static if (multi && mode == AddMode.add)
+			{
+				addedIndex = items.length;
+				lookup[key] ~= addedIndex;
+				items ~= Item(key, getValue());
+			}
+			else
+			{
+				lookup.update(key,
+					delegate Indexes()
+					{
+						addedIndex = items.length;
+						items ~= Item(key, getValue());
+						return [addedIndex];
+					},
+					delegate void(ref Indexes existingIndex)
+					{
+						addedIndex = existingIndex[0];
+						static if (mode != AddMode.require)
+						{
+							static if (multi)
+							{
+								static assert(mode == AddMode.replace);
+								existingIndex = existingIndex[0 .. 1];
+							}
+							items[addedIndex].value = getValue();
+						}
+					});
+			}
+
+			return items[addedIndex].returnValue;
+		}
+		else // ordered
+		{
+			static if (haveValues)
+			{
+				static if (mode == AddMode.require)
+					return (items.require(key, [getValue()]))[0];
+				else
+				static if (multi && mode == AddMode.add)
+					return (items[key] ~= getValue())[$-1];
+				else
+					return (items[key] = [getValue()])[0];
+			}
+			else
+			{
+				static if (multi)
+				{
+					static if (mode == AddMode.require)
+						items.require(key, 1);
+					else
+					static if (mode == AddMode.add)
+						items[key]++;
+					else
+						items[key] = 1;
+				}
+				else
+					items[key] = ValueStorageType.init;
+				// This branch returns void, as there is no reasonable
+				// ref to an AA key that we can return here.
+			}
+		}
+	}
+
+	/*private*/ template addSetFunc(AddMode mode)
+	{
+		static if (haveValues)
+		{
+			ref ReturnType!void addSetFunc(AK, AV)(auto ref AK key, auto ref AV value)
+			if (is(AK : K) && is(AV : V))
+			{
+				return addImpl!mode(key, () => value);
+			}
+		}
+		else
+		{
+			ref ReturnType!void addSetFunc(AK)(auto ref AK key)
+			if (is(AK : K))
+			{
+				ValueVarType value; // void[0]
+				return addImpl!mode(key, () => value);
+			}
+		}
+	}
+
+	/// Add an item.
+	alias add = addSetFunc!(AddMode.add);
+
+	/// Ensure a key exists (with the given value).
+	/// When `multi==true`, replaces all previous entries with this key.
+	/// Otherwise, behaves identically to `add`.
+	alias set = addSetFunc!(AddMode.replace);
+
+	/// Add `value` only if `key` is not present.
+	static if (haveValues)
+	ref V require()(auto ref K key, lazy V value = V.init)
+	{
+		return addImpl!(AddMode.require)(key, () => value);
+	}
+
+	deprecated alias getOrAdd = require;
+
+	private alias UpdateFuncRT(U) = typeof({ U u = void; V v = void; return u(v); }());
+
+	/// If `key` is present, call `update` for every value;
+	/// otherwise, add new value with `create`.
+	static if (haveValues)
+	private void update(C, U)(auto ref K key, scope C create, scope U update)
+	if (is(typeof(create()) : V) && (is(UpdateFuncRT!U : V) || is(UpdateFuncRT == void)))
+	{
+		static if (ordered)
+		{
+			lookup.update(key,
+				delegate Indexes()
+				{
+					auto addedIndex = items.length;
+					items ~= Item(key, create());
+					return [addedIndex];
+				},
+				delegate void(ref Indexes existingIndex)
+				{
+					foreach (i; existingIndex)
+						static if (is(UpdateFuncRT!U == void))
+							update(items[i].value);
+						else
+							items[i].value = update(items[i].value);
+				});
+		}
+		else // ordered
+		{
+			items.update(key,
+				delegate ValueStorageType ()
+				{
+					return [create()];
+				},
+				delegate void (ref ValueStorageType values)
+				{
+					foreach (ref value; values)
+						static if (is(UpdateFuncRT!U == void))
+							update(value);
+						else
+							value = update(value);
+				});
+		}
+	}
+
+	// *** Mutation (editing) ***
+
+	static if (haveIndexing)
+	{
+		static if (haveValues)
+		{
+			/// Same as `set(k, v)`.
+			ref IV opIndexAssign()(auto ref IV v, auto ref IK k)
+			{
+				return set(k, v);
+			}
+
+			/// Perform cumulative operation with value
+			/// (initialized with `.init` if the key does not exist).
+			ref IV opIndexOpAssign(string op)(auto ref IV v, auto ref IK k)
+			{
+				auto pv = &require(k);
+				return mixin("(*pv) " ~ op ~ "= v");
+			}
+
+			/// Perform unary operation with value
+			/// (initialized with `.init` if the key does not exist).
+			ref IV opIndexUnary(string op)(auto ref IK k)
+			{
+				auto pv = &require(k);
+				mixin("(*pv) " ~ op ~ ";");
+				return *pv;
+			}
+		}
+		else
+		{
+			private ref K editIndex(size_t index, scope void delegate(ref K) edit)
+			{
+				auto item = &items[index];
+				K oldKey = item.key;
+				auto pOldIndices = oldKey in lookup;
+				assert(pOldIndices);
+
+				edit(item.key);
+
+				// Add new value
+
+				lookup.update(item.key,
+					delegate Indexes()
+					{
+						// New value did not exist.
+						if ((*pOldIndices).length == 1)
+						{
+							// Optimization - migrate the Indexes value
+							assert((*pOldIndices)[0] == index);
+							return *pOldIndices;
+						}
+						else
+							return [index];
+					},
+					delegate void(ref Indexes existingIndex)
+					{
+						// Value(s) with the new key already existed
+						static if (multi)
+							existingIndex ~= index;
+						else
+							assert(false, "Collision after in-place edit of a non-multi ordered set element");
+					});
+
+				// Remove old value
+
+				if ((*pOldIndices).length == 1)
+					lookup.remove(oldKey);
+				else
+				static if (multi)
+					*pOldIndices = (*pOldIndices).remove!(i => i == index);
+				else
+					assert(false); // Should be unreachable (`if` above will always be true)
+
+				return item.key;
+			}
+
+			/// Allows writing to ordered sets by index.
+			/// The total number of elements never changes as a result
+			/// of such an operation - a consequence of which is that
+			/// if multi==false, changing the value to one that's
+			/// already in the set is an error.
+			ref IV opIndexAssign()(auto ref IV v, auto ref IK k)
+			{
+				static if (haveValues)
+					return set(k, v);
+				else
+					return editIndex(k, (ref IV e) { e = v; });
+			}
+
+			/// Perform cumulative operation with value at index.
+			ref IV opIndexOpAssign(string op)(auto ref VV v, auto ref IK k)
+			{
+				return editIndex(k, (ref IV e) { mixin("e " ~ op ~ "= v;"); });
+			}
+
+			/// Perform unary operation with value at index.
+			ref IV opIndexUnary(string op)(auto ref IK k)
+			{
+				return editIndex(k, (ref IV e) { mixin("e " ~ op ~ ";"); });
+			}
+		}
+	}
+
+	// *** Mutation (removal) ***
+
+	/// Removes all elements with the given key.
+	bool remove()(auto ref K key)
+	{
+		static if (ordered)
+		{
+			auto p = key in lookup;
+			if (!p)
+				return false;
+
+			auto targets = *p;
+			foreach (target; targets)
+			{
+				items = items.remove!(SwapStrategy.stable)(target);
+				foreach (ref k, ref vs; lookup)
+					foreach (ref v; vs)
+						if (v > target)
+							v--;
+			}
+			lookup.remove(key);
+			return true;
+		}
+		else
+			return items.remove(key);
+	}
+
+	/// Removes all elements.
+	void clear()
+	{
+		static if (ordered)
+		{
+			lookup.clear();
+			items.length = 0;
+		}
+		else
+			items.clear();
 	}
 }
 
+/// An associative array which retains the order in which elements were added.
+alias OrderedMap(K, V) = HashCollection!(K, V, true, false);
+
 unittest
 {
-	OrderedMap!(string, int) m;
+	alias M = OrderedMap!(string, int);
+	M m;
 	m["a"] = 1;
 	m["b"] = 2;
 	m["c"] = 3;
@@ -520,6 +1073,24 @@ unittest
 		r.popFront();
 		assert(r.empty);
 	}
+
+	assert(m.byKey.equal(["a", "b", "c"]));
+	assert(m.byValue.equal([1, 2, 3]));
+	assert(m.byKeyValue.map!(p => p.key).equal(m.byKey));
+	assert(m.byKeyValue.map!(p => p.value).equal(m.byValue));
+	assert(m.keys == ["a", "b", "c"]);
+	assert(m.values == [1, 2, 3]);
+
+	{
+		const(M)* c = &m;
+		assert(c.byKey.equal(["a", "b", "c"]));
+		assert(c.byValue.equal([1, 2, 3]));
+		assert(c.keys == ["a", "b", "c"]);
+		assert(c.values == [1, 2, 3]);
+	}
+
+	m.byValue.front = 5;
+	assert(m.byValue.equal([5, 2, 3]));
 
 	m.remove("a");
 	assert(m.length == 2);
@@ -566,7 +1137,7 @@ unittest
 {
 	class C {}
 	const OrderedMap!(string, C) m;
-	m.byKeyValue;
+	cast(void)m.byKeyValue;
 }
 
 unittest
@@ -599,16 +1170,20 @@ unittest
 	}
 }
 
+unittest
+{
+	OrderedMap!(string, int) m;
+	static assert(is(typeof(m.keys)));
+	static assert(is(typeof(m.values)));
+}
+
 /// Like assocArray
 auto orderedMap(R)(R input)
 if (input.front.length == 2)
 {
 	alias K = typeof(input.front[0]);
 	alias V = typeof(input.front[1]);
-	OrderedMap!(K, V) map;
-	foreach (ref pair; input)
-		map[pair[0]] = pair[1];
-	return map;
+	return OrderedMap!(K, V)(input);
 }
 
 unittest
@@ -620,53 +1195,7 @@ unittest
 // ***************************************************************************
 
 /// Helper/wrapper for void[0][T]
-struct HashSet(T)
-{
-	void[0][T] data;
-
-	alias data this;
-
-	this(R)(R r)
-	{
-		foreach (k; r)
-			add(k);
-	}
-
-	void add(T k)
-	{
-		void[0] v;
-		data[k] = v;
-	}
-
-	bool addNew(T k)
-	{
-		void[0] v;
-		return data.addNew(k, v);
-	}
-
-	bool remove(T k)
-	{
-		return data.remove(k);
-	}
-
-	@property HashSet!T dup() const
-	{
-		// Can't use .dup with void[0] value
-		HashSet!T result;
-		foreach (k, v; data)
-			result.add(k);
-		return result;
-	}
-
-	int opApply(scope int delegate(ref T) dg)
-	{
-		int result;
-		foreach (k, v; data)
-			if ((result = dg(k)) != 0)
-				break;
-		return result;
-	}
-}
+alias HashSet(T) = HashCollection!(T, void, false, false);
 
 unittest
 {
@@ -705,119 +1234,7 @@ unittest
 
 // ***************************************************************************
 
-struct OrderedSet(T)
-{
-	T[] items;
-	size_t[T] index;
-
-	this(R)(R r)
-	if (isInputRange!R)
-	{
-		foreach (k; r)
-			add(k);
-	}
-
-	static if (is(typeof(items.dup && index.dup)))
-	{
-		this(this)
-		{
-			items = items.dup;
-			index = index.dup;
-		}
-	}
-	else
-		@disable this(this);
-
-	void clear()
-	{
-		items = null;
-		index = null;
-	}
-
-	bool opCast(T)() const
-	if (is(T == bool))
-	{
-		return !!index;
-	}
-
-	ref inout(T) opIndex()(size_t i) inout
-	{
-		return items[i];
-	}
-
-	ref T opIndexAssign()(auto ref T v, size_t i)
-	{
-		assert(i < items.length);
-		index.remove(items[i]);
-		items[i] = v;
-		index[v] = i;
-		return items[i];
-	}
-
-	bool opBinaryRight(string op)(auto ref in T v) inout
-	if (op == "in")
-	{
-		return !!(v in index);
-	}
-
-	ref T add()(auto ref T v)
-	{
-		auto pi = v in index;
-		if (pi)
-		{
-			auto pv = &items[*pi];
-			*pv = v;
-			return *pv;
-		}
-
-		index[v] = items.length;
-		items ~= v;
-		return items[$-1];
-	}
-
-	void remove()(auto ref T v)
-	{
-		auto i = index[v];
-		index.remove(v);
-		items = items.remove(i);
-		foreach (key, ref idx; index)
-			if (idx > i)
-				idx--;
-	}
-
-	@property size_t length() const { return items.length; }
-
-	private int opApplyImpl(this This, Dg)(Dg dg)
-	{
-		int result = 0;
-
-		foreach (i, ref v; items)
-		{
-			result = dg(v);
-			if (result)
-				break;
-		}
-		return result;
-	}
-
-	int opApply(int delegate(ref T k) dg)
-	{
-		return opApplyImpl(dg);
-	}
-
-	int opApply(int delegate(const ref T k) dg) const
-	{
-		return opApplyImpl(dg);
-	}
-
-	@property typeof(this) dup()
-	{
-		typeof(this) result;
-		result.items = items.dup;
-		result.index = index.dup;
-		return result;
-	}
-}
+alias OrderedSet(T) = HashCollection!(T, void, true, false);
 
 unittest
 {
@@ -865,178 +1282,11 @@ unittest
 /// with the added property of being able to hold keys with
 /// multiple values. These are only exposed explicitly and
 /// through iteration
-struct MultiAA(K, V)
-{
-	V[][K] items;
-
-	/// If multiple items with this name are present,
-	/// only the first one is returned.
-	ref inout(V) opIndex(K key) inout
-	{
-		return items[key][0];
-	}
-
-	V opIndexAssign(V value, K key)
-	{
-		items[key] = [value];
-		return value;
-	}
-
-	inout(V)* opBinaryRight(string op)(K key) inout @nogc
-	if (op == "in")
-	{
-		auto pvalues = key in items;
-		if (pvalues && (*pvalues).length)
-			return &(*pvalues)[0];
-		return null;
-	}
-
-	bool remove(K key)
-	{
-		return items.remove(key);
-	}
-
-	// D forces these to be "ref"
-	int opApply(int delegate(ref K key, ref V value) dg)
-	{
-		int ret;
-		outer:
-		foreach (key, values; items)
-			foreach (ref value; values)
-			{
-				ret = dg(key, value);
-				if (ret)
-					break outer;
-			}
-		return ret;
-	}
-
-	// Copy-paste because of https://issues.dlang.org/show_bug.cgi?id=7543
-	int opApply(int delegate(ref const(K) key, ref const(V) value) dg) const
-	{
-		int ret;
-		outer:
-		foreach (key, values; items)
-			foreach (ref value; values)
-			{
-				ret = dg(key, value);
-				if (ret)
-					break outer;
-			}
-		return ret;
-	}
-
-	void add(K key, V value)
-	{
-		if (key !in items)
-			items[key] = [value];
-		else
-			items[key] ~= value;
-	}
-
-	V get(K key, lazy V def) const
-	{
-		auto pvalue = key in this;
-		return pvalue ? *pvalue : def;
-	}
-
-	inout(V)[] getAll(K key) inout
-	{
-		inout(V)[] result;
-		foreach (ref value; items.get(key, null))
-			result ~= value;
-		return result;
-	}
-
-	this(typeof(null) Null)
-	{
-	}
-
-	this(V[K] aa)
-	{
-		foreach (ref key, ref value; aa)
-			add(key, value);
-	}
-
-	this(V[][K] aa)
-	{
-		foreach (ref key, values; aa)
-			foreach (ref value; values)
-				add(key, value);
-	}
-
-	/// Like assocArray
-	this(R)(R range)
-	if (is(typeof(range.front[0]) : K) && is(typeof(range.front[1]) : V))
-	{
-		foreach (pair; range)
-			add(pair[0], pair[1]);
-	}
-
-	@property auto keys() inout { return items.keys; }
-
-	// https://issues.dlang.org/show_bug.cgi?id=14626
-
-	@property V[] values()
-	{
-		return items.byValue.join;
-	}
-
-	@property const(V)[] values() const
-	{
-		return items.byValue.join;
-	}
-
-	@property typeof(V[K].init.pairs) pairs()
-	{
-		alias Pair = typeof(V[K].init.pairs[0]);
-		Pair[] result;
-		result.reserve(length);
-		foreach (ref k, ref v; this)
-			result ~= Pair(k, v);
-		return result;
-	}
-
-	@property size_t length() const { return items.byValue.map!(item => item.length).sum(); }
-
-	auto byKey() { return items.byKey(); }
-	auto byValue() { return items.byValue().joiner(); }
-
-	bool opCast(T)() inout
-		if (is(T == bool))
-	{
-		return !!items;
-	}
-
-	/// Warning: discards repeating items
-	V[K] opCast(T)() const
-		if (is(T == V[K]))
-	{
-		V[K] result;
-		foreach (key, value; this)
-			result[key] = value;
-		return result;
-	}
-
-	V[][K] opCast(T)() inout
-		if (is(T == V[][K]))
-	{
-		V[][K] result;
-		foreach (k, v; this)
-			result[k] ~= v;
-		return result;
-	}
-
-	@property typeof(this) dup()
-	{
-		typeof(this) result;
-		result.items = items.dup;
-		return result;
-	}
-}
+alias MultiAA(K, V) = HashCollection!(K, V, false, true);
 
 unittest
 {
 	alias MASS = MultiAA!(string, int);
 	auto aa = MASS([tuple("foo", 42)]);
+	aa = ["a":1,"b":2];
 }
