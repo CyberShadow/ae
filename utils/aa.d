@@ -223,6 +223,26 @@ unittest
 	assert([2:4].pairs.toAA() == [2:4]);
 }
 
+/// Ensure that arr is non-null if empty.
+V[K] nonNull(K, V)(V[K] aa)
+{
+	if (aa !is null)
+		return aa;
+	aa[K.init] = V.init;
+	aa.remove(K.init);
+	assert(aa !is null);
+	return aa;
+}
+
+unittest
+{
+	int[int] aa;
+	assert(aa is null);
+	aa = aa.nonNull;
+	assert(aa !is null);
+	assert(aa.length == 0);
+}
+
 // ***************************************************************************
 
 /// An associative array which retains the order in which elements were added.
