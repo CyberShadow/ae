@@ -30,6 +30,19 @@ ref V require(K, V)(ref V[K] aa, K key, lazy V value = V.init)
 	return aa[key] = value;
 }
 
+unittest
+{
+	int[int] aa;
+	aa.require(1, 2);
+	assert(aa[1] == 2);
+	aa.require(2, 3) = 4;
+	assert(aa[2] == 4);
+	aa.require(1, 5);
+	assert(aa[1] == 2);
+	aa.require(1, 6) = 7;
+	assert(aa[1] == 7);
+}
+
 /// Polyfill for object.update
 static if (!__traits(hasMember, object, "update"))
 void update(K, V, C, U)(ref V[K] aa, K key, scope C create, scope U update)
