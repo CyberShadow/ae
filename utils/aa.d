@@ -15,6 +15,7 @@ module ae.utils.aa;
 
 import std.algorithm;
 import std.range;
+import std.traits;
 import std.typecons;
 
 // ***************************************************************************
@@ -42,6 +43,44 @@ if (is(typeof(create()) : V) && is(typeof(update(aa[K.init])) : V))
 		*p = update(*p);
 	else
 		aa[key] = create();
+}
+
+// https://github.com/dlang/druntime/pull/3012
+private enum haveObjectUpdateWithVoidUpdate = is(typeof({
+	int[int] aa;
+	.object.update(aa, 0, { return 0; }, (ref int v) { });
+}));
+
+static if (!haveObjectUpdateWithVoidUpdate)
+{
+	/// Polyfill for object.update with void update function
+	void update(K, V, C, U)(ref V[K] aa, K key, scope C create, scope U update)
+	if (is(typeof(create()) : V) && is(typeof(update(aa[K.init])) == void))
+	{
+		// We can polyfill this in two ways.
+		// What's more expensive, copying the value, or a second key lookup?
+		enum haveObjectUpdate = __traits(hasMember, object, "update");
+		enum valueIsExpensiveToCopy = V.sizeof > string.sizeof
+			|| hasElaborateCopyConstructor!V
+			|| hasElaborateDestructor!V;
+		static if (haveObjectUpdate && !valueIsExpensiveToCopy)
+		{
+			.object.update(aa, key, create,
+				(ref V v) { update(v); return v; });
+		}
+		else
+		{
+			auto p = key in aa;
+			if (p)
+				update(*p);
+			else
+				aa[key] = create();
+		}
+	}
+
+	// Inject overload
+	static if (__traits(hasMember, object, "update"))
+		alias update = object.update;
 }
 
 // ***************************************************************************
