@@ -19,6 +19,33 @@ import std.typecons;
 
 // ***************************************************************************
 
+/// Polyfill for object.require
+static if (!__traits(hasMember, object, "require"))
+ref V require(K, V)(ref V[K] aa, K key, lazy V value = V.init)
+{
+	auto p = key in aa;
+	if (!p)
+	{
+		aa[key] = value;
+		p = key in aa;
+	}
+	return *p;
+}
+
+/// Polyfill for object.update
+static if (!__traits(hasMember, object, "update"))
+void update(K, V, C, U)(ref V[K] aa, K key, scope C create, scope U update)
+if (is(typeof(create()) : V) && is(typeof(update(aa[K.init])) : V))
+{
+	auto p = key in aa;
+	if (p)
+		*p = update(*p);
+	else
+		aa[key] = create();
+}
+
+// ***************************************************************************
+
 /// Get a value from an AA, and throw an exception (not an error) if not found
 ref auto aaGet(AA, K)(auto ref AA aa, auto ref K key)
 	if (is(typeof(key in aa)))
