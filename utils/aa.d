@@ -66,18 +66,7 @@ ref auto aaGet(AA, K)(auto ref AA aa, auto ref K key)
 /// Returns a reference to the value corresponding to key.
 ref V getOrAdd(K, V)(ref V[K] aa, auto ref K key, auto ref V defaultValue)
 {
-	static if (__traits(hasMember, object, "require"))
-		return aa.require(key, defaultValue);
-	else
-	{
-		auto p = key in aa;
-		if (!p)
-		{
-			aa[key] = defaultValue;
-			p = key in aa;
-		}
-		return *p;
-	}
+	return aa.require(key, defaultValue);
 }
 
 /// ditto
@@ -127,6 +116,8 @@ unittest
 	assert(!aa.addNew(1, 3));
 	assert(aa[1] == 2);
 }
+
+// ***************************************************************************
 
 struct KeyValuePair(K, V) { K key; V value; }
 
