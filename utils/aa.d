@@ -579,6 +579,14 @@ public:
 		}
 	}
 
+	/// ditto
+	static if (haveValues)
+	auto byPair(this This)()
+	{
+		return byKeyValue
+			.map!(pair => tuple!("key", "value")(pair.key, pair.value));
+	}
+
 	/// Return a range which iterates over all keys.
 	/// Duplicate keys will occur several times in the range.
 	auto byKey(this This)()
@@ -1302,6 +1310,7 @@ unittest
 	aa.add("foo", 42);
 	assert(aa["foo"] == 42);
 	assert(aa.valuesOf("foo") == [42]);
+	assert(aa.byPair.front.key == "foo");
 
 	auto aa2 = MASS([tuple("foo", 42)]);
 	aa2 = ["a":1,"b":2];
