@@ -30,7 +30,7 @@ import ae.utils.graphics.view;
 pragma(lib, "gdi32");
 
 /// A canvas with added GDI functionality.
-struct GDICanvas(COLOR)
+struct GDICanvas(COLOR, StorageType = PlainStorageUnit!COLOR)
 {
 	struct Data
 	{
@@ -53,9 +53,9 @@ struct GDICanvas(COLOR)
 	RefCounted!Data data;
 
 	int w, h;
-	COLOR* pixels;
+	StorageType* pixels;
 
-	inout(COLOR)[] scanline(int y) inout
+	inout(StorageType)[] scanline(int y) inout
 	{
 		assert(y>=0 && y<h);
 		return pixels[w*y..w*(y+1)];
@@ -77,13 +77,13 @@ struct GDICanvas(COLOR)
 		bmi.bmiHeader.biWidth       = w;
 		bmi.bmiHeader.biHeight      = -h;
 		bmi.bmiHeader.biPlanes      = 1;
-		bmi.bmiHeader.biBitCount    = COLOR.sizeof * 8;
+		bmi.bmiHeader.biBitCount    = StorageType.sizeof * 8 / StorageType.length;
 		bmi.bmiHeader.biCompression = BI_RGB;
 		void* pvBits;
 		data.hbm = CreateDIBSection(data.hdc, &bmi, DIB_RGB_COLORS, &pvBits, null, 0);
 		enforce(data.hbm, "CreateDIBSection");
 		SelectObject(data.hdc, data.hbm);
-		pixels = cast(COLOR*)pvBits;
+		pixels = cast(StorageType*)pvBits;
 	}
 
 	auto opDispatch(string F, A...)(A args)
