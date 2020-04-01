@@ -265,44 +265,66 @@ unittest
 
 // ***************************************************************************
 
+// Helpers for HashCollection
+private
+{
+	alias Void = void[0]; // Zero-sized type
+	static assert(Void.sizeof == 0);
+
+	// Abstraction layer for single/multi-value type holding one or many T.
+	// Optimizer representation for Void.
+	struct SingleOrMultiValue(bool multi, T)
+	{
+		alias ValueType = Select!(multi,
+			// multi==true
+			Select!(is(T == Void),
+				size_t, // "store" the items by keeping track of their count only.
+				T[],
+			),
+
+			// multi==false
+			Select!(is(T == Void),
+				Void,
+				T[1],
+			),
+		);
+
+		// Using free functions instead of struct methods,
+		// as structs always have non-zero size.
+	static:
+
+		size_t length(in ref ValueType v) nothrow
+		{
+			static if (is(T == Void))
+				static if (multi)
+					return v; // count
+				else
+					return 1;
+			else
+				return v.length; // static or dynamic array
+		}
+	}
+}
+
 /// Base type for ordered/unordered single-value/multi-value map/set
 /*private*/ struct HashCollection(K, V, bool ordered, bool multi)
 {
-//private:
+private:
 	enum bool haveValues = !is(V == void); // Not a set
 
-	static if (ordered)
-	{
-		enum bool canDup = is(typeof(lookup.dup)) && is(typeof(items.dup));
+	// The type for values used when a value variable is needed
+	alias ValueVarType = Select!(haveValues, V, Void);
 
-		static if (multi)
-			alias Indexes = size_t[];
-		else
-			alias Indexes = size_t[1];
-	}
-	else
-	{
-		static if (haveValues)
-		{
-			static if (multi)
-				alias ValueStorageType = V[];
-			else
-				alias ValueStorageType = V[1];
-		}
-		else
-		{
-			static if (multi)
-				alias ValueStorageType = size_t;
-			else
-				alias ValueStorageType = void[0];
-		}
+	// The type of a single element of the values of `this.lookup`.
+	// When ordered==true, we use size_t (index into `this.items`).
+	alias LookupItem = Select!(ordered, size_t, ValueVarType);
 
-		enum bool canDup = is(typeof(items.dup));
-	}
+	// The type of the values of `this.lookup`.
+	alias SM = SingleOrMultiValue!(multi, LookupItem);
+	alias LookupValue = SM.ValueType;
 
 	static if (haveValues)
 	{
-		alias ValueVarType = V;
 		alias ReturnType(Fallback) = V;
 		alias SingleIterationType = V;
 		alias OpIndexKeyType = K;
@@ -310,7 +332,7 @@ unittest
 	}
 	else
 	{
-		alias ValueVarType = void[0];
+		alias SingleIterationType = const(K);
 		static if (ordered)
 		{
 			alias OpIndexKeyType = size_t;
@@ -323,7 +345,6 @@ unittest
 			alias OpIndexValueType = void;
 			alias ReturnType(Fallback) = Fallback;
 		}
-		alias SingleIterationType = const(K);
 	}
 	enum haveReturnType = !is(ReturnType!void == void);
 	enum haveIndexing = haveValues || ordered;
@@ -337,15 +358,21 @@ unittest
 	// on copy, so that we don't trample older copies' data.
 	enum bool needDupOnCopy = ordered;
 
+	static if (haveReturnType)
+	{
+		static if (ordered)
+			/*  */ ref inout(ReturnType!void) lookupToReturnValue(in        LookupItem  lookupItem) inout { return items[lookupItem].returnValue; }
+		else
+			static ref inout(ReturnType!void) lookupToReturnValue(ref inout(LookupItem) lookupItem)       { return       lookupItem             ; }
+	}
+
 	// *** Data ***
+
+	// This is used for all key hash lookups.
+	LookupValue[K] lookup;
 
 	static if (ordered)
 	{
-		Indexes[K] lookup;
-		// K[] keys;
-		// static if (haveValues)
-		// 	V[] values;
-
 		struct Item
 		{
 			K key;
@@ -357,9 +384,13 @@ unittest
 				private alias returnValue = key;
 		}
 		Item[] items;
+
+		enum bool canDup = is(typeof(lookup.dup)) && is(typeof(items.dup));
 	}
 	else
-		ValueStorageType[K] items;
+	{
+		enum bool canDup = is(typeof(lookup.dup));
+	}
 
 public:
 
@@ -387,9 +418,9 @@ public:
 		else
 		{
 			typeof(this) copy;
+			copy.lookup = lookup.dup;
 			static if (ordered)
-				copy.lookup = lookup.dup;
-			copy.items = items.dup;
+				copy.items = items.dup;
 			return copy;
 		}
 	}
@@ -462,15 +493,26 @@ public:
 	bool empty() pure const nothrow @nogc @safe
 	{
 		static if (ordered)
-			return items.length == 0;
+			return items.length == 0; // optimization
 		else
-			return items.byKey.empty;
+			return lookup.byKey.empty; // generic version
 	}
 
 	/// Total number of items, including with duplicate keys.
 	size_t length() pure const nothrow @nogc @safe
 	{
-		return items.length;
+		static if (ordered)
+			return items.length; // optimization
+		else
+		static if (!multi)
+			return lookup.length; // optimization
+		else // generic version
+		{
+			size_t result;
+			foreach (ref v; lookup.byValue)
+				result += SM.length(v);
+			return result;
+		}
 	}
 
 	// *** Query (by key) ***
@@ -479,21 +521,16 @@ public:
 	/// When applicable, return a pointer to the last value added with this key.
 	Select!(haveReturnType, inout(ReturnType!void)*, bool) opBinaryRight(string op : "in")(auto ref in K key) inout
 	{
-		static if (ordered)
-		{
-			auto p = key in lookup;
-			if (!p)
-				return null;
-			return &items[(*p)[$-1]].returnValue;
-		}
+		enum missValue = select!haveReturnType(null, false);
+
+		auto p = key in lookup;
+		if (!p)
+			return missValue;
+
+		static if (haveReturnType)
+			return &lookupToReturnValue((*p)[$-1]);
 		else
-		{
-			auto p = key in items;
-			static if (haveValues)
-				return (*p)[$-1];
-			else
-				return !!p;
-		}
+			return true;
 	}
 
 	/// Index operator.
@@ -503,12 +540,7 @@ public:
 	ref inout(IV) opIndex()(auto ref IK k) inout
 	{
 		static if (haveValues)
-		{
-			static if (ordered)
-				return items[lookup[k][0]].returnValue;
-			else
-				return items[k][$-1];
-		}
+			return lookupToReturnValue(lookup[k][$-1]);
 		else
 			return items[k].returnValue;
 	}
@@ -519,13 +551,8 @@ public:
 	{
 		static if (haveValues)
 		{
-			static if (ordered)
-			{
-				auto p = k in lookup;
-				return p ? items[(*p)[0]].returnValue : defaultValue;
-			}
-			else
-				return lookup.get(k, (&defaultValue)[0..1])[$-1];
+			auto p = k in lookup;
+			return p ? lookupToReturnValue((*p)[$-1]) : defaultValue;
 		}
 		else
 			return k < items.length ? items[k].returnValue : defaultValue;
@@ -541,7 +568,7 @@ public:
 			return items;
 		else
 		{
-			return items
+			return lookup
 				.byKeyValue
 				.map!(pair =>
 					pair
@@ -563,21 +590,10 @@ public:
 		}
 		else
 		{
-			size_t keyCount(in ref ValueStorageType vs)
-			{
-				static if (haveValues)
-					return vs.length;
-				else
-				static if (multi)
-					return vs;
-				else
-					return 1;
-			}
-
-			return items
+			return lookup
 				.byKeyValue
 				.map!(pair =>
-					pair.key.repeat(keyCount(pair.value))
+					pair.key.repeat(SM.length(pair.value))
 				)
 				.joiner;
 		}
@@ -594,7 +610,7 @@ public:
 		}
 		else
 		{
-			return items
+			return lookup
 				.byKeyValue
 				.map!(pair =>
 					pair
@@ -612,13 +628,8 @@ public:
 	static if (ordered)
 	private size_t[] indicesOf()(auto ref K k)
 	{
-		static if (multi)
-			return lookup.get(k, null);
-		else
-		{
-			auto p = k in lookup;
-			return p ? (*p)[] : null;
-		}
+		auto p = k in lookup;
+		return p ? (*p)[] : null;
 	}
 
 	/// Return the number of items with the given key.
@@ -628,13 +639,10 @@ public:
 		static if (ordered)
 			return indicesOf(k).length;
 		else
-		static if (haveValues)
-			return valuesOf(k).length;
-		else
-		static if (multi)
-			return items.get(k, 0);
-		else
-			return k in items ? 1 : 0;
+		{
+			auto p = k in lookup;
+			return p ? SM.length(*p) : 0;
+		}
 	}
 
 	/// Return a range with all values with the given key.
@@ -658,10 +666,10 @@ public:
 		else
 		{
 			static if (multi)
-				return items.get(k, null);
+				return lookup.get(k, null);
 			else
 			{
-				auto p = k in items;
+				auto p = k in lookup;
 				return p ? (*p)[] : null;
 			}
 		}
@@ -692,7 +700,7 @@ public:
 		}
 		else
 		{
-			foreach (ref key, ref values; items)
+			foreach (ref key, ref values; lookup)
 				static if (haveValues)
 				{
 					foreach (ref value; values)
@@ -707,11 +715,7 @@ public:
 				}
 				else
 				{
-					static if (multi)
-						size_t iterations = values;
-					else
-						enum size_t iterations = 1;
-					foreach (iteration; 0 .. iterations)
+					foreach (iteration; 0 .. SM.length(values))
 					{
 						static assert(single);
 						result = dg(key);
@@ -775,13 +779,13 @@ public:
 			else
 			{
 				lookup.updateVoid(key,
-					delegate Indexes()
+					delegate LookupValue()
 					{
 						addedIndex = items.length;
 						items ~= Item(key, getValue());
 						return [addedIndex];
 					},
-					delegate void(ref Indexes existingIndex)
+					delegate void(ref LookupValue existingIndex)
 					{
 						addedIndex = existingIndex[0];
 						static if (mode != AddMode.require)
@@ -803,27 +807,27 @@ public:
 			static if (haveValues)
 			{
 				static if (mode == AddMode.require)
-					return (items.require(key, [getValue()]))[0];
+					return (lookup.require(key, [getValue()]))[0];
 				else
 				static if (multi && mode == AddMode.add)
-					return (items[key] ~= getValue())[$-1];
+					return (lookup[key] ~= getValue())[$-1];
 				else
-					return (items[key] = [getValue()])[0];
+					return (lookup[key] = [getValue()])[0];
 			}
 			else
 			{
 				static if (multi)
 				{
 					static if (mode == AddMode.require)
-						items.require(key, 1);
+						lookup.require(key, 1);
 					else
 					static if (mode == AddMode.add)
-						items[key]++;
+						lookup[key]++;
 					else
-						items[key] = 1;
+						lookup[key] = 1;
 				}
 				else
-					items[key] = ValueStorageType.init;
+					lookup[key] = LookupValue.init;
 				// This branch returns void, as there is no reasonable
 				// ref to an AA key that we can return here.
 			}
@@ -879,13 +883,13 @@ public:
 		static if (ordered)
 		{
 			lookup.updateVoid(key,
-				delegate Indexes()
+				delegate LookupValue()
 				{
 					auto addedIndex = items.length;
 					items ~= Item(key, create());
 					return [addedIndex];
 				},
-				delegate void(ref Indexes existingIndex)
+				delegate void(ref LookupValue existingIndex)
 				{
 					foreach (i; existingIndex)
 						static if (is(UpdateFuncRT!U == void))
@@ -896,12 +900,12 @@ public:
 		}
 		else // ordered
 		{
-			items.updateVoid(key,
-				delegate ValueStorageType ()
+			lookup.updateVoid(key,
+				delegate LookupValue ()
 				{
 					return [create()];
 				},
-				delegate void (ref ValueStorageType values)
+				delegate void (ref LookupValue values)
 				{
 					foreach (ref value; values)
 						static if (is(UpdateFuncRT!U == void))
@@ -955,7 +959,7 @@ public:
 				// Add new value
 
 				lookup.updateVoid(item.key,
-					delegate Indexes()
+					delegate LookupValue()
 					{
 						// New value did not exist.
 						if ((*pOldIndices).length == 1)
@@ -967,7 +971,7 @@ public:
 						else
 							return [index];
 					},
-					delegate void(ref Indexes existingIndex)
+					delegate void(ref LookupValue existingIndex)
 					{
 						// Value(s) with the new key already existed
 						static if (multi)
@@ -1036,23 +1040,20 @@ public:
 						if (v > target)
 							v--;
 			}
-			lookup.remove(key);
+			auto success = lookup.remove(key);
+			assert(success);
 			return true;
 		}
 		else
-			return items.remove(key);
+			return lookup.remove(key);
 	}
 
 	/// Removes all elements.
 	void clear()
 	{
+		lookup.clear();
 		static if (ordered)
-		{
-			lookup.clear();
 			items.length = 0;
-		}
-		else
-			items.clear();
 	}
 }
 
@@ -1297,6 +1298,11 @@ alias MultiAA(K, V) = HashCollection!(K, V, false, true);
 unittest
 {
 	alias MASS = MultiAA!(string, int);
-	auto aa = MASS([tuple("foo", 42)]);
-	aa = ["a":1,"b":2];
+	MASS aa;
+	aa.add("foo", 42);
+	assert(aa["foo"] == 42);
+	assert(aa.valuesOf("foo") == [42]);
+
+	auto aa2 = MASS([tuple("foo", 42)]);
+	aa2 = ["a":1,"b":2];
 }
