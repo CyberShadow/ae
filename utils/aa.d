@@ -43,16 +43,21 @@ unittest
 	assert(aa[1] == 7);
 }
 
-/// Polyfill for object.update
 static if (!__traits(hasMember, object, "update"))
-void update(K, V, C, U)(ref V[K] aa, K key, scope C create, scope U update)
-if (is(typeof(create()) : V) && is(typeof(update(aa[K.init])) : V))
 {
-	auto p = key in aa;
-	if (p)
-		*p = update(*p);
-	else
-		aa[key] = create();
+	/// Polyfill for object.update
+	void updatePolyfill(K, V, C, U)(ref V[K] aa, K key, scope C create, scope U update)
+	if (is(typeof(create()) : V) && is(typeof(update(aa[K.init])) : V))
+	{
+		auto p = key in aa;
+		if (p)
+			*p = update(*p);
+		else
+			aa[key] = create();
+	}
+
+	/// Work around https://issues.dlang.org/show_bug.cgi?id=15795
+	alias update = updatePolyfill;
 }
 
 // https://github.com/dlang/druntime/pull/3012
@@ -64,7 +69,7 @@ private enum haveObjectUpdateWithVoidUpdate = is(typeof({
 static if (!haveObjectUpdateWithVoidUpdate)
 {
 	/// Polyfill for object.update with void update function
-	void update(K, V, C, U)(ref V[K] aa, K key, scope C create, scope U update)
+	void updateVoid(K, V, C, U)(ref V[K] aa, K key, scope C create, scope U update)
 	if (is(typeof(create()) : V) && is(typeof(update(aa[K.init])) == void))
 	{
 		// We can polyfill this in two ways.
@@ -88,10 +93,15 @@ static if (!haveObjectUpdateWithVoidUpdate)
 		}
 	}
 
-	// Inject overload
-	static if (__traits(hasMember, object, "update"))
-		alias update = object.update;
+	/// Work around https://issues.dlang.org/show_bug.cgi?id=15795
+	alias update = updateVoid;
 }
+else
+	alias updateVoid = object.update;
+
+// Inject overload
+static if (__traits(hasMember, object, "update"))
+	alias update = object.update;
 
 // ***************************************************************************
 
@@ -137,7 +147,7 @@ unittest
 bool addNew(K, V)(ref V[K] aa, auto ref K key, auto ref V value)
 {
 	bool added = void;
-	aa.update(key,
+	updateVoid(aa, key,
 		delegate V   (       ) { added = true ; return value; },
 		delegate void(ref V v) { added = false;               },
 	);
@@ -764,7 +774,7 @@ public:
 			}
 			else
 			{
-				lookup.update(key,
+				lookup.updateVoid(key,
 					delegate Indexes()
 					{
 						addedIndex = items.length;
@@ -868,7 +878,7 @@ public:
 	{
 		static if (ordered)
 		{
-			lookup.update(key,
+			lookup.updateVoid(key,
 				delegate Indexes()
 				{
 					auto addedIndex = items.length;
@@ -886,7 +896,7 @@ public:
 		}
 		else // ordered
 		{
-			items.update(key,
+			items.updateVoid(key,
 				delegate ValueStorageType ()
 				{
 					return [create()];
@@ -944,7 +954,7 @@ public:
 
 				// Add new value
 
-				lookup.update(item.key,
+				lookup.updateVoid(item.key,
 					delegate Indexes()
 					{
 						// New value did not exist.
