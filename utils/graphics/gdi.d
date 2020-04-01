@@ -25,13 +25,19 @@ mixin(importWin32!q{windef});
 
 import ae.utils.graphics.color;
 import ae.utils.graphics.draw;
+import ae.utils.graphics.image : bitmapPixelStride;
 import ae.utils.graphics.view;
 
 pragma(lib, "gdi32");
 
 /// A canvas with added GDI functionality.
-struct GDICanvas(COLOR, StorageType = PlainStorageUnit!COLOR)
+struct GDICanvas(COLOR)
 {
+	static if (is(COLOR == bool))
+		alias StorageType = OneBitStorageBE;
+	else
+		alias StorageType = PlainStorageUnit!COLOR;
+
 	struct Data
 	{
 		HDC hdc;
@@ -53,12 +59,15 @@ struct GDICanvas(COLOR, StorageType = PlainStorageUnit!COLOR)
 	RefCounted!Data data;
 
 	int w, h;
-	StorageType* pixels;
+	StorageType* pixelData;
+	sizediff_t pixelStride;
 
 	inout(StorageType)[] scanline(int y) inout
 	{
 		assert(y>=0 && y<h);
-		return pixels[w*y..w*(y+1)];
+		auto row = cast(void*)pixelData + y * pixelStride;
+		auto storageUnitsPerRow = (w + StorageType.length - 1) / StorageType.length;
+		return (cast(inout(StorageType)*)row)[0 .. storageUnitsPerRow];
 	}
 
 	mixin DirectView;
@@ -81,9 +90,10 @@ struct GDICanvas(COLOR, StorageType = PlainStorageUnit!COLOR)
 		bmi.bmiHeader.biCompression = BI_RGB;
 		void* pvBits;
 		data.hbm = CreateDIBSection(data.hdc, &bmi, DIB_RGB_COLORS, &pvBits, null, 0);
-		enforce(data.hbm, "CreateDIBSection");
+		enforce(data.hbm && pvBits, "CreateDIBSection");
 		SelectObject(data.hdc, data.hbm);
-		pixels = cast(StorageType*)pvBits;
+		pixelData = cast(StorageType*)pvBits;
+		pixelStride = bitmapPixelStride!StorageType(w);
 	}
 
 	auto opDispatch(string F, A...)(A args)
@@ -117,7 +127,24 @@ unittest
 	auto i = b.copy.colorMap!(c => RGB(c.r,c.g,c.b))();
 	assert(i[5, 5] == RGB(0, 0, 255));
 	assert(i[6, 6] == RGB(0, 0, 255));
+	assert(i[7, 7] == RGB(255, 255, 255));
 
 //	i.savePNG("gditest.png");
 //	i.savePNM("gditest.pnm");
+}
+
+unittest
+{
+	auto b = GDICanvas!bool(100, 100);
+	b.fill(true);
+
+	b.SetPixel(5, 5, 0x000000);
+	GdiFlush();
+	b[6, 6] = false;
+
+	import ae.utils.graphics.image : copy;
+	auto i = b.copy.colorMap!(c => L8(c * 0xFF))();
+	assert(i[5, 5] == L8(0));
+	assert(i[6, 6] == L8(0));
+	assert(i[7, 7] == L8(255));
 }
