@@ -518,12 +518,14 @@ struct Gradient(Value, Color)
 		if (value <= points[0].value)
 			return points[0].color;
 
-		for (int i = 0; i < points.length - 1; i++)
+		for (size_t i = 1; i < points.length; i++)
 		{
-			assert(points[i].value <= points[i+1].value,
+			assert(points[i-1].value <= points[i].value,
 				"Gradient values are not in ascending order");
-			if (value < points[i+1].value)
-				return Color.itpl(points[i].color, points[i+1].color, value, points[i].value, points[i+1].value);
+			if (value < points[i].value)
+				return Color.itpl(
+					points[i-1].color, points[i].color, value,
+					points[i-1].value, points[i].value);
 		}
 
 		return points[$-1].color;
