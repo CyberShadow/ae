@@ -408,7 +408,7 @@ EOF";
 }
 
 /// Ensure that arr is non-null if empty.
-T nonNull(T)(T arr)
+T[] nonNull(T)(T[] arr)
 {
 	if (arr !is null)
 		return arr;
