@@ -30,7 +30,7 @@ version(unittest) import ae.utils.graphics.image;
 /// Get the pixel color at the specified coordinates,
 /// or fall back to the specified default value if
 /// the coordinates are out of bounds.
-COLOR safeGet(V, COLOR)(auto ref V v, int x, int y, COLOR def)
+COLOR safeGet(V, COLOR)(auto ref V v, xy_t x, xy_t y, COLOR def)
 	if (isView!V && is(COLOR : ViewColor!V))
 {
 	if (x>=0 && y>=0 && x<v.w && y<v.h)
@@ -48,7 +48,7 @@ unittest
 
 /// Set the pixel color at the specified coordinates
 /// if the coordinates are not out of bounds.
-void safePut(V, COLOR)(auto ref V v, int x, int y, COLOR value)
+void safePut(V, COLOR)(auto ref V v, xy_t x, xy_t y, COLOR value)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
 	if (x>=0 && y>=0 && x<v.w && y<v.h)
@@ -66,7 +66,7 @@ unittest
 /// Forwards to safePut or opIndex, depending on the
 /// CHECKED parameter. Allows propagation of a
 /// CHECKED parameter from other callers.
-void putPixel(bool CHECKED, V, COLOR)(auto ref V v, int x, int y, COLOR value)
+void putPixel(bool CHECKED, V, COLOR)(auto ref V v, xy_t x, xy_t y, COLOR value)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
 	static if (CHECKED)
@@ -84,7 +84,7 @@ unittest
 }
 
 /// Gets a pixel's address from a direct view.
-ViewColor!V* pixelPtr(V)(auto ref V v, int x, int y)
+ViewColor!V* pixelPtr(V)(auto ref V v, xy_t x, xy_t y)
 if (isDirectView!V && is(typeof(&v.scanline(0)[0][0])))
 {
 	return &v.scanline(y)[x][0];
@@ -92,7 +92,7 @@ if (isDirectView!V && is(typeof(&v.scanline(0)[0][0])))
 
 unittest
 {
-	auto v = Image!int(1, 1);
+	auto v = Image!xy_t(1, 1);
 	v[0, 0] = 7;
 	auto p = v.pixelPtr(0, 0);
 	assert(*p == 7);
@@ -152,7 +152,7 @@ q{
 	assert(y1 <= y2);
 };
 
-void hline(bool CHECKED=true, V, COLOR)(auto ref V v, int x1, int x2, int y, COLOR c)
+void hline(bool CHECKED=true, V, COLOR)(auto ref V v, xy_t x1, xy_t x2, xy_t y, COLOR c)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
 	mixin(CheckHLine);
@@ -166,7 +166,7 @@ void hline(bool CHECKED=true, V, COLOR)(auto ref V v, int x1, int x2, int y, COL
 			v[x, y] = c;
 }
 
-void vline(bool CHECKED=true, V, COLOR)(auto ref V v, int x, int y1, int y2, COLOR c)
+void vline(bool CHECKED=true, V, COLOR)(auto ref V v, xy_t x, xy_t y1, xy_t y2, COLOR c)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
 	mixin(CheckVLine);
@@ -174,7 +174,7 @@ void vline(bool CHECKED=true, V, COLOR)(auto ref V v, int x, int y1, int y2, COL
 		v[x, y] = c;
 }
 
-void line(bool CHECKED=true, V, COLOR)(auto ref V v, int x1, int y1, int x2, int y2, COLOR c)
+void line(bool CHECKED=true, V, COLOR)(auto ref V v, xy_t x1, xy_t y1, xy_t x2, xy_t y2, COLOR c)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
 	mixin FixMath;
@@ -197,12 +197,12 @@ void line(bool CHECKED=true, V, COLOR)(auto ref V v, int x1, int y1, int x2, int
 
 		// Use fixed-point for b position and offset per 1 pixel along "a" axis
 		assert(b0 < (1L<<coordinateBits) && b1 < (1L<<coordinateBits));
-		SignedBitsType!(coordinateBits*2) bPos = b0 << coordinateBits;
-		SignedBitsType!(coordinateBits*2) bOff = ((b1-b0) << coordinateBits) / (a1-a0);
+		auto bPos = cast(SignedBitsType!(coordinateBits*2))(b0 << coordinateBits);
+		auto bOff = cast(SignedBitsType!(coordinateBits*2))(((b1-b0) << coordinateBits) / (a1-a0));
 
 		foreach (a; a0..a1+1)
 		{
-			int b = (bPos += bOff) >> coordinateBits;
+			xy_t b = (bPos += bOff) >> coordinateBits;
 			mixin(DrawPixel);
 		}
 	};
@@ -231,7 +231,7 @@ void line(bool CHECKED=true, V, COLOR)(auto ref V v, int x1, int y1, int x2, int
 
 /// Draws a rectangle with a solid line.
 /// The coordinates represent bounds (open on the right) for the outside of the rectangle.
-void rect(bool CHECKED=true, V, COLOR)(auto ref V v, int x1, int y1, int x2, int y2, COLOR c)
+void rect(bool CHECKED=true, V, COLOR)(auto ref V v, xy_t x1, xy_t y1, xy_t x2, xy_t y2, COLOR c)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
 	sort2(x1, x2);
@@ -242,7 +242,7 @@ void rect(bool CHECKED=true, V, COLOR)(auto ref V v, int x1, int y1, int x2, int
 	v.vline!CHECKED(x2-1, y1, y2, c);
 }
 
-void fillRect(bool CHECKED=true, V, COLOR)(auto ref V v, int x1, int y1, int x2, int y2, COLOR b) // [)
+void fillRect(bool CHECKED=true, V, COLOR)(auto ref V v, xy_t x1, xy_t y1, xy_t x2, xy_t y2, COLOR b) // [)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
 	sort2(x1, x2);
@@ -259,7 +259,7 @@ void fillRect(bool CHECKED=true, V, COLOR)(auto ref V v, int x1, int y1, int x2,
 		v.hline!false(x1, x2, y, b);
 }
 
-void fillRect(bool CHECKED=true, V, COLOR)(auto ref V v, int x1, int y1, int x2, int y2, COLOR c, COLOR b) // [)
+void fillRect(bool CHECKED=true, V, COLOR)(auto ref V v, xy_t x1, xy_t y1, xy_t x2, xy_t y2, COLOR c, COLOR b) // [)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
 	v.rect!CHECKED(x1, y1, x2, y2, c);
@@ -268,7 +268,7 @@ void fillRect(bool CHECKED=true, V, COLOR)(auto ref V v, int x1, int y1, int x2,
 }
 
 /// Unchecked! Make sure area is bounded.
-void uncheckedFloodFill(V, COLOR)(auto ref V v, int x, int y, COLOR c)
+void uncheckedFloodFill(V, COLOR)(auto ref V v, xy_t x, xy_t y, COLOR c)
 	if (isDirectView!V && is(COLOR : ViewColor!V))
 {
 	v.floodFillPtr(&v[x, y], c, v[x, y]);
@@ -292,16 +292,16 @@ private void floodFillPtr(V, COLOR)(auto ref V v, COLOR* pp, COLOR c, COLOR f)
 			v.floodFillPtr(p, c, f);
 }
 
-void fillCircle(V, COLOR)(auto ref V v, int x, int y, int r, COLOR c)
+void fillCircle(V, COLOR)(auto ref V v, xy_t x, xy_t y, xy_t r, COLOR c)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
 	import std.algorithm.comparison : min;
 
-	int x0 = x>r?x-r:0;
-	int y0 = y>r?y-r:0;
-	int x1 = min(x+r, v.w-1);
-	int y1 = min(y+r, v.h-1);
-	int rs = sqr(r);
+	xy_t x0 = x>r?x-r:0;
+	xy_t y0 = y>r?y-r:0;
+	xy_t x1 = min(x+r, v.w-1);
+	xy_t y1 = min(y+r, v.h-1);
+	xy_t rs = sqr(r);
 	// TODO: optimize
 	foreach (py; y0..y1+1)
 		foreach (px; x0..x1+1)
@@ -309,26 +309,26 @@ void fillCircle(V, COLOR)(auto ref V v, int x, int y, int r, COLOR c)
 				v[px, py] = c;
 }
 
-void fillSector(V, COLOR)(auto ref V v, int x, int y, int r0, int r1, real a0, real a1, COLOR c)
+void fillSector(V, COLOR)(auto ref V v, xy_t x, xy_t y, xy_t r0, xy_t r1, real a0, real a1, COLOR c)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
 	import std.algorithm.comparison : min;
 	import std.math : atan2;
 
-	int x0 = x>r1?x-r1:0;
-	int y0 = y>r1?y-r1:0;
-	int x1 = min(x+r1, v.w-1);
-	int y1 = min(y+r1, v.h-1);
-	int r0s = sqr(r0);
-	int r1s = sqr(r1);
+	xy_t x0 = x>r1?x-r1:0;
+	xy_t y0 = y>r1?y-r1:0;
+	xy_t x1 = min(x+r1, v.w-1);
+	xy_t y1 = min(y+r1, v.h-1);
+	xy_t r0s = sqr(r0);
+	xy_t r1s = sqr(r1);
 	if (a0 > a1)
 		a1 += TAU;
 	foreach (py; y0..y1+1)
 		foreach (px; x0..x1+1)
 		{
-			int dx = px-x;
-			int dy = py-y;
-			int rs = sqr(dx) + sqr(dy);
+			xy_t dx = px-x;
+			xy_t dy = py-y;
+			xy_t rs = sqr(dx) + sqr(dy);
 			if (r0s <= rs && rs < r1s)
 			{
 				real a = atan2(cast(real)dy, cast(real)dx);
@@ -339,14 +339,14 @@ void fillSector(V, COLOR)(auto ref V v, int x, int y, int r0, int r1, real a0, r
 		}
 }
 
-struct Coord { int x, y; string toString() { import std.string; return format("%s", [this.tupleof]); } }
+struct Coord { xy_t x, y; string toString() { import std.string; return format("%s", [this.tupleof]); } }
 
 void fillPoly(V, COLOR)(auto ref V v, Coord[] coords, COLOR f)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
 	import std.algorithm.comparison : min, max;
 
-	int minY, maxY;
+	xy_t minY, maxY;
 	minY = maxY = coords[0].y;
 	foreach (c; coords[1..$])
 		minY = min(minY, c.y),
@@ -354,17 +354,17 @@ void fillPoly(V, COLOR)(auto ref V v, Coord[] coords, COLOR f)
 
 	foreach (y; minY..maxY+1)
 	{
-		int[] intersections;
+		xy_t[] intersections;
 		for (uint i=0; i<coords.length; i++)
 		{
 			auto c0=coords[i], c1=coords[i==$-1?0:i+1];
 			if (y==c0.y)
 			{
 				assert(y == coords[i%$].y);
-				int pi = i-1; int py;
+				int pi = i-1; xy_t py;
 				while ((py=coords[(pi+$)%$].y)==y)
 					pi--;
-				int ni = i+1; int ny;
+				int ni = i+1; xy_t ny;
 				while ((ny=coords[ni%$].y)==y)
 					ni++;
 				if (ni > coords.length)
@@ -389,16 +389,16 @@ void fillPoly(V, COLOR)(auto ref V v, Coord[] coords, COLOR f)
 }
 
 // No caps
-void thickLine(V, COLOR)(auto ref V v, int x1, int y1, int x2, int y2, int r, COLOR c)
+void thickLine(V, COLOR)(auto ref V v, xy_t x1, xy_t y1, xy_t x2, xy_t y2, xy_t r, COLOR c)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
-	int dx = x2-x1;
-	int dy = y2-y1;
-	int d  = cast(int)sqrt(cast(float)(sqr(dx)+sqr(dy)));
+	xy_t dx = x2-x1;
+	xy_t dy = y2-y1;
+	xy_t d  = cast(xy_t)sqrt(cast(float)(sqr(dx)+sqr(dy)));
 	if (d==0) return;
 
-	int nx = dx*r/d;
-	int ny = dy*r/d;
+	xy_t nx = dx*r/d;
+	xy_t ny = dy*r/d;
 
 	fillPoly([
 		Coord(x1-ny, y1+nx),
@@ -409,7 +409,7 @@ void thickLine(V, COLOR)(auto ref V v, int x1, int y1, int x2, int y2, int r, CO
 }
 
 // No caps
-void thickLinePoly(V, COLOR)(auto ref V v, Coord[] coords, int r, COLOR c)
+void thickLinePoly(V, COLOR)(auto ref V v, Coord[] coords, xy_t r, COLOR c)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
 	foreach (i; 0..coords.length)
@@ -461,21 +461,21 @@ void whiteNoise(V)(V v)
 	import std.random;
 	alias COLOR = ViewColor!V;
 
-	for (int y=0;y<v.h/2;y++)
-		for (int x=0;x<v.w/2;x++)
+	for (xy_t y=0;y<v.h/2;y++)
+		for (xy_t x=0;x<v.w/2;x++)
 			v[x*2, y*2] = COLOR.monochrome(uniform!(COLOR.ChannelType)());
 
 	// interpolate
 	enum AVERAGE = q{(a+b)/2};
 
-	for (int y=0;y<v.h/2;y++)
-		for (int x=0;x<v.w/2-1;x++)
+	for (xy_t y=0;y<v.h/2;y++)
+		for (xy_t x=0;x<v.w/2-1;x++)
 			v[x*2+1, y*2  ] = COLOR.op!AVERAGE(v[x*2  , y*2], v[x*2+2, y*2  ]);
-	for (int y=0;y<v.h/2-1;y++)
-		for (int x=0;x<v.w/2;x++)
+	for (xy_t y=0;y<v.h/2-1;y++)
+		for (xy_t x=0;x<v.w/2;x++)
 			v[x*2  , y*2+1] = COLOR.op!AVERAGE(v[x*2  , y*2], v[x*2  , y*2+2]);
-	for (int y=0;y<v.h/2-1;y++)
-		for (int x=0;x<v.w/2-1;x++)
+	for (xy_t y=0;y<v.h/2-1;y++)
+		for (xy_t x=0;x<v.w/2-1;x++)
 			v[x*2+1, y*2+1] = COLOR.op!AVERAGE(v[x*2+1, y*2], v[x*2+2, y*2+2]);
 }
 
@@ -489,14 +489,14 @@ private template softRoundShape(bool RING)
 		assert(r0 <= r1);
 		assert(r1 <= r2);
 		assert(r2 < 256); // precision constraint - see SqrType
-		//int ix = cast(int)x;
-		//int iy = cast(int)y;
-		//int ir1 = cast(int)sqr(r1-1);
-		//int ir2 = cast(int)sqr(r2+1);
-		int x1 = cast(int)(x-r2-1); if (x1<0) x1=0;
-		int y1 = cast(int)(y-r2-1); if (y1<0) y1=0;
-		int x2 = cast(int)(x+r2+1); if (x2>v.w) x2 = v.w;
-		int y2 = cast(int)(y+r2+1); if (y2>v.h) y2 = v.h;
+		//xy_t ix = cast(xy_t)x;
+		//xy_t iy = cast(xy_t)y;
+		//xy_t ir1 = cast(xy_t)sqr(r1-1);
+		//xy_t ir2 = cast(xy_t)sqr(r2+1);
+		xy_t x1 = cast(xy_t)(x-r2-1); if (x1<0) x1=0;
+		xy_t y1 = cast(xy_t)(y-r2-1); if (y1<0) y1=0;
+		xy_t x2 = cast(xy_t)(x+r2+1); if (x2>v.w) x2 = v.w;
+		xy_t y2 = cast(xy_t)(y+r2+1); if (y2>v.h) y2 = v.h;
 
 		static if (RING)
 		auto r0s = r0*r0;
@@ -516,10 +516,10 @@ private template softRoundShape(bool RING)
 		fix fr10 = fr1s - fr0s;
 		fix fr21 = fr2s - fr1s;
 
-		for (int cy=y1;cy<y2;cy++)
+		for (xy_t cy=y1;cy<y2;cy++)
 		{
 			auto row = v[cy];
-			for (int cx=x1;cx<x2;cx++)
+			for (xy_t cx=x1;cx<x2;cx++)
 			{
 				alias SignedBitsType!(2*(8 + COLOR.channelBits)) SqrType; // fit the square of radius expressed as fixed-point
 				fix frs = cast(fix)((sqr(cast(SqrType)fx-tofix(cx)) + sqr(cast(SqrType)fy-tofix(cy))) >> COLOR.channelBits); // shift-right only once instead of once-per-sqr
@@ -577,7 +577,7 @@ template aaPutPixel(bool CHECKED=true, bool USE_ALPHA=true)
 	{
 		mixin FixMath;
 
-		void plot(bool CHECKED2)(int x, int y, frac f)
+		void plot(bool CHECKED2)(xy_t x, xy_t y, frac f)
 		{
 			static if (CHECKED2)
 				if (x<0 || x>=v.w || y<0 || y>=v.h)
@@ -616,7 +616,7 @@ void aaPutPixel(bool CHECKED=true, F:float, V, COLOR)(auto ref V v, F x, F y, CO
 	f(v, x, y, color, 0);
 }
 
-void hline(bool CHECKED=true, V, COLOR, frac)(auto ref V v, int x1, int x2, int y, COLOR color, frac alpha)
+void hline(bool CHECKED=true, V, COLOR, frac)(auto ref V v, xy_t x1, xy_t x2, xy_t y, COLOR color, frac alpha)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
 	mixin(CheckHLine);
@@ -632,7 +632,7 @@ void hline(bool CHECKED=true, V, COLOR, frac)(auto ref V v, int x1, int x2, int 
 				p = COLOR.op!q{.blend(a, b, c)}(color, p, alpha);
 }
 
-void vline(bool CHECKED=true, V, COLOR, frac)(auto ref V v, int x, int y1, int y2, COLOR color, frac alpha)
+void vline(bool CHECKED=true, V, COLOR, frac)(auto ref V v, xy_t x, xy_t y1, xy_t y2, COLOR color, frac alpha)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
 	mixin(CheckVLine);
@@ -734,7 +734,7 @@ unittest
 version(none):
 
 /// Draws an image. Returns this.
-typeof(this) draw(bool CHECKED=true, SRCCANVAS)(int x, int y, SRCCANVAS v)
+typeof(this) draw(bool CHECKED=true, SRCCANVAS)(xy_t x, xy_t y, SRCCANVAS v)
 	if (IsCanvas!SRCCANVAS && is(COLOR == SRCCANVAS.COLOR))
 {
 	static if (CHECKED)
@@ -786,7 +786,7 @@ void subpixelDownscale()()
 	Image!BASE scratch;
 	scratch.size(hr.w*3, hr.h);
 
-	foreach (int cx, char c; ValueTuple!('r', 'g', 'b'))
+	foreach (xy_t cx, char c; ValueTuple!('r', 'g', 'b'))
 	{
 		auto w = i.window(cx*HRX, 0, cx*HRX+hr.w*3, hr.h);
 		scratch.transformDraw!(`COLOR(c.`~c~`)`)(0, 0, w);

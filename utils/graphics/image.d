@@ -28,12 +28,12 @@ public import ae.utils.graphics.view;
 /// with a known distance between each row.
 struct ImageRef(COLOR, StorageType = PlainStorageUnit!COLOR)
 {
-	int w, h;
+	xy_t w, h;
 	size_t pitch; /// In bytes, not COLORs
 	StorageType* pixels;
 
 	/// Returns an array for the pixels at row y.
-	inout(StorageType)[] scanline(int y) inout
+	inout(StorageType)[] scanline(xy_t y) inout
 	{
 		assert(y>=0 && y<h, "Scanline out-of-bounds");
 		assert(pitch, "Pitch not set");
@@ -72,11 +72,11 @@ unittest
 /// Pixels are stored in a flat array.
 struct Image(COLOR, StorageType = PlainStorageUnit!COLOR)
 {
-	int w, h;
+	xy_t w, h;
 	StorageType[] pixels;
 
 	/// Returns an array for the pixels at row y.
-	inout(StorageType)[] scanline(int y) inout
+	inout(StorageType)[] scanline(xy_t y) inout
 	{
 		assert(y>=0 && y<h, "Scanline out-of-bounds");
 		auto start = w*y;
@@ -85,13 +85,13 @@ struct Image(COLOR, StorageType = PlainStorageUnit!COLOR)
 
 	mixin DirectView;
 
-	this(int w, int h)
+	this(xy_t w, xy_t h)
 	{
 		size(w, h);
 	}
 
 	/// Does not scale image
-	void size(int w, int h)
+	void size(xy_t w, xy_t h)
 	{
 		this.w = w;
 		this.h = h;
@@ -150,12 +150,12 @@ alias ElementViewImage(R) = ViewImage!(ElementType!R);
 auto hjoin(R, TARGET)(R images, auto ref TARGET target)
 	if (isInputRange!R && isView!(ElementType!R) && isWritableView!TARGET)
 {
-	int w, h;
+	xy_t w, h;
 	foreach (ref image; images)
 		w += image.w,
 		h = max(h, image.h);
 	target.size(w, h);
-	int x;
+	xy_t x;
 	foreach (ref image; images)
 		image.blitTo(target, x, 0),
 		x += image.w;
@@ -173,12 +173,12 @@ auto hjoin(R)(R images)
 auto vjoin(R, TARGET)(R images, auto ref TARGET target)
 	if (isInputRange!R && isView!(ElementType!R) && isWritableView!TARGET)
 {
-	int w, h;
+	xy_t w, h;
 	foreach (ref image; images)
 		w = max(w, image.w),
 		h += image.h;
 	target.size(w, h);
-	int y;
+	xy_t y;
 	foreach (ref image; images)
 		image.blitTo(target, 0, y),
 		y += image.h;
@@ -342,7 +342,7 @@ if (isDirectView!SRC && isWritableView!TARGET)
 							foreach (p; s)
 								sum += p;
 					auto area = (x1 - x0) * (y1 - y0);
-					auto avg = sum / area;
+					auto avg = sum / cast(uint)area;
 					lr[x, y] = cast(ViewColor!SRC)(avg);
 				}
 			}
@@ -365,7 +365,7 @@ if (isDirectView!SRC && isWritableView!TARGET)
 }
 
 /// Downscales an image to a certain size.
-auto downscaleTo(SRC)(auto ref SRC src, int w, int h)
+auto downscaleTo(SRC)(auto ref SRC src, xy_t w, xy_t h)
 if (isView!SRC)
 {
 	ViewImage!SRC target;
@@ -401,7 +401,7 @@ unittest
 // ***************************************************************************
 
 /// Copy the indicated row of src to a StorageType buffer.
-void copyScanline(SRC, StorageType)(auto ref SRC src, int y, StorageType[] dst)
+void copyScanline(SRC, StorageType)(auto ref SRC src, xy_t y, StorageType[] dst)
 if (isView!SRC && is(StorageColor!StorageType == ViewColor!SRC))
 {
 	static if (isDirectView!SRC && is(ViewStorageType!SRC == StorageType))
@@ -638,7 +638,7 @@ uint[4] bitmapChannelMasks(COLOR)()
 	return result;
 }
 
-@property size_t bitmapPixelStride(StorageType)(int w)
+@property size_t bitmapPixelStride(StorageType)(xy_t w)
 {
 	auto rowBits = w * storageColorBits!StorageType;
 	rowBits = (rowBits + 0x1f) & ~0x1f;
@@ -671,11 +671,11 @@ if (is(V : const(void)[]))
 
 	static struct BMP
 	{
-		int w, h;
+		xy_t w, h;
 		typeof(data.ptr) pixelData;
 		sizediff_t pixelStride;
 
-		inout(StorageType)[] scanline(int y) inout
+		inout(StorageType)[] scanline(xy_t y) inout
 		{
 			assert(y >= 0 && y < h, "BMP scanline out of bounds");
 			auto row = cast(void*)pixelData + y * pixelStride;
@@ -752,6 +752,11 @@ auto parseBMP(COLOR)(const(void)[] data)
 unittest
 {
 	alias parseBMP!BGR parseBMP24;
+	if (false)
+	{
+		auto b = viewBMP!BGRA((void[]).init);
+		BGRA c = b[1, 2];
+	}
 	alias parseBMP!bool parseBMP1;
 }
 
@@ -775,8 +780,8 @@ ubyte[] toBMP(SRC)(auto ref SRC src)
 	*header = Header.init;
 	header.bfSize = data.length.to!uint;
 	header.bfOffBits = Header.sizeof;
-	header.bcWidth = src.w;
-	header.bcHeight = -src.h;
+	header.bcWidth = src.w.to!int;
+	header.bcHeight = -src.h.to!int;
 	header.bcPlanes = 1;
 	header.biSizeImage = bitmapDataSize.to!uint;
 	enum storageBits = StorageType.sizeof * 8 / StorageType.length;
@@ -897,8 +902,8 @@ ubyte[] toPNG(SRC)(auto ref SRC src, int compressionLevel = 5)
 
 	PNGChunk[] chunks;
 	PNGHeader header = {
-		width : nativeToBigEndian(src.w),
-		height : nativeToBigEndian(src.h),
+		width : nativeToBigEndian(src.w.to!uint),
+		height : nativeToBigEndian(src.h.to!uint),
 		colourDepth : StorageType.sizeof * 8 / StorageType.length / numChannels,
 		colourType : COLOUR_TYPE,
 		compressionMethod : PNGCompressionMethod.DEFLATE,

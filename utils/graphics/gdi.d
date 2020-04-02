@@ -58,11 +58,11 @@ struct GDICanvas(COLOR)
 
 	RefCounted!Data data;
 
-	int w, h;
+	xy_t w, h;
 	StorageType* pixelData;
 	sizediff_t pixelStride;
 
-	inout(StorageType)[] scanline(int y) inout
+	inout(StorageType)[] scanline(xy_t y) inout
 	{
 		assert(y>=0 && y<h);
 		auto row = cast(void*)pixelData + y * pixelStride;

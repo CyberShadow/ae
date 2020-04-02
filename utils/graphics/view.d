@@ -16,13 +16,23 @@ module ae.utils.graphics.view;
 import std.functional;
 import std.typetuple;
 
+/// This is the type used for image sizes and coordinates.
+/// Rationale:
+/// - Signed, because operations with image coordinates
+///   often involve subtraction, and subtraction with
+///   unsigned numbers often leads to trouble.
+/// - Same size as size_t, in order to use the CPU word size
+///   and enable seamless interoperability with the
+///   .length property of arrays / ranges.
+alias xy_t = sizediff_t;
+
 /// A view is any type which provides a width, height,
 /// and can be indexed to get the color at a specific
 /// coordinate.
 enum isView(T) =
-	is(typeof(T.init.w) : size_t) && // width
-	is(typeof(T.init.h) : size_t) && // height
-	is(typeof(T.init[0, 0])     );   // color information
+	is(typeof(T.init.w) : xy_t) && // width
+	is(typeof(T.init.h) : xy_t) && // height
+	is(typeof(T.init[0, 0])   );   // color information
 
 /// Returns the color type of the specified view.
 /// By convention, colors are structs with numeric
@@ -49,7 +59,7 @@ mixin template DirectView()
 	alias COLOR = Unqual!(typeof(StorageType.init[0]));
 
 	/// Implements the view[x, y] operator.
-	auto ref inout(COLOR) opIndex(int x, int y) inout
+	auto ref inout(COLOR) opIndex(xy_t x, xy_t y) inout
 	{
 		return scanline(y)[x / StorageType.length][x % StorageType.length];
 	}
@@ -58,18 +68,18 @@ mixin template DirectView()
 	static struct Row
 	{
 		StorageType[] scanline;
-		auto ref inout(COLOR) opIndex(int x) inout
+		auto ref inout(COLOR) opIndex(xy_t x) inout
 		{
 			return scanline[x / StorageType.length][x % StorageType.length];
 		}
 	}
-	Row opIndex(int y) /// ditto
+	Row opIndex(xy_t y) /// ditto
 	{
 		return Row(scanline(y));
 	}
 
 	/// Implements the view[x, y] = c operator.
-	COLOR opIndexAssign(COLOR value, int x, int y)
+	COLOR opIndexAssign(COLOR value, xy_t x, xy_t y)
 	{
 		return scanline(y)[x / StorageType.length][x % StorageType.length] = value;
 	}
@@ -89,15 +99,15 @@ if (isDirectView!V)
 template procedural(alias formula)
 {
 	alias fun = binaryFun!(formula, "x", "y");
-	alias COLOR = typeof(fun(0, 0));
+	alias COLOR = typeof(fun(xy_t.init, xy_t.init));
 
-	auto procedural(int w, int h)
+	auto procedural(xy_t w, xy_t h)
 	{
 		struct Procedural
 		{
-			int w, h;
+			xy_t w, h;
 
-			auto ref COLOR opIndex(int x, int y)
+			auto ref COLOR opIndex(xy_t x, xy_t y)
 			{
 				assert(x >= 0 && y >= 0 && x < w && y < h);
 				return fun(x, y);
@@ -109,7 +119,7 @@ template procedural(alias formula)
 
 /// Returns a view of the specified dimensions
 /// and same solid color.
-auto solid(COLOR)(COLOR c, int w, int h)
+auto solid(COLOR)(COLOR c, xy_t w, xy_t h)
 {
 	return procedural!((x, y) => c)(w, h);
 }
@@ -147,15 +157,15 @@ void blitTo(SRC, DST)(auto ref SRC src, auto ref DST dst)
 }
 
 /// Helper function to blit an image onto another at a specified location.
-void blitTo(SRC, DST)(auto ref SRC src, auto ref DST dst, int x, int y)
+void blitTo(SRC, DST)(auto ref SRC src, auto ref DST dst, xy_t x, xy_t y)
 {
 	src.blitTo(dst.crop(x, y, x+src.w, y+src.h));
 }
 
-void safeBlitTo(SRC, DST)(auto ref SRC src, auto ref DST dst, int x, int y)
+void safeBlitTo(SRC, DST)(auto ref SRC src, auto ref DST dst, xy_t x, xy_t y)
 {
 	// TODO: refactor into safeCrop
-	int sx0, sy0, sx1, sy1, dx0, dy0, dx1, dy1;
+	xy_t sx0, sy0, sx1, sy1, dx0, dy0, dx1, dy1;
 	sx1 = src.w;
 	sy1 = src.h;
 	dx0 = x;
@@ -178,7 +188,7 @@ void safeBlitTo(SRC, DST)(auto ref SRC src, auto ref DST dst, int x, int y)
 
 /// Default implementation for the .size method.
 /// Asserts that the view has the desired size.
-void size(V)(auto ref V src, int w, int h)
+void size(V)(auto ref V src, xy_t w, xy_t h)
 	if (isView!V)
 {
 	import std.string : format;
@@ -196,14 +206,14 @@ mixin template Warp(V)
 {
 	V src;
 
-	auto ref ViewColor!V opIndex(int x, int y)
+	auto ref ViewColor!V opIndex(xy_t x, xy_t y)
 	{
 		warp(x, y);
 		return src[x, y];
 	}
 
 	static if (isWritableView!V)
-	ViewColor!V opIndexAssign(ViewColor!V value, int x, int y)
+	ViewColor!V opIndexAssign(ViewColor!V value, xy_t x, xy_t y)
 	{
 		warp(x, y);
 		return src[x, y] = value;
@@ -211,7 +221,7 @@ mixin template Warp(V)
 }
 
 /// Crop a view to the specified rectangle.
-auto crop(V)(auto ref V src, int x0, int y0, int x1, int y1)
+auto crop(V)(auto ref V src, xy_t x0, xy_t y0, xy_t x1, xy_t y1)
 	if (isView!V)
 {
 	assert( 0 <=    x0 &&  0 <=    y0);
@@ -222,19 +232,19 @@ auto crop(V)(auto ref V src, int x0, int y0, int x1, int y1)
 	{
 		mixin Warp!V;
 
-		int x0, y0, x1, y1;
+		xy_t x0, y0, x1, y1;
 
-		@property int w() { return x1-x0; }
-		@property int h() { return y1-y0; }
+		@property xy_t w() { return x1-x0; }
+		@property xy_t h() { return y1-y0; }
 
-		void warp(ref int x, ref int y)
+		void warp(ref xy_t x, ref xy_t y)
 		{
 			x += x0;
 			y += y0;
 		}
 
 		static if (isDirectView!V)
-		auto scanline(int y)
+		auto scanline(xy_t y)
 		{
 			return src.scanline(y0+y)[x0..x1];
 		}
@@ -253,16 +263,16 @@ unittest
 }
 
 /// Tile another view.
-auto tile(V)(auto ref V src, int w, int h)
+auto tile(V)(auto ref V src, xy_t w, xy_t h)
 	if (isView!V)
 {
 	static struct Tile
 	{
 		mixin Warp!V;
 
-		int w, h;
+		xy_t w, h;
 
-		void warp(ref int x, ref int y)
+		void warp(ref xy_t x, ref xy_t y)
 		{
 			assert(x >= 0 && y >= 0 && x < w && y < h);
 			x = x % src.w;
@@ -281,19 +291,19 @@ unittest
 }
 
 /// Present a resized view using nearest-neighbor interpolation.
-auto nearestNeighbor(V)(auto ref V src, int w, int h)
+auto nearestNeighbor(V)(auto ref V src, xy_t w, xy_t h)
 	if (isView!V)
 {
 	static struct NearestNeighbor
 	{
 		mixin Warp!V;
 
-		int w, h;
+		xy_t w, h;
 
-		void warp(ref int x, ref int y)
+		void warp(ref xy_t x, ref xy_t y)
 		{
-			x = cast(int)(cast(long)x * src.w / w);
-			y = cast(int)(cast(long)y * src.h / h);
+			x = cast(xy_t)(cast(long)x * src.w / w);
+			y = cast(xy_t)(cast(long)y * src.h / h);
 		}
 	}
 
@@ -314,10 +324,10 @@ auto flipXY(V)(auto ref V src)
 	{
 		mixin Warp!V;
 
-		@property int w() { return src.h; }
-		@property int h() { return src.w; }
+		@property xy_t w() { return src.h; }
+		@property xy_t h() { return src.w; }
 
-		void warp(ref int x, ref int y)
+		void warp(ref xy_t x, ref xy_t y)
 		{
 			import std.algorithm;
 			swap(x, y);
@@ -340,10 +350,10 @@ template warp(string xExpr, string yExpr)
 		{
 			mixin Warp!V;
 
-			@property int w() { return src.w; }
-			@property int h() { return src.h; }
+			@property xy_t w() { return src.w; }
+			@property xy_t h() { return src.h; }
 
-			void warp(ref int x, ref int y)
+			void warp(ref xy_t x, ref xy_t y)
 			{
 				auto nx = mixin(xExpr);
 				auto ny = mixin(yExpr);
@@ -352,7 +362,7 @@ template warp(string xExpr, string yExpr)
 
 			private void testWarpY()()
 			{
-				int y;
+				xy_t y;
 				y = mixin(yExpr);
 			}
 
@@ -361,7 +371,7 @@ template warp(string xExpr, string yExpr)
 			static if (xExpr == "x" &&
 				__traits(compiles, testWarpY()) &&
 				isDirectView!V)
-			auto scanline(int y)
+			auto scanline(xy_t y)
 			{
 				return src.scanline(mixin(yExpr));
 			}
@@ -381,8 +391,8 @@ template warp(alias pred)
 		{
 			mixin Warp!V;
 
-			@property int w() { return src.w; }
-			@property int h() { return src.h; }
+			@property xy_t w() { return src.w; }
+			@property xy_t h() { return src.h; }
 
 			alias warp = binaryFun!(pred, "x", "y");
 		}
@@ -427,7 +437,7 @@ auto rotateCCW(V)(auto ref V src)
 unittest
 {
 	auto g = procedural!((x, y) => x+10*y)(10, 10);
-	int[] corners(V)(V v) { return [v[0, 0], v[9, 0], v[0, 9], v[9, 9]]; }
+	xy_t[] corners(V)(V v) { return [v[0, 0], v[9, 0], v[0, 9], v[9, 9]]; }
 	assert(corners(g          ) == [ 0,  9, 90, 99]);
 	assert(corners(g.flipXY   ) == [ 0, 90,  9, 99]);
 	assert(corners(g.rotateCW ) == [90,  0, 99,  9]);
@@ -444,17 +454,17 @@ auto vjoiner(V)(V[] views)
 {
 	static struct VJoiner
 	{
-		struct Child { V view; int y; }
+		struct Child { V view; xy_t y; }
 		Child[] children;
 		size_t[] index;
 
-		@property int w() { return children[0].view.w; }
-		int h;
+		@property xy_t w() { return children[0].view.w; }
+		xy_t h;
 
 		this(V[] views)
 		{
 			children = new Child[views.length];
-			int y = 0;
+			xy_t y = 0;
 			foreach (i, ref v; views)
 			{
 				assert(v.w == views[0].w, "Inconsistent width");
@@ -470,21 +480,21 @@ auto vjoiner(V)(V[] views)
 				index[child.y .. child.y + child.view.h] = i;
 		}
 
-		auto ref ViewColor!V opIndex(int x, int y)
+		auto ref ViewColor!V opIndex(xy_t x, xy_t y)
 		{
 			auto child = &children[index[y]];
 			return child.view[x, y - child.y];
 		}
 
 		static if (isWritableView!V)
-		ViewColor!V opIndexAssign(ViewColor!V value, int x, int y)
+		ViewColor!V opIndexAssign(ViewColor!V value, xy_t x, xy_t y)
 		{
 			auto child = &children[index[y]];
 			return child.view[x, y - child.y] = value;
 		}
 
 		static if (isDirectView!V)
-		auto scanline(int y)
+		auto scanline(xy_t y)
 		{
 			auto child = &children[index[y]];
 			return child.view.scanline(y - child.y);
@@ -509,7 +519,7 @@ unittest
 
 /// Overlay the view fg over bg at a certain coordinate.
 /// The resulting view inherits bg's size.
-auto overlay(BG, FG)(auto ref BG bg, auto ref FG fg, int x, int y)
+auto overlay(BG, FG)(auto ref BG bg, auto ref FG fg, xy_t x, xy_t y)
 	if (isView!BG && isView!FG && is(ViewColor!BG == ViewColor!FG))
 {
 	alias COLOR = ViewColor!BG;
@@ -519,12 +529,12 @@ auto overlay(BG, FG)(auto ref BG bg, auto ref FG fg, int x, int y)
 		BG bg;
 		FG fg;
 
-		int ox, oy;
+		xy_t ox, oy;
 
-		@property int w() { return bg.w; }
-		@property int h() { return bg.h; }
+		@property xy_t w() { return bg.w; }
+		@property xy_t h() { return bg.h; }
 
-		auto ref COLOR opIndex(int x, int y)
+		auto ref COLOR opIndex(xy_t x, xy_t y)
 		{
 			if (x >= ox && y >= oy && x < ox + fg.w && y < oy + fg.h)
 				return fg[x - ox, y - oy];
@@ -533,7 +543,7 @@ auto overlay(BG, FG)(auto ref BG bg, auto ref FG fg, int x, int y)
 		}
 
 		static if (isWritableView!BG && isWritableView!FG)
-		COLOR opIndexAssign(COLOR value, int x, int y)
+		COLOR opIndexAssign(COLOR value, xy_t x, xy_t y)
 		{
 			if (x >= ox && y >= oy && x < ox + fg.w && y < oy + fg.h)
 				return fg[x - ox, y - oy] = value;
@@ -548,7 +558,7 @@ auto overlay(BG, FG)(auto ref BG bg, auto ref FG fg, int x, int y)
 /// Add a solid-color border around an image.
 /// The parameters indicate the border's thickness around each side
 /// (left, top, right, bottom in order).
-auto border(V, COLOR)(auto ref V src, int x0, int y0, int x1, int y1, COLOR color)
+auto border(V, COLOR)(auto ref V src, xy_t x0, xy_t y0, xy_t x1, xy_t y1, COLOR color)
 	if (isView!V && is(COLOR == ViewColor!V))
 {
 	return color
@@ -561,7 +571,7 @@ auto border(V, COLOR)(auto ref V src, int x0, int y0, int x1, int y1, COLOR colo
 
 unittest
 {
-	auto g = procedural!((x, y) => x+10*y)(10, 10);
+	auto g = procedural!((x, y) => cast(int)(x+10*y))(10, 10);
 	auto b = g.border(5, 5, 5, 5, 42);
 	assert(b.w == 20);
 	assert(b.h == 20);
@@ -589,10 +599,10 @@ auto blend(SRCS...)(SRCS sources)
 	{
 		SRCS sources;
 
-		@property int w() { return sources[0].w; }
-		@property int h() { return sources[0].h; }
+		@property xy_t w() { return sources[0].w; }
+		@property xy_t h() { return sources[0].h; }
 
-		COLOR opIndex(int x, int y)
+		COLOR opIndex(xy_t x, xy_t y)
 		{
 			COLOR c = sources[0][x, y];
 			foreach (ref src; sources[1..$])
@@ -621,7 +631,7 @@ mixin template SafeWarp(V)
 	V src;
 	ViewColor!V defaultColor;
 
-	auto ref ViewColor!V opIndex(int x, int y)
+	auto ref ViewColor!V opIndex(xy_t x, xy_t y)
 	{
 		warp(x, y);
 		if (x >= 0 && y >= 0 && x < w && y < h)
@@ -631,7 +641,7 @@ mixin template SafeWarp(V)
 	}
 
 	static if (isWritableView!V)
-	ViewColor!V opIndexAssign(ViewColor!V value, int x, int y)
+	ViewColor!V opIndexAssign(ViewColor!V value, xy_t x, xy_t y)
 	{
 		warp(x, y);
 		if (x >= 0 && y >= 0 && x < w && y < h)
@@ -653,16 +663,16 @@ auto rotate(V, COLOR)(auto ref V src, double angle, COLOR defaultColor,
 		mixin SafeWarp!V;
 		double theta, ox, oy;
 
-		@property int w() { return src.w; }
-		@property int h() { return src.h; }
+		@property xy_t w() { return src.w; }
+		@property xy_t h() { return src.h; }
 
-		void warp(ref int x, ref int y)
+		void warp(ref xy_t x, ref xy_t y)
 		{
 			import std.math;
 			auto vx = x - ox;
 			auto vy = y - oy;
-			x = cast(int)round(ox + cos(theta) * vx - sin(theta) * vy);
-			y = cast(int)round(oy + sin(theta) * vx + cos(theta) * vy);
+			x = cast(xy_t)round(ox + cos(theta) * vx - sin(theta) * vy);
+			y = cast(xy_t)round(oy + sin(theta) * vx + cos(theta) * vy);
 		}
 	}
 
@@ -685,7 +695,7 @@ unittest
 {
 	import ae.utils.graphics.image;
 	import ae.utils.geometry;
-	auto i = Image!int(3, 3);
+	auto i = Image!xy_t(3, 3);
 	i[1, 0] = 1;
 	auto r = i.rotate(cast(double)TAU/4, 0);
 	assert(r[1, 0] == 0);
@@ -708,10 +718,10 @@ template colorMap(alias fun)
 		{
 			V src;
 
-			@property int w() { return src.w; }
-			@property int h() { return src.h; }
+			@property xy_t w() { return src.w; }
+			@property xy_t h() { return src.h; }
 
-			/*auto ref*/ NEWCOLOR opIndex(int x, int y)
+			/*auto ref*/ NEWCOLOR opIndex(xy_t x, xy_t y)
 			{
 				return fun(src[x, y]);
 			}
@@ -734,16 +744,16 @@ template colorMap(alias getFun, alias setFun)
 		{
 			V src;
 
-			@property int w() { return src.w; }
-			@property int h() { return src.h; }
+			@property xy_t w() { return src.w; }
+			@property xy_t h() { return src.h; }
 
-			NEWCOLOR opIndex(int x, int y)
+			NEWCOLOR opIndex(xy_t x, xy_t y)
 			{
 				return getFun(src[x, y]);
 			}
 
 			static if (isWritableView!V)
-			NEWCOLOR opIndexAssign(NEWCOLOR c, int x, int y)
+			NEWCOLOR opIndexAssign(NEWCOLOR c, xy_t x, xy_t y)
 			{
 				return src[x, y] = setFun(c);
 			}
@@ -774,7 +784,7 @@ template trim(alias fun)
 {
 	auto trim(V)(auto ref V src)
 	{
-		int x0 = 0, y0 = 0, x1 = src.w, y1 = src.h;
+		xy_t x0 = 0, y0 = 0, x1 = src.w, y1 = src.h;
 	topLoop:
 		while (y0 < y1)
 		{
