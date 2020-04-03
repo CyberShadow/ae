@@ -59,7 +59,7 @@ struct JsonWriter(Output)
 		while (p < end)
 		{
 			auto c = *p++;
-			if (Escapes.escaped[c])
+			if (c < Escapes.escaped.length && Escapes.escaped[c])
 			{
 				putChars(start[0..p-start-1], Escapes.chars[c]);
 				start = p;
@@ -80,6 +80,9 @@ struct JsonWriter(Output)
 		else
 		static if (isSomeString!T)
 			putString(v);
+		else
+		static if (isSomeChar!(Unqual!T))
+			return putString((&v)[0..1]);
 		else
 		static if (is(Unqual!T == bool))
 			return output.put(v ? "true" : "false");
@@ -1093,6 +1096,12 @@ unittest
 {
 	double f = 1.5;
 	assert(f.toJson() == "1.5");
+}
+
+unittest
+{
+	dchar c = '😸';
+	assert(c.toJson() == `"😸"`);
 }
 
 // ************************************************************************
