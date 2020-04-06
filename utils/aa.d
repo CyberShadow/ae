@@ -490,7 +490,7 @@ public:
 	// *** Query (basic) ***
 
 	/// True when there are no items.
-	bool empty() pure const nothrow @nogc @safe
+	bool empty() pure const nothrow @nogc @trusted
 	{
 		static if (ordered)
 			return items.length == 0; // optimization
@@ -499,7 +499,7 @@ public:
 	}
 
 	/// Total number of items, including with duplicate keys.
-	size_t length() pure const nothrow @nogc @safe
+	size_t length() pure const nothrow @nogc @trusted
 	{
 		static if (ordered)
 			return items.length; // optimization
