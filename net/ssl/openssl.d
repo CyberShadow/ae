@@ -13,11 +13,7 @@
 
 module ae.net.ssl.openssl;
 
-import ae.net.asockets;
-import ae.net.ssl;
-import ae.utils.exception : CaughtException;
-import ae.utils.meta : enumLength;
-import ae.utils.text;
+import core.stdc.stdint;
 
 import std.conv : to;
 import std.exception : enforce, errnoEnforce;
@@ -28,6 +24,12 @@ import std.string;
 //import deimos.openssl.rand;
 import deimos.openssl.ssl;
 import deimos.openssl.err;
+
+import ae.net.asockets;
+import ae.net.ssl;
+import ae.utils.exception : CaughtException;
+import ae.utils.meta : enumLength;
+import ae.utils.text;
 
 mixin template SSLUseLib()
 {
