@@ -24,10 +24,6 @@
 
 module ae.utils.meta.tuplerange;
 
-import std.meta;
-
-import ae.utils.meta.caps;
-
 ///
 unittest
 {
@@ -40,6 +36,10 @@ unittest
 		.trEach!((n) { x = cast(int)n; } );
 	assert(x == 3);
 }
+
+import std.meta;
+
+import ae.utils.meta.caps;
 
 unittest
 {
