@@ -11,5 +11,7 @@
  *   Vladimir Panteleev <vladimir@thecybershadow.net>
  */
 
+module ae.utils.sound.riff;
+
 public import ae.utils.sound.riff.reader;
 public import ae.utils.sound.riff.writer;
