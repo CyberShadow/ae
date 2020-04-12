@@ -24,6 +24,7 @@ struct HLS(COLOR, HLSTYPE=ushort, HLSTYPE HLSMAX=240)
 	// initially set for achromatic colors
 	enum UNDEFINED = HLSMAX*2/3;
 
+static:
 	void toHLS(COLOR rgb, out HLSTYPE h, out HLSTYPE l, out HLSTYPE s)
 	{
 		auto R = rgb.r;
