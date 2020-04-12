@@ -1,5 +1,15 @@
 /**
- * ae.utils.meta.tuplerange
+ * Tuple ranges
+ *
+ * Contains constructs for iterating and chaining together operations
+ * on range-like constructs which operate on heterogeneous types.
+ *
+ * To allow heterogeneous elements, iteration is internal rather than
+ * external.  The range elements are functors - calling a range with
+ * a function parameter "next" asks the range to iterate over its
+ * members and call "next" over each one.  "next" returns a bool
+ * (true if iteration should stop, false if it should continue),
+ * which is propagated by the range's opCall upwards.
  *
  * License:
  *   This Source Code Form is subject to the terms of
@@ -10,17 +20,6 @@
  * Authors:
  *   Vladimir Panteleev <vladimir@thecybershadow.net>
  */
-
-/// Contains constructs for iterating and chaining together operations
-/// on tuple ranges (range-like constructs which operate on
-/// heterogeneous types).
-
-/// To allow heterogeneous elements, iteration is internal rather than
-/// external.  The range elements are functors - calling a range with
-/// a function parameter "next" asks the range to iterate over its
-/// members and call "next" over each one.  "next" returns a bool
-/// (true if iteration should stop, false if it should continue),
-/// which is propagated by the range's opCall upwards.
 
 module ae.utils.meta.tuplerange;
 
