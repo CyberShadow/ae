@@ -20,7 +20,7 @@ import std.range;
 import std.string;
 import std.traits;
 
-import ae.utils.aa : getOrAdd;
+import ae.utils.aa; // "require" polyfill
 import ae.utils.array : nonNull;
 import ae.utils.exception;
 import ae.utils.meta : boxVoid, unboxVoid;
@@ -249,7 +249,7 @@ IniHandler!S makeIniHandler(S = string, U)(ref U v)
 					static if (!isNestingType!U)
 						if (key in v)
 							throw new Exception("Duplicate value: " ~ to!string(name));
-					return dg(v.getOrAdd(key));
+					return dg(v.require(key));
 				}
 
 				// To know if the value handler will accept leafs or nodes requires constructing the handler.
