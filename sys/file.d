@@ -1753,8 +1753,8 @@ else
 	}
 }
 
-/// Uses UNC paths to open a file.
-/// Requires https://github.com/D-Programming-Language/phobos/pull/1888
+/// Polyfill for Windows fopen implementations with support for UNC
+/// paths and the 'x' subspecifier.
 File openFile()(string fn, string mode = "rb")
 {
 	File f;
@@ -1763,14 +1763,16 @@ File openFile()(string fn, string mode = "rb")
 		import core.sys.windows.windows;
 		import ae.sys.windows.exception;
 
-		string winMode;
+		string winMode, cMode;
 		foreach (c; mode)
+		{
 			switch (c)
 			{
 				case 'r':
 				case 'w':
 				case 'a':
 				case '+':
+				case 'x':
 					winMode ~= c;
 					break;
 				case 'b':
@@ -1779,16 +1781,23 @@ File openFile()(string fn, string mode = "rb")
 				default:
 					assert(false, "Unknown character in mode");
 			}
+			if (c != 'x')
+				cMode ~= c;
+		}
 		DWORD access, creation;
 		bool append;
 		switch (winMode)
 		{
-			case "r" : access = GENERIC_READ                ; creation = OPEN_EXISTING; break;
-			case "r+": access = GENERIC_READ | GENERIC_WRITE; creation = OPEN_EXISTING; break;
-			case "w" : access =                GENERIC_WRITE; creation = CREATE_ALWAYS; break;
-			case "w+": access = GENERIC_READ | GENERIC_WRITE; creation = CREATE_ALWAYS; break;
-			case "a" : access =                GENERIC_WRITE; creation = OPEN_ALWAYS  ; version (CRuntime_Microsoft) append = true; break;
-			case "a+": access = GENERIC_READ | GENERIC_WRITE; creation = OPEN_ALWAYS  ; version (CRuntime_Microsoft) assert(false, "MSVCRT can't fdopen with a+"); else break;
+			case "r"  : access = GENERIC_READ                ; creation = OPEN_EXISTING; break;
+			case "r+" : access = GENERIC_READ | GENERIC_WRITE; creation = OPEN_EXISTING; break;
+			case "w"  : access =                GENERIC_WRITE; creation = CREATE_ALWAYS; break;
+			case "w+" : access = GENERIC_READ | GENERIC_WRITE; creation = CREATE_ALWAYS; break;
+			case "a"  : access =                GENERIC_WRITE; creation = OPEN_ALWAYS  ; version (CRuntime_Microsoft) append = true; break;
+			case "a+" : access = GENERIC_READ | GENERIC_WRITE; creation = OPEN_ALWAYS  ; version (CRuntime_Microsoft) assert(false, "MSVCRT can't fdopen with a+"); else break;
+			case "wx" : access =                GENERIC_WRITE; creation = CREATE_NEW   ; break;
+			case "w+x": access = GENERIC_READ | GENERIC_WRITE; creation = CREATE_NEW   ; break;
+			case "ax" : access =                GENERIC_WRITE; creation = CREATE_NEW   ; version (CRuntime_Microsoft) append = true; break;
+			case "a+x": access = GENERIC_READ | GENERIC_WRITE; creation = CREATE_NEW   ; version (CRuntime_Microsoft) assert(false, "MSVCRT can't fdopen with a+"); else break;
 			default: assert(false, "Bad file mode: " ~ mode);
 		}
 
@@ -1799,7 +1808,7 @@ File openFile()(string fn, string mode = "rb")
 		if (append)
 			h.SetFilePointer(0, null, FILE_END);
 
-		f.windowsHandleOpen(h, mode);
+		f.windowsHandleOpen(h, cMode);
 	}
 	else
 		f.open(fn, mode);
@@ -1820,7 +1829,7 @@ unittest
 	void test(string mode, in Behavior expected)
 	{
 		static if (isVersion!q{CRuntime_Microsoft} || isVersion!q{OSX})
-			if (mode == "a+")
+			if (mode == "a+" || mode == "a+x")
 				return;
 
 		Behavior behavior;
@@ -1864,7 +1873,7 @@ unittest
 			{
 				behavior.read = Pos.none;
 				// Work around https://issues.dlang.org/show_bug.cgi?id=19751
-				f.reopen(fn, mode);
+				f.reopen(fn, "w");
 			}
 			else
 			if (buf.length)
@@ -1885,7 +1894,7 @@ unittest
 				{
 					s = null;
 					// Work around https://issues.dlang.org/show_bug.cgi?id=19751
-					f.reopen(fn, mode);
+					f.reopen(fn, "w");
 				}
 				else
 				{
@@ -1914,7 +1923,7 @@ unittest
 		{
 			import ae.utils.array : isOneOf;
 			version (Windows)
-				if (getWineVersion() && mode.isOneOf("w", "a"))
+				if (getWineVersion() && mode.isOneOf("w", "a", "wx", "ax"))
 				{
 					// Ignore bug in Wine msvcrt implementation
 					return;
@@ -1924,12 +1933,16 @@ unittest
 		}
 	}
 
-	test("r" , Behavior(Existence.mustExist   , false, Pos.start, Pos.none ));
-	test("r+", Behavior(Existence.mustExist   , false, Pos.start, Pos.start));
-	test("w" , Behavior(Existence.any         , true , Pos.none , Pos.empty));
-	test("w+", Behavior(Existence.any         , true , Pos.empty, Pos.empty));
-	test("a" , Behavior(Existence.any         , false, Pos.none , Pos.end  ));
-	test("a+", Behavior(Existence.any         , false, Pos.start, Pos.end  ));
+	test("r"  , Behavior(Existence.mustExist   , false, Pos.start, Pos.none ));
+	test("r+" , Behavior(Existence.mustExist   , false, Pos.start, Pos.start));
+	test("w"  , Behavior(Existence.any         , true , Pos.none , Pos.empty));
+	test("w+" , Behavior(Existence.any         , true , Pos.empty, Pos.empty));
+	test("a"  , Behavior(Existence.any         , false, Pos.none , Pos.end  ));
+	test("a+" , Behavior(Existence.any         , false, Pos.start, Pos.end  ));
+	test("wx" , Behavior(Existence.mustNotExist, true , Pos.none , Pos.empty));
+	test("w+x", Behavior(Existence.mustNotExist, true , Pos.empty, Pos.empty));
+	test("ax" , Behavior(Existence.mustNotExist, true , Pos.none , Pos.empty));
+	test("a+x", Behavior(Existence.mustNotExist, true , Pos.empty, Pos.empty));
 }
 
 auto fileDigest(Digest)(string fn)
