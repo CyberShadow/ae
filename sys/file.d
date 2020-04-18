@@ -1945,6 +1945,41 @@ unittest
 	test("a+x", Behavior(Existence.mustNotExist, true , Pos.empty, Pos.empty));
 }
 
+private version(Windows)
+{
+	version (CRuntime_Microsoft)
+	{
+		alias chsize_size_t = long;
+		extern(C) int _chsize_s(int fd, chsize_size_t size);
+		alias chsize = _chsize_s;
+	}
+	else
+	{
+		import core.stdc.config : c_long;
+		alias chsize_size_t = c_long;
+		extern(C) int chsize(int fd, c_long size);
+	}
+}
+
+void truncate(File f, ulong length)
+{
+	f.flush();
+	version (Windows)
+		chsize(f.fileno, length.to!chsize_size_t);
+	else
+		ftruncate(f.fileno, length.to!off_t);
+}
+
+unittest
+{
+	write("test.txt", "abcde");
+	auto f = File("test.txt", "r+b");
+	f.write("xyz");
+	f.truncate(f.tell);
+	f.close();
+	assert("test.txt".readText == "xyz");
+}
+
 auto fileDigest(Digest)(string fn)
 {
 	import std.range.primitives;
