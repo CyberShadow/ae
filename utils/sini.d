@@ -228,87 +228,88 @@ private enum isAALike(U, S) = is(typeof(
 	}
 ));
 
+// Deserializing leaf and node handlers.
+// Instantiation failure indicates lack of ability to handle leafs/nodes.
+private
+{
+	void leafHandler(S, alias v)(S value)
+	{
+		alias U = typeof(v);
+		static if (is(typeof(v = value)))
+			v = value;
+		else
+			v = value.to!U;
+	}
+
+	IniHandler!S nodeHandler(S, alias v)(S name)
+	{
+		alias U = typeof(v);
+		static if (isAALike!(U, S))
+		{
+			alias K = typeof(v.keys[0]);
+			alias V = typeof(v[K.init]);
+
+			auto key = name.to!K;
+
+			auto update(T)(T delegate(ref V) dg)
+			{
+				static if (!isNestingType!U)
+					if (key in v)
+						throw new Exception("Duplicate value: " ~ to!string(name));
+				return dg(v.require(key));
+			}
+
+			// To know if the value handler will accept leafs or nodes requires constructing the handler.
+			// To construct the handler we must have a pointer to the object it will handle.
+			// To have a pointer to the object means to allocate it in the AA...
+			// but, we can't do that until we know it's going to be written to.
+			// So, introspect what the handler for this type can handle at compile-time instead.
+			enum dummyHandlerCaps = {
+				V dummy;
+				auto h = makeIniHandler!S(dummy);
+				return [
+					h.leafHandler !is null,
+					h.nodeHandler !is null,
+				];
+			}();
+
+			return IniHandler!S
+			(
+				!dummyHandlerCaps[0] ? null : (S value) => update((ref V v) => makeIniHandler!S(v).leafHandler(value)),
+				!dummyHandlerCaps[1] ? null : (S name2) => update((ref V v) => makeIniHandler!S(v).nodeHandler(name2)),
+			);
+		}
+		else
+		static if (isAssociativeArray!U)
+			static assert(false, "Unsupported associative array type " ~ U.stringof);
+		else
+		static if (is(U == struct))
+		{
+			foreach (i, ref field; v.tupleof)
+			{
+				enum fieldName = to!S(v.tupleof[i].stringof[2..$]);
+				if (name == fieldName)
+				{
+					static if (is(typeof(makeIniHandler!S(v.tupleof[i]))))
+						return makeIniHandler!S(v.tupleof[i]);
+					else
+						throw new Exception("Can't parse " ~ U.stringof ~ "." ~ cast(string)name ~ " of type " ~ typeof(v.tupleof[i]).stringof);
+				}
+			}
+			static if (is(ReturnType!(v.parseSection)))
+				return v.parseSection(name);
+			else
+				throw new Exception("Unknown field " ~ to!string(name));
+		}
+		else
+			static assert(false);
+	}
+}
+
 IniHandler!S makeIniHandler(S = string, U)(ref U v)
 {
 	static if (!is(U == Unqual!U))
 		return makeIniHandler!S(*cast(Unqual!U*)&v);
-	else
-	static if (isAALike!(U, S))
-		return IniHandler!S
-		(
-			null,
-			(S name)
-			{
-				alias K = typeof(v.keys[0]);
-				alias V = typeof(v[K.init]);
-
-				auto key = name.to!K;
-
-				auto update(T)(T delegate(ref V) dg)
-				{
-					static if (!isNestingType!U)
-						if (key in v)
-							throw new Exception("Duplicate value: " ~ to!string(name));
-					return dg(v.require(key));
-				}
-
-				// To know if the value handler will accept leafs or nodes requires constructing the handler.
-				// To construct the handler we must have a pointer to the object it will handle.
-				// To have a pointer to the object means to allocate it in the AA...
-				// but, we can't do that until we know it's going to be written to.
-				// So, introspect what the handler for this type can handle at compile-time instead.
-				enum dummyHandlerCaps = {
-					V dummy;
-					auto h = makeIniHandler!S(dummy);
-					return [
-						h.leafHandler !is null,
-						h.nodeHandler !is null,
-					];
-				}();
-
-				return IniHandler!S
-				(
-					!dummyHandlerCaps[0] ? null : (S value) => update((ref V v) => makeIniHandler!S(v).leafHandler(value)),
-					!dummyHandlerCaps[1] ? null : (S name2) => update((ref V v) => makeIniHandler!S(v).nodeHandler(name2)),
-				);
-			}
-		);
-	else
-	static if (isAssociativeArray!U)
-		static assert(false, "Unsupported associative array type " ~ U.stringof);
-	else
-	static if (is(U == struct))
-		return IniHandler!S
-		(
-			null,
-			delegate IniHandler!S (S name)
-			{
-				foreach (i, ref field; v.tupleof)
-				{
-					enum fieldName = to!S(v.tupleof[i].stringof[2..$]);
-					if (name == fieldName)
-					{
-						static if (is(typeof(makeIniHandler!S(v.tupleof[i]))))
-							return makeIniHandler!S(v.tupleof[i]);
-						else
-							throw new Exception("Can't parse " ~ U.stringof ~ "." ~ cast(string)name ~ " of type " ~ typeof(v.tupleof[i]).stringof);
-					}
-				}
-				static if (is(ReturnType!(v.parseSection)))
-					return v.parseSection(name);
-				else
-					throw new Exception("Unknown field " ~ to!string(name));
-			}
-		);
-	else
-	static if (is(typeof(to!U(string.init))))
-		return IniHandler!S
-		(
-			(S value)
-			{
-				v = to!U(value);
-			}
-		);
 	else
 	static if (is(U V : V*))
 	{
@@ -316,6 +317,16 @@ IniHandler!S makeIniHandler(S = string, U)(ref U v)
 			if (!v)
 				v = new V;
 		return makeIniHandler!S(*v);
+	}
+	else
+	static if (is(typeof(leafHandler!(S, v))) || is(typeof(nodeHandler!(S, v))))
+	{
+		IniHandler!S handler;
+		static if (is(typeof(leafHandler!(S, v))))
+			handler.leafHandler = &leafHandler!(S, v);
+		static if (is(typeof(nodeHandler!(S, v))))
+			handler.nodeHandler = &nodeHandler!(S, v);
+		return handler;
 	}
 	else
 		static assert(false, "Can't parse " ~ U.stringof);
