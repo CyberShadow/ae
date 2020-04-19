@@ -509,6 +509,93 @@ unittest
 
 // ***************************************************************************
 
+/// Utility sponge type which absorbs any INI data.
+/// Can be later deserialized into a concrete type.
+struct IniFragment(S)
+{
+	S value;
+	IniFragment[S] children;
+
+	void opAssign(S value)
+	{
+		this.value = value;
+	}
+
+	alias children this;
+
+	void visit(IniHandler!S handler)
+	{
+		if (value)
+		{
+			enforce(handler.leafHandler, "Can't set a value here");
+			handler.leafHandler(value);
+		}
+		if (children)
+		{
+			enforce(handler.nodeHandler, "Can't use fields here");
+			foreach (key, ref value; children)
+				value.visit(handler.nodeHandler(key));
+		}
+	}
+
+	void deserializeInto(U)(ref U v)
+	{
+		visit(makeIniHandler!S(v));
+	}
+}
+
+static assert(isAALike!(IniFragment!string, char[]));
+
+unittest
+{
+	{
+		IniFragment!string f;
+		leafHandler!(string, f)("");
+		auto h = nodeHandler!(string, f)("");
+		assert(h.leafHandler);
+		assert(h.nodeHandler);
+	}
+
+	static struct File
+	{
+		IniFragment!string v, a, b;
+	}
+
+	auto f = parseIni!File
+	(
+		q"<
+			v=42
+			a.a=1
+			a.b=17
+			a.d.a=4
+			a.d.b=17
+			[b]
+			b=2
+			c=3
+			d.b=5
+			d.c=6
+		>".splitLines()
+	);
+
+	static struct S
+	{
+		int a, b, c;
+		int[string] d;
+	}
+
+	S s; int v;
+	f.a.deserializeInto(s);
+	f.b.deserializeInto(s);
+	f.v.deserializeInto(v);
+	assert(s.a == 1);
+	assert(s.b == 2);
+	assert(s.c == 3);
+	assert(s.d == ["a":4,"b":5,"c":6]);
+	assert(v == 42);
+}
+
+// ***************************************************************************
+
 deprecated alias parseStructuredIni = parseIni;
 deprecated alias makeStructuredIniHandler = makeIniHandler;
 
