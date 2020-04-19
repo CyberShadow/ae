@@ -266,11 +266,22 @@ private
 			// So, introspect what the handler for this type can handle at compile-time instead.
 			enum dummyHandlerCaps = {
 				V dummy;
-				auto h = makeIniHandler!S(dummy);
-				return [
-					h.leafHandler !is null,
-					h.nodeHandler !is null,
-				];
+				static if (is(V == U))
+				{
+					// Avoid "Functions cannot be interpreted while being compiled"
+					return [
+						is(typeof(leafHandler!(S, dummy)(S.init))),
+						true, // We can assume that the current function will instantiate successfully
+					];
+				}
+				else
+				{
+					auto h = makeIniHandler!S(dummy);
+					return [
+						h.leafHandler !is null,
+						h.nodeHandler !is null,
+					];
+				}
 			}();
 
 			return IniHandler!S
