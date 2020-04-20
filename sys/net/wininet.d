@@ -138,6 +138,16 @@ protected:
 		return results[0];
 	}
 
+	final static void checkOK(HNet hUrl)
+	{
+		auto statusCode = hUrl.I!httpQueryNumber(HTTP_QUERY_STATUS_CODE);
+		if (statusCode != 200)
+		{
+			auto statusText = hUrl.I!httpQueryString(HTTP_QUERY_STATUS_TEXT);
+			throw new Exception("Bad HTTP status code: %d (%s)".format(statusCode, statusText));
+		}
+	}
+
 	final static void doDownload(HNet hUrl, void delegate(ubyte[]) sink)
 	{
 		doDownload(hUrl, cast(void delegate(const ubyte[])) sink);
@@ -145,14 +155,6 @@ protected:
 
 	final static void doDownload(HNet hUrl, void delegate(const ubyte[]) sink)
 	{
-		// Check HTTP status code
-		auto statusCode = hUrl.I!httpQueryNumber(HTTP_QUERY_STATUS_CODE);
-		if (statusCode != 200)
-		{
-			auto statusText = hUrl.I!httpQueryString(HTTP_QUERY_STATUS_TEXT);
-			throw new Exception("Bad HTTP status code: %d (%s)".format(statusCode, statusText));
-		}
-
 		// Get total file size
 		DWORD bytesTotal = 0;
 		try
@@ -186,14 +188,18 @@ public:
 		import std.stdio;
 		auto f = File(target, "wb");
 		auto hNet = open();
-		doDownload(hNet.I!openUrl(url), &f.rawWrite!ubyte);
+		auto hReq = hNet.I!openUrl(url);
+		hReq.I!checkOK();
+		hReq.I!doDownload(&f.rawWrite!ubyte);
 	}
 
 	override void[] getFile(string url)
 	{
 		auto result = appender!(ubyte[]);
 		auto hNet = open();
-		doDownload(hNet.I!openUrl(url), &result.put!(ubyte[]));
+		auto hReq = hNet.I!openUrl(url);
+		hReq.I!checkOK();
+		hReq.I!doDownload(&result.put!(ubyte[]));
 		return result.data;
 	}
 
@@ -205,9 +211,10 @@ public:
 		auto hCon = hNet.I!connect(request.host, request.port);
 		auto hReq = hCon.I!openRequest("POST", request.resource, urlFlags(url));
 		hReq.I!sendRequest(null, data);
+		hReq.I!checkOK();
 
 		auto result = appender!(ubyte[]);
-		doDownload(hReq, &result.put!(ubyte[]));
+		hReq.I!doDownload(&result.put!(ubyte[]));
 		return result.data;
 	}
 
