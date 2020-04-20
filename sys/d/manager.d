@@ -26,6 +26,7 @@ import std.regex;
 import std.string;
 import std.typecons;
 
+import ae.net.github.rest;
 import ae.sys.d.cache;
 import ae.sys.d.repo;
 import ae.sys.file;
@@ -121,6 +122,9 @@ class DManager : ICacheHost
 			/// Maximum execution time, in seconds, of any single
 			/// command.
 			int timeout;
+
+			/// API token to access the GitHub REST API (optional).
+			string githubToken;
 		}
 		Local local; /// ditto
 	}
@@ -164,6 +168,7 @@ class DManager : ICacheHost
 	alias tmpDir     = subDir!"tmp";         /// Directory for $TMPDIR etc.
 	alias homeDir    = subDir!"home";        /// Directory for $HOME.
 	alias binDir     = subDir!"bin" ;        /// For wrapper scripts.
+	alias githubDir  = subDir!"github-cache";/// For the GitHub API cache.
 
 	/// This number increases with each incompatible change to cached data.
 	enum cacheVersion = 3;
@@ -2025,6 +2030,39 @@ EOS";
 			.byValue
 			.filter!(component => component.submoduleName == submoduleName)
 			.array();
+	}
+
+	// ***************************** GitHub API ******************************
+
+	GitHub github;
+
+	ref GitHub needGitHub()
+	{
+		if (github is GitHub.init)
+		{
+			github.log = &this.log;
+			github.token = config.local.githubToken;
+			github.cache = new class GitHub.ICache
+			{
+				final string cacheFileName(string key)
+				{
+					return githubDir.buildPath(getDigestString!MD5(key).toLower());
+				}
+
+				string get(string key)
+				{
+					auto fn = cacheFileName(key);
+					return fn.exists ? fn.readText : null;
+				}
+
+				void put(string key, string value)
+				{
+					githubDir.ensureDirExists;
+					std.file.write(cacheFileName(key), value);
+				}
+			};
+		}
+		return github;
 	}
 
 	// **************************** Customization ****************************
