@@ -17,6 +17,9 @@ import std.array;
 import std.file;
 import std.process : environment;
 
+import ae.net.http.common;
+import ae.sys.data;
+
 static import ae.sys.net.ae;
 static import ae.sys.net.curl;
 version(Windows)
@@ -70,6 +73,19 @@ void test(string moduleName, string className)()
 	{
 		auto result = cast(string)net.post(testBaseURL ~ "testUrl4", "Hello world\n");
 		assert(result == "Hello world\n", result);
+	}
+
+	debug std.stdio.stderr.writeln(" - httpRequest");
+	{
+		auto request = new HttpRequest(testBaseURL ~ "testUrl5");
+		request.method = "PUT";
+		request.headers.add("Test-Request-Header", "foo");
+		request.data = [Data("bar")];
+		auto response = net.httpRequest(request);
+		assert(response.status == HttpStatusCode.Accepted);
+		assert(response.statusMessage == "Custom Message");
+		assert(response.data.joinToHeap == "PUT foo bar");
+		assert(response.headers["Test-Response-Header"] == "baz");
 	}
 }
 
