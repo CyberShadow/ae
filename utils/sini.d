@@ -514,14 +514,26 @@ unittest
 struct IniFragment(S)
 {
 	S value;
-	IniFragment[S] children;
+	struct Child { S name; IniFragment value; }
+	Child[] children;
 
-	void opAssign(S value)
+	IniHandler!S makeIniHandler(S_)()
 	{
-		this.value = value;
+		static assert(is(S == S_),
+			"IniFragment instantiated with string type " ~ S.stringof ~
+			", but being parsed with string type " ~ S_.stringof);
+		return IniHandler!S(
+			(S value)
+			{
+				this.value = value;
+			},
+			(S name)
+			{
+				children ~= Child(name);
+				return children[$-1].value.makeIniHandler!S;
+			},
+		);
 	}
-
-	alias children this;
 
 	void visit(IniHandler!S handler)
 	{
@@ -533,29 +545,19 @@ struct IniFragment(S)
 		if (children)
 		{
 			enforce(handler.nodeHandler, "Can't use fields here");
-			foreach (key, ref value; children)
-				value.visit(handler.nodeHandler(key));
+			foreach (ref child; children)
+				child.value.visit(handler.nodeHandler(child.name));
 		}
 	}
 
 	void deserializeInto(U)(ref U v)
 	{
-		visit(makeIniHandler!S(v));
+		visit(v.makeIniHandler!S());
 	}
 }
 
-static assert(isAALike!(IniFragment!string, char[]));
-
 unittest
 {
-	{
-		IniFragment!string f;
-		leafHandler!(string, f)("");
-		auto h = nodeHandler!(string, f)("");
-		assert(h.leafHandler);
-		assert(h.nodeHandler);
-	}
-
 	static struct File
 	{
 		IniFragment!string v, a, b;
