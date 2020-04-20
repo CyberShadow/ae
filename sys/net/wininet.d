@@ -15,14 +15,20 @@
 module ae.sys.net.wininet;
 version(Windows):
 
+import std.algorithm.iteration;
+import std.algorithm.searching;
 import std.array;
 import std.conv : to;
 import std.exception;
+import std.range : dropOne;
 import std.string;
+import std.traits : OriginalType;
 import std.typecons : RefCounted;
 
-import ae.net.http.common : HttpRequest;
+import ae.net.http.common : HttpRequest, HttpResponse, HttpStatusCode;
 import ae.net.ietf.url;
+import ae.sys.data;
+import ae.sys.dataset;
 import ae.sys.net;
 import ae.sys.windows.dll;
 import ae.sys.windows.exception;
@@ -246,6 +252,34 @@ public:
 
 		auto location = hReq.I!httpQueryString(HTTP_QUERY_LOCATION);
 		return location ? url.applyRelativeURL(location) : null;
+	}
+
+	override HttpResponse httpRequest(HttpRequest request)
+	{
+		string requestHeaders;
+		foreach (name, value; request.headers)
+			requestHeaders ~= name ~ ": " ~ value ~ "\r\n";
+		auto hNet = open(INTERNET_FLAG_NO_AUTO_REDIRECT);
+		auto hCon = hNet.I!connect(request.host, request.port);
+		auto hReq = hCon.I!openRequest(request.method, request.resource,
+			INTERNET_FLAG_NO_AUTO_REDIRECT | urlFlags(request.url));
+		auto requestData = request.data.joinData;
+		hReq.I!sendRequest(requestHeaders, requestData.contents);
+
+		auto response = new HttpResponse;
+		response.status = cast(HttpStatusCode)hReq.I!httpQueryNumber(HTTP_QUERY_STATUS_CODE).to!(OriginalType!HttpStatusCode);
+		response.statusMessage = hReq.I!httpQueryString(HTTP_QUERY_STATUS_TEXT);
+
+		auto responseHeaders = hReq.I!httpQueryString(HTTP_QUERY_RAW_HEADERS);
+		foreach (header; responseHeaders.splitter('\0').dropOne)
+			if (header.length)
+			{
+				auto parts = header.findSplit(":");
+				response.headers.add(parts[0].strip, parts[2].strip);
+			}
+
+		hReq.I!doDownload((ubyte[] bytes) { response.data ~= Data(bytes, true); });
+		return response;
 	}
 }
 
