@@ -276,7 +276,7 @@ private
 				}
 				else
 				{
-					auto h = makeIniHandler!S(dummy);
+					auto h = dummy.makeIniHandler!S();
 					return [
 						h.leafHandler !is null,
 						h.nodeHandler !is null,
@@ -286,8 +286,8 @@ private
 
 			return IniHandler!S
 			(
-				!dummyHandlerCaps[0] ? null : (S value) => update((ref V v) => makeIniHandler!S(v).leafHandler(value)),
-				!dummyHandlerCaps[1] ? null : (S name2) => update((ref V v) => makeIniHandler!S(v).nodeHandler(name2)),
+				!dummyHandlerCaps[0] ? null : (S value) => update((ref V v) => v.makeIniHandler!S.leafHandler(value)),
+				!dummyHandlerCaps[1] ? null : (S name2) => update((ref V v) => v.makeIniHandler!S.nodeHandler(name2)),
 			);
 		}
 		else
@@ -301,8 +301,8 @@ private
 				enum fieldName = to!S(v.tupleof[i].stringof[2..$]);
 				if (name == fieldName)
 				{
-					static if (is(typeof(makeIniHandler!S(v.tupleof[i]))))
-						return makeIniHandler!S(v.tupleof[i]);
+					static if (is(typeof(v.tupleof[i].makeIniHandler!S)))
+						return v.tupleof[i].makeIniHandler!S;
 					else
 						throw new Exception("Can't parse " ~ U.stringof ~ "." ~ cast(string)name ~ " of type " ~ typeof(v.tupleof[i]).stringof);
 				}
@@ -320,14 +320,14 @@ private
 IniHandler!S makeIniHandler(S = string, U)(ref U v)
 {
 	static if (!is(U == Unqual!U))
-		return makeIniHandler!S(*cast(Unqual!U*)&v);
+		return (*cast(Unqual!U*)&v).makeIniHandler!S;
 	else
 	static if (is(U V : V*))
 	{
 		static if (is(typeof(v = new V)))
 			if (!v)
 				v = new V;
-		return makeIniHandler!S(*v);
+		return (*v).makeIniHandler!S;
 	}
 	else
 	static if (is(typeof(leafHandler!(S, v))) || is(typeof(nodeHandler!(S, v))))
@@ -356,7 +356,7 @@ T parseIni(T, R)(R r)
 void parseIniInto(R, T)(R r, ref T result)
 	if (isInputRange!R && isSomeString!(ElementType!R))
 {
-	parseIni(r, makeIniHandler!(ElementType!R)(result));
+	parseIni(r, result.makeIniHandler!(ElementType!R));
 }
 
 unittest
@@ -403,7 +403,7 @@ unittest
 			sections.length++;
 			auto p = &sections[$-1];
 			p.name = to!string(name);
-			return makeIniHandler!wstring(p.values);
+			return p.values.makeIniHandler!wstring();
 		}
 	}
 
