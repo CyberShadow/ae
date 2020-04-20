@@ -13,6 +13,7 @@
 
 module ae.sys.net.test;
 
+import std.array;
 import std.file;
 import std.process : environment;
 
@@ -26,6 +27,7 @@ debug static import std.stdio;
 
 // Server-side test scripts are here:
 // https://gist.github.com/58df32ed1dbe64fffd0545f87d9321ad
+string testBaseURL = "http://thecybershadow.net/d/nettest/"; // should be HTTP
 
 void test(string moduleName, string className)()
 {
@@ -37,7 +39,7 @@ void test(string moduleName, string className)()
 
 	debug std.stdio.stderr.writeln(" - getFile");
 	{
-		assert(net.getFile("http://thecybershadow.net/d/nettest/testUrl1") == "Hello world\n");
+		assert(net.getFile(testBaseURL ~ "testUrl1") == "Hello world\n");
 	}
 
 	debug std.stdio.stderr.writeln(" - downloadFile");
@@ -46,27 +48,27 @@ void test(string moduleName, string className)()
 		if (fn.exists) fn.remove();
 		scope(exit) if (fn.exists) fn.remove();
 
-		net.downloadFile("http://thecybershadow.net/d/nettest/testUrl1", fn);
+		net.downloadFile(testBaseURL ~ "testUrl1", fn);
 		assert(fn.readText() == "Hello world\n");
 	}
 
 	debug std.stdio.stderr.writeln(" - urlOK");
 	{
-		assert( net.urlOK("http://thecybershadow.net/d/nettest/testUrl1"));
-		assert(!net.urlOK("http://thecybershadow.net/d/nettest/testUrlNX"));
+		assert( net.urlOK(testBaseURL ~ "testUrl1"));
+		assert(!net.urlOK(testBaseURL ~ "testUrlNX"));
 		static if (moduleName == "wininet")
-			assert( net.urlOK("https://thecybershadow.net/d/nettest/testUrl1"));
+			assert( net.urlOK(testBaseURL.replace("http://", "https://") ~  "testUrl1"));
 	}
 
 	debug std.stdio.stderr.writeln(" - resolveRedirect");
 	{
-		auto result = net.resolveRedirect("http://thecybershadow.net/d/nettest/testUrl3");
-		assert(result == "http://thecybershadow.net/d/nettest/testUrl2", result);
+		auto result = net.resolveRedirect(testBaseURL ~ "testUrl3");
+		assert(result == testBaseURL ~ "testUrl2", result);
 	}
 
 	debug std.stdio.stderr.writeln(" - post");
 	{
-		auto result = cast(string)net.post("http://thecybershadow.net/d/nettest/testUrl4", "Hello world\n");
+		auto result = cast(string)net.post(testBaseURL ~ "testUrl4", "Hello world\n");
 		assert(result == "Hello world\n", result);
 	}
 }
