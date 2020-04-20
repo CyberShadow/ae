@@ -14,11 +14,16 @@
 
 module ae.sys.net.curl;
 
+import etc.c.curl : CurlSeekPos, CurlSeek;
+
+import std.algorithm.comparison;
 import std.file;
 import std.net.curl;
 import std.string;
 
+import ae.net.http.common;
 import ae.net.ietf.url;
+import ae.sys.data;
 import ae.sys.net;
 
 class CurlNetwork : Network
@@ -70,6 +75,85 @@ class CurlNetwork : Network
 		http.perform();
 
 		return result;
+	}
+
+	override HttpResponse httpRequest(HttpRequest request)
+	{
+		auto http = HTTP();
+		http.url = request.url;
+		switch (request.method.toUpper)
+		{
+			case "HEAD"   : http.method = HTTP.Method.head; break;
+			case "GET"    : http.method = HTTP.Method.get; break;
+			case "POST"   : http.method = HTTP.Method.post; break;
+			case "PUT"    : http.method = HTTP.Method.put; break;
+			case "DEL"    : http.method = HTTP.Method.del; break;
+			case "OPTIONS": http.method = HTTP.Method.options; break;
+			case "TRACE"  : http.method = HTTP.Method.trace; break;
+			case "CONNECT": http.method = HTTP.Method.connect; break;
+			case "PATCH"  : http.method = HTTP.Method.patch; break;
+			default: throw new Exception("Unknown HTTP method: " ~ request.method);
+		}
+		foreach (name, value; request.headers)
+			http.addRequestHeader(name, value);
+
+		if (request.data)
+		{
+			auto requestData = request.data.bytes;
+			http.contentLength = requestData.length;
+			auto remainingData = requestData;
+			http.onSend =
+				(void[] buf)
+				{
+					size_t bytesToSend = min(buf.length, remainingData.length);
+					if (!bytesToSend)
+						return 0;
+					auto dataToSend = remainingData[0 .. bytesToSend];
+					{
+						size_t p = 0;
+						foreach (datum; dataToSend)
+						{
+							buf[p .. p + datum.length] = datum.contents;
+							p += datum.length;
+						}
+					}
+					remainingData = remainingData[bytesToSend .. $].bytes;
+					return bytesToSend;
+				};
+			http.handle.onSeek =
+				(long offset, CurlSeekPos mode)
+				{
+					switch (mode)
+					{
+						case CurlSeekPos.set:
+							remainingData = requestData[cast(size_t) offset .. $].bytes;
+							return CurlSeek.ok;
+						default:
+							return CurlSeek.cantseek;
+					}
+				};
+		}
+
+		auto response = new HttpResponse;
+		http.onReceiveStatusLine =
+			(HTTP.StatusLine statusLine)
+			{
+				response.status = cast(HttpStatusCode)statusLine.code;
+				response.statusMessage = statusLine.reason;
+			};
+		http.onReceiveHeader =
+			(in char[] key, in char[] value)
+			{
+				response.headers.add(key.idup, value.idup);
+			};
+		http.onReceive =
+			(ubyte[] data)
+			{
+				response.data ~= Data(data);
+				return data.length;
+			};
+		http.perform();
+		return response;
 	}
 }
 
