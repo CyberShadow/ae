@@ -25,7 +25,10 @@ import std.path;
 import std.string;
 import std.typecons;
 
+import ae.net.http.common;
 import ae.net.ietf.url;
+import ae.sys.dataio;
+import ae.sys.dataset;
 import ae.sys.file;
 import ae.sys.net;
 import ae.utils.digest;
@@ -216,6 +219,41 @@ class CachedCurlNetwork : Network
 	override void[] post(string url, in void[] data)
 	{
 		return cachedReq(url, HTTP.Method.post, data).responseData;
+	}
+
+	override HttpResponse httpRequest(HttpRequest request)
+	{
+		Request req;
+		req.url = request.url;
+		switch (request.method.toUpper)
+		{
+			case "HEAD"   : req.method = HTTP.Method.head; break;
+			case "GET"    : req.method = HTTP.Method.get; break;
+			case "POST"   : req.method = HTTP.Method.post; break;
+			case "PUT"    : req.method = HTTP.Method.put; break;
+			case "DEL"    : req.method = HTTP.Method.del; break;
+			case "OPTIONS": req.method = HTTP.Method.options; break;
+			case "TRACE"  : req.method = HTTP.Method.trace; break;
+			case "CONNECT": req.method = HTTP.Method.connect; break;
+			case "PATCH"  : req.method = HTTP.Method.patch; break;
+			default: throw new Exception("Unknown HTTP method: " ~ request.method);
+		}
+		req.data = request.data.joinToHeap;
+		foreach (name, value; request.headers)
+			req.headers ~= [name, value];
+		req.maxRedirects = 0;
+
+		auto resp = cachedReq(req);
+		auto metadata = resp.metadata;
+
+		auto response = new HttpResponse;
+		response.status = cast(HttpStatusCode)metadata.statusLine.code;
+		response.statusMessage = metadata.statusLine.reason;
+		foreach (name, values; metadata.headers)
+			foreach (value; values)
+				response.headers.add(name, value);
+		response.data = [readData(resp.responsePath)];
+		return response;
 	}
 }
 
