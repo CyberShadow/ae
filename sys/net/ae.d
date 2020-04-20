@@ -73,7 +73,7 @@ class AENetwork : Network
 		request.resource = url;
 		try
 		{
-			httpRequest(request,
+			.httpRequest(request,
 				(HttpResponse response, string disconnectReason)
 				{
 					got = true;
@@ -100,7 +100,7 @@ class AENetwork : Network
 		auto request = new HttpRequest;
 		request.method = "HEAD";
 		request.resource = url;
-		httpRequest(request,
+		.httpRequest(request,
 			(HttpResponse response, string disconnectReason)
 			{
 				if (!response)
@@ -117,6 +117,25 @@ class AENetwork : Network
 
 		socketManager.loop();
 		assert(got);
+		return result;
+	}
+
+	override HttpResponse httpRequest(HttpRequest request)
+	{
+		HttpResponse result;
+
+		.httpRequest(request,
+			(HttpResponse response, string disconnectReason)
+			{
+				if (!response)
+					throw new Exception(disconnectReason);
+				else
+					result = response;
+			}
+		);
+
+		socketManager.loop();
+		assert(result);
 		return result;
 	}
 }
