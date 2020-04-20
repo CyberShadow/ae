@@ -81,7 +81,7 @@ class ManagedRepository
 			// Might be a GC-ed merge. Try to recreate the merge
 			auto hit = mergeCache.find!(entry => entry.result == hash)();
 			enforce(!hit.empty, "Unknown hash %s".format(hash));
-			performMerge(hit.front.base, hit.front.branch, hit.front.revert, hit.front.mainline);
+			performMerge(hit.front.spec);
 			enforce(getHead() == hash, "Unexpected merge result: expected %s, got %s".format(hash, getHead()));
 		}
 	}
@@ -192,12 +192,23 @@ class ManagedRepository
 
 	// Merge cache
 
+	enum MergeMode
+	{
+		merge,      /// git merge (commit with multiple parents) of the target and branch tips
+		cherryPick, /// apply the commits as a patch
+	}
+	private static struct MergeSpec
+	{
+		string target;
+		string[2] branch; // [base, tip]
+		MergeMode mode;
+		bool revert = false;
+	}
 	private static struct MergeInfo
 	{
-		string base, branch;
-		bool revert = false;
-		int mainline = 0;
+		MergeSpec spec;
 		string result;
+		int mainline = 0; // git parent index of the "target", if any
 	}
 	private alias MergeCache = MergeInfo[];
 	private MergeCache mergeCacheData;
@@ -222,41 +233,37 @@ class ManagedRepository
 
 	private @property string mergeCachePath()
 	{
-		return buildPath(git.gitDir, "ae-sys-d-mergecache.json");
+		return buildPath(git.gitDir, "ae-sys-d-mergecache-v2.json");
 	}
 
 	// Merge
 
-	/// Returns the hash of the merge between the base and branch commits.
+	/// Returns the hash of the merge between the target and branch commits.
 	/// Performs the merge if necessary. Caches the result.
-	public string getMerge(string base, string branch)
+	public string getMerge(string target, string[2] branch, MergeMode mode)
 	{
-		return getMergeImpl(base, branch, false, 0);
+		return getMergeImpl(MergeSpec(target, branch, mode, false));
 	}
 
 	/// Returns the resulting hash when reverting the branch from the base commit.
 	/// Performs the revert if necessary. Caches the result.
 	/// mainline is the 1-based mainline index (as per `man git-revert`),
 	/// or 0 if commit is not a merge commit.
-	public string getRevert(string base, string branch, int mainline)
+	public string getRevert(string target, string[2] branch, MergeMode mode)
 	{
-		return getMergeImpl(base, branch, true, mainline);
+		return getMergeImpl(MergeSpec(target, branch, mode, true));
 	}
 
-	private string getMergeImpl(string base, string branch, bool revert, int mainline)
+	private string getMergeImpl(MergeSpec spec)
 	{
-		auto hit = mergeCache.find!(entry =>
-			entry.base == base &&
-			entry.branch == branch &&
-			entry.revert == revert &&
-			entry.mainline == mainline)();
+		auto hit = mergeCache.find!(entry => entry.spec == spec)();
 		if (!hit.empty)
 			return hit.front.result;
 
-		performMerge(base, branch, revert, mainline);
+		performMerge(spec);
 
 		auto head = getHead();
-		mergeCache ~= MergeInfo(base, branch, revert, mainline, head);
+		mergeCache ~= MergeInfo(spec, head);
 		saveMergeCache();
 		return head;
 	}
@@ -265,41 +272,63 @@ class ManagedRepository
 	private static const string revertCommitMessage = "ae.sys.d revert";
 
 	// Performs a merge or revert.
-	private void performMerge(string base, string branch, bool revert, int mainline)
+	private void performMerge(MergeSpec spec)
 	{
-		needHead(base);
+		needHead(spec.target);
 		currentHead = null;
 
-		log("%s %s into %s.".format(revert ? "Reverting" : "Merging", branch, base));
+		log("%s %s into %s.".format(spec.revert ? "Reverting" : "Merging", spec.branch, spec.target));
 
 		scope(exit) saveState();
 
 		scope (failure)
 		{
-			if (!revert)
+			string op;
+			final switch (spec.mode)
 			{
-				log("Aborting merge...");
-				git.run("merge", "--abort");
+				case MergeMode.merge:
+					op = spec.revert ? "revert" : "merge";
+					break;
+				case MergeMode.cherryPick:
+					op = spec.revert ? "revert" : "cherry-pick";
+					break;
 			}
-			else
-			{
-				log("Aborting revert...");
-				git.run("revert", "--abort");
-			}
+
+			log("Aborting " ~ op ~ "...");
+			git.run(op, "--abort");
 			clean = false;
 		}
 
 		void doMerge()
 		{
-			if (!revert)
-				git.run("merge", "--no-ff", "-m", mergeCommitMessage, branch);
-			else
+			final switch (spec.mode)
 			{
-				string[] args = ["revert", "--no-edit"];
-				if (mainline)
-					args ~= ["--mainline", text(mainline)];
-				args ~= [branch];
-				git.run(args);
+				case MergeMode.merge:
+					if (!spec.revert)
+						git.run("merge", "--no-ff", "-m", mergeCommitMessage, spec.branch[1]);
+					else
+					{
+						// When reverting in merge mode, we try to
+						// find the merge commit following the branch
+						// tip, and revert only that merge commit.
+						string mergeCommit; int mainline;
+						getChild(spec.target, spec.branch[1], /*out*/mergeCommit, /*out*/mainline);
+
+						string[] args = ["revert", "--no-edit"];
+						if (mainline)
+							args ~= ["--mainline", text(mainline)];
+						args ~= [mergeCommit];
+						git.run(args);
+					}
+					break;
+				case MergeMode.cherryPick:
+					enforce(spec.branch[0], "Must specify a branch base for a cherry-pick merge");
+					auto range = spec.branch[0] ~ ".." ~ spec.branch[1];
+					if (!spec.revert)
+						git.run("cherry-pick", range);
+					else
+						git.run("revert", "--no-edit", range);
+					break;
 			}
 		}
 
@@ -312,7 +341,7 @@ class ManagedRepository
 				log("Merge failed. Attempting conflict resolution...");
 				git.run("checkout", "--theirs", "test");
 				git.run("add", "test");
-				if (!revert)
+				if (!spec.revert)
 					git.run("-c", "rerere.enabled=false", "commit", "-m", mergeCommitMessage);
 				else
 					git.run("revert", "--continue");
@@ -328,7 +357,7 @@ class ManagedRepository
 	/// Queries the git repository if necessary. Caches the result.
 	public MergeInfo getMergeInfo(string merge)
 	{
-		auto hit = mergeCache.find!(entry => entry.result == merge && !entry.revert)();
+		auto hit = mergeCache.find!(entry => entry.result == merge && !entry.spec.revert)();
 		if (!hit.empty)
 			return hit.front;
 
@@ -336,7 +365,7 @@ class ManagedRepository
 		enforce(parents.length > 1, "Not a merge: " ~ merge);
 		enforce(parents.length == 2, "Too many parents: " ~ merge);
 
-		auto info = MergeInfo(parents[0], parents[1], false, 0, merge);
+		auto info = MergeInfo(MergeSpec(parents[0], [null, parents[1]], MergeMode.merge, false), merge, 1);
 		mergeCache ~= info;
 		return info;
 	}
@@ -345,15 +374,18 @@ class ManagedRepository
 	/// head commit, up till the merge with the given branch.
 	/// Then, reapplies all merges in order,
 	/// except for that with the given branch.
-	public string getUnMerge(string head, string branch)
+	public string getUnMerge(string head, string[2] branch, MergeMode mode)
 	{
 		// This could be optimized using an interactive rebase
 
 		auto info = getMergeInfo(head);
-		if (info.branch == branch)
-			return info.base;
+		if (info.spec.branch[1] == branch[1])
+			return info.spec.target;
 
-		return getMerge(getUnMerge(info.base, branch), info.branch);
+		// Recurse to keep looking
+		auto unmerge = getUnMerge(info.spec.target, branch, mode);
+		// Re-apply this non-matching merge
+		return getMerge(unmerge, info.spec.branch, info.spec.mode);
 	}
 
 	// Branches, forks and customization
@@ -372,7 +404,7 @@ class ManagedRepository
 
 	/// Return SHA1 of the given pull request #.
 	/// Fetches the pull request first, unless offline mode is on.
-	string getPull(int pull)
+	string getPullTip(int pull)
 	{
 		return getRemoteRef(
 			"origin",
@@ -381,19 +413,50 @@ class ManagedRepository
 		);
 	}
 
-	/// Return SHA1 of the given GitHub fork.
-	/// Fetches the fork first, unless offline mode is on.
-	/// (This is a thin wrapper around getRemoteBranch.)
-	string getFork(string user, string branch)
+	private static bool isCommitHash(string s)
 	{
-		enforce(user  .match(re!`^\w[\w\-]*$`), "Bad remote name");
-		enforce(branch.match(re!`^\w[\w\-\.]*$`), "Bad branch name");
+		return s.length == 40 && s.representation.all!(c => (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'));
+	}
 
-		return getRemoteRef(
-			"https://github.com/%s/%s".format(user, name),
-			"refs/heads/%s".format(branch),
-			"refs/digger/fork/%s/%s".format(user, branch),
-		);
+	/// Return SHA1 (base, tip) of the given branch (possibly of GitHub fork).
+	/// Fetches the fork first, unless offline mode is on.
+	/// (This is a thin wrapper around getRemoteRef.)
+	string[2] getBranch(string user, string base, string tip)
+	{
+		if (user) enforce(user.match(re!`^\w[\w\-]*$`), "Bad remote name");
+		if (base) enforce(base.match(re!`^\w[\w\-\.]*$`), "Bad branch base name");
+		if (true) enforce(tip .match(re!`^\w[\w\-\.]*$`), "Bad branch tip name");
+
+		if (!user)
+			user = "dlang";
+
+		if (isCommitHash(tip))
+		{
+			if (!offline)
+			{
+				// We don't know which branch the commit will be in, so just grab everything.
+				auto remote = "https://github.com/%s/%s".format(user, name);
+				log("Fetching everything from %s ...".format(remote));
+				git.run("fetch", remote, "+refs/heads/*:refs/forks/%s/*".format(user));
+			}
+			if (!base)
+				base = git.query("rev-parse", tip ~ "^");
+			return [
+				base,
+				tip,
+			];
+		}
+		else
+		{
+			return [
+				null,
+				getRemoteRef(
+					"https://github.com/%s/%s".format(user, name),
+					"refs/heads/%s".format(tip),
+					"refs/digger/fork/%s/%s".format(user, tip),
+				),
+			];
+		}
 	}
 
 	/// Find the child of a commit, and, if the commit was a merge,
@@ -442,9 +505,12 @@ class ManagedRepository
 				mainline = 1;
 
 			auto mergeInfo = MergeInfo(
-				childCommit.parents[0].hash.toString(),
-				childCommit.parents[1].hash.toString(),
-				true, mainline, commit);
+				MergeSpec(
+					childCommit.parents[0].hash.toString(),
+					childCommit.parents[1].hash.toString(),
+					MergeMode.merge,
+					true),
+				commit, mainline);
 			if (!mergeCache.canFind(mergeInfo))
 			{
 				mergeCache ~= mergeInfo;

@@ -19,6 +19,7 @@ import std.conv;
 import std.datetime;
 import std.exception;
 import std.file;
+import std.json : parseJSON;
 import std.path;
 import std.process : spawnProcess, wait, escapeShellCommand;
 import std.range;
@@ -2086,62 +2087,59 @@ EOS";
 		return SubmoduleState(getMetaRepo().getSubmoduleCommits(commit));
 	}
 
+	alias MergeMode = ManagedRepository.MergeMode;
+
 	/// Applies a merge onto the given SubmoduleState.
-	void merge(ref SubmoduleState submoduleState, string submoduleName, string branch)
+	void merge(ref SubmoduleState submoduleState, string submoduleName, string[2] branch, MergeMode mode)
 	{
-		log("Merging %s commit %s".format(submoduleName, branch));
+		log("Merging %s commits %s..%s".format(submoduleName, branch[0], branch[1]));
 		enforce(submoduleName in submoduleState.submoduleCommits, "Unknown submodule: " ~ submoduleName);
 		auto submodule = getSubmodule(submoduleName);
 		auto head = submoduleState.submoduleCommits[submoduleName];
-		auto result = submodule.getMerge(head, branch);
+		auto result = submodule.getMerge(head, branch, mode);
 		submoduleState.submoduleCommits[submoduleName] = result;
 	}
 
 	/// Removes a merge from the given SubmoduleState.
-	void unmerge(ref SubmoduleState submoduleState, string submoduleName, string branch)
+	void unmerge(ref SubmoduleState submoduleState, string submoduleName, string[2] branch, MergeMode mode)
 	{
-		log("Unmerging %s commit %s".format(submoduleName, branch));
+		log("Unmerging %s commits %s..%s".format(submoduleName, branch[0], branch[1]));
 		enforce(submoduleName in submoduleState.submoduleCommits, "Unknown submodule: " ~ submoduleName);
 		auto submodule = getSubmodule(submoduleName);
 		auto head = submoduleState.submoduleCommits[submoduleName];
-		auto result = submodule.getUnMerge(head, branch);
+		auto result = submodule.getUnMerge(head, branch, mode);
 		submoduleState.submoduleCommits[submoduleName] = result;
 	}
 
 	/// Reverts a commit from the given SubmoduleState.
 	/// parent is the 1-based mainline index (as per `man git-revert`),
 	/// or 0 if commit is not a merge commit.
-	void revert(ref SubmoduleState submoduleState, string submoduleName, string commit, int parent)
+	void revert(ref SubmoduleState submoduleState, string submoduleName, string[2] branch, MergeMode mode)
 	{
-		log("Reverting %s commit %s".format(submoduleName, commit));
+		log("Reverting %s commits %s..%s".format(submoduleName, branch[0], branch[1]));
 		enforce(submoduleName in submoduleState.submoduleCommits, "Unknown submodule: " ~ submoduleName);
 		auto submodule = getSubmodule(submoduleName);
 		auto head = submoduleState.submoduleCommits[submoduleName];
-		auto result = submodule.getRevert(head, commit, parent);
+		auto result = submodule.getRevert(head, branch, mode);
 		submoduleState.submoduleCommits[submoduleName] = result;
 	}
 
-	/// Returns the commit hash for the given pull request #.
+	/// Returns the commit hash for the given pull request # (base and tip).
 	/// The result can then be used with addMerge/removeMerge.
-	string getPull(string submoduleName, int pullNumber)
+	string[2] getPull(string submoduleName, int pullNumber)
 	{
-		return getSubmodule(submoduleName).getPull(pullNumber);
+		auto tip = getSubmodule(submoduleName).getPullTip(pullNumber);
+		auto pull = needGitHub().query("https://api.github.com/repos/%s/%s/pulls/%d"
+			.format("dlang", submoduleName, pullNumber)).data.parseJSON;
+		auto base = pull["base"]["sha"].str;
+		return [base, tip];
 	}
 
-	/// Returns the commit hash for the given GitHub fork.
+	/// Returns the commit hash for the given branch (optionally GitHub fork).
 	/// The result can then be used with addMerge/removeMerge.
-	string getFork(string submoduleName, string user, string branch)
+	string[2] getBranch(string submoduleName, string user, string base, string tip)
 	{
-		return getSubmodule(submoduleName).getFork(user, branch);
-	}
-
-	/// Find the child of a commit (starting with the current submodule state),
-	/// and, if the commit was a merge, the mainline index of said commit for the child.
-	void getChild(ref SubmoduleState submoduleState, string submoduleName, string commit, out string child, out int mainline)
-	{
-		enforce(submoduleName in submoduleState.submoduleCommits, "Unknown submodule: " ~ submoduleName);
-		auto head = submoduleState.submoduleCommits[submoduleName];
-		return getSubmodule(submoduleName).getChild(head, commit, child, mainline);
+		return getSubmodule(submoduleName).getBranch(user, base, tip);
 	}
 
 	// ****************************** Building *******************************
