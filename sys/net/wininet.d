@@ -53,6 +53,7 @@ protected:
 	{
 		HINTERNET hNet;
 		alias hNet this;
+		@disable this(this);
 		~this() { if (hNet != hNet.init) InternetCloseHandle(hNet); }
 	}
 	alias HNet = RefCounted!HNetImpl;
