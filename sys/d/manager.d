@@ -1058,6 +1058,7 @@ EOF");
 				{
 					fn.write(fn.readText
 						.replace(`#include <bits/mathdef.h>`, `#include <complex.h>`)
+						.replace(`#include <bits/nan.h>`, `#include <math.h>`)
 					);
 					submodule.saveFileState(fn.relativePath(sourceDir));
 				}
