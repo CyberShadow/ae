@@ -17,6 +17,7 @@ module ae.sys.net;
 import std.functional;
 import std.path;
 
+import ae.net.http.common;
 import ae.net.ietf.url;
 import ae.sys.file;
 
@@ -54,6 +55,12 @@ class Network
 
 	/// Get the destination of an HTTP redirect.
 	string resolveRedirect(string url)
+	{
+		notImplemented();
+		assert(false);
+	}
+
+	HttpResponse httpRequest(HttpRequest request)
 	{
 		notImplemented();
 		assert(false);
