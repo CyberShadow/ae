@@ -167,7 +167,7 @@ unittest
 struct KeyValuePair(K, V) { K key; V value; }
 
 /// Get key/value pairs from AA
-KeyValuePair!(K, V)[] pairs(K, V)(V[K] aa)
+deprecated KeyValuePair!(K, V)[] pairs(K, V)(V[K] aa)
 {
 	KeyValuePair!(K, V)[] result;
 	foreach (key, value; aa)
@@ -237,7 +237,7 @@ auto toAA(R)(R r)
 	return r.map!(el => tuple(el.tupleof)).toAA();
 }
 
-unittest
+deprecated unittest
 {
 	assert([[2, 4]].toAA() == [2:4]);
 	assert([2:4].pairs.toAA() == [2:4]);
