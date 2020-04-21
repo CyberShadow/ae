@@ -535,7 +535,7 @@ struct IniFragment(S)
 		);
 	}
 
-	void visit(IniHandler!S handler)
+	void visit(IniHandler!S handler) const
 	{
 		if (value)
 		{
@@ -550,7 +550,7 @@ struct IniFragment(S)
 		}
 	}
 
-	void deserializeInto(U)(ref U v)
+	void deserializeInto(U)(ref U v) const
 	{
 		visit(v.makeIniHandler!S());
 	}
