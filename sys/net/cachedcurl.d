@@ -147,7 +147,7 @@ class CachedCurlNetwork : Network
 			return metadata.statusLine.code / 100 == 2;
 		}
 
-		ref Response checkOK()
+		ref Response checkOK() return
 		{
 			if (!ok)
 				throw new CachedCurlException(metadata);
