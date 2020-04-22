@@ -42,16 +42,16 @@ auto loadImage(string path, ref Image!RGBX target = *new Image!RGBX)
 	{
 		switch (surface.format.BitsPerPixel)
 		{
-			case 1: depalettize!1(cast(ubyte*)surface.pixels, target.pixels.ptr, surface.format.palette, surface.w, surface.h, surface.pitch); break;
-			case 2: depalettize!2(cast(ubyte*)surface.pixels, target.pixels.ptr, surface.format.palette, surface.w, surface.h, surface.pitch); break;
-			case 4: depalettize!4(cast(ubyte*)surface.pixels, target.pixels.ptr, surface.format.palette, surface.w, surface.h, surface.pitch); break;
-			case 8: depalettize!8(cast(ubyte*)surface.pixels, target.pixels.ptr, surface.format.palette, surface.w, surface.h, surface.pitch); break;
+			case 1: depalettize!1(cast(ubyte*)surface.pixels, cast(RGBX*)target.pixels.ptr, surface.format.palette, surface.w, surface.h, surface.pitch); break;
+			case 2: depalettize!2(cast(ubyte*)surface.pixels, cast(RGBX*)target.pixels.ptr, surface.format.palette, surface.w, surface.h, surface.pitch); break;
+			case 4: depalettize!4(cast(ubyte*)surface.pixels, cast(RGBX*)target.pixels.ptr, surface.format.palette, surface.w, surface.h, surface.pitch); break;
+			case 8: depalettize!8(cast(ubyte*)surface.pixels, cast(RGBX*)target.pixels.ptr, surface.format.palette, surface.w, surface.h, surface.pitch); break;
 			default:
 				enforce(false, format("Don't know how to depalettize image with %d bits per pixel", surface.format.BitsPerPixel));
 		}
 	}
 	else
-		rgbTransform(cast(ubyte*)surface.pixels, target.pixels.ptr, surface.format, surface.w, surface.h, surface.pitch);
+		rgbTransform(cast(ubyte*)surface.pixels, cast(RGBX*)target.pixels.ptr, surface.format, surface.w, surface.h, surface.pitch);
 
 	return target;
 }
