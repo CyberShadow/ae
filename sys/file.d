@@ -2059,6 +2059,29 @@ bool readExactly(ref File f, ubyte[] buf)
 	return true;
 }
 
+private
+version (Windows)
+{
+	version (CRuntime_DigitalMars)
+		extern(C) sizediff_t read(int, void*, size_t);
+	else
+	{
+		extern(C) sizediff_t _read(int, void*, size_t);
+		alias read = _read;
+	}
+}
+else
+	import core.sys.posix.unistd : read;
+
+/// Like `File.rawRead`, but returns as soon as any data is available.
+void[] readPartial(File f, void[] buf)
+{
+	assert(buf.length);
+	auto numRead = read(f.fileno, buf.ptr, buf.length);
+	errnoEnforce(numRead >= 0);
+	return buf[0 .. numRead];
+}
+
 /// Like std.file.readText for non-UTF8
 ascii readAscii()(string fileName)
 {
