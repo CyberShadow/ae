@@ -66,8 +66,8 @@ struct ResourceParser
 			DirectoryData data;
 		}
 		Contents contents;
-		ref @property Directory directory() { assert(isDirectory); return contents.directory; }
-		ref @property DirectoryData data() { assert(!isDirectory); return contents.data; }
+		ref @property Directory directory() return { assert(isDirectory); return contents.directory; }
+		ref @property DirectoryData data() return { assert(!isDirectory); return contents.data; }
 	}
 
 	struct DirectoryData
