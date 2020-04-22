@@ -107,7 +107,7 @@ version (linux)
 			enforce(ximage.bits_per_pixel == 32, "Wrong image bits_per_pixel (expected 32)");
 
 			alias COLOR = BGRA;
-			ImageRef!COLOR(ximage.width, ximage.height, ximage.chars_per_line, cast(COLOR*) ximage.data).copy(image);
+			ImageRef!COLOR(ximage.width, ximage.height, ximage.chars_per_line, cast(PlainStorageUnit!COLOR*) ximage.data).copy(image);
 		}
 		else
 			assert(false, "TODO");
