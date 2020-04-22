@@ -26,11 +26,12 @@ class Renderer
 	struct Bitmap
 	{
 		static assert(COLOR.sizeof == uint.sizeof);
+		alias StorageType = PlainStorageUnit!COLOR;
 
-		COLOR* pixels;
-		int w, h, stride;
+		StorageType* pixels;
+		xy_t w, h, stride;
 
-		inout(COLOR)[] scanline(int y) inout
+		inout(StorageType)[] scanline(xy_t y) inout
 		{
 			assert(y>=0 && y<h);
 			return pixels[stride*y..stride*(y+1)];
