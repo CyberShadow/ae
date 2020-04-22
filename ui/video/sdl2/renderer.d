@@ -51,7 +51,7 @@ final class SDL2SoftwareRenderer : Renderer
 			void* pixels;
 			int pitch;
 			sdlEnforce(SDL_LockTexture(t, null, &pixels, &pitch)==0, "SDL_LockTexture failed");
-			_bitmap = Bitmap(cast(COLOR*)pixels, w, h, pitch / cast(int)COLOR.sizeof);
+			_bitmap = Bitmap(cast(Bitmap.StorageType*)pixels, w, h, pitch / cast(int)COLOR.sizeof);
 			locked = true;
 		}
 		return _bitmap;
