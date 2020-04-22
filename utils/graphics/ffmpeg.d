@@ -14,11 +14,13 @@
 module ae.utils.graphics.ffmpeg;
 
 import std.exception;
+import std.stdio;
 import std.typecons;
 
 import ae.utils.graphics.bitmap;
 import ae.utils.graphics.color;
 import ae.utils.graphics.image;
+import ae.sys.file : readExactly;
 
 private struct VideoInputStreamImpl
 {
@@ -200,18 +202,4 @@ private:
 
 	alias BitmapHeader!3 Header;
 	Image!BGR frame;
-}
-
-// ----------------------------------------------------------------------------
-
-private:
-
-import std.stdio;
-
-bool readExactly(ref File f, ubyte[] buf)
-{
-	auto read = f.rawRead(buf);
-	if (read.length==0) return false;
-	enforce(read.length == buf.length, "Unexpected end of stream");
-	return true;
 }

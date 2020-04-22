@@ -2049,6 +2049,16 @@ unittest
 	assert(readFile(File("test.txt")) == s);
 }
 
+/// Read exactly `buf.length` bytes and return true.
+/// On EOF, return false.
+bool readExactly(ref File f, ubyte[] buf)
+{
+	auto read = f.rawRead(buf);
+	if (read.length==0) return false;
+	enforce(read.length == buf.length, "Unexpected end of file");
+	return true;
+}
+
 /// Like std.file.readText for non-UTF8
 ascii readAscii()(string fileName)
 {
