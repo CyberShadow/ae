@@ -66,7 +66,7 @@ struct OAuthSession
 		{
 			string[] values;
 			foreach (set; parameters)
-				foreach (value; set.getAll(key).sort())
+				foreach (value; set.valuesOf(key).sort())
 					values ~= value;
 
 			foreach (value; values.sort())
