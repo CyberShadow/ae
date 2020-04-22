@@ -238,7 +238,7 @@ final class SDL2Renderer : Renderer
 	private void rebuildTexture(SDLTextureRenderData data, TextureSource source)
 	{
 		auto pixelInfo = source.getPixels();
-		data.t = sdlEnforce(SDL_CreateTexture(renderer, PIXEL_FORMAT, SDL_TEXTUREACCESS_STREAMING, pixelInfo.w, pixelInfo.h), "SDL_CreateTexture");
+		data.t = sdlEnforce(SDL_CreateTexture(renderer, PIXEL_FORMAT, SDL_TEXTUREACCESS_STREAMING, cast(int)pixelInfo.w, cast(int)pixelInfo.h), "SDL_CreateTexture");
 		sdlEnforce(SDL_UpdateTexture(data.t, null, pixelInfo.pixels, cast(uint)pixelInfo.pitch)==0, "SDL_UpdateTexture");
 		data.textureVersion = source.textureVersion;
 		data.invalid = false;
