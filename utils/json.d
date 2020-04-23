@@ -18,6 +18,7 @@ import std.string;
 import std.traits;
 import std.typecons;
 
+import ae.utils.appender;
 import ae.utils.exception;
 import ae.utils.meta;
 import ae.utils.textout;
@@ -31,8 +32,8 @@ struct JsonWriter(Output)
 
 	private void putChars(S...)(S strings)
 	{
-		static if (is(typeof(output.put(strings))))
-			output.put(strings);
+		static if (is(typeof(output.putEx(strings))))
+			output.putEx(strings);
 		else
 			foreach (str; strings)
 				static if (is(typeof(output.put(str))))
@@ -53,7 +54,7 @@ struct JsonWriter(Output)
 		// TODO: escape Unicode characters?
 		// TODO: Handle U+2028 and U+2029 ( http://timelessrepo.com/json-isnt-a-javascript-subset )
 
-		output.put('"');
+		output.putEx('"');
 		auto start = s.ptr, p = start, end = start+s.length;
 
 		while (p < end)
@@ -98,33 +99,33 @@ struct JsonWriter(Output)
 
 	void beginArray()
 	{
-		output.put('[');
+		output.putEx('[');
 	}
 
 	void endArray()
 	{
-		output.put(']');
+		output.putEx(']');
 	}
 
 	void beginObject()
 	{
-		output.put('{');
+		output.putEx('{');
 	}
 
 	void endObject()
 	{
-		output.put('}');
+		output.putEx('}');
 	}
 
 	void putKey(in char[] key)
 	{
 		putString(key);
-		output.put(':');
+		output.putEx(':');
 	}
 
 	void putComma()
 	{
-		output.put(',');
+		output.putEx(',');
 	}
 }
 
@@ -141,7 +142,7 @@ struct PrettyJsonWriter(Output, alias indent = '\t', alias newLine = '\n', alias
 		if (indentPending)
 		{
 			foreach (n; 0..indentLevel)
-				output.put(indent);
+				output.putEx(indent);
 			indentPending = false;
 		}
 	}
@@ -150,7 +151,7 @@ struct PrettyJsonWriter(Output, alias indent = '\t', alias newLine = '\n', alias
 	{
 		if (!indentPending)
 		{
-			output.put(newLine);
+			output.putEx(newLine);
 			indentPending = true;
 		}
 	}
@@ -197,7 +198,7 @@ struct PrettyJsonWriter(Output, alias indent = '\t', alias newLine = '\n', alias
 	{
 		putIndent();
 		putString(key);
-		output.put(pad, ':', pad);
+		output.putEx(pad, ':', pad);
 	}
 
 	void putComma()
