@@ -25,6 +25,9 @@ import std.datetime;
 
 alias StdTime = typeof(SysTime.init.stdTime); // long
 
+/// Convert from StdTime to Duration
+alias stdDur = hnsecs;
+
 /// Like SysTime.stdTime.
 @property StdTime stdTime(Duration d)
 {
