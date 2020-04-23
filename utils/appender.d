@@ -122,7 +122,7 @@ public:
 	/// Put elements.
 	/// Accepts any number of items (and will allocate at most once per call).
 	/// Items can be of the element type (I), or arrays.
-	void put(U...)(U items)
+	void putEx(U...)(U items)
 		if (CanPutAll!U)
 	{
 		// TODO: check for static if length is 1
@@ -167,6 +167,8 @@ public:
 				}
 		}
 	}
+
+	alias put = putEx;
 
 	/// Unsafe. Use together with preallocate().
 	void uncheckedPut(U...)(U items) @system
@@ -300,5 +302,27 @@ unittest
 		assert(a.get == "");
 		a.allocate(3)[] = 'x';
 		assert(a.get == "xxx");
+	}
+}
+
+/// UFCS shim for classic output ranges, which only take a single-argument put.
+void putEx(R, U...)(auto ref R r, U items)
+{
+	foreach (item; items)
+	{
+		static if (is(typeof(r.put(item))))
+			r.put(item);
+		else
+		static if (is(typeof(r.put(item[]))))
+			r.put(item[]);
+		else
+		static if (is(typeof({ foreach (c; item) r.put(c); })))
+			foreach (c; item)
+				r.put(c);
+		else
+		static if (is(typeof(r.put((&item)[0..1]))))
+			r.put((&item)[0..1]);
+		else
+			static assert(false, "Can't figure out how to put " ~ typeof(item).stringof ~ " into a " ~ R.stringof);
 	}
 }
