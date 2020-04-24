@@ -992,6 +992,84 @@ void ensurePathExists(string fn)
 	fn.dirName.ensureDirExists();
 }
 
+static import core.stdc.errno;
+version (Windows)
+{
+	static import core.sys.windows.winerror;
+	static import std.windows.syserror;
+	static import ae.sys.windows.exception;
+}
+
+bool collectOSError(alias checkCError, alias checkWinError)(scope void delegate() operation)
+{
+	mixin(() {
+		string code = q{
+			try
+			{
+				operation();
+				return true;
+			}
+			catch (FileException e)
+			{
+				version (Windows)
+					bool collect = checkWinError(e.errno);
+				else
+					bool collect = checkCError(e.errno);
+				if (collect)
+					return false;
+				else
+					throw e;
+			}
+			catch (ErrnoException e)
+			{
+				if (checkCError(e.errno))
+					return false;
+				else
+					throw e;
+			}
+		};
+		version(Windows) code ~= q{
+			catch (std.windows.syserror.WindowsException e)
+			{
+				if (checkWinError(e.code))
+					return false;
+				else
+					throw e;
+			}
+			catch (ae.sys.windows.exception.WindowsException e)
+			{
+				if (checkWinError(e.code))
+					return false;
+				else
+					throw e;
+			}
+		};
+		return code;
+	}());
+}
+
+alias collectFileExistsError = collectOSError!(
+	errno => errno == core.stdc.errno.EEXIST,
+	(code) { version(Windows) return
+			 code == core.sys.windows.winerror.ERROR_FILE_EXISTS ||
+			 code == core.sys.windows.winerror.ERROR_ALREADY_EXISTS; },
+);
+
+unittest
+{
+	auto fn = deleteme;
+	foreach (dg; [
+		{ mkdir(fn); },
+		{ openFile(fn, "wxb"); },
+		{ touch(fn ~ "2"); hardLink(fn ~ "2", fn); },
+	])
+	{
+		if (fn.exists) fn.removeRecurse();
+		assert( dg.collectFileExistsError);
+		assert(!dg.collectFileExistsError);
+	}
+}
+
 import ae.utils.text;
 
 /// Forcibly remove a file or directory.
