@@ -1402,7 +1402,7 @@ version (Posix)
 	void hardLink()(string src, string dst)
 	{
 		import core.sys.posix.unistd;
-		enforce(link(toUTFz!(const char*)(src), toUTFz!(const char*)(dst)) == 0, "link() failed: " ~ dst);
+		errnoEnforce(link(toUTFz!(const char*)(src), toUTFz!(const char*)(dst)) == 0, "link() failed: " ~ dst);
 	}
 
 	alias deleteHardLink = remove;
