@@ -1048,6 +1048,25 @@ bool collectOSError(alias checkCError, alias checkWinError)(scope void delegate(
 	}());
 }
 
+alias collectNotFoundError = collectOSError!(
+	errno => errno == core.stdc.errno.ENOENT,
+	(code) { version(Windows) return
+			 code == core.sys.windows.winerror.ERROR_FILE_NOT_FOUND ||
+			 code == core.sys.windows.winerror.ERROR_PATH_NOT_FOUND; },
+);
+
+unittest
+{
+	auto fn = deleteme;
+	if (fn.exists) fn.removeRecurse();
+	foreach (dg; [
+		{ openFile(fn, "rb"); },
+		{ mkdir(fn.buildPath("b")); },
+		{ hardLink(fn, fn ~ "2"); },
+	])
+		assert(!dg.collectNotFoundError);
+}
+
 alias collectFileExistsError = collectOSError!(
 	errno => errno == core.stdc.errno.EEXIST,
 	(code) { version(Windows) return
