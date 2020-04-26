@@ -30,6 +30,8 @@ static:
 	const RSS = `D, d M Y H:i:s O`;
 	const W3C = `Y-m-d\TH:i:sP`;
 
+	const CTIME = `D M d H:i:s Y`; /// ctime/localtime format
+
 	const HTML5DATE = `Y-m-d`;
 
 	/// Format produced by std.date.toString, e.g. "Tue Jun 07 13:23:19 GMT+0100 2011"
