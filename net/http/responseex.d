@@ -206,7 +206,7 @@ public:
 
 	void writePageContents(string title, string contentHTML)
 	{
-		string[string] dictionary;
+		string[string] dictionary = pageTokens.dup;
 		dictionary["title"] = encodeEntities(title);
 		dictionary["content"] = contentHTML;
 		data = [Data(parseTemplate(pageTemplate, dictionary))];
@@ -248,7 +248,7 @@ public:
 	{
 		setStatus(code);
 
-		string[string] dictionary;
+		string[string] dictionary = errorTokens.dup;
 		dictionary["code"] = to!string(cast(int)code);
 		dictionary["message"] = encodeEntities(getStatusMessage(code));
 		dictionary["explanation"] = encodeEntities(getStatusExplanation(code));
@@ -364,6 +364,8 @@ public:
   </body>
 </html>`;
 
+	string[string] pageTokens;
+
 	static contentTemplate =
 `    <p><span style="font-weight: bold; font-size: 40px;"><?title?></span></p>
 <?content?>
@@ -374,4 +376,5 @@ public:
     <p><?explanation?></p>
     <p><?details?></p>
 `;
+	string[string] errorTokens;
 }
