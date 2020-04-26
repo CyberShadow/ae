@@ -419,6 +419,99 @@ unittest
 
 // ************************************************************************
 
+/// Like std.string.wrap, but preserves whitespace at line start and
+/// between (non-wrapped) words.
+string verbatimWrap(
+	string s,
+	size_t columns = 80,
+	string firstIndent = null,
+	string indent = null,
+	size_t tabWidth = 8,
+)
+{
+	if (!s.length)
+		return s;
+
+	import std.uni : isWhite;
+	import std.range;
+
+	// Result buffer. Append-only (contains only text which has been wrapped).
+	string result;
+	// Index in `s` corresponding to the end of `result`
+	size_t start;
+	// Index in `s` corresponding to after the last newline in `result`
+	size_t lineStart;
+	// Current column
+	size_t col;
+	// Was the previous character we looked at whitespace?
+	bool wasWhite;
+	// We need to add an indent at the next (non-newline) character.
+	bool needIndent;
+
+	result = firstIndent;
+	col = firstIndent.walkLength;
+	auto indentWidth = indent.walkLength;
+
+	void flush(size_t pos)
+	{
+		if (col > columns && start > lineStart)
+		{
+			result ~= "\n" ~ indent;
+			col = indentWidth;
+
+			// Consume whitespace at line break
+			size_t numWhite;
+			foreach (i, c; s[start .. $])
+				if (isWhite(c))
+					numWhite = i;
+				else
+					break;
+			start += numWhite;
+			lineStart = start;
+		}
+		result ~= s[start .. pos];
+		start = pos;
+	}
+
+	foreach (pos, dchar c; s)
+	{
+		auto atWhite = isWhite(c);
+		if (atWhite && !wasWhite)
+			flush(pos);
+		if (c == '\n')
+		{
+			flush(pos);
+			result ~= "\n";
+			start++; // past newline
+			lineStart = start;
+			needIndent = true;
+			col = 0;
+		}
+		else
+		{
+			if (needIndent)
+			{
+				assert(col == 0);
+				result ~= indent;
+				col += indentWidth;
+				needIndent = false;
+			}
+			if (c == '\t')
+				col += tabWidth;
+			else
+				col++;
+		}
+		wasWhite = atWhite;
+	}
+	flush(s.length);
+	if (col)
+		result ~= "\n"; // trailing newline
+
+	return result;
+}
+
+// ************************************************************************
+
 /// Case-insensitive ASCII string.
 alias CIAsciiString = NormalizedArray!(immutable(char), s => s.byCodeUnit.map!(std.ascii.toLower));
 
