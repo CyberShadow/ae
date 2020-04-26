@@ -466,6 +466,18 @@ public:
 		return this;
 	}
 
+	/// Convert from a range of key/value pairs
+	ref typeof(this) opAssign(R)(R input)
+	if (haveValues
+		&& is(typeof({ foreach (ref pair; input) add(pair.key, pair.value); }))
+		&& !is(typeof({ foreach (ref k, ref v; input) add(k, v); })))
+	{
+		clear();
+		foreach (ref pair; input)
+			add(pair.key, pair.value);
+		return this;
+	}
+
 	/// Convert from a range of values
 	ref typeof(this) opAssign(R)(R input)
 	if (!haveValues
@@ -1198,10 +1210,18 @@ unittest
 
 /// Like assocArray
 auto orderedMap(R)(R input)
-if (input.front.length == 2)
+if (is(typeof(input.front.length) : size_t) && input.front.length == 2)
 {
 	alias K = typeof(input.front[0]);
 	alias V = typeof(input.front[1]);
+	return OrderedMap!(K, V)(input);
+}
+
+auto orderedMap(R)(R input) /// ditto
+if (is(typeof(input.front.key)) && is(typeof(input.front.value)) && !is(typeof(input.front.length)))
+{
+	alias K = typeof(input.front.key);
+	alias V = typeof(input.front.value);
 	return OrderedMap!(K, V)(input);
 }
 
@@ -1209,6 +1229,13 @@ unittest
 {
 	auto map = 3.iota.map!(n => tuple(n, n + 1)).orderedMap;
 	assert(map.length == 3 && map[1] == 2);
+}
+
+unittest
+{
+	OrderedMap!(string, int) m;
+	m = m.byKeyValue.orderedMap;
+	m = m.byPair.orderedMap;
 }
 
 // ***************************************************************************
