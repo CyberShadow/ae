@@ -460,13 +460,13 @@ string optionWrap(string text, string firstIndent, size_t indentWidth)
 	auto padding = " ".replicate(2 + indentWidth + 2);
 	text = text.findSplit("\n\n")[0];
 	auto paragraphs = text.split1("\n");
-	auto result = wrap(
+	auto result = verbatimWrap(
 		paragraphs[0],
 		width,
 		"  %-*s  ".format(indentWidth, firstIndent),
 		padding
 	);
-	result ~= paragraphs[1..$].map!(p => wrap(p, width, padding, padding)).join();
+	result ~= paragraphs[1..$].map!(p => verbatimWrap(p, width, padding, padding)).join();
 	return result;
 }
 
