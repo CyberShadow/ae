@@ -365,6 +365,8 @@ private string getProgramName(string program)
 	return programName;
 }
 
+private string escapeFmt(string s) { return s.replace("%", "%%"); }
+
 string getUsage(alias FUN)(string program)
 {
 	auto programName = getProgramName(program);
@@ -412,7 +414,7 @@ string getUsageFormatString(alias FUN)()
 					result ~= "]";
 			}
 			else
-				result ~= " [" ~ getSwitchText!i() ~ "]";
+				result ~= " [" ~ getSwitchText!i().escapeFmt() ~ "]";
 			static if (isOptionArray!Param)
 				result ~= "...";
 		}
@@ -446,7 +448,7 @@ string getUsageFormatString(alias FUN)()
 		result ~= "\nOptions:\n";
 		foreach (i, Param; Params)
 			static if (optionHasDescription!Param)
-				result ~= optionWrap(optionDescription!Param, selectors[i], longestSelector);
+				result ~= optionWrap(optionDescription!Param.escapeFmt(), selectors[i], longestSelector);
 	}
 
 	return result;
@@ -553,6 +555,20 @@ Options:
 
 Options:
   FILES  Files to transmogrify.
+", usage);
+
+	// Ensure % characters work as expected.
+	void f7(
+		Parameter!(int, "How much power % to use.") powerPct,
+	)
+	{}
+
+	usage = getUsage!f7("program");
+	assert(usage ==
+"Usage: program POWER-PCT
+
+Options:
+  POWER-PCT  How much power % to use.
 ", usage);
 }
 
