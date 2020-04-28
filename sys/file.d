@@ -2150,6 +2150,8 @@ unittest
 /// On EOF, return false.
 bool readExactly(ref File f, ubyte[] buf)
 {
+	if (!buf.length)
+		return true;
 	auto read = f.rawRead(buf);
 	if (read.length==0) return false;
 	enforce(read.length == buf.length, "Unexpected end of file");
