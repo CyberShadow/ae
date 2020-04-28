@@ -401,6 +401,8 @@ string getUsageFormatString(alias FUN)()
 		}
 	}
 
+	string optionalEnd;
+	void flushOptional() { result ~= optionalEnd; optionalEnd = null; }
 	foreach (i, Param; Params)
 		static if (!isHiddenOption!Param && inSynopsis!Param)
 		{
@@ -408,16 +410,21 @@ string getUsageFormatString(alias FUN)()
 			{
 				result ~= " ";
 				static if (!is(defaults[i] == void))
+				{
 					result ~= "[";
+					optionalEnd ~= "]";
+				}
 				result ~= names[i].identifierToCommandLineParam();
-				static if (!is(defaults[i] == void))
-					result ~= "]";
 			}
 			else
+			{
+				flushOptional();
 				result ~= " [" ~ getSwitchText!i().escapeFmt() ~ "]";
+			}
 			static if (isOptionArray!Param)
 				result ~= "...";
 		}
+	flushOptional();
 
 	result ~= "\n";
 
@@ -484,7 +491,7 @@ unittest
 
 	auto usage = getUsage!f1("program");
 	assert(usage ==
-"Usage: program [OPTION]... FILENAME [OUTPUT] [EXTRA-FILES]...
+"Usage: program [OPTION]... FILENAME [OUTPUT [EXTRA-FILES...]]
 
 Options:
   -v, --verbose       Enable verbose logging
@@ -513,7 +520,7 @@ Options:
 
 	usage = getUsage!f3("program");
 	assert(usage ==
-"Usage: program [ARGS]...
+"Usage: program [ARGS...]
 ", usage);
 
 	void f4(
@@ -523,7 +530,7 @@ Options:
 
 	usage = getUsage!f4("program");
 	assert(usage ==
-"Usage: program [ARGS]...
+"Usage: program [ARGS...]
 
 Options:
   ARGS  The program arguments.
@@ -551,7 +558,7 @@ Options:
 
 	usage = getUsage!f6("program");
 	assert(usage ==
-"Usage: program [--verbose] [FILES]...
+"Usage: program [--verbose] [FILES...]
 
 Options:
   FILES  Files to transmogrify.
