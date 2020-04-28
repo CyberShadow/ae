@@ -30,7 +30,6 @@ abstract class Term
 		red           = 1 << 0,
 		green         = 1 << 1,
 		blue          = 1 << 2,
-		bright        = 1 << 3,
 
 		yellow        = red | green       ,
 		magenta       = red |         blue,
@@ -45,6 +44,10 @@ abstract class Term
 		brightMagenta = bright | magenta,
 		brightCyan    = bright | cyan,
 		white         = bright | gray,
+
+		// Place this definition after the colors so that e.g.
+		// std.conv prefers the color name over this flag name.
+		bright        = 1 << 3,
 	}
 
 	private enum mixColorAliases(T) = (){
