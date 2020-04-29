@@ -19,6 +19,7 @@ import std.ascii;
 import std.exception;
 
 import ae.utils.text;
+import ae.utils.aa;
 
 /// AA-like superset structure with the purpose of maintaining
 /// compatibility with the old HTTP string[string] headers field
@@ -124,6 +125,11 @@ struct Headers
 		foreach (header; headers.get(CIAsciiString(key), null))
 			result ~= header.value;
 		return result;
+	}
+
+	ref string require(string key, lazy string value)
+	{
+		return headers.require(CIAsciiString(key), [Header(key, value)])[0].value;
 	}
 
 	/// Warning: discards repeating headers
