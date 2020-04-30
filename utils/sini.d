@@ -106,7 +106,7 @@ void parseIni(R, H)(R r, H rootHandler)
 				break;
 			case line.Type.section:
 				currentHandler = rootHandler;
-				foreach (segment; line.name.split("."))
+				foreach (segment; line.name.splitter('.'))
 					currentHandler = currentHandler.nodeHandler
 						.enforce("This group may not have any nodes.")
 						(segment);
