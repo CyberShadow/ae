@@ -1446,6 +1446,18 @@ public:
 		updateFlags();
 	}
 
+	this()
+	{
+	}
+
+	/// Creates a TcpServer with the given sockets.
+	/// The sockets must have already had `bind` and `listen` called on them.
+	this(Socket[] sockets...)
+	{
+		foreach (socket; sockets)
+			listeners ~= new Listener(socket);
+	}
+
 	final @property Address[] localAddresses()
 	{
 		Address[] result;
