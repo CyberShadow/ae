@@ -293,6 +293,7 @@ private
 			(
 				!dummyHandlerCaps[0] ? null : (S value) => update((ref V v) => v.makeIniHandler!S.leafHandler(value)),
 				!dummyHandlerCaps[1] ? null : (S name2) => update((ref V v) => v.makeIniHandler!S.nodeHandler(name2)),
+				() => update((ref V v) {}),
 			);
 		}
 		else
@@ -510,6 +511,19 @@ unittest
 	);
 
 	assert(r == ["a.b.c" : "d.e.f"]);
+}
+
+unittest
+{
+	struct S {}
+	auto r = parseIni!(S[string])
+	(
+		q"<
+			[a]
+		>".splitLines()
+	);
+
+	assert(r == ["a" : S()]);
 }
 
 // ***************************************************************************
