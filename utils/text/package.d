@@ -43,6 +43,22 @@ string formatAs(T)(auto ref T obj, string fmt)
 	return format(fmt, obj);
 }
 
+/// Lazily formatted object
+auto formatted(string fmt, T...)(auto ref T values)
+{
+	static struct Formatted
+	{
+		T values;
+		void toString(void delegate(const(char)[]) sink) const
+		{
+			sink.formattedWrite!fmt(values);
+		}
+	}
+	return Formatted(values);
+}
+
+// ************************************************************************
+
 /// Consume a LF or CRLF terminated line from s.
 /// Sets s to null and returns the remainder
 /// if there is no line terminator in s.
@@ -1119,7 +1135,6 @@ string selectBestFrom(in string[] items, string target, float threshold = 0.7)
 }
 
 // ************************************************************************
-
 
 string randomString()(int length=20, string chars="abcdefghijklmnopqrstuvwxyz")
 {
