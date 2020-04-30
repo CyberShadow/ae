@@ -15,12 +15,13 @@
 module ae.utils.bitmanip;
 
 import std.bitmanip;
+import std.traits;
 
 struct BigEndian(T)
 {
 	private ubyte[T.sizeof] _endian_bytes;
-	@property T _endian_value() { return bigEndianToNative!T(_endian_bytes); }
-	@property void _endian_value(T value) { _endian_bytes = nativeToBigEndian(value); }
+	@property T _endian_value() { return cast(T)bigEndianToNative!(OriginalType!T)(_endian_bytes); }
+	@property void _endian_value(T value) { _endian_bytes = nativeToBigEndian(OriginalType!T(value)); }
 	alias _endian_value this;
 	alias opAssign = _endian_value;
 }
@@ -28,8 +29,8 @@ struct BigEndian(T)
 struct LittleEndian(T)
 {
 	private ubyte[T.sizeof] _endian_bytes;
-	@property T _endian_value() { return littleEndianToNative!T(_endian_bytes); }
-	@property void _endian_value(T value) { _endian_bytes = nativeToLittleEndian(value); }
+	@property T _endian_value() { return cast(T)littleEndianToNative!(OriginalType!T)(_endian_bytes); }
+	@property void _endian_value(T value) { _endian_bytes = nativeToLittleEndian(OriginalType!T(value)); }
 	alias _endian_value this;
 	alias opAssign = _endian_value;
 }
@@ -55,3 +56,8 @@ unittest
 	assert(u.le == 0x7856);
 }
 
+unittest
+{
+	enum E : uint { e }
+	BigEndian!E be;
+}
