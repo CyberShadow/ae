@@ -37,6 +37,9 @@ struct IniHandler(S)
 
 	/// User callback for obtaining a child node from this node.
 	IniHandler delegate(S name) nodeHandler;
+
+	/// User callback for indicating that this node is a section.
+	void delegate() sectionHandler;
 }
 
 struct IniLine(S)
@@ -110,6 +113,8 @@ void parseIni(R, H)(R r, H rootHandler)
 					currentHandler = currentHandler.nodeHandler
 						.enforce("This group may not have any nodes.")
 						(segment);
+				if (currentHandler.sectionHandler)
+					currentHandler.sectionHandler();
 				break;
 			case line.Type.value:
 			{
