@@ -762,13 +762,13 @@ public:
 	static if (haveValues)
 	{
 		/// Iterate over keys and values.
-		int opApply(int delegate(const ref K k, ref V v) dg)
+		int opApply(int delegate(K k, ref V v) dg)
 		{
 			return opApplyImpl(dg);
 		}
 
 		/// ditto
-		int opApply(int delegate(const ref K k, const ref V v) dg) const
+		int opApply(int delegate(K k, const ref V v) dg) const
 		{
 			return opApplyImpl(dg);
 		}
@@ -1206,6 +1206,13 @@ unittest
 	OrderedMap!(string, int) m;
 	static assert(is(typeof(m.keys)));
 	static assert(is(typeof(m.values)));
+}
+
+unittest
+{
+	OrderedMap!(string, int) m;
+	foreach (k, v; m)
+		k = k ~ k;
 }
 
 /// Like assocArray
