@@ -741,8 +741,12 @@ private struct JsonParser(C)
 		foreach (i, ref subvalue; value)
 		{
 			if (i)
+			{
 				expect(',');
+				skipWhitespace();
+			}
 			read(subvalue);
+			skipWhitespace();
 		}
 		expect(']');
 	}
@@ -962,6 +966,11 @@ unittest
 	jsonParse!T(cast(const(char)[]) s);
 	jsonParse!T(s.to!wstring);
 	jsonParse!T(s.to!dstring);
+}
+
+unittest
+{
+	jsonParse!(int[2])(`[ 1 , 2 ]`);
 }
 
 void jsonParse(T, C)(C[] s, ref T result)
