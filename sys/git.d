@@ -70,7 +70,7 @@ struct Repository
 	// Have just some primitives here.
 	// Higher-level functionality can be added using UFCS.
 	void   run  (string[] args...) const { return .run  (commandPrefix ~ args, environment, path); }
-	string query(string[] args...) const { return .query(commandPrefix ~ args, environment, path).strip(); }
+	string query(string[] args...) const { return .query(commandPrefix ~ args, environment, path).chomp(); }
 	bool   check(string[] args...) const { return spawnProcess(commandPrefix ~ args, environment, Config.none, path).wait() == 0; }
 	auto   pipe (string[] args, Redirect redirect)
 	                               const { return pipeProcess(commandPrefix ~ args, redirect, environment, Config.none, path); }
