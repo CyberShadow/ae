@@ -20,12 +20,14 @@ import std.path;
 /// E.g.: `/foo/bar`.rebasePath(`/foo`, `/quux`) == `/quux/bar`
 string rebasePath(string path, string oldBase, string newBase)
 {
-	return buildPath(newBase, path.absolutePath.relativePath(oldBase.absolutePath));
+	return buildPath(newBase, path.relPath(oldBase));
 }
 
-/// Like std.path.relativePath,
-/// but does not allocate if path starts with base.
-string fastRelativePath(string path, string base)
+/// Variant of std.path.relativePath with the following differences:
+/// - Works with relative paths.
+///   If either path is relative, it is first resolved to an absolute path.
+/// - If `path` starts with `base`, avoids allocating.
+string relPath(string path, string base)
 {
 	if (base.length && path.length > base.length &&
 		path[0..base.length] == base)
@@ -35,23 +37,25 @@ string fastRelativePath(string path, string base)
 		if (path[base.length].isDirSeparator)
 			return path[base.length+1..$];
 	}
-	return relativePath(path, base);
+	return relativePath(path.absolutePath, base.absolutePath);
 }
+
+deprecated alias fastRelativePath = relPath;
 
 unittest
 {
 	version(Windows)
 	{
-		assert(fastRelativePath(`C:\a\b\c`, `C:\a`) == `b\c`);
-		assert(fastRelativePath(`C:\a\b\c`, `C:\a\`) == `b\c`);
-		assert(fastRelativePath(`C:\a\b\c`, `C:\a/`) == `b\c`);
-		assert(fastRelativePath(`C:\a\b\c`, `C:\a\d`) == `..\b\c`);
+		assert(relPath(`C:\a\b\c`, `C:\a`) == `b\c`);
+		assert(relPath(`C:\a\b\c`, `C:\a\`) == `b\c`);
+		assert(relPath(`C:\a\b\c`, `C:\a/`) == `b\c`);
+		assert(relPath(`C:\a\b\c`, `C:\a\d`) == `..\b\c`);
 	}
 	else
 	{
-		assert(fastRelativePath("/a/b/c", "/a") == "b/c");
-		assert(fastRelativePath("/a/b/c", "/a/") == "b/c");
-		assert(fastRelativePath("/a/b/c", "/a/d") == "../b/c");
+		assert(relPath("/a/b/c", "/a") == "b/c");
+		assert(relPath("/a/b/c", "/a/") == "b/c");
+		assert(relPath("/a/b/c", "/a/d") == "../b/c");
 	}
 }
 
