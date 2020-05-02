@@ -14,6 +14,7 @@
 module ae.utils.sound.riff.writer;
 
 import std.algorithm;
+import std.array : staticArray;
 import std.conv;
 import std.range;
 
@@ -53,15 +54,13 @@ auto riffChunk(R)(char[4] name, R data)
 
 auto makeRiff(R)(R r, uint sampleRate = 44100)
 {
-	static if (!is(typeof(r.front) == struct))
-	{
-		struct Mono { typeof(r.front) sample; }
-		return makeRiff(r.map!(s => Mono(s)), sampleRate);
-	}
+	alias Sample = typeof(r.front);
+	static if (!is(Sample C : C[channels_], size_t channels_))
+		return makeRiff(r.map!(s => [s].staticArray), sampleRate);
 	else
 	{
-		enum numChannels = r.front.tupleof.length;
-		auto bytesPerSample = r.front.tupleof[0].sizeof;
+		enum numChannels = r.front.length;
+		auto bytesPerSample = r.front[0].sizeof;
 		auto bitsPerSample = bytesPerSample * 8;
 
 		return riffChunk("RIFF",
