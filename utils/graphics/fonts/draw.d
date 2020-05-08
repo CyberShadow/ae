@@ -17,7 +17,7 @@ import ae.utils.graphics.draw;
 import ae.utils.graphics.view;
 
 /// Draw text using a bitmap font.
-void drawText(V, FONT, S, COLOR)(auto ref V v, int x, int y, S s, ref FONT font, COLOR color)
+void drawText(V, FONT, S, COLOR)(auto ref V v, xy_t x, xy_t y, S s, ref FONT font, COLOR color)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
 	auto x0 = x;
