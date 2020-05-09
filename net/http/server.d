@@ -38,39 +38,36 @@ public import ae.net.http.common;
 
 debug(HTTP) import std.stdio : stderr;
 
-final class HttpServerConnection
+class BaseHttpServerConnection
 {
 public:
-	TcpConnection tcp;
 	TimeoutAdapter timer;
 	IConnection conn;
 
-	HttpServer server;
 	HttpRequest currentRequest;
-	Address localAddress, remoteAddress;
 	bool persistent;
 
-	mixin DListLink;
-
 	bool connected = true;
+	Logger log;
 
-private:
+	void delegate(HttpRequest request) handleRequest;
+
+protected:
 	Data[] inBuffer;
 	sizediff_t expect;
 	size_t responseSize;
 	bool requestProcessing; // user code is asynchronously processing current request
+	Duration timeout;
 	bool timeoutActive;
-	string protocol;
+	string banner;
 
-	this(HttpServer server, TcpConnection tcp, IConnection c, string protocol = "http")
+	this(IConnection c, Duration timeout)
 	{
-		debug (HTTP) debugLog("New connection from %s", tcp.remoteAddress);
-		this.server = server;
-		this.tcp = tcp;
-		this.protocol = protocol;
+		debug (HTTP) debugLog("New connection from %s", remoteAddressStr);
 
+		this.timeout = timeout;
 		timer = new TimeoutAdapter(c);
-		timer.setIdleTimeout(server.timeout);
+		timer.setIdleTimeout(timeout);
 		c = timer;
 
 		this.conn = c;
@@ -78,9 +75,6 @@ private:
 		conn.handleDisconnect = &onDisconnect;
 
 		timeoutActive = true;
-		localAddress = tcp.localAddress;
-		remoteAddress = tcp.remoteAddress;
-		server.connections.pushFront(this);
 	}
 
 	debug (HTTP)
@@ -90,7 +84,7 @@ private:
 		stderr.writefln(args);
 	}
 
-	void onNewRequest(Data data)
+	final void onNewRequest(Data data)
 	{
 		try
 		{
@@ -164,10 +158,9 @@ private:
 	{
 		debug (HTTP) debugLog("Disconnect: %s", reason);
 		connected = false;
-		server.connections.remove(this);
 	}
 
-	void onContinuation(Data data)
+	final void onContinuation(Data data)
 	{
 		debug (HTTP) debugLog("Receiving continuation of request: \n%s---", cast(string)data.contents);
 		inBuffer ~= data;
@@ -179,37 +172,37 @@ private:
 		}
 	}
 
-	void processRequest(Data[] data)
+	final void processRequest(Data[] data)
 	{
 		debug (HTTP) debugLog("processRequest (%d bytes)", data.bytes.length);
 		currentRequest.data = data;
 		timeoutActive = false;
 		timer.cancelIdleTimeout();
-		if (server.handleRequest)
+		if (handleRequest)
 		{
 			// Log unhandled exceptions, but don't mess up the stack trace
 			//scope(failure) logRequest(currentRequest, null);
 
 			// sendResponse may be called immediately, or later
 			requestProcessing = true;
-			server.handleRequest(currentRequest, this);
+			handleRequest(currentRequest);
 		}
 	}
 
-	void logRequest(HttpRequest request, HttpResponse response)
+	final void logRequest(HttpRequest request, HttpResponse response)
 	{
 		debug // avoid linewrap in terminal during development
 			enum DEBUG = true;
 		else
 			enum DEBUG = false;
 
-		if (server.log) server.log(([
+		if (log) log(([
 			"", // align IP to tab
-			request ? request.remoteHosts(remoteAddress.toAddrString())[0] : remoteAddress.toAddrString(),
+			request ? request.remoteHosts(remoteAddressStr)[0] : remoteAddressStr,
 			response ? text(cast(ushort)response.status) : "-",
 			request ? format("%9.2f ms", request.age.total!"usecs" / 1000f) : "-",
 			request ? request.method : "-",
-			request ? formatAddress(protocol, localAddress, request.host, request.port) ~ request.resource : "-",
+			request ? formatLocalAddress(request) ~ request.resource : "-",
 			response ? response.headers.get("Content-Type", "-") : "-",
 		] ~ (DEBUG ? [] : [
 			request ? request.headers.get("Referer", "-") : "-",
@@ -217,7 +210,10 @@ private:
 		])).join("\t"));
 	}
 
-	@property bool idle()
+	abstract string formatLocalAddress(HttpRequest r);
+	abstract @property string remoteAddressStr();
+
+	final @property bool idle()
 	{
 		if (requestProcessing)
 			return false;
@@ -228,7 +224,7 @@ private:
 	}
 
 public:
-	void sendHeaders(Headers headers, HttpStatusCode status, string statusMessage = null)
+	final void sendHeaders(Headers headers, HttpStatusCode status, string statusMessage = null)
 	{
 		assert(status, "Unset status code");
 
@@ -239,8 +235,8 @@ public:
 		auto protocolVersion = currentRequest ? currentRequest.protocolVersion : "1.0";
 		respMessage.put("HTTP/", protocolVersion, " ");
 
-		if (server.banner && "X-Powered-By" !in headers)
-			headers["X-Powered-By"] = server.banner;
+		if (banner && "X-Powered-By" !in headers)
+			headers["X-Powered-By"] = banner;
 
 		if ("Date" !in headers)
 			headers["Date"] = httpTime(Clock.currTime());
@@ -264,12 +260,12 @@ public:
 		conn.send(Data(respMessage.get()));
 	}
 
-	void sendHeaders(HttpResponse response)
+	final void sendHeaders(HttpResponse response)
 	{
 		sendHeaders(response.headers, response.status, response.statusMessage);
 	}
 
-	void sendResponse(HttpResponse response)
+	final void sendResponse(HttpResponse response)
 	{
 		requestProcessing = false;
 		if (!response)
@@ -304,14 +300,17 @@ public:
 		logRequest(currentRequest, response);
 	}
 
-	void sendData(Data[] data)
+	final void sendData(Data[] data)
 	{
 		conn.send(data);
 	}
 
-	void closeResponse()
+	/// Accept more requests on the same connection?
+	bool acceptMore() { return true; }
+
+	final void closeResponse()
 	{
-		if (persistent && server.conn.isListening)
+		if (persistent && acceptMore)
 		{
 			// reset for next request
 			debug (HTTP) debugLog("  Waiting for next request.");
@@ -320,7 +319,7 @@ public:
 			{
 				// Give the client time to download large requests.
 				// Assume a minimal speed of 1kb/s.
-				timer.setIdleTimeout(server.timeout + (responseSize / 1024).seconds);
+				timer.setIdleTimeout(timeout + (responseSize / 1024).seconds);
 				timeoutActive = true;
 			}
 			if (inBuffer.bytes.length) // a second request has been pipelined
@@ -450,6 +449,44 @@ protected:
 	{
 		return ssl.createAdapter(ctx, tcp);
 	}
+}
+
+final class HttpServerConnection : BaseHttpServerConnection
+{
+	TcpConnection tcp;
+	HttpServer server;
+	Address localAddress, remoteAddress;
+
+	mixin DListLink;
+
+protected:
+	string protocol;
+
+	this(HttpServer server, TcpConnection tcp, IConnection c, string protocol = "http")
+	{
+		this.server = server;
+		this.tcp = tcp;
+		this.log = server.log;
+		this.protocol = protocol;
+		this.banner = server.banner;
+		this.handleRequest = (HttpRequest r) => server.handleRequest(r, this);
+		this.localAddress = tcp.localAddress;
+		this.remoteAddress = tcp.remoteAddress;
+
+		super(c, server.timeout);
+
+		server.connections.pushFront(this);
+	}
+
+	override void onDisconnect(string reason, DisconnectType type)
+	{
+		super.onDisconnect(reason, type);
+		server.connections.remove(this);
+	}
+
+	override bool acceptMore() { return server.conn.isListening; }
+	override string formatLocalAddress(HttpRequest r) { return formatAddress(protocol, localAddress, r.host, r.port); }
+	override @property string remoteAddressStr() { return remoteAddress.toAddrString(); }
 }
 
 string formatAddress(string protocol, Address address, string vhost = null, ushort logPort = 0)
