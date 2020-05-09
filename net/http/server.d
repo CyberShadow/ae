@@ -38,120 +38,6 @@ public import ae.net.http.common;
 
 debug(HTTP) import std.stdio : stderr;
 
-class HttpServer
-{
-public:
-	this(Duration timeout = 30.seconds)
-	{
-		assert(timeout > Duration.zero);
-		this.timeout = timeout;
-
-		conn = new TcpServer();
-		conn.handleClose = &onClose;
-		conn.handleAccept = &onAccept;
-	}
-
-	ushort listen(ushort port, string addr = null)
-	{
-		port = conn.listen(port, addr);
-		if (log)
-			foreach (address; conn.localAddresses)
-				log("Listening on " ~ formatAddress(protocol, address) ~ " [" ~ to!string(address.addressFamily) ~ "]");
-		return port;
-	}
-
-	void listen(AddressInfo[] addresses)
-	{
-		conn.listen(addresses);
-		if (log)
-			foreach (address; conn.localAddresses)
-				log("Listening on " ~ formatAddress(protocol, address) ~ " [" ~ to!string(address.addressFamily) ~ "]");
-	}
-
-	void close()
-	{
-		debug(HTTP) stderr.writeln("Shutting down");
-		if (log) log("Shutting down.");
-		conn.close();
-
-		debug(HTTP) stderr.writefln("There still are %d active connections", connections.iterator.walkLength);
-
-		// Close idle connections
-		foreach (connection; connections.iterator.array)
-			if (connection.idle && connection.conn.state == ConnectionState.connected)
-				connection.conn.disconnect("HTTP server shutting down");
-	}
-
-	Logger log;
-
-	/// Single-ended doubly-linked list of active connections
-	SEDListContainer!HttpServerConnection connections;
-
-	/// Callback for when the socket was closed.
-	void delegate() handleClose;
-	/// Callback for an incoming request.
-	void delegate(HttpRequest request, HttpServerConnection conn) handleRequest;
-
-	string banner = "ae.net.http.server (+https://github.com/CyberShadow/ae)";
-
-protected:
-	TcpServer conn;
-	Duration timeout;
-
-	void onClose()
-	{
-		if (handleClose)
-			handleClose();
-	}
-
-	IConnection createConnection(TcpConnection tcp)
-	{
-		return tcp;
-	}
-
-	@property string protocol() { return "http"; }
-
-	void onAccept(TcpConnection incoming)
-	{
-		try
-			new HttpServerConnection(this, incoming, createConnection(incoming), protocol);
-		catch (Exception e)
-		{
-			if (log)
-				log("Error accepting connection: " ~ e.msg);
-			if (incoming.state == ConnectionState.connected)
-				incoming.disconnect();
-		}
-	}
-}
-
-/// HTTPS server. Set SSL parameters on ctx after instantiation.
-/// Example:
-/// ---
-///	auto s = new HttpsServer();
-///	s.ctx.enableDH(4096);
-///	s.ctx.enableECDH();
-///	s.ctx.setCertificate("server.crt");
-///	s.ctx.setPrivateKey("server.key");
-/// ---
-class HttpsServer : HttpServer
-{
-	SSLContext ctx;
-
-	this()
-	{
-		ctx = ssl.createContext(SSLContext.Kind.server);
-	}
-
-protected:
-	override @property string protocol() { return "https"; }
-
-	override IConnection createConnection(TcpConnection tcp)
-	{
-		return ssl.createAdapter(ctx, tcp);
-	}
-}
-
 final class HttpServerConnection
 {
 public:
@@ -449,6 +335,120 @@ public:
 			debug (HTTP) debugLog("  Closing connection (%s).", reason);
 			conn.disconnect(reason);
 		}
+	}
+}
+
+class HttpServer
+{
+public:
+	this(Duration timeout = 30.seconds)
+	{
+		assert(timeout > Duration.zero);
+		this.timeout = timeout;
+
+		conn = new TcpServer();
+		conn.handleClose = &onClose;
+		conn.handleAccept = &onAccept;
+	}
+
+	ushort listen(ushort port, string addr = null)
+	{
+		port = conn.listen(port, addr);
+		if (log)
+			foreach (address; conn.localAddresses)
+				log("Listening on " ~ formatAddress(protocol, address) ~ " [" ~ to!string(address.addressFamily) ~ "]");
+		return port;
+	}
+
+	void listen(AddressInfo[] addresses)
+	{
+		conn.listen(addresses);
+		if (log)
+			foreach (address; conn.localAddresses)
+				log("Listening on " ~ formatAddress(protocol, address) ~ " [" ~ to!string(address.addressFamily) ~ "]");
+	}
+
+	void close()
+	{
+		debug(HTTP) stderr.writeln("Shutting down");
+		if (log) log("Shutting down.");
+		conn.close();
+
+		debug(HTTP) stderr.writefln("There still are %d active connections", connections.iterator.walkLength);
+
+		// Close idle connections
+		foreach (connection; connections.iterator.array)
+			if (connection.idle && connection.conn.state == ConnectionState.connected)
+				connection.conn.disconnect("HTTP server shutting down");
+	}
+
+	Logger log;
+
+	/// Single-ended doubly-linked list of active connections
+	SEDListContainer!HttpServerConnection connections;
+
+	/// Callback for when the socket was closed.
+	void delegate() handleClose;
+	/// Callback for an incoming request.
+	void delegate(HttpRequest request, HttpServerConnection conn) handleRequest;
+
+	string banner = "ae.net.http.server (+https://github.com/CyberShadow/ae)";
+
+protected:
+	TcpServer conn;
+	Duration timeout;
+
+	void onClose()
+	{
+		if (handleClose)
+			handleClose();
+	}
+
+	IConnection createConnection(TcpConnection tcp)
+	{
+		return tcp;
+	}
+
+	@property string protocol() { return "http"; }
+
+	void onAccept(TcpConnection incoming)
+	{
+		try
+			new HttpServerConnection(this, incoming, createConnection(incoming), protocol);
+		catch (Exception e)
+		{
+			if (log)
+				log("Error accepting connection: " ~ e.msg);
+			if (incoming.state == ConnectionState.connected)
+				incoming.disconnect();
+		}
+	}
+}
+
+/// HTTPS server. Set SSL parameters on ctx after instantiation.
+/// Example:
+/// ---
+///	auto s = new HttpsServer();
+///	s.ctx.enableDH(4096);
+///	s.ctx.enableECDH();
+///	s.ctx.setCertificate("server.crt");
+///	s.ctx.setPrivateKey("server.key");
+/// ---
+class HttpsServer : HttpServer
+{
+	SSLContext ctx;
+
+	this()
+	{
+		ctx = ssl.createContext(SSLContext.Kind.server);
+	}
+
+protected:
+	override @property string protocol() { return "https"; }
+
+	override IConnection createConnection(TcpConnection tcp)
+	{
+		return ssl.createAdapter(ctx, tcp);
 	}
 }
 
