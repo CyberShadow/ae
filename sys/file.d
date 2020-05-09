@@ -756,7 +756,7 @@ unittest
 	string[] entries;
 	listDir!((e) {
 		assert(equal(e.fullNameFS, e.fullName));
-		entries ~= e.fullName.fastRelativePath(tmpDir);
+		entries ~= e.fullName.relPath(tmpDir);
 		if (e.entryIsDir)
 			e.recurse();
 	})(tmpDir);
@@ -769,7 +769,7 @@ unittest
 	entries = null;
 	import std.ascii : isDigit;
 	listDir!((e) {
-		entries ~= e.fullName.fastRelativePath(tmpDir);
+		entries ~= e.fullName.relPath(tmpDir);
 		if (e.baseNameFS[0].isDigit)
 			e.stop();
 		else
@@ -791,7 +791,7 @@ unittest
 
 		string[] entries;
 		listDir!((e) {
-			entries ~= e.fullName.fastRelativePath(tmpDir);
+			entries ~= e.fullName.relPath(tmpDir);
 			if (e.entryIsDir)
 				e.recurse();
 		})(tmpDir);
@@ -805,7 +805,7 @@ unittest
 
 		entries = null;
 		listDir!((e) {
-			entries ~= e.fullName.fastRelativePath(tmpDir);
+			entries ~= e.fullName.relPath(tmpDir);
 			if (e.isDir)
 				try
 					e.recurse();
