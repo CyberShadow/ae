@@ -490,6 +490,30 @@ protected:
 	override @property string remoteAddressStr() { return remoteAddress.toAddrString(); }
 }
 
+version (Posix)
+final class FileHttpServerConnection : BaseHttpServerConnection
+{
+	this(File input = stdin, File output = stdout, string protocol = "stdin")
+	{
+		this.protocol = protocol;
+
+		auto c = new Duplex(
+			new FileConnection(stdin.fileno),
+			new FileConnection(stdout.fileno),
+		);
+
+		super(c);
+	}
+
+protected:
+	import std.stdio : File, stdin, stdout;
+
+	string protocol;
+
+	override string formatLocalAddress(HttpRequest r) { return protocol ~ "://"; }
+	override @property string remoteAddressStr() { return "-"; }
+}
+
 string formatAddress(string protocol, Address address, string vhost = null, ushort logPort = 0)
 {
 	string addr = address.toAddrString();
