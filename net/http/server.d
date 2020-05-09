@@ -57,15 +57,14 @@ protected:
 	sizediff_t expect;
 	size_t responseSize;
 	bool requestProcessing; // user code is asynchronously processing current request
-	Duration timeout;
+	Duration timeout = HttpServer.defaultTimeout;
 	bool timeoutActive;
 	string banner;
 
-	this(IConnection c, Duration timeout)
+	this(IConnection c)
 	{
 		debug (HTTP) debugLog("New connection from %s", remoteAddressStr);
 
-		this.timeout = timeout;
 		timer = new TimeoutAdapter(c);
 		timer.setIdleTimeout(timeout);
 		c = timer;
@@ -339,8 +338,9 @@ public:
 
 class HttpServer
 {
+	enum defaultTimeout = 30.seconds;
 public:
-	this(Duration timeout = 30.seconds)
+	this(Duration timeout = defaultTimeout)
 	{
 		assert(timeout > Duration.zero);
 		this.timeout = timeout;
@@ -469,11 +469,12 @@ protected:
 		this.log = server.log;
 		this.protocol = protocol;
 		this.banner = server.banner;
+		this.timeout = server.timeout;
 		this.handleRequest = (HttpRequest r) => server.handleRequest(r, this);
 		this.localAddress = tcp.localAddress;
 		this.remoteAddress = tcp.remoteAddress;
 
-		super(c, server.timeout);
+		super(c);
 
 		server.connections.pushFront(this);
 	}
