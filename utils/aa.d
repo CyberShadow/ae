@@ -720,6 +720,7 @@ public:
 		}
 		else
 		{
+		outer:
 			foreach (ref key, ref values; lookup)
 				static if (haveValues)
 				{
@@ -730,7 +731,7 @@ public:
 						else
 							result = dg(key, value);
 						if (result)
-							break;
+							break outer;
 					}
 				}
 				else
@@ -740,7 +741,7 @@ public:
 						static assert(single);
 						result = dg(key);
 						if (result)
-							break;
+							break outer;
 					}
 				}
 		}
