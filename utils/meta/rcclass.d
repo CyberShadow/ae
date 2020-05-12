@@ -37,6 +37,16 @@ if (is(C == class))
 
 	alias _rcClassGet this;
 
+	// construction
+
+	this(T)(T value)
+	if (is(T == RCClass!U, U) && is(typeof({U u; C c = u;})))
+	{
+		_rcClassStore = cast(RCClassStore!C*)value._rcClassStore;
+		if (_rcClassStore)
+			_rcClassStore.refCount++;
+	}
+
 	// operations
 
 	ref typeof(this) opAssign(T)(T value)
@@ -205,8 +215,8 @@ unittest
 	}
 
 	auto derived = rcClass!Derived();
-	RCClass!Base base;
-	base = derived;
+	RCClass!Base base = derived; // initialization
+	base = derived;              // assignment
 	static assert(!is(typeof(derived = base)));
 	auto base2 = cast(RCClass!Base)derived;
 }
