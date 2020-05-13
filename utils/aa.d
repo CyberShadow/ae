@@ -101,7 +101,7 @@ else
 
 // Inject overload
 static if (__traits(hasMember, object, "update"))
-	alias update = object.update;
+	private alias update = object.update;
 
 // ***************************************************************************
 
