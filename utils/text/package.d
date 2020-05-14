@@ -809,6 +809,17 @@ template toHex(alias digits = hexDigits)
 		return buf;
 	}
 
+	char[n*2] toHex(size_t n)(in ubyte[n] data) pure
+	{
+		char[n*2] buf;
+		foreach (i, b; data)
+		{
+			buf[i*2  ] = digits[b>>4];
+			buf[i*2+1] = digits[b&15];
+		}
+		return buf;
+	}
+
 	string toHex(in ubyte[] data) pure
 	{
 		auto buf = new char[data.length*2];
@@ -864,6 +875,14 @@ char[T.sizeof*2] toHex(T : ulong)(T n)
 unittest
 {
 	assert(toHex(0x01234567) == "01234567");
+}
+
+unittest
+{
+	ubyte[2] bytes = [0x12, 0x34];
+	auto buf = bytes.toLowerHex();
+	static assert(buf.length == 4);
+	assert(buf == "1234");
 }
 
 /// How many significant decimal digits does a FP type have
