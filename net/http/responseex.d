@@ -79,7 +79,9 @@ public:
 
 	static bool checkPath(string path)
 	{
-		if (path.length && (path.contains("..") || path[0]=='/' || path[0]=='\\' || path.contains("//") || path.contains("\\\\")))
+		if (!path.length)
+			return true;
+		if (path.contains("..") || path[0]=='/' || path[0]=='\\' || path.contains("//") || path.contains("\\\\"))
 			return false;
 		return true;
 	}
