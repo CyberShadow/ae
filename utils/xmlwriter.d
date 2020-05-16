@@ -200,7 +200,7 @@ struct CustomXmlWriter(WRITER, Formatter)
 		debug inAttributes = false;
 	}
 
-	void endAttributesAndTag() { enum CLOSE = " />"; mixin(mixEndAttributesAndTagGeneric); }
+	void endAttributesAndTag() { enum CLOSE = "/>"; mixin(mixEndAttributesAndTagGeneric); }
 
 	// endTag
 
