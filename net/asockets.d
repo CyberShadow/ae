@@ -544,55 +544,39 @@ protected:
 
 public:
 	/// allow getting the address of connections that are already disconnected
-	private Address cachedLocalAddress, cachedRemoteAddress;
+	private Address[2] cachedAddress;
+
+	/*private*/ final @property Address address(bool local)()
+	{
+		if (cachedAddress[local] !is null)
+			return cachedAddress[local];
+		else
+		if (conn is null)
+			return null;
+		else
+			return cachedAddress[local] = local ? conn.localAddress() : conn.remoteAddress();
+	}
+
+	alias localAddress = address!true;
+	alias remoteAddress = address!false;
+
+	/*private*/ final @property string addressStr(bool local)() nothrow
+	{
+		try
+		{
+			auto a = address!local;
+			return a is null ? "[null address]" : a.toString();
+		}
+		catch (Exception e)
+			return "[error: " ~ e.msg ~ "]";
+	}
+
+	alias localAddressStr = addressStr!true;
+	alias remoteAddressStr = addressStr!false;
 
 	/// Don't block the process from exiting.
 	/// TODO: Not implemented with libev
 	bool daemon;
-
-	final @property Address localAddress()
-	{
-		if (cachedLocalAddress !is null)
-			return cachedLocalAddress;
-		else
-		if (conn is null)
-			return null;
-		else
-			return cachedLocalAddress = conn.localAddress();
-	}
-
-	final @property string localAddressStr() nothrow
-	{
-		try
-		{
-			auto a = localAddress;
-			return a is null ? "[null address]" : a.toString();
-		}
-		catch (Exception e)
-			return "[error: " ~ e.msg ~ "]";
-	}
-
-	final @property Address remoteAddress()
-	{
-		if (cachedRemoteAddress !is null)
-			return cachedRemoteAddress;
-		else
-		if (conn is null)
-			return null;
-		else
-			return cachedRemoteAddress = conn.remoteAddress();
-	}
-
-	final @property string remoteAddressStr() nothrow
-	{
-		try
-		{
-			auto a = remoteAddress;
-			return a is null ? "[null address]" : a.toString();
-		}
-		catch (Exception e)
-			return "[error: " ~ e.msg ~ "]";
-	}
 
 	final void setKeepAlive(bool enabled=true, int time=10, int interval=5)
 	{
