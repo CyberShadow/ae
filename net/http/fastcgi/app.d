@@ -64,7 +64,51 @@ bool inFastCGI()
 }
 
 /// Base implementation of the low-level FastCGI protocol.
-class FastCGIAppSocketServer
+class FastCGIConnection
+{
+	Data buffer;
+	IConnection connection;
+	Logger log;
+
+	this(IConnection connection)
+	{
+		this.connection = connection;
+		connection.handleReadData = &onReadData;
+	}
+
+	void onReadData(Data data)
+	{
+		buffer ~= data;
+
+		while (true)
+		{
+			if (buffer.length < FCGI_RecordHeader.sizeof)
+				return;
+
+			auto pheader = cast(FCGI_RecordHeader*)buffer.contents.ptr;
+			auto totalLength = FCGI_RecordHeader.sizeof + pheader.contentLength + pheader.paddingLength;
+			if (buffer.length < totalLength)
+				return;
+
+			auto contentData = buffer[FCGI_RecordHeader.sizeof .. FCGI_RecordHeader.sizeof + pheader.contentLength];
+
+			try
+				onRecord(*pheader, contentData);
+			catch (Exception e)
+			{
+				if (log) log("Error handling record: " ~ e.toString());
+				connection.disconnect(e.msg);
+				return;
+			}
+
+			buffer = buffer[totalLength .. $];
+		}
+	}
+
+	abstract void onRecord(ref FCGI_RecordHeader header, Data contentData);
+}
+
+class FastCGIAppSocketServer /// ditto
 {
 	string[] serverAddrs;
 	Logger log;
@@ -81,262 +125,219 @@ class FastCGIAppSocketServer
 		listener.handleAccept(&onAccept);
 	}
 
-	class Connection
+	final void onAccept(TcpConnection connection)
 	{
-		Data buffer;
-		TcpConnection connection;
-
-		this(TcpConnection connection)
+		if (log) log("Accepted connection from " ~ connection.remoteAddressStr);
+		if (serverAddrs && !serverAddrs.canFind(connection.remoteAddressStr))
 		{
-			this.connection = connection;
-
-			if (log) log("Accepted connection from " ~ connection.remoteAddressStr);
-			if (serverAddrs && !serverAddrs.canFind(connection.remoteAddressStr))
-			{
-				if (log) log("Address not in FCGI_WEB_SERVER_ADDRS, rejecting");
-				connection.disconnect("Forbidden by FCGI_WEB_SERVER_ADDRS");
-				return;
-			}
-
-			connection.handleReadData = &onReadData;
+			if (log) log("Address not in FCGI_WEB_SERVER_ADDRS, rejecting");
+			connection.disconnect("Forbidden by FCGI_WEB_SERVER_ADDRS");
+			return;
 		}
-
-		void onReadData(Data data)
-		{
-			buffer ~= data;
-
-			while (true)
-			{
-				if (buffer.length < FCGI_RecordHeader.sizeof)
-					return;
-
-				auto pheader = cast(FCGI_RecordHeader*)buffer.contents.ptr;
-				auto totalLength = FCGI_RecordHeader.sizeof + pheader.contentLength + pheader.paddingLength;
-				if (buffer.length < totalLength)
-					return;
-
-				auto contentData = buffer[FCGI_RecordHeader.sizeof .. FCGI_RecordHeader.sizeof + pheader.contentLength];
-
-				try
-					onRecord(*pheader, contentData);
-				catch (Exception e)
-				{
-					if (log) log("Error handling record: " ~ e.toString());
-					connection.disconnect(e.msg);
-					return;
-				}
-
-				buffer = buffer[totalLength .. $];
-			}
-		}
-
-		abstract void onRecord(ref FCGI_RecordHeader header, Data contentData);
+		createConnection(connection);
 	}
 
-	abstract void onAccept(TcpConnection connection);
+	abstract void createConnection(IConnection connection);
 }
 
 /// Higher-level FastCGI app server implementation,
 /// handling the various FastCGI response types.
-class FastCGIAppProtoServer : FastCGIAppSocketServer
+class FastCGIProtoConnection : FastCGIConnection
 {
-	class ProtoConnection : FastCGIAppSocketServer.Connection
+	// Some conservative limits that are unlikely to run afoul of any
+	// default limits such as file descriptor ulimit.
+	size_t maxConns = 512;
+	size_t maxReqs = 4096;
+	bool mpxsConns = true;
+
+	this(IConnection connection) { super(connection); }
+
+	class Request
 	{
-		// Some conservative limits that are unlikely to run afoul of any
-		// default limits such as file descriptor ulimit.
-		size_t maxConns = 512;
-		size_t maxReqs = 4096;
-		bool mpxsConns = true;
+		ushort id;
+		FCGI_Role role;
+		bool keepConn;
+		Data paramBuf;
 
-		this(TcpConnection connection) { super(connection); }
+		void begin() {}
+		void abort() {}
+		void param(const(char)[] name, const(char)[] value) {}
+		void paramEnd() {}
+		void stdin(Data datum) {}
+		void stdinEnd() {}
+		void data(Data datum) {}
+		void dataEnd() {}
 
-		class Request
+	final:
+		void stdout(Data datum) { assert(datum.length); sendRecord(FCGI_RecordType.stdout, id, datum); }
+		void stdoutEnd() { sendRecord(FCGI_RecordType.stdout, id, Data.init); }
+		void stderr(Data datum) { assert(datum.length); sendRecord(FCGI_RecordType.stderr, id, datum); }
+		void stderrEnd() { sendRecord(FCGI_RecordType.stderr, id, Data.init); }
+		void end(uint appStatus, FCGI_ProtocolStatus status)
 		{
-			ushort id;
-			FCGI_Role role;
-			bool keepConn;
-			Data paramBuf;
+			FCGI_EndRequestBody data;
+			data.appStatus = appStatus;
+			data.protocolStatus = status;
+			sendRecord(FCGI_RecordType.endRequest, id, Data(data.bytes));
+			killRequest(id);
+		}
+	}
 
-			void begin() {}
-			void abort() {}
-			void param(const(char)[] name, const(char)[] value) {}
-			void paramEnd() {}
-			void stdin(Data datum) {}
-			void stdinEnd() {}
-			void data(Data datum) {}
-			void dataEnd() {}
+	Request[] requests;
 
-		final:
-			void stdout(Data datum) { assert(datum.length); sendRecord(FCGI_RecordType.stdout, id, datum); }
-			void stdoutEnd() { sendRecord(FCGI_RecordType.stdout, id, Data.init); }
-			void stderr(Data datum) { assert(datum.length); sendRecord(FCGI_RecordType.stderr, id, datum); }
-			void stderrEnd() { sendRecord(FCGI_RecordType.stderr, id, Data.init); }
-			void end(uint appStatus, FCGI_ProtocolStatus status)
+	abstract Request createRequest();
+
+	Request getRequest(ushort requestId)
+	{
+		enforce(requestId > 0, "Unexpected null request ID");
+		return requests.getExpand(requestId - 1);
+	}
+
+	Request newRequest(ushort requestId)
+	{
+		enforce(requestId > 0, "Unexpected null request ID");
+		auto request = createRequest();
+		request.id = requestId;
+		requests.putExpand(requestId - 1, request);
+		return request;
+	}
+
+	void killRequest(ushort requestId)
+	{
+		enforce(requestId > 0, "Unexpected null request ID");
+		requests.putExpand(requestId - 1, null);
+	}
+
+	final void sendRecord(ref FCGI_RecordHeader header, Data contentData)
+	{
+		connection.send(Data(header.bytes));
+		connection.send(contentData);
+	}
+
+	final void sendRecord(FCGI_RecordType type, ushort requestId, Data contentData)
+	{
+		FCGI_RecordHeader header;
+		header.version_ = FCGI_VERSION_1;
+		header.type = type;
+		header.requestId = requestId;
+		header.contentLength = contentData.length.to!ushort;
+		sendRecord(header, contentData);
+	}
+
+	override void onRecord(ref FCGI_RecordHeader header, Data contentData)
+	{
+		switch (header.type)
+		{
+			case FCGI_RecordType.beginRequest:
 			{
-				FCGI_EndRequestBody data;
-				data.appStatus = appStatus;
-				data.protocolStatus = status;
-				sendRecord(FCGI_RecordType.endRequest, id, Data(data.bytes));
-				killRequest(id);
+				auto beginRequest = contentData.asStruct!FCGI_BeginRequestBody;
+				auto request = newRequest(header.requestId);
+				request.role = beginRequest.role;
+				request.keepConn = !!(beginRequest.flags & FCGI_RequestFlags.keepConn);
+				request.begin();
+				break;
+			}
+			case FCGI_RecordType.abortRequest:
+			{
+				enforce(contentData.length == 0, "Expected no data after FCGI_ABORT_REQUEST");
+				auto request = getRequest(header.requestId);
+				if (!request)
+					return;
+				request.abort();
+				break;
+			}
+			case FCGI_RecordType.params:
+			{
+				auto request = getRequest(header.requestId);
+				if (!request)
+					return;
+				if (contentData.length)
+				{
+					request.paramBuf ~= contentData;
+					char[] name, value;
+					auto buf = request.paramBuf;
+					while (buf.readNameValue(name, value))
+					{
+						request.param(name, value);
+						request.paramBuf = buf;
+					}
+				}
+				else
+				{
+					enforce(request.paramBuf.length == 0, "Slack data in FCGI_PARAMS");
+					request.paramEnd();
+				}
+				break;
+			}
+			case FCGI_RecordType.stdin:
+			{
+				auto request = getRequest(header.requestId);
+				if (!request)
+					return;
+				if (contentData.length)
+					request.stdin(contentData);
+				else
+					request.stdinEnd();
+				break;
+			}
+			case FCGI_RecordType.data:
+			{
+				auto request = getRequest(header.requestId);
+				if (!request)
+					return;
+				if (contentData.length)
+					request.data(contentData);
+				else
+					request.dataEnd();
+				break;
+			}
+			case FCGI_RecordType.getValues:
+			{
+				FastAppender!ubyte result;
+				while (contentData.length)
+				{
+					char[] name, dummyValue;
+					contentData.readNameValue(name, dummyValue)
+						.enforce("Incomplete FCGI_GET_VALUES");
+					enforce(dummyValue.length == 0,
+						"Present value in FCGI_GET_VALUES");
+					auto value = getValue(name);
+					if (value)
+						result.putNameValue(name, value);
+				}
+				sendRecord(
+					FCGI_RecordType.getValuesResult,
+					FCGI_NULL_REQUEST_ID,
+					Data(result.get),
+				);
+				break;
+			}
+			default:
+			{
+				FCGI_UnknownTypeBody data;
+				data.type = header.type;
+				sendRecord(
+					FCGI_RecordType.unknownType,
+					FCGI_NULL_REQUEST_ID,
+					Data(data.bytes),
+				);
+				break;
 			}
 		}
+	}
 
-		Request[] requests;
-
-		abstract Request createRequest();
-
-		Request getRequest(ushort requestId)
+	const(char)[] getValue(const(char)[] name)
+	{
+		switch (name)
 		{
-			enforce(requestId > 0, "Unexpected null request ID");
-			return requests.getExpand(requestId - 1);
-		}
-
-		Request newRequest(ushort requestId)
-		{
-			enforce(requestId > 0, "Unexpected null request ID");
-			auto request = createRequest();
-			request.id = requestId;
-			requests.putExpand(requestId - 1, request);
-			return request;
-		}
-
-		void killRequest(ushort requestId)
-		{
-			enforce(requestId > 0, "Unexpected null request ID");
-			requests.putExpand(requestId - 1, null);
-		}
-
-		final void sendRecord(ref FCGI_RecordHeader header, Data contentData)
-		{
-			connection.send(Data(header.bytes));
-			connection.send(contentData);
-		}
-
-		final void sendRecord(FCGI_RecordType type, ushort requestId, Data contentData)
-		{
-			FCGI_RecordHeader header;
-			header.version_ = FCGI_VERSION_1;
-			header.type = type;
-			header.requestId = requestId;
-			header.contentLength = contentData.length.to!ushort;
-			sendRecord(header, contentData);
-		}
-
-		override void onRecord(ref FCGI_RecordHeader header, Data contentData)
-		{
-			switch (header.type)
-			{
-				case FCGI_RecordType.beginRequest:
-				{
-					auto beginRequest = contentData.asStruct!FCGI_BeginRequestBody;
-					auto request = newRequest(header.requestId);
-					request.role = beginRequest.role;
-					request.keepConn = !!(beginRequest.flags & FCGI_RequestFlags.keepConn);
-					request.begin();
-					break;
-				}
-				case FCGI_RecordType.abortRequest:
-				{
-					enforce(contentData.length == 0, "Expected no data after FCGI_ABORT_REQUEST");
-					auto request = getRequest(header.requestId);
-					if (!request)
-						return;
-					request.abort();
-					break;
-				}
-				case FCGI_RecordType.params:
-				{
-					auto request = getRequest(header.requestId);
-					if (!request)
-						return;
-					if (contentData.length)
-					{
-						request.paramBuf ~= contentData;
-						char[] name, value;
-						auto buf = request.paramBuf;
-						while (buf.readNameValue(name, value))
-						{
-							request.param(name, value);
-							request.paramBuf = buf;
-						}
-					}
-					else
-					{
-						enforce(request.paramBuf.length == 0, "Slack data in FCGI_PARAMS");
-						request.paramEnd();
-					}
-					break;
-				}
-				case FCGI_RecordType.stdin:
-				{
-					auto request = getRequest(header.requestId);
-					if (!request)
-						return;
-					if (contentData.length)
-						request.stdin(contentData);
-					else
-						request.stdinEnd();
-					break;
-				}
-				case FCGI_RecordType.data:
-				{
-					auto request = getRequest(header.requestId);
-					if (!request)
-						return;
-					if (contentData.length)
-						request.data(contentData);
-					else
-						request.dataEnd();
-					break;
-				}
-				case FCGI_RecordType.getValues:
-				{
-					FastAppender!ubyte result;
-					while (contentData.length)
-					{
-						char[] name, dummyValue;
-						contentData.readNameValue(name, dummyValue)
-							.enforce("Incomplete FCGI_GET_VALUES");
-						enforce(dummyValue.length == 0,
-							"Present value in FCGI_GET_VALUES");
-						auto value = getValue(name);
-						if (value)
-							result.putNameValue(name, value);
-					}
-					sendRecord(
-						FCGI_RecordType.getValuesResult,
-						FCGI_NULL_REQUEST_ID,
-						Data(result.get),
-					);
-					break;
-				}
-				default:
-				{
-					FCGI_UnknownTypeBody data;
-					data.type = header.type;
-					sendRecord(
-						FCGI_RecordType.unknownType,
-						FCGI_NULL_REQUEST_ID,
-						Data(data.bytes),
-					);
-					break;
-				}
-			}
-		}
-
-		const(char)[] getValue(const(char)[] name)
-		{
-			switch (name)
-			{
-				case FCGI_MAX_CONNS:
-					return maxConns.text;
-				case FCGI_MAX_REQS:
-					return maxReqs.text;
-				case FCGI_MPXS_CONNS:
-					return int(mpxsConns).text;
-				default:
-					return null;
-			}
+			case FCGI_MAX_CONNS:
+				return maxConns.text;
+			case FCGI_MAX_REQS:
+				return maxReqs.text;
+			case FCGI_MPXS_CONNS:
+				return int(mpxsConns).text;
+			default:
+				return null;
 		}
 	}
 }
@@ -407,77 +408,83 @@ void putVLInt(W)(ref W writer, size_t value)
 }
 
 /// FastCGI server for handling Responder requests.
-class FastCGIResponderServer : FastCGIAppProtoServer
+class FastCGIResponderConnection : FastCGIProtoConnection
+{
+	this(IConnection connection) { super(connection); }
+
+	final class ResponderRequest : Request
+	{
+		string[string] params;
+		Data[] inputData;
+
+		override void begin()
+		{
+			if (role != FCGI_Role.responder)
+				return end(1, FCGI_ProtocolStatus.unknownRole);
+		}
+
+		override void param(const(char)[] name, const(char)[] value)
+		{
+			params[name.idup] = value.idup;
+		}
+
+		override void stdin(Data datum)
+		{
+			inputData ~= datum;
+		}
+
+		override void stdinEnd()
+		{
+			auto request = CGIRequest.fromAA(params);
+			request.data = inputData;
+
+			try
+				this.outer.handleRequest(request, &sendResponse);
+			catch (Exception e)
+			{
+				stderr(Data(e.toString()));
+				stderrEnd();
+				end(0, FCGI_ProtocolStatus.requestComplete);
+			}
+		}
+
+		void sendResponse(HttpResponse r)
+		{
+			FastAppender!char headers;
+			if (this.outer.nph)
+				writeNPHHeaders(r, headers);
+			else
+				writeCGIHeaders(r, headers);
+			stdout(Data(headers.get));
+
+			foreach (datum; r.data)
+				stdout(datum);
+			stdoutEnd();
+			end(0, FCGI_ProtocolStatus.requestComplete);
+		}
+
+		override void data(Data datum) { throw new Exception("Unexpected FCGI_DATA"); }
+		override void dataEnd() { throw new Exception("Unexpected FCGI_DATA"); }
+	}
+
+	override Request createRequest() { return new ResponderRequest; }
+
+	void delegate(ref CGIRequest, void delegate(HttpResponse)) handleRequest;
+	bool nph;
+}
+
+class FastCGIResponderServer : FastCGIAppSocketServer /// ditto
 {
 	bool nph;
 
 	void delegate(ref CGIRequest, void delegate(HttpResponse)) handleRequest;
 
-	class FastCGIResponderConnection : FastCGIAppProtoServer.ProtoConnection
+	override void createConnection(IConnection connection)
 	{
-		this(TcpConnection connection) { super(connection); }
-
-		final class ResponderRequest : Request
-		{
-			string[string] params;
-			Data[] inputData;
-
-			override void begin()
-			{
-				if (role != FCGI_Role.responder)
-					return end(1, FCGI_ProtocolStatus.unknownRole);
-			}
-
-			override void param(const(char)[] name, const(char)[] value)
-			{
-				params[name.idup] = value.idup;
-			}
-
-			override void stdin(Data datum)
-			{
-				inputData ~= datum;
-			}
-
-			override void stdinEnd()
-			{
-				auto request = CGIRequest.fromAA(params);
-				request.data = inputData;
-
-				try
-					this.outer.outer.handleRequest(request, &sendResponse);
-				catch (Exception e)
-				{
-					stderr(Data(e.toString()));
-					stderrEnd();
-					end(0, FCGI_ProtocolStatus.requestComplete);
-				}
-			}
-
-			void sendResponse(HttpResponse r)
-			{
-				FastAppender!char headers;
-				if (this.outer.outer.nph)
-					writeNPHHeaders(r, headers);
-				else
-					writeCGIHeaders(r, headers);
-				stdout(Data(headers.get));
-
-				foreach (datum; r.data)
-					stdout(datum);
-				stdoutEnd();
-				end(0, FCGI_ProtocolStatus.requestComplete);
-			}
-
-			override void data(Data datum) { throw new Exception("Unexpected FCGI_DATA"); }
-			override void dataEnd() { throw new Exception("Unexpected FCGI_DATA"); }
-		}
-
-		override Request createRequest() { return new ResponderRequest; }
-	}
-
-	override void onAccept(TcpConnection connection)
-	{
-		new FastCGIResponderConnection(connection);
+		auto fconn = new FastCGIResponderConnection(connection);
+		fconn.log = this.log;
+		fconn.nph = this.nph;
+		fconn.handleRequest = this.handleRequest;
 	}
 }
 
