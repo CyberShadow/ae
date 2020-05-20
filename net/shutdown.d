@@ -35,7 +35,7 @@ void addShutdownHandler(void delegate() fn)
 /// Calls all registered handlers.
 void shutdown()
 {
-	foreach (fn; handlers)
+	foreach_reverse (fn; handlers)
 		fn();
 }
 
