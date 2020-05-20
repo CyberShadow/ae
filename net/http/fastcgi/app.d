@@ -180,6 +180,8 @@ class FastCGIProtoConnection : FastCGIConnection
 			data.protocolStatus = status;
 			sendRecord(FCGI_RecordType.endRequest, id, Data(data.bytes));
 			killRequest(id);
+			if (!keepConn)
+				connection.disconnect("End of request without FCGI_KEEP_CONN");
 		}
 	}
 
