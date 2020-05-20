@@ -194,7 +194,8 @@ public:
 		auto p = resource.indexOf('?');
 		if (p >= 0)
 			resource = resource[0..p];
-		resource = resource ~ '?' ~ value;
+		if (value)
+			resource = resource ~ '?' ~ value;
 	}
 
 	/// AA of query string parameters
