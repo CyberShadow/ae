@@ -64,6 +64,9 @@ struct CGIRequest
 		typeof(this) result;
 		result.vars = CGIVars.fromAA(env);
 
+		// Missing `include /etc/nginx/fastcgi_params;` in nginx?
+		enforce(result.vars.gatewayInterface, "GATEWAY_INTERFACE not set");
+
 		enforce(result.vars.gatewayInterface == "CGI/1.1",
 			"Unknown CGI version: " ~ result.vars.gatewayInterface);
 
