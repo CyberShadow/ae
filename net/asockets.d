@@ -554,7 +554,31 @@ public:
 		if (conn is null)
 			return null;
 		else
-			return cachedAddress[local] = local ? conn.localAddress() : conn.remoteAddress();
+		{
+			Address a;
+			if (conn.addressFamily == AddressFamily.UNSPEC)
+			{
+				// Socket will attempt to construct an UnknownAddress,
+				// which will almost certainly not match the real address length.
+				static if (local)
+					alias getname = getsockname;
+				else
+					alias getname = getpeername;
+
+				socklen_t nameLen = 0;
+				if (getname(conn.handle, null, &nameLen) < 0)
+					throw new SocketOSException("Unable to obtain socket address");
+
+				auto buf = new ubyte[nameLen];
+				auto sa = cast(sockaddr*)buf.ptr;
+				if (getname(conn.handle, sa, &nameLen) < 0)
+					throw new SocketOSException("Unable to obtain socket address");
+				a = new UnknownAddressReference(sa, nameLen);
+			}
+			else
+				a = local ? conn.localAddress() : conn.remoteAddress();
+			return cachedAddress[local] = a;
+		}
 	}
 
 	alias localAddress = address!true;
