@@ -44,6 +44,11 @@ struct CGIVars
 	@("SERVER_PROTOCOL"  ) string serverProtocol;
 	@("SERVER_SOFTWARE"  ) string serverSoftware;
 
+	// SCGI vars:
+	@("REQUEST_URI"      ) string requestUri;
+	@("DOCUMENT_URI"     ) string documentUri;
+	@("DOCUMENT_ROOT"    ) string documentRoot;
+
 	static typeof(this) fromAA(string[string] env)
 	{
 		typeof(this) result;
@@ -94,8 +99,15 @@ class CGIHttpRequest : HttpRequest
 	{
 		cgiVars = cgi.vars;
 		headers = cgi.headers;
-		resource = cgi.vars.scriptName ~ cgi.vars.pathInfo;
-		queryString = cgi.vars.queryString;
+		if (cgi.vars.requestUri)
+			resource = cgi.vars.requestUri;
+		else
+		if (cgi.vars.documentUri)
+			resource = cgi.vars.documentUri;
+		else
+			resource = cgi.vars.scriptName ~ cgi.vars.pathInfo;
+		if (cgi.vars.queryString)
+			queryString = cgi.vars.queryString;
 
 		if (cgi.vars.contentType)
 			headers.require("Content-Type", cgi.vars.contentType);
