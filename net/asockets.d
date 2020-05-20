@@ -1482,6 +1482,25 @@ public:
 			handleClose();
 	}
 
+	/// Create a TcpServer using the handle passed on standard input,
+	/// for which `listen` had already been called. Used by
+	/// e.g. FastCGI and systemd sockets with "Listen = yes".
+	static TcpServer fromStdin()
+	{
+		socket_t socket;
+		version (Windows)
+		{
+			import core.sys.windows.winbase : GetStdHandle, STD_INPUT_HANDLE;
+			socket = cast(socket_t)GetStdHandle(STD_INPUT_HANDLE);
+		}
+		else
+			socket = cast(socket_t)0;
+
+		auto s = new Socket(socket, AddressFamily.UNSPEC);
+		s.blocking = false;
+		return new TcpServer(s);
+	}
+
 public:
 	/// Callback for when the socket was closed.
 	void delegate() handleClose;
