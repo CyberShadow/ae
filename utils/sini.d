@@ -19,6 +19,7 @@ import std.exception;
 import std.range;
 import std.string;
 import std.traits;
+import std.typecons : Nullable;
 
 import ae.utils.aa; // "require" polyfill
 import ae.utils.array : nonNull;
@@ -336,6 +337,13 @@ IniHandler!S makeIniHandler(S = string, U)(ref U v)
 		return (*v).makeIniHandler!S;
 	}
 	else
+	static if (is(U X == Nullable!X))
+	{
+		if (v.isNull)
+			v = X.init;
+		return v.get.makeIniHandler!S;
+	}
+	else
 	static if (is(typeof(leafHandler!(S, v))) || is(typeof(nodeHandler!(S, v))))
 	{
 		IniHandler!S handler;
@@ -524,6 +532,22 @@ unittest
 	);
 
 	assert(r == ["a" : S()]);
+}
+
+unittest
+{
+	struct S { Nullable!bool a, b, c; }
+	auto r = parseIni!S
+	(
+		q"<
+			a = true
+			b = false
+		>".splitLines()
+	);
+
+	assert( r.a.get);
+	assert(!r.b.get);
+	assert( r.c.isNull);
 }
 
 // ***************************************************************************
