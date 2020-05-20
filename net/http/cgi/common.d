@@ -70,12 +70,19 @@ struct CGIRequest
 		enforce(result.vars.gatewayInterface == "CGI/1.1",
 			"Unknown CGI version: " ~ result.vars.gatewayInterface);
 
-		auto protocolPrefix = result.vars.serverProtocol.findSplit("/")[0] ~ "_";
-		foreach (name, value; env)
-			if (name.skipOver(protocolPrefix))
-				result.headers.add(name.replace("_", "-"), value);
+		result.headers = decodeHeaders(env, result.vars.serverProtocol);
 
 		return result;
+	}
+
+	static Headers decodeHeaders(string[string] env, string serverProtocol)
+	{
+		Headers headers;
+		auto protocolPrefix = serverProtocol.findSplit("/")[0] ~ "_";
+		foreach (name, value; env)
+			if (name.skipOver(protocolPrefix))
+				headers.add(name.replace("_", "-"), value);
+		return headers;
 	}
 }
 
