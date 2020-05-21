@@ -181,6 +181,7 @@ size_t timeFormatSize(string fmt)
 					size += 2;
 					break;
 				case TimeFormatElement.dayOfYear:
+				case TimeFormatElement.milliseconds:
 				case TimeFormatElement.millisecondsAlt: // not standard
 					size += 3;
 					break;

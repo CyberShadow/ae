@@ -178,6 +178,7 @@ private void putToken(alias c, alias context, alias sink)()
 				case TimeFormatElement.microseconds:
 					sink.put(toDecFixed!6(cast(uint)t.fracSecs.split!"usecs".usecs));
 					break;
+				case TimeFormatElement.milliseconds:
 				case TimeFormatElement.millisecondsAlt: // not standard
 					sink.put(toDecFixed!3(cast(uint)t.fracSecs.split!"msecs".msecs));
 					break;
