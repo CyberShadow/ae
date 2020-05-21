@@ -156,79 +156,79 @@ size_t timeFormatSize(string fmt)
 		else
 			switch (c)
 			{
-				case 'N':
-				case 'w':
-				case 'L':
-				case 'I':
+				case TimeFormatElement.dayOfWeekIndexISO8601:
+				case TimeFormatElement.dayOfWeekIndex:
+				case TimeFormatElement.yearIsLeapYear:
+				case TimeFormatElement.isDST:
 					size++;
 					break;
-				case 'd':
-				case 'j':
-				case 'S':
-				case 'W':
-				case 'm':
-				case 'n':
-				case 't':
-				case 'y':
-				case 'a':
-				case 'A':
-				case 'g':
-				case 'G':
-				case 'h':
-				case 'H':
-				case 'i':
-				case 's':
+				case TimeFormatElement.dayOfMonthZeroPadded:
+				case TimeFormatElement.dayOfMonth:
+				case TimeFormatElement.dayOfMonthOrdinalSuffix:
+				case TimeFormatElement.weekOfYear:
+				case TimeFormatElement.monthZeroPadded:
+				case TimeFormatElement.month:
+				case TimeFormatElement.daysInMonth:
+				case TimeFormatElement.yearOfCentury:
+				case TimeFormatElement.ampmLower:
+				case TimeFormatElement.ampmUpper:
+				case TimeFormatElement.hour12:
+				case TimeFormatElement.hour:
+				case TimeFormatElement.hour12ZeroPadded:
+				case TimeFormatElement.hourZeroPadded:
+				case TimeFormatElement.minute:
+				case TimeFormatElement.second:
 					size += 2;
 					break;
-				case 'z':
-				case 'E': // not standard
+				case TimeFormatElement.dayOfYear:
+				case TimeFormatElement.millisecondsAlt: // not standard
 					size += 3;
 					break;
-				case 'Y':
+				case TimeFormatElement.year:
 					size += 4;
 					break;
-				case 'Z': // Timezone offset in seconds
-				case 'O':
+				case TimeFormatElement.timezoneOffsetSeconds: // Timezone offset in seconds
+				case TimeFormatElement.timezoneOffsetWithoutColon:
 					size += 5;
 					break;
-				case 'u':
-				case 'P':
+				case TimeFormatElement.microseconds:
+				case TimeFormatElement.timezoneOffsetWithColon:
 					size += 6;
 					break;
-				case 'T':
+				case TimeFormatElement.timezoneAbbreviation:
 					size += 32;
 					break;
 
-				case 'D':
+				case TimeFormatElement.dayOfWeekNameShort:
 					size += maxLength(WeekdayShortNames);
 					break;
-				case 'l':
+				case TimeFormatElement.dayOfWeekName:
 					size += maxLength(WeekdayLongNames);
 					break;
-				case 'F':
+				case TimeFormatElement.monthName:
 					size += maxLength(MonthLongNames);
 					break;
-				case 'M':
+				case TimeFormatElement.monthNameShort:
 					size += maxLength(MonthShortNames);
 					break;
 
-				case 'e': // Timezone name
+				case TimeFormatElement.timezoneName: // Timezone name
 					return MaxTimezoneNameLength;
 
 				// Full date/time
-				case 'c':
+				case TimeFormatElement.dateTimeISO8601:
 					enum ISOExtLength = "-0004-01-05T00:00:02.052092+10:00".length;
 					size += ISOExtLength;
 					break;
-				case 'r':
+				case TimeFormatElement.dateTimeRFC2822:
 					size += timeFormatSize(TimeFormats.RFC2822);
 					break;
-				case 'U':
+				case TimeFormatElement.dateTimeUNIX:
 					size += DecimalSize!int;
 					break;
 
 				// Escape next character
-				case '\\':
+				case TimeFormatElement.escapeNextCharacter:
 					escaping = true;
 					break;
 

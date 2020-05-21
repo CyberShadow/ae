@@ -62,7 +62,7 @@ private void putToken(alias c, alias context, alias sink)()
 		//		sink.put("UTC");
 		//	else
 			{
-				enum fmt = 'P';
+				enum fmt = TimeFormatElement.timezoneOffsetWithColon;
 				putToken!(fmt, context, sink)();
 			}
 		}
@@ -73,22 +73,22 @@ private void putToken(alias c, alias context, alias sink)()
 			switch (c)
 			{
 				// Day
-				case 'd':
+				case TimeFormatElement.dayOfMonthZeroPadded:
 					sink.put(toDecFixed!2(dt.day));
 					break;
-				case 'D':
+				case TimeFormatElement.dayOfWeekNameShort:
 					sink.put(WeekdayShortNames[dt.dayOfWeek]);
 					break;
-				case 'j':
+				case TimeFormatElement.dayOfMonth:
 					putOneOrTwoDigits(dt.day);
 					break;
-				case 'l':
+				case TimeFormatElement.dayOfWeekName:
 					sink.put(WeekdayLongNames[dt.dayOfWeek]);
 					break;
-				case 'N':
+				case TimeFormatElement.dayOfWeekIndexISO8601:
 					putOneDigit((dt.dayOfWeek+6)%7 + 1);
 					break;
-				case 'S':
+				case TimeFormatElement.dayOfMonthOrdinalSuffix:
 					switch (dt.day)
 					{
 						case 1:
@@ -108,119 +108,119 @@ private void putToken(alias c, alias context, alias sink)()
 							sink.put("th");
 					}
 					break;
-				case 'w':
+				case TimeFormatElement.dayOfWeekIndex:
 					putOneDigit(cast(int)dt.dayOfWeek);
 					break;
-				case 'z':
+				case TimeFormatElement.dayOfYear:
 					sink.put(text(dt.dayOfYear-1));
 					break;
 
 				// Week
-				case 'W':
+				case TimeFormatElement.weekOfYear:
 					sink.put(toDecFixed!2(dt.isoWeek));
 					break;
 
 				// Month
-				case 'F':
+				case TimeFormatElement.monthName:
 					sink.put(MonthLongNames[dt.month-1]);
 					break;
-				case 'm':
+				case TimeFormatElement.monthZeroPadded:
 					sink.put(toDecFixed!2(dt.month));
 					break;
-				case 'M':
+				case TimeFormatElement.monthNameShort:
 					sink.put(MonthShortNames[dt.month-1]);
 					break;
-				case 'n':
+				case TimeFormatElement.month:
 					putOneOrTwoDigits(dt.month);
 					break;
-				case 't':
+				case TimeFormatElement.daysInMonth:
 					putOneOrTwoDigits(dt.daysInMonth);
 					break;
 
 				// Year
-				case 'L':
+				case TimeFormatElement.yearIsLeapYear:
 					sink.put(dt.isLeapYear ? '1' : '0');
 					break;
-				// case 'o': TODO (ISO 8601 year number)
-				case 'Y':
+				// case TimeFormatElement.yearForWeekNumbering: TODO (ISO 8601 year number)
+				case TimeFormatElement.year:
 					sink.put(toDecFixed!4(cast(uint)dt.year)); // Hack? Assumes years are in 1000-9999 AD range
 					break;
-				case 'y':
+				case TimeFormatElement.yearOfCentury:
 					sink.put(toDecFixed!2(cast(uint)dt.year % 100));
 					break;
 
 				// Time
-				case 'a':
+				case TimeFormatElement.ampmLower:
 					sink.put(dt.hour < 12 ? "am" : "pm");
 					break;
-				case 'A':
+				case TimeFormatElement.ampmUpper:
 					sink.put(dt.hour < 12 ? "AM" : "PM");
 					break;
-				// case 'B': TODO (Swatch Internet time)
-				case 'g':
+				// case TimeFormatElement.swatchInternetTime: TODO (Swatch Internet time)
+				case TimeFormatElement.hour12:
 					putOneOrTwoDigits((dt.hour+11)%12 + 1);
 					break;
-				case 'G':
+				case TimeFormatElement.hour:
 					putOneOrTwoDigits(dt.hour);
 					break;
-				case 'h':
+				case TimeFormatElement.hour12ZeroPadded:
 					sink.put(toDecFixed!2(cast(uint)(dt.hour+11)%12 + 1));
 					break;
-				case 'H':
+				case TimeFormatElement.hourZeroPadded:
 					sink.put(toDecFixed!2(dt.hour));
 					break;
-				case 'i':
+				case TimeFormatElement.minute:
 					sink.put(toDecFixed!2(dt.minute));
 					break;
-				case 's':
+				case TimeFormatElement.second:
 					sink.put(toDecFixed!2(dt.second));
 					break;
-				case 'u':
+				case TimeFormatElement.microseconds:
 					sink.put(toDecFixed!6(cast(uint)t.fracSecs.split!"usecs".usecs));
 					break;
-				case 'E': // not standard
+				case TimeFormatElement.millisecondsAlt: // not standard
 					sink.put(toDecFixed!3(cast(uint)t.fracSecs.split!"msecs".msecs));
 					break;
 
 				// Timezone
-				case 'e':
+				case TimeFormatElement.timezoneName:
 					putTimezoneName(t.timezone.name);
 					break;
-				case 'I':
+				case TimeFormatElement.isDST:
 					sink.put(t.dstInEffect ? '1': '0');
 					break;
-				case 'O':
+				case TimeFormatElement.timezoneOffsetWithoutColon:
 				{
 					auto minutes = (t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000 / 60;
 					sink.reference.formattedWrite("%+03d%02d", minutes/60, abs(minutes%60));
 					break;
 				}
-				case 'P':
+				case TimeFormatElement.timezoneOffsetWithColon:
 				{
 					auto minutes = (t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000 / 60;
 					sink.reference.formattedWrite("%+03d:%02d", minutes/60, abs(minutes%60));
 					break;
 				}
-				case 'T':
+				case TimeFormatElement.timezoneAbbreviation:
 					putTimezoneName(t.timezone.stdName);
 					break;
-				case 'Z':
+				case TimeFormatElement.timezoneOffsetSeconds:
 					sink.putDecimal((t.timezone.utcToTZ(t.stdTime) - t.stdTime) / 10_000_000);
 					break;
 
 				// Full date/time
-				case 'c':
+				case TimeFormatElement.dateTimeISO8601:
 					sink.put(dt.toISOExtString());
 					break;
-				case 'r':
+				case TimeFormatElement.dateTimeRFC2822:
 					putTime(sink, t, TimeFormats.RFC2822);
 					break;
-				case 'U':
+				case TimeFormatElement.dateTimeUNIX:
 					sink.putDecimal(t.toUnixTime());
 					break;
 
 				// Escape next character
-				case '\\':
+				case TimeFormatElement.escapeNextCharacter:
 					escaping = true;
 					break;
 

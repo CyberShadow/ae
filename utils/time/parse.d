@@ -119,58 +119,58 @@ private void parseToken(alias c, alias context)()
 		switch (c)
 		{
 			// Day
-			case 'd':
+			case TimeFormatElement.dayOfMonthZeroPadded:
 				day = takeNumber!(2)();
 				break;
-			case 'D':
+			case TimeFormatElement.dayOfWeekNameShort:
 				dow = takeWord(WeekdayShortNames, "Weekday");
 				break;
-			case 'j':
+			case TimeFormatElement.dayOfMonth:
 				day = takeNumber!(1, 2);
 				break;
-			case 'l':
+			case TimeFormatElement.dayOfWeekName:
 				dow = takeWord(WeekdayLongNames, "Weekday");
 				break;
-			case 'N':
+			case TimeFormatElement.dayOfWeekIndexISO8601:
 				dow = takeNumber!1 % 7;
 				break;
-			case 'S': // ordinal suffix
+			case TimeFormatElement.dayOfMonthOrdinalSuffix: // ordinal suffix
 				take!2;
 				break;
-			case 'w':
+			case TimeFormatElement.dayOfWeekIndex:
 				dow = takeNumber!1;
 				break;
-			//case 'z': TODO
+			//case TimeFormatElement.dayOfYear: TODO
 
 			// Week
-			//case 'W': TODO
+			//case TimeFormatElement.weekOfYear: TODO
 
 			// Month
-			case 'F':
+			case TimeFormatElement.monthName:
 				month = takeWord(MonthLongNames, "Month") + 1;
 				break;
-			case 'm':
+			case TimeFormatElement.monthZeroPadded:
 				month = takeNumber!2;
 				break;
-			case 'M':
+			case TimeFormatElement.monthNameShort:
 				month = takeWord(MonthShortNames, "Month") + 1;
 				break;
-			case 'n':
+			case TimeFormatElement.month:
 				month = takeNumber!(1, 2);
 				break;
-			case 't':
+			case TimeFormatElement.daysInMonth:
 				takeNumber!(1, 2); // TODO: validate DIM?
 				break;
 
 			// Year
-			case 'L':
+			case TimeFormatElement.yearIsLeapYear:
 				takeNumber!1; // TODO: validate leapness?
 				break;
-			// case 'o': TODO (ISO 8601 year number)
-			case 'Y':
+			// case TimeFormatElement.yearForWeekNumbering: TODO (ISO 8601 year number)
+			case TimeFormatElement.year:
 				year = takeNumber!4;
 				break;
-			case 'y':
+			case TimeFormatElement.yearOfCentury:
 				year = takeNumber!2;
 				if (year > 50) // TODO: find correct logic for this
 					year += 1900;
@@ -179,52 +179,52 @@ private void parseToken(alias c, alias context)()
 				break;
 
 			// Time
-			case 'a':
+			case TimeFormatElement.ampmLower:
 				pm = takeWord(["am", "pm"], "am/pm")==1;
 				break;
-			case 'A':
+			case TimeFormatElement.ampmUpper:
 				pm = takeWord(["AM", "PM"], "AM/PM")==1;
 				break;
-			// case 'B': TODO (Swatch Internet time)
-			case 'g':
+			// case TimeFormatElement.swatchInternetTime: TODO (Swatch Internet time)
+			case TimeFormatElement.hour12:
 				hour12 = takeNumber!(1, 2);
 				break;
-			case 'G':
+			case TimeFormatElement.hour:
 				hour = takeNumber!(1, 2);
 				break;
-			case 'h':
+			case TimeFormatElement.hour12ZeroPadded:
 				hour12 = takeNumber!2;
 				break;
-			case 'H':
+			case TimeFormatElement.hourZeroPadded:
 				hour = takeNumber!2;
 				break;
-			case 'i':
+			case TimeFormatElement.minute:
 				minute = takeNumber!2;
 				break;
-			case 's':
+			case TimeFormatElement.second:
 				second = takeNumber!2;
 				break;
-			case 'u':
+			case TimeFormatElement.microseconds:
 				usecs = takeNumber!6;
 				break;
-			case 'E': // not standard
+			case TimeFormatElement.millisecondsAlt: // not standard
 				usecs = 1000 * takeNumber!3;
 				break;
 
 			// Timezone
-			// case 'e': ???
-			case 'I':
+			// case TimeFormatElement.timezoneName: ???
+			case TimeFormatElement.isDST:
 				takeNumber!1;
 				break;
-			case 'O':
+			case TimeFormatElement.timezoneOffsetWithoutColon:
 			{
-				if (peek() == 'Z')
+				if (peek() == TimeFormatElement.timezoneOffsetSeconds)
 				{
 					t = t[1..$];
 					tz = UTC();
 				}
 				else
-				if (peek() == 'G')
+				if (peek() == TimeFormatElement.hour)
 				{
 					enforce(take!3() == "GMT", "GMT expected");
 					tz = UTC();
@@ -238,7 +238,7 @@ private void parseToken(alias c, alias context)()
 				}
 				break;
 			}
-			case 'P':
+			case TimeFormatElement.timezoneOffsetWithColon:
 			{
 				auto tzStr = take!6();
 				enforce(tzStr[0]=='-' || tzStr[0]=='+', "- / + expected");
@@ -247,7 +247,7 @@ private void parseToken(alias c, alias context)()
 				tz = new immutable(SimpleTimeZone)(minutes(n));
 				break;
 			}
-			case 'T':
+			case TimeFormatElement.timezoneAbbreviation:
 				version(Posix)
 					tz = PosixTimeZone.getTimeZone(t.idup);
 				else
@@ -256,7 +256,7 @@ private void parseToken(alias c, alias context)()
 
 				t = null;
 				break;
-			case 'Z':
+			case TimeFormatElement.timezoneOffsetSeconds:
 			{
 				// TODO: is this correct?
 				auto n = takeNumber!(1, 6);
@@ -265,12 +265,12 @@ private void parseToken(alias c, alias context)()
 			}
 
 			// Full date/time
-			//case 'c': TODO
-			//case 'r': TODO
-			//case 'U': TODO
+			//case TimeFormatElement.dateTimeISO8601: TODO
+			//case TimeFormatElement.dateTimeRFC2822: TODO
+			//case TimeFormatElement.dateTimeUNIX: TODO
 
 			// Escape next character
-			case '\\':
+			case TimeFormatElement.escapeNextCharacter:
 				escaping = true;
 				break;
 
