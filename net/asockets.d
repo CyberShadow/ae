@@ -589,7 +589,19 @@ public:
 		try
 		{
 			auto a = address!local;
-			return a is null ? "[null address]" : a.toString();
+			if (a is null)
+				return "[null address]";
+			string host = a.toAddrString();
+			import std.string : indexOf;
+			if (host.indexOf(':') >= 0)
+				host = "[" ~ host ~ "]";
+			try
+			{
+				string port = a.toPortString();
+				return host ~ ":" ~ port;
+			}
+			catch (Exception e)
+				return host;
 		}
 		catch (Exception e)
 			return "[error: " ~ e.msg ~ "]";
