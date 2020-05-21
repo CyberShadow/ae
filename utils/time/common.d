@@ -15,6 +15,103 @@ module ae.utils.time.common;
 
 import ae.utils.text;
 
+/// Based on php.net/date
+enum TimeFormatElement : char
+{
+	/// Year, all digits
+	year                        = 'Y',
+	/// Year, last 2 digits
+	yearOfCentury               = 'y',
+	// /// ISO-8601 week-numbering year
+	// yearForWeekNumbering        = 'o',
+	/// '1' if the year is a leap year, '0' otherwise
+	yearIsLeapYear              = 'L',
+
+	/// Month index, 1 or 2 digits (1 = January)
+	month                       = 'n',
+	/// Month index, 2 digits with leading zeroes (01 = January)
+	monthZeroPadded             = 'm',
+	/// Month name, full ("January", "February" ...)
+	monthName                   = 'F',
+	/// Month name, three letters ("Jan", "Feb" ...)
+	monthNameShort              = 'M',
+	/// Number of days within the month, 2 digits
+	daysInMonth                 = 't',
+
+	/// ISO-8601 week index
+	weekOfYear                  = 'W',
+
+	/// Day of year (January 1st = 0)
+	dayOfYear                   = 'z',
+
+	/// Day of month, 1 or 2 digits
+	dayOfMonth                  = 'j',
+	/// Day of month, 2 digits with leading zeroes
+	dayOfMonthZeroPadded        = 'd',
+	/// English ordinal suffix for the day of month, 2 characters
+	dayOfMonthOrdinalSuffix     = 'S',
+
+	/// Weekday index (0 = Sunday, 1 = Monday, ... 6 = Saturday)
+	dayOfWeekIndex              = 'w',
+	/// Weekday index, ISO-8601 numerical representation (1 = Monday, 2 = Tuesday, ... 7 = Sunday)
+	dayOfWeekIndexISO8601       = 'N',
+	/// Weekday name, three letters ("Mon", "Tue", ...)
+	dayOfWeekNameShort          = 'D',
+	/// Weekday name, full ("Monday", "Tuesday", ...)
+	dayOfWeekName               = 'l',
+
+	// /// Swatch Internet time
+	// swatchInternetTime          = 'B',
+
+	/// "am" / "pm"
+	ampmLower                   = 'a',
+	/// "AM" / "PM"
+	ampmUpper                   = 'A',
+
+	/// Hour (24-hour format), 1 or 2 digits
+	hour                        = 'G',
+	/// Hour (24-hour format), 2 digits with leading zeroes
+	hourZeroPadded              = 'H',
+	/// Hour (12-hour format), 1 or 2 digits (12 = midnight/noon)
+	hour12                      = 'g',
+	/// Hour (12-hour format), 2 digits with leading zeroes (12 = midnight/noon)
+	hour12ZeroPadded            = 'h',
+
+	/// Minute, 2 digits with leading zeroes
+	minute                      = 'i',
+	/// Second, 2 digits with leading zeroes
+	second                      = 's',
+	/// Milliseconds within second, 3 digits
+	milliseconds                = 'v',
+	/// Milliseconds within second, 3 digits (ae extension)
+	millisecondsAlt             = 'E',
+	/// Microseconds within second, 6 digits
+	microseconds                = 'u',
+
+	/// Timezone identifier
+	timezoneName                = 'e',
+	/// Timezone abbreviation (e.g. "EST")
+	timezoneAbbreviation        = 'T',
+	/// Difference from GMT, with colon (e.g. "+02:00")
+	timezoneOffsetWithColon     = 'P',
+	/// Difference from GMT, without colon (e.g. "+0200")
+	timezoneOffsetWithoutColon  = 'O',
+	/// Difference from GMT in seconds
+	timezoneOffsetSeconds       = 'Z',
+	/// '1' if DST is in effect, '0' otherwise
+	isDST                       = 'I',
+
+	/// Full ISO 8601 date/time (e.g. "2004-02-12T15:19:21+00:00")
+	dateTimeISO8601             = 'c',
+	/// Full RFC 2822 date/time (e.g. "Thu, 21 Dec 2000 16:01:07 +0200")
+	dateTimeRFC2822             = 'r',
+	/// UNIX time (seconds since January 1 1970 00:00:00 UTC)
+	dateTimeUNIX                = 'U',
+
+	/// Treat the next character verbatim (copy when formatting, expect when parsing)
+	escapeNextCharacter         = '\\',
+}
+
 struct TimeFormats
 {
 static:
