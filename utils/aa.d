@@ -1330,6 +1330,12 @@ unittest
 		assert(v == 2);
 }
 
+auto orderedSet(R)(R r)
+{
+	alias E = ElementType!R;
+	return OrderedSet!E(r);
+}
+
 // ***************************************************************************
 
 /// An object which acts mostly as an associative array,
