@@ -13,8 +13,12 @@
 
 module ae.sys.persistence.memoize;
 
+import std.traits;
+import std.typecons;
+
 import ae.sys.persistence.core;
 import ae.sys.persistence.json;
+import ae.utils.json;
 
 // ****************************************************************************
 
@@ -24,11 +28,7 @@ static import ae.utils.json;
 /// std.functional.memoize variant with automatic persistence
 struct PersistentMemoized(alias fun, FlushPolicy flushPolicy = FlushPolicy.atThreadExit)
 {
-	import std.traits;
-	import std.typecons;
-	import ae.utils.json;
-
-	alias ReturnType!fun[string] AA;
+	alias AA = ReturnType!fun[string];
 	private JsonFileCache!(AA, flushPolicy) memo;
 
 	this(string fileName) { memo.fileName = fileName; }
@@ -49,7 +49,7 @@ struct PersistentMemoized(alias fun, FlushPolicy flushPolicy = FlushPolicy.atThr
 
 unittest
 {
-	import std.file;
+	import std.file : exists, remove;
 
 	static int value = 42;
 	int getValue(int x) { return value; }
@@ -72,5 +72,36 @@ unittest
 		auto getValueMemoized = PersistentMemoized!(getValue, FlushPolicy.atScopeExit)(FN);
 		assert(getValueMemoized(1) == 42);
 		assert(getValueMemoized(2) == 24);
+	}
+}
+
+/// As above, but with synchronization
+struct SynchronizedPersistentMemoized(alias fun, FlushPolicy flushPolicy = FlushPolicy.atThreadExit)
+{
+	alias AA = ReturnType!fun[string];
+	private JsonFileCache!(AA, flushPolicy) memo;
+	Object mutex;
+
+	this(string fileName)
+	{
+		memo.fileName = fileName;
+		mutex = new Object;
+	}
+
+	ReturnType!fun opCall(ParameterTypeTuple!fun args)
+	{
+		string key;
+		static if (args.length==1 && is(typeof(args[0]) : string))
+			key = args[0];
+		else
+			key = toJson(tuple(args));
+		synchronized (mutex)
+		{
+			auto p = key in memo;
+			if (p) return *p;
+		}
+		auto r = fun(args);
+		synchronized (mutex)
+			return memo[key] = r;
 	}
 }
