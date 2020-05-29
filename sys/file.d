@@ -1850,6 +1850,13 @@ else
 	}
 }
 
+/// Same as toFile, but accepts void[] and does not conflict with the
+/// std.stdio function.
+void writeTo(in void[] data, in char[] target)
+{
+	std.file.write(target, data);
+}
+
 /// Polyfill for Windows fopen implementations with support for UNC
 /// paths and the 'x' subspecifier.
 File openFile()(string fn, string mode = "rb")
@@ -2480,7 +2487,7 @@ deprecated alias obtainUsing = cached;
 /// atomic!syncUpdate instead.
 alias atomic!writeProxy atomicWrite;
 deprecated alias safeWrite = atomicWrite;
-void writeProxy(string target, in void[] data)
+/*private*/ void writeProxy(string target, in void[] data)
 {
 	std.file.write(target, data);
 }
