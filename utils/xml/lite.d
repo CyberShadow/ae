@@ -281,6 +281,13 @@ class XmlDocument : XmlNode
 
 	this(ref StringStream s) { this(); parseInto!XmlParseConfig(this, s); }
 	this(string s) { auto ss = StringStream(s); this(ss); }
+
+	final @property XmlDocument dup()
+	{
+		auto result = new XmlDocument();
+		result.children = super.dup().children;
+		return result;
+	}
 }
 
 /// The logic for how to handle a node's closing tags.
