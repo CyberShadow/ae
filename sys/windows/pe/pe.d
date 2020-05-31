@@ -24,7 +24,7 @@ struct PE
 	ubyte[] data;
 
 	PIMAGE_DOS_HEADER dosHeader;
-	PIMAGE_NT_HEADERS ntHeaders;
+	PIMAGE_NT_HEADERS32 ntHeaders;
 	IMAGE_SECTION_HEADER[] sectionHeaders;
 	IMAGE_DATA_DIRECTORY[] dataDirectories;
 
@@ -36,8 +36,8 @@ struct PE
 		dosHeader = cast(PIMAGE_DOS_HEADER)data.ptr;
 		enforce(dosHeader.e_magic == IMAGE_DOS_SIGNATURE, "Invalid DOS signature");
 
-		enforce(data.length > dosHeader.e_lfanew + IMAGE_NT_HEADERS.sizeof, "Not enough data for NT headers");
-		ntHeaders = cast(PIMAGE_NT_HEADERS)(data.ptr + dosHeader.e_lfanew);
+		enforce(data.length > dosHeader.e_lfanew + IMAGE_NT_HEADERS32.sizeof, "Not enough data for NT headers");
+		ntHeaders = cast(PIMAGE_NT_HEADERS32)(data.ptr + dosHeader.e_lfanew);
 		enforce(ntHeaders.Signature == IMAGE_NT_SIGNATURE, "Invalid NT signature");
 		enforce(ntHeaders.FileHeader.Machine == IMAGE_FILE_MACHINE_I386, "Not an x86 PE");
 
