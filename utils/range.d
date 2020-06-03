@@ -14,8 +14,10 @@
 module ae.utils.range;
 
 import std.range.primitives;
+import std.typecons;
 
 import ae.utils.meta : isDebug;
+import ae.utils.text.ascii : toDec;
 
 /// An equivalent of an array range, but which maintains
 /// a start and end pointer instead of a start pointer
@@ -251,4 +253,58 @@ unittest
 		lazyInitRange(() => todo.map!(n => { done ~= n; })),
 	).each!(dg => dg());
 	assert(done == [1, 2, 3]);
+}
+
+// ************************************************************************
+
+/// A faster, random-access version of `cartesianProduct`.
+auto fastCartesianProduct(R...)(R ranges)
+{
+	struct Product
+	{
+		size_t start, end;
+		R ranges;
+		auto front() { return this[0]; }
+		void popFront() { start++; }
+		auto back() { return this[$-1]; }
+		void popBack() { end--; }
+		bool empty() const { return start == end; }
+		size_t length() { return end - start; }
+		alias opDollar = length;
+
+		auto opIndex(size_t index)
+		{
+			auto p = start + index;
+			size_t[R.length] positions;
+			foreach (i, r; ranges)
+			{
+				auto l = r.length;
+				positions[i] = p % l;
+				p /= l;
+			}
+			assert(p == 0, "Out of bounds");
+			mixin({
+				string s;
+				foreach (i; 0 .. R.length)
+					s ~= `ranges[` ~ toDec(i) ~ `][positions[` ~ toDec(i) ~ `]], `;
+				return `return tuple(` ~ s ~ `);`;
+			}());
+		}
+	}
+	size_t end = 1;
+	foreach (r; ranges)
+		end *= r.length;
+	return Product(0, end, ranges);
+}
+
+unittest
+{
+	import std.algorithm.comparison : equal;
+	assert(fastCartesianProduct().length == 1);
+	assert(fastCartesianProduct([1, 2, 3]).equal([tuple(1), tuple(2), tuple(3)]));
+	assert(fastCartesianProduct([1, 2], [3, 4, 5]).equal([
+		tuple(1, 3), tuple(2, 3),
+		tuple(1, 4), tuple(2, 4),
+		tuple(1, 5), tuple(2, 5),
+	]));
 }
