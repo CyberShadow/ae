@@ -461,6 +461,11 @@ struct GitObject
 		Hash[] parents;
 		string author, committer; /// entire lines - name, email and date
 		string[] message, gpgsig;
+
+		@property Authorship parsedAuthor() { return parseAuthorship(author); }
+		@property Authorship parsedCommitter() { return parseAuthorship(committer); }
+		@property void parsedAuthor(Authorship authorship) { author = authorship.toString(); }
+		@property void parsedCommitter(Authorship authorship) { committer = authorship.toString(); }
 	}
 
 	ParsedCommit parseCommit()
@@ -577,6 +582,29 @@ struct Commit
 	string author, committer;
 	string[] message;
 	Commit*[] parents, children;
+
+	@property Authorship parsedAuthor() { return parseAuthorship(author); }
+	@property Authorship parsedCommitter() { return parseAuthorship(committer); }
+	@property void parsedAuthor(Authorship authorship) { author = authorship.toString(); }
+	@property void parsedCommitter(Authorship authorship) { committer = authorship.toString(); }
+}
+
+struct Authorship
+{
+	string name;
+	string email;
+	string date; // use `"U O"` ae.utils.time format to parse/format
+	string toString() const { return name ~ " <" ~ email ~ "> " ~ date; }
+}
+static Authorship parseAuthorship(string authorship)
+{
+	Authorship result;
+	auto parts1 = authorship.findSplit(" <");
+	auto parts2 = parts1[2].findSplit("> ");
+	result.name = parts1[0];
+	result.email = parts2[0];
+	result.date = parts2[2];
+	return result;
 }
 
 Hash toCommitHash(in char[] hash)
