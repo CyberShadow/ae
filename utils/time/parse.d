@@ -268,7 +268,18 @@ private void parseToken(alias c, alias context)()
 			// Full date/time
 			//case TimeFormatElement.dateTimeISO8601: TODO
 			//case TimeFormatElement.dateTimeRFC2822: TODO
-			//case TimeFormatElement.dateTimeUNIX: TODO
+			case TimeFormatElement.dateTimeUNIX:
+			{
+				auto unixTime = takeNumber!(1, 20);
+				auto d = SysTime.fromUnixTime(unixTime).to!DateTime;
+				year = d.year;
+				month = d.month;
+				day = d.day;
+				hour = d.hour;
+				minute = d.minute;
+				second = d.second;
+				break;
+			}
 
 			// Escape next character
 			case TimeFormatElement.escapeNextCharacter:
@@ -369,7 +380,8 @@ unittest
 unittest
 {
 	const char[] s = "Tue, 21 Nov 2006 21:19:46 +0000";
-	s.parseTime!(TimeFormats.RFC2822);
+	auto d = s.parseTime!(TimeFormats.RFC2822);
+	assert(d.stdTime == d.formatTime!"U".parseTime!"U".stdTime);
 }
 
 unittest
