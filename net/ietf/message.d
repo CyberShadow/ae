@@ -84,6 +84,10 @@ class Rfc850Message
 	/// This message's headers.
 	Headers headers;
 
+	/// The raw body of this message (or message part),
+	/// i.e. the part of `this.message` after the headers.
+	ascii rawContent;
+
 	/// The text contents of this message (UTF-8).
 	/// "null" in case of an error.
 	string content;
@@ -140,7 +144,7 @@ class Rfc850Message
 
 		// Decode transfer encoding
 
-		ascii rawContent = text[min(headerEnd+2, $)..$];
+		rawContent = text[min(headerEnd+2, $)..$];
 
 		if ("Content-Transfer-Encoding" in headers)
 			try
