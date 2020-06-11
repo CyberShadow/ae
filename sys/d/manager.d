@@ -1975,6 +1975,29 @@ EOS";
 		}
 	}
 
+	/// The Dub package manager and build tool
+	final class Dub : Component
+	{
+		@property override string submoduleName() { return "dub"; }
+		@property override string[] sourceDependencies() { return []; }
+		@property override string[] dependencies() { return []; }
+		@property override string configString() { return null; }
+
+		override void performBuild()
+		{
+			auto env = baseEnvironment;
+			run([dmd, "-i", "-run", "build.d"], env.vars, sourceDir);
+		}
+
+		override void performStage()
+		{
+			cp(
+				buildPath(sourceDir, "bin", "dub" ~ binExt),
+				buildPath(stageDir , "bin", "dub" ~ binExt),
+			);
+		}
+	}
+
 	private int tempError;
 
 	private Component[string] components;
@@ -2013,6 +2036,9 @@ EOS";
 					break;
 				case "curl":
 					c = new Curl();
+					break;
+				case "dub":
+					c = new Dub();
 					break;
 				default:
 					throw new Exception("Unknown component: " ~ name);
@@ -2165,7 +2191,7 @@ EOS";
 	}
 
 	static const string[] defaultComponents = ["dmd", "druntime", "phobos-includes", "phobos", "rdmd"];
-	static const string[] additionalComponents = ["tools", "website", "extras", "curl"];
+	static const string[] additionalComponents = ["tools", "website", "extras", "curl", "dub"];
 	static const string[] allComponents = defaultComponents ~ additionalComponents;
 
 	/// Build the specified components according to the specified configuration.
