@@ -1720,7 +1720,7 @@ EOS";
 	final class Website : Component
 	{
 		@property override string submoduleName() { return "dlang.org"; }
-		@property override string[] sourceDependencies() { return ["druntime", "phobos"]; }
+		@property override string[] sourceDependencies() { return ["druntime", "phobos", "dub"]; }
 		@property override string[] dependencies() { return ["dmd", "druntime", "phobos", "rdmd"]; }
 
 		struct Config
@@ -1778,7 +1778,8 @@ EOS";
 				// Need Druntime/Phobos source because we are building its documentation from there.
 				c.needSource();
 			}
-			getComponent("tools").needSource(); // for changed.d
+			foreach (dep; ["tools", "dub"]) // for changelog; also tools for changed.d
+				getComponent(dep).needSource();
 
 			auto env = baseEnvironment;
 
