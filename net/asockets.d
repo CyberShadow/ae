@@ -27,6 +27,11 @@ import std.socket;
 import std.string : format;
 public import std.socket : Address, AddressInfo, Socket;
 
+version (Windows)
+    private import c_socks = core.sys.windows.winsock2;
+else version (Posix)
+    private import c_socks = core.sys.posix.sys.socket;
+
 debug(ASOCKETS) import std.stdio : stderr;
 debug(PRINTDATA) static import std.stdio;
 debug(PRINTDATA) import ae.utils.text : hexDump;
@@ -561,16 +566,16 @@ public:
 				// Socket will attempt to construct an UnknownAddress,
 				// which will almost certainly not match the real address length.
 				static if (local)
-					alias getname = getsockname;
+					alias getname = c_socks.getsockname;
 				else
-					alias getname = getpeername;
+					alias getname = c_socks.getpeername;
 
-				socklen_t nameLen = 0;
+				c_socks.socklen_t nameLen = 0;
 				if (getname(conn.handle, null, &nameLen) < 0)
 					throw new SocketOSException("Unable to obtain socket address");
 
 				auto buf = new ubyte[nameLen];
-				auto sa = cast(sockaddr*)buf.ptr;
+				auto sa = cast(c_socks.sockaddr*)buf.ptr;
 				if (getname(conn.handle, sa, &nameLen) < 0)
 					throw new SocketOSException("Unable to obtain socket address");
 				a = new UnknownAddressReference(sa, nameLen);
