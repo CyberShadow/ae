@@ -490,7 +490,11 @@ class DManager : ICacheHost
 			tempError++; scope(success) tempError--;
 
 			if (incrementalBuild)
-				return;
+			{
+				if (submodule.getHead() == commit)
+					return;
+				log("Checking out required " ~ submoduleName ~ " commit despite incremental build.");
+			}
 			if (!submoduleName)
 				return;
 			foreach (component; getSubmoduleComponents(submoduleName))
