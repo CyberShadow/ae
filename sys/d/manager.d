@@ -485,23 +485,30 @@ class DManager : ICacheHost
 
 		/// Prepare the source checkout for this component.
 		/// Usually needed by other components.
-		void needSource()
+		void needSource(bool dirtyOK = false)
 		{
 			tempError++; scope(success) tempError--;
 
-			auto commit = getComponentCommit(name); // Not "incremental" as per this.commit
 			if (incrementalBuild)
-			{
-				if (submodule.getHead() == commit)
-					return;
-				log("Checking out required " ~ submoduleName ~ " commit despite incremental build.");
-			}
+				return;
 			if (!submoduleName)
 				return;
-			foreach (component; getSubmoduleComponents(submoduleName))
-				component.haveBuild = false;
 
-			submodule.needHead(commit);
+			bool needHead;
+			if (dirtyOK)
+			{
+				// It's OK to run tests with a dirty worktree (i.e. after a build).
+				needHead = commit != submodule.getHead();
+			}
+			else
+				needHead = true;
+
+			if (needHead)
+			{
+				foreach (component; getSubmoduleComponents(submoduleName))
+					component.haveBuild = false;
+				submodule.needHead(commit);
+			}
 			submodule.clean = false;
 		}
 
@@ -1781,7 +1788,7 @@ EOS";
 
 				// Need DMD source because https://github.com/dlang/phobos/pull/4613#issuecomment-266462596
 				// Need Druntime/Phobos source because we are building its documentation from there.
-				c.needSource();
+				c.needSource(target == Target.test);
 			}
 			foreach (dep; ["tools", "dub"]) // for changelog; also tools for changed.d
 				getComponent(dep).needSource();
@@ -2248,14 +2255,17 @@ EOS";
 	}
 
 	/// Run all tests for the current checkout (like rebuild).
-	void test()
+	void test(bool incremental = true)
 	{
 		auto componentNames = config.build.components.getEnabledComponentNames();
 		log("Testing components %-(%s, %)".format(componentNames));
 
-		this.components = null;
-		this.submoduleState = SubmoduleState(null);
-		this.incrementalBuild = true;
+		if (incremental)
+		{
+			this.components = null;
+			this.submoduleState = SubmoduleState(null);
+			this.incrementalBuild = true;
+		}
 
 		foreach (componentName; componentNames)
 			getComponent(componentName).test();
