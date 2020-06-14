@@ -485,7 +485,7 @@ class DManager : ICacheHost
 
 		/// Prepare the source checkout for this component.
 		/// Usually needed by other components.
-		void needSource(bool dirtyOK = false)
+		void needSource(bool needClean = false)
 		{
 			tempError++; scope(success) tempError--;
 
@@ -495,13 +495,13 @@ class DManager : ICacheHost
 				return;
 
 			bool needHead;
-			if (dirtyOK)
+			if (needClean)
+				needHead = true;
+			else
 			{
 				// It's OK to run tests with a dirty worktree (i.e. after a build).
 				needHead = commit != submodule.getHead();
 			}
-			else
-				needHead = true;
 
 			if (needHead)
 			{
@@ -516,14 +516,14 @@ class DManager : ICacheHost
 
 		/// Build the component in-place, as needed,
 		/// without moving the built files anywhere.
-		void needBuild()
+		void needBuild(bool clean = true)
 		{
 			if (haveBuild) return;
 			scope(success) haveBuild = true;
 
 			log("needBuild: " ~ getBuildID());
 
-			needSource();
+			needSource(clean);
 
 			prepareEnv();
 
@@ -989,7 +989,7 @@ EOF");
 				needDMD(env, dmdVer);
 
 				// Go back to our commit (in case we bootstrapped from source).
-				needSource();
+				needSource(true);
 				submodule.clean = false;
 			}
 
@@ -1267,7 +1267,7 @@ EOS";
 		override void performTest()
 		{
 			foreach (dep; ["dmd", "druntime", "phobos"])
-				getComponent(dep).needBuild();
+				getComponent(dep).needBuild(true);
 
 			foreach (model; config.build.components.common.models)
 			{
@@ -1393,7 +1393,7 @@ EOS";
 
 		override void performTest()
 		{
-			getComponent("druntime").needBuild();
+			getComponent("druntime").needBuild(true);
 			getComponent("dmd").needInstalled();
 
 			foreach (model; config.build.components.common.models)
@@ -1535,8 +1535,8 @@ EOS";
 
 		override void performTest()
 		{
-			getComponent("druntime").needBuild();
-			getComponent("phobos").needBuild();
+			getComponent("druntime").needBuild(true);
+			getComponent("phobos").needBuild(true);
 			getComponent("dmd").needInstalled();
 
 			foreach (model; config.build.components.common.models)
@@ -1788,7 +1788,7 @@ EOS";
 
 				// Need DMD source because https://github.com/dlang/phobos/pull/4613#issuecomment-266462596
 				// Need Druntime/Phobos source because we are building its documentation from there.
-				c.needSource(target == Target.test);
+				c.needSource();
 			}
 			foreach (dep; ["tools", "dub"]) // for changelog; also tools for changed.d
 				getComponent(dep).needSource();
@@ -1804,7 +1804,7 @@ EOS";
 				// Need an in-tree build for SYSCONFDIR.imp, which is
 				// needed to parse .d files for the DMD API
 				// documentation.
-				getComponent("dmd").needBuild();
+				getComponent("dmd").needBuild(target == Target.test);
 
 				needKindleGen(env);
 
@@ -2245,7 +2245,7 @@ EOS";
 		this.incrementalBuild = false;
 
 		foreach (componentName; componentNames)
-			getComponent(componentName).needSource();
+			getComponent(componentName).needSource(true);
 	}
 
 	/// Rerun build without cleaning up any files.
