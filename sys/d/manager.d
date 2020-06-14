@@ -489,6 +489,7 @@ class DManager : ICacheHost
 		{
 			tempError++; scope(success) tempError--;
 
+			auto commit = getComponentCommit(name); // Not "incremental" as per this.commit
 			if (incrementalBuild)
 			{
 				if (submodule.getHead() == commit)
