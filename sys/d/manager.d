@@ -1843,16 +1843,18 @@ EOS";
 
 				string[] diffable = null;
 
+				auto pdf = makeSrc.indexOf("pdf") >= 0 ? ["pdf"] : [];
+
 				string[] targets =
 					[
 						config.build.components.website.diffable
 						? makeSrc.indexOf("dautotest") >= 0
 							? ["dautotest"]
-							: ["all", "verbatim", "pdf"] ~ (
+							: ["all", "verbatim"] ~ pdf ~ (
 								makeSrc.indexOf("diffable-intermediaries") >= 0
 								? ["diffable-intermediaries"]
 								: ["dlangspec.html"])
-						: ["all", "verbatim", "pdf", "kindle"],
+						: ["all", "verbatim", "kindle"] ~ pdf,
 						["test"]
 					][target];
 
