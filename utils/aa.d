@@ -898,8 +898,8 @@ public:
 	/// If `key` is present, call `update` for every value;
 	/// otherwise, add new value with `create`.
 	static if (haveValues)
-	private void update(C, U)(auto ref K key, scope C create, scope U update)
-	if (is(typeof(create()) : V) && (is(UpdateFuncRT!U : V) || is(UpdateFuncRT == void)))
+	void update(C, U)(auto ref K key, scope C create, scope U update)
+	if (is(typeof(create()) : V) && (is(UpdateFuncRT!U : V) || is(UpdateFuncRT!U == void)))
 	{
 		static if (ordered)
 		{
