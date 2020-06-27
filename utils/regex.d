@@ -342,8 +342,9 @@ private Transformation[] splitRETransformation(string s)
 
 unittest
 {
-	Transformation result = { type : Transformation.Type.replace, replace : { search : "from", replacement : "to", flags : "" } };
-	assert(splitRETransformation("s/from/to/") == [result]);
+	auto actual = splitRETransformation("s/from/to/");
+	Transformation expected = { type : Transformation.Type.replace, replace : { search : "from", replacement : "to", flags : "" } };
+	assert(actual.length == 1 && actual[0].tupleof == expected.tupleof);
 }
 
 /// Apply sed-like regex transformation (in the form of "s/FROM/TO/FLAGS") to a string.
