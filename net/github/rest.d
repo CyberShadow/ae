@@ -21,6 +21,7 @@ import std.string;
 import std.utf;
 
 import ae.net.http.common;
+import ae.net.ietf.headers;
 import ae.net.ietf.url;
 import ae.sys.data;
 import ae.sys.log;
@@ -71,10 +72,11 @@ struct GitHub
 		if (cacheEntryStr)
 		{
 			cacheEntry = cacheEntryStr.jsonParse!CacheEntry();
+			auto cacheHeaders = Headers(cacheEntry.headers);
 
-			if (auto p = "ETag" in cacheEntry.headers)
+			if (auto p = "ETag" in cacheHeaders)
 				request.headers["If-None-Match"] = *p;
-			if (auto p = "Last-Modified" in cacheEntry.headers)
+			if (auto p = "Last-Modified" in cacheHeaders)
 				request.headers["If-Modified-Since"] = *p;
 		}
 
