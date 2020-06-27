@@ -362,7 +362,8 @@ class GitCache : DCache
 
 	override bool haveEntry(string key) const
 	{
-		auto p = git.pipe(["show-ref", "--verify", refPrefix ~ key], Redirect.stderr);
+		auto p = git.pipe(["show-ref", "--verify", refPrefix ~ key], Redirect.stdout | Redirect.stderr);
+		readFile(p.stdout);
 		readFile(p.stderr);
 		return p.pid.wait() == 0;
 	}
