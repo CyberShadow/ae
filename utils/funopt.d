@@ -667,6 +667,11 @@ unittest
 		@(`Perform action f1`)
 		static void f1(bool verbose) {}
 
+		@(`Perform complicated action f2
+
+This action is complicated because of reasons.`)
+		static void f2() {}
+
 		@(`An action sub-group`)
 		struct fooBar
 		{
@@ -680,6 +685,7 @@ unittest
 	assert(funoptDispatchUsage!Actions() == "
 Actions:
   f1       Perform action f1
+  f2       Perform complicated action f2
   foo-bar  An action sub-group
 ");
 
@@ -696,5 +702,13 @@ Actions:
 	assert(usage == "Usage: unittest f1 [--verbose]
 
 Perform action f1
+", usage);
+
+	funoptDispatch!(Actions, FunOptConfig.init, usageFun)(["unittest", "f2", "--help"]);
+	assert(usage == "Usage: unittest f2
+
+Perform complicated action f2
+
+This action is complicated because of reasons.
 ", usage);
 }
