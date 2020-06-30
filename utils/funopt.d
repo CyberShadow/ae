@@ -380,7 +380,7 @@ string getUsageFormatString(alias FUN)()
 	enum names = [optionNames!FUN];
 	alias defaults = ParameterDefaultValueTuple!FUN;
 
-	string result = "Usage: %s";
+	string result = "Usage: %1$s";
 	enum inSynopsis(Param) = isParameter!Param || !optionHasDescription!Param;
 	enum haveOmittedOptions = !allSatisfy!(inSynopsis, Params);
 	static if (haveOmittedOptions)
@@ -427,6 +427,11 @@ string getUsageFormatString(alias FUN)()
 	flushOptional();
 
 	result ~= "\n";
+	static if (hasAttribute!(string, FUN))
+	{
+		enum description = getAttribute!(string, FUN);
+		result ~= "\n" ~ description ~ "\n";
+	}
 
 	enum haveDescriptions = anySatisfy!(optionHasDescription, Params);
 	static if (haveDescriptions)
@@ -577,6 +582,20 @@ Options:
 Options:
   POWER-PCT  How much power % to use.
 ", usage);
+
+	// Test program descriptions
+	@(`Refrobnicates the transmogrifier.`)
+	void f8(Switch!"Be verbose." verbose){}
+
+	usage = getUsage!f8("program");
+	assert(usage ==
+"Usage: program [OPTION]...
+
+Refrobnicates the transmogrifier.
+
+Options:
+  --verbose  Be verbose.
+", usage);
 }
 
 // ***************************************************************************
@@ -593,12 +612,6 @@ auto funoptDispatch(alias Actions, FunOptConfig config = FunOptConfig.init, alia
 	{
 		action = action.canonicalizeCommandLineArgument();
 
-		static void descUsageFun(string description)(string usage)
-		{
-			auto lines = usage.split("\n");
-			usageFun((lines[0..1] ~ [null, description] ~ lines[1..$]).join("\n"));
-		}
-
 		foreach (m; __traits(allMembers, Actions))
 			static if (is(typeof(hasAttribute!(string, __traits(getMember, Actions, m)))))
 			{
@@ -606,19 +619,11 @@ auto funoptDispatch(alias Actions, FunOptConfig config = FunOptConfig.init, alia
 				enum name = m.canonicalizeIdentifier();
 				if (name == action)
 				{
-					static if (hasAttribute!(string, member))
-					{
-						enum description = getAttribute!(string, member);
-						alias myUsageFun = descUsageFun!description;
-					}
-					else
-						alias myUsageFun = usageFun;
-
 					auto args = [getProgramName(program) ~ " " ~ action] ~ actionArguments;
 					static if (is(member == struct))
 						return funoptDispatch!(member, config, usageFun)(args);
 					else
-						return funopt!(member, config, myUsageFun)(args);
+						return funopt!(member, config, usageFun)(args);
 				}
 			}
 
