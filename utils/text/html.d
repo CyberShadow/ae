@@ -36,6 +36,10 @@ string encodeHtmlEntities(bool inAttribute = true)(string s)
 		if (inAttribute && c=='"')
 			result.put(s[start..i], "&quot;"),
 			start = i+1;
+		else
+		if (inAttribute && c=='\'')
+			result.put(s[start..i], "&#39;"),
+			start = i+1;
 
 	if (!start)
 		return s;
