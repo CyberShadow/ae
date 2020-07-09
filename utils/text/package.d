@@ -18,6 +18,7 @@ import std.ascii;
 import std.exception;
 import std.conv;
 import std.format;
+import std.range.primitives;
 import std.string;
 import std.traits;
 import std.typetuple;
@@ -49,12 +50,24 @@ auto formatted(string fmt, T...)(auto ref T values)
 	static struct Formatted
 	{
 		T values;
+
 		void toString(void delegate(const(char)[]) sink) const
 		{
 			sink.formattedWrite!fmt(values);
 		}
+
+		void toString(W)(ref W writer) const
+		if (isOutputRange!(W, char))
+		{
+			writer.formattedWrite!fmt(values);
+		}
 	}
 	return Formatted(values);
+}
+
+unittest
+{
+	assert(format!"%s%s%s"("<", formatted!"%x"(64), ">") == "<40>");
 }
 
 // ************************************************************************
