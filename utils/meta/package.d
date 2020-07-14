@@ -679,6 +679,38 @@ unittest
 	assert(C.n == 6);
 }
 
+/// As above, but using arbitrary types and a factory function.
+@property singleton(alias fun, args...)()
+	if (is(typeof(fun(args))))
+{
+	alias T = typeof(fun(args));
+	static T instance;
+	static bool initialized;
+	if (!initialized)
+	{
+		instance = fun(args);
+		initialized = true;
+	}
+	return instance;
+}
+
+unittest
+{
+	int n;
+	int gen(int _ = 0)
+	{
+		return ++n;
+	}
+
+	alias singleton!gen c0;
+	assert(c0 == 1);
+	assert(c0 == 1);
+
+	alias singleton!(gen, 1) c1;
+	assert(c1 == 2);
+	assert(c1 == 2);
+}
+
 // ************************************************************************
 
 /// Were we built with -debug?
