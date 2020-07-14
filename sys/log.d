@@ -296,3 +296,22 @@ Logger createLogger(string name)
 	}
 	return result;
 }
+
+/// Create a logger using a user-supplied log directory or transport.
+Logger createLogger(string name, string target)
+{
+	Logger result;
+	switch (target)
+	{
+		case "/dev/stderr":
+			result = consoleLogger(name);
+			break;
+		case "/dev/null":
+			result = nullLogger();
+			break;
+		default:
+			result = fileLogger(target.buildPath(name));
+			break;
+	}
+	return result;
+}
