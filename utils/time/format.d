@@ -244,7 +244,7 @@ string formatTime(string fmt)(SysTime t)
 
 /// ditto
 void putTime(string fmt, S)(ref S sink, SysTime t)
-	if (IsStringSink!S)
+	if (isStringSink!S)
 {
 	putTimeImpl!fmt(sink, t);
 }
@@ -268,14 +268,14 @@ deprecated string formatTime(string fmt, SysTime t = Clock.currTime())
 
 /// ditto
 void putTime(S)(ref S sink, SysTime t, string fmt)
-	if (IsStringSink!S)
+	if (isStringSink!S)
 {
 	putTimeImpl!fmt(sink, t);
 }
 
 /// ditto
 deprecated void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime())
-	if (IsStringSink!S)
+	if (isStringSink!S)
 {
 	putTimeImpl!fmt(sink, t);
 }
