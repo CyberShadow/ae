@@ -158,7 +158,7 @@ class Installer
 	protected void atomicInstallImpl()
 	{
 		void installProxy(string target) { installImpl(target); }
-		safeUpdate!installProxy(directory);
+		atomic!installProxy(directory);
 	}
 
 	protected void installImpl(string target)
