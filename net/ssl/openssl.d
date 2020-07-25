@@ -508,7 +508,7 @@ unittest
 		s.handleConnect =
 		{
 			debug(OPENSSL) stderr.writeln("Connected!");
-			s.send(Data("GET / HTTP/1.0\r\n\r\n"));
+			s.send(Data("GET / HTTP/1.0\r\nHost: www.openssl.org\r\n\r\n"));
 		};
 		s.handleReadData = (Data data)
 		{
