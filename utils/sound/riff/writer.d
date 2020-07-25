@@ -14,11 +14,11 @@
 module ae.utils.sound.riff.writer;
 
 import std.algorithm;
-import std.array : staticArray;
 import std.conv;
 import std.range;
 
 import ae.utils.sound.riff.common;
+import ae.utils.array : staticArray;
 
 struct ValueReprRange(T)
 {
