@@ -33,6 +33,12 @@ T[] toArray(T)(ref T v)
 	return (&v)[0..1];
 }
 
+/// std.array.staticArray shim
+static if (__traits(hasMember, std.array, "staticArray"))
+	public import std.array : staticArray;
+else
+	pragma(inline, true) T[n] staticArray(T, size_t n)(auto ref T[n] a) { return a; }
+
 /// Return the value represented as an array of bytes.
 @property inout(ubyte)[] bytes(T)(ref inout(T) value)
 	if (!hasIndirections!T)
