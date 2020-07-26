@@ -819,7 +819,7 @@ unittest
 
 // ***************************************************************************
 
-enum ulong PNGSignature = 0x0a1a0a0d474e5089;
+static immutable ubyte[8] pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]; // \211   P   N   G  \r  \n \032 \n
 
 struct PNGChunk
 {
@@ -940,7 +940,7 @@ ubyte[] makePNG(PNGChunk[] chunks)
 		totalSize += 8 + chunk.data.length + 4;
 	ubyte[] data = new ubyte[totalSize];
 
-	*cast(ulong*)data.ptr = PNGSignature;
+	data[0..pngSignature.length] = pngSignature;
 	uint pos = 8;
 	foreach(chunk;chunks)
 	{
