@@ -863,6 +863,9 @@ align(1):
 	static assert(PNGHeader.sizeof == 13);
 }
 
+struct PNGChunkHeader { ubyte[4] length; char[4] type; }
+struct PNGChunkFooter { ubyte[4] crc32; }
+
 /// Creates a PNG file.
 /// Only basic PNG features are supported
 /// (no filters, interlacing, palettes etc.)
@@ -935,23 +938,26 @@ ubyte[] makePNG(PNGChunk[] chunks)
 {
 	import std.bitmanip : nativeToBigEndian;
 
-	uint totalSize = 8;
+	size_t totalSize = pngSignature.length;
 	foreach (chunk; chunks)
-		totalSize += 8 + chunk.data.length + 4;
+		totalSize += PNGChunkHeader.sizeof + chunk.data.length + PNGChunkFooter.sizeof;
 	ubyte[] data = new ubyte[totalSize];
 
-	data[0..pngSignature.length] = pngSignature;
-	uint pos = 8;
-	foreach(chunk;chunks)
+	data[0 .. pngSignature.length] = pngSignature;
+	size_t pos = pngSignature.length;
+	foreach (chunk; chunks)
 	{
-		uint i = pos;
-		uint chunkLength = to!uint(chunk.data.length);
-		pos += 12 + chunkLength;
-		*cast(ubyte[4]*)&data[i] = nativeToBigEndian(chunkLength);
-		(cast(char[])data[i+4 .. i+8])[] = chunk.type[];
-		data[i+8 .. i+8+chunk.data.length] = (cast(ubyte[])chunk.data)[];
-		*cast(ubyte[4]*)&data[i+8+chunk.data.length] = nativeToBigEndian(chunk.crc32());
-		assert(pos == i+12+chunk.data.length);
+		auto header = cast(PNGChunkHeader*)data.ptr;
+		header.length = chunk.data.length.to!uint.nativeToBigEndian;
+		header.type = chunk.type;
+		pos += PNGChunkHeader.sizeof;
+
+		data[pos .. pos + chunk.data.length] = cast(ubyte[])chunk.data;
+		pos += chunk.data.length;
+
+		auto footer = cast(PNGChunkFooter*)data.ptr;
+		footer.crc32 = chunk.crc32.nativeToBigEndian;
+		pos += PNGChunkFooter.sizeof;
 	}
 
 	return data;
