@@ -24,6 +24,7 @@ struct BigEndian(T)
 	@property void _endian_value(T value) { _endian_bytes = nativeToBigEndian(OriginalType!T(value)); }
 	alias _endian_value this;
 	alias opAssign = _endian_value;
+	this(T value) { _endian_value(value); }
 }
 
 struct LittleEndian(T)
@@ -33,6 +34,7 @@ struct LittleEndian(T)
 	@property void _endian_value(T value) { _endian_bytes = nativeToLittleEndian(OriginalType!T(value)); }
 	alias _endian_value this;
 	alias opAssign = _endian_value;
+	this(T value) { _endian_value(value); }
 }
 
 unittest
