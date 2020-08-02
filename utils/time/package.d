@@ -21,8 +21,13 @@ public import ae.utils.time.parsedur;
 
 unittest
 {
+	import core.stdc.time : time_t;
+
 	enum f = `U\.9`;
-	assert("123456789012.123456789".parseTime!f.formatTime!f == "123456789012.123456700");
+	static if (time_t.sizeof == 4)
+		assert("1234567890.123456789".parseTime!f.formatTime!f == "1234567890.123456700");
+	else
+		assert("123456789012.123456789".parseTime!f.formatTime!f == "123456789012.123456700");
 }
 
 // ***************************************************************************
