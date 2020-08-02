@@ -208,6 +208,7 @@ private void parseToken(alias c, alias context)()
 			case TimeFormatElement.milliseconds:
 			case TimeFormatElement.millisecondsAlt: // not standard
 				nsecs = takeNumber!3 * 1_000_000;
+				break;
 			case TimeFormatElement.microseconds:
 				nsecs = takeNumber!6 * 1_000;
 				break;
