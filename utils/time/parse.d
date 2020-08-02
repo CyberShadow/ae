@@ -274,7 +274,7 @@ private void parseToken(alias c, alias context)()
 			case TimeFormatElement.dateTimeUNIX:
 			{
 				auto unixTime = takeNumber!(1, 20, time_t);
-				auto d = SysTime.fromUnixTime(unixTime).to!DateTime;
+				auto d = SysTime.fromUnixTime(unixTime, UTC()).to!DateTime;
 				year = d.year;
 				month = d.month;
 				day = d.day;
