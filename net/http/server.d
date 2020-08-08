@@ -498,8 +498,8 @@ final class FileHttpServerConnection : BaseHttpServerConnection
 		this.protocol = protocol;
 
 		auto c = new Duplex(
-			new FileConnection(stdin.fileno),
-			new FileConnection(stdout.fileno),
+			new FileConnection(input.fileno),
+			new FileConnection(output.fileno),
 		);
 
 		super(c);
