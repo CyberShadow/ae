@@ -57,10 +57,7 @@ version (Windows)
 
 	/*private*/ string getAppDir(int csidl, string appName = null)
 	{
-		string dir = getShellPath(csidl) ~ `\` ~ (appName ? appName : getExecutableName());
-		if (!exists(dir))
-			mkdir(dir);
-		return dir;
+		return getShellPath(csidl) ~ `\` ~ (appName ? appName : getExecutableName());
 	}
 
 	/*private*/ string[] getAppDirs(int csidl, string appName = null)
@@ -112,22 +109,12 @@ else // POSIX
 
 		string getHome() const
 		{
-			string path = environment.get(homeVarName, homeDefaultValue.expandTilde());
-			if (!exists(path))
-			{
-				mkdir(path);
-				setAttributes(path, octal!700);
-			}
-			return path;
+			return environment.get(homeVarName, homeDefaultValue.expandTilde());
 		}
 
 		string getAppHome(string appName) const
 		{
-			string path = getHome();
-			path = path.buildPath(getPosixAppName(appName));
-			if (!exists(path))
-				mkdir(path);
-			return path;
+			return getHome().buildPath(getPosixAppName(appName));
 		}
 
 		string[] getDirs() const
