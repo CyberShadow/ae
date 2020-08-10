@@ -15,6 +15,7 @@ module ae.sys.config;
 
 import std.ascii;
 
+import ae.sys.file;
 import ae.sys.paths;
 
 class Config
@@ -183,6 +184,7 @@ class Config
 		{
 			if (!dirty)
 				return;
+			ensurePathExists(fileName);
 			auto f = File(fileName, "wt");
 			foreach (name, value; values)
 				f.writefln("%s=%s", name, value);
