@@ -2618,7 +2618,7 @@ EOS";
 		else
 		{
 			// Needed for coreutils, make, gcc, git etc.
-			newPaths = ["/bin", "/usr/bin"];
+			newPaths = ["/bin", "/usr/bin", "/usr/local/bin"];
 
 			version (linux)
 			{
