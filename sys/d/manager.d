@@ -757,7 +757,11 @@ EOF");
 		/// Returns the command for the make utility.
 		string[] getMake(in ref Environment env)
 		{
-			return [env.vars.get("MAKE", "make")];
+			version (Posix)
+				enum makeProgram = "gmake"; // GNU make
+			else
+				enum makeProgram = "make";
+			return [env.vars.get("MAKE", makeProgram)];
 		}
 
 		/// Returns the path to the built dmd executable.
