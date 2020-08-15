@@ -20,6 +20,9 @@ excludedSourceFiles "sys/persistence/keyvalue.d"
 # In ae:openssl
 excludedSourceFiles "net/ssl/openssl.d"
 
+# In ae:botan
+excludedSourceFiles "net/ssl/botan.d"
+
 # In ae:sdl2
 excludedSourceFiles "utils/graphics/sdl2image.d"
 
@@ -91,6 +94,15 @@ subPackage {
 	libs "ssl" "crypto" platform="posix"
 	libs "ssl" "eay" platform="windows-x86"
 	libs "ssleay32" "libeay32" platform="windows-x86_64"
+}
+
+subPackage {
+	name "botan"
+	targetType "sourceLibrary"
+	dependency "ae" version="*" path="."
+	dependency "botan" version="~>1.12.18"
+	sourceFiles \
+		"net/ssl/botan.d"
 }
 
 ---------------------------
