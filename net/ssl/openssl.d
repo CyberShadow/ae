@@ -434,7 +434,7 @@ class OpenSSLAdapter : SSLAdapter
 		}
 	}
 
-	override void setHostName(string hostname)
+	override void setHostName(string hostname, ushort port = 0, string service = null)
 	{
 		SSL_set_tlsext_host_name(sslHandle, cast(char*)hostname.toStringz());
 	}
@@ -558,6 +558,7 @@ unittest
 			assert(type == DisconnectType.graceful);
 			assert((cast(string)allData.contents).endsWith("Hello world\n"));
 		};
+		s.setHostName("thecybershadow.net");
 		c.connect(host, port);
 		socketManager.loop();
 	}
