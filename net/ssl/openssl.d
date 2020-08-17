@@ -497,35 +497,5 @@ T sslEnforce(T)(T v, string message = null)
 
 // ***************************************************************************
 
-unittest
-{
-	void testServer(string host, ushort port)
-	{
-		auto c = new TcpConnection;
-		auto ctx = ssl.createContext(SSLContext.Kind.client);
-		auto s = ssl.createAdapter(ctx, c);
-		Data allData;
-
-		s.handleConnect =
-		{
-			debug(OPENSSL) stderr.writeln("Connected!");
-			s.send(Data("GET /d/nettest/testUrl1 HTTP/1.0\r\nHost: thecybershadow.net\r\n\r\n"));
-		};
-		s.handleReadData = (Data data)
-		{
-			debug(OPENSSL) { stderr.write(cast(string)data.contents); stderr.flush(); }
-			allData ~= data;
-		};
-		s.handleDisconnect = (string reason, DisconnectType type)
-		{
-			debug(OPENSSL) { stderr.writeln(reason); }
-			assert(type == DisconnectType.graceful);
-			assert((cast(string)allData.contents).endsWith("Hello world\n"));
-		};
-		s.setHostName("thecybershadow.net");
-		c.connect(host, port);
-		socketManager.loop();
-	}
-
-	testServer("thecybershadow.net", 443);
-}
+version (unittest) import ae.net.ssl.test;
+unittest { testSSL(new OpenSSLProvider); }
