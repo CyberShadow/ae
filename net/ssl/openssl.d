@@ -265,6 +265,7 @@ class OpenSSLAdapter : SSLAdapter
 	SSL* sslHandle;
 	OpenSSLContext context;
 	ConnectionState connectionState;
+	const(char)* hostname;
 
 	this(OpenSSLContext context, IConnection next)
 	{
@@ -292,6 +293,12 @@ class OpenSSLAdapter : SSLAdapter
 		}
 		connectionState = ConnectionState.connecting;
 		updateState();
+
+		if (context.verify && hostname && context.kind == OpenSSLContext.Kind.client)
+		{
+			SSL_set_hostflags(sslHandle, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+			SSL_set1_host(sslHandle, hostname).sslEnforce("SSL_set1_host");
+		}
 	}
 
 	MemoryBIO r; // BIO for incoming ciphertext
@@ -461,7 +468,8 @@ class OpenSSLAdapter : SSLAdapter
 
 	override void setHostName(string hostname, ushort port = 0, string service = null)
 	{
-		SSL_set_tlsext_host_name(sslHandle, cast(char*)hostname.toStringz());
+		this.hostname = cast(char*)hostname.toStringz();
+		SSL_set_tlsext_host_name(sslHandle, cast(char*)this.hostname);
 	}
 
 	override OpenSSLCertificate getHostCertificate()
