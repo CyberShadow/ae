@@ -59,7 +59,7 @@ abstract class SSLAdapter : ConnectionAdapter
 
 abstract class SSLCertificate
 {
-	string getSubjectName();
+	abstract string getSubjectName();
 }
 
 SSLProvider ssl;
