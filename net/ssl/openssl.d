@@ -222,6 +222,7 @@ class OpenSSLAdapter : SSLAdapter
 {
 	SSL* sslHandle;
 	OpenSSLContext context;
+	ConnectionState connectionState;
 
 	this(OpenSSLContext context, IConnection next)
 	{
@@ -238,7 +239,6 @@ class OpenSSLAdapter : SSLAdapter
 	override void onConnect()
 	{
 		initialize();
-		super.onConnect();
 	}
 
 	private final void initialize()
@@ -248,6 +248,8 @@ class OpenSSLAdapter : SSLAdapter
 			case OpenSSLContext.Kind.client: SSL_connect(sslHandle).sslEnforce(); break;
 			case OpenSSLContext.Kind.server: SSL_accept (sslHandle).sslEnforce(); break;
 		}
+		connectionState = ConnectionState.connecting;
+		updateState();
 	}
 
 	MemoryBIO r; // BIO for incoming ciphertext
@@ -255,7 +257,7 @@ class OpenSSLAdapter : SSLAdapter
 
 	override void onReadData(Data data)
 	{
-		debug(OPENSSL_DATA) stderr.writefln("OpenSSL: Got %d incoming bytes from network", data.length);
+		debug(OPENSSL_DATA) stderr.writefln("OpenSSL: { Got %d incoming bytes from network", data.length);
 
 		if (next.state == ConnectionState.disconnecting)
 		{
@@ -264,22 +266,18 @@ class OpenSSLAdapter : SSLAdapter
 
 		assert(r.data.length == 0, "Would clobber data");
 		r.set(data.contents);
-		debug(OPENSSL_DATA) stderr.writefln("OpenSSL: r.data.length = %d", r.data.length);
 
 		try
 		{
-			if (queue.length)
-				flushQueue();
-
 			while (true)
 			{
 				static ubyte[4096] buf;
 				debug(OPENSSL_DATA) auto oldLength = r.data.length;
 				auto result = SSL_read(sslHandle, buf.ptr, buf.length);
-				debug(OPENSSL_DATA) stderr.writefln("OpenSSL: SSL_read ate %d bytes and spat out %d bytes", oldLength - r.data.length, result);
-				flushWritten();
+				debug(OPENSSL_DATA) stderr.writefln("OpenSSL: < SSL_read ate %d bytes and spat out %d bytes", oldLength - r.data.length, result);
 				if (result > 0)
 				{
+					updateState();
 					super.onReadData(Data(buf[0..result]));
 					// Stop if upstream decided to disconnect.
 					if (next.state != ConnectionState.connected)
@@ -288,6 +286,7 @@ class OpenSSLAdapter : SSLAdapter
 				else
 				{
 					sslError(result, "SSL_read");
+					updateState();
 					break;
 				}
 			}
@@ -303,34 +302,24 @@ class OpenSSLAdapter : SSLAdapter
 		}
 	}
 
-	Data[] queue; /// Queue of outgoing plaintext
-
 	override void send(Data[] data, int priority = DEFAULT_PRIORITY)
 	{
-		foreach (datum; data)
-			if (datum.length)
-			{
-				debug(OPENSSL_DATA) stderr.writefln("OpenSSL: Got %d outgoing bytes from program", datum.length);
-				queue ~= datum;
-			}
-
-		flushQueue();
-	}
-
-	/// Encrypt outgoing plaintext
-	/// queue -> SSL_write -> w
-	void flushQueue()
-	{
-		while (queue.length)
+		while (data.length)
 		{
+			auto datum = data[0];
+			data = data[1 .. $];
+			if (!datum.length)
+				continue;
+
+			debug(OPENSSL_DATA) stderr.writefln("OpenSSL: > Got %d outgoing bytes from program", datum.length);
+
 			debug(OPENSSL_DATA) auto oldLength = w.data.length;
-			auto result = SSL_write(sslHandle, queue[0].ptr, queue[0].length.to!int);
-			debug(OPENSSL_DATA) stderr.writefln("OpenSSL: SSL_write ate %d bytes and spat out %d bytes", queue[0].length, w.data.length - oldLength);
+			auto result = SSL_write(sslHandle, datum.ptr, datum.length.to!int);
+			debug(OPENSSL_DATA) stderr.writefln("OpenSSL:   SSL_write ate %d bytes and spat out %d bytes", datum.length, w.data.length - oldLength);
 			if (result > 0)
 			{
 				// "SSL_write() will only return with success, when the
 				// complete contents of buf of length num has been written."
-				queue = queue[1..$];
 			}
 			else
 			{
@@ -338,16 +327,29 @@ class OpenSSLAdapter : SSLAdapter
 				break;
 			}
 		}
-		flushWritten();
+		updateState();
 	}
 
-	/// Flush any accumulated outgoing ciphertext to the network
-	void flushWritten()
+	override @property ConnectionState state()
 	{
+		return connectionState;
+	}
+
+	final void updateState()
+	{
+		// Flush any accumulated outgoing ciphertext to the network
 		if (w.data.length)
 		{
+			debug(OPENSSL_DATA) stderr.writefln("OpenSSL: } Flushing %d outgoing bytes from OpenSSL to network", w.data.length);
 			next.send([Data(w.data)]);
 			w.clear();
+		}
+
+		// Has the handshake been completed?
+		if (connectionState == ConnectionState.connecting && SSL_is_init_finished(sslHandle))
+		{
+			connectionState = ConnectionState.connected;
+			super.onConnect();
 		}
 	}
 
@@ -358,11 +360,12 @@ class OpenSSLAdapter : SSLAdapter
 		{
 			debug(OPENSSL) stderr.writefln("OpenSSL: Calling SSL_shutdown");
 			SSL_shutdown(sslHandle);
+			connectionState = ConnectionState.disconnecting;
+			updateState();
 		}
 		else
 			debug(OPENSSL) stderr.writefln("OpenSSL: In init, not calling SSL_shutdown");
 		debug(OPENSSL) stderr.writefln("OpenSSL: SSL_shutdown done, flushing");
-		flushWritten();
 		debug(OPENSSL) stderr.writefln("OpenSSL: SSL_shutdown output flushed");
 		super.disconnect(reason, type);
 	}
@@ -374,6 +377,7 @@ class OpenSSLAdapter : SSLAdapter
 		w.clear();
 		SSL_free(sslHandle);
 		sslHandle = null;
+		connectionState = ConnectionState.disconnected;
 		debug(OPENSSL) stderr.writeln("OpenSSL: onDisconnect: SSL_free called, calling super.onDisconnect");
 		super.onDisconnect(reason, type);
 		debug(OPENSSL) stderr.writeln("OpenSSL: onDisconnect finished");
