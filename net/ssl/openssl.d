@@ -52,6 +52,8 @@ import std.string;
 //import deimos.openssl.rand;
 import deimos.openssl.ssl;
 import deimos.openssl.err;
+import deimos.openssl.x509_vfy;
+import deimos.openssl.x509v3;
 
 import ae.net.asockets;
 import ae.net.ssl;
@@ -150,6 +152,7 @@ class OpenSSLContext : SSLContext
 {
 	SSL_CTX* sslCtx;
 	Kind kind;
+	Verify verify;
 
 	this(Kind kind)
 	{
@@ -167,6 +170,8 @@ class OpenSSLContext : SSLContext
 				break;
 		}
 		sslCtx = SSL_CTX_new(method).sslEnforce();
+
+		SSL_CTX_set_default_verify_paths(sslCtx);
 	}
 
 	override void setCipherList(string[] ciphers)
@@ -227,6 +232,7 @@ class OpenSSLContext : SSLContext
 			SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT,
 		];
 		SSL_CTX_set_verify(sslCtx, modes[verify], null);
+		this.verify = verify;
 	}
 
 	override void setPeerRootCertificate(string path)
@@ -385,6 +391,21 @@ class OpenSSLAdapter : SSLAdapter
 		if (connectionState == ConnectionState.connecting && SSL_is_init_finished(sslHandle))
 		{
 			connectionState = ConnectionState.connected;
+			if (context.verify)
+				try
+					if (!SSL_get_peer_certificate(sslHandle))
+						enforce(context.verify != SSLContext.Verify.require, "No SSL peer certificate was presented");
+					else
+					{
+						auto result = SSL_get_verify_result(sslHandle);
+						enforce(result == X509_V_OK,
+							"SSL peer verification failed with error " ~ result.to!string);
+					}
+				catch (Exception e)
+				{
+					disconnect(e.msg, DisconnectType.error);
+					return;
+				}
 			super.onConnect();
 		}
 	}
