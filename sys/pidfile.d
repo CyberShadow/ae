@@ -70,14 +70,13 @@ unittest
 		{
 			// Since locks are per-process, we cannot test lock failures within
 			// the same process. fork() is used to create a second process.
-			import core.stdc.stdlib : exit;
 			import core.sys.posix.sys.wait : wait;
-			import core.sys.posix.unistd : fork;
+			import core.sys.posix.unistd : fork, _exit;
 			int child, status;
 			if ((child = fork()) == 0)
 			{
 				code();
-				exit(0);
+				_exit(0);
 			}
 			else
 			{
