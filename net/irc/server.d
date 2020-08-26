@@ -966,7 +966,7 @@ class IrcServer
 
 		void add(Client client)
 		{
-			auto modes = members.length ? Member.Modes.none : Member.Modes.op;
+			auto modes = staticChannels || members.length ? Member.Modes.none : Member.Modes.op;
 			members[client.nickname.normalized] = Member(client, modes);
 		}
 
