@@ -646,10 +646,18 @@ public:
 	// *** Query (search by key) ***
 
 	static if (ordered)
-	private size_t[] indicesOf()(auto ref K k)
 	{
-		auto p = k in lookup;
-		return p ? (*p)[] : null;
+		private size_t indexOf()(auto ref K k)
+		{
+			auto p = k in lookup;
+			return p ? (*p)[0] : -1;
+		}
+
+		private size_t[] indicesOf()(auto ref K k)
+		{
+			auto p = k in lookup;
+			return p ? (*p)[] : null;
+		}
 	}
 
 	/// Return the number of items with the given key.
