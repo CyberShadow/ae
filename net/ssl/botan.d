@@ -24,6 +24,7 @@ import ae.net.ssl;
 debug = BotanSSL;
 debug(BotanSSL) import std.stdio : stderr;
 
+/// Botan implementation of SSLProvider.
 class BotanSSLProvider : SSLProvider
 {
 	override SSLContext createContext(SSLContext.Kind kind)
@@ -39,6 +40,7 @@ class BotanSSLProvider : SSLProvider
 	}
 }
 
+/// Implementation of TLSCredentialsManager with the default behavior.
 class DefaultTLSCredentialsManager : TLSCredentialsManager
 {
 	override Vector!CertificateStore trustedCertificateAuthorities(in string type, in string context)
@@ -117,17 +119,47 @@ class DefaultTLSCredentialsManager : TLSCredentialsManager
 
 class AETLSCredentialsManager : DefaultTLSCredentialsManager
 {
+	/// E.g.: `() => readText(".../ca-bundle.crt")`
+	static string delegate() trustedRootCABundleProvider = null;
+	static CertificateStore trustedrootCABundleStore;
+
+	SSLContext.Verify verify;
+
+	override Vector!CertificateStore trustedCertificateAuthorities(in string type, in string context)
+	{
+		if (!trustedrootCABundleStore)
+		{
+			auto memStore = new CertificateStoreInMemory();
+			import std.string : split;
+			auto bundleText = trustedRootCABundleProvider();
+			foreach (certText; bundleText.split("\n=")[1..$])
+				memStore.addCertificate(X509Certificate(cast(DataSource) DataSourceMemory(certText)));
+			trustedrootCABundleStore = memStore;
+		}
+
+		return Vector!CertificateStore(trustedrootCABundleStore);
+	}
+
 	override void verifyCertificateChain(in string type, in string purported_hostname, const ref Vector!X509Certificate cert_chain)
 	{
-		// TODO!
+		if (verify == SSLContext.Verify.none)
+			return;
+		if (verify == SSLContext.Verify.verify && cert_chain.empty)
+			return;
+		super.verifyCertificateChain(type, purported_hostname, cert_chain);
 	}
+}
+
+class AETLSPolicy : TLSPolicy
+{
 }
 
 class BotanSSLContext : SSLContext
 {
 	Kind kind;
+	Verify verify;
+
 	TLSSessionManager sessions;
-	TLSCredentialsManager creds;
 	RandomNumberGenerator rng;
 	TLSPolicy policy;
 
@@ -136,8 +168,7 @@ class BotanSSLContext : SSLContext
 		this.kind = kind;
 		this.rng = new AutoSeededRNG;
 		this.sessions = new TLSSessionManagerInMemory(rng);
-		this.creds = new AETLSCredentialsManager();
-		this.policy = new TLSPolicy;
+		this.policy = new AETLSPolicy();
 	}
 
 	override void setCipherList(string[] ciphers)
@@ -167,7 +198,7 @@ class BotanSSLContext : SSLContext
 
 	override void setPeerVerify(Verify verify)
 	{
-		assert(false, "TODO");
+		this.verify = verify;
 	}
 
 	override void setPeerRootCertificate(string path)
@@ -186,16 +217,53 @@ static this()
 	ssl = new BotanSSLProvider();
 }
 
+static this()
+{
+	// Needed for OCSP validation
+	import botan.utils.http_util.http_util : tcp_message_handler;
+	tcp_message_handler =
+		(in string hostname, string message)
+		{
+			import std.socket : TcpSocket, InternetAddress;
+			auto s = new TcpSocket(new InternetAddress(hostname, 80));
+			import std.array;
+			// stderr.writeln("OCSP send:", message);
+			// import std.file; std.file.write("ocsp-req", message);
+			while (message.length)
+			{
+				auto sent = s.send(message);
+				message = message[sent .. $];
+			}
+			string reply;
+			char[4096] buf;
+			while (true)
+			{
+				auto received = s.receive(buf);
+				if (received > 0)
+					reply ~= buf[0 .. received];
+				else
+					break;
+			}
+			// stderr.writeln("OCSP:", [reply]);
+			s.close();
+			return reply;
+		};
+}
+
 // ***************************************************************************
 
 class BotanSSLAdapter : SSLAdapter
 {
 	BotanSSLContext context;
 	TLSChannel channel;
+	AETLSCredentialsManager creds;
+	TLSServerInformation serverInfo;
 
 	this(BotanSSLContext context, IConnection next)
 	{
 		this.context = context;
+		this.creds = new AETLSCredentialsManager();
+		this.creds.verify = context.verify;
 		super(next);
 
 		if (next.state == ConnectionState.connected)
@@ -218,9 +286,10 @@ class BotanSSLAdapter : SSLAdapter
 					&botanAlert,
 					&botanHandshake,
 					context.sessions,
-					context.creds,
+					creds,
 					context.policy,
-					context.rng
+					context.rng,
+					serverInfo,
 				);
 				break;
 			case SSLContext.Kind.server:
@@ -231,12 +300,21 @@ class BotanSSLAdapter : SSLAdapter
 
 	override void onReadData(Data data)
 	{
+		bool wasActive = channel.isActive();
 		channel.receivedData(cast(ubyte*)data.ptr, data.length);
+		if (!wasActive && channel.isActive())
+			super.onConnect();
 	}
 
-	override void setHostName(string hostname)
+	override void send(Data[] data, int priority)
 	{
-		assert(false, "TODO");
+		foreach (datum; data)
+			channel.send(cast(ubyte*)datum.ptr, datum.length);
+	}
+
+	override void setHostName(string hostname, ushort port = 0, string service = null)
+	{
+		serverInfo = TLSServerInformation(hostname, service, port);
 	}
 
 	override SSLCertificate getHostCertificate()
@@ -249,8 +327,15 @@ class BotanSSLAdapter : SSLAdapter
 		assert(false, "TODO");
 	}
 
-	void botanSocketOutput(in ubyte[] data) { next.send(Data(data, true)); }
-	void botanClientData(in ubyte[] data) { throw new Exception("Unexpected client data"); }
+	void botanSocketOutput(in ubyte[] data)
+	{
+		next.send(Data(data, true));
+	}
+
+	void botanClientData(in ubyte[] data)
+	{
+		super.onReadData(Data(data));
+	}
 
 	void botanAlert(in TLSAlert alert, in ubyte[] data)
 	{
@@ -260,7 +345,7 @@ class BotanSSLAdapter : SSLAdapter
 
 	bool botanHandshake(in TLSSession session)
 	{
-		super.onConnect();
+		debug(BotanSSL) stderr.writeln("Handshake done!");
 		return true;
 	}
 }
@@ -273,28 +358,40 @@ class BotanSSLCertificate : SSLCertificate
 
 unittest
 {
+	import std.file : readText;
+	AETLSCredentialsManager.trustedRootCABundleProvider = () => readText("/home/vladimir/Downloads/ca-bundle.crt");
+
 	void testServer(string host, ushort port)
 	{
 		auto c = new TcpConnection;
 		auto ctx = ssl.createContext(SSLContext.Kind.client);
 		auto s = ssl.createAdapter(ctx, c);
+		Data allData;
 
 		s.handleConnect =
 		{
 			debug(BotanSSL) stderr.writeln("Connected!");
-			s.send(Data("GET / HTTP/1.0\r\nHost: www.google.com\r\n\r\n"));
+			s.send(Data("GET /d/nettest/testUrl1 HTTP/1.0\r\nHost: thecybershadow.net\r\n\r\n"));
 		};
 		s.handleReadData = (Data data)
 		{
 			debug(BotanSSL) { stderr.write(cast(string)data.contents); stderr.flush(); }
+			allData ~= data;
 		};
 		s.handleDisconnect = (string reason, DisconnectType type)
 		{
 			debug(BotanSSL) { stderr.writeln(reason); }
+			assert(type == DisconnectType.graceful);
+			import std.algorithm.searching : endsWith;
+			assert((cast(string)allData.contents).endsWith("Hello world\n"));
 		};
+		s.setHostName("thecybershadow.net");
 		c.connect(host, port);
 		socketManager.loop();
 	}
 
-	testServer("www.google.com", 443);
+	testServer("thecybershadow.net", 443);
 }
+
+// version (unittest) import ae.net.ssl.test;
+// unittest { testSSL(new BotanSSLProvider); }
