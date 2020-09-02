@@ -15,7 +15,7 @@
 .dub
 dub.selections.json
 /ae-test-library
-/ae-*-test-library
+/ae-*-test-lib*
 
 # demos - rdmd binaries
 /demo/binview/binview
