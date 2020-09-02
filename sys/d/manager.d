@@ -757,10 +757,13 @@ EOF");
 		/// Returns the command for the make utility.
 		string[] getMake(in ref Environment env)
 		{
-			version (Posix)
+			version (FreeBSD)
 				enum makeProgram = "gmake"; // GNU make
 			else
-				enum makeProgram = "make";
+			version (Posix)
+				enum makeProgram = "make"; // GNU make
+			else
+				enum makeProgram = "make"; // DigitalMars make
 			return [env.vars.get("MAKE", makeProgram)];
 		}
 
