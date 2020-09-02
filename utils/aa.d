@@ -531,7 +531,8 @@ public:
 
 	/// Check if item with this key has been added.
 	/// When applicable, return a pointer to the last value added with this key.
-	Select!(haveReturnType, inout(ReturnType!void)*, bool) opBinaryRight(string op : "in")(auto ref in K key) inout
+	Select!(haveReturnType, inout(ReturnType!void)*, bool) opBinaryRight(string op : "in", _K)(auto ref _K key) inout
+	if (is(typeof(key in lookup)))
 	{
 		enum missValue = select!haveReturnType(null, false);
 
@@ -1279,6 +1280,15 @@ unittest
 	assert(t.length==1);
 	t.remove(1);
 	assert(t.length==0);
+}
+
+unittest
+{
+	struct S { int[int] aa; }
+	HashSet!S set;
+	S s;
+	set.add(s);
+	assert(s in set);
 }
 
 auto toSet(R)(R r)
