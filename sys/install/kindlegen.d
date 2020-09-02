@@ -22,13 +22,13 @@ public import ae.sys.install.common;
 class KindleGenInstaller : Installer
 {
 	version (Windows)
-		enum defaultUrl = "http://kindlegen.s3.amazonaws.com/kindlegen_win32_v2_9.zip";
+		enum defaultUrl = "https://dump.cy.md/d4be194f848da73ea09742bc3a787f1b/kindlegen_win32_v2_9.zip";
 	else
 	version (linux)
-		enum defaultUrl = "http://kindlegen.s3.amazonaws.com/kindlegen_linux_2.6_i386_v2_9.tar.gz";
+		enum defaultUrl = "https://dump.cy.md/21aef3c8846946203e178c83a37beba1/kindlegen_linux_2.6_i386_v2_9.tar.gz";
 	else
 	version (OSX)
-		enum defaultUrl = "http://kindlegen.s3.amazonaws.com/KindleGen_Mac_i386_v2_9.zip";
+		enum defaultUrl = "https://dump.cy.md/204a2a4cc3e95e1a0dbbb9e52a7bc482/KindleGen_Mac_i386_v2_9.zip";
 	else
 		enum defaultUrl = null;
 
