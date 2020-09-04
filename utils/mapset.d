@@ -85,8 +85,13 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 
 			size_t totalNodes = 1;
 			foreach (submatrix, ref values; children)
-				if (submatrix !is emptySet && submatrix !is unitSet)
+			{
+				// Same as "Node with zero children"
+				assert(submatrix !is emptySet, "Empty set as submatrix");
+
+				if (submatrix !is unitSet)
 					totalNodes += submatrix.root.totalNodes;
+			}
 			this.totalNodes = totalNodes;
 		}
 
