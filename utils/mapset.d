@@ -470,4 +470,11 @@ unittest
 	m = m.merge(M.unitSet.set("x", 11).set("y", 22));
 	auto o = m.optimize();
 	assert(o.root.totalNodes < m.root.totalNodes);
+
+	m = M.emptySet;
+	assert(m.all("x") == []);
+	m = M.unitSet;
+	assert(m.all("x") == [0]);
+	m = m.merge(M.unitSet.set("x", 1));
+	assert(m.all("x").sort.release == [0, 1]);
 }
