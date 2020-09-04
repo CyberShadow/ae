@@ -13,6 +13,8 @@
 
 module ae.utils.mapset;
 
+static if (__VERSION__ >= 2083):
+
 import std.algorithm.iteration;
 import std.array;
 import std.exception;
