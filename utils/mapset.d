@@ -337,9 +337,13 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 
 	/// Refactor this matrix into one with the same data,
 	/// but putting the given dimension in front.
-	private MapSet bringToFront(DimName dim) const
+	/// This will speed up access to values with the given dimension.
+	/// If the dimension does not yet occur in the set (or any subset),
+	/// it is instantiated with a single `nullValue` value.
+	/// The set must be non-empty.
+	MapSet bringToFront(DimName dim) const
 	{
-		assert(this !is emptySet);
+		assert(this !is emptySet, "Empty sets may not have dimensions");
 
 		if (this is unitSet)
 		{
