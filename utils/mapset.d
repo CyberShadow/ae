@@ -164,7 +164,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		bool modified;
 		foreach (submatrix, ref values; other.root.children)
 			foreach (value; values)
-				newChildren.update(value,
+				newChildren.updateVoid(value,
 					{
 						modified = true;
 						return submatrix;
@@ -241,7 +241,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 
 	private static void mergeChildren(ref ValueSet[MapSet] target, MapSet submatrix, ValueSet newValues)
 	{
-		target.update(submatrix,
+		target.updateVoid(submatrix,
 			() => newValues,
 			(ref ValueSet oldValues) { mergeValues(oldValues, newValues); },
 		);
