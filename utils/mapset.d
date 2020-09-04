@@ -84,6 +84,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			hash = hashOf(dim) ^ hashOf(children);
 
 			size_t totalNodes = 1;
+			size_t totalMembers = 0;
 			foreach (submatrix, ref values; children)
 			{
 				// Same as "Node with zero children"
@@ -91,8 +92,10 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 
 				if (submatrix !is unitSet)
 					totalNodes += submatrix.root.totalNodes;
+				totalMembers += values.length * submatrix.count;
 			}
 			this.totalNodes = totalNodes;
+			this.totalMembers = totalMembers;
 		}
 
 		immutable this(DimName dim, immutable MapSet[DimValue] childMap)
@@ -121,6 +124,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 
 		private hash_t hash;
 		size_t totalNodes;
+		size_t totalMembers;
 
 		hash_t toHash() const @safe pure nothrow
 		{
@@ -149,6 +153,16 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 
 	/// The empty set. Represents a set which holds zero values.
 	enum emptySet = MapSet(emptySetRoot);
+
+	/// Return the total number of items in this set.
+	size_t count()
+	{
+		if (this is emptySet)
+			return 0;
+		if (this is unitSet)
+			return 1;
+		return root.totalMembers;
+	}
 
 	/// Combine two matrices together, returning their union.
 	/// If `other` is a subset of `this`, return `this` unchanged.
