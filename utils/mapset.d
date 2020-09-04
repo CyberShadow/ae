@@ -89,6 +89,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			{
 				// Same as "Node with zero children"
 				assert(submatrix !is emptySet, "Empty set as submatrix");
+				assert(!values.empty, "Empty ValueSet");
 
 				if (submatrix !is unitSet)
 					totalNodes += submatrix.root.totalNodes;
@@ -277,7 +278,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		{
 			MapSet result;
 			foreach (submatrix, ref values; root.children)
-				result.merge(submatrix);
+				result = result.merge(submatrix);
 			return result;
 		}
 		// Defer allocation until the need to mutate
@@ -507,4 +508,7 @@ unittest
 	assert(m.all("x") == [0]);
 	m = m.merge(M.unitSet.set("x", 1));
 	assert(m.all("x").sort.release == [0, 1]);
+
+	m = M.unitSet;
+	assert(m.set("x", 1).set("x", 1).all("x") == [1]);
 }
