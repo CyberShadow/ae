@@ -315,14 +315,26 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	}
 
 	/// Return a sub-matrix for all points where the given dimension has this value.
-	/// Note: if `dim` doesn't occur (e.g. because `this` is the unit set) and `value` is `nullValue,
+	/// The dimension itself is not included in the result.
+	/// Note: if `dim` doesn't occur (e.g. because `this` is the unit set) and `value` is `nullValue`,
 	/// this returns the unit set (not the empty set).
-	MapSet get(DimName dim, DimValue value) const
+	MapSet slice(DimName dim, DimValue value) const
 	{
 		if (this is emptySet) return emptySet;
 		foreach (submatrix, ref values; bringToFront(dim).root.children)
 			if (value in values)
 				return submatrix;
+		return emptySet;
+	}
+
+	/// Return a subset of this set for all points where the given dimension has this value.
+	/// Unlike `slice`, the dimension itself is included in the result (with the given value).
+	MapSet get(DimName dim, DimValue value) const
+	{
+		if (this is emptySet) return emptySet;
+		foreach (submatrix, ref values; bringToFront(dim).root.children)
+			if (value in values)
+				return MapSet(new immutable Node(dim, [value : submatrix]));
 		return emptySet;
 	}
 
