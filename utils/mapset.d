@@ -150,10 +150,10 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	/// A set containing a single nil-dimensional element.
 	/// Holds exactly one value (a point with all dimensions at
 	/// nullValue).
-	enum unitSet = MapSet(null);
+	static immutable unitSet = MapSet(null);
 
 	/// The empty set. Represents a set which holds zero values.
-	enum emptySet = MapSet(emptySetRoot);
+	static immutable emptySet = MapSet(emptySetRoot);
 
 	/// Return the total number of items in this set.
 	size_t count()
