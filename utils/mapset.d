@@ -362,6 +362,15 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		return bringToFront(dim).root.children.byValue.map!((ref values) => values.byKey).join;
 	}
 
+	/// Return a set which represents the Cartesian product between
+	/// this set and the given `values` across the specified
+	/// dimension.
+	MapSet cartesianProduct(DimName dim, DimValue[] values)
+	{
+		if (this is emptySet) return emptySet;
+		return MapSet(new immutable Node(dim, cast(immutable) [this.remove(dim) : ValueSet(values)]));
+	}
+
 	/// Refactor this matrix into one with the same data,
 	/// but putting the given dimension in front.
 	/// This will speed up access to values with the given dimension.
@@ -511,4 +520,10 @@ unittest
 
 	m = M.unitSet;
 	assert(m.set("x", 1).set("x", 1).all("x") == [1]);
+
+	m = M.unitSet;
+	m = m.cartesianProduct("x", [1, 2, 3]);
+	m = m.cartesianProduct("y", [1, 2, 3]);
+	m = m.cartesianProduct("z", [1, 2, 3]);
+	assert(m.count == 3 * 3 * 3);
 }
