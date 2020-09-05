@@ -162,21 +162,6 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		return root.totalMembers;
 	}
 
-	size_t uniqueNodes() const
-	{
-		HashSet!MapSet seen;
-		void visit(MapSet set)
-		{
-			if (set is emptySet || set is unitSet || set in seen)
-				return;
-			seen.add(set);
-			foreach (submatrix, ref values; set.root.children)
-				visit(submatrix);
-		}
-		visit(this);
-		return seen.length;
-	}
-
 	private struct SetSetOp { MapSet a, b; }
 	private struct SetDimOp { MapSet set; DimName dim; }
 	private struct Cache
@@ -187,6 +172,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		/// should be memoized here
 		MapSet[SetSetOp] merge, subtract;
 		MapSet[SetDimOp] remove, bringToFront;
+		size_t[MapSet] uniqueNodes;
 	}
 	private static Cache cache;
 
@@ -221,6 +207,24 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	}
 
 	private static void assertDeduplicated(MapSet set) { debug assert(deduplicate(set) is set); }
+
+	/// Count and return the total number of unique nodes in this MapSet.
+	size_t uniqueNodes() const
+	{
+		return cache.uniqueNodes.require(this, {
+			HashSet!MapSet seen;
+			void visit(MapSet set)
+			{
+				if (set is emptySet || set is unitSet || set in seen)
+					return;
+				seen.add(set);
+				foreach (submatrix, ref values; set.root.children)
+					visit(submatrix);
+			}
+			visit(this);
+			return seen.length;
+		}());
+	}
 
 	/// Combine two matrices together, returning their union.
 	/// If `other` is a subset of `this`, return `this` unchanged.
