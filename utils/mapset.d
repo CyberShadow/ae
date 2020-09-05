@@ -405,9 +405,6 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			assert(newSubmatrix.root.dim == dim);
 			foreach (value; values)
 			{
-				if (newSubmatrix.root.children.byKey.empty)
-					submatrices[nullValue][value] = MapSet();
-				else
 				foreach (submatrix2, values2; newSubmatrix.root.children)
 					foreach (value2; values2)
 						submatrices[value2][value] = submatrix2;
