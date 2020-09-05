@@ -468,7 +468,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		return
 			this is emptySet ? 0 :
 			this is unitSet ? 1 :
-			0;
+			root.toHash();
 	}
 
 	bool opEquals(ref const typeof(this) s) const @safe pure nothrow
