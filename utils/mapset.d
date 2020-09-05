@@ -400,10 +400,11 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 
 		MapSet[DimValue][DimValue] submatrices;
 		foreach (submatrix, ref values; root.children)
+		{
+			auto newSubmatrix = submatrix.bringToFront(dim);
+			assert(newSubmatrix.root.dim == dim);
 			foreach (value; values)
 			{
-				auto newSubmatrix = submatrix.bringToFront(dim);
-				assert(newSubmatrix.root.dim == dim);
 				if (newSubmatrix.root.children.byKey.empty)
 					submatrices[nullValue][value] = MapSet();
 				else
@@ -411,6 +412,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 					foreach (value2; values2)
 						submatrices[value2][value] = submatrix2;
 			}
+		}
 		MapSet[DimValue] newChildren;
 		foreach (value, children; submatrices)
 			newChildren[value] = MapSet(new immutable Node(root.dim, cast(immutable) children));
