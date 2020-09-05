@@ -322,7 +322,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	private static void mergeValues(ref ValueSet target, ValueSet newValues)
 	{
 		if (target.empty)
-			target = newValues;
+			target = newValues.dup;
 		else
 			foreach (value; newValues)
 				target.add(value);
@@ -331,7 +331,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	private static void mergeChildren(ref ValueSet[MapSet] target, MapSet submatrix, ValueSet newValues)
 	{
 		target.updateVoid(submatrix,
-			() => newValues,
+			() => newValues.dup,
 			(ref ValueSet oldValues) { mergeValues(oldValues, newValues); },
 		);
 	}
@@ -365,7 +365,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 						if (j < i)
 						{
 							// Known to not need mutation
-							newChildren[submatrix2] = cast() values2;
+							newChildren[submatrix2] = (cast() values2).dup;
 							j++;
 						}
 						else
@@ -503,7 +503,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			auto newMatrix = submatrix.optimize;
 			if (newMatrix !is submatrix)
 				modified = true;
-			mergeChildren(newChildren, newMatrix, cast() values); // WATCH ME: this cast!
+			mergeChildren(newChildren, newMatrix, cast() values);
 		}
 
 		MapSet result = modified ? MapSet(new immutable Node(root.dim, cast(immutable) newChildren)).I!deduplicate : this;
