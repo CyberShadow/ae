@@ -84,7 +84,6 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			// pre-calculate the hash during construction.
 			hash = hashOf(dim) ^ hashOf(children);
 
-			size_t totalNodes = 1;
 			size_t totalMembers = 0;
 			foreach (submatrix, ref values; children)
 			{
@@ -93,11 +92,8 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 				assert(submatrix !is emptySet, "Empty set as submatrix");
 				assert(!values.empty, "Empty ValueSet");
 
-				if (submatrix !is unitSet)
-					totalNodes += submatrix.root.totalNodes;
 				totalMembers += values.length * submatrix.count;
 			}
-			this.totalNodes = totalNodes;
 			this.totalMembers = totalMembers;
 		}
 
@@ -126,7 +122,6 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		}
 
 		private hash_t hash;
-		size_t totalNodes;
 		size_t totalMembers;
 
 		hash_t toHash() const @safe pure nothrow
@@ -165,6 +160,21 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		if (this is unitSet)
 			return 1;
 		return root.totalMembers;
+	}
+
+	size_t uniqueNodes() const
+	{
+		HashSet!MapSet seen;
+		void visit(MapSet set)
+		{
+			if (set is emptySet || set is unitSet || set in seen)
+				return;
+			seen.add(set);
+			foreach (submatrix, ref values; set.root.children)
+				visit(submatrix);
+		}
+		visit(this);
+		return seen.length;
 	}
 
 	private struct SetSetOp { MapSet a, b; }
@@ -505,7 +515,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 				// 		optimized.root.totalNodes, optimized,
 				// 	);
 				// }
-				return optimized.root.totalNodes < result.root.totalNodes ? optimized : result;
+				return optimized.uniqueNodes < result.uniqueNodes ? optimized : result;
 			}
 
 		return result.I!deduplicate;
@@ -568,7 +578,7 @@ unittest
 	m = m.merge(M.unitSet.set("x", 11).set("y", 21));
 	m = m.merge(M.unitSet.set("x", 11).set("y", 22));
 	auto o = m.optimize();
-	assert(o.root.totalNodes < m.root.totalNodes);
+	assert(o.uniqueNodes < m.uniqueNodes);
 
 	m = M.emptySet;
 	assert(m.all("x") == []);
