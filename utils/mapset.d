@@ -226,6 +226,24 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		}());
 	}
 
+	/// Collect the names of all dimensions occurring in this tree.
+	DimName[] getDims() const
+	{
+		HashSet!DimName dims;
+		HashSet!MapSet seen;
+		void visit(MapSet set)
+		{
+			if (set is emptySet || set is unitSet || set in seen)
+				return;
+			seen.add(set);
+			dims.add(set.root.dim);
+			foreach (submatrix, ref values; set.root.children)
+				visit(submatrix);
+		}
+		visit(this);
+		return dims.keys;
+	}
+
 	/// Combine two matrices together, returning their union.
 	/// If `other` is a subset of `this`, return `this` unchanged.
 	MapSet merge(MapSet other) const
