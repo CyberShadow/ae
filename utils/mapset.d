@@ -448,8 +448,34 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	/// If `dim` doesn't occur, it will be `[nullValue]`.
 	DimValue[] all(DimName dim) const
 	{
+		// return bringToFront(dim).root.children.byValue.map!((ref values) => values.byKey).join;
 		if (this is emptySet) return null;
-		return bringToFront(dim).root.children.byValue.map!((ref values) => values.byKey).join;
+		if (this is unitSet) return [nullValue];
+		if (root.dim == dim) return root.children.byValue.map!((ref values) => values.byKey).join;
+
+		HashSet!DimValue allValues;
+		HashSet!MapSet seen;
+		void visit(MapSet set)
+		{
+			if (set is unitSet)
+			{
+				allValues.add(nullValue);
+				return;
+			}
+			if (set in seen)
+				return;
+			seen.add(set);
+
+			if (set.root.dim == dim)
+				foreach (submatrix, ref values; set.root.children)
+					foreach (value; values)
+						allValues.add(value);
+			else
+				foreach (submatrix, ref values; set.root.children)
+					visit(submatrix);
+		}
+		visit(this);
+		return allValues.keys;
 	}
 
 	/// Return a set which represents the Cartesian product between
