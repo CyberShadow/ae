@@ -152,7 +152,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	static immutable emptySet = MapSet(emptySetRoot);
 
 	/// Return the total number of items in this set.
-	size_t count()
+	size_t count() const
 	{
 		if (this is emptySet)
 			return 0;
@@ -191,7 +191,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	/// maintaining a set of interned sets benefits performance. After
 	/// calling `clearCache`, call this method to re-register extant
 	/// live instances to the instance cache.
-	void addToCache()
+	void addToCache() const
 	{
 		cache.instances.updateVoid(
 			this,
@@ -208,7 +208,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		);
 	}
 
-	private MapSet deduplicate()
+	private MapSet deduplicate() const
 	{
 		MapSet deduplicated;
 		cache.instances.updateVoid(
@@ -500,7 +500,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	/// Return a set which represents the Cartesian product between
 	/// this set and the given `values` across the specified
 	/// dimension.
-	MapSet cartesianProduct(DimName dim, DimValue[] values)
+	MapSet cartesianProduct(DimName dim, DimValue[] values) const
 	{
 		if (this is emptySet) return emptySet;
 		this.assertDeduplicated();
