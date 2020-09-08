@@ -280,8 +280,6 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		return cache.merge.require(SetSetOp(this, other), {
 			other = other.bringToFront(root.dim);
 
-			MapSet[MapSet][MapSet] mergeCache;
-
 			MapSet[DimValue] newChildren;
 			foreach (submatrix, ref values; root.children)
 				foreach (value; values)
@@ -297,9 +295,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 						},
 						(ref MapSet oldSubmatrix)
 						{
-							auto mergeResult = mergeCache
-								.require(oldSubmatrix, null)
-								.require(submatrix, oldSubmatrix.merge(submatrix));
+							auto mergeResult = oldSubmatrix.merge(submatrix);
 							if (oldSubmatrix !is mergeResult)
 							{
 								oldSubmatrix = mergeResult;
@@ -329,8 +325,6 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		return cache.subtract.require(SetSetOp(this, other), {
 			other = other.bringToFront(root.dim);
 
-			MapSet[MapSet][MapSet] subtractCache;
-
 			MapSet[DimValue] newChildren;
 			foreach (submatrix, ref values; root.children)
 				foreach (value; values)
@@ -341,9 +335,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 				foreach (value; values)
 					if (auto poldSubmatrix = value in newChildren)
 					{
-						auto subtractResult = subtractCache
-							.require(*poldSubmatrix, null)
-							.require(submatrix, poldSubmatrix.subtract(submatrix));
+						auto subtractResult = poldSubmatrix.subtract(submatrix);
 						if (*poldSubmatrix !is subtractResult)
 						{
 							*poldSubmatrix = subtractResult;
