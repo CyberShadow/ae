@@ -18,6 +18,7 @@ static if (__VERSION__ >= 2083):
 import std.algorithm.iteration;
 import std.array;
 import std.exception;
+import std.typecons : tuple;
 
 import ae.utils.aa : HashSet, updateVoid;
 
@@ -62,14 +63,12 @@ import ae.utils.aa : HashSet, updateVoid;
  */
 struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 {
-	alias ValueSet = HashSet!DimValue;
-
 	struct Node
 	{
 		DimName dim;
-		ValueSet[MapSet] children;
+		MapSet[DimValue] children;
 
-		immutable this(DimName dim, immutable ValueSet[MapSet] children)
+		immutable this(DimName dim, immutable MapSet[DimValue] children)
 		{
 			// Zero children doesn't make sense.
 			// It would be the equivalent of an empty set,
@@ -84,24 +83,15 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			hash = hashOf(dim) ^ hashOf(children);
 
 			size_t totalMembers = 0;
-			foreach (submatrix, ref values; children)
+			foreach (value, submatrix; children)
 			{
 				submatrix.assertDeduplicated();
 				// Same as "Node with zero children"
 				assert(submatrix !is emptySet, "Empty set as submatrix");
-				assert(!values.empty, "Empty ValueSet");
 
-				totalMembers += values.length * submatrix.count;
+				totalMembers += submatrix.count;
 			}
 			this.totalMembers = totalMembers;
-		}
-
-		immutable this(DimName dim, immutable MapSet[DimValue] childMap)
-		{
-			ValueSet[MapSet] children;
-			foreach (value, submatrix; childMap)
-				children.require(submatrix, ValueSet.init).add(value);
-			this(dim, cast(immutable) children);
 		}
 
 		void toString(scope void delegate(const(char)[]) sink) const
@@ -109,13 +99,13 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			import std.format : formattedWrite;
 			sink.formattedWrite("{ %(%s%), [ ", (&dim)[0..1]);
 			bool first = true;
-			foreach (submatrix, ref values; children)
+			foreach (value, submatrix; children)
 			{
 				if (first)
 					first = false;
 				else
 					sink(", ");
-				sink.formattedWrite("[ %(%s, %) ] : %s", values.byKey, submatrix);
+				sink.formattedWrite("%s : %s", value, submatrix);
 			}
 			sink(" ] }");
 		}
@@ -197,7 +187,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			this,
 			{
 				if (this !is emptySet && this !is unitSet)
-					foreach (submatrix, ref values; root.children)
+					foreach (value, submatrix; root.children)
 						submatrix.addToCache();
 				return this;
 			},
@@ -215,7 +205,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			this,
 			{
 				debug if (this !is emptySet && this !is unitSet)
-					foreach (submatrix, ref values; root.children)
+					foreach (value, submatrix; root.children)
 						submatrix.assertDeduplicated();
 				deduplicated = this;
 				return this;
@@ -240,7 +230,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 				if (set is emptySet || set is unitSet || set in seen)
 					return;
 				seen.add(set);
-				foreach (submatrix, ref values; set.root.children)
+				foreach (value, submatrix; set.root.children)
 					visit(submatrix);
 			}
 			visit(this);
@@ -259,7 +249,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 				return;
 			seen.add(set);
 			dims.add(set.root.dim);
-			foreach (submatrix, ref values; set.root.children)
+			foreach (value, submatrix; set.root.children)
 				visit(submatrix);
 		}
 		visit(this);
@@ -281,28 +271,26 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			other = other.bringToFront(root.dim);
 
 			MapSet[DimValue] newChildren;
-			foreach (submatrix, ref values; root.children)
-				foreach (value; values)
-					newChildren[value] = submatrix;
+			foreach (value, submatrix; root.children)
+				newChildren[value] = submatrix;
 
 			bool modified;
-			foreach (submatrix, ref values; other.root.children)
-				foreach (value; values)
-					newChildren.updateVoid(value,
+			foreach (value, submatrix; other.root.children)
+				newChildren.updateVoid(value,
+					{
+						modified = true;
+						return submatrix;
+					},
+					(ref MapSet oldSubmatrix)
+					{
+						auto mergeResult = oldSubmatrix.merge(submatrix);
+						if (oldSubmatrix !is mergeResult)
 						{
+							oldSubmatrix = mergeResult;
 							modified = true;
-							return submatrix;
-						},
-						(ref MapSet oldSubmatrix)
-						{
-							auto mergeResult = oldSubmatrix.merge(submatrix);
-							if (oldSubmatrix !is mergeResult)
-							{
-								oldSubmatrix = mergeResult;
-								modified = true;
-							}
 						}
-					);
+					}
+				);
 
 			if (!modified)
 				return this;
@@ -326,24 +314,22 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			other = other.bringToFront(root.dim);
 
 			MapSet[DimValue] newChildren;
-			foreach (submatrix, ref values; root.children)
-				foreach (value; values)
-					newChildren[value] = submatrix;
+			foreach (value, submatrix; root.children)
+				newChildren[value] = submatrix;
 
 			bool modified;
-			foreach (submatrix, ref values; other.root.children)
-				foreach (value; values)
-					if (auto poldSubmatrix = value in newChildren)
+			foreach (value, submatrix; other.root.children)
+				if (auto poldSubmatrix = value in newChildren)
+				{
+					auto subtractResult = poldSubmatrix.subtract(submatrix);
+					if (*poldSubmatrix !is subtractResult)
 					{
-						auto subtractResult = poldSubmatrix.subtract(submatrix);
-						if (*poldSubmatrix !is subtractResult)
-						{
-							*poldSubmatrix = subtractResult;
-							if (subtractResult is emptySet)
-								newChildren.remove(value);
-							modified = true;
-						}
+						*poldSubmatrix = subtractResult;
+						if (subtractResult is emptySet)
+							newChildren.remove(value);
+						modified = true;
 					}
+				}
 
 			if (!modified)
 				return this;
@@ -352,23 +338,6 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 
 			return MapSet(new immutable Node(root.dim, cast(immutable) newChildren)).deduplicate;
 		}());
-	}
-
-	private static void mergeValues(ref ValueSet target, ValueSet newValues)
-	{
-		if (target.empty)
-			target = newValues.dup;
-		else
-			foreach (value; newValues)
-				target.add(value);
-	}
-
-	private static void mergeChildren(ref ValueSet[MapSet] target, MapSet submatrix, ValueSet newValues)
-	{
-		target.updateVoid(submatrix,
-			() => newValues.dup,
-			(ref ValueSet oldValues) { mergeValues(oldValues, newValues); },
-		);
 	}
 
 	/// "Unset" a given dimension, removing it from the matrix.
@@ -381,40 +350,40 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			if (root.dim == dim)
 			{
 				MapSet result;
-				foreach (submatrix, ref values; root.children)
+				foreach (value, submatrix; root.children)
 					result = result.merge(submatrix);
 				return result;
 			}
 			// Defer allocation until the need to mutate
 			size_t i;
-			foreach (submatrix, ref values; root.children) // Read-only scan
+			foreach (value, submatrix; root.children) // Read-only scan
 			{
 				auto newSubmatrix = submatrix.remove(dim);
 				if (newSubmatrix !is submatrix)
 				{
-					ValueSet[MapSet] newChildren;
+					MapSet[DimValue] newChildren;
 					size_t j;
 					// Restart scan with mutation
-					foreach (submatrix2, values2; root.children)
+					foreach (value2, submatrix2; root.children)
 					{
 						if (j < i)
 						{
 							// Known to not need mutation
-							newChildren[submatrix2] = (cast() values2).dup;
+							newChildren[value2] = submatrix2;
 							j++;
 						}
 						else
 						if (j == i)
 						{
 							// Reuse already calculated result
-							assert(values == values2);
-							mergeChildren(newChildren, newSubmatrix, cast() values2);
+							assert(value == value2);
+							newChildren[value2] = newSubmatrix;
 							j++;
 						}
 						else
 						{
 							// Not yet scanned, do so now
-							mergeChildren(newChildren, submatrix2.remove(dim), cast() values2);
+							newChildren[value2] = submatrix2.remove(dim);
 						}
 					}
 					return MapSet(new immutable Node(root.dim, cast(immutable) newChildren)).deduplicate;
@@ -432,7 +401,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	{
 		if (this is emptySet) return emptySet;
 		this.assertDeduplicated();
-		return MapSet(new immutable Node(dim, cast(immutable) [this.remove(dim) : ValueSet([value])])).deduplicate;
+		return MapSet(new immutable Node(dim, cast(immutable) [value : this.remove(dim)])).deduplicate;
 	}
 
 	/// Return a sub-matrix for all points where the given dimension has this value.
@@ -443,9 +412,8 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	{
 		if (this is emptySet) return emptySet;
 		this.assertDeduplicated();
-		foreach (submatrix, ref values; bringToFront(dim).root.children)
-			if (value in values)
-				return submatrix;
+		if (auto psubmatrix = value in bringToFront(dim).root.children)
+			return *psubmatrix;
 		return emptySet;
 	}
 
@@ -455,9 +423,8 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	{
 		if (this is emptySet) return emptySet;
 		this.assertDeduplicated();
-		foreach (submatrix, ref values; bringToFront(dim).root.children)
-			if (value in values)
-				return MapSet(new immutable Node(dim, [value : submatrix])).deduplicate;
+		if (auto psubmatrix = value in bringToFront(dim).root.children)
+			return MapSet(new immutable Node(dim, [value : *psubmatrix])).deduplicate;
 		return emptySet;
 	}
 
@@ -466,10 +433,10 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	/// If `dim` doesn't occur, it will be `[nullValue]`.
 	DimValue[] all(DimName dim) const
 	{
-		// return bringToFront(dim).root.children.byValue.map!((ref values) => values.byKey).join;
+		// return bringToFront(dim).root.children.keys;
 		if (this is emptySet) return null;
 		if (this is unitSet) return [nullValue];
-		if (root.dim == dim) return root.children.byValue.map!((ref values) => values.byKey).join;
+		if (root.dim == dim) return root.children.keys;
 		this.assertDeduplicated();
 
 		HashSet!DimValue allValues;
@@ -486,11 +453,10 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			seen.add(set);
 
 			if (set.root.dim == dim)
-				foreach (submatrix, ref values; set.root.children)
-					foreach (value; values)
-						allValues.add(value);
+				foreach (value, submatrix; set.root.children)
+					allValues.add(value);
 			else
-				foreach (submatrix, ref values; set.root.children)
+				foreach (value, submatrix; set.root.children)
 					visit(submatrix);
 		}
 		visit(this);
@@ -504,7 +470,8 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	{
 		if (this is emptySet) return emptySet;
 		this.assertDeduplicated();
-		return MapSet(new immutable Node(dim, cast(immutable) [this.remove(dim) : ValueSet(values)])).deduplicate;
+		auto unset = this.remove(dim);
+		return MapSet(new immutable Node(dim, cast(immutable) values.map!(value => tuple(value, unset)).assocArray)).deduplicate;
 	}
 
 	/// Refactor this matrix into one with the same data,
@@ -537,16 +504,12 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		this.assertDeduplicated();
 		return cache.bringToFront.require(SetDimOp(this, dim), {
 			MapSet[DimValue][DimValue] submatrices;
-			foreach (submatrix, ref values; root.children)
+			foreach (value, submatrix; root.children)
 			{
 				auto newSubmatrix = submatrix.bringToFront(dim);
 				assert(newSubmatrix.root.dim == dim);
-				foreach (value; values)
-				{
-					foreach (submatrix2, values2; newSubmatrix.root.children)
-						foreach (value2; values2)
-							submatrices[value2][value] = submatrix2;
-				}
+				foreach (value2, submatrix2; newSubmatrix.root.children)
+					submatrices[value2][value] = submatrix2;
 			}
 			MapSet[DimValue] newChildren;
 			foreach (value, children; submatrices)
@@ -557,15 +520,15 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 
 	/// Refactor this matrix into one with the same data,
 	/// but attempting to lower the total number of nodes.
-	MapSet optimize()
+	MapSet optimize() const
 	{
 		if (this is emptySet || this is unitSet) return this;
 		this.assertDeduplicated();
 
 		return cache.optimize.require(this, {
 			bool modified;
-			ValueSet[MapSet] newChildren;
-			foreach (submatrix, ref values; root.children)
+			MapSet[DimValue] newChildren;
+			foreach (value, submatrix; root.children)
 			{
 				auto newMatrix = submatrix.optimize;
 				if (newMatrix !is submatrix)
@@ -573,12 +536,12 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 					modified = true;
 					assert(newMatrix.count == submatrix.count);
 				}
-				mergeChildren(newChildren, newMatrix, cast() values);
+				newChildren[value] = newMatrix;
 			}
 
 			MapSet result = modified ? MapSet(new immutable Node(root.dim, cast(immutable) newChildren)).deduplicate : this;
 
-			foreach (submatrix, ref values; result.root.children)
+			foreach (value, submatrix; result.root.children)
 				if (submatrix.root)
 				{
 					auto optimized = result.bringToFront(submatrix.root.dim);
@@ -670,4 +633,7 @@ unittest
 	m = m.cartesianProduct("y", [1, 2, 3]);
 	m = m.cartesianProduct("z", [1, 2, 3]);
 	assert(m.count == 3 * 3 * 3);
+	assert(m            .all("x").sort.release == [1, 2, 3]);
+	assert(m.set("z", 1).all("x").sort.release == [1, 2, 3]);
+	assert(m.set("x", 1).all("z").sort.release == [1, 2, 3]);
 }
