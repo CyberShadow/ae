@@ -172,6 +172,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		/// should be memoized here
 		MapSet[SetSetOp] merge, subtract;
 		MapSet[SetDimOp] remove, bringToFront;
+		MapSet[MapSet] optimize;
 		size_t[MapSet] uniqueNodes;
 	}
 	private static Cache cache;
@@ -311,6 +312,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			foreach (submatrix, ref values; root.children)
 				foreach (value; values)
 					newChildren[value] = submatrix;
+
 			bool modified;
 			foreach (submatrix, ref values; other.root.children)
 				foreach (value; values)
@@ -514,33 +516,38 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		if (this is emptySet || this is unitSet) return this;
 		assertDeduplicated(this);
 
-		bool modified;
-		ValueSet[MapSet] newChildren;
-		foreach (submatrix, ref values; root.children)
-		{
-			auto newMatrix = submatrix.optimize;
-			if (newMatrix !is submatrix)
-				modified = true;
-			mergeChildren(newChildren, newMatrix, cast() values);
-		}
-
-		MapSet result = modified ? MapSet(new immutable Node(root.dim, cast(immutable) newChildren)).I!deduplicate : this;
-
-		foreach (submatrix, ref values; result.root.children)
-			if (submatrix.root)
+		return cache.optimize.require(this, {
+			bool modified;
+			ValueSet[MapSet] newChildren;
+			foreach (submatrix, ref values; root.children)
 			{
-				auto optimized = result.bringToFront(submatrix.root.dim);
-				// {
-				// 	import std.stdio;
-				// 	writefln("Trying to optimize:\n- Old: %d : %s\n- New: %d : %s",
-				// 		result.root.totalNodes, result,
-				// 		optimized.root.totalNodes, optimized,
-				// 	);
-				// }
-				return optimized.uniqueNodes < result.uniqueNodes ? optimized : result;
+				auto newMatrix = submatrix.optimize;
+				if (newMatrix !is submatrix)
+				{
+					modified = true;
+					assert(newMatrix.count == submatrix.count);
+				}
+				mergeChildren(newChildren, newMatrix, cast() values);
 			}
 
-		return result.I!deduplicate;
+			MapSet result = modified ? MapSet(new immutable Node(root.dim, cast(immutable) newChildren)).I!deduplicate : this;
+
+			foreach (submatrix, ref values; result.root.children)
+				if (submatrix.root)
+				{
+					auto optimized = result.bringToFront(submatrix.root.dim);
+					// {
+					// 	import std.stdio;
+					// 	writefln("Trying to optimize:\n- Old: %d : %s\n- New: %d : %s",
+					// 		result.root.totalNodes, result,
+					// 		optimized.root.totalNodes, optimized,
+					// 	);
+					// }
+					return optimized.uniqueNodes < result.uniqueNodes ? optimized : result;
+				}
+
+			return result.I!deduplicate;
+		}());
 	}
 
 	void toString(scope void delegate(const(char)[]) sink) const
