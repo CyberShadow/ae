@@ -401,7 +401,10 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	{
 		if (this is emptySet) return emptySet;
 		this.assertDeduplicated();
-		return MapSet(new immutable Node(dim, cast(immutable) [value : this.remove(dim)])).deduplicate;
+		auto removed = this.remove(dim);
+		if (value == nullValue)
+			return removed;
+		return MapSet(new immutable Node(dim, cast(immutable) [value : removed])).deduplicate;
 	}
 
 	/// Return a sub-matrix for all points where the given dimension has this value.
