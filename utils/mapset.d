@@ -674,3 +674,111 @@ unittest
 	assert(m.set("z", 1).all("x").dup.sort.release == [1, 2, 3]);
 	assert(m.set("x", 1).all("z").dup.sort.release == [1, 2, 3]);
 }
+
+
+/// Allows executing a deterministic algorithm over all states in a given MapSet.
+/// If a variable is not queried by the algorithm, states for all
+/// variations of that variable are processed in one iteration.
+struct MapSetVisitor(A, V)
+{
+	alias Set = MapSet!(A, V);
+	Set set;
+
+	struct Var
+	{
+		A name;
+		const(V)[] values;
+		size_t pos;
+	}
+	Var[] stack;
+	V[A] resolvedValues; // Faster than currentSubset.all(name)[0]
+	Set currentSubset;
+
+	/// Returns true if there are more states to iterate over,
+	/// otherwise returns false
+	bool next()
+	{
+		if (set is Set.emptySet)
+			return false;
+		if (currentSubset is Set.emptySet)
+		{
+			// first iteration
+		}
+		else
+			while (true)
+			{
+				if (!stack.length)
+					return false; // All possibilities exhausted
+				auto last = &stack[$-1];
+				last.pos++;
+				if (last.pos == last.values.length)
+				{
+					stack = stack[0 .. $ - 1];
+					continue;
+				}
+				break;
+			}
+
+		currentSubset = set;
+		resolvedValues = null;
+		foreach (ref var; stack)
+		{
+			auto value = var.values[var.pos];
+			currentSubset = currentSubset.get(var.name, value);
+			resolvedValues[var.name] = value;
+		}
+		return true;
+	}
+
+	/// Algorithm interface - get a value by name
+	V get(A name)
+	{
+		if (auto pvalue = name in resolvedValues)
+			return *pvalue;
+
+		auto values = currentSubset.all(name);
+		auto value = values[0];
+		resolvedValues[name] = value;
+		stack ~= Var(name, values, 0);
+		if (values.length > 1)
+			currentSubset = currentSubset.get(name, value);
+		return value;
+	}
+
+	/// Algorithm interface - set a value by name
+	void put(A name, V value)
+	{
+		currentSubset = currentSubset.set(name, value);
+		resolvedValues[name] = value;
+	}
+}
+
+/// An algorithm which divides two numbers.
+/// When the divisor is zero, we don't even query the dividend,
+/// therefore processing all dividends in one iteration.
+unittest
+{
+	alias M = MapSet!(string, int);
+	M m = M.unitSet
+		.cartesianProduct("divisor" , [0, 1, 2])
+		.cartesianProduct("dividend", [0, 1, 2]);
+	assert(m.count == 9);
+
+	auto v = MapSetVisitor!(string, int)(m);
+	M results;
+	int iterations;
+	while (v.next())
+	{
+		iterations++;
+		auto divisor = v.get("divisor");
+		if (divisor == 0)
+			continue;
+		auto dividend = v.get("dividend");
+		v.put("quotient", dividend / divisor);
+		results = results.merge(v.currentSubset);
+	}
+
+	assert(iterations == 7); // 1 for division by zero + 3 for division by one + 3 for division by two
+	assert(results.get("divisor", 2).get("dividend", 2).all("quotient") == [1]);
+	assert(results.get("divisor", 0).count == 0);
+}
