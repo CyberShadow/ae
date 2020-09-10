@@ -282,6 +282,17 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		return cache.merge.require(SetSetOp(this, other), {
 			other = other.bringToFront(root.dim);
 
+			if (root.children.length == 1 && other.root.children.length == 1 &&
+				root.children[0].value == other.root.children[0].value)
+			{
+				// Single-child optimization
+				auto mergeResult = root.children[0].set.merge(other.root.children[0].set);
+				if (mergeResult !is root.children[0].set)
+					return MapSet(new immutable Node(root.dim, [Pair(root.children[0].value, mergeResult)])).deduplicate;
+				else
+					return this;
+			}
+
 			MapSet[DimValue] newChildren;
 			foreach (ref pair; root.children)
 				newChildren[pair.value] = pair.set;
@@ -324,6 +335,20 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		other.assertDeduplicated();
 		return cache.subtract.require(SetSetOp(this, other), {
 			other = other.bringToFront(root.dim);
+
+			if (root.children.length == 1 && other.root.children.length == 1 &&
+				root.children[0].value == other.root.children[0].value)
+			{
+				// Single-child optimization
+				auto subtractResult = root.children[0].set.subtract(other.root.children[0].set);
+				if (subtractResult is emptySet)
+					return emptySet;
+				else
+				if (subtractResult !is root.children[0].set)
+					return MapSet(new immutable Node(root.dim, [Pair(root.children[0].value, subtractResult)])).deduplicate;
+				else
+					return this;
+			}
 
 			MapSet[DimValue] newChildren;
 			foreach (ref pair; root.children)
@@ -506,6 +531,15 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 
 		this.assertDeduplicated();
 		return cache.bringToFront.require(SetDimOp(this, dim), {
+			if (root.children.length == 1)
+			{
+				auto newSubmatrix = root.children[0].set.bringToFront(dim);
+				auto newChildren = newSubmatrix.root.children.dup;
+				foreach (ref pair; newChildren)
+					pair.set = MapSet(new immutable Node(root.dim, [Pair(root.children[0].value, pair.set)])).deduplicate;
+				return MapSet(new immutable Node(dim, cast(immutable) newChildren)).deduplicate;
+			}
+
 			Pair[][DimValue] submatrices;
 			foreach (ref pair; root.children)
 			{
