@@ -619,11 +619,11 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			root.toHash();
 	}
 
-	bool opEquals(ref const typeof(this) s) const
+	bool opEquals(const typeof(this) s) const
 	{
 		if (root is s.root)
 			return true;
-		if ((this is emptySet || this is unitSet) && (s is emptySet || s is unitSet))
+		if (this is emptySet || this is unitSet || s is emptySet || s is unitSet)
 			return this is s;
 		return *root == *s.root;
 	}
@@ -676,6 +676,8 @@ unittest
 	assert(m            .all("x").dup.sort.release == [1, 2, 3]);
 	assert(m.set("z", 1).all("x").dup.sort.release == [1, 2, 3]);
 	assert(m.set("x", 1).all("z").dup.sort.release == [1, 2, 3]);
+
+	assert(M.unitSet != M.unitSet.set("x", 1));
 }
 
 
