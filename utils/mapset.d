@@ -352,6 +352,28 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		}());
 	}
 
+	private MapSet lazyMap(scope MapSet delegate(MapSet) fn) const
+	{
+		// Defer allocation until the need to mutate
+		foreach (i, ref pair; root.children) // Read-only scan
+		{
+			auto newSet = fn(pair.set);
+			if (newSet !is pair.set)
+			{
+				auto newChildren = new Pair[root.children.length];
+				// Known to not need mutation
+				newChildren[0 .. i] = root.children[0 .. i];
+				// Reuse already calculated result
+				newChildren[i] = Pair(pair.value, newSet);
+				// Continue scan with mutation
+				foreach (j, ref pair2; root.children[i + 1 .. $])
+					newChildren[i + 1 + j] = Pair(pair2.value, fn(pair2.set));
+				return MapSet(new immutable Node(root.dim, cast(immutable) newChildren)).deduplicate;
+			}
+		}
+		return this; // No mutation necessary
+	}
+
 	/// "Unset" a given dimension, removing it from the matrix.
 	/// The result is the union of all sub-matrices for all values of `dim`.
 	MapSet remove(DimName dim) const
@@ -366,43 +388,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 					result = result.merge(pair.set);
 				return result;
 			}
-			// Defer allocation until the need to mutate
-			size_t i;
-			foreach (ref pair; root.children) // Read-only scan
-			{
-				auto newSubmatrix = pair.set.remove(dim);
-				if (newSubmatrix !is pair.set)
-				{
-					MapSet[DimValue] newChildren;
-					size_t j;
-					// Restart scan with mutation
-					foreach (ref pair2; root.children)
-					{
-						if (j < i)
-						{
-							// Known to not need mutation
-							newChildren[pair2.value] = pair2.set;
-							j++;
-						}
-						else
-						if (j == i)
-						{
-							// Reuse already calculated result
-							assert(pair.value == pair2.value);
-							newChildren[pair2.value] = newSubmatrix;
-							j++;
-						}
-						else
-						{
-							// Not yet scanned, do so now
-							newChildren[pair2.value] = pair2.set.remove(dim);
-						}
-					}
-					return MapSet(new immutable Node(root.dim, cast(immutable) newChildren)).deduplicate;
-				}
-				i++;
-			}
-			return this; // No mutation necessary
+			return lazyMap(set => set.remove(dim));
 		}());
 	}
 
