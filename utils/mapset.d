@@ -21,6 +21,7 @@ import std.exception;
 import std.typecons : tuple;
 
 import ae.utils.aa : HashSet, updateVoid;
+import ae.utils.array : amap;
 
 /**
    Data structure for holding optimized "sparse" N-dimensional matrices.
@@ -63,17 +64,23 @@ import ae.utils.aa : HashSet, updateVoid;
  */
 struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 {
+	struct Pair
+	{
+		DimValue value;
+		MapSet set;
+	}
+
 	struct Node
 	{
 		DimName dim;
-		MapSet[DimValue] children;
+		Pair[] children;
 
-		immutable this(DimName dim, immutable MapSet[DimValue] children)
+		immutable this(DimName dim, immutable Pair[] children)
 		{
 			// Zero children doesn't make sense.
 			// It would be the equivalent of an empty set,
 			// but then we should just use MapSet.emptySet instead.
-			assert(!children.byValue.empty, "Node with zero children");
+			assert(!children.empty, "Node with zero children");
 
 			this.dim = dim;
 			this.children = children;
@@ -83,15 +90,20 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			hash = hashOf(dim) ^ hashOf(children);
 
 			size_t totalMembers = 0;
-			foreach (value, submatrix; children)
+			foreach (ref pair; children)
 			{
-				submatrix.assertDeduplicated();
+				pair.set.assertDeduplicated();
 				// Same as "Node with zero children"
-				assert(submatrix !is emptySet, "Empty set as submatrix");
+				assert(pair.set !is emptySet, "Empty set as submatrix");
 
-				totalMembers += submatrix.count;
+				totalMembers += pair.set.count;
 			}
 			this.totalMembers = totalMembers;
+		}
+
+		immutable this(DimName dim, immutable MapSet[DimValue] children)
+		{
+			this(dim, children.byKeyValue.map!(kv => Pair(kv.key, kv.value)).array);
 		}
 
 		void toString(scope void delegate(const(char)[]) sink) const
@@ -99,13 +111,13 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			import std.format : formattedWrite;
 			sink.formattedWrite("{ %(%s%), [ ", (&dim)[0..1]);
 			bool first = true;
-			foreach (value, submatrix; children)
+			foreach (ref pair; children)
 			{
 				if (first)
 					first = false;
 				else
 					sink(", ");
-				sink.formattedWrite("%s : %s", value, submatrix);
+				sink.formattedWrite("%s : %s", pair.value, pair.set);
 			}
 			sink(" ] }");
 		}
@@ -113,12 +125,12 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		private hash_t hash;
 		size_t totalMembers;
 
-		hash_t toHash() const @safe pure nothrow
+		hash_t toHash() const
 		{
 			return hash;
 		}
 
-		bool opEquals(ref const typeof(this) s) const @safe pure nothrow
+		bool opEquals(ref const typeof(this) s) const
 		{
 			return hash == s.hash && dim == s.dim && children == s.children;
 		}
@@ -187,8 +199,8 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			this,
 			{
 				if (this !is emptySet && this !is unitSet)
-					foreach (value, submatrix; root.children)
-						submatrix.addToCache();
+					foreach (ref pair; root.children)
+						pair.set.addToCache();
 				return this;
 			},
 			(ref MapSet set)
@@ -205,8 +217,8 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			this,
 			{
 				debug if (this !is emptySet && this !is unitSet)
-					foreach (value, submatrix; root.children)
-						submatrix.assertDeduplicated();
+					foreach (ref pair; root.children)
+						pair.set.assertDeduplicated();
 				deduplicated = this;
 				return this;
 			},
@@ -230,8 +242,8 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 				if (set is emptySet || set is unitSet || set in seen)
 					return;
 				seen.add(set);
-				foreach (value, submatrix; set.root.children)
-					visit(submatrix);
+				foreach (ref pair; set.root.children)
+					visit(pair.set);
 			}
 			visit(this);
 			return seen.length;
@@ -249,8 +261,8 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 				return;
 			seen.add(set);
 			dims.add(set.root.dim);
-			foreach (value, submatrix; set.root.children)
-				visit(submatrix);
+			foreach (ref pair; set.root.children)
+				visit(pair.set);
 		}
 		visit(this);
 		return dims.keys;
@@ -271,19 +283,19 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			other = other.bringToFront(root.dim);
 
 			MapSet[DimValue] newChildren;
-			foreach (value, submatrix; root.children)
-				newChildren[value] = submatrix;
+			foreach (ref pair; root.children)
+				newChildren[pair.value] = pair.set;
 
 			bool modified;
-			foreach (value, submatrix; other.root.children)
-				newChildren.updateVoid(value,
+			foreach (ref pair; other.root.children)
+				newChildren.updateVoid(pair.value,
 					{
 						modified = true;
-						return submatrix;
+						return pair.set;
 					},
 					(ref MapSet oldSubmatrix)
 					{
-						auto mergeResult = oldSubmatrix.merge(submatrix);
+						auto mergeResult = oldSubmatrix.merge(pair.set);
 						if (oldSubmatrix !is mergeResult)
 						{
 							oldSubmatrix = mergeResult;
@@ -314,19 +326,19 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			other = other.bringToFront(root.dim);
 
 			MapSet[DimValue] newChildren;
-			foreach (value, submatrix; root.children)
-				newChildren[value] = submatrix;
+			foreach (ref pair; root.children)
+				newChildren[pair.value] = pair.set;
 
 			bool modified;
-			foreach (value, submatrix; other.root.children)
-				if (auto poldSubmatrix = value in newChildren)
+			foreach (ref pair; other.root.children)
+				if (auto poldSubmatrix = pair.value in newChildren)
 				{
-					auto subtractResult = poldSubmatrix.subtract(submatrix);
+					auto subtractResult = poldSubmatrix.subtract(pair.set);
 					if (*poldSubmatrix !is subtractResult)
 					{
 						*poldSubmatrix = subtractResult;
 						if (subtractResult is emptySet)
-							newChildren.remove(value);
+							newChildren.remove(pair.value);
 						modified = true;
 					}
 				}
@@ -350,40 +362,40 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			if (root.dim == dim)
 			{
 				MapSet result;
-				foreach (value, submatrix; root.children)
-					result = result.merge(submatrix);
+				foreach (ref pair; root.children)
+					result = result.merge(pair.set);
 				return result;
 			}
 			// Defer allocation until the need to mutate
 			size_t i;
-			foreach (value, submatrix; root.children) // Read-only scan
+			foreach (ref pair; root.children) // Read-only scan
 			{
-				auto newSubmatrix = submatrix.remove(dim);
-				if (newSubmatrix !is submatrix)
+				auto newSubmatrix = pair.set.remove(dim);
+				if (newSubmatrix !is pair.set)
 				{
 					MapSet[DimValue] newChildren;
 					size_t j;
 					// Restart scan with mutation
-					foreach (value2, submatrix2; root.children)
+					foreach (ref pair2; root.children)
 					{
 						if (j < i)
 						{
 							// Known to not need mutation
-							newChildren[value2] = submatrix2;
+							newChildren[pair2.value] = pair2.set;
 							j++;
 						}
 						else
 						if (j == i)
 						{
 							// Reuse already calculated result
-							assert(value == value2);
-							newChildren[value2] = newSubmatrix;
+							assert(pair.value == pair2.value);
+							newChildren[pair2.value] = newSubmatrix;
 							j++;
 						}
 						else
 						{
 							// Not yet scanned, do so now
-							newChildren[value2] = submatrix2.remove(dim);
+							newChildren[pair2.value] = pair2.set.remove(dim);
 						}
 					}
 					return MapSet(new immutable Node(root.dim, cast(immutable) newChildren)).deduplicate;
@@ -415,8 +427,9 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	{
 		if (this is emptySet) return emptySet;
 		this.assertDeduplicated();
-		if (auto psubmatrix = value in bringToFront(dim).root.children)
-			return *psubmatrix;
+		foreach (ref pair; bringToFront(dim).root.children)
+			if (pair.value == value)
+				return pair.set;
 		return emptySet;
 	}
 
@@ -426,20 +439,21 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	{
 		if (this is emptySet) return emptySet;
 		this.assertDeduplicated();
-		if (auto psubmatrix = value in bringToFront(dim).root.children)
-			return MapSet(new immutable Node(dim, [value : *psubmatrix])).deduplicate;
+		foreach (ref pair; bringToFront(dim).root.children)
+			if (pair.value == value)
+				return MapSet(new immutable Node(dim, [Pair(value, pair.set)])).deduplicate;
 		return emptySet;
 	}
 
 	/// Return all unique values occurring for a given dimension.
 	/// Unless this is the empty set, the return value is always non-empty.
 	/// If `dim` doesn't occur, it will be `[nullValue]`.
-	DimValue[] all(DimName dim) const
+	const(DimValue)[] all(DimName dim) const
 	{
 		// return bringToFront(dim).root.children.keys;
 		if (this is emptySet) return null;
 		if (this is unitSet) return [nullValue];
-		if (root.dim == dim) return root.children.keys;
+		if (root.dim == dim) return root.children.amap!(child => child.value);
 		this.assertDeduplicated();
 
 		HashSet!DimValue allValues;
@@ -456,11 +470,11 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			seen.add(set);
 
 			if (set.root.dim == dim)
-				foreach (value, submatrix; set.root.children)
-					allValues.add(value);
+				foreach (ref pair; set.root.children)
+					allValues.add(pair.value);
 			else
-				foreach (value, submatrix; set.root.children)
-					visit(submatrix);
+				foreach (ref pair; set.root.children)
+					visit(pair.set);
 		}
 		visit(this);
 		return allValues.keys;
@@ -491,7 +505,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		{
 			// We reached the bottom, and did not find `dim` along the way.
 			// Create it now.
-			return MapSet(new immutable Node(dim, [nullValue : unitSet])).deduplicate;
+			return MapSet(new immutable Node(dim, [Pair(nullValue, unitSet)])).deduplicate;
 		}
 
 		if (dim == root.dim)
@@ -506,17 +520,17 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 
 		this.assertDeduplicated();
 		return cache.bringToFront.require(SetDimOp(this, dim), {
-			MapSet[DimValue][DimValue] submatrices;
-			foreach (value, submatrix; root.children)
+			Pair[][DimValue] submatrices;
+			foreach (ref pair; root.children)
 			{
-				auto newSubmatrix = submatrix.bringToFront(dim);
+				auto newSubmatrix = pair.set.bringToFront(dim);
 				assert(newSubmatrix.root.dim == dim);
-				foreach (value2, submatrix2; newSubmatrix.root.children)
-					submatrices[value2][value] = submatrix2;
+				foreach (ref pair2; newSubmatrix.root.children)
+					submatrices[pair2.value] ~= Pair(pair.value, pair2.set);
 			}
-			MapSet[DimValue] newChildren;
+			Pair[] newChildren;
 			foreach (value, children; submatrices)
-				newChildren[value] = MapSet(new immutable Node(root.dim, cast(immutable) children)).deduplicate;
+				newChildren ~= Pair(value, MapSet(new immutable Node(root.dim, cast(immutable) children)).deduplicate);
 			return MapSet(new immutable Node(dim, cast(immutable) newChildren)).deduplicate;
 		}());
 	}
@@ -531,23 +545,23 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		return cache.optimize.require(this, {
 			bool modified;
 			MapSet[DimValue] newChildren;
-			foreach (value, submatrix; root.children)
+			foreach (ref pair; root.children)
 			{
-				auto newMatrix = submatrix.optimize;
-				if (newMatrix !is submatrix)
+				auto newMatrix = pair.set.optimize;
+				if (newMatrix !is pair.set)
 				{
 					modified = true;
-					assert(newMatrix.count == submatrix.count);
+					assert(newMatrix.count == pair.set.count);
 				}
-				newChildren[value] = newMatrix;
+				newChildren[pair.value] = newMatrix;
 			}
 
 			MapSet result = modified ? MapSet(new immutable Node(root.dim, cast(immutable) newChildren)).deduplicate : this;
 
-			foreach (value, submatrix; result.root.children)
-				if (submatrix.root)
+			foreach (ref pair; result.root.children)
+				if (pair.set.root)
 				{
-					auto optimized = result.bringToFront(submatrix.root.dim);
+					auto optimized = result.bringToFront(pair.set.root.dim);
 					// {
 					// 	import std.stdio;
 					// 	writefln("Trying to optimize:\n- Old: %d : %s\n- New: %d : %s",
@@ -574,7 +588,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			sink.formattedWrite!"%s"(*root);
 	}
 
-	hash_t toHash() const @safe pure nothrow
+	hash_t toHash() const
 	{
 		return
 			this is emptySet ? 0 :
@@ -582,7 +596,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			root.toHash();
 	}
 
-	bool opEquals(ref const typeof(this) s) const @safe pure nothrow
+	bool opEquals(ref const typeof(this) s) const
 	{
 		if (root is s.root)
 			return true;
@@ -601,15 +615,15 @@ unittest
 	m = m.merge(M.unitSet.set("x", 1).set("y", 5));
 	m = m.merge(M.unitSet.set("x", 1).set("y", 6));
 	assert(m.all("x") == [1]);
-	assert(m.all("y").sort.release == [5, 6]);
+	assert(m.all("y").dup.sort.release == [5, 6]);
 
 	m = m.merge(M.unitSet.set("x", 2).set("y", 6));
-	assert(m.get("x", 1).all("y").sort.release == [5, 6]);
-	assert(m.get("y", 6).all("x").sort.release == [1, 2]);
+	assert(m.get("x", 1).all("y").dup.sort.release == [5, 6]);
+	assert(m.get("y", 6).all("x").dup.sort.release == [1, 2]);
 
 	m = m.subtract(M.unitSet.set("x", 1).set("y", 6));
-	assert(m.all("x").sort.release == [1, 2]);
-	assert(m.all("y").sort.release == [5, 6]);
+	assert(m.all("x").dup.sort.release == [1, 2]);
+	assert(m.all("y").dup.sort.release == [5, 6]);
 	assert(m.get("x", 1).all("y") == [5]);
 	assert(m.get("y", 6).all("x") == [2]);
 
@@ -626,7 +640,7 @@ unittest
 	m = M.unitSet;
 	assert(m.all("x") == [0]);
 	m = m.merge(M.unitSet.set("x", 1));
-	assert(m.all("x").sort.release == [0, 1]);
+	assert(m.all("x").dup.sort.release == [0, 1]);
 
 	m = M.unitSet;
 	assert(m.set("x", 1).set("x", 1).all("x") == [1]);
@@ -636,7 +650,7 @@ unittest
 	m = m.cartesianProduct("y", [1, 2, 3]);
 	m = m.cartesianProduct("z", [1, 2, 3]);
 	assert(m.count == 3 * 3 * 3);
-	assert(m            .all("x").sort.release == [1, 2, 3]);
-	assert(m.set("z", 1).all("x").sort.release == [1, 2, 3]);
-	assert(m.set("x", 1).all("z").sort.release == [1, 2, 3]);
+	assert(m            .all("x").dup.sort.release == [1, 2, 3]);
+	assert(m.set("z", 1).all("x").dup.sort.release == [1, 2, 3]);
+	assert(m.set("x", 1).all("z").dup.sort.release == [1, 2, 3]);
 }
