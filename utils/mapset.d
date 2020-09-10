@@ -210,7 +210,10 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		);
 	}
 
-	private MapSet deduplicate() const
+	/// Intern and deduplicate this MapSet.
+	/// Needs to be called only after constructing a MapSet manually
+	/// (by allocating, populating, and setting `root`).
+	MapSet deduplicate() const
 	{
 		MapSet deduplicated;
 		cache.instances.updateVoid(
