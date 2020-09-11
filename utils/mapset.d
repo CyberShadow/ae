@@ -20,7 +20,7 @@ import std.array;
 import std.exception;
 import std.typecons : tuple;
 
-import ae.utils.aa : HashSet, updateVoid;
+import ae.utils.aa;
 import ae.utils.array : amap;
 
 /**
@@ -269,6 +269,47 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		}
 		visit(this);
 		return dims.keys;
+	}
+
+	/// Return all values for all dimensions occurring in this set.
+	/// The Cartesian product of these values would thus be a superset
+	/// of this set.
+	/// This is equivalent to, but faster than, calling `getDims` and
+	/// then `all` for each dim.
+	HashSet!DimValue[DimName] getDimsAndValues() const
+	{
+		if (this is emptySet) return null;
+		// Be careful to count the implicit nullValues on branches
+		// where a dim doesn't occur.
+		auto dims = getDims();
+		auto dimIndices = OrderedSet!DimName(dims);
+		auto dimSeen = new bool[dims.length];
+		HashSet!DimValue[DimName] result;
+		HashSet!MapSet seen;
+		void visit(MapSet set)
+		{
+			if (set is unitSet)
+			{
+				foreach (i, seen; dimSeen)
+					if (!seen)
+						result.require(dims[i], HashSet!DimValue.init).add(nullValue);
+				return;
+			}
+
+			if (set in seen) return;
+			seen.add(set);
+			auto pvalues = &result.require(set.root.dim, HashSet!DimValue.init);
+			foreach (ref pair; set.root.children)
+				pvalues.add(pair.value);
+
+			auto i = dimIndices.indexOf(set.root.dim);
+			dimSeen[i] = true;
+			foreach (ref pair; set.root.children)
+				visit(pair.set);
+			dimSeen[i] = false;
+		}
+		visit(this);
+		return result;
 	}
 
 	/// Combine two matrices together, returning their union.
