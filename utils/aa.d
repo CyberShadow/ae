@@ -648,13 +648,13 @@ public:
 
 	static if (ordered)
 	{
-		private size_t indexOf()(auto ref K k)
+		size_t indexOf()(auto ref in K k)
 		{
 			auto p = k in lookup;
 			return p ? (*p)[0] : -1;
 		}
 
-		private size_t[] indicesOf()(auto ref K k)
+		size_t[] indicesOf()(auto ref in K k)
 		{
 			auto p = k in lookup;
 			return p ? (*p)[] : null;
