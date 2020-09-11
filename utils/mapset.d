@@ -500,6 +500,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	MapSet cartesianProduct(DimName dim, DimValue[] values) const
 	{
 		if (this is emptySet) return emptySet;
+		if (values.length == 0) return emptySet;
 		this.assertDeduplicated();
 		auto unset = this.remove(dim);
 		return MapSet(new immutable Node(dim, cast(immutable) values.map!(value => tuple(value, unset)).assocArray)).deduplicate;
