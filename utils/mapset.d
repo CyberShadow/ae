@@ -738,8 +738,16 @@ struct MapSetVisitor(A, V)
 		size_t pos;
 	}
 	Var[] stack;
-	V[A] resolvedValues; // Faster than currentSubset.all(name)[0]
+	V[A] singularValues, resolvedValues; // Faster than currentSubset.all(name)[0]
 	Set currentSubset;
+
+	this(Set set)
+	{
+		this.set = set;
+		foreach (dim, values; set.getDimsAndValues())
+			if (values.length == 1)
+				singularValues[dim] = values.byKey.front;
+	}
 
 	/// Returns true if there are more states to iterate over,
 	/// otherwise returns false
@@ -781,6 +789,8 @@ struct MapSetVisitor(A, V)
 	V get(A name)
 	{
 		if (auto pvalue = name in resolvedValues)
+			return *pvalue;
+		if (auto pvalue = name in singularValues)
 			return *pvalue;
 
 		auto values = currentSubset.all(name);
