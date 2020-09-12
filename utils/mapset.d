@@ -857,6 +857,20 @@ struct MapSetVisitor(A, V)
 		currentSubset = currentSubset.set(name, value);
 		resolvedValues[name] = value;
 	}
+
+	/// Apply a function over every possible value of the given
+	/// variable, without resolving it (unless it's already resolved).
+	void transform(A name, scope void delegate(ref V value) fun)
+	{
+		if (auto pvalue = name in resolvedValues)
+			return fun(*pvalue);
+
+		currentSubset = currentSubset.bringToFront(name);
+		auto newChildren = currentSubset.root.children.dup;
+		foreach (ref child; newChildren)
+			fun(child.value);
+		currentSubset = Set(new immutable Set.Node(name, cast(immutable) newChildren));
+	}
 }
 
 /// An algorithm which divides two numbers.
@@ -887,4 +901,16 @@ unittest
 	assert(iterations == 7); // 1 for division by zero + 3 for division by one + 3 for division by two
 	assert(results.get("divisor", 2).get("dividend", 2).all("quotient") == [1]);
 	assert(results.get("divisor", 0).count == 0);
+}
+
+unittest
+{
+	import std.algorithm.sorting : sort;
+
+	alias M = MapSet!(string, int);
+	M m = M.unitSet.cartesianProduct("x", [1, 2, 3]);
+	auto v = MapSetVisitor!(string, int)(m);
+	v.next();
+	v.transform("x", (ref int v) { v *= 2; });
+	assert(v.currentSubset.all("x").dup.sort.release == [2, 4, 6]);
 }
