@@ -789,6 +789,15 @@ struct MapSetVisitor(A, V)
 				singularValues[dim] = values.byKey.front;
 	}
 
+	/// Resets iteration to the beginning.
+	/// Equivalent to but faster than constructing a new MapSetVisitor
+	/// instance (`visitor = MapSetVisitor(visitor.set)`).
+	void reset()
+	{
+		currentSubset = Set.emptySet;
+		stack = null;
+	}
+
 	/// Returns true if there are more states to iterate over,
 	/// otherwise returns false
 	bool next()
