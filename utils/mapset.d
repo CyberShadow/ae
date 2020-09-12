@@ -171,7 +171,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		MapSet[MapSet] instances;
 		/// Operations - things that operate recursively on subtrees
 		/// should be memoized here
-		MapSet[SetSetOp] merge, subtract;
+		MapSet[SetSetOp] merge, subtract, cartesianProduct;
 		MapSet[SetDimOp] remove, bringToFront;
 		MapSet[MapSet] optimize;
 		size_t[MapSet] uniqueNodes;
@@ -547,6 +547,37 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		return MapSet(new immutable Node(dim, cast(immutable) values.map!(value => tuple(value, unset)).assocArray)).deduplicate;
 	}
 
+	/// Return a set which represents the Cartesian product between
+	/// this and the given set.
+	/// Duplicate dimensions are first removed from `this` set.
+	/// For best performance, call `big.cartesianProduct(small)`
+	MapSet cartesianProduct(MapSet other) const
+	{
+		if (this is emptySet || other is emptySet) return emptySet;
+		if (this is unitSet) return other;
+		if (other is unitSet) return this;
+
+		MapSet unset = this;
+		foreach (dim; other.getDims())
+			unset = unset.remove(dim);
+
+		return other.uncheckedCartesianProduct(this);
+	}
+
+	// Assumes that the dimensions in `this` and `other` are disjoint.
+	private MapSet uncheckedCartesianProduct(MapSet other) const
+	{
+		if (this is unitSet) return other;
+		if (other is unitSet) return this;
+
+		this.assertDeduplicated();
+		other.assertDeduplicated();
+
+		return cache.cartesianProduct.require(SetSetOp(this, other), {
+			return lazyMap(set => set.uncheckedCartesianProduct(other));
+		}());
+	}
+
 	/// Refactor this matrix into one with the same data,
 	/// but putting the given dimension in front.
 	/// This will speed up access to values with the given dimension.
@@ -676,7 +707,7 @@ unittest
 	import std.algorithm.sorting : sort;
 
 	alias M = MapSet!(string, int);
-	M m = M.emptySet;
+	M m, n;
 	m = m.merge(M.unitSet.set("x", 1).set("y", 5));
 	m = m.merge(M.unitSet.set("x", 1).set("y", 6));
 	assert(m.all("x") == [1]);
@@ -718,6 +749,15 @@ unittest
 	assert(m            .all("x").dup.sort.release == [1, 2, 3]);
 	assert(m.set("z", 1).all("x").dup.sort.release == [1, 2, 3]);
 	assert(m.set("x", 1).all("z").dup.sort.release == [1, 2, 3]);
+
+	m = M.unitSet;
+	m = m.cartesianProduct("a", [1, 2, 3]);
+	m = m.cartesianProduct("b", [1, 2, 3]);
+	n = M.unitSet;
+	n = n.cartesianProduct("c", [1, 2, 3]);
+	n = n.cartesianProduct("d", [1, 2, 3]);
+	m = m.cartesianProduct(n);
+	assert(m.count == 3 * 3 * 3 * 3);
 
 	assert(M.unitSet != M.unitSet.set("x", 1));
 }
