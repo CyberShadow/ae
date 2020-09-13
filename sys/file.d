@@ -1716,7 +1716,7 @@ version (linux)
 		return XAttrs!(const(char)*, "l")(path.toStringz());
 	}
 
-	auto xAttrs(in ref File f)
+	auto xAttrs(ref const File f)
 	{
 		return XAttrs!(int, "f")(f.fileno);
 	}

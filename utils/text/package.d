@@ -765,7 +765,7 @@ void arrayFromHex(HexParseConfig config = HexParseConfig.init)(in char[] hex, ub
 }
 
 /// Fast version for static arrays of known length.
-void sarrayFromHex(HexParseConfig config = HexParseConfig.init, size_t N, Hex)(in ref Hex hex, ref ubyte[N] buf)
+void sarrayFromHex(HexParseConfig config = HexParseConfig.init, size_t N, Hex)(ref const Hex hex, ref ubyte[N] buf)
 if (is(Hex == char[N*2]))
 {
 	foreach (i; 0..N/4)

@@ -493,7 +493,7 @@ public:
 	}
 
 	/// Called by the server to compress content, if possible/appropriate
-	final package void optimizeData(in ref Headers requestHeaders)
+	final package void optimizeData(ref const Headers requestHeaders)
 	{
 		auto acceptEncoding = requestHeaders.get("Accept-Encoding", null);
 		if (acceptEncoding && "Content-Encoding" !in headers)
@@ -531,7 +531,7 @@ public:
 	}
 
 	/// Called by the server to apply range request.
-	final package void sliceData(in ref Headers requestHeaders)
+	final package void sliceData(ref const Headers requestHeaders)
 	{
 		if (status == HttpStatusCode.OK)
 		{

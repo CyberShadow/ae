@@ -755,7 +755,7 @@ EOF");
 			static assert(false);
 
 		/// Returns the command for the make utility.
-		string[] getMake(in ref Environment env)
+		string[] getMake(ref const Environment env)
 		{
 			version (FreeBSD)
 				enum makeProgram = "gmake"; // GNU make
@@ -782,7 +782,7 @@ EOF");
 			assert(dDoTestEscape(`C:\Foo boo bar\baz quuz\derp.exe`) == `C:\"Foo boo bar"\"baz quuz"\derp.exe`);
 		}
 
-		string[] getPlatformMakeVars(in ref Environment env, string model, bool quote = true)
+		string[] getPlatformMakeVars(ref const Environment env, string model, bool quote = true)
 		{
 			string[] args;
 

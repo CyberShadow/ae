@@ -191,7 +191,7 @@ sizediff_t indexOf(T)(in T[] arr, in T[] val) /// ditto
 }
 
 /// Index of element, no BS.
-sizediff_t indexOfElement(T, D)(in T[] arr, auto ref in D val)
+sizediff_t indexOfElement(T, D)(in T[] arr, auto ref const D val)
 	if (is(typeof(arr[0]==val)))
 {
 	foreach (i, ref v; arr)
@@ -201,7 +201,7 @@ sizediff_t indexOfElement(T, D)(in T[] arr, auto ref in D val)
 }
 
 /// Whether array contains value, no BS.
-bool contains(T, V)(in T[] arr, auto ref in V val)
+bool contains(T, V)(in T[] arr, auto ref const V val)
 	if (is(typeof(arr[0]==val)))
 {
 	return arr.indexOfElement(val) >= 0;

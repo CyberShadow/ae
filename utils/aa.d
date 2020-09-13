@@ -293,7 +293,7 @@ private
 		// as structs always have non-zero size.
 	static:
 
-		size_t length(in ref ValueType v) nothrow
+		size_t length(ref const ValueType v) nothrow
 		{
 			static if (is(T == Void))
 				static if (multi)
@@ -648,13 +648,13 @@ public:
 
 	static if (ordered)
 	{
-		size_t indexOf()(auto ref in K k)
+		size_t indexOf()(auto ref const K k)
 		{
 			auto p = k in lookup;
 			return p ? (*p)[0] : -1;
 		}
 
-		size_t[] indicesOf()(auto ref in K k)
+		size_t[] indicesOf()(auto ref const K k)
 		{
 			auto p = k in lookup;
 			return p ? (*p)[] : null;

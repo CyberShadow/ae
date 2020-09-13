@@ -74,7 +74,7 @@ class CachedCurlNetwork : Network
 		int maxRedirects = int.min; // choose depending or method
 	}
 
-	/*private*/ static void req(CachedCurlNetwork instance, in ref Request request, string target, string metadataPath)
+	/*private*/ static void req(CachedCurlNetwork instance, ref const Request request, string target, string metadataPath)
 	{
 		with (instance)
 		{
@@ -166,7 +166,7 @@ class CachedCurlNetwork : Network
 		}
 	}
 
-	Response cachedReq(in ref Request request)
+	Response cachedReq(ref const Request request)
 	{
 		auto hash = getDigestString!MD5(request.url ~ cast(char)request.method ~ request.data);
 		auto path = buildPath(cacheDir, hash[0..2], hash);
