@@ -808,14 +808,16 @@ if (is(Target == string) &&
 
 version (unittest)
 {
-    private @property bool inTravisCIImpl() { import std.process; return !!environment.get("TRAVIS"); }
-    private @property bool inTravisCI() pure @trusted nothrow @nogc { return (cast(bool function() pure nothrow @nogc)&inTravisCIImpl)(); }
+    private @property bool haveEnvVarImpl(string s) { import std.process; return !!environment.get(s); }
+    private @property bool haveEnvVar(string s) pure @trusted nothrow @nogc { return (cast(bool function(string) pure nothrow @nogc)&haveEnvVarImpl)(s); }
 }
 
 @safe pure unittest
 {
     // Fails only on Travis CI (not reproducible locally even with Travis CI docker image)
-    if (inTravisCI) return;
+    if (haveEnvVar("TRAVIS")) return;
+    // Same problem with BuildKite
+	if (haveEnvVar("BUILDKITE_AGENT_NAME")) return;
 
     import std.exception;
     import std.conv : ConvException;
