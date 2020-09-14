@@ -869,7 +869,7 @@ struct MapSetVisitor(A, V)
 		auto newChildren = currentSubset.root.children.dup;
 		foreach (ref child; newChildren)
 			fun(child.value);
-		currentSubset = Set(new immutable Set.Node(name, cast(immutable) newChildren));
+		currentSubset = Set(new immutable Set.Node(name, cast(immutable) newChildren)).deduplicate;
 	}
 }
 
