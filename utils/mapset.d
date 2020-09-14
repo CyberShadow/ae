@@ -561,7 +561,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		foreach (dim; other.getDims())
 			unset = unset.remove(dim);
 
-		return other.uncheckedCartesianProduct(this);
+		return other.uncheckedCartesianProduct(unset);
 	}
 
 	// Assumes that the dimensions in `this` and `other` are disjoint.
