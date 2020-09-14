@@ -854,6 +854,10 @@ struct MapSetVisitor(A, V)
 	/// Algorithm interface - set a value by name
 	void put(A name, V value)
 	{
+		if (name !in resolvedValues)
+			if (auto pvalue = name in singularValues)
+				if (*pvalue == value)
+					return;
 		currentSubset = currentSubset.set(name, value);
 		resolvedValues[name] = value;
 	}
