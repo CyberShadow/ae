@@ -778,6 +778,7 @@ struct MapSetVisitor(A, V)
 		size_t pos;
 	}
 	Var[] stack;
+	size_t stackPos;
 	V[A] singularValues, resolvedValues; // Faster than currentSubset.all(name)[0]
 	Set currentSubset;
 
@@ -825,12 +826,7 @@ struct MapSetVisitor(A, V)
 
 		currentSubset = set;
 		resolvedValues = null;
-		foreach (ref var; stack)
-		{
-			auto value = var.values[var.pos];
-			currentSubset = currentSubset.get(var.name, value);
-			resolvedValues[var.name] = value;
-		}
+		stackPos = 0;
 		return true;
 	}
 
@@ -842,12 +838,27 @@ struct MapSetVisitor(A, V)
 		if (auto pvalue = name in singularValues)
 			return *pvalue;
 
-		auto values = currentSubset.all(name);
-		auto value = values[0];
-		resolvedValues[name] = value;
-		stack ~= Var(name, values, 0);
-		if (values.length > 1)
-			currentSubset = currentSubset.get(name, value);
+		if (stackPos == stack.length)
+		{
+			// Expand new variable
+			auto values = currentSubset.all(name);
+			auto value = values[0];
+			resolvedValues[name] = value;
+			stack ~= Var(name, values, 0);
+			stackPos++;
+			if (values.length > 1)
+				currentSubset = currentSubset.get(name, value);
+			return value;
+		}
+
+		// Iterate over known variable
+		auto var = &stack[stackPos];
+		assert(var.name == name, "Mismatching get order");
+		auto value = var.values[var.pos];
+		currentSubset = currentSubset.get(var.name, value);
+		assert(currentSubset !is Set.emptySet, "Empty set after restoring");
+		resolvedValues[var.name] = value;
+		stackPos++;
 		return value;
 	}
 
@@ -917,4 +928,16 @@ unittest
 	v.next();
 	v.transform("x", (ref int v) { v *= 2; });
 	assert(v.currentSubset.all("x").dup.sort.release == [2, 4, 6]);
+}
+
+unittest
+{
+	alias M = MapSet!(string, int);
+	M m = M.unitSet.cartesianProduct("x", [1, 2, 3]);
+	auto v = MapSetVisitor!(string, int)(m);
+	while (v.next())
+	{
+		v.transform("x", (ref int v) { v *= 2; });
+		v.put("y", v.get("x"));
+	}
 }
