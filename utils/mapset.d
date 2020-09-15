@@ -279,36 +279,19 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	HashSet!DimValue[DimName] getDimsAndValues() const
 	{
 		if (this is emptySet) return null;
+
 		// Be careful to count the implicit nullValues on branches
 		// where a dim doesn't occur.
-		auto dims = getDims();
-		auto dimIndices = OrderedSet!DimName(dims);
-		auto dimSeen = new bool[dims.length];
+		MapSet set = this.completeSuperset;
 		HashSet!DimValue[DimName] result;
-		HashSet!MapSet seen;
-		void visit(MapSet set)
+		while (set !is unitSet)
 		{
-			if (set is unitSet)
-			{
-				foreach (i, seen; dimSeen)
-					if (!seen)
-						result.require(dims[i], HashSet!DimValue.init).add(nullValue);
-				return;
-			}
-
-			if (set in seen) return;
-			seen.add(set);
-			auto pvalues = &result.require(set.root.dim, HashSet!DimValue.init);
-			foreach (ref pair; set.root.children)
-				pvalues.add(pair.value);
-
-			auto i = dimIndices.indexOf(set.root.dim);
-			dimSeen[i] = true;
-			foreach (ref pair; set.root.children)
-				visit(pair.set);
-			dimSeen[i] = false;
+			DimName dim = set.root.dim;
+			HashSet!DimValue values = set.root.children.map!((ref child) => child.value).toSet;
+			bool added = result.addNew(dim, values);
+			assert(added, "Duplicate dimension");
+			set = set.root.children[0].set;
 		}
-		visit(this);
 		return result;
 	}
 
