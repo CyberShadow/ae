@@ -173,7 +173,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		/// should be memoized here
 		MapSet[SetSetOp] merge, subtract, cartesianProduct;
 		MapSet[SetDimOp] remove, bringToFront;
-		MapSet[MapSet] optimize;
+		MapSet[MapSet] optimize, completeSuperset;
 		size_t[MapSet] uniqueNodes;
 	}
 	private static Cache cache;
@@ -575,6 +575,26 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 
 		return cache.cartesianProduct.require(SetSetOp(this, other), {
 			return lazyMap(set => set.uncheckedCartesianProduct(other));
+		}());
+	}
+
+	/// Return a superset of this set, consisting of a Cartesian
+	/// product of every value of every dimension. The total number of
+	/// unique nodes is thus equal to the number of dimensions.
+	MapSet completeSuperset() const
+	{
+		if (this is emptySet || this is unitSet) return this;
+		this.assertDeduplicated();
+
+		return cache.completeSuperset.require(this, {
+			MapSet child = MapSet.emptySet;
+			foreach (ref pair; root.children)
+				child = child.merge(pair.set);
+			child = child.completeSuperset();
+			auto newChildren = root.children.dup;
+			foreach (ref pair; newChildren)
+				pair.set = child;
+			return MapSet(new immutable Node(root.dim, cast(immutable) newChildren)).deduplicate;
 		}());
 	}
 
