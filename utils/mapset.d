@@ -783,6 +783,7 @@ struct MapSetVisitor(A, V)
 	Var[] stack;
 	size_t stackPos;
 	V[A] singularValues, resolvedValues; // Faster than workingSet.all(name)[0]
+	private HashSet!A dirtyValues; // Accumulate MapSet.set calls
 	private Set workingSet;
 
 	this(Set set)
@@ -829,13 +830,22 @@ struct MapSetVisitor(A, V)
 
 		workingSet = set;
 		resolvedValues = null;
+		dirtyValues.clear();
 		stackPos = 0;
 		return true;
+	}
+
+	private void flush()
+	{
+		foreach (name; dirtyValues)
+			workingSet = workingSet.set(name, resolvedValues[name]);
+		dirtyValues.clear();
 	}
 
 	@property Set currentSubset()
 	{
 		assert(workingSet !is Set.emptySet, "Not iterating");
+		flush();
 		return workingSet;
 	}
 
@@ -880,8 +890,9 @@ struct MapSetVisitor(A, V)
 			if (auto pvalue = name in singularValues)
 				if (*pvalue == value)
 					return;
-		workingSet = workingSet.set(name, value);
+
 		resolvedValues[name] = value;
+		dirtyValues.add(name);
 	}
 
 	/// Apply a function over every possible value of the given
@@ -890,7 +901,10 @@ struct MapSetVisitor(A, V)
 	{
 		assert(workingSet !is Set.emptySet, "Not iterating");
 		if (auto pvalue = name in resolvedValues)
+		{
+			dirtyValues.add(name);
 			return fun(*pvalue);
+		}
 
 		workingSet = workingSet.bringToFront(name);
 		auto newChildren = workingSet.root.children.dup;
