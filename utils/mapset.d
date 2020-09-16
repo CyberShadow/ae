@@ -301,7 +301,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	{
 		if (this is emptySet) return other;
 		if (other is emptySet) return this;
-		if (this is unitSet && other is unitSet) return unitSet;
+		if (this is other) return this;
 		if (!root) return bringToFront(other.root.dim).merge(other);
 
 		this.assertDeduplicated();
@@ -355,7 +355,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	{
 		if (this is emptySet) return this;
 		if (other is emptySet) return this;
-		if (this is unitSet && other is unitSet) return emptySet;
+		if (this is other) return emptySet;
 		if (!root) return bringToFront(other.root.dim).subtract(other);
 
 		this.assertDeduplicated();
