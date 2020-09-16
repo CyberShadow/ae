@@ -836,6 +836,7 @@ struct MapSetVisitor(A, V)
 	/// Algorithm interface - get a value by name
 	V get(A name)
 	{
+		assert(currentSubset !is Set.emptySet, "Not iterating");
 		if (auto pvalue = name in resolvedValues)
 			return *pvalue;
 		if (auto pvalue = name in singularValues)
@@ -868,6 +869,7 @@ struct MapSetVisitor(A, V)
 	/// Algorithm interface - set a value by name
 	void put(A name, V value)
 	{
+		assert(currentSubset !is Set.emptySet, "Not iterating");
 		if (name !in resolvedValues)
 			if (auto pvalue = name in singularValues)
 				if (*pvalue == value)
@@ -880,6 +882,7 @@ struct MapSetVisitor(A, V)
 	/// variable, without resolving it (unless it's already resolved).
 	void transform(A name, scope void delegate(ref V value) fun)
 	{
+		assert(currentSubset !is Set.emptySet, "Not iterating");
 		if (auto pvalue = name in resolvedValues)
 			return fun(*pvalue);
 
