@@ -444,6 +444,33 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		}());
 	}
 
+	/// Unset dimensions according to a predicate.
+	/// This is faster than removing dimensions individually, however,
+	/// unlike the `DimName` overload, this one does not benefit from global memoization.
+	MapSet remove(bool delegate(DimName) pred) const
+	{
+		if (this is emptySet) return this;
+		this.assertDeduplicated();
+
+		MapSet[MapSet] cache;
+		MapSet visit(MapSet set)
+		{
+			if (set is unitSet)
+				return set;
+			return cache.require(set, {
+				if (pred(set.root.dim))
+				{
+					MapSet result;
+					foreach (ref pair; set.root.children)
+						result = result.merge(visit(pair.set));
+					return result;
+				}
+				return set.lazyMap(set => visit(set));
+			}());
+		}
+		return visit(this);
+	}
+
 	/// Set the given dimension to always have the given value,
 	/// collapsing (returning the union of) all sub-matrices
 	/// for previously different values of `dim`.
