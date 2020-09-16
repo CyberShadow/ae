@@ -476,12 +476,19 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	/// for previously different values of `dim`.
 	MapSet set(DimName dim, DimValue value) const
 	{
-		if (this is emptySet) return emptySet;
+		return this.remove(dim).addDim(dim, value);
+	}
+
+	/// Adds a new dimension with the given value.
+	/// The dimension must not have previously existed in `this`.
+	private MapSet addDim(DimName dim, DimValue value) const
+	{
+		if (this is emptySet) return this;
 		this.assertDeduplicated();
-		auto removed = this.remove(dim);
+		assert(this is this.remove(dim), "Duplicate dimension");
 		if (value == nullValue)
-			return removed;
-		return MapSet(new immutable Node(dim, cast(immutable) [value : removed])).deduplicate;
+			return this;
+		return MapSet(new immutable Node(dim, cast(immutable) [value : this])).deduplicate;
 	}
 
 	/// Return a sub-matrix for all points where the given dimension has this value.
