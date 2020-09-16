@@ -871,8 +871,11 @@ struct MapSetVisitor(A, V)
 
 	private void flush()
 	{
+		if (dirtyValues.empty)
+			return;
+		workingSet = workingSet.remove((A name) => name in dirtyValues);
 		foreach (name; dirtyValues)
-			workingSet = workingSet.set(name, resolvedValues[name]);
+			workingSet = workingSet.addDim(name, resolvedValues[name]);
 		dirtyValues.clear();
 	}
 
