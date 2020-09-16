@@ -782,8 +782,8 @@ struct MapSetVisitor(A, V)
 	}
 	Var[] stack;
 	size_t stackPos;
-	V[A] singularValues, resolvedValues; // Faster than currentSubset.all(name)[0]
-	Set currentSubset;
+	V[A] singularValues, resolvedValues; // Faster than workingSet.all(name)[0]
+	private Set workingSet;
 
 	this(Set set)
 	{
@@ -798,7 +798,7 @@ struct MapSetVisitor(A, V)
 	/// instance (`visitor = MapSetVisitor(visitor.set)`).
 	void reset()
 	{
-		currentSubset = Set.emptySet;
+		workingSet = Set.emptySet;
 		stack = null;
 	}
 
@@ -808,7 +808,7 @@ struct MapSetVisitor(A, V)
 	{
 		if (set is Set.emptySet)
 			return false;
-		if (currentSubset is Set.emptySet)
+		if (workingSet is Set.emptySet)
 		{
 			// first iteration
 		}
@@ -827,16 +827,22 @@ struct MapSetVisitor(A, V)
 				break;
 			}
 
-		currentSubset = set;
+		workingSet = set;
 		resolvedValues = null;
 		stackPos = 0;
 		return true;
 	}
 
+	@property Set currentSubset()
+	{
+		assert(workingSet !is Set.emptySet, "Not iterating");
+		return workingSet;
+	}
+
 	/// Algorithm interface - get a value by name
 	V get(A name)
 	{
-		assert(currentSubset !is Set.emptySet, "Not iterating");
+		assert(workingSet !is Set.emptySet, "Not iterating");
 		if (auto pvalue = name in resolvedValues)
 			return *pvalue;
 		if (auto pvalue = name in singularValues)
@@ -845,13 +851,13 @@ struct MapSetVisitor(A, V)
 		if (stackPos == stack.length)
 		{
 			// Expand new variable
-			auto values = currentSubset.all(name);
+			auto values = workingSet.all(name);
 			auto value = values[0];
 			resolvedValues[name] = value;
 			stack ~= Var(name, values, 0);
 			stackPos++;
 			if (values.length > 1)
-				currentSubset = currentSubset.get(name, value);
+				workingSet = workingSet.get(name, value);
 			return value;
 		}
 
@@ -859,8 +865,8 @@ struct MapSetVisitor(A, V)
 		auto var = &stack[stackPos];
 		assert(var.name == name, "Mismatching get order");
 		auto value = var.values[var.pos];
-		currentSubset = currentSubset.get(var.name, value);
-		assert(currentSubset !is Set.emptySet, "Empty set after restoring");
+		workingSet = workingSet.get(var.name, value);
+		assert(workingSet !is Set.emptySet, "Empty set after restoring");
 		resolvedValues[var.name] = value;
 		stackPos++;
 		return value;
@@ -869,12 +875,12 @@ struct MapSetVisitor(A, V)
 	/// Algorithm interface - set a value by name
 	void put(A name, V value)
 	{
-		assert(currentSubset !is Set.emptySet, "Not iterating");
+		assert(workingSet !is Set.emptySet, "Not iterating");
 		if (name !in resolvedValues)
 			if (auto pvalue = name in singularValues)
 				if (*pvalue == value)
 					return;
-		currentSubset = currentSubset.set(name, value);
+		workingSet = workingSet.set(name, value);
 		resolvedValues[name] = value;
 	}
 
@@ -882,15 +888,15 @@ struct MapSetVisitor(A, V)
 	/// variable, without resolving it (unless it's already resolved).
 	void transform(A name, scope void delegate(ref V value) fun)
 	{
-		assert(currentSubset !is Set.emptySet, "Not iterating");
+		assert(workingSet !is Set.emptySet, "Not iterating");
 		if (auto pvalue = name in resolvedValues)
 			return fun(*pvalue);
 
-		currentSubset = currentSubset.bringToFront(name);
-		auto newChildren = currentSubset.root.children.dup;
+		workingSet = workingSet.bringToFront(name);
+		auto newChildren = workingSet.root.children.dup;
 		foreach (ref child; newChildren)
 			fun(child.value);
-		currentSubset = Set(new immutable Set.Node(name, cast(immutable) newChildren)).deduplicate;
+		workingSet = Set(new immutable Set.Node(name, cast(immutable) newChildren)).deduplicate;
 	}
 }
 
