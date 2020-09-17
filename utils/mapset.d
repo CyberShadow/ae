@@ -561,7 +561,8 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		if (values.length == 0) return emptySet;
 		this.assertDeduplicated();
 		auto unset = this.remove(dim);
-		return MapSet(new immutable Node(dim, cast(immutable) values.map!(value => tuple(value, unset)).assocArray)).deduplicate;
+		auto children = values.map!(value => Pair(value, unset)).array;
+		return MapSet(new immutable Node(dim, cast(immutable) children)).deduplicate;
 	}
 
 	/// Return a set which represents the Cartesian product between
