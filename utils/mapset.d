@@ -16,6 +16,7 @@ module ae.utils.mapset;
 static if (__VERSION__ >= 2083):
 
 import std.algorithm.iteration;
+import std.algorithm.sorting;
 import std.array;
 import std.exception;
 import std.typecons : tuple;
@@ -68,6 +69,14 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	{
 		DimValue value;
 		MapSet set;
+
+		int opCmp(ref const typeof(this) other) const
+		{
+			static if (is(typeof(value.opCmp(other.value)) : int))
+				return value.opCmp(other.value);
+			else
+				return value < other.value ? -1 : value > other.value ? 1 : 0;
+		}
 	}
 
 	struct Node
@@ -82,6 +91,10 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			// but then we should just use MapSet.emptySet instead.
 			assert(!children.empty, "Node with zero children");
 
+			// Nodes should be in their canonical form for
+			// memoization and deduplication to be effective.
+			assert(children.isSorted, "Children are not sorted");
+
 			this.dim = dim;
 			this.children = children;
 
@@ -90,8 +103,11 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			hash = hashOf(dim) ^ hashOf(children);
 
 			size_t totalMembers = 0;
-			foreach (ref pair; children)
+			foreach (i, ref pair; children)
 			{
+				if (i)
+					assert(pair.value != children[i-1].value, "Duplicate value");
+
 				pair.set.assertDeduplicated();
 				// Same as "Node with zero children"
 				assert(pair.set !is emptySet, "Empty set as submatrix");
@@ -103,7 +119,9 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 
 		immutable this(DimName dim, immutable MapSet[DimValue] children)
 		{
-			this(dim, children.byKeyValue.map!(kv => Pair(kv.key, kv.value)).array);
+			auto childrenList = children.byKeyValue.map!(kv => Pair(kv.key, kv.value)).array;
+			childrenList.sort();
+			this(dim, cast(immutable) childrenList);
 		}
 
 		void toString(scope void delegate(const(char)[]) sink) const
@@ -562,6 +580,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		this.assertDeduplicated();
 		auto unset = this.remove(dim);
 		auto children = values.map!(value => Pair(value, unset)).array;
+		children.sort();
 		return MapSet(new immutable Node(dim, cast(immutable) children)).deduplicate;
 	}
 
@@ -664,7 +683,11 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			}
 			Pair[] newChildren;
 			foreach (value, children; submatrices)
+			{
+				children.sort();
 				newChildren ~= Pair(value, MapSet(new immutable Node(root.dim, cast(immutable) children)).deduplicate);
+			}
+			newChildren.sort();
 			return MapSet(new immutable Node(dim, cast(immutable) newChildren)).deduplicate;
 		}());
 	}
