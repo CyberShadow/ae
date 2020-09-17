@@ -65,6 +65,9 @@ import ae.utils.array : amap;
  */
 struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 {
+	/// Logically, each MapSet node has a map of values to a subset.
+	/// However, it is faster to represent that map as an array of key-value pairs
+	/// rather than a D associative array, so we do that here.
 	struct Pair
 	{
 		DimValue value;
