@@ -101,7 +101,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			this.dim = dim;
 			this.children = children;
 
-			// Because each submatrix is immutable, we can
+			// Because each subset is immutable, we can
 			// pre-calculate the hash during construction.
 			hash = hashOf(dim) ^ hashOf(children);
 
@@ -113,7 +113,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 
 				pair.set.assertDeduplicated();
 				// Same as "Node with zero children"
-				assert(pair.set !is emptySet, "Empty set as submatrix");
+				assert(pair.set !is emptySet, "Empty set as subset");
 
 				totalMembers += pair.set.count;
 			}
@@ -158,7 +158,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	}
 
 	/// Indicates the empty set.
-	/// May only occur at the top level (never as a submatrix).
+	/// May only occur at the top level (never as a subset).
 	private enum emptySetRoot = cast(immutable(Node)*)1;
 
 	/// If emptySetRoot, zero values.
