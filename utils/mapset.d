@@ -488,7 +488,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		assert(this is this.remove(dim), "Duplicate dimension");
 		if (value == nullValue)
 			return this;
-		return MapSet(new immutable Node(dim, cast(immutable) [value : this])).deduplicate;
+		return MapSet(new immutable Node(dim, [Pair(value, this)])).deduplicate;
 	}
 
 	/// Return a sub-matrix for all points where the given dimension has this value.
