@@ -968,9 +968,39 @@ struct MapSetVisitor(A, V)
 		}
 
 		workingSet = workingSet.bringToFront(name);
+		Set[V] newChildren;
+		foreach (ref child; workingSet.root.children)
+		{
+			V value = child.value;
+			fun(value);
+			newChildren.updateVoid(value,
+				() => child.set,
+				(ref Set set)
+				{
+					set = set.merge(child.set);
+				});
+		}
+		workingSet = Set(new immutable Set.Node(name, cast(immutable) newChildren)).deduplicate;
+	}
+
+	/// Apply a function over every possible value of the given
+	/// variable, without resolving it (unless it's already resolved).
+	/// The function is assumed to be injective (does not produce
+	/// duplicate outputs for distinct inputs).
+	void injectiveTransform(A name, scope void delegate(ref V value) fun)
+	{
+		assert(workingSet !is Set.emptySet, "Not iterating");
+		if (auto pvalue = name in resolvedValues)
+		{
+			dirtyValues.add(name);
+			return fun(*pvalue);
+		}
+
+		workingSet = workingSet.bringToFront(name);
 		auto newChildren = workingSet.root.children.dup;
 		foreach (ref child; newChildren)
 			fun(child.value);
+		newChildren.sort();
 		workingSet = Set(new immutable Set.Node(name, cast(immutable) newChildren)).deduplicate;
 	}
 }
