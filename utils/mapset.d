@@ -824,6 +824,16 @@ unittest
 	assert(m.count == 3 * 3 * 3 * 3);
 
 	assert(M.unitSet != M.unitSet.set("x", 1));
+
+	m = M.emptySet;
+	m = m.merge(M.unitSet.set("x", 1).set("y", 11));
+	m = m.merge(M.unitSet.set("x", 2).set("y", 12).set("z", 22));
+	m = m.completeSuperset();
+	assert(m.uniqueNodes == 3);
+	assert(m.count == 8); // 2 ^^ 3
+	assert(m.all("x").dup.sort.release == [1, 2]);
+	assert(m.all("y").dup.sort.release == [11, 12]);
+	assert(m.all("z").dup.sort.release == [0, 22]);
 }
 
 
