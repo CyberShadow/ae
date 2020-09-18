@@ -20,6 +20,7 @@ import std.algorithm.sorting;
 import std.array;
 import std.exception;
 import std.format;
+import std.functional;
 import std.traits;
 
 import ae.utils.meta;
@@ -669,6 +670,15 @@ unittest
 {
 	assert([1, 2, 3].amap!`a*2`() == [2, 4, 6]);
 	assert([1, 2, 3].amap!(n => n*n)() == [1, 4, 9]);
+}
+
+auto amap(alias pred, T, size_t n)(T[n] arr)
+{
+	alias R = typeof(unaryFun!pred(arr[0]));
+	R[n] result;
+	foreach (i, ref r; result)
+		r = unaryFun!pred(arr[i]);
+	return result;
 }
 
 // ***************************************************************************
