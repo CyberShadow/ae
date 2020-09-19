@@ -764,6 +764,15 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		return result;
 	}
 
+	/// Refactor this matrix into one in which dimensions always occur
+	/// in the same order, no matter what path is taken.
+	private MapSet evenOut() const
+	{
+		if (this is unitSet || this is emptySet) return this;
+
+		return reorderUsing(dimOrderReference());
+	}
+
 	private size_t maxDepth() const
 	{
 		import std.algorithm.comparison : max;
