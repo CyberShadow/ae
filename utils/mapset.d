@@ -705,36 +705,29 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		this.assertDeduplicated();
 
 		return cache.optimize.require(this, {
-			bool modified;
-			MapSet[DimValue] newChildren;
-			foreach (ref pair; root.children)
+			MapSet bestSet = this;
+			auto bestNodes = this.uniqueNodes;
+			size_t maxDepth = this.maxDepth;
+
+			size_t depth = 0;
+
+			while (depth < maxDepth)
 			{
-				auto newMatrix = pair.set.optimize;
-				if (newMatrix !is pair.set)
+				auto newSet = bestSet.swapDepth(depth);
+				auto newNodes = newSet.uniqueNodes;
+				if (bestNodes > newNodes)
 				{
-					modified = true;
-					assert(newMatrix.count == pair.set.count);
+					bestSet = newSet;
+					bestNodes = newNodes;
+					if (depth > 0)
+						depth--;
 				}
-				newChildren[pair.value] = newMatrix;
+				else
+				{
+					depth++;
+				}
 			}
-
-			MapSet result = modified ? MapSet(new immutable Node(root.dim, cast(immutable) newChildren)).deduplicate : this;
-
-			foreach (ref pair; result.root.children)
-				if (pair.set.root)
-				{
-					auto optimized = result.bringToFront(pair.set.root.dim);
-					// {
-					// 	import std.stdio;
-					// 	writefln("Trying to optimize:\n- Old: %d : %s\n- New: %d : %s",
-					// 		result.root.totalNodes, result,
-					// 		optimized.root.totalNodes, optimized,
-					// 	);
-					// }
-					return optimized.uniqueNodes < result.uniqueNodes ? optimized : result;
-				}
-
-			return result.deduplicate;
+			return bestSet;
 		}());
 	}
 
