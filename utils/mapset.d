@@ -193,7 +193,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		MapSet[MapSet] instances;
 		/// Operations - things that operate recursively on subtrees
 		/// should be memoized here
-		MapSet[SetSetOp] merge, subtract, cartesianProduct;
+		MapSet[SetSetOp] merge, subtract, cartesianProduct, reorderUsing;
 		MapSet[SetDimOp] remove, bringToFront;
 		MapSet[SetIdxOp] swapDepth;
 		MapSet[MapSet] optimize, completeSuperset;
@@ -758,6 +758,20 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 					pair.set = pair.set.swapDepth(depth - 1);
 				return MapSet(new immutable Node(root.dim, cast(immutable) newChildren)).deduplicate;
 			}
+		}());
+	}
+
+	/// Refactor this matrix into one with the same data, but in which
+	/// the dimensions always occur as in `reference` (which is
+	/// assumed to be normalized).
+	MapSet reorderUsing(MapSet reference) const
+	{
+		if (this is emptySet || reference is emptySet || reference is unitSet) return this;
+		this.assertDeduplicated();
+		reference.assertDeduplicated();
+
+		return cache.reorderUsing.require(SetSetOp(this, reference), {
+			return bringToFront(reference.root.dim).lazyMap(set => set.reorderUsing(reference.root.children[0].set));
 		}());
 	}
 
