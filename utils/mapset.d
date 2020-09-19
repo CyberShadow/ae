@@ -186,6 +186,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 
 	private struct SetSetOp { MapSet a, b; }
 	private struct SetDimOp { MapSet set; DimName dim; }
+	private struct SetIdxOp { MapSet set; size_t index; }
 	private struct Cache
 	{
 		/// For deduplication - key is value
@@ -194,6 +195,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		/// should be memoized here
 		MapSet[SetSetOp] merge, subtract, cartesianProduct;
 		MapSet[SetDimOp] remove, bringToFront;
+		MapSet[SetIdxOp] swapDepth;
 		MapSet[MapSet] optimize, completeSuperset;
 		size_t[MapSet] uniqueNodes;
 	}
@@ -733,6 +735,29 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 				}
 
 			return result.deduplicate;
+		}());
+	}
+
+	private MapSet swapDepth(size_t depth) const
+	{
+		if (this is emptySet || this is unitSet) return this;
+		this.assertDeduplicated();
+
+		return cache.swapDepth.require(SetIdxOp(this, depth), {
+			if (depth == 0)
+			{
+				foreach (ref pair; root.children)
+					if (pair.set !is unitSet)
+						return bringToFront(pair.set.root.dim);
+				return this;
+			}
+			else
+			{
+				auto newChildren = root.children.dup;
+				foreach (ref pair; newChildren)
+					pair.set = pair.set.swapDepth(depth - 1);
+				return MapSet(new immutable Node(root.dim, cast(immutable) newChildren)).deduplicate;
+			}
 		}());
 	}
 
