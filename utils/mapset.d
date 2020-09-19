@@ -197,7 +197,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		MapSet[SetDimOp] remove, bringToFront;
 		MapSet[SetIdxOp] swapDepth;
 		MapSet[MapSet] optimize, completeSuperset;
-		size_t[MapSet] uniqueNodes;
+		size_t[MapSet] uniqueNodes, maxDepth;
 	}
 	private static Cache cache;
 
@@ -735,6 +735,21 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 				}
 
 			return result.deduplicate;
+		}());
+	}
+
+	private size_t maxDepth() const
+	{
+		import std.algorithm.comparison : max;
+
+		if (this is emptySet || this is unitSet)
+			return 0;
+		this.assertDeduplicated();
+		return cache.maxDepth.require(this, {
+			size_t maxDepth = 0;
+			foreach (ref pair; root.children)
+				maxDepth = max(maxDepth, pair.set.maxDepth());
+			return 1 + maxDepth;
 		}());
 	}
 
