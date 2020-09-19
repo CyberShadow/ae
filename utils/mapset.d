@@ -707,8 +707,11 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 
 		return cache.optimize.require(this, {
 			MapSet bestSet = this;
-			auto bestNodes = this.uniqueNodes;
-			size_t maxDepth = this.maxDepth;
+
+			bestSet = bestSet.evenOut();
+
+			auto bestNodes = bestSet.uniqueNodes;
+			size_t maxDepth = bestSet.maxDepth;
 
 			size_t depth = 0;
 
