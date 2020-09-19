@@ -16,6 +16,7 @@ module ae.utils.mapset;
 static if (__VERSION__ >= 2083):
 
 import std.algorithm.iteration;
+import std.algorithm.searching;
 import std.algorithm.sorting;
 import std.array;
 import std.exception;
@@ -729,6 +730,38 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			}
 			return bestSet;
 		}());
+	}
+
+	/// Return a set equivalent to a unit set (all dimensions
+	/// explicitly set to `nullValue`), with all dimensions in `this`,
+	/// in an order approximately following that of the dimensions in
+	/// `this`.  Implicitly normalized.
+	private MapSet dimOrderReference() const
+	{
+		if (this is unitSet || this is emptySet) return this;
+
+		DimName[] dims;
+		HashSet!MapSet seen;
+		void visit(MapSet set, size_t pos)
+		{
+			if (set is unitSet) return;
+			if (set in seen) return;
+			seen.add(set);
+			if ((pos == dims.length || dims[pos] != set.root.dim) && !dims.canFind(set.root.dim))
+			{
+				dims.insertInPlace(pos, set.root.dim);
+				pos++;
+			}
+			foreach (ref pair; set.root.children)
+				visit(pair.set, pos);
+		}
+		visit(this, 0);
+
+		MapSet result = unitSet;
+		foreach_reverse (dim; dims)
+			result = MapSet(new immutable Node(dim, [Pair(nullValue, result)])).deduplicate();
+
+		return result;
 	}
 
 	private size_t maxDepth() const
