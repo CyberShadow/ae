@@ -199,14 +199,14 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		MapSet[MapSet] optimize, completeSuperset;
 		size_t[MapSet] uniqueNodes, maxDepth;
 	}
-	private static Cache cache;
 
-	/// Clear the global operations cache.
 	/// Because subtrees can be reused within the tree, a way of
 	/// memoizing operations across the entire tree (instead of just
 	/// across children of a single node, or siblings) is crucial for
 	/// performance.
-	/// Call this function to clear this cache.
+	static Cache cache;
+
+	/// Clear the global operations cache.
 	static void clearCache()
 	{
 		cache = Cache.init;
