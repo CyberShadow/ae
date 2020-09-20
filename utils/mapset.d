@@ -706,32 +706,104 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		this.assertDeduplicated();
 
 		return cache.optimize.require(this, {
-			MapSet bestSet = this;
-
-			bestSet = bestSet.evenOut();
-
-			auto bestNodes = bestSet.uniqueNodes;
-			size_t maxDepth = bestSet.maxDepth;
-
-			size_t depth = 0;
-
-			while (depth < maxDepth)
+			static MapSet[MapSet] optimizeLayer(HashSet!MapSet sets0)
 			{
-				auto newSet = bestSet.swapDepth(depth);
-				auto newNodes = newSet.uniqueNodes;
-				if (bestNodes > newNodes)
+				// - At the bottom?
+				//   - Yes:
+				//     - return failure
+				//   - No:
+				//     - Try to swap this layer. Success?
+				//       - Yes:
+				//         - return success
+				//       - No:
+				//         - Recurse and try to swap next layer. Success?
+				//           - Yes: Retry this layer
+				//           - No: return failure (bottom reached)
+
+				assert(!sets0.empty);
+				if (sets0.byKey.front is unitSet)
+					return null; // at the bottom
+				auto dim0 = sets0.byKey.front.root.dim;
+				assert(sets0.byKey.all!(set => set !is unitSet), "Leaf/non-leaf nodes mismatch");
+				assert(sets0.byKey.all!(set => set.root.dim == dim0), "Dim mismatch");
+
+				auto sets1 = sets0.byKey.map!(set => set.root.children.map!(function MapSet (ref child) => child.set)).joiner.toSet;
+				assert(!sets1.empty);
+				if (sets1.byKey.front is unitSet)
+					return null; // one layer away from the bottom, nothing to swap with
+				auto dim1 = sets1.byKey.front.root.dim;
+				assert(sets1.byKey.all!(set => set !is unitSet), "Leaf/non-leaf nodes mismatch");
+				assert(sets1.byKey.all!(set => set.root.dim == dim1), "Dim mismatch");
+
+				auto currentNodes = sets0.length + sets1.length;
+
+				MapSet[MapSet] swappedSets;
+				HashSet!MapSet sets0new, sets1new;
+
+				foreach (set0; sets0.byKey)
 				{
-					bestSet = newSet;
-					bestNodes = newNodes;
-					if (depth > 0)
-						depth--;
+					Pair[][DimValue] subsets;
+					foreach (ref pair0; set0.root.children)
+						foreach (ref pair1; pair0.set.root.children)
+							subsets[pair1.value] ~= Pair(pair0.value, pair1.set);
+
+					Pair[] newChildren;
+					foreach (value, children; subsets)
+					{
+						children.sort();
+						auto set1new = MapSet(new immutable Node(dim0, cast(immutable) children)).deduplicate;
+						sets1new.add(set1new);
+						newChildren ~= Pair(value, set1new);
+					}
+					newChildren.sort();
+					auto set0new = MapSet(new immutable Node(dim1, cast(immutable) newChildren)).deduplicate;
+					sets0new.add(set0new);
+					swappedSets[set0] = set0new;
 				}
-				else
+
+				auto newNodes = sets0new.length + sets1new.length;
+
+				if (newNodes < currentNodes)
+					return swappedSets; // Success, retry above layer
+
+				// Failure, descend
+
+				auto result1 = optimizeLayer(sets1);
+				if (result1 is null)
+					return null; // Done, bottom reached
+
+				// Apply result
+				sets0new.clear();
+				foreach (set0; sets0.byKey)
 				{
-					depth++;
+					set0.assertDeduplicated();
+					auto newChildren = set0.root.children.dup;
+					foreach (ref pair0; newChildren)
+						pair0.set = result1[pair0.set];
+					auto set0new = MapSet(new immutable Node(dim0, cast(immutable) newChildren)).deduplicate;
+					sets0new.add(set0new);
+					swappedSets[set0] = set0new;
 				}
+
+				// Retry this layer
+				auto result0 = optimizeLayer(sets0new);
+				if (!result0)
+					return swappedSets; // Bottom was reached upon retry, just return our results unchanged
+
+				MapSet[MapSet] compoundedResult;
+				foreach (set0; sets0.byKey)
+					compoundedResult[set0] = result0[swappedSets[set0]];
+				return compoundedResult;
 			}
-			return bestSet;
+
+			MapSet[1] root = [this.evenOut];
+			while (true)
+			{
+				auto result = optimizeLayer(root[].toSet());
+				if (!result)
+					return root[0];
+				root[0] = result[root[0]];
+			}
 		}());
 	}
 
