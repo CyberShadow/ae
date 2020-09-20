@@ -796,7 +796,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 				return compoundedResult;
 			}
 
-			MapSet[1] root = [this.evenOut];
+			MapSet[1] root = [this.normalize];
 			while (true)
 			{
 				auto result = optimizeLayer(root[].toSet());
@@ -841,7 +841,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 
 	/// Refactor this matrix into one in which dimensions always occur
 	/// in the same order, no matter what path is taken.
-	private MapSet evenOut() const
+	MapSet normalize() const
 	{
 		if (this is unitSet || this is emptySet) return this;
 
