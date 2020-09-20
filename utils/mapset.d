@@ -679,16 +679,16 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 				return MapSet(new immutable Node(dim, cast(immutable) newChildren)).deduplicate;
 			}
 
-			Pair[][DimValue] submatrices;
+			Pair[][DimValue] subsets;
 			foreach (ref pair; root.children)
 			{
 				auto newSubmatrix = pair.set.bringToFront(dim);
 				assert(newSubmatrix.root.dim == dim);
 				foreach (ref pair2; newSubmatrix.root.children)
-					submatrices[pair2.value] ~= Pair(pair.value, pair2.set);
+					subsets[pair2.value] ~= Pair(pair.value, pair2.set);
 			}
 			Pair[] newChildren;
-			foreach (value, children; submatrices)
+			foreach (value, children; subsets)
 			{
 				children.sort();
 				newChildren ~= Pair(value, MapSet(new immutable Node(root.dim, cast(immutable) children)).deduplicate);
