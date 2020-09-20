@@ -706,7 +706,8 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		this.assertDeduplicated();
 
 		return cache.optimize.require(this, {
-			static MapSet[MapSet] optimizeLayer(HashSet!MapSet sets0)
+			struct Result { bool done; MapSet[MapSet] map; }
+			static Result optimizeLayer(HashSet!MapSet sets0)
 			{
 				// - At the bottom?
 				//   - Yes:
@@ -722,7 +723,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 
 				assert(!sets0.empty);
 				if (sets0.byKey.front is unitSet)
-					return null; // at the bottom
+					return Result(true, null); // at the bottom
 				auto dim0 = sets0.byKey.front.root.dim;
 				assert(sets0.byKey.all!(set => set !is unitSet), "Leaf/non-leaf nodes mismatch");
 				assert(sets0.byKey.all!(set => set.root.dim == dim0), "Dim mismatch");
@@ -730,7 +731,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 				auto sets1 = sets0.byKey.map!(set => set.root.children.map!(function MapSet (ref child) => child.set)).joiner.toSet;
 				assert(!sets1.empty);
 				if (sets1.byKey.front is unitSet)
-					return null; // one layer away from the bottom, nothing to swap with
+					return Result(true, null); // one layer away from the bottom, nothing to swap with
 				auto dim1 = sets1.byKey.front.root.dim;
 				assert(sets1.byKey.all!(set => set !is unitSet), "Leaf/non-leaf nodes mismatch");
 				assert(sets1.byKey.all!(set => set.root.dim == dim1), "Dim mismatch");
@@ -764,13 +765,16 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 				auto newNodes = sets0new.length + sets1new.length;
 
 				if (newNodes < currentNodes)
-					return swappedSets; // Success, retry above layer
+					return Result(false, swappedSets); // Success, retry above layer
 
 				// Failure, descend
 
 				auto result1 = optimizeLayer(sets1);
-				if (result1 is null)
-					return null; // Done, bottom reached
+				if (!result1.map)
+				{
+					assert(result1.done);
+					return Result(true, null); // Done, bottom reached
+				}
 
 				// Apply result
 				sets0new.clear();
@@ -779,30 +783,37 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 					set0.assertDeduplicated();
 					auto newChildren = set0.root.children.dup;
 					foreach (ref pair0; newChildren)
-						pair0.set = result1[pair0.set];
+						pair0.set = result1.map[pair0.set];
 					auto set0new = MapSet(new immutable Node(dim0, cast(immutable) newChildren)).deduplicate;
 					sets0new.add(set0new);
 					swappedSets[set0] = set0new;
 				}
 
+				if (result1.done)
+					return Result(true, swappedSets);
+
 				// Retry this layer
 				auto result0 = optimizeLayer(sets0new);
-				if (!result0)
-					return swappedSets; // Bottom was reached upon retry, just return our results unchanged
+				if (!result0.map)
+				{
+					assert(result0.done);
+					return Result(true, swappedSets); // Bottom was reached upon retry, just return our results unchanged
+				}
 
 				MapSet[MapSet] compoundedResult;
 				foreach (set0; sets0.byKey)
-					compoundedResult[set0] = result0[swappedSets[set0]];
-				return compoundedResult;
+					compoundedResult[set0] = result0.map[swappedSets[set0]];
+				return Result(result0.done, compoundedResult);
 			}
 
 			MapSet[1] root = [this.normalize];
 			while (true)
 			{
 				auto result = optimizeLayer(root[].toSet());
-				if (!result)
+				if (result.map)
+					root[0] = result.map[root[0]];
+				if (result.done)
 					return root[0];
-				root[0] = result[root[0]];
 			}
 		}());
 	}
