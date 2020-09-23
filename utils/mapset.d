@@ -1191,6 +1191,17 @@ struct MapSetVisitor(A, V)
 		newChildren.sort();
 		workingSet = Set(new immutable Set.Node(name, cast(immutable) newChildren)).deduplicate;
 	}
+
+	/// Inject a variable and values to iterate over.
+	/// The variable must not have been resolved yet.
+	void inject(A name, V[] values)
+	{
+		assert(name !in resolvedValues, "Already resolved");
+		assert(values.length > 0, "Injecting zero values would result in an empty set");
+		if (values.length > 1)
+			singularValues.remove(name);
+		workingSet = workingSet.cartesianProduct(name, values);
+	}
 }
 
 /// An algorithm which divides two numbers.
