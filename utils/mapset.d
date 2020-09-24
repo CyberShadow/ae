@@ -428,7 +428,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		}());
 	}
 
-	private MapSet lazyMap(scope MapSet delegate(MapSet) fn) const
+	/*private*/ MapSet lazyMap(scope MapSet delegate(MapSet) fn) const
 	{
 		// Defer allocation until the need to mutate
 		foreach (i, ref pair; root.children) // Read-only scan
@@ -874,7 +874,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		}());
 	}
 
-	private MapSet swapDepth(size_t depth) const
+	/*private*/ MapSet swapDepth(size_t depth) const
 	{
 		if (this is emptySet || this is unitSet) return this;
 		this.assertDeduplicated();
