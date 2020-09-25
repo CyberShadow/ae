@@ -947,7 +947,7 @@ ubyte[] makePNG(PNGChunk[] chunks)
 	size_t pos = pngSignature.length;
 	foreach (chunk; chunks)
 	{
-		auto header = cast(PNGChunkHeader*)data.ptr;
+		auto header = cast(PNGChunkHeader*)data[pos .. $].ptr;
 		header.length = chunk.data.length.to!uint.nativeToBigEndian;
 		header.type = chunk.type;
 		pos += PNGChunkHeader.sizeof;
@@ -955,7 +955,7 @@ ubyte[] makePNG(PNGChunk[] chunks)
 		data[pos .. pos + chunk.data.length] = cast(ubyte[])chunk.data;
 		pos += chunk.data.length;
 
-		auto footer = cast(PNGChunkFooter*)data.ptr;
+		auto footer = cast(PNGChunkFooter*)data[pos .. $].ptr;
 		footer.crc32 = chunk.crc32.nativeToBigEndian;
 		pos += PNGChunkFooter.sizeof;
 	}
