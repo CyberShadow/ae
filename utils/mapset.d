@@ -1198,8 +1198,7 @@ struct MapSetVisitor(A, V)
 	{
 		assert(name !in resolvedValues, "Already resolved");
 		assert(values.length > 0, "Injecting zero values would result in an empty set");
-		if (values.length > 1)
-			singularValues.remove(name);
+		singularValues.remove(name);
 		workingSet = workingSet.cartesianProduct(name, values);
 	}
 }
