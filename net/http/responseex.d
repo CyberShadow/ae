@@ -122,7 +122,7 @@ public:
 
 		string filename = fsBase ~ path;
 
-		if (filename == "" || isDir(filename))
+		if (filename == "" || (filename.exists && filename.isDir))
 		{
 			if (filename.length && !filename.endsWith("/"))
 				return redirect("/" ~ path ~ "/");
