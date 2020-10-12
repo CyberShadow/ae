@@ -11,6 +11,34 @@
  *   Vladimir Panteleev <vladimir@thecybershadow.net>
  */
 
+/**
+   This module selects which OpenSSL version to target depending on
+   what version of D bindings are available. The "openssl" Deimos
+   package version 1.x targets OpenSSL 1.0, and version 2.x targets
+   OpenSSL 1.1.
+
+   If you use ae with Dub, you can specify the version of the OpenSSL
+   D bindings in your project's dub.sdl. The ae:openssl subpackage
+   also has configurations which indicate the library file names to
+   link against.
+
+   Thus, to target OpenSSL 1.0, you can use:
+
+   ---
+   dependency "ae:openssl" version="..."
+   dependency "openssl" version="~>1.0"
+   subConfiguration "ae:openssl" "lib-explicit-1.0"
+   ---
+
+   And, to target OpenSSL 1.1:
+
+   ---
+   dependency "ae:openssl" version="..."
+   dependency "openssl" version="~>2.0"
+   subConfiguration "ae:openssl" "lib-implicit-1.1"
+   ---
+ */
+
 module ae.net.ssl.openssl;
 
 import core.stdc.stdint;
