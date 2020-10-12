@@ -59,23 +59,6 @@ import ae.utils.exception : CaughtException;
 import ae.utils.meta : enumLength;
 import ae.utils.text;
 
-mixin template SSLUseLib()
-{
-	version(Win64)
-	{
-		pragma(lib, "ssleay32");
-		pragma(lib, "libeay32");
-	}
-	else
-	{
-		pragma(lib, "ssl");
-		version(Windows)
-			{ pragma(lib, "eay"); }
-		else
-			{ pragma(lib, "crypto"); }
-	}
-}
-
 debug(OPENSSL) import std.stdio : stderr;
 
 // ***************************************************************************
@@ -84,6 +67,31 @@ static if (is(typeof(OPENSSL_MAKE_VERSION)))
 	private enum isOpenSSL11 = OPENSSL_VERSION_NUMBER >= OPENSSL_MAKE_VERSION(1, 1, 0, 0);
 else
 	private enum isOpenSSL11 = false;
+
+mixin template SSLUseLib()
+{
+	static if (isOpenSSL11)
+	{
+		pragma(lib, "ssl");
+		pragma(lib, "crypto");
+	}
+	else
+	{
+		version(Win64)
+		{
+			pragma(lib, "ssleay32");
+			pragma(lib, "libeay32");
+		}
+		else
+		{
+			pragma(lib, "ssl");
+			version(Windows)
+				{ pragma(lib, "eay"); }
+			else
+				{ pragma(lib, "crypto"); }
+		}
+	}
+}
 
 // Patch up incomplete Deimos bindings.
 
