@@ -85,12 +85,42 @@ subPackage {
 	targetType "sourceLibrary"
 	systemDependencies "OpenSSL"
 	dependency "ae" version="*" path="."
+
+	# The OpenSSL version is specified here unconstrained,
+        # and not within the configuration blocks constrained to the
+        # particular OpenSSL version, because Dub does not support
+        # conditionally selecting dependency versions:
+        # https://github.com/dlang/dub/issues/2023
+	# The desired OpenSSL bindings version must thus be specified
+	# upstream, in the project using ae.
         dependency "openssl" version=">=1.0.0"
+        importPaths "net" # Silence Dub warning
+
 	sourceFiles \
 		"net/ssl/openssl.d"
-	libs "ssl" "crypto" platform="posix"
-	libs "ssl" "eay" platform="windows-x86"
-	libs "ssleay32" "libeay32" platform="windows-x86_64"
+
+	# If you intend to specify the libraries to link against manually, or use SSLUseLib.
+	configuration "lib-none" {
+	}
+
+	# For systems with OpenSSL 1.0.
+	configuration "lib-implicit-1.0" {
+		libs "ssl" "crypto" platform="posix"
+		libs "ssl" "eay" platform="windows-x86"
+		libs "ssleay32" "libeay32" platform="windows-x86_64"
+	}
+
+	# For systems with OpenSSL 1.0 installed alongside some other OpenSSL version.
+	configuration "lib-explicit-1.0" {
+		libs ":libssl.so.1.0.0" ":libcrypto.so.1.0.0" platform="posix"
+		libs "ssl" "eay" platform="windows-x86"
+		libs "ssleay32" "libeay32" platform="windows-x86_64"
+	}
+
+	# For systems with OpenSSL 1.1.
+	configuration "lib-implicit-1.1" {
+		libs "ssl" "crypto"
+	}
 }
 
 ---------------------------
