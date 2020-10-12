@@ -85,7 +85,7 @@ subPackage {
 	targetType "sourceLibrary"
 	systemDependencies "OpenSSL"
 	dependency "ae" version="*" path="."
-	dependency "openssl" version="~>1.1"
+        dependency "openssl" version=">=1.0.0"
 	sourceFiles \
 		"net/ssl/openssl.d"
 	libs "ssl" "crypto" platform="posix"
