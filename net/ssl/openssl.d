@@ -64,13 +64,13 @@ debug(OPENSSL) import std.stdio : stderr;
 // ***************************************************************************
 
 static if (is(typeof(OPENSSL_MAKE_VERSION)))
-	private enum isOpenSSL11 = OPENSSL_VERSION_NUMBER >= OPENSSL_MAKE_VERSION(1, 1, 0, 0);
+	enum isOpenSSL11 = OPENSSL_VERSION_NUMBER >= OPENSSL_MAKE_VERSION(1, 1, 0, 0);
 else
-	private enum isOpenSSL11 = false;
+	enum isOpenSSL11 = false;
 
 mixin template SSLUseLib()
 {
-	static if (isOpenSSL11)
+	static if (ae.net.ssl.openssl.isOpenSSL11)
 	{
 		pragma(lib, "ssl");
 		pragma(lib, "crypto");
