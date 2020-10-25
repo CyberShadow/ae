@@ -102,10 +102,11 @@ void unpack(string archive, string target)
 		archive.unzip(target);
 	else
 	if (haveExecutable("tar") && or(
-			untar(".tar.gz"  , ".tgz", "--gzip" , "gzip" ),
-			untar(".tar.bz2" , ".tbz", "--bzip2", "bzip2"),
-			untar(".tar.lzma", ".tlz", "--lzma" , "lzma" ),
-			untar(".tar.xz"  , ".txz", "--xz"   , "xz"   ),
+			untar(".tar.gz"  , ".tgz" , "--gzip" , "gzip" ),
+			untar(".tar.bz2" , ".tbz" , "--bzip2", "bzip2"),
+			untar(".tar.lzma", ".tlz" , "--lzma" , "lzma" ),
+			untar(".tar.xz"  , ".txz" , "--xz"   , "xz"   ),
+			untar(".tar.zst" , ".tzst", "--zstd" , "zstd" ),
 		))
 		{}
 	else
