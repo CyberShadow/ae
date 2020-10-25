@@ -24,6 +24,7 @@ import std.string;
 
 import ae.sys.file;
 import ae.sys.install.sevenzip;
+import ae.utils.meta;
 import ae.utils.path : haveExecutable;
 
 /// Unzips a .zip file to the target directory.
@@ -100,11 +101,12 @@ void unpack(string archive, string target)
 	if (archive.toLower().endsWith(".zip"))
 		archive.unzip(target);
 	else
-	if (haveExecutable("tar") && (
-		untar(".tar.gz", ".tgz", "--gzip", "gzip") ||
-		untar(".tar.bz2", ".tbz", "--bzip2", "bzip2") ||
-		untar(".tar.lzma", ".tlz", "--lzma", "lzma") ||
-		untar(".tar.xz", ".txz", "--xz", "xz")))
+	if (haveExecutable("tar") && or(
+			untar(".tar.gz"  , ".tgz", "--gzip" , "gzip" ),
+			untar(".tar.bz2" , ".tbz", "--bzip2", "bzip2"),
+			untar(".tar.lzma", ".tlz", "--lzma" , "lzma" ),
+			untar(".tar.xz"  , ".txz", "--xz"   , "xz"   ),
+		))
 		{}
 	else
 	if (archive.extension.toLower == ".rar" && haveExecutable("unrar"))
