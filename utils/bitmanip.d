@@ -20,7 +20,7 @@ import std.traits;
 struct BigEndian(T)
 {
 	private ubyte[T.sizeof] _endian_bytes;
-	@property T _endian_value() { return cast(T)bigEndianToNative!(OriginalType!T)(_endian_bytes); }
+	@property T _endian_value() const { return cast(T)bigEndianToNative!(OriginalType!T)(_endian_bytes); }
 	@property void _endian_value(T value) { _endian_bytes = nativeToBigEndian(OriginalType!T(value)); }
 	alias _endian_value this;
 	alias opAssign = _endian_value;
@@ -30,7 +30,7 @@ struct BigEndian(T)
 struct LittleEndian(T)
 {
 	private ubyte[T.sizeof] _endian_bytes;
-	@property T _endian_value() { return cast(T)littleEndianToNative!(OriginalType!T)(_endian_bytes); }
+	@property T _endian_value() const { return cast(T)littleEndianToNative!(OriginalType!T)(_endian_bytes); }
 	@property void _endian_value(T value) { _endian_bytes = nativeToLittleEndian(OriginalType!T(value)); }
 	alias _endian_value this;
 	alias opAssign = _endian_value;
@@ -62,4 +62,10 @@ unittest
 {
 	enum E : uint { e }
 	BigEndian!E be;
+}
+
+unittest
+{
+	const e = BigEndian!int(1);
+	assert(e == 1);
 }
