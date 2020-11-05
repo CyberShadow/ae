@@ -43,6 +43,17 @@ auto op(string OP, T...)(T args)
 auto sum(T...)(T args) { return op!"+"(args); }
 auto average(T...)(T args) { return sum(args) / args.length; }
 
+template binary(string op)
+{
+	auto binary(A, B)(auto ref A a, auto ref B b) { return mixin(`a` ~ op ~ `b`); }
+}
+alias eq = binary!"==";
+alias ne = binary!"!=";
+alias lt = binary!"<";
+alias gt = binary!">";
+alias le = binary!"<=";
+alias ge = binary!">=";
+
 T rangeIntersection(T)(T a0, T a1, T b0, T b1)
 {
 	import std.algorithm.comparison : min, max;
