@@ -64,6 +64,12 @@ excludedSourceFiles "utils/container/package.d"
 excludedSourceFiles "utils/serialization/*.d"
 excludedSourceFiles "utils/xmldom.d"
 
+# libz (zlib) is a dependency on Phobos, and normally shouldn't be
+# explicitly specified as required, however in some setups (such as
+# LDC on Debian) it is not pulled in automatically for whatever
+# reason.
+libs "z" platform="posix"
+
 ---------------------------
 
 subPackage {
