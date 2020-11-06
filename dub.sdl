@@ -10,7 +10,7 @@ targetType "sourceLibrary"
 # The main package has no special dependencies.
 
 sourcePaths "sys" "utils" "net"
-importPaths "sys" "utils" "net"
+importPaths ".."
 
 # In ae:sqlite
 excludedSourceFiles "sys/database.d"
