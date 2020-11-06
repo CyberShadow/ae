@@ -1312,14 +1312,15 @@ ulong getFileID()(string fn)
 
 unittest
 {
-	touch("a");
-	scope(exit) remove("a");
-	hardLink("a", "b");
-	scope(exit) remove("b");
-	touch("c");
-	scope(exit) remove("c");
-	assert(getFileID("a") == getFileID("b"));
-	assert(getFileID("a") != getFileID("c"));
+	auto base = deleteme;
+	touch(base ~ "a");
+	scope(exit) remove(base ~ "a");
+	hardLink(base ~ "a", base ~ "b");
+	scope(exit) remove(base ~ "b");
+	touch(base ~ "c");
+	scope(exit) remove(base ~ "c");
+	assert(getFileID(base ~ "a") == getFileID(base ~ "b"));
+	assert(getFileID(base ~ "a") != getFileID(base ~ "c"));
 }
 
 deprecated alias std.file.getSize getSize2;
