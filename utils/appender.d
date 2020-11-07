@@ -269,7 +269,6 @@ public:
 	static if (is(I == T)) // mutable types only
 	{
 		/// Set the length (up to the current capacity).
-		/// Does not resize. Use preallocate for that.
 		@property void length(size_t value)
 		{
 			if (start + value > end)
