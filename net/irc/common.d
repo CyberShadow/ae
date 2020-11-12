@@ -140,7 +140,7 @@ private:
 
 	void onIdleTimeout()
 	{
-		if (pingSent || handleInactivity is null)
+		if (pingSent || handleInactivity is null || conn.state != ConnectionState.connected)
 		{
 			if (handleTimeout)
 				handleTimeout();
