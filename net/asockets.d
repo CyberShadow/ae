@@ -1219,11 +1219,10 @@ unittest { if (false) new Duplex(null, null); }
 
 // ***************************************************************************
 
-/// An asynchronous TCP connection.
-class TcpConnection : StreamConnection
+/// An asynchronous socket-based connection.
+class SocketConnection : StreamConnection
 {
 protected:
-	/// Queue of addresses to try connecting to.
 	AddressInfo[] addressQueue;
 
 	this(Socket conn)
@@ -1280,8 +1279,40 @@ public:
 	/// Default constructor
 	this()
 	{
+		debug (ASOCKETS) stderr.writefln("New SocketConnection @ %s", cast(void*)this);
+	}
+
+	/// Start establishing a connection.
+	final void connect(AddressInfo[] addresses)
+	{
+		assert(addresses.length, "No addresses specified");
+
+		assert(state == ConnectionState.disconnected, "Attempting to connect on a %s socket".format(state));
+		assert(!conn);
+
+		addressQueue = addresses;
+		state = ConnectionState.connecting;
+		tryNextAddress();
+	}
+}
+
+/// An asynchronous TCP connection.
+class TcpConnection : SocketConnection
+{
+protected:
+	this(Socket conn)
+	{
+		super(conn);
+	}
+
+public:
+	/// Default constructor
+	this()
+	{
 		debug (ASOCKETS) stderr.writefln("New TcpConnection @ %s", cast(void*)this);
 	}
+
+	alias connect = SocketConnection.connect; // raise overload
 
 	/// Start establishing a connection.
 	final void connect(string host, ushort port)
@@ -1321,27 +1352,14 @@ public:
 		state = ConnectionState.disconnected;
 		connect(addressInfos);
 	}
-
-	/// ditto
-	final void connect(AddressInfo[] addresses)
-	{
-		assert(addresses.length, "No addresses specified");
-
-		assert(state == ConnectionState.disconnected, "Attempting to connect on a %s socket".format(state));
-		assert(!conn);
-
-		addressQueue = addresses;
-		state = ConnectionState.connecting;
-		tryNextAddress();
-	}
 }
 
 // ***************************************************************************
 
-/// An asynchronous TCP connection server.
-class TcpServer
+/// An asynchronous connection server for socket-based connections.
+class SocketServer
 {
-private:
+protected:
 	/// Class that actually performs listening on a certain address family
 	final class Listener : GenericSocket
 	{
@@ -1360,7 +1378,7 @@ private:
 			acceptSocket.blocking = false;
 			if (handleAccept)
 			{
-				TcpConnection connection = new TcpConnection(acceptSocket);
+				auto connection = createConnection(acceptSocket);
 				debug (ASOCKETS) stderr.writefln("\tAccepted connection %s from %s", connection, connection.remoteAddress);
 				connection.setKeepAlive();
 				//assert(connection.connected);
@@ -1391,6 +1409,11 @@ private:
 		}
 	}
 
+	SocketConnection createConnection(Socket socket)
+	{
+		return new SocketConnection(socket);
+	}
+
 	/// Whether the socket is listening.
 	bool listening;
 	/// Listener instances
@@ -1404,41 +1427,6 @@ private:
 
 public:
 	/// Start listening on this socket.
-	final ushort listen(ushort port, string addr = null)
-	{
-		debug(ASOCKETS) stderr.writefln("Attempting to listen on %s:%d", addr, port);
-		//assert(!listening, "Attempting to listen on a listening socket");
-
-		auto addressInfos = getAddressInfo(addr, to!string(port), AddressInfoFlags.PASSIVE, SocketType.STREAM, ProtocolType.TCP);
-
-		debug (ASOCKETS)
-		{
-			stderr.writefln("Resolved to %s addresses:", addressInfos.length);
-			foreach (ref addressInfo; addressInfos)
-				stderr.writefln("- %s", addressInfo);
-		}
-
-		// listen on random ports only on IPv4 for now
-		if (port == 0)
-		{
-			foreach_reverse (i, ref addressInfo; addressInfos)
-				if (addressInfo.family != AddressFamily.INET)
-					addressInfos = addressInfos[0..i] ~ addressInfos[i+1..$];
-		}
-
-		listen(addressInfos);
-
-		foreach (listener; listeners)
-		{
-			auto address = listener.conn.localAddress();
-			if (address.addressFamily == AddressFamily.INET)
-				port = to!ushort(address.toPortString());
-		}
-
-		return port;
-	}
-
-	/// ditto
 	final void listen(AddressInfo[] addressInfos)
 	{
 		foreach (ref addressInfo; addressInfos)
@@ -1475,7 +1463,7 @@ public:
 	{
 	}
 
-	/// Creates a TcpServer with the given sockets.
+	/// Creates a Server with the given sockets.
 	/// The sockets must have already had `bind` and `listen` called on them.
 	this(Socket[] sockets...)
 	{
@@ -1507,10 +1495,10 @@ public:
 			handleClose();
 	}
 
-	/// Create a TcpServer using the handle passed on standard input,
+	/// Create a SocketServer using the handle passed on standard input,
 	/// for which `listen` had already been called. Used by
 	/// e.g. FastCGI and systemd sockets with "Listen = yes".
-	static TcpServer fromStdin()
+	static SocketServer fromStdin()
 	{
 		socket_t socket;
 		version (Windows)
@@ -1523,19 +1511,80 @@ public:
 
 		auto s = new Socket(socket, AddressFamily.UNSPEC);
 		s.blocking = false;
-		return new TcpServer(s);
+		return new SocketServer(s);
 	}
 
-public:
 	/// Callback for when the socket was closed.
 	void delegate() handleClose;
 
-	private void delegate(TcpConnection incoming) acceptHandler;
+	private void delegate(SocketConnection incoming) acceptHandler;
 	/// Callback for an incoming connection.
 	/// Connections will not be accepted unless this handler is set.
-	@property final void delegate(TcpConnection incoming) handleAccept() { return acceptHandler; }
+	@property final void delegate(SocketConnection incoming) handleAccept() { return acceptHandler; }
 	/// ditto
-	@property final void handleAccept(void delegate(TcpConnection incoming) value) { acceptHandler = value; updateFlags(); }
+	@property final void handleAccept(void delegate(SocketConnection incoming) value) { acceptHandler = value; updateFlags(); }
+}
+
+/// An asynchronous TCP connection server.
+class TcpServer : SocketServer
+{
+protected:
+	override SocketConnection createConnection(Socket socket)
+	{
+		return new TcpConnection(socket);
+	}
+
+public:
+	this()
+	{
+	}
+
+	this(Socket[] sockets...)
+	{
+		super(sockets);
+	}
+
+	alias listen = SocketServer.listen; // raise overload
+
+	/// Start listening on this socket.
+	final ushort listen(ushort port, string addr = null)
+	{
+		debug(ASOCKETS) stderr.writefln("Attempting to listen on %s:%d", addr, port);
+		//assert(!listening, "Attempting to listen on a listening socket");
+
+		auto addressInfos = getAddressInfo(addr, to!string(port), AddressInfoFlags.PASSIVE, SocketType.STREAM, ProtocolType.TCP);
+
+		debug (ASOCKETS)
+		{
+			stderr.writefln("Resolved to %s addresses:", addressInfos.length);
+			foreach (ref addressInfo; addressInfos)
+				stderr.writefln("- %s", addressInfo);
+		}
+
+		// listen on random ports only on IPv4 for now
+		if (port == 0)
+		{
+			foreach_reverse (i, ref addressInfo; addressInfos)
+				if (addressInfo.family != AddressFamily.INET)
+					addressInfos = addressInfos[0..i] ~ addressInfos[i+1..$];
+		}
+
+		listen(addressInfos);
+
+		foreach (listener; listeners)
+		{
+			auto address = listener.conn.localAddress();
+			if (address.addressFamily == AddressFamily.INET)
+				port = to!ushort(address.toPortString());
+		}
+
+		return port;
+	}
+
+	deprecated("Use SocketServer.fromStdin")
+	static TcpServer fromStdin() { return cast(TcpServer) cast(void*) SocketServer.fromStdin; }
+
+	@property final void handleAccept(void delegate(TcpConnection incoming) value) { super.handleAccept((SocketConnection c) => value(cast(TcpConnection)c)); }
 }
 
 // ***************************************************************************
