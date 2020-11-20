@@ -15,8 +15,7 @@ module ae.utils.meta.caps;
 
 /// Does this compiler support __traits(child) ?
 /// https://github.com/D-Programming-Language/dmd/pull/3329
-//enum haveChildTrait = is(typeof({ struct S { int i; } S s; __traits(child, s, S.i) = 0; }));
-enum haveChildTrait = false;
+enum haveChildTrait = is(typeof({ struct S { int i; } S s; __traits(child, s, S.i) = 0; }));
 
 // ************************************************************************
 
