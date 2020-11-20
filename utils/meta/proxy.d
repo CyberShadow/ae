@@ -107,7 +107,7 @@ template ScopeProxy(alias a)
 	}
 }
 
-static if (haveChildTrait)
+static if (haveChildTrait && haveFieldAliasBinding)
 unittest
 {
 	// Can't declare template at statement level

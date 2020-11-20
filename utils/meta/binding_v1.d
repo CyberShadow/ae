@@ -88,7 +88,7 @@ version(none)
 	}
 }
 
-static if (haveChildTrait)
+static if (haveChildTrait && haveFieldAliasBinding)
 unittest
 {
 	static struct A()
