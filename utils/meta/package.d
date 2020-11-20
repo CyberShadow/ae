@@ -747,7 +747,7 @@ alias I(alias A) = A;
 /// Skips template and mixin ancestors until it finds a struct or class.
 template thisOf(alias f)
 {
-	alias p = Identity!(__traits(parent, f));
+	alias p = I!(__traits(parent, f));
 	static if (is(p == class) || is(p == struct) || is(p == union))
 		alias thisOf = p;
 	else

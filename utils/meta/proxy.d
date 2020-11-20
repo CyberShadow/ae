@@ -15,6 +15,7 @@ module ae.utils.meta.proxy;
 
 import std.traits;
 
+import ae.utils.meta : I;
 import ae.utils.meta.caps;
 import ae.utils.meta.reference;
 
@@ -72,7 +73,7 @@ template SubProxy(alias S, string exp)
 	}
 }
 
-alias parentOf(alias a) = Identity!(__traits(parent, a));
+alias parentOf(alias a) = I!(__traits(parent, a));
 
 /// Returns a type that points to a sub-aggregate
 /// (mixin or template alias) of a struct or class.
