@@ -47,6 +47,7 @@ template boundFunctorOf(alias f)
 
 /// ditto
 @property auto boundFunctorOf(alias f)()
+if (is(typeof(this))) // haveMethodAliasBinding
 {
 	BoundFunctorOf!(RefType!(typeof(this)), f) r;
 	r.context = this.reference;
@@ -69,7 +70,7 @@ struct BoundFunctorOf(R, alias f)
 	auto bind(R)(R r) { return this; }
 }
 
-static if (haveAliasCtxInference && haveMethodAliasBinding)
+static if (haveChildTrait)
 unittest
 {
 	static struct Test
@@ -88,10 +89,16 @@ unittest
 
 		void test()
 		{
-			caller(unboundFunctorOf!callee);
-			caller(  boundFunctorOf!callee);
+			caller(unboundFunctorOf!callee.bind(&this));
+			assert(i == 1);
 
-			assert(i == 2);
+			static if (haveMethodAliasBinding) // or is it haveAliasCtxInference ?
+			{
+				caller(unboundFunctorOf!callee);
+				caller(  boundFunctorOf!callee);
+
+				assert(i == 3);
+			}
 
 			static struct S
 			{
