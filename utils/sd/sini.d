@@ -11,8 +11,7 @@
  *   Vladimir Panteleev <ae@cy.md>
  */
 
-deprecated module ae.utils.serialization.sini;
-deprecated:
+module ae.utils.sd.sini;
 
 import std.exception;
 import std.range;
@@ -103,7 +102,7 @@ struct IniParser(R)
 T parseIni(T, R)(R r)
 	if (isInputRange!R && isSomeString!(ElementType!R))
 {
-	import ae.utils.serialization.serialization;
+	import ae.utils.sd.sd;
 
 	T result;
 	auto parser = IniParser!R();
@@ -141,7 +140,7 @@ unittest
 
 unittest
 {
-	import ae.utils.serialization.serialization;
+	import ae.utils.sd.sd;
 	import std.conv;
 
 	static struct Custom

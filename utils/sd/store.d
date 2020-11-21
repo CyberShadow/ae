@@ -1,5 +1,5 @@
 /**
- * Intermediary, abstract format for serialization.
+ * Intermediary, abstract format for sd.
  *
  * License:
  *   This Source Code Form is subject to the terms of
@@ -11,8 +11,7 @@
  *   Vladimir Panteleev <ae@cy.md>
  */
 
-deprecated module ae.utils.serialization.store;
-deprecated:
+module ae.utils.sd.store;
 
 import std.conv;
 import std.exception;
@@ -21,7 +20,7 @@ import std.traits;
 
 import ae.utils.meta;
 
-/// A discriminated union type which can be used as both a serialization sink and source.
+/// A discriminated union type which can be used as both a sd sink and source.
 /// Similar to std.variant.Variant and std.json.JSONValue.
 struct SerializedObject(C)
 {
@@ -329,7 +328,7 @@ unittest
 
 unittest
 {
-	import ae.utils.serialization.json;
+	import ae.utils.sd.json;
 	auto s = jsonParse!(SerializedObject!(immutable(char)))(`null`);
 	assert(s.type == s.Type.sNull);
 }

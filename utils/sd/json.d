@@ -11,8 +11,7 @@
  *   Vladimir Panteleev <ae@cy.md>
  */
 
-deprecated module ae.utils.serialization.json;
-deprecated:
+module ae.utils.sd.json;
 
 import std.conv;
 import std.exception;
@@ -24,284 +23,290 @@ import std.utf;
 import ae.utils.meta;
 import ae.utils.text;
 
-import ae.utils.serialization.serialization;
+import ae.utils.sd.sd;
 
 /// Serialization source which parses a JSON stream.
 struct JsonParser(C)
 {
-	// TODO: some abstract input stream?
-	struct Data
+	alias Char = C;
+
+	C[] s;
+	size_t p;
+
+	C next()
 	{
-		C[] s;
-		size_t p;
+		enforce(p < s.length);
+		return s[p++];
 	}
 
-	static template Impl(alias data)
+	void skip()
 	{
-		alias Char = C;
+		p++;
+	}
 
-		C next()
+	C[] readN(size_t n)
+	{
+		auto end = p + n;
+		enforce(end <= s.length);
+		C[] result = s[p .. end];
+		p = end;
+		return result;
+	}
+
+	C peek()
+	{
+		enforce(p < s.length);
+		return s[p];
+	}
+
+	size_t mark()
+	{
+		return p;
+	}
+
+	C[] slice(size_t a, size_t b)
+	{
+		return s[a..b];
+	}
+
+	@property bool eof() { return p == s.length; }
+
+	// *******************************************************************
+
+	static bool isWhite(C c)
+	{
+		return c == ' ' || c == '\t';
+	}
+
+	void skipWhitespace()
+	{
+		while (isWhite(peek()))
+			skip();
+	}
+
+	void expect(C c)
+	{
+		auto n = next();
+		enforce(n==c, "Expected %s, got %s".format(c, n));
+	}
+
+	// *******************************************************************
+
+	void read(Sink)(Sink sink)
+	{
+		skipWhitespace();
+		switch (peek())
 		{
-			enforce(data.p < data.s.length);
-			return data.s[data.p++];
-		}
-
-		void skip()
-		{
-			data.p++;
-		}
-
-		C[] readN(size_t n)
-		{
-			auto end = data.p + n;
-			enforce(end <= data.s.length);
-			C[] result = data.s[data.p .. end];
-			data.p = end;
-			return result;
-		}
-
-		C peek()
-		{
-			enforce(data.p < data.s.length);
-			return data.s[data.p];
-		}
-
-		size_t mark()
-		{
-			return data.p;
-		}
-
-		C[] slice(size_t a, size_t b)
-		{
-			return data.s[a..b];
-		}
-
-		@property bool eof() { return data.p == data.s.length; }
-
-		// *******************************************************************
-
-		static bool isWhite(C c)
-		{
-			return c == ' ' || c == '\t';
-		}
-
-		void skipWhitespace()
-		{
-			while (isWhite(peek()))
+			case '[':
 				skip();
+				sink.handleArray(boundFunctorOf!readArray);
+				break;
+			case '"':
+				skip();
+				sink.handleStringFragments(boundFunctorOf!readString);
+				break;
+			case 't':
+				skip();
+				expect('r');
+				expect('u');
+				expect('e');
+				sink.handleBoolean(true);
+				break;
+			case 'f':
+				skip();
+				expect('a');
+				expect('l');
+				expect('s');
+				expect('e');
+				sink.handleBoolean(false);
+				break;
+			case 'n':
+				skip();
+				expect('u');
+				expect('l');
+				expect('l');
+				sink.handleNull();
+				break;
+			case '-':
+			case '0':
+				..
+			case '9':
+				sink.handleNumeric(readNumeric());
+				break;
+			case '{':
+				skip();
+				sink.handleObject(boundFunctorOf!readObject);
+				break;
+			default:
+				throw new Exception("Unknown JSON symbol: %s".format(peek()));
 		}
+	}
 
-		void expect(C c)
+	void readArray(Sink)(Sink sink)
+	{
+		if (peek()==']')
 		{
-			auto n = next();
-			enforce(n==c, "Expected %s, got %s".format(c, n));
+			skip();
+			return;
 		}
-
-		// *******************************************************************
-
-		void read(Sink)(Sink sink)
+		while (true)
 		{
+			read(sink);
 			skipWhitespace();
-			switch (peek())
-			{
-				case '[':
-					skip();
-					sink.handleArray(boundFunctorOf!readArray);
-					break;
-				case '"':
-					skip();
-					sink.handleStringFragments(boundFunctorOf!readString);
-					break;
-				case 't':
-					skip();
-					expect('r');
-					expect('u');
-					expect('e');
-					sink.handleBoolean(true);
-					break;
-				case 'f':
-					skip();
-					expect('a');
-					expect('l');
-					expect('s');
-					expect('e');
-					sink.handleBoolean(false);
-					break;
-				case 'n':
-					skip();
-					expect('u');
-					expect('l');
-					expect('l');
-					sink.handleNull();
-					break;
-				case '-':
-				case '0':
-					..
-				case '9':
-					sink.handleNumeric(readNumeric());
-					break;
-				case '{':
-					skip();
-					sink.handleObject(boundFunctorOf!readObject);
-					break;
-				default:
-					throw new Exception("Unknown JSON symbol: %s".format(peek()));
-			}
-		}
-
-		void readArray(Sink)(Sink sink)
-		{
 			if (peek()==']')
 			{
 				skip();
 				return;
 			}
-			while (true)
-			{
-				read(sink);
-				skipWhitespace();
-				if (peek()==']')
-				{
-					skip();
-					return;
-				}
-				else
-					expect(',');
-			}
+			else
+				expect(',');
+		}
+	}
+
+	void readObject(Sink)(Sink sink)
+	{
+		skipWhitespace();
+		if (peek()=='}')
+		{
+			skip();
+			return;
 		}
 
-		void readObject(Sink)(Sink sink)
+		while (true)
 		{
+			sink.handleField(boundFunctorOf!read, boundFunctorOf!readObjectValue);
+
 			skipWhitespace();
 			if (peek()=='}')
 			{
 				skip();
 				return;
 			}
-
-			while (true)
-			{
-				sink.handleField(boundFunctorOf!read, boundFunctorOf!readObjectValue);
-
-				skipWhitespace();
-				if (peek()=='}')
-				{
-					skip();
-					return;
-				}
-				else
-					expect(',');
-			}
-		}
-
-		void readObjectValue(Sink)(Sink sink)
-		{
-			skipWhitespace();
-			expect(':');
-			read(sink);
-		}
-
-		/// This will call sink.handleStringFragment multiple times.
-		void readString(Sink)(Sink sink)
-		{
-			auto start = mark();
-
-			void flush()
-			{
-				auto end = mark();
-				if (start != end)
-					sink.handleStringFragment(slice(start, end));
-			}
-
-			void oneConst(C c)()
-			{
-				static C[1] arr = [c];
-				sink.handleStringFragment(arr[]);
-			}
-
-			while (true)
-			{
-				C c = peek();
-				if (c=='"')
-				{
-					flush();
-					skip();
-					return;
-				}
-				else
-				if (c=='\\')
-				{
-					flush();
-					skip();
-					switch (next())
-					{
-						case '"':  oneConst!('"'); break;
-						case '/':  oneConst!('/'); break;
-						case '\\': oneConst!('\\'); break;
-						case 'b':  oneConst!('\b'); break;
-						case 'f':  oneConst!('\f'); break;
-						case 'n':  oneConst!('\n'); break;
-						case 'r':  oneConst!('\r'); break;
-						case 't':  oneConst!('\t'); break;
-						case 'u':
-						{
-							auto w = cast(wchar)fromHex!ushort(readN(4));
-							static if (C.sizeof == 1)
-							{
-								char[4] buf;
-								sink.handleStringFragment(buf[0..encode(buf, w)]);
-							}
-							else
-							{
-								Unqual!C[1] buf;
-								buf[0] = w;
-								sink.handleStringFragment(buf[]);
-							}
-							break;
-						}
-						default: enforce(false, "Unknown escape");
-					}
-					start = mark();
-				}
-				else
-					skip();
-			}
-		}
-
-		C[] readNumeric()
-		{
-			auto p = mark();
-
-			static immutable bool[256] numeric =
-			[
-				'0':true,
-				'1':true,
-				'2':true,
-				'3':true,
-				'4':true,
-				'5':true,
-				'6':true,
-				'7':true,
-				'8':true,
-				'9':true,
-				'.':true,
-				'-':true,
-				'+':true,
-				'e':true,
-				'E':true,
-			];
-
-			while (!eof() && numeric[peek()])
-				skip();
-			return slice(p, mark());
+			else
+				expect(',');
 		}
 	}
+
+	void readObjectValue(Sink)(Sink sink)
+	{
+		skipWhitespace();
+		expect(':');
+		read(sink);
+	}
+
+	/// This will call sink.handleStringFragment multiple times.
+	void readString(Sink)(Sink sink)
+	{
+		auto start = mark();
+
+		void flush()
+		{
+			auto end = mark();
+			if (start != end)
+				sink.handleStringFragment(slice(start, end));
+		}
+
+		void oneConst(C c)()
+		{
+			static C[1] arr = [c];
+			sink.handleStringFragment(arr[]);
+		}
+
+		while (true)
+		{
+			C c = peek();
+			if (c=='"')
+			{
+				flush();
+				skip();
+				return;
+			}
+			else
+			if (c=='\\')
+			{
+				flush();
+				skip();
+				switch (next())
+				{
+					case '"':  oneConst!('"'); break;
+					case '/':  oneConst!('/'); break;
+					case '\\': oneConst!('\\'); break;
+					case 'b':  oneConst!('\b'); break;
+					case 'f':  oneConst!('\f'); break;
+					case 'n':  oneConst!('\n'); break;
+					case 'r':  oneConst!('\r'); break;
+					case 't':  oneConst!('\t'); break;
+					case 'u':
+					{
+						auto w = cast(wchar)fromHex!ushort(readN(4));
+						static if (C.sizeof == 1)
+						{
+							char[4] buf;
+							sink.handleStringFragment(buf[0..encode(buf, w)]);
+						}
+						else
+						{
+							Unqual!C[1] buf;
+							buf[0] = w;
+							sink.handleStringFragment(buf[]);
+						}
+						break;
+					}
+					default: enforce(false, "Unknown escape");
+				}
+				start = mark();
+			}
+			else
+				skip();
+		}
+	}
+
+	C[] readNumeric()
+	{
+		auto p = mark();
+
+		static immutable bool[256] numeric =
+		[
+			'0':true,
+			'1':true,
+			'2':true,
+			'3':true,
+			'4':true,
+			'5':true,
+			'6':true,
+			'7':true,
+			'8':true,
+			'9':true,
+			'.':true,
+			'-':true,
+			'+':true,
+			'e':true,
+			'E':true,
+		];
+
+		while (!eof() && numeric[peek()])
+			skip();
+		return slice(p, mark());
+	}
 }
+
+// /// Encapsulates a reference to some field of a type.
+// struct FieldRef(
+// 	/// The type holding the field
+// 	T,
+// 	/// Field resolver - should return a pointer to the field given a T*
+// 	alias resolve,
+// )
+// {
+// 	T* _FieldRef_ptr;
+// 	ref T _FieldRef_ref() { return *resolve(_FieldRef_ptr); }
+// 	alias _FieldRef_ref this;
+// }
 
 struct JsonDeserializer(C)
 {
 	JsonParser!C.Data jsonData;
-	alias JsonParser!C.Impl!jsonData jsonImpl;
+	alias DataRef = FieldRef!(typeof(jsonData), p => p);
 	void[0] anchor;
 	alias Deserializer!anchor deserializer;
 
@@ -314,6 +319,8 @@ struct JsonDeserializer(C)
 	{
 		T t;
 		auto sink = deserializer.makeSink(&t);
+		alias JsonImpl = JsonParser!C.Impl!DataRef;
+		auto jsonImpl = JsonImpl(DataRef(&jsonData));
 		jsonImpl.read(sink);
 		return t;
 	}
