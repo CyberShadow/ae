@@ -60,10 +60,6 @@ The top-level context is used to define handling for different kinds of values.
   - -> [Top-level context](#top-level-context)
     - the next context should be able to handle `T` accordingly (piecemeal using `handleArray` / `handleMap` etc., or optionally also in whole using `handleValue!T`)
     - the next context should not have `handleTypeHint!T` again for this `T`, as that may result in infinite recursion
-- `handleNull`
-  - represents the "null" token (such as JSON `null`)
-  - no arguments
-  - terminal (no reader / child context)
 - `handleNumeric`
   - represents a text string representing a number of unspecified size or precision, as it appears in the input
   - -> [Array context](#array-context)
@@ -75,7 +71,11 @@ The top-level context is used to define handling for different kinds of values.
   - keys are generally expected to be unique
   - -> [Map context](#map-context)
 
-You may notice that there is no `handleString`; strings are instead represented as arrays of characters. `handleSlice` is used to batch-process string spans (segmented by escape sequences and input buffer chunk boundaries) for efficiency. Because e.g. JSON has different syntax for strings than from other kinds of arrays, `handleTypeHint!T` is used to allow sources to announce beforehand that the written array will consist of characters, and thus emit a string literal instead of an array literal.
+Here is how some basic common types are communicated:
+
+- **strings**: You may notice that there is no `handleString`; strings are instead represented as arrays of characters. `handleSlice` is used to batch-process string spans (segmented by escape sequences and input buffer chunk boundaries) for efficiency. Because e.g. JSON has different syntax for strings than from other kinds of arrays, `handleTypeHint!T` is used to allow sources to announce beforehand that the written array will consist of characters, and thus emit a string literal instead of an array literal.
+- `true` / `false`: represented as `handleValue!bool`.
+- `null`: represented as `handleValue!(typeof(null))` `typeof(null)` is a distinct type in D with a single value (`null`).
 
 #### Array context
 
