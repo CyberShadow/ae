@@ -47,6 +47,19 @@ The top-level context is used to define handling for different kinds of values.
   - `canHandleValue` must be defined and `canHandleValue!T` must be `true`
   - if present and enabled for `T`, takes precedence over other methods
   - terminal (no reader / child context)
+- `handleTypeHint!T`
+  - indicates to the sink that the source knows exactly the full structure of the following value
+  - represents a promise to deliver a value according to the structure described by `T`
+  - `T` is a D representation of the type, with straight-forward rules:
+    - basic types indicate themselves, and represent a promise to call `handleValue`
+    - arrays represent a promise to call `handleArray`
+    - associative arrays represent a promise to call `handleMap`
+    - if `handleValue!U` is present (where `U` is `T` or any subtype of `T`), it can be used if present, as usual
+  - `canHandleTypeHint` must be defined and `canHandleTypeHint!T` must be `true`
+  - if present and enabled for `T`, takes precedence over other methods below
+  - -> [Top-level context](#top-level-context)
+    - the next context should be able to handle `T` accordingly (piecemeal using `handleArray` / `handleMap` etc., or optionally also in whole using `handleValue!T`)
+    - the next context should not have `handleTypeHint!T` again for this `T`, as that may result in infinite recursion
 - `handleNull`
   - represents the "null" token (such as JSON `null`)
   - no arguments
@@ -54,11 +67,6 @@ The top-level context is used to define handling for different kinds of values.
 - `handleNumeric`
   - represents a text string representing a number of unspecified size or precision, as it appears in the input
   - -> [Array context](#array-context)
-- `handleArrayOf!T` 
-  - represents an array of raw values of type `T` (if the source can provide them and the sink can accept them)
-  - `canHandleArrayOf` must be defined and `canHandleArrayOf!T` must be `true`
-  - if present and enabled for `T`, takes precedence over `handleArray`
-  - otherwise, has the same arguments and behaves the same as `handleArray`
 - `handleArray`
   - represents an array of non-specific values
   - -> [Array context](#array-context)
@@ -67,7 +75,7 @@ The top-level context is used to define handling for different kinds of values.
   - keys are generally expected to be unique
   - -> [Map context](#map-context)
 
-You may notice that there is no `handleString`; strings are instead represented as arrays of characters. `handleSlice` is used to batch-process string spans (segmented by escape sequences and input buffer chunk boundaries) for efficiency. Because e.g. JSON has different syntax for strings than from other kinds of arrays, `handleArrayOf!T` exists to allow sources to announce beforehand that the written array will consist of characters.
+You may notice that there is no `handleString`; strings are instead represented as arrays of characters. `handleSlice` is used to batch-process string spans (segmented by escape sequences and input buffer chunk boundaries) for efficiency. Because e.g. JSON has different syntax for strings than from other kinds of arrays, `handleTypeHint!T` is used to allow sources to announce beforehand that the written array will consist of characters, and thus emit a string literal instead of an array literal.
 
 #### Array context
 
