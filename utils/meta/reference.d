@@ -63,8 +63,9 @@ template isReference(T)
 	enum isReference = isPointer!T || is(T==class);
 }
 
-/// Allow passing a constructed (non-null class, or non-class)
-/// object by reference, without redundant indirection.
+/// Allow passing a constructed object by reference, without redundant indirection.
+/// The intended use is with types which support the dot operator
+/// (a non-null class, a struct, or a non-null struct pointer).
 T* reference(T)(ref T v)
 	if (!isReference!T)
 {
