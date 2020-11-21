@@ -51,53 +51,53 @@ The top-level context is used to define handling for different kinds of values.
   - represents the "null" token (such as JSON `null`)
   - no arguments
   - terminal (no reader / child context)
-- `handleNumeric` 
-  - represents a text string representing a number of unspecified size or precision, as it appears in the input 
+- `handleNumeric`
+  - represents a text string representing a number of unspecified size or precision, as it appears in the input
   - -> [Array context](#array-context)
 - `handleArrayOf!T` 
   - represents an array of raw values of type `T` (if the source can provide them and the sink can accept them)
   - `canHandleArrayOf` must be defined and `canHandleArrayOf!T` must be `true`
   - if present and enabled for `T`, takes precedence over `handleArray`
   - otherwise, has the same arguments and behaves the same as `handleArray`
-- `handleArray` 
-  - represents an array of non-specific values 
+- `handleArray`
+  - represents an array of non-specific values
   - -> [Array context](#array-context)
-- `handleMap` 
+- `handleMap`
   - represents a list of ordered pairs
-  - keys are generally expected to be unique 
+  - keys are generally expected to be unique
   - -> [Map context](#map-context)
 
 You may notice that there is no `handleString`; strings are instead represented as arrays of characters. `handleSlice` is used to batch-process string spans (segmented by escape sequences and input buffer chunk boundaries) for efficiency. Because e.g. JSON has different syntax for strings than from other kinds of arrays, `handleArrayOf!T` exists to allow sources to announce beforehand that the written array will consist of characters.
 
 #### Array context
 
-- `handleSlice!T` 
+- `handleSlice!T`
   - represents several array elements of type `T`
   - `canHandleSlice` must be defined and `canHandleSlice!T` must be `true`
   - if present and enabled for `T`, takes precedence over individual `handleElement` calls
-- `handleElement` 
-  - represents one array element 
+- `handleElement`
+  - represents one array element
   - -> [Top-level context](#top-level-context)
-- `handleEnd` 
+- `handleEnd`
   - represents the end of the array
   - always called
   - terminal (no reader / child context)
 
 #### Map context
 
-- `handlePair` 
-  - begin a new map pair 
+- `handlePair`
+  - begin a new map pair
   - -> [Map pair context](#map-pair-context)
-- `handleEnd` 
+- `handleEnd`
   - represents the end of the map
   - always called
   - terminal (no reader / child context)
 
 #### Pair context
 
-- `handleKey` 
-  - the pair key 
+- `handleKey`
+  - the pair key
   - -> [Top-level context](#top-level-context)
-- `handleValue` 
-  - the pair value 
+- `handleValue`
+  - the pair value
   - -> [Top-level context](#top-level-context)
