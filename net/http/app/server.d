@@ -253,7 +253,7 @@ private:
 			return [log].ptr;
 		}();
 
-		TcpServer server;
+		SocketServer server;
 		string protocol = join(
 			(serverConfig.transport == ServerConfig.Transport.inet ? [] : [serverConfig.transport.text]) ~
 			(
@@ -407,15 +407,18 @@ private:
 				else
 					throw new Exception("Sorry, transport = stdin is not supported on this platform!");
 			case ServerConfig.Transport.accept:
-				server = TcpServer.fromStdin();
+				server = SocketServer.fromStdin();
 				break;
 			case ServerConfig.Transport.inet:
-				server = new TcpServer();
-				server.listen(serverConfig.listen.port, serverConfig.listen.addr);
+			{
+				auto tcpServer = new TcpServer();
+				tcpServer.listen(serverConfig.listen.port, serverConfig.listen.addr);
+				server = tcpServer;
 				break;
+			}
 			case ServerConfig.Transport.unix:
 			{
-				server = new TcpServer();
+				server = new SocketServer();
 				static if (is(UnixAddress))
 				{
 					string socketPath = serverConfig.listen.socketPath;
@@ -444,7 +447,7 @@ private:
 		addShutdownHandler({ server.close(); });
 
 		server.handleAccept =
-			(TcpConnection incoming)
+			(SocketConnection incoming)
 			{
 				handleConnection(incoming, incoming.localAddressStr, incoming.remoteAddressStr);
 			};
