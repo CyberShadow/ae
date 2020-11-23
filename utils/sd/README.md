@@ -39,10 +39,11 @@ Aside from sink-specified preferences, different kinds of values introduce speci
 
 #### Top-level context
 
-The top-level context is used to define handling for different kinds of values.
+The top-level context is used to define handling for different kinds of values. All methods are optional. Exactly one method will be called exactly once; if no methods match the source data, an error is raised.
 
 - `handleValue!T`
   - represents a raw value of type `T` (if the source can provide one and the sink can accept it)
+  - can be a basic type, such as `char` or `bool`, or a complex type such as a `struct` or an array
   - the argument is a value of type `T`
   - `canHandleValue` must be defined and `canHandleValue!T` must be `true`
   - if present and enabled for `T`, takes precedence over other methods
@@ -61,19 +62,24 @@ The top-level context is used to define handling for different kinds of values.
     - the next context should be able to handle `T` accordingly (piecemeal using `handleArray` / `handleMap` etc., or optionally also in whole using `handleValue!T`)
     - the next context should not have `handleTypeHint!T` again for this `T`, as that may result in infinite recursion
 - `handleNumeric`
-  - represents a text string representing a number of unspecified size or precision, as it appears in the input
+  - represents a text string representing a number of unspecified size or precision, as it appears in the input (generally something that can be converted with `std.conv.to`)
+  - optional
+  - TODO, probably should be defined more explicitly - in any case, JSON/YAML syntax or a superset thereof
   - -> [Array context](#array-context)
 - `handleArray`
   - represents an array of non-specific values
+  - optional
   - -> [Array context](#array-context)
 - `handleMap`
   - represents a list of ordered pairs
+  - optional
   - keys are generally expected to be unique
   - -> [Map context](#map-context)
 
 Here is how some basic common types are communicated:
 
 - **strings**: You may notice that there is no `handleString`; strings are instead represented as arrays of characters. `handleSlice` is used to batch-process string spans (segmented by escape sequences and input buffer chunk boundaries) for efficiency. Because e.g. JSON has different syntax for strings than from other kinds of arrays, `handleTypeHint!T` is used to allow sources to announce beforehand that the written array will consist of characters, and thus emit a string literal instead of an array literal.
+- **numbers** are represented as their basic D type (`int` / `double`) if their binary size is known, or `handleNumeric` otherwise.
 - `true` / `false`: represented as `handleValue!bool`.
 - `null`: represented as `handleValue!(typeof(null))` `typeof(null)` is a distinct type in D with a single value (`null`).
 
@@ -85,27 +91,31 @@ Here is how some basic common types are communicated:
   - if present and enabled for `T`, takes precedence over individual `handleElement` calls
 - `handleElement`
   - represents one array element
+  - required, called zero or more times
   - -> [Top-level context](#top-level-context)
 - `handleEnd`
   - represents the end of the array
-  - always called
+  - required, called exactly once
   - terminal (no reader / child context)
 
 #### Map context
 
 - `handlePair`
   - begin a new map pair
+  - required, called zero or more times
   - -> [Map pair context](#map-pair-context)
 - `handleEnd`
   - represents the end of the map
-  - always called
+  - required, called exactly once
   - terminal (no reader / child context)
 
-#### Pair context
+#### Map pair context
 
-- `handleKey`
+- `handlePairKey`
   - the pair key
+  - required, called exactly once
   - -> [Top-level context](#top-level-context)
-- `handleValue`
+- `handlePairValue`
   - the pair value
+  - required, called exactly once
   - -> [Top-level context](#top-level-context)
