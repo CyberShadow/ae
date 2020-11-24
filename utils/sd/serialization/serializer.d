@@ -109,10 +109,11 @@ struct Serializer(T)
 			{
 				Pair* pair;
 
-				void read(Handler)(Handler handler)
+				auto read(Handler)(Handler handler)
 				{
 					handler.handlePairKey(Serializer!K(&pair.key()));
 					handler.handlePairValue(Serializer!V(&pair.value()));
+					return handler.handleEnd();
 				}
 			}
 
@@ -132,13 +133,15 @@ struct Serializer(T)
 			{
 				T* object;
 
-				void read(Handler)(Handler handler)
+				auto read(Handler)(Handler handler)
 				{
 					static immutable name = __traits(identifier, T.tupleof[fieldIndex]);
 					handler.handlePairKey(Serializer!(immutable(string))(&name));
 
 					alias F = typeof(object.tupleof[fieldIndex]);
 					handler.handlePairValue(Serializer!F(&object.tupleof[fieldIndex]));
+
+					return handler.handleEnd();
 				}
 			}
 

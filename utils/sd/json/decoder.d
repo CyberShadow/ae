@@ -230,7 +230,8 @@ private:
 			handler.handlePairKey(ValueReader(json));
 			json.skipWhitespace();
 			json.expect(':');
-			return handler.handlePairValue(ValueReader(json));
+			handler.handlePairValue(ValueReader(json));
+			return handler.handleEnd();
 		}
 	}
 
@@ -240,7 +241,6 @@ private:
 
 		auto read(Handler)(Handler handler)
 		{
-pragma(msg, "VarReader.read - " ~ __traits(parent, Handler).stringof ~ "." ~ Handler.stringof);
 			static assert(__traits(hasMember, Handler, q{canHandleValue}),
 				Handler.stringof ~ " can't accept values");
 			static assert(Handler.canHandleValue!V,
@@ -255,7 +255,6 @@ pragma(msg, "VarReader.read - " ~ __traits(parent, Handler).stringof ~ "." ~ Han
 
 		void read(Handler)(Handler handler)
 		{
-pragma(msg, "StringReader.read - " ~ __traits(parent, Handler).stringof ~ "." ~ Handler.stringof);
 			json.skip(); // '"'
 
 			auto start = json.mark();
@@ -361,7 +360,8 @@ pragma(msg, "StringReader.read - " ~ __traits(parent, Handler).stringof ~ "." ~ 
 
 			while (!json.eof() && numeric[json.peek()]) // TODO wchar/dchar OOB
 				json.skip();
-			return handler.handleSlice!C(json.slice(p, json.mark()));
+			handler.handleSlice!C(json.slice(p, json.mark()));
+			return handler.handleEnd();
 		}
 	}
 }

@@ -119,3 +119,7 @@ Here is how some basic common types are communicated:
   - the pair value
   - required, called exactly once
   - -> [Top-level context](#top-level-context)
+- `handleEnd`
+  - represents the end of the pair
+  - required, called exactly once
+  - terminal (no reader / child context)

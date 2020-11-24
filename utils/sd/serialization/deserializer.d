@@ -23,10 +23,12 @@ private struct MaxLengthArrayHandler(
 	T,
 	/// Maximum number of elements to receive and store
 	size_t maxLength,
-	/// This will be called if the buffer is exceeded, with the buffer so far and the overflow
-	alias onOverflow,
+	/// Object receiving the result, or handling overflow
+	ResultHandler,
 )
 {
+	ResultHandler handler;
+
 private:
 	T[maxLength] buf;
 	size_t pos;
@@ -38,7 +40,7 @@ public: // Handler interface
 	{
 		auto end = pos + slice.length;
 		if (end > maxLength)
-			onOverflow(data, slice);
+			handler.handleOverflow(data, slice);
 		buf[pos .. end] = slice[];
 		pos = end;
 	}
@@ -52,7 +54,7 @@ public: // Handler interface
 		if (canHandleValue!U)
 		{
 			if (arrayHandler.pos == maxLength)
-				onOverflow(arrayHandler.data, (&value)[0..1]);
+				arrayHandler.handler.handleOverflow(arrayHandler.data, (&value)[0..1]);
 			arrayHandler.buf[arrayHandler.pos++] = value;
 		}
 	}
@@ -62,7 +64,10 @@ public: // Handler interface
 		reader.read(ElementHandler(&this));
 	}
 
-	void handleEnd() {}
+	void handleEnd()
+	{
+		handler.handleResult(data);
+	}
 
 public: // Caller API
 	/// Get elements received so far
@@ -72,7 +77,6 @@ public: // Caller API
 /// Sink for deserializing data into a variable of type `T`.
 struct Deserializer(T)
 {
-	pragma(msg, "Deserializer!" ~ T.stringof);
 	T* target;
 
 	// Implements the top-level context handler
@@ -88,6 +92,22 @@ struct Deserializer(T)
 	{
 		void handleNumeric(Reader)(Reader reader)
 		{
+			struct ResultHandler
+			{
+				T* target;
+
+				void handleResult(char[] data)
+				{
+					import std.conv : to;
+					*target = data.to!T;
+				}
+
+				void handleOverflow(in char[] /*data*/, in char[] /*overflow*/)
+				{
+					throw new Exception("Numeric value is too long");
+				}
+			}
+
 			// The longest number we can reasonably expect in the
 			// input which would still reasonably be parsed into a D
 			// numeric type.  Integers already are bounded by a hard
@@ -100,14 +120,11 @@ struct Deserializer(T)
 			alias NumericArrayHandler = MaxLengthArrayHandler!(
 				char,
 				maxLength,
-				(in char[] data, in char[] overflow) { throw new Exception("Numeric value is too long"); },
+				ResultHandler,
 			);
 
-			NumericArrayHandler handler;
+			auto handler = NumericArrayHandler(ResultHandler(target));
 			reader.read(&handler);
-
-			import std.conv : to;
-			*target = handler.data.to!T;
 		}
 	}
 
@@ -124,10 +141,21 @@ struct Deserializer(T)
 
 		struct FieldNameHandler
 		{
-			alias FieldNameArrayHandler = MaxLengthArrayHandler!(
-				char, maxLength,
-				(in char[] data, in char[] overflow) { throw new Exception("No field with prefix " ~ cast(string)data ~ cast(string)overflow); },
-			);
+			struct ResultHandler
+			{
+				T* target;
+
+				void handleResult(char[] /*data*/)
+				{
+				}
+
+				void handleOverflow(in char[] data, in char[] overflow)
+				{
+					throw new Exception("No field with prefix " ~ cast(string)data ~ cast(string)overflow);
+				}
+			}
+
+			alias FieldNameArrayHandler = MaxLengthArrayHandler!(char, maxLength, ResultHandler);
 			FieldNameArrayHandler arrayHandler;
 
 			void handleArray(Reader)(Reader reader)
@@ -159,6 +187,8 @@ struct Deserializer(T)
 						throw new Exception("No field with prefix " ~ name.idup);
 				}
 			}
+
+			void handleEnd() {}
 		}
 
 		struct StructHandler

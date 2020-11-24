@@ -199,6 +199,8 @@ struct JSONEncoder(Output)
 			{
 				reader.read(JSONEncoder(output));
 			}
+
+			void handleEnd() {}
 		}
 
 		static struct ArrayHandler
@@ -239,6 +241,8 @@ struct JSONEncoder(Output)
 			{
 				reader.read(JSONEncoder(output));
 			}
+
+			void handleEnd() {}
 		}
 
 		static struct MapHandler
@@ -281,11 +285,16 @@ unittest
 
 	void test(string s)
 	{
-		assert(s.decodeJSON().toJSON() == s);
+		auto r = s.decodeJSON().toJSON();
+		assert(r == s, s ~ " != " ~ r);
 	}
 
+	test(`42`);
+	test(`"Hello"`);
+	test(`{}`);
 	test(`{"str":"Hello","i":42}`);
 	test(`"Hello\nworld"`);
+	test(`[]`);
 	test(`[true,false,null]`);
 }
 
@@ -374,26 +383,26 @@ unittest
 		testObj      (v, s);
 	}
 
-// 	testAll  (`Hello "world"`   , `"Hello \"world\""` );
+	testAll  (`Hello "world"`   , `"Hello \"world\""` );
 	testAll  (["Hello", "world"], `["Hello","world"]` );
-// 	testAll  ([true, false]     , `[true,false]`      );
-// 	testAll  ([4, 2]            , `[4,2]`             );
-// 	testAll  (["a":1, "b":2]    , `{"b":2,"a":1}`     );
-// 	struct S { int i; string s; }
-// 	testAll  (S(42, "foo")      , `{"i":42,"s":"foo"}`);
-// //	testAll  (`"test"`w         , "test"w             );
-// 	testParse(S(0, null)        , `{"s":null}`        );
+	testAll  ([true, false]     , `[true,false]`      );
+	testAll  ([4, 2]            , `[4,2]`             );
+	testAll  (["a":1, "b":2]    , `{"b":2,"a":1}`     );
+	struct S { int i; string s; }
+	testAll  (S(42, "foo")      , `{"i":42,"s":"foo"}`);
+//	testAll  (`"test"`w         , "test"w             );
+	testParse(S(0, null)        , `{"s":null}`        );
 
-// 	testAll  (4                 , `4`                 );
-// 	testAll  (4.5               , `4.5`               );
-// 	testAll  (4.1               , `4.1`               );
+	testAll  (4                 , `4`                 );
+	testAll  (4.5               , `4.5`               );
+	testAll  (4.1               , `4.1`               );
 
-// 	testAll  ((int[]).init      ,  `null`             );
+	testAll  ((int[]).init      ,  `null`             );
 
-// 	struct RA { RA[] arr; }
-// 	testAll  ((RA[]).init      ,  `null`             );
+	struct RA { RA[] arr; }
+	testAll  ((RA[]).init      ,  `null`             );
 
-// 	struct RM { RM[string] aa; }
-// 	testAll  ((RM).init        ,  `{"aa":null}`      ); // https://issues.dlang.org/show_bug.cgi?id=21419
-// 	testAll  ((RM[]).init      ,  `null`             );
+	struct RM { RM[string] aa; }
+	testAll  ((RM).init        ,  `{"aa":null}`      ); // https://issues.dlang.org/show_bug.cgi?id=21419
+	testAll  ((RM[]).init      ,  `null`             );
 }
