@@ -172,7 +172,7 @@ unittest
 }
 
 import std.traits;
-import ae.utils.text : toDec, DecimalSize;
+import ae.utils.text : toDec, decimalSize;
 
 /// Default implementation of put for numbers (uses decimal ASCII)
 void put(S, N)(ref S sink, N n)
@@ -184,7 +184,7 @@ void put(S, N)(ref S sink, N n)
 /// Write a number `n` in decimal to `sink`.
 void putDecimal(S, N)(ref S sink, N n)
 {
-	char[DecimalSize!N] buf = void;
+	char[decimalSize!N] buf = void;
 	sink.put(toDec(n, buf));
 }
 

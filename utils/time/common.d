@@ -234,7 +234,7 @@ size_t timeFormatSize(string fmt)
 					size += timeFormatSize(TimeFormats.RFC2822);
 					break;
 				case TimeFormatElement.dateTimeUNIX:
-					size += DecimalSize!time_t;
+					size += decimalSize!time_t;
 					break;
 
 				// Escape next character
