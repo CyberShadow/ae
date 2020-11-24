@@ -31,61 +31,63 @@ alias string ascii;
 
 /// Maximum number of characters needed to fit the decimal
 /// representation of any number of this basic integer type.
-template DecimalSize(T : ulong)
+template decimalSize(T : ulong)
 {
 	alias _U = Unqual!T;
 	///
 	static if (is(_U == ubyte))
-		enum DecimalSize = 3;
+		enum decimalSize = 3;
 	else
 	static if (is(_U == byte))
-		enum DecimalSize = 4;
+		enum decimalSize = 4;
 	else
 	static if (is(_U == ushort))
-		enum DecimalSize = 5;
+		enum decimalSize = 5;
 	else
 	static if (is(_U == short))
-		enum DecimalSize = 6;
+		enum decimalSize = 6;
 	else
 	static if (is(_U == uint))
-		enum DecimalSize = 10;
+		enum decimalSize = 10;
 	else
 	static if (is(_U == int))
-		enum DecimalSize = 11;
+		enum decimalSize = 11;
 	else
 	static if (is(_U == ulong))
-		enum DecimalSize = 20;
+		enum decimalSize = 20;
 	else
 	static if (is(_U == long))
-		enum DecimalSize = 20;
+		enum decimalSize = 20;
 	else
-		static assert(false, "Unknown type for DecimalSize");
+		static assert(false, "Unknown type for decimalSize");
 }
+
+deprecated alias DecimalSize = decimalSize;
 
 unittest
 {
-	template DecimalSize2(T : ulong)
+	template decimalSize2(T : ulong)
 	{
 		import std.conv : text;
-		enum DecimalSize2 = max(text(T.min).length, text(T.max).length);
+		enum decimalSize2 = max(text(T.min).length, text(T.max).length);
 	}
 
-	static assert(DecimalSize!ubyte == DecimalSize2!ubyte);
-	static assert(DecimalSize!byte == DecimalSize2!byte);
-	static assert(DecimalSize!ushort == DecimalSize2!ushort);
-	static assert(DecimalSize!short == DecimalSize2!short);
-	static assert(DecimalSize!uint == DecimalSize2!uint);
-	static assert(DecimalSize!int == DecimalSize2!int);
-	static assert(DecimalSize!ulong == DecimalSize2!ulong);
-	static assert(DecimalSize!long == DecimalSize2!long);
+	static assert(decimalSize!ubyte == decimalSize2!ubyte);
+	static assert(decimalSize!byte == decimalSize2!byte);
+	static assert(decimalSize!ushort == decimalSize2!ushort);
+	static assert(decimalSize!short == decimalSize2!short);
+	static assert(decimalSize!uint == decimalSize2!uint);
+	static assert(decimalSize!int == decimalSize2!int);
+	static assert(decimalSize!ulong == decimalSize2!ulong);
+	static assert(decimalSize!long == decimalSize2!long);
 
-	static assert(DecimalSize!(const(long)) == DecimalSize!long);
+	static assert(decimalSize!(const(long)) == decimalSize!long);
 }
 
 /// Writes n as decimal number to buf (right-aligned), returns slice of buf containing result.
 char[] toDec(N : ulong, size_t U)(N o, ref char[U] buf) pure
 {
-	static assert(U >= DecimalSize!N, "Buffer too small to fit any " ~ N.stringof ~ " value");
+	static assert(U >= decimalSize!N, "Buffer too small to fit any " ~ N.stringof ~ " value");
 
 	Unqual!N n = o;
 	char* p = buf.ptr+buf.length;
@@ -112,7 +114,7 @@ char[] toDec(N : ulong, size_t U)(N o, ref char[U] buf) pure
 /// CTFE-friendly variant.
 char[] toDecCTFE(N : ulong, size_t U)(N o, ref char[U] buf)
 {
-	static assert(U >= DecimalSize!N, "Buffer too small to fit any " ~ N.stringof ~ " value");
+	static assert(U >= decimalSize!N, "Buffer too small to fit any " ~ N.stringof ~ " value");
 
 	Unqual!N n = o;
 	size_t p = buf.length;
@@ -141,12 +143,12 @@ string toDec(T : ulong)(T n)
 {
 	if (__ctfe)
 	{
-		char[DecimalSize!T] buf;
+		char[decimalSize!T] buf;
 		return toDecCTFE(n, buf).idup;
 	}
 	else
 	{
-		static struct Buf { char[DecimalSize!T] buf; } // Can't put static array on heap, use struct
+		static struct Buf { char[decimalSize!T] buf; } // Can't put static array on heap, use struct
 		return toDec(n, (new Buf).buf);
 	}
 }
