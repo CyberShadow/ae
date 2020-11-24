@@ -69,8 +69,10 @@ public: // Caller API
 	T[] data() { return buf[0 .. pos]; }
 }
 
+/// Sink for deserializing data into a variable of type `T`.
 struct Deserializer(T)
 {
+	pragma(msg, "Deserializer!" ~ T.stringof);
 	T* target;
 
 	// Implements the top-level context handler
@@ -183,11 +185,13 @@ struct Deserializer(T)
 		{
 			T* target;
 
+			// TODO handleSlice
+
 			void handleElement(Reader)(Reader reader)
 			{
 				target.length++;
 				alias U = Unqual!E;
-				reader.read(Deserializer!U(cast(U*)&(*target)[$ - 1]));
+				reader.read(.Deserializer!U(cast(U*)&(*target)[$ - 1]));
 			}
 
 			void handleEnd() {}
@@ -200,7 +204,16 @@ struct Deserializer(T)
 	}
 }
 
+/// Accept a data source and absorb received data into the given variable.
 void deserializeInto(Source, T)(Source source, ref T target)
 {
 	source.read(Deserializer!T(&target));
+}
+
+/// Accept a data source and absorb received data into a new variable of type `T`.
+T deserializeNew(T, Source)(Source source)
+{
+	T target;
+	source.read(Deserializer!T(&target));
+	return target;
 }

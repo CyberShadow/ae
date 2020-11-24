@@ -240,6 +240,11 @@ private:
 
 		auto read(Handler)(Handler handler)
 		{
+pragma(msg, "VarReader.read - " ~ __traits(parent, Handler).stringof ~ "." ~ Handler.stringof);
+			static assert(__traits(hasMember, Handler, q{canHandleValue}),
+				Handler.stringof ~ " can't accept values");
+			static assert(Handler.canHandleValue!V,
+				Handler.stringof ~ " can't accept values of type " ~ V.stringof);
 			return handler.handleValue!V(v);
 		}
 	}
@@ -250,6 +255,7 @@ private:
 
 		void read(Handler)(Handler handler)
 		{
+pragma(msg, "StringReader.read - " ~ __traits(parent, Handler).stringof ~ "." ~ Handler.stringof);
 			json.skip(); // '"'
 
 			auto start = json.mark();

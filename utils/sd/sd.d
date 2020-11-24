@@ -40,7 +40,7 @@ struct Serializer
 			else
 			static if (is(T : ulong))
 			{
-				char[DecimalSize!T] buf = void;
+				char[decimalSize!T] buf = void;
 				sink.handleNumeric(toDec(v, buf));
 			}
 			else
