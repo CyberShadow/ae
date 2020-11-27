@@ -72,8 +72,8 @@ The top-level context is used to define handling for different kinds of values. 
   - -> [Array context](#array-context)
 - `handleMap`
   - represents a list of ordered pairs
-  - optional
   - keys are generally expected to be unique
+  - optional
   - -> [Map context](#map-context)
 
 Here is how some basic common types are communicated:

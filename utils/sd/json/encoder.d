@@ -397,12 +397,12 @@ unittest
 	testAll  (4.5               , `4.5`               );
 	testAll  (4.1               , `4.1`               );
 
-	testAll  ((int[]).init      ,  `null`             );
+	testAll  ((int[]).init      , `null`              );
 
 	struct RA { RA[] arr; }
-	testAll  ((RA[]).init      ,  `null`             );
+	testAll  ((RA[]).init       , `null`              );
 
 	struct RM { RM[string] aa; }
-	testAll  ((RM).init        ,  `{"aa":null}`      ); // https://issues.dlang.org/show_bug.cgi?id=21419
-	testAll  ((RM[]).init      ,  `null`             );
+	testAll  ((RM).init         , `{"aa":null}`       ); // https://issues.dlang.org/show_bug.cgi?id=21419
+	testAll  ((RM[]).init       , `null`              );
 }
