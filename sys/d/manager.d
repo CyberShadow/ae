@@ -1369,15 +1369,21 @@ EOS";
 
 		override void performBuild()
 		{
-			getComponent("phobos").needSource();
-			getComponent("dmd").needSource();
-			getComponent("dmd").needInstalled();
-			getComponent("phobos-includes").needInstalled();
-
 			foreach (model; config.build.components.common.models)
 			{
 				auto env = baseEnvironment;
 				needCC(env, model);
+
+				if (needHostDMD)
+				{
+					enum dmdVer = "v2.079.0"; // Same as latest version in DMD.performBuild
+					needDMD(env, dmdVer);
+				}
+
+				getComponent("phobos").needSource();
+				getComponent("dmd").needSource();
+				getComponent("dmd").needInstalled();
+				getComponent("phobos-includes").needInstalled();
 
 				mkdirRecurse(sourceDir.buildPath("import"));
 				mkdirRecurse(sourceDir.buildPath("lib"));
@@ -1411,6 +1417,13 @@ EOS";
 			}
 		}
 
+		private bool needHostDMD()
+		{
+			version (Windows)
+				return sourceDir.buildPath("mak", "copyimports.d").exists;
+			return false;
+		}
+
 		private final void runMake(ref Environment env, string model, string target = null)
 		{
 			// Work around https://github.com/dlang/druntime/pull/2438
@@ -1421,6 +1434,7 @@ EOS";
 				["-f", makeFileNameModel(model)] ~
 				(target ? [target] : []) ~
 				["DMD=" ~ dmd] ~
+				(needHostDMD ? ["HOST_DMD=" ~ env.deps.hostDC] : []) ~
 				config.build.components.common.makeArgs ~
 				getPlatformMakeVars(env, model, quotePaths) ~
 				dMakeArgs;
