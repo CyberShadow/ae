@@ -1421,7 +1421,8 @@ EOS";
 		{
 			version (Windows)
 				return sourceDir.buildPath("mak", "copyimports.d").exists;
-			return false;
+			else
+				return false;
 		}
 
 		private final void runMake(ref Environment env, string model, string target = null)
