@@ -2361,9 +2361,31 @@ EOS";
 	{
 		tempError++; scope(success) tempError--;
 
+		auto numericVersion(string dmdVer)
+		{
+			assert(dmdVer.startsWith("v"));
+			return dmdVer[1 .. $].splitter('.').map!(to!int).array;
+		}
+
+		// Nudge indicated version if we know it won't be usable on the current system.
+		version (OSX)
+		{
+			enum minimalWithoutEnumerateTLV = "v2.088.0";
+			if (numericVersion(dmdVer) < numericVersion(minimalWithoutEnumerateTLV) && !haveEnumerateTLV())
+			{
+				log("DMD " ~ dmdVer ~ " not usable on this system - using " ~ minimalWithoutEnumerateTLV ~ " instead.");
+				dmdVer = minimalWithoutEnumerateTLV;
+			}
+		}
+
 		// User setting overrides autodetection
 		if (config.build.components.dmd.bootstrap.ver)
+		{
+			log("Using user-specified bootstrap DMD version " ~
+				config.build.components.dmd.bootstrap.ver ~
+				" instead of auto-detected version " ~ dmdVer ~ ".");
 			dmdVer = config.build.components.dmd.bootstrap.ver;
+		}
 
 		if (config.build.components.dmd.bootstrap.fromSource)
 		{
@@ -2608,6 +2630,58 @@ EOS";
 	{
 		enum : uint { SEM_FAILCRITICALERRORS = 1, SEM_NOGPFAULTERRORBOX = 2 }
 		SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+	}
+
+	version (OSX)
+	{
+		bool needWorkingCCChecked;
+		void needWorkingCC()
+		{
+			if (!needWorkingCCChecked)
+			{
+				log("Checking for a working C compiler...");
+				auto dir = buildPath(config.local.workDir, "temp", "cc-test");
+				if (dir.exists) dir.rmdirRecurse();
+				dir.mkdirRecurse();
+				scope(success) rmdirRecurse(dir);
+
+				write(dir.buildPath("test.c"), "int main() { return 0; }");
+				auto status = spawnProcess(["cc", "test.c"], baseEnvironment.vars, std.process.Config.newEnv, dir).wait();
+				enforce(status == 0, "Failed to compile a simple C program - no C compiler.");
+
+				log("> OK");
+				needWorkingCCChecked = true;
+			}
+		};
+
+		bool haveEnumerateTLVChecked, haveEnumerateTLVValue;
+		bool haveEnumerateTLV()
+		{
+			if (!haveEnumerateTLVChecked)
+			{
+				needWorkingCC();
+
+				log("Checking for dyld_enumerate_tlv_storage...");
+				auto dir = buildPath(config.local.workDir, "temp", "cc-tlv-test");
+				if (dir.exists) dir.rmdirRecurse();
+				dir.mkdirRecurse();
+				scope(success) rmdirRecurse(dir);
+
+				write(dir.buildPath("test.c"), "extern void dyld_enumerate_tlv_storage(void* handler); int main() { dyld_enumerate_tlv_storage(0); return 0; }");
+				if (spawnProcess(["cc", "test.c"], baseEnvironment.vars, std.process.Config.newEnv, dir).wait() == 0)
+				{
+					log("> Present (probably 10.14 or older)");
+					haveEnumerateTLVValue = true;
+				}
+				else
+				{
+					log("> Absent (probably 10.15 or newer)");
+					haveEnumerateTLVValue = false;
+				}
+				haveEnumerateTLVChecked = true;
+			}
+			return haveEnumerateTLVValue;
+		}
 	}
 
 	/// Create a build environment base.
