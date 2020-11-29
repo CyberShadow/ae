@@ -88,6 +88,6 @@ static this()
 /// UFCS-able global synonym functions.
 void downloadFile(string url, string target) { net.downloadFile(url, target); }
 void[] getFile(string url) { return net.getFile(url); } /// ditto
-void[] post(string url, void[] data) { return net.post(url, data); } /// ditto
+void[] post(string url, const(void)[] data) { return net.post(url, data); } /// ditto
 bool urlOK(string url) { return net.urlOK(url); } /// ditto
 string resolveRedirect(string url) { return net.resolveRedirect(url); } /// ditto
