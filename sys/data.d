@@ -48,7 +48,6 @@ import core.stdc.string : memmove;
 import std.traits;
 import core.memory;
 import core.exception;
-debug import std.stdio;
 debug import std.string;
 public import ae.sys.dataset;
 import ae.utils.math;
@@ -582,9 +581,9 @@ final class MemoryDataWrapper : DataWrapper
 		data = malloc(/*ref*/ capacity);
 		if (data is null)
 		{
-			debug(DATA) printf("Garbage collect triggered by failed Data allocation of %llu bytes... ", cast(ulong)capacity);
+			debug(DATA) fprintf(stderr, "Garbage collect triggered by failed Data allocation of %llu bytes... ", cast(ulong)capacity);
 			GC.collect();
-			debug(DATA) printf("Done\n");
+			debug(DATA) fprintf(stderr, "Done\n");
 			data = malloc(/*ref*/ capacity);
 			allocatedThreshold = 0;
 		}
@@ -604,9 +603,9 @@ final class MemoryDataWrapper : DataWrapper
 		allocatedThreshold += capacity;
 		if (allocatedThreshold > collectThreshold)
 		{
-			debug(DATA) printf("Garbage collect triggered by total allocated Data exceeding threshold... ");
+			debug(DATA) fprintf(stderr, "Garbage collect triggered by total allocated Data exceeding threshold... ");
 			GC.collect();
-			debug(DATA) printf("Done\n");
+			debug(DATA) fprintf(stderr, "Done\n");
 			allocatedThreshold = 0;
 		}
 	}
@@ -741,13 +740,13 @@ debug(DATA_REFCOUNT) import ae.utils.exception, ae.sys.memory, std.stdio;
 
 debug(DATA_REFCOUNT) void debugLog(Args...)(const char* s, Args args) @nogc
 {
-	printf(s, args);
-	printf("\n");
+	fprintf(stderr, s, args);
+	fprintf(stderr, "\n");
 	if (inCollect())
-		printf("\t(in GC collect)\n");
+		fprintf(stderr, "\t(in GC collect)\n");
 	else
 		(cast(void function() @nogc)&debugStackTrace)();
-	fflush(core.stdc.stdio.stdout);
+	fflush(core.stdc.stdio.stderr);
 }
 
 debug(DATA_REFCOUNT) void debugStackTrace()
