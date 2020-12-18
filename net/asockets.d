@@ -801,7 +801,7 @@ protected:
 		{
 			debug (PRINTDATA)
 			{
-				std.stdio.writefln("== %s <- %s ==", localAddress, remoteAddress);
+				std.stdio.writefln("== %s <- %s ==", localAddressStr, remoteAddressStr);
 				std.stdio.write(hexDump(inBuffer[0 .. received]));
 				std.stdio.stdout.flush();
 			}
@@ -915,7 +915,7 @@ public:
 
 		debug (PRINTDATA)
 		{
-			std.stdio.writefln("== %s -> %s ==", localAddress, remoteAddress);
+			std.stdio.writefln("== %s -> %s ==", localAddressStr, remoteAddressStr);
 			foreach (datum; data)
 				if (datum.length)
 					std.stdio.write(hexDump(datum.contents));
@@ -1030,7 +1030,7 @@ protected:
 
 			state = ConnectionState.connected;
 
-			//debug writefln("[%s] Connected", remoteAddress);
+			//debug writefln("[%s] Connected", remoteAddressStr);
 			try
 				setKeepAlive();
 			catch (Exception e)
@@ -1039,7 +1039,7 @@ protected:
 				connectHandler();
 			return;
 		}
-		//debug writefln(remoteAddress(), ": Writable - handler ", handleBufferFlushed?"OK":"not set", ", outBuffer.length=", outBuffer.length);
+		//debug writefln(remoteAddressStr, ": Writable - handler ", handleBufferFlushed?"OK":"not set", ", outBuffer.length=", outBuffer.length);
 
 		foreach (sendPartial; [true, false])
 			foreach (int priority, ref queue; outQueue)
@@ -1080,7 +1080,7 @@ protected:
 					else
 					{
 						assert(sent == pdata.length);
-						//debug writefln("[%s] Sent data:", remoteAddress);
+						//debug writefln("[%s] Sent data:", remoteAddressStr);
 						//debug writefln("%s", hexDump(pdata.contents[0..sent]));
 						pdata.clear();
 						queue = queue[1..$];
@@ -1379,7 +1379,7 @@ protected:
 			if (handleAccept)
 			{
 				auto connection = createConnection(acceptSocket);
-				debug (ASOCKETS) stderr.writefln("\tAccepted connection %s from %s", connection, connection.remoteAddress);
+				debug (ASOCKETS) stderr.writefln("\tAccepted connection %s from %s", connection, connection.remoteAddressStr);
 				connection.setKeepAlive();
 				//assert(connection.connected);
 				//connection.connected = true;
@@ -1635,7 +1635,7 @@ protected:
 				else
 				{
 					assert(sent == pdata.length);
-					//debug writefln("[%s] Sent data:", remoteAddress);
+					//debug writefln("[%s] Sent data:", remoteAddressStr);
 					//debug writefln("%s", hexDump(pdata.contents[0..sent]));
 					pdata.clear();
 					queue = queue[1..$];
