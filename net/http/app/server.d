@@ -285,7 +285,7 @@ private:
 				{
 					log.log([
 						"", // align IP to tab
-						request ? request.remoteHosts(remoteAddressStr).get(0, remoteAddressStr) : remoteAddressStr,
+						remoteAddressStr,
 						response ? text(cast(ushort)response.status) : "-",
 						request ? format("%9.2f ms", request.age.total!"usecs" / 1000f) : "-",
 						request ? request.method : "-",
