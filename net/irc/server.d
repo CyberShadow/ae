@@ -25,6 +25,7 @@ import std.string;
 import ae.net.asockets;
 import ae.utils.array;
 import ae.sys.log;
+import ae.utils.exception;
 
 import ae.net.irc.common;
 
@@ -432,7 +433,7 @@ class IrcServer
 							return sendReply(Reply.ERR_UNKNOWNCOMMAND, command, "Unknown command");
 				}
 			}
-			catch (Exception e)
+			catch (CaughtException e)
 			{
 				disconnect(e.msg);
 			}
