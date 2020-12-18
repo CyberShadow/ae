@@ -63,7 +63,7 @@ protected:
 
 	this(IConnection c)
 	{
-		debug (HTTP) debugLog("New connection from %s", remoteAddressStr);
+		debug (HTTP) debugLog("New connection from %s", remoteAddressStr(null));
 
 		timer = new TimeoutAdapter(c);
 		timer.setIdleTimeout(timeout);
@@ -197,7 +197,7 @@ protected:
 
 		if (log) log(([
 			"", // align IP to tab
-			remoteAddressStr,
+			remoteAddressStr(request),
 			response ? text(cast(ushort)response.status) : "-",
 			request ? format("%9.2f ms", request.age.total!"usecs" / 1000f) : "-",
 			request ? request.method : "-",
@@ -210,7 +210,6 @@ protected:
 	}
 
 	abstract string formatLocalAddress(HttpRequest r);
-	abstract @property string remoteAddressStr();
 
 	final @property bool idle()
 	{
@@ -334,6 +333,8 @@ public:
 			conn.disconnect(reason);
 		}
 	}
+
+	abstract @property string remoteAddressStr(HttpRequest r);
 }
 
 class HttpServer
@@ -392,6 +393,7 @@ public:
 	void delegate(HttpRequest request, HttpServerConnection conn) handleRequest;
 
 	string banner = "ae.net.http.server (+https://github.com/CyberShadow/ae)";
+	string remoteIPHeader; // For reverse proxies
 
 protected:
 	TcpServer conn;
@@ -459,6 +461,20 @@ final class HttpServerConnection : BaseHttpServerConnection
 
 	mixin DListLink;
 
+	override @property string remoteAddressStr(HttpRequest r)
+	{
+		if (server.remoteIPHeader)
+		{
+			if (r)
+				if (auto p = server.remoteIPHeader in r.headers)
+					return (*p).split(",")[$ - 1];
+
+			return "[local:" ~ remoteAddress.toAddrString() ~ "]";
+		}
+
+		return remoteAddress.toAddrString();
+	}
+
 protected:
 	string protocol;
 
@@ -487,7 +503,6 @@ protected:
 
 	override bool acceptMore() { return server.conn.isListening; }
 	override string formatLocalAddress(HttpRequest r) { return formatAddress(protocol, localAddress, r.host, r.port); }
-	override @property string remoteAddressStr() { return remoteAddress.toAddrString(); }
 }
 
 version (Posix)
@@ -505,13 +520,14 @@ final class FileHttpServerConnection : BaseHttpServerConnection
 		super(c);
 	}
 
+	override @property string remoteAddressStr(HttpRequest r) { return "-"; }
+
 protected:
 	import std.stdio : File, stdin, stdout;
 
 	string protocol;
 
 	override string formatLocalAddress(HttpRequest r) { return protocol ~ "://"; }
-	override @property string remoteAddressStr() { return "-"; }
 }
 
 string formatAddress(string protocol, Address address, string vhost = null, ushort logPort = 0)

@@ -379,7 +379,7 @@ private:
 
 						override bool acceptMore() { return server.isListening; }
 						override string formatLocalAddress(HttpRequest r) { return protocol ~ "://" ~ localAddressStr; }
-						override @property string remoteAddressStr() { return connRemoteAddressStr; }
+						override @property string remoteAddressStr(HttpRequest r) { return connRemoteAddressStr; }
 					}
 					new HttpConnection();
 					break;
