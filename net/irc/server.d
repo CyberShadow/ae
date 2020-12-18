@@ -595,7 +595,7 @@ class IrcServer
 			if (pmember.modeSet(mode) == value)
 				return;
 
-			pmember.setMode(Channel.Member.Mode.op, value);
+			pmember.setMode(mode, value);
 			auto c = ChannelModes.memberModeChars[mode];
 			foreach (member; channel.members)
 				member.client.sendCommand(server.hostname, "MODE", channel.name, [value ? '+' : '-', c], nickname, null);
