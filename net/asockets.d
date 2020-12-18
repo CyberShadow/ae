@@ -289,12 +289,11 @@ else // Use select
 		{
 			debug (ASOCKETS) stderr.writeln("Starting event loop.");
 
-			SocketSet readset, writeset, errorset;
+			SocketSet readset, writeset;
 			size_t sockcount;
 			uint setSize = FD_SETSIZE; // Can't trust SocketSet.max due to Issue 14012
 			readset  = new SocketSet(setSize);
 			writeset = new SocketSet(setSize);
-			errorset = new SocketSet(setSize);
 			while (true)
 			{
 				uint minSize = 0;
@@ -314,13 +313,11 @@ else // Use select
 					setSize = minSize * 2;
 					readset  = new SocketSet(setSize);
 					writeset = new SocketSet(setSize);
-					errorset = new SocketSet(setSize);
 				}
 				else
 				{
 					readset.reset();
 					writeset.reset();
-					errorset.reset();
 				}
 
 				sockcount = 0;
@@ -345,13 +342,12 @@ else // Use select
 						writeset.add(conn.socket);
 						debug (ASOCKETS) stderr.write(" WRITE");
 					}
-					errorset.add(conn.socket);
 					debug (ASOCKETS) stderr.writeln();
 				}
 				debug (ASOCKETS)
 				{
 					stderr.writefln("Sets populated as follows:");
-					printSets(readset, writeset, errorset);
+					printSets(readset, writeset);
 				}
 
 				debug (ASOCKETS) stderr.writefln("Waiting (%d sockets, %s timer events, %d idle handlers)...",
@@ -373,7 +369,7 @@ else // Use select
 					if (sockcount==0)
 						events = 0;
 					else
-						events = Socket.select(readset, writeset, errorset, 0.seconds);
+						events = Socket.select(readset, writeset, null, 0.seconds);
 				}
 				else
 				if (USE_SLEEP && sockcount==0)
@@ -395,9 +391,9 @@ else // Use select
 				}
 				else
 				if (mainTimer.isWaiting())
-					events = Socket.select(readset, writeset, errorset, mainTimer.getRemainingTime());
+					events = Socket.select(readset, writeset, null, mainTimer.getRemainingTime());
 				else
-					events = Socket.select(readset, writeset, errorset);
+					events = Socket.select(readset, writeset, null);
 
 				debug (ASOCKETS) stderr.writefln("%d events fired.", events);
 
@@ -405,7 +401,7 @@ else // Use select
 				{
 					// Handle just one event at a time, as the first
 					// handler might invalidate select()'s results.
-					handleEvent(readset, writeset, errorset);
+					handleEvent(readset, writeset);
 				}
 				else
 				if (idleHandlers.length)
@@ -428,7 +424,7 @@ else // Use select
 		}
 
 		debug (ASOCKETS)
-		void printSets(SocketSet readset, SocketSet writeset, SocketSet errorset)
+		void printSets(SocketSet readset, SocketSet writeset)
 		{
 			foreach (GenericSocket conn; sockets)
 			{
@@ -440,18 +436,16 @@ else // Use select
 						stderr.writefln("\t\t%s is readable", conn);
 					if (writeset.isSet(conn.socket))
 						stderr.writefln("\t\t%s is writable", conn);
-					if (errorset.isSet(conn.socket))
-						stderr.writefln("\t\t%s is errored", conn);
 				}
 			}
 		}
 
-		void handleEvent(SocketSet readset, SocketSet writeset, SocketSet errorset)
+		void handleEvent(SocketSet readset, SocketSet writeset)
 		{
 			debug (ASOCKETS)
 			{
 				stderr.writefln("\tSelect results:");
-				printSets(readset, writeset, errorset);
+				printSets(readset, writeset);
 			}
 
 			foreach (GenericSocket conn; sockets)
@@ -469,12 +463,6 @@ else // Use select
 				{
 					debug (ASOCKETS) stderr.writefln("\t%s - calling onWritable", conn);
 					return conn.onWritable();
-				}
-				else
-				if (errorset.isSet(conn.socket))
-				{
-					debug (ASOCKETS) stderr.writefln("\t%s - calling onError", conn);
-					return conn.onError("select() error: " ~ conn.socket.getErrorText());
 				}
 			}
 
