@@ -286,6 +286,7 @@ public:
 	/// First item in returned array is the node furthest away.
 	/// Duplicates are removed.
 	/// Specify socket remote address in remoteHost to add it to the list.
+	deprecated("Insecure, use HttpServer.remoteIPHeader")
 	string[] remoteHosts(string remoteHost = null)
 	{
 		return
@@ -296,7 +297,7 @@ public:
 			.auniq();
 	}
 
-	unittest
+	deprecated unittest
 	{
 		auto req = new HttpRequest();
 		assert(req.remoteHosts() == []);
