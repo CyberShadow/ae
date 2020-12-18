@@ -148,6 +148,7 @@ unittest
 	// ThreadAnchor sockets are daemon
 	auto dummy = new TcpServer();
 	dummy.listen(0, "localhost");
+	dummy.handleAccept = (TcpConnection incoming) {};
 
 	import ae.sys.timing;
 
