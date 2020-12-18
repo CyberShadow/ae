@@ -26,6 +26,7 @@ import ae.net.asockets;
 import ae.utils.array;
 import ae.sys.log;
 import ae.utils.exception;
+import ae.utils.meta;
 
 import ae.net.irc.common;
 
@@ -51,6 +52,9 @@ class IrcServer
 	bool staticChannels;
 	/// If set, masks all IPs to the given mask
 	string addressMask;
+
+	/// How to convert the IRC 8-bit data to and from UTF-8 (D strings must be valid UTF-8).
+	string function(in char[]) decoder = null, encoder = null;
 
 	Logger log;
 
@@ -99,6 +103,7 @@ class IrcServer
 
 		void onReadLine(string line)
 		{
+			if (server.decoder) line = server.decoder(line);
 			try
 			{
 				if (conn.state != ConnectionState.connected)
@@ -900,6 +905,7 @@ class IrcServer
 
 		void sendLine(string line)
 		{
+			if (server.encoder) line = server.encoder(line);
 			conn.send(line);
 		}
 	}
