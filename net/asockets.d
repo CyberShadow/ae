@@ -33,7 +33,7 @@ else version (Posix)
     private import c_socks = core.sys.posix.sys.socket;
 
 debug(ASOCKETS) import std.stdio : stderr;
-debug(PRINTDATA) static import std.stdio;
+debug(PRINTDATA) import std.stdio : stderr;
 debug(PRINTDATA) import ae.utils.text : hexDump;
 private import std.conv : to;
 
@@ -801,9 +801,9 @@ protected:
 		{
 			debug (PRINTDATA)
 			{
-				std.stdio.writefln("== %s <- %s ==", localAddressStr, remoteAddressStr);
-				std.stdio.write(hexDump(inBuffer[0 .. received]));
-				std.stdio.stdout.flush();
+				stderr.writefln("== %s <- %s ==", localAddressStr, remoteAddressStr);
+				stderr.write(hexDump(inBuffer[0 .. received]));
+				stderr.flush();
 			}
 
 			if (state == ConnectionState.disconnecting)
@@ -915,13 +915,13 @@ public:
 
 		debug (PRINTDATA)
 		{
-			std.stdio.writefln("== %s -> %s ==", localAddressStr, remoteAddressStr);
+			stderr.writefln("== %s -> %s ==", localAddressStr, remoteAddressStr);
 			foreach (datum; data)
 				if (datum.length)
-					std.stdio.write(hexDump(datum.contents));
+					stderr.write(hexDump(datum.contents));
 				else
-					std.stdio.writeln("(empty Data)");
-			std.stdio.stdout.flush();
+					stderr.writeln("(empty Data)");
+			stderr.flush();
 		}
 	}
 
