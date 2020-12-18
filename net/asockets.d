@@ -328,19 +328,21 @@ else // Use select
 					if (!conn.socket)
 						continue;
 					sockcount++;
-					if (!conn.daemon)
-						haveActive = true;
 
 					debug (ASOCKETS) stderr.writef("\t%s:", conn);
 					if (conn.notifyRead)
 					{
 						readset.add(conn.socket);
-						debug (ASOCKETS) stderr.write(" READ", conn.daemon ? "[daemon]" : "");
+						if (!conn.daemonRead)
+							haveActive = true;
+						debug (ASOCKETS) stderr.write(" READ", conn.daemonRead ? "[daemon]" : "");
 					}
 					if (conn.notifyWrite)
 					{
 						writeset.add(conn.socket);
-						debug (ASOCKETS) stderr.write(" WRITE", conn.daemon ? "[daemon]" : "");
+						if (!conn.daemonWrite)
+							haveActive = true;
+						debug (ASOCKETS) stderr.write(" WRITE", conn.daemonWrite ? "[daemon]" : "");
 					}
 					debug (ASOCKETS) stderr.writeln();
 				}
@@ -604,9 +606,15 @@ public:
 	alias localAddressStr = addressStr!true;
 	alias remoteAddressStr = addressStr!false;
 
-	/// Don't block the process from exiting.
+	/// Don't block the process from exiting, even if the socket is ready to receive data.
 	/// TODO: Not implemented with libev
-	bool daemon;
+	bool daemonRead;
+
+	/// Don't block the process from exiting, even if the socket is ready to send data.
+	/// TODO: Not implemented with libev
+	bool daemonWrite;
+
+	deprecated alias daemon = daemonRead;
 
 	final void setKeepAlive(bool enabled=true, int time=10, int interval=5)
 	{
