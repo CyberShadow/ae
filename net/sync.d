@@ -77,7 +77,7 @@ private:
 			super(pair[0]);
 			pinger = pair[1];
 			this.handleReadData = &onReadData;
-			this.daemon = daemon;
+			this.daemonRead = daemon;
 		}
 
 		void onReadData(Data data)

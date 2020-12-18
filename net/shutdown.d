@@ -61,7 +61,7 @@ final class ShutdownConnection : TcpConnection
 		pinger = pair[1];
 		this.handleReadData = &onReadData;
 		addShutdownHandler(&onShutdown); // for manual shutdown calls
-		this.daemon = true;
+		this.daemonRead = true;
 	}
 
 	void ping() //@nogc
