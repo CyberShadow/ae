@@ -335,12 +335,12 @@ else // Use select
 					if (conn.notifyRead)
 					{
 						readset.add(conn.socket);
-						debug (ASOCKETS) stderr.write(" READ");
+						debug (ASOCKETS) stderr.write(" READ", conn.daemon ? "[daemon]" : "");
 					}
 					if (conn.notifyWrite)
 					{
 						writeset.add(conn.socket);
-						debug (ASOCKETS) stderr.write(" WRITE");
+						debug (ASOCKETS) stderr.write(" WRITE", conn.daemon ? "[daemon]" : "");
 					}
 					debug (ASOCKETS) stderr.writeln();
 				}
@@ -350,7 +350,8 @@ else // Use select
 					printSets(readset, writeset);
 				}
 
-				debug (ASOCKETS) stderr.writefln("Waiting (%d sockets, %s timer events, %d idle handlers)...",
+				debug (ASOCKETS) stderr.writefln("Waiting (%sactive with %d sockets, %s timer events, %d idle handlers)...",
+					haveActive ? "" : "not ",
 					sockcount,
 					mainTimer.isWaiting() ? "with" : "no",
 					idleHandlers.length,
