@@ -263,7 +263,7 @@ class IrcServer
 					case "LIST":
 						if (!registered)
 							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
-						foreach (channel; server.channels)
+						foreach (channel; getChannelList())
 							if (!(channel.modes.flags['p'] || channel.modes.flags['s']) || nickname.normalized in channel.members)
 								sendReply(Reply.RPL_LIST, channel.name, channel.members.length.text, channel.topic ? channel.topic : "");
 						sendReply(Reply.RPL_LISTEND, "End of LIST");
@@ -634,6 +634,12 @@ class IrcServer
 			foreach (chunk; channel.members.values.chunks(10)) // can't use byValue - http://j.mp/IUhhGC (Issue 11761)
 				sendReply(Reply.RPL_NAMREPLY, channel.modes.flags['s'] ? "@" : channel.modes.flags['p'] ? "*" : "=", channel.name, chunk.map!q{a.displayName}.join(" "));
 			sendReply(Reply.RPL_ENDOFNAMES, channel.name, "End of /NAMES list");
+		}
+
+		/// For LIST
+		Channel[] getChannelList()
+		{
+			return server.channels.values;
 		}
 
 		void sendChannelModes(Channel channel)
