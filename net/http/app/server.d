@@ -437,14 +437,14 @@ private:
 					ai.address = new UnixAddress(socketPath);
 					server.listen([ai]);
 
-					addShutdownHandler({ socketPath.remove(); });
+					addShutdownHandler((reason) { socketPath.remove(); });
 				}
 				else
 					throw new Exception("UNIX sockets are not available on this platform");
 			}
 		}
 
-		addShutdownHandler({ server.close(); });
+		addShutdownHandler((reason) { server.close(); });
 
 		server.handleAccept =
 			(SocketConnection incoming)
