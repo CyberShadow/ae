@@ -57,7 +57,8 @@ unittest
 
 // TODO: allow customization of timing mechanism (alternatives to TickDuration)?
 
-debug(TIMER) import std.stdio;
+debug(TIMER) import std.stdio : stderr;
+debug(TIMER_TRACK) import std.stdio : stderr;
 debug(TIMER_TRACK) import ae.utils.exception;
 
 static this()
@@ -75,7 +76,7 @@ private:
 
 	void add(TimerTask task, TimerTask start)
 	{
-		debug (TIMER_VERBOSE) writefln("Adding a task which waits for %s.", task.delay);
+		debug(TIMER_VERBOSE) stderr.writefln("Adding a task which waits for %s.", task.delay);
 		debug(TIMER_TRACK) task.additionStackTrace = getStackTrace();
 
 		auto now = MonoTime.currTime();
@@ -130,7 +131,7 @@ private:
 	/// Unschedule a task.
 	void remove(TimerTask task)
 	{
-		debug (TIMER_VERBOSE) writefln("Removing a task which waits for %s.", task.delay);
+		debug (TIMER_VERBOSE) stderr.writefln("Removing a task which waits for %s.", task.delay);
 		assert(task.owner is this);
 		if (task is head)
 		{
@@ -138,11 +139,11 @@ private:
 			{
 				head = head.next;
 				head.prev = null;
-				debug (TIMER_VERBOSE) writefln("Removed current task, next task is waiting for %s (next at %s).", head.delay, head.when);
+				debug (TIMER_VERBOSE) stderr.writefln("Removed current task, next task is waiting for %s (next at %s).", head.delay, head.when);
 			}
 			else
 			{
-				debug (TIMER_VERBOSE) writefln("Removed last task.");
+				debug (TIMER_VERBOSE) stderr.writefln("Removed last task.");
 				assert(tail is task);
 				head = tail = null;
 			}
@@ -176,7 +177,7 @@ private:
 
 		assert(task.owner !is null, "This TimerTask is not active");
 		assert(task.owner is this, "This TimerTask is not owned by this Timer");
-		debug (TIMER_VERBOSE) writefln("Restarting a task which waits for %s.", task.delay);
+		debug (TIMER_VERBOSE) stderr.writefln("Restarting a task which waits for %s.", task.delay);
 
 		// Store current position, as the new position must be after it
 		tmp = task.next !is null ? task.next : task.prev;
@@ -208,13 +209,13 @@ public:
 			{
 				TimerTask task = head;
 				remove(head);
-				debug (TIMER) writefln("%s: Firing a task that waited for %s of %s.", now, task.delay + (now - task.when), task.delay);
+				debug (TIMER) stderr.writefln("%s: Firing a task that waited for %s of %s.", now, task.delay + (now - task.when), task.delay);
 				if (task.handleTask)
 					task.handleTask(this, task);
 				ran = true;
 			}
 
-			debug (TIMER_VERBOSE) if (head !is null) writefln("Current task is waiting for %s, %s remaining.", head.delay, head.when - now);
+			debug (TIMER_VERBOSE) if (head !is null) stderr.writefln("Current task is waiting for %s, %s remaining.", head.delay, head.when - now);
 		}
 
 		return ran;
@@ -223,7 +224,7 @@ public:
 	/// Add a new task to the timer.
 	void add(TimerTask task)
 	{
-		debug (TIMER_VERBOSE) writefln("Adding a task which waits for %s.", task.delay);
+		debug (TIMER_VERBOSE) stderr.writefln("Adding a task which waits for %s.", task.delay);
 		assert(task.owner is null, "This TimerTask is already active");
 		add(task, null);
 		assert(task.owner is this);
@@ -250,7 +251,7 @@ public:
 
 		auto now = MonoTime.currTime();
 
-		debug(TIMER_TRACK) writefln("First timer due to fire in %s:\n\tCreated:\n\t\t%-(%s\n\t\t%)\n\tAdded:\n\t\t%-(%s\n\t\t%)",
+		debug(TIMER_TRACK) stderr.writefln("First timer due to fire in %s:\n\tCreated:\n\t\t%-(%s\n\t\t%)\n\tAdded:\n\t\t%-(%s\n\t\t%)",
 			head.when - now, head.creationStackTrace, head.additionStackTrace);
 
 		if (now < head.when) // "when" is in the future
