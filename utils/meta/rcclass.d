@@ -103,7 +103,8 @@ if (is(C == class))
 
 	this(this)
 	{
-		_rcClassStore.refCount++;
+		if (_rcClassStore)
+			_rcClassStore.refCount++;
 	}
 
 	~this()
