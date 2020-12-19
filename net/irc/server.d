@@ -1027,6 +1027,13 @@ class IrcServer
 		return channels[name.normalized] = new Channel(name);
 	}
 
+	void close(string reason)
+	{
+		conn.close();
+		foreach (client; clients.keys)
+			client.disconnect("Server is shutting down" ~ (reason.length ? ": " ~ reason : ""));
+	}
+
 protected:
 	Client createClient(TcpConnection incoming)
 	{
