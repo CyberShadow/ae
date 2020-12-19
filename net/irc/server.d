@@ -104,9 +104,10 @@ class IrcServer
 
 		void onReadLine(string line)
 		{
-			if (server.decoder) line = server.decoder(line);
 			try
 			{
+				if (server.decoder) line = server.decoder(line);
+
 				if (conn.state != ConnectionState.connected)
 					return; // A previous line in the same buffer caused a disconnect
 
