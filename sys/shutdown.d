@@ -21,29 +21,39 @@
 module ae.sys.shutdown;
 
 /// Warning: the delegate may be called in an arbitrary thread.
-void addShutdownHandler(void delegate() fn)
+void addShutdownHandler(void delegate(scope const(char)[] reason) fn)
 {
 	handlers.add(fn);
 }
 
+deprecated void addShutdownHandler(void delegate() fn)
+{
+	addShutdownHandler((scope const(char)[] reason) { fn(); });
+}
+
 /// Calls all registered handlers.
-void shutdown()
+void shutdown(scope const(char)[] reason)
 {
 	foreach (fn; handlers.get())
-		fn();
+		fn(reason);
+}
+
+deprecated void shutdown()
+{
+	shutdown(null);
 }
 
 private:
 
 import core.thread;
 
-void syncShutdown() nothrow @system
+void syncShutdown(scope const(char)[] reason) nothrow @system
 {
 	try
 	{
 		thread_suspendAll();
 		scope(exit) thread_resumeAll();
-		shutdown();
+		shutdown(reason);
 	}
 	catch (Throwable e)
 	{
@@ -74,8 +84,8 @@ void register()
 {
 	version(Posix)
 	{
-		addSignalHandler(SIGTERM, { syncShutdown(); });
-		addSignalHandler(SIGINT , { syncShutdown(); });
+		addSignalHandler(SIGTERM, { syncShutdown("SIGTERM"); });
+		addSignalHandler(SIGINT , { syncShutdown("SIGINT" ); });
 	}
 	else
 	version(Windows)
@@ -96,10 +106,21 @@ void register()
 				closing = true;
 				win32write("Shutdown event received, shutting down.\r\n");
 
+				string reason;
+				switch (dwCtrlType)
+				{
+					case CTRL_C_EVENT       : reason = "CTRL_C_EVENT"       ; break;
+					case CTRL_BREAK_EVENT   : reason = "CTRL_BREAK_EVENT"   ; break;
+					case CTRL_CLOSE_EVENT   : reason = "CTRL_CLOSE_EVENT"   ; break;
+					case CTRL_LOGOFF_EVENT  : reason = "CTRL_LOGOFF_EVENT"  ; break;
+					case CTRL_SHUTDOWN_EVENT: reason = "CTRL_SHUTDOWN_EVENT"; break;
+					default: reason = "Unknown dwCtrlType"; break;
+				}
+
 				try
 				{
 					thread_attachThis();
-					syncShutdown();
+					syncShutdown(reason);
 					thread_detachThis();
 
 					return TRUE;
@@ -123,7 +144,7 @@ void register()
 
 synchronized class HandlerSet
 {
-	alias T = void delegate();
+	alias T = void delegate(scope const(char)[] reason);
 	private T[] handlers;
 
 	void add(T fn)
