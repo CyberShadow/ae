@@ -54,14 +54,14 @@ class IrcServer
 	/// If set, masks all IPs to the given mask
 	string addressMask;
 
-	/// How to convert the IRC 8-bit data to and from UTF-8 (D strings must be valid UTF-8).
-	string function(in char[]) decoder = &rawToUTF8, encoder = &UTF8ToRaw;
-
 	Logger log;
 
 	/// Client connection and information
 	abstract static class Client
 	{
+		/// How to convert the IRC 8-bit data to and from UTF-8 (D strings must be valid UTF-8).
+		string function(in char[]) decoder = &rawToUTF8, encoder = &UTF8ToRaw;
+
 		/// Registration details
 		string nickname, password;
 		string username, hostname, servername, realname;
@@ -102,7 +102,7 @@ class IrcServer
 		{
 			try
 			{
-				if (server.decoder) line = server.decoder(line);
+				if (decoder) line = decoder(line);
 
 				if (!connConnected())
 					return; // A previous line in the same buffer caused a disconnect
@@ -917,7 +917,7 @@ class IrcServer
 
 		void sendLine(string line)
 		{
-			if (server.encoder) line = server.encoder(line);
+			if (encoder) line = encoder(line);
 			connSendLine(line);
 		}
 
