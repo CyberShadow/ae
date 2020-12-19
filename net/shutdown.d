@@ -74,10 +74,10 @@ final class ShutdownConnection : TcpConnection
 		this.daemonRead = true;
 	}
 
-	void ping() //@nogc
+	void ping(scope const(char)[] reason) //@nogc
 	{
-		static immutable ubyte[1] data = [42];
-		pinger.send(data[]);
+		static immutable ubyte[1] nullReason = [0];
+		pinger.send(reason.length ? cast(ubyte[])reason : nullReason[]);
 	}
 
 	void onShutdown(scope const(char)[] reason)
@@ -87,7 +87,9 @@ final class ShutdownConnection : TcpConnection
 
 	void onReadData(Data data)
 	{
-		shutdown();
+		auto dataBytes = cast(char[])data.contents;
+		auto reason = dataBytes.length == 1 && dataBytes[0] == 0 ? null : dataBytes;
+		shutdown(reason);
 	}
 }
 
