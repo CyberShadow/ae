@@ -437,14 +437,14 @@ private:
 					ai.address = new UnixAddress(socketPath);
 					server.listen([ai]);
 
-					addShutdownHandler((reason) { socketPath.remove(); });
+					addShutdownHandler((scope const(char)[] reason) { socketPath.remove(); });
 				}
 				else
 					throw new Exception("UNIX sockets are not available on this platform");
 			}
 		}
 
-		addShutdownHandler((reason) { server.close(); });
+		addShutdownHandler((scope const(char)[] reason) { server.close(); });
 
 		server.handleAccept =
 			(SocketConnection incoming)
