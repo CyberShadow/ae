@@ -25,18 +25,28 @@
 
 module ae.net.shutdown;
 
-void addShutdownHandler(void delegate() fn)
+void addShutdownHandler(void delegate(scope const(char)[] reason) fn)
 {
 	handlers ~= fn;
 	if (handlers.length == 1) // first
 		register();
 }
 
+deprecated void addShutdownHandler(void delegate() fn)
+{
+	addShutdownHandler((scope const(char)[] reason) { fn(); });
+}
+
 /// Calls all registered handlers.
-void shutdown()
+void shutdown(scope const(char)[] reason)
 {
 	foreach_reverse (fn; handlers)
-		fn();
+		fn(reason);
+}
+
+deprecated void shutdown()
+{
+	shutdown(null);
 }
 
 private:
@@ -47,7 +57,7 @@ import ae.net.asockets;
 import ae.sys.data;
 
 // Per-thread
-void delegate()[] handlers;
+void delegate(scope const(char)[] reason)[] handlers;
 
 final class ShutdownConnection : TcpConnection
 {
@@ -70,7 +80,7 @@ final class ShutdownConnection : TcpConnection
 		pinger.send(data[]);
 	}
 
-	void onShutdown()
+	void onShutdown(scope const(char)[] reason)
 	{
 		pinger.close();
 	}
