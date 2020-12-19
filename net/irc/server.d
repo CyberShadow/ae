@@ -83,6 +83,13 @@ class IrcServer
 
 		string realHostname() { return remoteAddress.toAddrString; }
 		string publicHostname() { return server.addressMask ? server.addressMask : realHostname; }
+		bool realHostnameVisibleTo(Client viewer)
+		{
+			return server.addressMask is null
+				|| viewer is this;
+		}
+		string hostnameAsVisibleTo(Client viewer) { return realHostnameVisibleTo(viewer) ? realHostname : publicHostname; }
+		string prefixAsVisibleTo(Client viewer) { return realHostnameVisibleTo(viewer) ? prefix : publicPrefix; }
 
 	protected:
 		IrcServer server;
@@ -310,7 +317,7 @@ class IrcServer
 							continue;
 						foreach (member; channel.members)
 							if (inChannel || !member.client.modes.flags['i'])
-								if (!mask || channel.name.maskMatch(mask) || member.client.nickname.maskMatch(mask) || member.client.publicHostname.maskMatch(mask))
+								if (!mask || channel.name.maskMatch(mask) || member.client.nickname.maskMatch(mask) || member.client.hostnameAsVisibleTo(this).maskMatch(mask))
 								{
 									auto phit = member.client.nickname in result;
 									if (phit)
@@ -322,7 +329,7 @@ class IrcServer
 
 					foreach (client; server.nicknames)
 						if (!client.modes.flags['i'])
-							if (!mask || client.nickname.maskMatch(mask) || client.publicHostname.maskMatch(mask))
+							if (!mask || client.nickname.maskMatch(mask) || client.hostnameAsVisibleTo(this).maskMatch(mask))
 								if (client.nickname !in result)
 									result[client.nickname] = "*";
 
@@ -332,7 +339,7 @@ class IrcServer
 						sendReply(Reply.RPL_WHOREPLY,
 							channel,
 							client.username,
-							safeHostname(this is client ? client.realHostname : client.publicHostname),
+							safeHostname(hostnameAsVisibleTo(this)),
 							server.hostname,
 							nickname,
 							"H",
@@ -383,7 +390,7 @@ class IrcServer
 							client.modes.flags['o'] ? "*" : "",
 							client.away ? "+" : "-",
 							client.username,
-							this is client ? client.realHostname : client.publicHostname,
+							hostnameAsVisibleTo(this),
 						);
 					}
 					sendReply(Reply.RPL_USERHOST, replies.join(" "));
@@ -884,7 +891,7 @@ class IrcServer
 
 		void sendCommand(Client from, string[] parameters...)
 		{
-			return sendCommand(this is from ? prefix : from.publicPrefix, parameters);
+			return sendCommand(this is from ? prefix : from.prefixAsVisibleTo(this), parameters);
 		}
 
 		void sendCommand(string from, string[] parameters...)
