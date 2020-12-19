@@ -939,13 +939,11 @@ class IrcServer
 			conn.handleReadLine = &onReadLine;
 			conn.handleInactivity = &onInactivity;
 			conn.handleDisconnect = &onDisconnect;
-
-			server.log("New IRC connection from " ~ remoteAddress.toString);
 		}
 
 		override bool connConnected()
 		{
-			return conn.state != ConnectionState.connected;
+			return conn.state == ConnectionState.connected;
 		}
 
 		override void connSendLine(string line)
