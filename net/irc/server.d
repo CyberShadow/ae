@@ -389,6 +389,8 @@ class IrcServer
 						if (parameters.length < 2)
 							return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
 						auto message = parameters[1];
+						if (!message.length)
+							return sendReply(Reply.ERR_NOTEXTTOSEND, command, "No text to send");
 						foreach (target; parameters[0].split(","))
 						{
 							if (server.isChannelName(target))
