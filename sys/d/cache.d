@@ -182,7 +182,11 @@ class TempCache : DirCacheBase
 		finalize();
 	}
 
-	alias cacheHost this; // https://issues.dlang.org/show_bug.cgi?id=5973
+	version (__NewAliasThis) {}
+	else
+	{
+		alias cacheHost this; // https://issues.dlang.org/show_bug.cgi?id=5973
+	}
 
 	override @property string name() const { return "none"; }
 
@@ -206,7 +210,12 @@ class TempCache : DirCacheBase
 class DirCache : DirCacheBase
 {
 	mixin GenerateConstructorProxies;
-	alias cacheHost this; // https://issues.dlang.org/show_bug.cgi?id=5973
+
+	version (__NewAliasThis) {}
+	else
+	{
+		alias cacheHost this; // https://issues.dlang.org/show_bug.cgi?id=5973
+	}
 
 	override @property string name() const { return "directory"; }
 
