@@ -124,7 +124,8 @@ class IrcServer
 			}
 			catch (CaughtException e)
 			{
-				disconnect(e.msg);
+				if (conn.state == ConnectionState.connected)
+					disconnect(e.msg);
 			}
 		}
 
