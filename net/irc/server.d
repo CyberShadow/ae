@@ -99,6 +99,8 @@ class IrcServer
 			conn.handleInactivity = &onInactivity;
 			conn.handleDisconnect = &onDisconnect;
 
+			server.clients.add(this);
+
 			server.log("New IRC connection from " ~ remoteAddress.toString);
 		}
 
@@ -469,6 +471,7 @@ class IrcServer
 		{
 			if (registered)
 				unregister(reason);
+			server.clients.remove(this);
 			server.log("IRC: %s disconnecting: %s".format(remoteAddress, reason));
 		}
 
@@ -924,7 +927,8 @@ class IrcServer
 		}
 	}
 
-	Client[string] nicknames;
+	HashSet!Client clients; /// All clients
+	Client[string] nicknames; /// Registered clients only
 
 	/// Statistics
 	ulong maxUsers, totalConnections;
