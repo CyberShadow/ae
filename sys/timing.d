@@ -76,7 +76,7 @@ private:
 
 	void add(TimerTask task, TimerTask start)
 	{
-		debug(TIMER_VERBOSE) stderr.writefln("Adding a task which waits for %s.", task.delay);
+		debug(TIMER_VERBOSE) stderr.writefln("Adding task %s which waits for %s.", cast(void*)task, task.delay);
 		debug(TIMER_TRACK) task.additionStackTrace = getStackTrace();
 
 		auto now = MonoTime.currTime();
@@ -131,7 +131,7 @@ private:
 	/// Unschedule a task.
 	void remove(TimerTask task)
 	{
-		debug (TIMER_VERBOSE) stderr.writefln("Removing a task which waits for %s.", task.delay);
+		debug (TIMER_VERBOSE) stderr.writefln("Removing task %s which waits for %s.", cast(void*)task, task.delay);
 		assert(task.owner is this);
 		if (task is head)
 		{
@@ -177,7 +177,7 @@ private:
 
 		assert(task.owner !is null, "This TimerTask is not active");
 		assert(task.owner is this, "This TimerTask is not owned by this Timer");
-		debug (TIMER_VERBOSE) stderr.writefln("Restarting a task which waits for %s.", task.delay);
+		debug (TIMER_VERBOSE) stderr.writefln("Restarting task %s which waits for %s.", cast(void*)task, task.delay);
 
 		// Store current position, as the new position must be after it
 		tmp = task.next !is null ? task.next : task.prev;
@@ -209,7 +209,7 @@ public:
 			{
 				TimerTask task = head;
 				remove(head);
-				debug (TIMER) stderr.writefln("%s: Firing a task that waited for %s of %s.", now, task.delay + (now - task.when), task.delay);
+				debug (TIMER) stderr.writefln("%s: Firing task %s that waited for %s of %s.", now, cast(void*)task, task.delay + (now - task.when), task.delay);
 				if (task.handleTask)
 					task.handleTask(this, task);
 				ran = true;
@@ -224,7 +224,7 @@ public:
 	/// Add a new task to the timer.
 	void add(TimerTask task)
 	{
-		debug (TIMER_VERBOSE) stderr.writefln("Adding a task which waits for %s.", task.delay);
+		debug (TIMER_VERBOSE) stderr.writefln("Adding task %s which waits for %s.", cast(void*)task, task.delay);
 		assert(task.owner is null, "This TimerTask is already active");
 		add(task, null);
 		assert(task.owner is this);
@@ -251,8 +251,9 @@ public:
 
 		auto now = MonoTime.currTime();
 
-		debug(TIMER_TRACK) stderr.writefln("First timer due to fire in %s:\n\tCreated:\n\t\t%-(%s\n\t\t%)\n\tAdded:\n\t\t%-(%s\n\t\t%)",
-			head.when - now, head.creationStackTrace, head.additionStackTrace);
+		debug(TIMER) stderr.writefln("First task is %s, due to fire in %s", cast(void*)head, head.when - now);
+		debug(TIMER_TRACK) stderr.writefln("\tCreated:\n\t\t%-(%s\n\t\t%)\n\tAdded:\n\t\t%-(%s\n\t\t%)",
+			head.creationStackTrace, head.additionStackTrace);
 
 		if (now < head.when) // "when" is in the future
 			return head.when - now;
