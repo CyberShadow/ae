@@ -60,7 +60,7 @@ class IrcServer
 	Logger log;
 
 	/// Client connection and information
-	static class Client
+	abstract static class Client
 	{
 		/// Registration details
 		string nickname, password;
@@ -86,20 +86,14 @@ class IrcServer
 
 	protected:
 		IrcServer server;
-		IrcConnection conn;
 		Address remoteAddress;
 
-		this(IrcServer server, IrcConnection incoming, Address remoteAddress)
+		this(IrcServer server, Address remoteAddress)
 		{
 			this.server = server;
-			this.remoteAddress = remoteAddress;
-
-			conn = incoming;
-			conn.handleReadLine = &onReadLine;
-			conn.handleInactivity = &onInactivity;
-			conn.handleDisconnect = &onDisconnect;
-
 			server.clients.add(this);
+
+			this.remoteAddress = remoteAddress;
 
 			server.log("New IRC connection from " ~ remoteAddress.toString);
 		}
@@ -110,7 +104,7 @@ class IrcServer
 			{
 				if (server.decoder) line = server.decoder(line);
 
-				if (conn.state != ConnectionState.connected)
+				if (!connConnected())
 					return; // A previous line in the same buffer caused a disconnect
 
 				enforce(line.indexOf('\0')<0 && line.indexOf('\r')<0 && line.indexOf('\n')<0, "Forbidden character");
@@ -124,7 +118,7 @@ class IrcServer
 			}
 			catch (CaughtException e)
 			{
-				if (conn.state == ConnectionState.connected)
+				if (connConnected())
 					disconnect(e.msg);
 			}
 		}
@@ -465,7 +459,7 @@ class IrcServer
 			if (registered)
 				unregister(why);
 			sendLine("ERROR :Closing Link: %s[%s@%s] (%s)".format(nickname, username, realHostname, why));
-			conn.disconnect(why);
+			connDisconnect(why);
 		}
 
 		void onDisconnect(string reason, DisconnectType type)
@@ -924,7 +918,44 @@ class IrcServer
 		void sendLine(string line)
 		{
 			if (server.encoder) line = server.encoder(line);
+			connSendLine(line);
+		}
+
+		abstract bool connConnected();
+		abstract void connSendLine(string line);
+		abstract void connDisconnect(string reason);
+	}
+
+	static class NetworkClient : Client
+	{
+	protected:
+		IrcConnection conn;
+
+		this(IrcServer server, IrcConnection incoming, Address remoteAddress)
+		{
+			super(server, remoteAddress);
+
+			conn = incoming;
+			conn.handleReadLine = &onReadLine;
+			conn.handleInactivity = &onInactivity;
+			conn.handleDisconnect = &onDisconnect;
+
+			server.log("New IRC connection from " ~ remoteAddress.toString);
+		}
+
+		override bool connConnected()
+		{
+			return conn.state != ConnectionState.connected;
+		}
+
+		override void connSendLine(string line)
+		{
 			conn.send(line);
+		}
+
+		override void connDisconnect(string reason)
+		{
+			conn.disconnect(reason);
 		}
 	}
 
@@ -1038,7 +1069,7 @@ class IrcServer
 protected:
 	Client createClient(TcpConnection incoming)
 	{
-		return new Client(this, new IrcConnection(incoming), incoming.remoteAddress);
+		return new NetworkClient(this, new IrcConnection(incoming), incoming.remoteAddress);
 	}
 
 	void onAccept(TcpConnection incoming)
