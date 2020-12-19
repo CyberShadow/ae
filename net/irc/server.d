@@ -118,231 +118,132 @@ class IrcServer
 					return;
 
 				auto command = parameters.shift.toUpper();
+				onCommand(command, parameters);
+			}
+			catch (CaughtException e)
+			{
+				disconnect(e.msg);
+			}
+		}
 
-				switch (command)
-				{
-					case "PASS":
-						if (registered)
-							return sendReply(Reply.ERR_ALREADYREGISTRED, "You may not reregister");
-						if (parameters.length != 1)
-							return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
-						password = parameters[0];
-						break;
-					case "NICK":
-						if (parameters.length != 1)
-							return sendReply(Reply.ERR_NONICKNAMEGIVEN, "No nickname given");
-						if (!registered)
-						{
-							nickname = parameters[0];
-							checkRegistration();
-						}
-						else
-						{
-							auto newNick = parameters[0];
-							if (!newNick.match(server.nicknameValidationPattern))
-								return sendReply(Reply.ERR_ERRONEUSNICKNAME, newNick, "Erroneous nickname");
-							if (newNick.normalized in server.nicknames)
-							{
-								if (newNick.normalized != nickname.normalized)
-									sendReply(Reply.ERR_NICKNAMEINUSE, newNick, "Nickname is already in use");
-								return;
-							}
-
-							changeNick(newNick);
-						}
-						break;
-					case "USER":
-						if (registered)
-							return sendReply(Reply.ERR_ALREADYREGISTRED, "You may not reregister");
-						if (parameters.length != 4)
-							return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
-						username   = parameters[0];
-						hostname   = parameters[1];
-						servername = parameters[2];
-						realname   = parameters[3];
+		void onCommand(string command, scope string[] parameters...)
+		{
+			switch (command)
+			{
+				case "PASS":
+					if (registered)
+						return sendReply(Reply.ERR_ALREADYREGISTRED, "You may not reregister");
+					if (parameters.length != 1)
+						return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
+					password = parameters[0];
+					break;
+				case "NICK":
+					if (parameters.length != 1)
+						return sendReply(Reply.ERR_NONICKNAMEGIVEN, "No nickname given");
+					if (!registered)
+					{
+						nickname = parameters[0];
 						checkRegistration();
-						break;
-
-					case "PING":
-						if (!registered)
-							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered"); // KVIrc needs this.
-						sendReply("PONG", parameters);
-						break;
-					case "PONG":
-						break;
-					case "QUIT":
-						if (parameters.length)
-							disconnect("Quit: " ~ parameters[0]);
-						else
-							disconnect("Quit");
-						break;
-					case "JOIN":
-						if (!registered)
-							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
-						if (parameters.length < 1)
-							return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
-						string[] keys = parameters.length > 1 ? parameters[1].split(",") : null;
-						foreach (i, channame; parameters[0].split(","))
-						{
-							auto key = i < keys.length ? keys[i] : null;
-							if (!server.isChannelName(channame))
-								{ sendReply(Reply.ERR_NOSUCHCHANNEL, channame, "No such channel"); continue; }
-							auto normchan = channame.normalized;
-							if (!mayJoin(normchan))
-								continue;
-							auto pchannel = normchan in server.channels;
-							Channel channel;
-							if (pchannel)
-								channel = *pchannel;
-							else
-							{
-								if (server.staticChannels)
-									{ sendReply(Reply.ERR_NOSUCHCHANNEL, channame, "No such channel"); continue; }
-								else
-									channel = server.createChannel(channame);
-							}
-							if (nickname.normalized in channel.members)
-								continue; // already on channel
-							if (channel.modes.strings['k'] && channel.modes.strings['k'] != key)
-								{ sendReply(Reply.ERR_BADCHANNELKEY, channame, "Cannot join channel (+k)"); continue; }
-							if (channel.modes.masks['b'].any!(mask => prefix.maskMatch(mask)))
-								{ sendReply(Reply.ERR_BANNEDFROMCHAN, channame, "Cannot join channel (+b)"); continue; }
-							join(channel);
-						}
-						break;
-					case "PART":
-						if (!registered)
-							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
-						if (parameters.length < 1) // TODO: part reason
-							return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
-						string reason = parameters.length < 2 ? null : parameters[1];
-						foreach (channame; parameters[0].split(","))
-						{
-							auto pchan = channame.normalized in server.channels;
-							if (!pchan)
-								{ sendReply(Reply.ERR_NOSUCHCHANNEL, channame, "No such channel"); continue; }
-							auto chan = *pchan;
-							if (nickname.normalized !in chan.members)
-								{ sendReply(Reply.ERR_NOTONCHANNEL, channame, "You're not on that channel"); continue; }
-							part(chan, reason);
-						}
-						break;
-					case "MODE":
-						if (!registered)
-							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
-						if (parameters.length < 1)
-							return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
-						auto target = parameters.shift;
-						if (server.isChannelName(target))
-						{
-							auto pchannel = target.normalized in server.channels;
-							if (!pchannel)
-								return sendReply(Reply.ERR_NOSUCHNICK, target, "No such nick/channel");
-							auto channel = *pchannel;
-							auto pmember = nickname.normalized in channel.members;
-							if (!pmember)
-								return sendReply(Reply.ERR_NOTONCHANNEL, target, "You're not on that channel");
-							if (!parameters.length)
-								return sendChannelModes(channel);
-							return setChannelModes(channel, parameters);
-						}
-						else
-						{
-							auto pclient = target.normalized in server.nicknames;
-							if (!pclient)
-								return sendReply(Reply.ERR_NOSUCHNICK, target, "No such nick/channel");
-							auto client = *pclient;
-							if (parameters.length)
-							{
-								if (client !is this)
-									return sendReply(Reply.ERR_USERSDONTMATCH, "Cannot change mode for other users");
-								return setUserModes(parameters);
-							}
-							else
-								return sendUserModes(client);
-						}
-					case "LIST":
-						if (!registered)
-							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
-						foreach (channel; getChannelList())
-							if (!(channel.modes.flags['p'] || channel.modes.flags['s']) || nickname.normalized in channel.members)
-								sendReply(Reply.RPL_LIST, channel.name, channel.members.length.text, channel.topic ? channel.topic : "");
-						sendReply(Reply.RPL_LISTEND, "End of LIST");
-						break;
-					case "MOTD":
-						if (!registered)
-							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
-						sendMotd();
-						break;
-					case "NAMES":
-						if (!registered)
-							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
-						if (parameters.length < 1)
-							return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
-						foreach (channame; parameters[0].split(","))
-						{
-							auto pchan = channame.normalized in server.channels;
-							if (!pchan)
-								{ sendReply(Reply.ERR_NOSUCHCHANNEL, channame, "No such channel"); continue; }
-							auto channel = *pchan;
-							auto pmember = nickname.normalized in channel.members;
-							if (!pmember)
-								{ sendReply(Reply.ERR_NOTONCHANNEL, channame, "You're not on that channel"); continue; }
-							sendNames(channel);
-						}
-						break;
-					case "WHO":
-					{
-						if (!registered)
-							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
-						auto mask = parameters.length ? parameters[0].among("", "*", "0") ? null : parameters[0] : null;
-						string[string] result;
-						foreach (channel; server.channels)
-						{
-							auto inChannel = nickname.normalized in channel.members;
-							if (!inChannel && channel.modes.flags['s'])
-								continue;
-							foreach (member; channel.members)
-								if (inChannel || !member.client.modes.flags['i'])
-									if (!mask || channel.name.maskMatch(mask) || member.client.nickname.maskMatch(mask) || member.client.publicHostname.maskMatch(mask))
-									{
-										auto phit = member.client.nickname in result;
-										if (phit)
-											*phit = "*";
-										else
-											result[member.client.nickname] = channel.name;
-									}
-						}
-
-						foreach (client; server.nicknames)
-							if (!client.modes.flags['i'])
-								if (!mask || client.nickname.maskMatch(mask) || client.publicHostname.maskMatch(mask))
-									if (client.nickname !in result)
-										result[client.nickname] = "*";
-
-						foreach (nickname, channel; result)
-						{
-							auto client = server.nicknames[nickname.normalized];
-							sendReply(Reply.RPL_WHOREPLY,
-								channel,
-								client.username,
-								safeHostname(this is client ? client.realHostname : client.publicHostname),
-								server.hostname,
-								nickname,
-								"H",
-								"0 " ~ client.realname,
-							);
-						}
-						sendReply(Reply.RPL_ENDOFWHO, mask ? mask : "*", "End of WHO list");
-						break;
 					}
-					case "TOPIC":
+					else
 					{
-						if (!registered)
-							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
-						if (parameters.length < 1)
-							return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
-						auto target = parameters.shift;
+						auto newNick = parameters[0];
+						if (!newNick.match(server.nicknameValidationPattern))
+							return sendReply(Reply.ERR_ERRONEUSNICKNAME, newNick, "Erroneous nickname");
+						if (newNick.normalized in server.nicknames)
+						{
+							if (newNick.normalized != nickname.normalized)
+								sendReply(Reply.ERR_NICKNAMEINUSE, newNick, "Nickname is already in use");
+							return;
+						}
+
+						changeNick(newNick);
+					}
+					break;
+				case "USER":
+					if (registered)
+						return sendReply(Reply.ERR_ALREADYREGISTRED, "You may not reregister");
+					if (parameters.length != 4)
+						return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
+					username   = parameters[0];
+					hostname   = parameters[1];
+					servername = parameters[2];
+					realname   = parameters[3];
+					checkRegistration();
+					break;
+
+				case "PING":
+					if (!registered)
+						return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered"); // KVIrc needs this.
+					sendReply("PONG", parameters);
+					break;
+				case "PONG":
+					break;
+				case "QUIT":
+					if (parameters.length)
+						disconnect("Quit: " ~ parameters[0]);
+					else
+						disconnect("Quit");
+					break;
+				case "JOIN":
+					if (!registered)
+						return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
+					if (parameters.length < 1)
+						return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
+					string[] keys = parameters.length > 1 ? parameters[1].split(",") : null;
+					foreach (i, channame; parameters[0].split(","))
+					{
+						auto key = i < keys.length ? keys[i] : null;
+						if (!server.isChannelName(channame))
+							{ sendReply(Reply.ERR_NOSUCHCHANNEL, channame, "No such channel"); continue; }
+						auto normchan = channame.normalized;
+						if (!mayJoin(normchan))
+							continue;
+						auto pchannel = normchan in server.channels;
+						Channel channel;
+						if (pchannel)
+							channel = *pchannel;
+						else
+						{
+							if (server.staticChannels)
+								{ sendReply(Reply.ERR_NOSUCHCHANNEL, channame, "No such channel"); continue; }
+							else
+								channel = server.createChannel(channame);
+						}
+						if (nickname.normalized in channel.members)
+							continue; // already on channel
+						if (channel.modes.strings['k'] && channel.modes.strings['k'] != key)
+							{ sendReply(Reply.ERR_BADCHANNELKEY, channame, "Cannot join channel (+k)"); continue; }
+						if (channel.modes.masks['b'].any!(mask => prefix.maskMatch(mask)))
+							{ sendReply(Reply.ERR_BANNEDFROMCHAN, channame, "Cannot join channel (+b)"); continue; }
+						join(channel);
+					}
+					break;
+				case "PART":
+					if (!registered)
+						return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
+					if (parameters.length < 1) // TODO: part reason
+						return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
+					string reason = parameters.length < 2 ? null : parameters[1];
+					foreach (channame; parameters[0].split(","))
+					{
+						auto pchan = channame.normalized in server.channels;
+						if (!pchan)
+							{ sendReply(Reply.ERR_NOSUCHCHANNEL, channame, "No such channel"); continue; }
+						auto chan = *pchan;
+						if (nickname.normalized !in chan.members)
+							{ sendReply(Reply.ERR_NOTONCHANNEL, channame, "You're not on that channel"); continue; }
+						part(chan, reason);
+					}
+					break;
+				case "MODE":
+					if (!registered)
+						return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
+					if (parameters.length < 1)
+						return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
+					auto target = parameters.shift;
+					if (server.isChannelName(target))
+					{
 						auto pchannel = target.normalized in server.channels;
 						if (!pchannel)
 							return sendReply(Reply.ERR_NOSUCHNICK, target, "No such nick/channel");
@@ -351,100 +252,203 @@ class IrcServer
 						if (!pmember)
 							return sendReply(Reply.ERR_NOTONCHANNEL, target, "You're not on that channel");
 						if (!parameters.length)
-							return sendTopic(channel);
-						if (channel.modes.flags['t'] && (pmember.modes & Channel.Member.Modes.op) == 0)
-							return sendReply(Reply.ERR_CHANOPRIVSNEEDED, target, "You're not channel operator");
-						return setChannelTopic(channel, parameters[0]);
+							return sendChannelModes(channel);
+						return setChannelModes(channel, parameters);
 					}
-					case "ISON":
-						if (!registered)
-							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
-						sendReply(Reply.RPL_ISON, parameters.filter!(nick => nick.normalized in server.nicknames).join(" "));
-						break;
-					case "USERHOST":
+					else
 					{
-						if (!registered)
-							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
-						string[] replies;
-						foreach (nick; parameters)
+						auto pclient = target.normalized in server.nicknames;
+						if (!pclient)
+							return sendReply(Reply.ERR_NOSUCHNICK, target, "No such nick/channel");
+						auto client = *pclient;
+						if (parameters.length)
 						{
-							auto pclient = nick.normalized in server.nicknames;
-							if (!pclient)
-								continue;
-							auto client = *pclient;
-							replies ~= "%s%s=%s%s@%s".format(
-								nick,
-								client.modes.flags['o'] ? "*" : "",
-								client.away ? "+" : "-",
-								client.username,
-								this is client ? client.realHostname : client.publicHostname,
-							);
+							if (client !is this)
+								return sendReply(Reply.ERR_USERSDONTMATCH, "Cannot change mode for other users");
+							return setUserModes(parameters);
 						}
-						sendReply(Reply.RPL_USERHOST, replies.join(" "));
-						break;
+						else
+							return sendUserModes(client);
 					}
-					case "PRIVMSG":
-					case "NOTICE":
-						if (!registered)
-							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
-						if (parameters.length < 2)
-							return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
-						auto message = parameters[1];
-						if (!message.length)
-							return sendReply(Reply.ERR_NOTEXTTOSEND, command, "No text to send");
-						foreach (target; parameters[0].split(","))
+				case "LIST":
+					if (!registered)
+						return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
+					foreach (channel; getChannelList())
+						if (!(channel.modes.flags['p'] || channel.modes.flags['s']) || nickname.normalized in channel.members)
+							sendReply(Reply.RPL_LIST, channel.name, channel.members.length.text, channel.topic ? channel.topic : "");
+					sendReply(Reply.RPL_LISTEND, "End of LIST");
+					break;
+				case "MOTD":
+					if (!registered)
+						return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
+					sendMotd();
+					break;
+				case "NAMES":
+					if (!registered)
+						return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
+					if (parameters.length < 1)
+						return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
+					foreach (channame; parameters[0].split(","))
+					{
+						auto pchan = channame.normalized in server.channels;
+						if (!pchan)
+							{ sendReply(Reply.ERR_NOSUCHCHANNEL, channame, "No such channel"); continue; }
+						auto channel = *pchan;
+						auto pmember = nickname.normalized in channel.members;
+						if (!pmember)
+							{ sendReply(Reply.ERR_NOTONCHANNEL, channame, "You're not on that channel"); continue; }
+						sendNames(channel);
+					}
+					break;
+				case "WHO":
+				{
+					if (!registered)
+						return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
+					auto mask = parameters.length ? parameters[0].among("", "*", "0") ? null : parameters[0] : null;
+					string[string] result;
+					foreach (channel; server.channels)
+					{
+						auto inChannel = nickname.normalized in channel.members;
+						if (!inChannel && channel.modes.flags['s'])
+							continue;
+						foreach (member; channel.members)
+							if (inChannel || !member.client.modes.flags['i'])
+								if (!mask || channel.name.maskMatch(mask) || member.client.nickname.maskMatch(mask) || member.client.publicHostname.maskMatch(mask))
+								{
+									auto phit = member.client.nickname in result;
+									if (phit)
+										*phit = "*";
+									else
+										result[member.client.nickname] = channel.name;
+								}
+					}
+
+					foreach (client; server.nicknames)
+						if (!client.modes.flags['i'])
+							if (!mask || client.nickname.maskMatch(mask) || client.publicHostname.maskMatch(mask))
+								if (client.nickname !in result)
+									result[client.nickname] = "*";
+
+					foreach (nickname, channel; result)
+					{
+						auto client = server.nicknames[nickname.normalized];
+						sendReply(Reply.RPL_WHOREPLY,
+							channel,
+							client.username,
+							safeHostname(this is client ? client.realHostname : client.publicHostname),
+							server.hostname,
+							nickname,
+							"H",
+							"0 " ~ client.realname,
+						);
+					}
+					sendReply(Reply.RPL_ENDOFWHO, mask ? mask : "*", "End of WHO list");
+					break;
+				}
+				case "TOPIC":
+				{
+					if (!registered)
+						return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
+					if (parameters.length < 1)
+						return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
+					auto target = parameters.shift;
+					auto pchannel = target.normalized in server.channels;
+					if (!pchannel)
+						return sendReply(Reply.ERR_NOSUCHNICK, target, "No such nick/channel");
+					auto channel = *pchannel;
+					auto pmember = nickname.normalized in channel.members;
+					if (!pmember)
+						return sendReply(Reply.ERR_NOTONCHANNEL, target, "You're not on that channel");
+					if (!parameters.length)
+						return sendTopic(channel);
+					if (channel.modes.flags['t'] && (pmember.modes & Channel.Member.Modes.op) == 0)
+						return sendReply(Reply.ERR_CHANOPRIVSNEEDED, target, "You're not channel operator");
+					return setChannelTopic(channel, parameters[0]);
+				}
+				case "ISON":
+					if (!registered)
+						return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
+					sendReply(Reply.RPL_ISON, parameters.filter!(nick => nick.normalized in server.nicknames).join(" "));
+					break;
+				case "USERHOST":
+				{
+					if (!registered)
+						return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
+					string[] replies;
+					foreach (nick; parameters)
+					{
+						auto pclient = nick.normalized in server.nicknames;
+						if (!pclient)
+							continue;
+						auto client = *pclient;
+						replies ~= "%s%s=%s%s@%s".format(
+							nick,
+							client.modes.flags['o'] ? "*" : "",
+							client.away ? "+" : "-",
+							client.username,
+							this is client ? client.realHostname : client.publicHostname,
+						);
+					}
+					sendReply(Reply.RPL_USERHOST, replies.join(" "));
+					break;
+				}
+				case "PRIVMSG":
+				case "NOTICE":
+					if (!registered)
+						return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
+					if (parameters.length < 2)
+						return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
+					auto message = parameters[1];
+					if (!message.length)
+						return sendReply(Reply.ERR_NOTEXTTOSEND, command, "No text to send");
+					foreach (target; parameters[0].split(","))
+					{
+						if (server.isChannelName(target))
 						{
-							if (server.isChannelName(target))
+							auto pchannel = target.normalized in server.channels;
+							if (!pchannel)
+								{ sendReply(Reply.ERR_NOSUCHNICK, target, "No such nick/channel"); continue; }
+							auto channel = *pchannel;
+							auto pmember = nickname.normalized in channel.members;
+							if (pmember) // On channel?
 							{
-								auto pchannel = target.normalized in server.channels;
-								if (!pchannel)
-									{ sendReply(Reply.ERR_NOSUCHNICK, target, "No such nick/channel"); continue; }
-								auto channel = *pchannel;
-								auto pmember = nickname.normalized in channel.members;
-								if (pmember) // On channel?
-								{
-									if (channel.modes.flags['m'] && (pmember.modes & Channel.Member.Modes.bypassM) == 0)
-										{ sendReply(Reply.ERR_CANNOTSENDTOCHAN, target, "Cannot send to channel"); continue; }
-								}
-								else
-								{
-									if (channel.modes.flags['n']) // No external messages
-										{ sendReply(Reply.ERR_NOTONCHANNEL, target, "You're not on that channel"); continue; }
-								}
-								sendToChannel(channel, command, message);
+								if (channel.modes.flags['m'] && (pmember.modes & Channel.Member.Modes.bypassM) == 0)
+									{ sendReply(Reply.ERR_CANNOTSENDTOCHAN, target, "Cannot send to channel"); continue; }
 							}
 							else
 							{
-								auto pclient = target.normalized in server.nicknames;
-								if (!pclient)
-									{ sendReply(Reply.ERR_NOSUCHNICK, target, "No such nick/channel"); continue; }
-								sendToClient(*pclient, command, message);
+								if (channel.modes.flags['n']) // No external messages
+									{ sendReply(Reply.ERR_NOTONCHANNEL, target, "You're not on that channel"); continue; }
 							}
+							sendToChannel(channel, command, message);
 						}
-						break;
-					case "OPER":
-						if (!registered)
-							return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
-						if (parameters.length < 1)
-							return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
-						if (!server.operPassword || parameters[$-1] != server.operPassword)
-							return sendReply(Reply.ERR_PASSWDMISMATCH, "Password incorrect");
-						modes.flags['o'] = true;
-						sendReply(Reply.RPL_YOUREOPER, "You are now an IRC operator");
-						sendUserModes(this);
-						foreach (channel; server.channels)
-							if (nickname.normalized in channel.members)
-								setChannelMode(channel, nickname, Channel.Member.Mode.op, true);
-						break;
+						else
+						{
+							auto pclient = target.normalized in server.nicknames;
+							if (!pclient)
+								{ sendReply(Reply.ERR_NOSUCHNICK, target, "No such nick/channel"); continue; }
+							sendToClient(*pclient, command, message);
+						}
+					}
+					break;
+				case "OPER":
+					if (!registered)
+						return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
+					if (parameters.length < 1)
+						return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
+					if (!server.operPassword || parameters[$-1] != server.operPassword)
+						return sendReply(Reply.ERR_PASSWDMISMATCH, "Password incorrect");
+					modes.flags['o'] = true;
+					sendReply(Reply.RPL_YOUREOPER, "You are now an IRC operator");
+					sendUserModes(this);
+					foreach (channel; server.channels)
+						if (nickname.normalized in channel.members)
+							setChannelMode(channel, nickname, Channel.Member.Mode.op, true);
+					break;
 
-					default:
-						if (registered)
-							return sendReply(Reply.ERR_UNKNOWNCOMMAND, command, "Unknown command");
-				}
-			}
-			catch (CaughtException e)
-			{
-				disconnect(e.msg);
+				default:
+					if (registered)
+						return sendReply(Reply.ERR_UNKNOWNCOMMAND, command, "Unknown command");
 			}
 		}
 
