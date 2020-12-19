@@ -86,7 +86,8 @@ class IrcServer
 		bool realHostnameVisibleTo(Client viewer)
 		{
 			return server.addressMask is null
-				|| viewer is this;
+				|| viewer is this
+				|| viewer.modes.flags['o']; // Oper
 		}
 		string hostnameAsVisibleTo(Client viewer) { return realHostnameVisibleTo(viewer) ? realHostname : publicHostname; }
 		string prefixAsVisibleTo(Client viewer) { return realHostnameVisibleTo(viewer) ? prefix : publicPrefix; }
