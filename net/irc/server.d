@@ -344,7 +344,7 @@ class IrcServer
 						sendReply(Reply.RPL_WHOREPLY,
 							channel,
 							client.username,
-							safeHostname(hostnameAsVisibleTo(this)),
+							safeHostname(client.hostnameAsVisibleTo(this)),
 							server.hostname,
 							nickname,
 							"H",
@@ -372,7 +372,7 @@ class IrcServer
 						sendReply(Reply.RPL_WHOISUSER,
 							client.nickname,
 							client.username,
-							safeHostname(hostnameAsVisibleTo(this)),
+							safeHostname(client.hostnameAsVisibleTo(this)),
 							"*",
 							client.realname,
 						);
@@ -438,7 +438,7 @@ class IrcServer
 							client.modes.flags['o'] ? "*" : "",
 							client.away ? "+" : "-",
 							client.username,
-							hostnameAsVisibleTo(this),
+							client.hostnameAsVisibleTo(this),
 						);
 					}
 					sendReply(Reply.RPL_USERHOST, replies.join(" "));
