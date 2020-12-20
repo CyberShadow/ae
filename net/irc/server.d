@@ -354,6 +354,49 @@ class IrcServer
 					sendReply(Reply.RPL_ENDOFWHO, mask ? mask : "*", "End of WHO list");
 					break;
 				}
+				case "WHOIS":
+				{
+					if (!registered)
+						return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
+					// Contrary to the RFC, and similar to e.g. Freenode, we don't support masks here.
+					if (parameters.length < 1)
+						return sendReply(Reply.ERR_NEEDMOREPARAMS, command, "Not enough parameters");
+					foreach (nick; parameters[0].split(","))
+					{
+						auto pclient = nick.normalized in server.nicknames;
+						if (!pclient)
+							sendReply(Reply.ERR_NOSUCHNICK, nick, "No such nick");
+						auto client = *pclient;
+
+						// RPL_WHOISUSER
+						sendReply(Reply.RPL_WHOISUSER,
+							client.nickname,
+							client.username,
+							safeHostname(hostnameAsVisibleTo(this)),
+							"*",
+							client.realname,
+						);
+						// RPL_WHOISCHANNELS
+						server.channels.byValue
+							// Channel contents visible?
+							.filter!(channel => !channel.modes.flags['s'] || this.nickname.normalized in channel.members)
+							// Get channel member mode + name if target in channel, or null
+							.map!(channel => (nick.normalized in channel.members).I!(pmember => pmember ? pmember.modeChar() ~ channel.name : null))
+							.filter!(name => name !is null)
+							.chunks(10)
+							.each!(chunk => sendReply(Reply.RPL_WHOISCHANNELS, client.nickname, chunk.join(" ")));
+						// RPL_WHOISOPERATOR
+						if (client.modes.flags['o'])
+							sendReply(Reply.RPL_WHOISOPERATOR, client.nickname, "is an IRC operator");
+						// RPL_WHOISIDLE
+						sendReply(Reply.RPL_WHOISIDLE, client.nickname,
+							(MonoTime.currTime - client.lastActivity).total!"seconds".text,
+							"seconds idle");
+					}
+					// RPL_ENDOFWHOIS
+					sendReply(Reply.RPL_ENDOFWHOIS, parameters[0], "End of WHOIS list");
+					break;
+				}
 				case "TOPIC":
 				{
 					if (!registered)
