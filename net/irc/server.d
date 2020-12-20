@@ -574,7 +574,7 @@ class IrcServer
 			sendReply(Reply.RPL_MYINFO       , server.hostname, server.serverVersion, UserModes.supported, ChannelModes.supported, null);
 			sendReply(cast(Reply)         005, server.capabilities ~ ["are supported by this server"]);
 			sendReply(Reply.RPL_LUSERCLIENT  , "There are %d users and %d invisible on %d servers".format(userCount, 0, 1));
-			sendReply(Reply.RPL_LUSEROP      , 0.text, "IRC Operators online"); // TODO: OPER
+			sendReply(Reply.RPL_LUSEROP      , clients.byKey.filter!(client => client.modes.flags['o']).walkLength.text, "IRC Operators online");
 			sendReply(Reply.RPL_LUSERCHANNELS, server.channels.length.text, "channels formed");
 			sendReply(Reply.RPL_LUSERME      , "I have %d clients and %d servers".format(userCount, 0));
 			sendReply(cast(Reply)         265, "Current local  users: %d  Max: %d".format(userCount, server.maxUsers));
