@@ -71,6 +71,7 @@ class IrcServer
 
 		bool registered;
 		Modes modes;
+		MonoTime lastActivity;
 
 		Channel[] getJoinedChannels()
 		{
@@ -99,6 +100,7 @@ class IrcServer
 		this(IrcServer server, Address remoteAddress)
 		{
 			this.server = server;
+			lastActivity = MonoTime.currTime;
 			server.clients.add(this);
 
 			this.remoteAddress = remoteAddress;
@@ -223,6 +225,7 @@ class IrcServer
 							{ sendReply(Reply.ERR_BANNEDFROMCHAN, channame, "Cannot join channel (+b)"); continue; }
 						join(channel);
 					}
+					lastActivity = MonoTime.currTime;
 					break;
 				case "PART":
 					if (!registered)
@@ -240,6 +243,7 @@ class IrcServer
 							{ sendReply(Reply.ERR_NOTONCHANNEL, channame, "You're not on that channel"); continue; }
 						part(chan, reason);
 					}
+					lastActivity = MonoTime.currTime;
 					break;
 				case "MODE":
 					if (!registered)
@@ -399,6 +403,7 @@ class IrcServer
 				}
 				case "PRIVMSG":
 				case "NOTICE":
+				{
 					if (!registered)
 						return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
 					if (parameters.length < 2)
@@ -435,7 +440,9 @@ class IrcServer
 							sendToClient(*pclient, command, message);
 						}
 					}
+					lastActivity = MonoTime.currTime;
 					break;
+				}
 				case "OPER":
 					if (!registered)
 						return sendReply(Reply.ERR_NOTREGISTERED, "You have not registered");
