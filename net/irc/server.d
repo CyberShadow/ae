@@ -444,6 +444,9 @@ class IrcServer
 					sendReply(Reply.RPL_USERHOST, replies.join(" "));
 					break;
 				}
+				case "LUSERS":
+					sendLusers();
+					break;
 				case "PRIVMSG":
 				case "NOTICE":
 				{
@@ -573,10 +576,7 @@ class IrcServer
 			sendReply(Reply.RPL_CREATED      , "This server was created %s".format(server.creationTime));
 			sendReply(Reply.RPL_MYINFO       , server.hostname, server.serverVersion, UserModes.supported, ChannelModes.supported, null);
 			sendReply(cast(Reply)         005, server.capabilities ~ ["are supported by this server"]);
-			sendReply(Reply.RPL_LUSERCLIENT  , "There are %d users and %d invisible on %d servers".format(userCount, 0, 1));
-			sendReply(Reply.RPL_LUSEROP      , clients.byKey.filter!(client => client.modes.flags['o']).walkLength.text, "IRC Operators online");
-			sendReply(Reply.RPL_LUSERCHANNELS, server.channels.length.text, "channels formed");
-			sendReply(Reply.RPL_LUSERME      , "I have %d clients and %d servers".format(userCount, 0));
+			sendLusers();
 			sendReply(cast(Reply)         265, "Current local  users: %d  Max: %d".format(userCount, server.maxUsers));
 			sendReply(cast(Reply)         266, "Current global users: %d  Max: %d".format(userCount, server.maxUsers));
 			sendReply(cast(Reply)         250, "Highest connection count: %d (%d clients) (%d since server was (re)started)".format(server.maxUsers, server.maxUsers, server.totalConnections));
@@ -631,6 +631,22 @@ class IrcServer
 			foreach (line; server.motd)
 				sendReply(Reply.RPL_MOTD, "- %s".format(line));
 			sendReply(Reply.RPL_ENDOFMOTD    , "End of /MOTD command.");
+		}
+
+		void sendLusers()
+		{
+			sendReply(Reply.RPL_LUSERCLIENT  , "There are %d users and %d services on %d servers".format(
+				server.clients.byKey.filter!(client => cast(NetworkClient)client && client.registered).walkLength,
+				server.clients.byKey.filter!(client => !cast(NetworkClient)client).walkLength,
+				1,
+			));
+			sendReply(Reply.RPL_LUSEROP      , server.clients.byKey.filter!(client => client.modes.flags['o']).walkLength.text, "IRC Operators online");
+			sendReply(Reply.RPL_LUSERUNKNOWN , server.clients.byKey.filter!(client => cast(NetworkClient)client && !client.registered).walkLength.text, "unknown connection(s)");
+			sendReply(Reply.RPL_LUSERCHANNELS, server.channels.length.text, "channels formed");
+			sendReply(Reply.RPL_LUSERME      , "I have %d clients and %d servers".format(
+				server.clients.byKey.filter!(client => client.registered).walkLength,
+				0,
+			));
 		}
 
 		bool mayJoin(string name)
