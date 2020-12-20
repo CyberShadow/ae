@@ -365,7 +365,7 @@ class IrcServer
 					{
 						auto pclient = nick.normalized in server.nicknames;
 						if (!pclient)
-							sendReply(Reply.ERR_NOSUCHNICK, nick, "No such nick");
+							{ sendReply(Reply.ERR_NOSUCHNICK, nick, "No such nick/channel"); continue; }
 						auto client = *pclient;
 
 						// RPL_WHOISUSER
