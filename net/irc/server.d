@@ -958,7 +958,7 @@ class IrcServer
 
 		void sendCommand(Client from, string[] parameters...)
 		{
-			return sendCommand(this is from ? prefix : from.prefixAsVisibleTo(this), parameters);
+			return sendCommand(from.prefixAsVisibleTo(this), parameters);
 		}
 
 		void sendCommand(string from, string[] parameters...)
