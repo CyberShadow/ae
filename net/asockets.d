@@ -1867,6 +1867,9 @@ class LineBufferedAdapter : ConnectionAdapter
 	/// The protocol's line delimiter.
 	string delimiter = "\r\n";
 
+	/// Maximum line length (0 means unlimited).
+	size_t maxLength = 0;
+
 	this(IConnection next)
 	{
 		super(next);
@@ -1904,7 +1907,8 @@ protected:
 			while (p)
 			{
 				sizediff_t index = p - inBuffer.ptr;
-				processLine(index);
+				if (!processLine(index))
+					break;
 
 				p = memchr(inBuffer.ptr, c, inBuffer.length);
 			}
@@ -1913,16 +1917,26 @@ protected:
 		{
 			sizediff_t index;
 			// TODO: we can start the search at oldBufferLength-delimiter.length+1
-			while ((index=indexOf(cast(string)inBuffer.contents, delimiter)) >= 0)
-				processLine(index);
+			while ((index = indexOf(cast(string)inBuffer.contents, delimiter)) >= 0
+				&& processLine(index))
+			{}
 		}
+
+		if (maxLength && inBuffer.length > maxLength)
+			disconnect("Line too long", DisconnectType.error);
 	}
 
-	final void processLine(size_t index)
+	final bool processLine(size_t index)
 	{
+		if (maxLength && index > maxLength)
+		{
+			disconnect("Line too long", DisconnectType.error);
+			return false;
+		}
 		auto line = inBuffer[0..index];
 		inBuffer = inBuffer[index+delimiter.length..inBuffer.length];
 		super.onReadData(line);
+		return true;
 	}
 
 	override void onDisconnect(string reason, DisconnectType type)
