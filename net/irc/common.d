@@ -96,10 +96,11 @@ public:
 	IConnection conn;
 	alias conn this;
 
-	this(IConnection c)
+	this(IConnection c, size_t maxLineLength = 512)
 	{
 		c = line = new LineBufferedAdapter(c);
 		line.delimiter = "\n";
+		line.maxLength = maxLineLength;
 
 		c = timer = new TimeoutAdapter(c);
 		timer.setIdleTimeout(90.seconds);
