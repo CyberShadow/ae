@@ -984,14 +984,16 @@ public:
 		static if (haveValues)
 		{
 			/// Same as `set(k, v)`.
-			ref IV opIndexAssign()(auto ref IV v, auto ref IK k)
+			ref IV opIndexAssign(AK, AV)(auto ref AV v, auto ref AK k)
+			if (is(AK : K) && is(AV : V))
 			{
 				return set(k, v);
 			}
 
 			/// Perform cumulative operation with value
 			/// (initialized with `.init` if the key does not exist).
-			ref IV opIndexOpAssign(string op)(auto ref IV v, auto ref IK k)
+			ref IV opIndexOpAssign(string op, AK, AV)(auto ref AV v, auto ref AK k)
+			if (is(AK : K) && is(AV : V))
 			{
 				auto pv = &require(k);
 				return mixin("(*pv) " ~ op ~ "= v");
@@ -999,7 +1001,8 @@ public:
 
 			/// Perform unary operation with value
 			/// (initialized with `.init` if the key does not exist).
-			ref IV opIndexUnary(string op)(auto ref IK k)
+			ref IV opIndexUnary(string op, AK)(auto ref AK k)
+			if (is(AK : K))
 			{
 				auto pv = &require(k);
 				mixin("(*pv) " ~ op ~ ";");
@@ -1419,6 +1422,9 @@ unittest
 
 	auto aa2 = MASS([tuple("foo", 42)]);
 	aa2 = ["a":1,"b":2];
+
+	const int i;
+	aa["a"] = i;
 }
 
 unittest
