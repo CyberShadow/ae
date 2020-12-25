@@ -511,7 +511,7 @@ public:
 	bool opCast(T)() const
 	if (is(T == bool))
 	{
-		return items !is null;
+		return lookup !is null;
 	}
 
 	/// Convert to D associative array
@@ -1298,6 +1298,7 @@ alias HashSet(T) = HashCollection!(T, void, false, false);
 unittest
 {
 	HashSet!int s;
+	assert(!s);
 	assert(s.length == 0);
 	assert(!(1 in s));
 	assert(1 !in s);
