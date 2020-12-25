@@ -1053,7 +1053,8 @@ public:
 	// *** Mutation (removal) ***
 
 	/// Removes all elements with the given key.
-	bool remove()(auto ref K key)
+	bool remove(AK)(auto ref AK key)
+	if (is(typeof(lookup.remove(key))))
 	{
 		static if (ordered)
 		{
@@ -1302,6 +1303,20 @@ unittest
 	auto set = [1, 2, 3].toSet();
 	assert(2 in set);
 	assert(4 !in set);
+}
+
+unittest
+{
+	HashSet!int m;
+	const int i;
+	m.remove(i);
+}
+
+unittest
+{
+	HashSet!Object m;
+	Object o;
+	m.remove(o);
 }
 
 // ***************************************************************************
