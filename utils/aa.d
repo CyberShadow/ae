@@ -514,6 +514,22 @@ public:
 		return items !is null;
 	}
 
+	/// Convert to D associative array
+	static if (!ordered)
+	{
+		const(LookupValue[K]) toAA() const
+		{
+			return lookup;
+		}
+
+		LookupValue[K] toAA()
+		{
+			return lookup.dup;
+		}
+
+		deprecated alias items = toAA;
+	}
+
 	// *** Query (basic) ***
 
 	/// True when there are no items.
