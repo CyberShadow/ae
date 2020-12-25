@@ -453,11 +453,26 @@ public:
 		return this;
 	}
 
+	/// Convert from an associative type of multiple items
+	ref typeof(this) opAssign(AA)(AA aa)
+	if (haveValues
+		&& multi
+		&& !is(AA : typeof(this))
+		&& is(typeof({ foreach (ref k, ref vs; aa) foreach (ref v; vs) add(k, v); })))
+	{
+		clear();
+		foreach (ref k, ref vs; aa)
+			foreach (ref v; vs)
+				add(k, v);
+		return this;
+	}
+
 	/// Convert from a range of tuples
 	ref typeof(this) opAssign(R)(R input)
 	if (haveValues
 		&& is(typeof({ foreach (ref pair; input) add(pair[0], pair[1]); }))
 		&& !is(typeof({ foreach (ref k, ref v; input) add(k, v); }))
+		&& is(typeof(input.front.length))
 		&& input.front.length == 2)
 	{
 		clear();
@@ -1388,4 +1403,11 @@ unittest
 
 	auto aa2 = MASS([tuple("foo", 42)]);
 	aa2 = ["a":1,"b":2];
+}
+
+unittest
+{
+	MultiAA!(int, int) m;
+	int[][int] a;
+	m = a;
 }
