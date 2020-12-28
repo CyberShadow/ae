@@ -384,33 +384,11 @@ class Rfc850Message
 
 		time = Clock.currTime; // default value
 
-		if ("NNTP-Posting-Date" in headers)
-			time = parseTime!`D, j M Y H:i:s O \(\U\T\C\)`(headers["NNTP-Posting-Date"].strip());
+		if (auto pdate = "NNTP-Posting-Date" in headers)
+			time = parseDate(*pdate, time);
 		else
-		if ("Date" in headers)
-		{
-			auto str = headers["Date"].strip();
-			str = str.replace(re!`([+\-]\d\d\d\d) \(.*\)$`, "$1");
-			try
-				time = parseTime!(TimeFormats.RFC850)(str);
-			catch (Exception e)
-			try
-				time = parseTime!(`D, j M Y H:i:s O`)(str);
-			catch (Exception e)
-			try
-				time = parseTime!(`D, j M Y H:i:s e`)(str);
-			catch (Exception e)
-			try
-				time = parseTime!(`D, j M Y H:i O`)(str);
-			catch (Exception e)
-			try
-				time = parseTime!(`D, j M Y H:i e`)(str);
-			catch (Exception e)
-			{
-				// fall-back to default (class creation time)
-				// TODO: better behavior?
-			}
-		}
+		if (auto pdate = "Date" in headers)
+			time = parseDate(*pdate, time);
 	}
 
 	private this() {} // for attachments and templates
@@ -422,6 +400,32 @@ class Rfc850Message
 		foreach (group; groups.split(","))
 			post.xref ~= Xref(group);
 		return post;
+	}
+
+	private static SysTime parseDate(string str, SysTime defaultTime)
+	{
+		str = str.strip();
+		str = str.replace(re!`([+\-]\d\d\d\d) \(.*\)$`, "$1");
+		try
+			return parseTime!(TimeFormats.RFC850)(str);
+		catch (Exception e)
+		try
+			return parseTime!(`D, j M Y H:i:s O`)(str);
+		catch (Exception e)
+		try
+			return parseTime!(`D, j M Y H:i:s e`)(str);
+		catch (Exception e)
+		try
+			return parseTime!(`D, j M Y H:i O`)(str);
+		catch (Exception e)
+		try
+			return parseTime!(`D, j M Y H:i e`)(str);
+		catch (Exception e)
+		{
+			// fall-back to default (class creation time)
+			// TODO: better behavior?
+			return defaultTime;
+		}
 	}
 
 	@property WrapFormat wrapFormat()
