@@ -90,18 +90,16 @@ private:
 
 	void onNewNews(string[] reply)
 	{
-		bool[string] messages;
-		foreach (message; reply[1..$])
-			messages[message] = true;
+		auto messages = reply[1..$];
 
 		assert(queued == 0);
-		foreach (message, b; messages)
-			if (!(message in oldMessages))
+		foreach (message; messages)
+			if (message !in oldMessages)
 			{
+				oldMessages[message] = true;
 				client.getMessage(message, &onMessage);
 				queued++;
 			}
-		oldMessages = messages;
 		if (queued==0)
 			schedulePoll();
 	}
