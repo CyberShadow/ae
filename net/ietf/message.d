@@ -384,6 +384,9 @@ class Rfc850Message
 
 		time = Clock.currTime; // default value
 
+		if (auto pdate = "X-Original-Date" in headers)
+			time = parseDate(*pdate, time);
+		else
 		if (auto pdate = "NNTP-Posting-Date" in headers)
 			time = parseDate(*pdate, time);
 		else
