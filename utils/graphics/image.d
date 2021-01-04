@@ -69,7 +69,8 @@ unittest
 // ***************************************************************************
 
 /// An in-memory image.
-/// Pixels are stored in a flat array.
+/// Pixels are stored as contiguous scanlines,
+/// with each scanline consisting of one or more `StorageType`.
 struct Image(COLOR, StorageType = PlainStorageUnit!COLOR)
 {
 	xy_t w, h;
@@ -79,8 +80,9 @@ struct Image(COLOR, StorageType = PlainStorageUnit!COLOR)
 	inout(StorageType)[] scanline(xy_t y) inout
 	{
 		assert(y>=0 && y<h, "Scanline out-of-bounds");
-		auto start = w*y;
-		return pixels[start..start+w];
+		auto rowSize = this.rowSize;
+		auto start = rowSize * y;
+		return pixels[start .. start + rowSize];
 	}
 
 	mixin DirectView;
@@ -95,8 +97,16 @@ struct Image(COLOR, StorageType = PlainStorageUnit!COLOR)
 	{
 		this.w = w;
 		this.h = h;
-		if (pixels.length < w*h)
-			pixels.length = w*h;
+		auto size = rowSize * h;
+
+		if (pixels.length < size)
+			pixels.length = size;
+	}
+
+	/// Number of `StorageType` per scanline (row).
+	size_t rowSize() const
+	{
+		return (w + StorageType.length - 1) / StorageType.length;
 	}
 }
 
