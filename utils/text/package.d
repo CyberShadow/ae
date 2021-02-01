@@ -38,7 +38,7 @@ public import ae.utils.array : contains;
 
 // ************************************************************************
 
-/// CTFE helper
+/// UFCS helper
 string formatAs(T)(auto ref T obj, string fmt)
 {
 	return format(fmt, obj);
