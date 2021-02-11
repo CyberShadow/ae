@@ -61,7 +61,7 @@ protected:
 		if (!compat)
 		{
 			if ("Accept-Encoding" !in request.headers)
-				request.headers["Accept-Encoding"] = "gzip, deflate, *;q=0";
+				request.headers["Accept-Encoding"] = "gzip, deflate, identity;q=0.5, *;q=0";
 			if (request.data)
 				request.headers["Content-Length"] = to!string(request.data.bytes.length);
 		}
