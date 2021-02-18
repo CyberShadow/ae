@@ -18,6 +18,7 @@ import std.socket;
 import std.string;
 import ae.net.asockets;
 
+/// Resolve a hostname to an IPv4 dotted quad.
 string getIP(string hostname)
 {
 	try
@@ -26,6 +27,9 @@ string getIP(string hostname)
 		return null;
 }
 
+/// Look up an IP address against a specific DNS blacklist.
+/// Returns: the numeric code (generally indicating a
+/// blacklist-specific list reason).
 int lookupAgainst(string ip, string db)
 {
 	string[] sections = split(ip, ".");
@@ -38,6 +42,9 @@ int lookupAgainst(string ip, string db)
 		return 0;
 }
 
+/// Look up an IP address against DroneBL.
+/// Returns: a string describing the reason this IP is listed,
+/// or `null` if the IP is not listed.
 string lookupDroneBL(string ip)
 {
 	switch (lookupAgainst(ip, "dnsbl.dronebl.org"))
@@ -58,6 +65,9 @@ string lookupDroneBL(string ip)
 	}
 }
 
+/// Look up an IP address against DroneBL.
+/// Returns: a string describing the reason this IP is listed,
+/// or `null` if the IP is not listed.
 string lookupEfnetRBL(string ip)
 {
 	switch (lookupAgainst(ip, "rbl.efnetrbl.org"))
@@ -72,6 +82,11 @@ string lookupEfnetRBL(string ip)
 	}
 }
 
+/// Look up an IP address in all implemented DNS blacklists.
+/// Returns: null, or an array with three elements:
+/// 0. a string describing the reason this IP is listed
+/// 1. the name of the DNS blacklist service
+/// 2. an URL with more information about the listing.
 string[] blacklistCheck(string hostname)
 {
 	string ip = getIP(hostname);
