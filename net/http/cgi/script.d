@@ -72,6 +72,7 @@ private struct FileWriter
 	void put(T...)(auto ref T args) { f.write(args); }
 }
 
+/// Write the response headers from a HTTP response in CGI format.
 void writeCGIHeaders(Writer)(HttpResponse r, ref Writer writer)
 {
 	auto headers = r.headers;
@@ -89,6 +90,7 @@ void writeCGIHeaders(Writer)(HttpResponse r, ref Writer writer)
 	writer.put("\n");
 }
 
+/// Write the response headers from a HTTP response in CGI NPH format.
 void writeNPHHeaders(Writer)(HttpResponse r, ref Writer writer)
 {
 	char[5] statusBuf;
@@ -98,6 +100,7 @@ void writeNPHHeaders(Writer)(HttpResponse r, ref Writer writer)
 	writer.put("\n");
 }
 
+/// Write a HTTP response in CGI format.
 void writeCGIResponse(HttpResponse r)
 {
 	auto writer = FileWriter(stdout);
@@ -107,6 +110,7 @@ void writeCGIResponse(HttpResponse r)
 		stdout.rawWrite(datum.contents);
 }
 
+/// Write a HTTP response in CGI NPH format.
 void writeNPHResponse(HttpResponse r)
 {
 	auto writer = FileWriter(stdout);
