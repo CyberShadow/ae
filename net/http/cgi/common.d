@@ -23,32 +23,33 @@ import ae.net.ietf.headers : Headers;
 import ae.sys.data : Data;
 import ae.utils.meta : getAttribute;
 
-/// CGI meta-variables
+/// Holds parsed CGI meta-variables.
 struct CGIVars
 {
-	@("AUTH_TYPE"        ) string authType;
-	@("CONTENT_LENGTH"   ) string contentLength;
-	@("CONTENT_TYPE"     ) string contentType;
-	@("GATEWAY_INTERFACE") string gatewayInterface;
-	@("PATH_INFO"        ) string pathInfo;
-	@("PATH_TRANSLATED"  ) string pathTranslated;
-	@("QUERY_STRING"     ) string queryString;
-	@("REMOTE_ADDR"      ) string remoteAddr;
-	@("REMOTE_HOST"      ) string remoteHost;
-	@("REMOTE_IDENT"     ) string remoteIdent;
-	@("REMOTE_USER"      ) string remoteUser;
-	@("REQUEST_METHOD"   ) string requestMethod;
-	@("SCRIPT_NAME"      ) string scriptName;
-	@("SERVER_NAME"      ) string serverName;
-	@("SERVER_PORT"      ) string serverPort;
-	@("SERVER_PROTOCOL"  ) string serverProtocol;
-	@("SERVER_SOFTWARE"  ) string serverSoftware;
+	@("AUTH_TYPE"        ) string authType;         /// The CGI "AUTH_TYPE" meta-variable.
+	@("CONTENT_LENGTH"   ) string contentLength;    /// The CGI "CONTENT_LENGTH" meta-variable.
+	@("CONTENT_TYPE"     ) string contentType;      /// The CGI "CONTENT_TYPE" meta-variable.
+	@("GATEWAY_INTERFACE") string gatewayInterface; /// The CGI "GATEWAY_INTERFACE" meta-variable.
+	@("PATH_INFO"        ) string pathInfo;         /// The CGI "PATH_INFO" meta-variable.
+	@("PATH_TRANSLATED"  ) string pathTranslated;   /// The CGI "PATH_TRANSLATED" meta-variable.
+	@("QUERY_STRING"     ) string queryString;      /// The CGI "QUERY_STRING" meta-variable.
+	@("REMOTE_ADDR"      ) string remoteAddr;       /// The CGI "REMOTE_ADDR" meta-variable.
+	@("REMOTE_HOST"      ) string remoteHost;       /// The CGI "REMOTE_HOST" meta-variable.
+	@("REMOTE_IDENT"     ) string remoteIdent;      /// The CGI "REMOTE_IDENT" meta-variable.
+	@("REMOTE_USER"      ) string remoteUser;       /// The CGI "REMOTE_USER" meta-variable.
+	@("REQUEST_METHOD"   ) string requestMethod;    /// The CGI "REQUEST_METHOD" meta-variable.
+	@("SCRIPT_NAME"      ) string scriptName;       /// The CGI "SCRIPT_NAME" meta-variable.
+	@("SERVER_NAME"      ) string serverName;       /// The CGI "SERVER_NAME" meta-variable.
+	@("SERVER_PORT"      ) string serverPort;       /// The CGI "SERVER_PORT" meta-variable.
+	@("SERVER_PROTOCOL"  ) string serverProtocol;   /// The CGI "SERVER_PROTOCOL" meta-variable.
+	@("SERVER_SOFTWARE"  ) string serverSoftware;   /// The CGI "SERVER_SOFTWARE" meta-variable.
 
 	// SCGI vars:
-	@("REQUEST_URI"      ) string requestUri;
-	@("DOCUMENT_URI"     ) string documentUri;
-	@("DOCUMENT_ROOT"    ) string documentRoot;
+	@("REQUEST_URI"      ) string requestUri;       /// The SCGI "REQUEST_URI" meta-variable.
+	@("DOCUMENT_URI"     ) string documentUri;      /// The SCGI "DOCUMENT_URI" meta-variable.
+	@("DOCUMENT_ROOT"    ) string documentRoot;     /// The SCGI "DOCUMENT_ROOT" meta-variable.
 
+	/// Parse from an environment block (represented as an associate array).
 	static typeof(this) fromAA(string[string] env)
 	{
 		typeof(this) result;
@@ -58,12 +59,14 @@ struct CGIVars
 	}
 }
 
+/// Holds a CGI request.
 struct CGIRequest
 {
-	CGIVars vars;
-	Headers headers;
-	Data[] data;
+	CGIVars vars;    /// CGI meta-variables.
+	Headers headers; /// Request headers.
+	Data[] data;     /// Request data.
 
+	/// Parse from an environment block (represented as an associate array).
 	static typeof(this) fromAA(string[string] env)
 	{
 		typeof(this) result;
@@ -80,6 +83,12 @@ struct CGIRequest
 		return result;
 	}
 
+	/// Extract request headers from an environment block (represented
+	/// as an associate array).
+	/// Params:
+	///  env            = The environment block.
+	///  serverProtocol = The protocol (as specified in
+	///                   SERVER_PROTOCOL).
 	static Headers decodeHeaders(string[string] env, string serverProtocol)
 	{
 		Headers headers;
@@ -91,10 +100,12 @@ struct CGIRequest
 	}
 }
 
+/// Subclass of `HttpRequest` for HTTP requests received via CGI.
 class CGIHttpRequest : HttpRequest
 {
-	CGIVars cgiVars;
+	CGIVars cgiVars; /// CGI meta-variables.
 
+	/// Construct the HTTP request from a CGI request.
 	this(ref CGIRequest cgi)
 	{
 		cgiVars = cgi.vars;
