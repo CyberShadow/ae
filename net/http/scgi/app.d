@@ -25,12 +25,16 @@ import ae.net.http.common;
 import ae.sys.log;
 import ae.utils.array;
 
+/// Implements the SCGI protocol over an abstract connection.
 final class SCGIConnection
 {
-	IConnection connection;
-	Logger log;
-	bool nph;
+	IConnection connection;  /// Connection used to construct this object.
+	Logger log;              /// Optional logger.
+	bool nph;                /// Whether to operate in Non-Parsed Headers mode.
 
+	/// Constructor.
+	/// Params:
+	///  connection = Abstract connection used for communication.
 	this(IConnection connection)
 	{
 		this.connection = connection;
@@ -39,7 +43,7 @@ final class SCGIConnection
 
 	private Data buffer;
 
-	void onReadData(Data data)
+	protected void onReadData(Data data)
 	{
 		buffer ~= data;
 
@@ -84,6 +88,7 @@ final class SCGIConnection
 			}
 	}
 
+	/// Parse SCGI-formatted headers.
 	static string[string] parseHeaders(string s)
 	{
 		string[string] headers;
@@ -96,6 +101,7 @@ final class SCGIConnection
 		return headers;
 	}
 
+	/// Write a response.
 	void sendResponse(HttpResponse r)
 	{
 		FastAppender!char headers;
@@ -107,5 +113,6 @@ final class SCGIConnection
 		connection.disconnect("Response sent");
 	}
 
+	/// User-supplied callback for handling incoming requests.
 	void delegate(ref CGIRequest) handleRequest;
 }
