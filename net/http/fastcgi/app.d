@@ -66,17 +66,20 @@ bool inFastCGI()
 /// Base implementation of the low-level FastCGI protocol.
 class FastCGIConnection
 {
-	Data buffer;
-	IConnection connection;
-	Logger log;
+	private Data buffer;
+	IConnection connection; /// Connection used to construct this object.
+	Logger log;             /// Optional logger.
 
+	/// Constructor.
+	/// Params:
+	///  connection = Abstract connection used for communication.
 	this(IConnection connection)
 	{
 		this.connection = connection;
 		connection.handleReadData = &onReadData;
 	}
 
-	void onReadData(Data data)
+	protected void onReadData(Data data)
 	{
 		buffer ~= data;
 
@@ -105,19 +108,26 @@ class FastCGIConnection
 		}
 	}
 
-	abstract void onRecord(ref FCGI_RecordHeader header, Data contentData);
+	protected abstract void onRecord(ref FCGI_RecordHeader header, Data contentData);
 }
 
-class FastCGIAppSocketServer /// ditto
+/// ditto
+class FastCGIAppSocketServer
 {
+	/// Addresses to listen on.
+	/// Populated from `FCGI_WEB_SERVER_ADDRS` by default.
 	string[] serverAddrs;
-	Logger log;
+	Logger log; /// Optional logger.
 
+	///
 	this()
 	{
 		serverAddrs = environment.get("FCGI_WEB_SERVER_ADDRS", null).split(",");
 	}
 
+	/// Begin listening.
+	/// Params:
+	///  socket = Listen on this socket instead of the default.
 	final void listen(Socket socket = getListenSocket())
 	{
 		socket.blocking = false;
@@ -125,7 +135,7 @@ class FastCGIAppSocketServer /// ditto
 		listener.handleAccept(&onAccept);
 	}
 
-	final void onAccept(TcpConnection connection)
+	protected final void onAccept(TcpConnection connection)
 	{
 		if (log) log("Accepted connection from " ~ connection.remoteAddressStr);
 		if (serverAddrs && !serverAddrs.canFind(connection.remoteAddressStr))
@@ -137,7 +147,7 @@ class FastCGIAppSocketServer /// ditto
 		createConnection(connection);
 	}
 
-	abstract void createConnection(IConnection connection);
+	protected abstract void createConnection(IConnection connection);
 }
 
 /// Higher-level FastCGI app server implementation,
@@ -146,33 +156,41 @@ class FastCGIProtoConnection : FastCGIConnection
 {
 	// Some conservative limits that are unlikely to run afoul of any
 	// default limits such as file descriptor ulimit.
-	size_t maxConns = 512;
-	size_t maxReqs = 4096;
-	bool mpxsConns = true;
+	size_t maxConns = 512; /// Maximum number of concurrent connections to advertise.
+	size_t maxReqs = 4096; /// Maximum number of concurrent requests to advertise.
+	bool mpxsConns = true; /// Whether to advertise support for multiplexing.
 
+	///
 	this(IConnection connection) { super(connection); }
 
+	/// Base class for an abstract ongoing FastCGI request.
 	class Request
 	{
-		ushort id;
-		FCGI_Role role;
-		bool keepConn;
-		Data paramBuf;
+		ushort id;      /// FastCGI request ID.
+		FCGI_Role role; /// FastCGI role. (Responder, authorizer...)
+		bool keepConn;  /// Keep connection alive after handling request.
+		Data paramBuf;  /// Buffer used to hold the parameters.
 
-		void begin() {}
-		void abort() {}
+		void begin() {} /// Handle the beginning of processing this request.
+		void abort() {} /// Handle a request to abort processing this request.
+		/// Handle an incoming request parameter.
 		void param(const(char)[] name, const(char)[] value) {}
-		void paramEnd() {}
-		void stdin(Data datum) {}
-		void stdinEnd() {}
-		void data(Data datum) {}
-		void dataEnd() {}
+		void paramEnd() {} /// Handle the end of request parameters.
+		void stdin(Data datum) {} /// Handle a chunk of input (i.e. request body) data.
+		void stdinEnd() {} /// Handle the end of input data.
+		void data(Data datum) {} /// Handle a chunk of additional data.
+		void dataEnd() {} /// Handle the end of additional data.
 
 	final:
+		/// Send output (response) data.
 		void stdout(Data datum) { assert(datum.length); sendRecord(FCGI_RecordType.stdout, id, datum); }
+		/// Finish sending output data.
 		void stdoutEnd() { sendRecord(FCGI_RecordType.stdout, id, Data.init); }
+		/// Send error data.
 		void stderr(Data datum) { assert(datum.length); sendRecord(FCGI_RecordType.stderr, id, datum); }
+		/// Finish sending error data.
 		void stderrEnd() { sendRecord(FCGI_RecordType.stderr, id, Data.init); }
+		/// Finish processing this request, with the indicated status codes.
 		void end(uint appStatus, FCGI_ProtocolStatus status)
 		{
 			FCGI_EndRequestBody data;
@@ -185,16 +203,21 @@ class FastCGIProtoConnection : FastCGIConnection
 		}
 	}
 
+	/// In-flight requests.
 	Request[] requests;
 
+	/// Override this method to provide a factory for your Request
+	/// implementation.
 	abstract Request createRequest();
 
+	/// Return the request with the given ID.
 	Request getRequest(ushort requestId)
 	{
 		enforce(requestId > 0, "Unexpected null request ID");
 		return requests.getExpand(requestId - 1);
 	}
 
+	/// Create and return a request with the given ID.
 	Request newRequest(ushort requestId)
 	{
 		enforce(requestId > 0, "Unexpected null request ID");
@@ -204,18 +227,21 @@ class FastCGIProtoConnection : FastCGIConnection
 		return request;
 	}
 
+	/// Clear the given request ID.
 	void killRequest(ushort requestId)
 	{
 		enforce(requestId > 0, "Unexpected null request ID");
 		requests.putExpand(requestId - 1, null);
 	}
 
+	/// Write a raw FastCGI packet.
 	final void sendRecord(ref FCGI_RecordHeader header, Data contentData)
 	{
 		connection.send(Data(header.bytes));
 		connection.send(contentData);
 	}
 
+	/// ditto
 	final void sendRecord(FCGI_RecordType type, ushort requestId, Data contentData)
 	{
 		FCGI_RecordHeader header;
@@ -328,7 +354,7 @@ class FastCGIProtoConnection : FastCGIConnection
 		}
 	}
 
-	const(char)[] getValue(const(char)[] name)
+	private const(char)[] getValue(const(char)[] name)
 	{
 		switch (name)
 		{
@@ -344,7 +370,7 @@ class FastCGIProtoConnection : FastCGIConnection
 	}
 }
 
-T* asStruct(T)(Data data)
+private T* asStruct(T)(Data data)
 {
 	enforce(data.length == T.sizeof,
 		format!"Expected data for %s (%d bytes), but got %d bytes"(
@@ -353,6 +379,7 @@ T* asStruct(T)(Data data)
 	return cast(T*)data.contents.ptr;
 }
 
+/// Parse a FastCGI-encoded name-value pair.
 bool readNameValue(ref Data data, ref char[] name, ref char[] value)
 {
 	uint nameLen, valueLen;
@@ -369,6 +396,7 @@ bool readNameValue(ref Data data, ref char[] name, ref char[] value)
 	return true;
 }
 
+/// Parse a FastCGI-encoded variable-length integer.
 bool readVLInt(ref Data data, ref uint value)
 {
 	auto bytes = cast(ubyte[])data.contents;
@@ -387,6 +415,7 @@ bool readVLInt(ref Data data, ref uint value)
 	return true;
 }
 
+/// Write a FastCGI-encoded name-value pair.
 void putNameValue(W)(ref W writer, in char[] name, in char[] value)
 {
 	writer.putVLInt(name.length);
@@ -395,6 +424,7 @@ void putNameValue(W)(ref W writer, in char[] name, in char[] value)
 	writer.put(cast(ubyte[])value);
 }
 
+/// Write a FastCGI-encoded variable-length integer.
 void putVLInt(W)(ref W writer, size_t value)
 {
 	enforce(value <= 0x7FFFFFFF, "FastCGI integer value overflow");
@@ -412,9 +442,10 @@ void putVLInt(W)(ref W writer, size_t value)
 /// FastCGI server for handling Responder requests.
 class FastCGIResponderConnection : FastCGIProtoConnection
 {
+	///
 	this(IConnection connection) { super(connection); }
 
-	final class ResponderRequest : Request
+	protected final class ResponderRequest : Request
 	{
 		string[string] params;
 		Data[] inputData;
@@ -471,14 +502,20 @@ class FastCGIResponderConnection : FastCGIProtoConnection
 
 	override Request createRequest() { return new ResponderRequest; }
 
+	/// User-supplied callback for handling incoming requests.
 	void delegate(ref CGIRequest, void delegate(HttpResponse)) handleRequest;
+
+	/// Whether to operate in Non-Parsed Headers mode.
 	bool nph;
 }
 
-class FastCGIResponderServer : FastCGIAppSocketServer /// ditto
+/// ditto
+class FastCGIResponderServer : FastCGIAppSocketServer
 {
+	/// Whether to operate in Non-Parsed Headers mode.
 	bool nph;
 
+	/// User-supplied callback for handling incoming requests.
 	void delegate(ref CGIRequest, void delegate(HttpResponse)) handleRequest;
 
 	override void createConnection(IConnection connection)
