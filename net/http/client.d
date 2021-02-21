@@ -213,7 +213,6 @@ protected:
 public:
 	string agent = "ae.net.http.client (+https://github.com/CyberShadow/ae)";
 	bool keepAlive = false;
-	string[] cookies;
 
 public:
 	this(Duration timeout = 30.seconds, Connector connector = new TcpConnector)
