@@ -58,18 +58,10 @@ protected:
 	{
 		if ("User-Agent" !in request.headers && agent)
 			request.headers["User-Agent"] = agent;
-		if (!compat)
-		{
-			if ("Accept-Encoding" !in request.headers)
-				request.headers["Accept-Encoding"] = "gzip, deflate, identity;q=0.5, *;q=0";
-			if (request.data)
-				request.headers["Content-Length"] = to!string(request.data.bytes.length);
-		}
-		else
-		{
-			if ("Pragma" !in request.headers)
-				request.headers["Pragma"] = "No-Cache";
-		}
+		if ("Accept-Encoding" !in request.headers)
+			request.headers["Accept-Encoding"] = "gzip, deflate, identity;q=0.5, *;q=0";
+		if (request.data)
+			request.headers["Content-Length"] = to!string(request.data.bytes.length);
 		if ("Connection" !in request.headers)
 			request.headers["Connection"] = keepAlive ? "keep-alive" : "close";
 
@@ -81,7 +73,7 @@ protected:
 		string reqMessage = request.method ~ " ";
 		if (request.proxy !is null) {
 			reqMessage ~= "http://" ~ request.host;
-			if (compat || request.port != 80)
+			if (request.port != 80)
 				reqMessage ~= format(":%d", request.port);
 		}
 		reqMessage ~= request.resource ~ " HTTP/1.0\r\n";
@@ -220,7 +212,6 @@ protected:
 
 public:
 	string agent = "ae.net.http.client (+https://github.com/CyberShadow/ae)";
-	bool compat = false;
 	bool keepAlive = false;
 	string[] cookies;
 
