@@ -47,7 +47,10 @@ The library is split into the following packages:
 
 Notable sub-packages:
 
+ * `ae.sys.d` – Builds arbitrary versions of D. Shared by Digger, DAutoTest, and TrenD.
+ * `ae.sys.net` – High-level synchronous API for accessing network resources (URLs). Includes implementations based on cURL, WinINet, and `ae.net`.
  * `ae.utils.graphics` – Contains a templated graphical context optimized for speed, and basic support for a few image formats.
+ * `ae.utils.time` – Supplements `core.time` and `std.datetime` with extras such as PHP-like parsing / formatting and floating-point duration operations.
 
 Data
 ----
