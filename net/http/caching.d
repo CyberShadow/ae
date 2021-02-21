@@ -181,7 +181,7 @@ public:
 class StaticResource : AbstractCachedResource
 {
 private:
-	import std.file;
+	import std.file : exists, isFile, timeLastModified;
 
 	string filename;
 	SysTime fileTime, lastChecked;
@@ -198,7 +198,7 @@ protected:
 		// maybe use mmap?
 		// mmap implies either file locking, or risk of bad data (file content changes, mapped length not)
 
-		import ae.sys.dataio;
+		import ae.sys.dataio : readData;
 		return [readData(filename)];
 	}
 
@@ -224,6 +224,7 @@ protected:
 	}
 
 public:
+	///
 	this(string filename)
 	{
 		this.filename = filename;
@@ -245,12 +246,14 @@ protected:
 	}
 
 public:
+	///
 	this(Data[] data, string contentType)
 	{
 		this.data = data;
 		this.contentType = contentType;
 	}
 
+	/// Update the contents.
 	void setData(Data[] data)
 	{
 		this.data = data;
