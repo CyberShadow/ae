@@ -34,6 +34,8 @@ debug(HTTP) import std.stdio : stderr;
 
 public import ae.net.http.common;
 
+/// Implements a HTTP client.
+/// Generally used to send one HTTP request.
 class HttpClient
 {
 private:
@@ -211,10 +213,12 @@ protected:
 	}
 
 public:
+	/// User-Agent header to advertise.
 	string agent = "ae.net.http.client (+https://github.com/CyberShadow/ae)";
+	/// Keep connection alive after one request.
 	bool keepAlive = false;
 
-public:
+	/// Constructor.
 	this(Duration timeout = 30.seconds, Connector connector = new TcpConnector)
 	{
 		assert(timeout >= Duration.zero);
@@ -236,6 +240,7 @@ public:
 		conn.handleDisconnect = &onDisconnect;
 	}
 
+	/// Send a HTTP request.
 	void request(HttpRequest request)
 	{
 		//debug writefln("New HTTP request: %s", request.url);
@@ -259,6 +264,8 @@ public:
 		}
 	}
 
+	/// Returns true if a connection is active
+	/// (whether due to an in-flight request or due to keep-alive).
 	bool connected()
 	{
 		if (currentRequest !is null)
@@ -268,21 +275,24 @@ public:
 		return false;
 	}
 
+	/// Close the connection to the HTTP server.
 	void disconnect(string reason = IConnection.defaultDisconnectReason)
 	{
 		conn.disconnect(reason);
 	}
 
-public:
-	// Provide the following callbacks
+	/// User-supplied callback for handling the response.
 	void delegate(HttpResponse response, string disconnectReason) handleResponse;
 }
 
+/// HTTPS client.
 class HttpsClient : HttpClient
 {
+	/// SSL context and adapter to use for TLS.
 	SSLContext ctx;
-	SSLAdapter adapter;
+	SSLAdapter adapter; /// ditto
 
+	/// Constructor.
 	this(Duration timeout = 30.seconds)
 	{
 		ctx = ssl.createContext(SSLContext.Kind.client);
@@ -464,8 +474,9 @@ version (unittest)
 
 unittest
 {
-	import ae.net.http.server;
-	import ae.net.http.responseex;
+	import ae.net.http.common : HttpRequest, HttpResponse;
+	import ae.net.http.server : HttpServer, HttpServerConnection;
+	import ae.net.http.responseex : HttpResponseEx;
 
 	void test(bool keepAlive)
 	{
