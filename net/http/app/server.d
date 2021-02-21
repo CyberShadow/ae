@@ -40,63 +40,94 @@ import ae.net.ssl;
 import ae.sys.log;
 import ae.utils.array;
 
+/// Describes one configuration for how a listener can receive
+/// HTTP requests and send responses.
 struct ServerConfig
 {
+	/// Low-level transport to listen on.
 	enum Transport
 	{
-		inet,
-		unix,
-		stdin,
-		accept,
+		inet,   /// Internet Protocol (TCP)
+		unix,   /// UNIX socket
+		stdin,  /// Standard input (like CGI)
+		accept, /// A socket that can be accepted on standard input (like FastCGI)
 	}
-	Transport transport;
+	Transport transport; /// ditto
 
+	/// Listen parameters
 	struct Listen
 	{
+		/// Local address to bind to
 		string addr;
+		/// Port number to listen on
 		ushort port;
+		/// Path to UNIX socket to listen on
 		string socketPath;
 	}
-	Listen listen;
+	Listen listen; /// ditto
 
+	/// Protocol in which requests arrive and responses should be sent in
 	enum Protocol
 	{
-		http,
-		cgi,
-		scgi,
-		fastcgi,
+		http,     /// Standard HTTP
+		cgi,      /// CGI
+		scgi,     /// SCGI
+		fastcgi,  /// FastCGI
 	}
-	Protocol protocol;
+	Protocol protocol; /// ditto
 
+	/// Whether "No Parsed Headers" mode is enabled or not (null = autodetect).
 	Nullable!bool nph;
 
+	/// SSL parameters. If set, enables TLS.
 	struct SSL
 	{
-		string cert, key;
+		/// Path to a PEM-encoded file containing the public part of the certificate.
+		string cert;
+		/// Path to a PEM-encoded file containing the certificate's private key.
+		string key;
 	}
-	SSL ssl;
+	SSL ssl; /// ditto
 
-	string logDir;
-	string prefix = "/";
-	string username;
-	string password;
+	string logDir; /// Directory where logs are to be saved. If null, just write to stderr.
+	string prefix = "/"; /// URL prefix that requests are expected to start with.
+	string username; /// Require this username via HTTP basic authentication, if set.
+	string password; /// Require this password via HTTP basic authentication, if set.
 }
 
+/// An object which receives HTTP requests through one or more
+/// channels and sends replies according to a user-supplied handler.
+/// Params:
+///  useSSL = Whether to compile SSL support (using ae.net.ssl).
 struct Server(bool useSSL)
 {
 	static if (useSSL)
 	{
-		import ae.net.ssl.openssl;
-		mixin SSLUseLib;
+		static import ae.net.ssl.openssl;
+		mixin ae.net.ssl.openssl.SSLUseLib;
 	}
 
+	/// Configuration (as specified when constructing).
 	immutable ServerConfig[string] config;
 
+	/// Constructor.
+	/// Params:
+	///  config = An associative array from listener names to their
+	///           listen configuration.
 	this(immutable ServerConfig[string] config)
 	{
 		this.config = config;
 	}
 
+	/// The use-specified request handler.
+	/// Params:
+	///  request        = The HTTP request object to respond to.
+	///  serverConfig   = The configuration of the listener that
+	///                   received this request.
+	///  handleResponse = Call this to send a response.
+	///  log            = The Logger object associated with this
+	///                   server.  Can be used to log more
+	///                   information.
 	void delegate(
 		HttpRequest request,
 		immutable ref ServerConfig serverConfig,
@@ -104,8 +135,11 @@ struct Server(bool useSSL)
 		ref Logger log,
 	) handleRequest;
 
+	/// Send this as the X-Powered-By header.
 	string banner;
 
+	/// Start only the server with the specified name.
+	/// Does not start an event loop, and returns immediately.
 	void startServer(string serverName)
 	{
 		auto pserverConfig = serverName in config;
@@ -113,6 +147,9 @@ struct Server(bool useSSL)
 		startServer(serverName, *pserverConfig, true);
 	}
 
+	/// Start all configured servers, and runs an event loop.
+	/// Shutdown handlers will be registered, so calling
+	/// `ae.net.shutdown.shutdown` will stop all servers.
 	void startServers()
 	{
 		enforce(config.length, "No servers are configured.");
@@ -124,6 +161,10 @@ struct Server(bool useSSL)
 		socketManager.loop();
 	}
 
+	/// If the current process is being run in a certain environment
+	/// that implies a particular way of handling requests, run an
+	/// appropriate server until termination and return true.
+	/// Otherwise, return false.
 	bool runImplicitServer()
 	{
 		if (inCGI())
