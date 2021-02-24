@@ -557,8 +557,10 @@ unittest
 	assert(CIAsciiString("я") != CIAsciiString("Я"));
 }
 
+import std.uni : toLower;
+
 /// Case-insensitive Unicode string.
-alias CIUniString = NormalizedArray!(immutable(char), s => s.map!(std.uni.toLower));
+alias CIUniString = NormalizedArray!(immutable(char), s => s.map!(toLower));
 
 ///
 unittest
