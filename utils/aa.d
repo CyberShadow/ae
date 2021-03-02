@@ -154,9 +154,29 @@ bool addNew(K, V)(ref V[K] aa, auto ref K key, auto ref V value)
 	return added;
 }
 
+/// ditto
+bool addNew(K, V, bool ordered, bool multi)(ref HashCollection!(K, V, ordered, multi) aa, auto ref K key, auto ref V value)
+if (!is(V == void)) // Not a set
+{
+	bool added = void;
+	aa.update(key,
+		delegate V   (       ) { added = true ; return value; },
+		delegate void(ref V v) { added = false;               },
+	);
+	return added;
+}
+
 unittest
 {
 	int[int] aa;
+	assert( aa.addNew(1, 2));
+	assert(!aa.addNew(1, 3));
+	assert(aa[1] == 2);
+}
+
+unittest
+{
+	OrderedMap!(int, int) aa;
 	assert( aa.addNew(1, 2));
 	assert(!aa.addNew(1, 3));
 	assert(aa[1] == 2);
