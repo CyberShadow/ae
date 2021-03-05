@@ -407,6 +407,12 @@ struct Repository
 			initialized = true;
 		}
 
+		private void op(string op)
+		{
+			pipes.stdin.write(op, '\0');
+			pipes.stdin.flush();
+		}
+
 		private void op(string op, bool noDeref, string refName, Hash*[] hashes...)
 		{
 			if (noDeref)
@@ -428,6 +434,10 @@ struct Repository
 		void deleteRef(string refName,                Hash oldValue, bool noDeref = false) { op("delete", noDeref, refName,            &oldValue); }
 		void verify   (string refName                              , bool noDeref = false) { op("verify", noDeref, refName,            null     ); }
 		void verify   (string refName,                Hash oldValue, bool noDeref = false) { op("verify", noDeref, refName,            &oldValue); }
+		void start    () { op("start"); }
+		void prepare  () { op("prepare"); }
+		void commit   () { op("commit"); }
+		void abort    () { op("abort"); }
 
 		~this()
 		{
