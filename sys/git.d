@@ -455,6 +455,11 @@ struct GitObject
 	string type;
 	immutable(ubyte)[] data;
 
+	static GitObject createBlob(immutable(ubyte)[] data)
+	{
+		return GitObject(Hash.init, "blob", data);
+	}
+
 	struct ParsedCommit
 	{
 		Hash tree;
