@@ -265,6 +265,8 @@ public:
 
 	final void sendResponse(HttpResponse response)
 	{
+		assert(response.status != 0);
+
 		requestProcessing = false;
 		if (!response)
 		{
