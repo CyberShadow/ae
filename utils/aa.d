@@ -763,8 +763,8 @@ public:
 	// mutable OR ref, but not both. This is an important reason for
 	// the complexity below.
 
-	private enum isParameterRef(alias fun, size_t index) = (){
-		foreach (keyStorageClass; __traits(getParameterStorageClasses, fun, index))
+	private enum isParameterRef(size_t index, fun...) = (){
+		foreach (keyStorageClass; __traits(getParameterStorageClasses, fun[0], index))
 			if (keyStorageClass == "ref")
 				return true;
 		return false;
@@ -800,7 +800,7 @@ public:
 			{
 				// Dg accepts a key (and maybe a value), so use the Dg signature for iteration.
 				alias LK = Parameters!Dg[0];
-				enum useRef = isParameterRef!(Dg, 0);
+				enum useRef = isParameterRef!(0, Dg);
 			}
 			// LookupValue or const(LookupValue), depending on the constness of This
 			alias LV = typeof(lookup.values[0]);
@@ -848,7 +848,7 @@ public:
 		return result;
 	}
 
-	private alias KeyIterationType(bool isConst, bool byRef) = typeof(ref (){
+	private alias KeyIterationType(bool isConst, bool byRef) = typeof(*(){
 
 		static if (isConst)
 			const bool[K] aa;
@@ -857,10 +857,10 @@ public:
 
 		static if (byRef)
 			foreach (ref k, v; aa)
-				return k;
+				return &k;
 		else
 			foreach (k, v; aa)
-				return k;
+				return &k;
 
 		assert(false);
 	}());
