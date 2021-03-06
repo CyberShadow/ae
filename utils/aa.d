@@ -540,6 +540,7 @@ public:
 			return lookup;
 		}
 
+		static if (is(typeof(lookup.dup)))
 		LookupValue[K] toAA()
 		{
 			return lookup.dup;
@@ -867,7 +868,18 @@ public:
 	private enum needRefOverload(bool isConst) =
 		// Unfortunately this doesn't work: https://issues.dlang.org/show_bug.cgi?id=21683
 		// !is(KeyIterationType!(isConst, false) == KeyIterationType!(isConst, true));
-		false;
+		!isCopyable!K;
+
+	private template needIter(bool isConst, bool byRef)
+	{
+		static if (!isCopyable!K)
+			enum needIter = byRef;
+		else
+		static if (!byRef)
+			enum needIter = true;
+		else
+			enum needIter = needRefOverload!isConst;
+	}
 
 	static if (haveValues)
 	{
@@ -878,23 +890,19 @@ public:
 	else
 	{
 		/// Iterate over keys (sets).
-		int opApply(scope int delegate(    KeyIterationType!(false, false)) dg)       { return opApplyImpl(dg); }
-		int opApply(scope int delegate(    KeyIterationType!(true , false)) dg) const { return opApplyImpl(dg); } /// ditto
-		static if (needRefOverload!false)
-		int opApply(scope int delegate(ref KeyIterationType!(false, true )) dg)       { return opApplyImpl(dg); } /// ditto
-		static if (needRefOverload!true)
-		int opApply(scope int delegate(ref KeyIterationType!(true , true )) dg) const { return opApplyImpl(dg); } /// ditto
+		static if (needIter!(false, false)) int opApply(scope int delegate(    KeyIterationType!(false, false)) dg)       { return opApplyImpl(dg); }
+		static if (needIter!(true , false)) int opApply(scope int delegate(    KeyIterationType!(true , false)) dg) const { return opApplyImpl(dg); } /// ditto
+		static if (needIter!(false, true )) int opApply(scope int delegate(ref KeyIterationType!(false, true )) dg)       { return opApplyImpl(dg); } /// ditto
+		static if (needIter!(true , true )) int opApply(scope int delegate(ref KeyIterationType!(true , true )) dg) const { return opApplyImpl(dg); } /// ditto
 	}
 
 	static if (haveValues)
 	{
 		/// Iterate over keys and values.
-		int opApply(scope int delegate(    KeyIterationType!(false, false),       ref V) dg)       { return opApplyImpl(dg); }
-		int opApply(scope int delegate(    KeyIterationType!(true , false), const ref V) dg) const { return opApplyImpl(dg); } /// ditto
-		static if (needRefOverload!false)
-		int opApply(scope int delegate(ref KeyIterationType!(false, true ),       ref V) dg)       { return opApplyImpl(dg); } /// ditto
-		static if (needRefOverload!true)
-		int opApply(scope int delegate(ref KeyIterationType!(true , true ), const ref V) dg) const { return opApplyImpl(dg); } /// ditto
+		static if (needIter!(false, false)) int opApply(scope int delegate(    KeyIterationType!(false, false),       ref V) dg)       { return opApplyImpl(dg); }
+		static if (needIter!(true , false)) int opApply(scope int delegate(    KeyIterationType!(true , false), const ref V) dg) const { return opApplyImpl(dg); } /// ditto
+		static if (needIter!(false, true )) int opApply(scope int delegate(ref KeyIterationType!(false, true ),       ref V) dg)       { return opApplyImpl(dg); } /// ditto
+		static if (needIter!(true , true )) int opApply(scope int delegate(ref KeyIterationType!(true , true ), const ref V) dg) const { return opApplyImpl(dg); } /// ditto
 	}
 
 	private struct ByRef(bool isConst)
@@ -1464,6 +1472,16 @@ unittest
 	HashSet!Object m;
 	Object o;
 	m.remove(o);
+}
+
+unittest
+{
+	struct S
+	{
+		@disable this(this);
+	}
+
+	HashSet!S set;
 }
 
 // ***************************************************************************
