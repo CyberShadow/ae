@@ -330,6 +330,8 @@ private:
 /// HTTP response status codes
 enum HttpStatusCode : ushort
 {
+	None = 0,
+
 	Continue=100,
 	SwitchingProtocols=101,
 
