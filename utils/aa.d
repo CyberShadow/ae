@@ -346,13 +346,11 @@ private:
 	static if (haveValues)
 	{
 		alias ReturnType(Fallback) = V;
-		alias SingleIterationType = V;
 		alias OpIndexKeyType = K;
 		alias OpIndexValueType = V;
 	}
 	else
 	{
-		alias SingleIterationType = const(K);
 		static if (ordered)
 		{
 			alias OpIndexKeyType = size_t;
@@ -760,7 +758,18 @@ public:
 
 	// *** Iteration ***
 
-	private int opApplyImpl(this This, Dg)(Dg dg)
+	// Note: When iterating over keys in an AA, you must choose
+	// mutable OR ref, but not both. This is an important reason for
+	// the complexity below.
+
+	private enum isParameterRef(alias fun, size_t index) = (){
+		foreach (keyStorageClass; __traits(getParameterStorageClasses, fun, index))
+			if (keyStorageClass == "ref")
+				return true;
+		return false;
+	}();
+
+	private int opApplyImpl(this This, Dg)(scope Dg dg)
 	{
 		enum single = arity!dg == 1;
 
@@ -780,8 +789,23 @@ public:
 		}
 		else
 		{
-		outer:
-			foreach (ref key, ref values; lookup)
+			static if (single && haveValues)
+			{
+				// Dg accepts value only, so use whatever we want for the key iteration.
+				alias LK = const(K);
+				enum useRef = true;
+			}
+			else
+			{
+				// Dg accepts a key (and maybe a value), so use the Dg signature for iteration.
+				alias LK = Parameters!Dg[0];
+				enum useRef = isParameterRef!(Dg, 0);
+			}
+			// LookupValue or const(LookupValue), depending on the constness of This
+			alias LV = typeof(lookup.values[0]);
+
+			bool handle()(ref LK key, ref LV values)
+			{
 				static if (haveValues)
 				{
 					foreach (ref value; values)
@@ -791,7 +815,7 @@ public:
 						else
 							result = dg(key, value);
 						if (result)
-							break outer;
+							return false;
 					}
 				}
 				else
@@ -801,39 +825,105 @@ public:
 						static assert(single);
 						result = dg(key);
 						if (result)
-							break outer;
+							return false;
 					}
 				}
+				return true;
+			}
+
+			static if (useRef)
+			{
+				foreach (ref LK key, ref LV values; lookup)
+					if (!handle(key, values))
+						break;
+			}
+			else
+			{
+				foreach (LK key, ref LV values; lookup)
+					if (!handle(key, values))
+						break;
+			}
 		}
 		return result;
 	}
 
-	/// Iterate over keys (sets) / values (maps).
-	int opApply(int delegate(ref SingleIterationType x) dg)
-	{
-		return opApplyImpl(dg);
-	}
+	private alias KeyIterationType(bool isConst, bool byRef) = typeof(ref (){
 
-	/// ditto
-	int opApply(int delegate(const ref SingleIterationType x) dg) const
+		static if (isConst)
+			const bool[K] aa;
+		else
+			bool[K] aa;
+
+		static if (byRef)
+			foreach (ref k, v; aa)
+				return k;
+		else
+			foreach (k, v; aa)
+				return k;
+
+		assert(false);
+	}());
+
+	private enum needRefOverload(bool isConst) =
+		// Unfortunately this doesn't work: https://issues.dlang.org/show_bug.cgi?id=21683
+		// !is(KeyIterationType!(isConst, false) == KeyIterationType!(isConst, true));
+		false;
+
+	static if (haveValues)
 	{
-		return opApplyImpl(dg);
+		/// Iterate over values (maps).
+		int opApply(scope int delegate(      ref V) dg)       { return opApplyImpl(dg); }
+		int opApply(scope int delegate(const ref V) dg) const { return opApplyImpl(dg); } /// ditto
+	}
+	else
+	{
+		/// Iterate over keys (sets).
+		int opApply(scope int delegate(    KeyIterationType!(false, false)) dg)       { return opApplyImpl(dg); }
+		int opApply(scope int delegate(    KeyIterationType!(true , false)) dg) const { return opApplyImpl(dg); } /// ditto
+		static if (needRefOverload!false)
+		int opApply(scope int delegate(ref KeyIterationType!(false, true )) dg)       { return opApplyImpl(dg); } /// ditto
+		static if (needRefOverload!true)
+		int opApply(scope int delegate(ref KeyIterationType!(true , true )) dg) const { return opApplyImpl(dg); } /// ditto
 	}
 
 	static if (haveValues)
 	{
 		/// Iterate over keys and values.
-		int opApply(int delegate(K k, ref V v) dg)
-		{
-			return opApplyImpl(dg);
-		}
+		int opApply(scope int delegate(    KeyIterationType!(false, false),       ref V) dg)       { return opApplyImpl(dg); }
+		int opApply(scope int delegate(    KeyIterationType!(true , false), const ref V) dg) const { return opApplyImpl(dg); } /// ditto
+		static if (needRefOverload!false)
+		int opApply(scope int delegate(ref KeyIterationType!(false, true ),       ref V) dg)       { return opApplyImpl(dg); } /// ditto
+		static if (needRefOverload!true)
+		int opApply(scope int delegate(ref KeyIterationType!(true , true ), const ref V) dg) const { return opApplyImpl(dg); } /// ditto
+	}
 
-		/// ditto
-		int opApply(int delegate(K k, const ref V v) dg) const
+	private struct ByRef(bool isConst)
+	{
+		static if (isConst)
+			const(HashCollection)* c;
+		else
+			HashCollection* c;
+
+		static if (haveValues)
 		{
-			return opApplyImpl(dg);
+			static if (isConst)
+				int opApply(scope int delegate(ref KeyIterationType!(true , true ), const ref V) dg) const { return c.opApplyImpl(dg); }
+			else
+				int opApply(scope int delegate(ref KeyIterationType!(false, true ),       ref V) dg)       { return c.opApplyImpl(dg); }
+		}
+		else
+		{
+			static if (isConst)
+				int opApply(scope int delegate(ref KeyIterationType!(true , true )) dg) const { return c.opApplyImpl(dg); }
+			else
+				int opApply(scope int delegate(ref KeyIterationType!(false, true )) dg)       { return c.opApplyImpl(dg); }
 		}
 	}
+
+	/// Returns an object that allows iterating over this collection with ref keys.
+	/// Workaround for https://issues.dlang.org/show_bug.cgi?id=21683
+	auto byRef()       return { return ByRef!false(&this); }
+	auto byRef() const return { return ByRef!true (&this); } /// ditto
 
 	// *** Mutation (addition) ***
 
@@ -1326,6 +1416,8 @@ unittest
 	assert(1 in s);
 	assert(s.length == 1);
 	foreach (k; s)
+		assert(k == 1);
+	foreach (ref k; s.byRef)
 		assert(k == 1);
 	s.remove(1);
 	assert(s.length == 0);
