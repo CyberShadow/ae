@@ -132,6 +132,12 @@ struct Headers
 		return headers.require(CIAsciiString(key), [Header(key, value)])[0].value;
 	}
 
+	bool opCast(T)() const
+		if (is(T == bool))
+	{
+		return !!headers;
+	}
+
 	/// Warning: discards repeating headers
 	string[string] opCast(T)() const
 		if (is(T == string[string]))
