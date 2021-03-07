@@ -168,6 +168,11 @@ protected:
 		if (timer)
 			timer.markNonIdle();
 
+		// HACK (if onData override called disconnect).
+		// TODO: rewrite this entire pile of garbage
+		if (!currentResponse)
+			return;
+
 		auto received = currentResponse.data.bytes.length;
 		if (expect!=size_t.max && received >= expect)
 		{
