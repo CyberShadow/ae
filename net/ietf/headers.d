@@ -151,7 +151,7 @@ struct Headers
 		return result;
 	}
 
-	@property Headers dup()
+	@property Headers dup() const
 	{
 		Headers c;
 		foreach (k, v; this)
