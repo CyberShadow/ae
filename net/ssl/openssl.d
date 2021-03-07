@@ -443,6 +443,8 @@ class OpenSSLAdapter : SSLAdapter
 		w.clear();
 		SSL_free(sslHandle);
 		sslHandle = null;
+		r = MemoryBIO.init; // Was owned by sslHandle, destroyed by SSL_free
+		w = MemoryBIO.init; // ditto
 		connectionState = ConnectionState.disconnected;
 		debug(OPENSSL) stderr.writeln("OpenSSL: onDisconnect: SSL_free called, calling super.onDisconnect");
 		super.onDisconnect(reason, type);
