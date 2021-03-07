@@ -354,6 +354,7 @@ class OpenSSLAdapter : SSLAdapter
 
 	override void send(Data[] data, int priority = DEFAULT_PRIORITY)
 	{
+		assert(state == ConnectionState.connected, "Attempting to send to a non-connected socket");
 		while (data.length)
 		{
 			auto datum = data[0];
