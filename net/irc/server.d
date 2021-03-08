@@ -725,7 +725,7 @@ class IrcServer
 		{
 			string modes = "+";
 			string[] modeParams;
-			foreach (c; 0..char.max)
+			foreach (char c; 0..char.max)
 				final switch (ChannelModes.modeTypes[c])
 				{
 					case ChannelModes.Type.none:
@@ -742,7 +742,9 @@ class IrcServer
 						if (channel.modes.strings[c])
 						{
 							modes ~= c;
-							modeParams ~= channel.modes.strings[c];
+							auto value = channel.modes.strings[c];
+							assert(value.length, "Empty string channel parameter: " ~ c);
+							modeParams ~= value;
 						}
 						break;
 					case ChannelModes.Type.number:
@@ -753,7 +755,7 @@ class IrcServer
 						}
 						break;
 				}
-			sendReply(Reply.RPL_CHANNELMODEIS, channel.name, ([modes] ~ modeParams).join(" "), null);
+			sendReply(Reply.RPL_CHANNELMODEIS, [channel.name, modes] ~ modeParams ~ [string.init]);
 		}
 
 		void sendChannelModeMasks(Channel channel, char mode)
