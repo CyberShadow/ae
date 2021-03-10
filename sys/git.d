@@ -581,6 +581,11 @@ struct Git
 				*pwriter = ObjectWriter(repo.pipe(`hash-object`, `-t`, obj.type, `-w`, `--stdin-paths`));
 			return pwriter.write(obj.data);
 		}
+
+		/// Format and write a Git object, and return the OID.
+		CommitID write(in Object.ParsedCommit commit) { return CommitID(write(Object.createCommit(commit))); }
+		TreeID   write(in Object.TreeEntry[] entries) { return TreeID  (write(Object.createTree(entries))); } /// ditto
+		BlobID   write(immutable(ubyte)[] bytes     ) { return BlobID  (write(Object.createBlob(bytes))); } /// ditto
 	}
 	alias ObjectMultiWriter = RefCounted!ObjectMultiWriterImpl; /// ditto
 
