@@ -268,8 +268,7 @@ struct Git
 		}
 	}
 
-	/// Strong typed OIDs to distinguish which kind of object they identify.
-	/*private*/ struct TypedObjectID(string type_)
+	private mixin template TypedObjectID(string type_)
 	{
 		/// As in git-hash-object's -t parameter.
 		enum type = type_;
@@ -281,9 +280,10 @@ struct Git
 		this(in char[] hash) { oid = OID(hash); } /// Construct from an ASCII string.
 		string toString() pure const { return oid.toString(); } /// Convert to the ASCII representation.
 	}
-	alias CommitID = TypedObjectID!"commit"; /// ditto
-	alias TreeID   = TypedObjectID!"tree"  ; /// ditto
-	alias BlobID   = TypedObjectID!"blob"  ; /// ditto
+	/// Strong typed OIDs to distinguish which kind of object they identify.
+	struct CommitID { mixin TypedObjectID!"commit"; }
+	struct TreeID   { mixin TypedObjectID!"tree"  ; } /// ditto
+	struct BlobID   { mixin TypedObjectID!"blob"  ; } /// ditto
 
 	/// The parsed representation of a raw Git object.
 	struct Object
