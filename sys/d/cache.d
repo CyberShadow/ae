@@ -326,7 +326,7 @@ class GitCache : DCache
 	import std.process;
 	import ae.sys.git;
 
-	Repository git;
+	Git git;
 	static const refPrefix = "refs/ae-sys-d-cache/";
 
 	override @property string name() const { return "git"; }
@@ -342,7 +342,7 @@ class GitCache : DCache
 				.I!(code => (code==0).enforce("git init failed"))
 			;
 		}
-		git = Repository(cacheDir);
+		git = Git(cacheDir);
 	}
 
 	override string[] getEntries() const
@@ -381,7 +381,7 @@ class GitCache : DCache
 		auto writer = git.createObjectWriter();
 		auto tree = git.importTree(sourcePath, writer);
 		auto author = "ae.sys.d.cache <ae.sys.d.cache@thecybershadow.net> 0 +0000";
-		auto commit = writer.write(GitObject.createCommit(GitObject.ParsedCommit(tree, null, author, author, [key])));
+		auto commit = writer.write(Git.Object.createCommit(Git.Object.ParsedCommit(tree, null, author, author, [key])));
 		git.run("update-ref", refPrefix ~ key, commit.toString());
 	}
 

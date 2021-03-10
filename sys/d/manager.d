@@ -216,7 +216,7 @@ class DManager : ICacheHost
 
 	class MetaRepository : DManagerRepository
 	{
-		protected override Repository getRepo()
+		protected override Git getRepo()
 		{
 			needGit();
 
@@ -226,7 +226,7 @@ class DManager : ICacheHost
 				atomic!performClone(config.local.repoUrl, repoDir);
 			}
 
-			return Repository(repoDir);
+			return Git(repoDir);
 		}
 
 		static void performClone(string url, string target)
@@ -305,10 +305,10 @@ class DManager : ICacheHost
 	{
 		string dir;
 
-		protected override Repository getRepo()
+		protected override Git getRepo()
 		{
 			getMetaRepo().git; // ensure meta-repository is cloned
-			return Repository(dir);
+			return Git(dir);
 		}
 
 		override void needHead(string hash)
@@ -2886,7 +2886,7 @@ EOS";
 		for (auto c = master; c; c = c.parents.length ? c.parents[0] : null)
 		{
 			auto time = SysTime(c.time.unixTimeToStdTime);
-			logs ~= LogEntry(c.hash.toString(), c.message, time);
+			logs ~= LogEntry(c.oid.toString(), c.message, time);
 		}
 		return logs;
 	}

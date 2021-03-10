@@ -34,7 +34,7 @@ import ae.utils.time : StdTime;
 class ManagedRepository
 {
 	/// Git repository we manage.
-	public @property ref const(Repository) git()
+	public @property ref const(Git) git()
 	{
 		if (!gitRepo.path)
 		{
@@ -56,10 +56,10 @@ class ManagedRepository
 	/// Verify working tree state to make sure we don't clobber user changes?
 	public bool verify;
 
-	private Repository gitRepo;
+	private Git gitRepo;
 
 	/// Repository provider
-	abstract protected Repository getRepo();
+	abstract protected Git getRepo();
 
 	public @property string name() { return git.path.baseName; }
 
@@ -468,31 +468,31 @@ class ManagedRepository
 		log("Querying history for commit children...");
 		auto history = git.getHistory([branch]);
 
-		bool[Hash] seen;
-		void visit(Commit* commit)
+		bool[Git.CommitID] seen;
+		void visit(Git.History.Commit* commit)
 		{
-			if (commit.hash !in seen)
+			if (commit.oid !in seen)
 			{
-				seen[commit.hash] = true;
+				seen[commit.oid] = true;
 				foreach (parent; commit.parents)
 					visit(parent);
 			}
 		}
-		auto branchHash = branch.toCommitHash();
+		auto branchHash = Git.CommitID(branch);
 		auto pBranchCommit = branchHash in history.commits;
 		enforce(pBranchCommit, "Can't find commit " ~ branch ~" in history");
 		visit(*pBranchCommit);
 
-		auto commitHash = commit.toCommitHash();
+		auto commitHash = Git.CommitID(commit);
 		auto pCommit = commitHash in history.commits;
 		enforce(pCommit, "Can't find commit in history");
 		auto children = (*pCommit).children;
 		enforce(children.length, "Commit has no children");
-		children = children.filter!(child => child.hash in seen).array();
+		children = children.filter!(child => child.oid in seen).array();
 		enforce(children.length, "Commit has no children under specified branch");
 		enforce(children.length == 1, "Commit has more than one child");
 		auto childCommit = children[0];
-		child = childCommit.hash.toString();
+		child = childCommit.oid.toString();
 
 		if (childCommit.parents.length == 1)
 			mainline = 0;
@@ -506,8 +506,8 @@ class ManagedRepository
 
 			auto mergeInfo = MergeInfo(
 				MergeSpec(
-					childCommit.parents[0].hash.toString(),
-					childCommit.parents[1].hash.toString(),
+					childCommit.parents[0].oid.toString(),
+					childCommit.parents[1].oid.toString(),
 					MergeMode.merge,
 					true),
 				commit, mainline);
