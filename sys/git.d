@@ -378,11 +378,11 @@ struct Git
 		}
 
 		/// Format a Git commit into a raw Git object.
-		static Object createCommit(ParsedCommit commit)
+		static Object createCommit(in ParsedCommit commit)
 		{
 			auto s = "tree %s\n%-(parent %s\n%|%)author %s\ncommitter %s\n\n%-(%s\n%)".format(
 					commit.tree.toString(),
-					commit.parents.map!((ref CommitID oid) => oid.toString()),
+					commit.parents.map!((in ref CommitID oid) => oid.toString()),
 					commit.author,
 					commit.committer,
 					commit.message,
@@ -429,7 +429,7 @@ struct Git
 
 		/// Format a Git tree into a raw Git object.
 		/// Tree entries must be sorted lexicographically by name.
-		static Object createTree(TreeEntry[] entries)
+		static Object createTree(in TreeEntry[] entries)
 		{
 			auto buf = appender!(immutable(ubyte)[]);
 			foreach (entry; entries)
