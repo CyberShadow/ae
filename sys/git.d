@@ -279,6 +279,11 @@ struct Git
 		this(OID oid) { this.oid = oid; } /// Construct from a generic identifier.
 		this(in char[] hash) { oid = OID(hash); } /// Construct from an ASCII string.
 		string toString() pure const { return oid.toString(); } /// Convert to the ASCII representation.
+
+		// Disable implicit conversion directly between different kinds of OIDs.
+		static if (!is(typeof(this) == CommitID)) @disable this(CommitID);
+		static if (!is(typeof(this) == TreeID)) @disable this(TreeID);
+		static if (!is(typeof(this) == BlobID)) @disable this(BlobID);
 	}
 	/// Strong typed OIDs to distinguish which kind of object they identify.
 	struct CommitID { mixin TypedObjectID!"commit"; }
