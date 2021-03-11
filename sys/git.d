@@ -225,6 +225,9 @@ struct Git
 				enforce(false, "Unknown line in git log: " ~ line);
 		}
 
+		if (!history.commits)
+			return history; // show-ref will fail if there are no refs
+
 		foreach (line; query([`show-ref`, `--dereference`]).splitLines())
 		{
 			auto h = CommitID(line[0..40]);
