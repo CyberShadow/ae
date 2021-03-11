@@ -228,8 +228,8 @@ struct Git
 		foreach (line; query([`show-ref`, `--dereference`]).splitLines())
 		{
 			auto h = CommitID(line[0..40]);
-			if (h in history.commits)
-				history.refs[line[41..$]] = h;
+			enforce(h in history.commits, "Ref commit not in log: " ~ line);
+			history.refs[line[41..$]] = h;
 		}
 
 		return history;
