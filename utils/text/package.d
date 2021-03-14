@@ -614,7 +614,8 @@ unittest
 /// Where a delegate with this signature is required.
 string nullStringTransform(in char[] s) { return to!string(s); }
 
-string forceValidUTF8(string s)
+/// Lossily convert arbitrary data into a valid UTF-8 string.
+string forceValidUTF8(ascii s)
 {
 	try
 	{
