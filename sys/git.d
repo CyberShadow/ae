@@ -571,7 +571,7 @@ struct Git
 
 	struct ObjectMultiWriterImpl /// ditto
 	{
-		private Git* repo;
+		private Git repo;
 
 		/// The ObjectWriter instances for each individual type.
 		ObjectWriter treeWriter, blobWriter, commitWriter;
@@ -602,7 +602,7 @@ struct Git
 	/// ditto
 	ObjectMultiWriter createObjectWriter()
 	{
-		return ObjectMultiWriter(&this);
+		return ObjectMultiWriter(this);
 	}
 
 	/// Batch-write the given objects to the database.
