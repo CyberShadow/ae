@@ -59,7 +59,7 @@ ubyte[16] mdFile(string path) { return getVFS(path).mdFile(path); }
 S readText(S = string)(string name)
 {
     auto result = cast(S) read(name);
-    import std.utf;
+    import std.utf : validate;
     validate(result);
     return result;
 }
