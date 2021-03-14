@@ -315,6 +315,13 @@ struct Git
 			return Object(OID.init, "blob", data);
 		}
 
+		/// "Parse" this raw Git object as a blob.
+		immutable(ubyte)[] parseBlob()
+		{
+			enforce(type == "blob", "Wrong object type");
+			return data;
+		}
+
 		/// Represents a parsed Git commit object.
 		struct ParsedCommit
 		{
