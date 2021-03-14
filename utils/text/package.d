@@ -614,6 +614,15 @@ unittest
 /// Where a delegate with this signature is required.
 string nullStringTransform(in char[] s) { return to!string(s); }
 
+/// Like readText, but with in-memory data.
+/// Reverse of ae.utils.array.bytes (for strings).
+inout(char)[] asText(inout(ubyte)[] bytes)
+{
+	auto s = cast(inout(char)[]) bytes;
+	validate(s);
+	return s;
+}
+
 /// Lossily convert arbitrary data into a valid UTF-8 string.
 string forceValidUTF8(ascii s)
 {
