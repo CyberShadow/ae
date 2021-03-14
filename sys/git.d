@@ -445,7 +445,7 @@ struct Git
 		}
 
 		/// Format a Git tree into a raw Git object.
-		/// Tree entries must be sorted lexicographically by name.
+		/// Tree entries must be sorted (TreeEntry implements an appropriate opCmp).
 		static Object createTree(in TreeEntry[] entries)
 		{
 			auto buf = appender!(immutable(ubyte)[]);
