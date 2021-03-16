@@ -285,6 +285,9 @@ struct CustomJsonSerializer(Writer)
 		static if (is(T==JSONFragment))
 			writer.output.put(v.json);
 		else
+		static if (__traits(hasMember, T, "toJSON"))
+			put(v.toJSON());
+		else
 		static if (is(T==struct))
 		{
 			writer.beginObject();
@@ -495,6 +498,14 @@ private struct JsonParser(C)
 			auto start = p;
 			skipValue();
 			value = JSONFragment(s[start..p]);
+		}
+		else
+		static if (__traits(hasMember, T, "fromJSON"))
+		{
+			alias Q = Parameters!(T.fromJSON)[0];
+			Q tempValue;
+			read!Q(tempValue);
+			value = T.fromJSON(tempValue);
 		}
 		else
 		static if (is(T==struct))
@@ -1112,6 +1123,35 @@ unittest
 {
 	dchar c = '😸';
 	assert(c.toJson() == `"😸"`);
+}
+
+/// `fromJSON` / `toJSON` can be added to a type to control their serialized representation.
+unittest
+{
+	static struct S
+	{
+		string value;
+		static S fromJSON(string value) { return S(value); }
+		string toJSON() { return value; }
+	}
+	auto s = S("test");
+	assert(s.toJson == `"test"`);
+	assert(s.toJson.jsonParse!S == s);
+}
+
+/// `fromJSON` / `toJSON` can also accept/return a `JSONFragment`,
+/// which allows full control over JSON serialization.
+unittest
+{
+	static struct BigInt
+	{
+		string decimalDigits;
+		static BigInt fromJSON(JSONFragment value) { return BigInt(value.json); }
+		JSONFragment toJSON() { return JSONFragment(decimalDigits); }
+	}
+	auto n = BigInt("12345678901234567890");
+	assert(n.toJson == `12345678901234567890`);
+	assert(n.toJson.jsonParse!BigInt == n);
 }
 
 // ************************************************************************
