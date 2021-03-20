@@ -289,8 +289,26 @@ T[] slice(T)(T[] arr, size_t p0, size_t p1)
 	return arr[p0..p1];
 }
 
+/// Given an array and a reference to an element inside it, returns its index.
+/// The reverse operation of indexing an array.
+size_t elementIndex(T)(in T[] arr, in ref T element)
+{
+	auto start = arr.ptr;
+	auto end = start + arr.length;
+	auto p = &element;
+	assert(start <= p && p < end, "Element is not in array");
+	return p - start;
+}
+
+unittest
+{
+	auto arr = [1, 2, 3];
+	assert(arr.elementIndex(arr[1]) == 1);
+}
+
 /// Given an array and its slice, returns the
 /// start index of the slice inside the array.
+/// The reverse operation of slicing an array.
 size_t sliceIndex(T)(in T[] arr, in T[] slice)
 {
 	auto a = arr.ptr;
