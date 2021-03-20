@@ -308,3 +308,27 @@ unittest
 		tuple(1, 5), tuple(2, 5),
 	]));
 }
+
+// ************************************************************************
+
+/// `map` variant which takes the predicate as a functor.
+/// https://forum.dlang.org/post/qnigarkuxxnqwdernhzv@forum.dlang.org
+struct PMap(R, Pred)
+{
+	R r;
+	Pred pred;
+
+	auto ref front() { return pred(r.front); }
+	static if (__traits(hasMember, R, "back"))
+		auto ref back() { return pred(r.back); }
+
+	alias r this;
+}
+auto pmap(R, Pred)(R r, Pred pred) { return PMap!(R, Pred)(r, pred); } /// ditto
+
+unittest
+{
+	import std.algorithm.comparison : equal;
+	import std.range : iota;
+	assert(5.iota.pmap((int n) => n + 1).equal([1, 2, 3, 4, 5]));
+}
