@@ -311,6 +311,21 @@ unittest
 
 // ************************************************************************
 
+/// Calculate the mean value of the range's elements (sum divided by length).
+/// The range must obviously be non-empty.
+auto average(R)(R range) if (hasLength!R)
+{
+	import std.algorithm.iteration : sum;
+	return sum(range) / range.length;
+}
+
+unittest
+{
+	assert([1, 2, 3].average == 2);
+}
+
+// ************************************************************************
+
 /// `map` variant which takes the predicate as a functor.
 /// https://forum.dlang.org/post/qnigarkuxxnqwdernhzv@forum.dlang.org
 struct PMap(R, Pred)
