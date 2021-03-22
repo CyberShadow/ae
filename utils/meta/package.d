@@ -399,6 +399,10 @@ static if (haveStaticForeach)
 
 // ************************************************************************
 
+// By Paul Backus: https://forum.dlang.org/post/mkiyylyjznwgkzpnbryk@forum.dlang.org
+/// Pass struct / tuple members as arguments to a function.
+alias tupleAs(alias fun) = args => fun(args.tupleof);
+
 /// Call a predicate with the given value. Return the value.
 /// Intended to be used in UFCS chains using functions which mutate their argument,
 /// such as skipOver and each.
