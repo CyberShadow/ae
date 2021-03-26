@@ -159,7 +159,7 @@ struct Git
 	}
 
 	/// ditto
-	History getHistory() const
+	History getHistory(string[] extraRefs = null) const
 	{
 		History history;
 
@@ -172,7 +172,7 @@ struct Git
 		History.Commit* commit;
 		string currentBlock;
 
-		foreach (line; query([`log`, `--all`, `--pretty=raw`]).split('\n'))
+		foreach (line; query([`log`, `--all`, `--pretty=raw`] ~ extraRefs).split('\n'))
 		{
 			if (!line.length)
 			{
@@ -237,8 +237,6 @@ struct Git
 
 		return history;
 	}
-
-	deprecated History getHistory(string[] /*extraRefs*/) const { return getHistory(); }
 
 	// Low-level pipes
 
