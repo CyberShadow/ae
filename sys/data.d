@@ -243,7 +243,7 @@ public:
 		return contents is null;
 	}
 
-	bool opCast(T)()
+	bool opCast(T)() const
 		if (is(T == bool))
 	{
 		return !empty;
