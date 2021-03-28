@@ -104,8 +104,15 @@ public:
 	 */
 	this(const(void)[] data, bool forceReallocation = false)
 	{
-		if (data.length == 0)
+		if (data is null)
 			contents = null;
+		else
+		if (data.length == 0)
+		{
+			wrapper = emptyDataWrapper;
+			wrapper.references++;
+			contents = data;
+		}
 		else
 		if (forceReallocation || GC.addrOf(data.ptr) is null)
 		{
@@ -454,7 +461,7 @@ public:
 	do
 	{
 		if (x == y)
-			return Data();
+			return Data(emptyDataWrapper.data[]);
 		else
 		{
 			Data result = this;
@@ -709,6 +716,23 @@ final class MemoryDataWrapper : DataWrapper
 			core.stdc.free(size);
 	}
 }
+
+// ************************************************************************
+
+/// DataWrapper implementation used for the empty (but non-null) Data slice.
+class EmptyDataWrapper : DataWrapper
+{
+	void[0] data;
+
+	override @property inout(void)[] contents() inout { return data[]; }
+	override @property size_t size() const { return data.length; }
+	override void setSize(size_t newSize) { assert(false); }
+	override @property size_t capacity() const { return data.length; }
+}
+
+__gshared EmptyDataWrapper emptyDataWrapper = new EmptyDataWrapper;
+
+// ************************************************************************
 
 // Source: Win32 bindings project
 version(Windows)
