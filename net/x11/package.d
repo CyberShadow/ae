@@ -31,6 +31,7 @@ import ae.net.asockets;
 import ae.utils.array;
 import ae.utils.exception : CaughtException;
 import ae.utils.meta;
+import ae.utils.text.ascii : toDec;
 
 /// These are always 32-bit in the protocol,
 /// but are defined as possibly 64-bit in X.h.
@@ -161,19 +162,20 @@ final class X11Client
 	mixin((){
 		string code;
 
-		foreach (name; __traits(allMembers, RequestSpecs))
+		foreach (i, Spec; RequestSpecs)
 		{
-			alias Spec = typeof(__traits(getMember, RequestSpecs, name));
-			code ~= "void " ~ name ~ "(Parameters!(RequestSpecs." ~ name ~ ".encoder) params, ";
-			enum haveReply = !is(typeof(Spec.decoder is null));
+			enum index = toDec(i);
+			assert(Spec.reqName[0 .. 2] == "X_");
+			code ~= "void send" ~ Spec.reqName[2 .. $] ~ "(Parameters!(RequestSpecs[" ~ index ~ "].encoder) params, ";
+			enum haveReply = !is(Spec.decoder == void);
 			if (haveReply)
-				code ~= "Parameters!(RequestSpecs." ~ name ~ ".decoder) callback";
-			code ~= ") { sendRequest(RequestSpecs." ~ name ~ ".encoder(params), ";
+				code ~= "Parameters!(RequestSpecs[" ~ index ~ "].decoder) callback";
+			code ~= ") { sendRequest(RequestSpecs[" ~ index ~ "].reqType, RequestSpecs[" ~ index ~ "].encoder(params), ";
 			if (haveReply)
-				code ~= "(Data data) { RequestSpecs." ~ name ~ ".decoder(data, callback); }";
+				code ~= "(Data data) { RequestSpecs[" ~ index ~ "].decoder(data, callback); }";
 			else
 				code ~= "null";
-			code ~= "); }";
+			code ~= "); }\n";
 		}
 
 		foreach (name; __traits(allMembers, EventSpecs))
@@ -186,15 +188,18 @@ final class X11Client
 	}());
 
 private:
-	struct RequestSpec(alias encoder_, alias decoder_)
+	struct RequestSpec(args...)
+	if (args.length == 3)
 	{
-		alias encoder = encoder_;
-		alias decoder = decoder_;
+		enum reqType = args[0];
+		enum reqName = __traits(identifier, args[0]);
+		alias encoder = args[1];
+		alias decoder = args[2];
 	}
 
 	/// Instantiates to a function which accepts arguments and
 	/// puts them into a struct, according to its fields.
-	static template simpleEncoder(Req, CARD8 reqType)
+	static template simpleEncoder(Req)
 	{
 		template isPertinentFieldIdx(size_t index)
 		{
@@ -211,7 +216,6 @@ private:
 			staticMap!(FieldIdxType, pertinentFieldIndices) args,
 		) {
 			Req req;
-			req.reqType = reqType;
 
 			foreach (i; RangeTuple!(args.length))
 			{
@@ -256,9 +260,9 @@ private:
 		}
 	}
 
-	struct RequestSpecs
-	{
+	alias RequestSpecs = AliasSeq!(
 		RequestSpec!(
+			X_CreateWindow,
 			function Data (
 				// xCreateWindowReq struct members
 				CARD8 depth, 
@@ -295,7 +299,6 @@ private:
 				Nullable!Cursor                  cursor             = Nullable!Cursor.init,
 			) {
 				xCreateWindowReq req;
-				req.reqType = X_CreateWindow;
 				req.depth = depth;
 				req.wid = wid;
 				req.parent = parent;
@@ -336,12 +339,13 @@ private:
 
 				return Data(req.bytes) ~ Data(values.bytes);
 			},
-			null,
-		) createWindow;
+			void,
+		),
 
 		// ...
 
 		RequestSpec!(
+			X_CreateGC,
 			function Data (
 				// xCreateGCReq struct members
 				GContext gc,
@@ -375,7 +379,6 @@ private:
 				Nullable!(typeof(ArcChord))       arcMode            = Nullable!(typeof(ArcChord)).init,
 			) {
 				xCreateGCReq req;
-				req.reqType = X_CreateGC;
 				req.gc = gc;
 				req.drawable = drawable;
 
@@ -440,12 +443,13 @@ private:
 
 				return Data(req.bytes) ~ Data(values.bytes);
 			},
-			null,
-		) createGC;
+			void,
+		),
 
 		// ...
 
 		RequestSpec!(
+			X_ImageText8,
 			function Data (
 				// xImageTextReq struct members
 				Drawable drawable,
@@ -458,7 +462,6 @@ private:
 
 			) {
 				xImageTextReq req;
-				req.reqType = X_ImageText8;
 				req.drawable = drawable;
 				req.gc = gc;
 				req.x = x;
@@ -467,12 +470,13 @@ private:
 
 				return pad4(Data(req.bytes) ~ Data(string.bytes));
 			},
-			null,
-		) imageText8;
+			void,
+		),
 
 		// ...
 
 		RequestSpec!(
+			X_PolyFillRectangle,
 			function Data (
 				// xPolyFillRectangleReq struct members
 				Drawable drawable,
@@ -483,22 +487,22 @@ private:
 
 			) {
 				xPolyFillRectangleReq req;
-				req.reqType = X_PolyFillRectangle;
 				req.drawable = drawable;
 				req.gc = gc;
 
 				return Data(req.bytes) ~ Data(rectangles.bytes);
 			},
-			null,
-		) polyFillRectangle;
+			void,
+		),
 
 		// ...
 
 		RequestSpec!(
-			simpleEncoder!(xResourceReq, X_MapWindow),
-			null,
-		) mapWindow;
-	}
+			X_MapWindow,
+			simpleEncoder!xResourceReq,
+			void,
+		),
+	);
 
 	struct EventSpec(BYTE type_, alias decoder_)
 	{
@@ -708,11 +712,12 @@ private:
 		throw new Exception("Unrecognized event: " ~ eventType.to!string);
 	}
 
-	void sendRequest(Data requestData, void delegate(Data) handler)
+	void sendRequest(BYTE reqType, Data requestData, void delegate(Data) handler)
 	{
 		assert(requestData.length >= sz_xReq);
 		assert(requestData.length % 4 == 0);
 		auto pReq = cast(xReq*)requestData.contents.ptr;
+		pReq.reqType = reqType;
 		pReq.length = (requestData.length / 4).to!ushort;
 
 		enforce(replyHandlers[sequenceNumber] is null,
