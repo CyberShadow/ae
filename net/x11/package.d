@@ -340,19 +340,9 @@ private:
 				// is indicated by a bit mask
 				in ref WindowAttributes windowAttributes,
 			) {
-				xCreateWindowReq req;
-				req.depth = depth;
-				req.wid = wid;
-				req.parent = parent;
-				req.x = x;
-				req.y = y;
-				req.width = width;
-				req.height = height;
-				req.borderWidth = borderWidth;
-				req.c_class = c_class;
-				req.visual = visual;
-
-				auto values = windowAttributes._serialize(req.mask);
+				CARD32 mask;
+				auto values = windowAttributes._serialize(mask);
+				mixin(populateRequestFromLocals!xCreateWindowReq);
 				return Data(req.bytes) ~ Data(values.bytes);
 			},
 			void,
@@ -371,11 +361,9 @@ private:
 				// is indicated by a bit mask
 				in ref GCAttributes gcAttributes,
 			) {
-				xCreateGCReq req;
-				req.gc = gc;
-				req.drawable = drawable;
-
-				auto values = gcAttributes._serialize(req.mask);
+				CARD32 mask;
+				auto values = gcAttributes._serialize(mask);
+				mixin(populateRequestFromLocals!xCreateGCReq);
 				return Data(req.bytes) ~ Data(values.bytes);
 			},
 			void,
@@ -396,13 +384,8 @@ private:
 				const(char)[] string,
 
 			) {
-				xImageTextReq req;
-				req.drawable = drawable;
-				req.gc = gc;
-				req.x = x;
-				req.y = y;
-				req.nChars = string.length.to!ubyte;
-
+				auto nChars = string.length.to!ubyte;
+				mixin(populateRequestFromLocals!xImageText8Req);
 				return pad4(Data(req.bytes) ~ Data(string.bytes));
 			},
 			void,
@@ -421,10 +404,7 @@ private:
 				const(xRectangle)[] rectangles,
 
 			) {
-				xPolyFillRectangleReq req;
-				req.drawable = drawable;
-				req.gc = gc;
-
+				mixin(populateRequestFromLocals!xPolyFillRectangleReq);
 				return Data(req.bytes) ~ Data(rectangles.bytes);
 			},
 			void,
@@ -697,6 +677,23 @@ if (args.length % 2 == 0)
 			}
 		return result;
 	}
+}
+
+/// Generate code to populate all of a request struct's fields from arguments / locals.
+string populateRequestFromLocals(T)()
+{
+	string code = T.stringof ~ " req;\n";
+	foreach (i; RangeTuple!(T.tupleof.length))
+	{
+		enum name = __traits(identifier, T.tupleof[i]);
+		enum isPertinentField =
+			name != "reqType" &&
+			name != "length" &&
+			(name.length < 3 || name[0..3] != "pad");
+		if (isPertinentField)
+			code ~= "req." ~ name ~ " = " ~ name ~ ";\n";
+	}
+	return code;
 }
 
 // ************************************************************************
