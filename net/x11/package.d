@@ -178,10 +178,10 @@ final class X11Client
 			code ~= "); }\n";
 		}
 
-		foreach (name; __traits(allMembers, EventSpecs))
+		foreach (i, Spec; EventSpecs)
 		{
-			alias Spec = typeof(__traits(getMember, EventSpecs, name));
-			code ~= "Parameters!(EventSpecs." ~ name ~ ".decoder)[1] " ~ name ~ ";";
+			enum index = toDec(i);
+			code ~= "Parameters!(EventSpecs[" ~ index ~ "].decoder)[1] handle" ~ Spec.name ~ ";\n";
 		}
 
 		return code;
@@ -504,16 +504,17 @@ private:
 		),
 	);
 
-	struct EventSpec(BYTE type_, alias decoder_)
+	struct EventSpec(args...)
+	if (args.length == 2)
 	{
-		enum type = type_;
-		alias decoder = decoder_;
+		enum name = __traits(identifier, args[0]);
+		enum type = args[0];
+		alias decoder = args[1];
 	}
 
-	struct EventSpecs
-	{
-		EventSpec!(Expose, simpleDecoder!(xEvent.Expose)) handleExpose;
-	}
+	alias EventSpecs = AliasSeq!(
+		EventSpec!(Expose, simpleDecoder!(xEvent.Expose)),
+	);
 
 	static Data pad4(Data packet)
 	{
@@ -697,16 +698,15 @@ private:
 	{
 		auto pEvent = DataReader(packet).peek!xEvent;
 		auto eventType = (*pEvent).u.type;
-		foreach (name; __traits(allMembers, EventSpecs))
+		foreach (Spec; EventSpecs)
 		{
-			alias Spec = typeof(__traits(getMember, EventSpecs, name));
 			if (Spec.type == eventType)
 			{
-				auto handler = __traits(getMember, this, name);
+				auto handler = __traits(getMember, this, "handle" ~ Spec.name);
 				if (handler)
 					return Spec.decoder(packet, handler);
 				else
-					throw new Exception("No event handler for event: " ~ name);
+					throw new Exception("No event handler for event: " ~ Spec.name);
 			}
 		}
 		throw new Exception("Unrecognized event: " ~ eventType.to!string);
