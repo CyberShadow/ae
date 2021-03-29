@@ -1022,7 +1022,7 @@ private:
 							break;
 						case X_Reply:
 						case GenericEvent:
-							packet = reader.read!uint((*pGenericReply).length).data;
+							packet = reader.read!uint(8 + (*pGenericReply).length).data;
 							if (!packet)
 								return;
 							break;
