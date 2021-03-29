@@ -76,6 +76,21 @@ struct WindowAttributes
 	);
 }
 
+/// Used for ConfigureWindow.
+struct WindowConfiguration
+{
+	/// This will generate `Nullable` fields `x`, `y`, ...
+	mixin Optionals!(
+		CWX           , INT16,
+		CWY           , INT16,
+		CWWidth       , CARD16,
+		CWHeight      , CARD16,
+		CWBorderWidth , CARD16,
+		CWSibling     , Window,
+		CWStackMode   , typeof(Above),
+	);
+}
+
 /// Used for CreateGC, ChangeGC and CopyGC.
 struct GCAttributes
 {
@@ -105,6 +120,14 @@ struct GCAttributes
 		GCDashList          , CARD8                 ,
 		GCArcMode           , typeof(ArcChord)      ,
 	);
+}
+
+/// xReq equivalent for requests with no arguments.
+extern(C) struct xEmptyReq
+{
+    CARD8 reqType;
+    CARD8 pad;
+    CARD16 length;
 }
 
 /// Implements the X11 protocol as a client.
@@ -227,7 +250,7 @@ final class X11Client
 			code ~= "void send" ~ Spec.reqName[2 .. $] ~ "(Parameters!(RequestSpecs[" ~ index ~ "].encoder) params, ";
 			enum haveReply = !is(Spec.decoder == void);
 			if (haveReply)
-				code ~= "Parameters!(RequestSpecs[" ~ index ~ "].decoder) callback";
+				code ~= "Parameters!(RequestSpecs[" ~ index ~ "].decoder)[1] callback";
 			code ~= ") { sendRequest(RequestSpecs[" ~ index ~ "].reqType, RequestSpecs[" ~ index ~ "].encoder(params), ";
 			if (haveReply)
 				code ~= "(Data data) { RequestSpecs[" ~ index ~ "].decoder(data, callback); }";
@@ -324,7 +347,7 @@ private:
 		RequestSpec!(
 			X_CreateWindow,
 			function Data (
-				// xCreateWindowReq struct members
+				// Request struct members
 				CARD8 depth, 
 				Window wid,
 				Window parent,
@@ -348,12 +371,419 @@ private:
 			void,
 		),
 
+		RequestSpec!(
+			X_ChangeWindowAttributes,
+			function Data (
+				// Request struct members
+				Window window,
+
+				// Optional parameters whose presence
+				// is indicated by a bit mask
+				in ref WindowAttributes windowAttributes,
+			) {
+				CARD32 valueMask;
+				auto values = windowAttributes._serialize(valueMask);
+				mixin(populateRequestFromLocals!xChangeWindowAttributesReq);
+				return Data(req.bytes) ~ Data(values.bytes);
+			},
+			void,
+		),
+
+		RequestSpec!(
+			X_GetWindowAttributes,
+			simpleEncoder!xResourceReq,
+			simpleDecoder!xGetWindowAttributesReply,
+		),
+
+		RequestSpec!(
+			X_DestroyWindow,
+			simpleEncoder!xResourceReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_DestroySubwindows,
+			simpleEncoder!xResourceReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_ChangeSaveSet,
+			simpleEncoder!xChangeSaveSetReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_ReparentWindow,
+			simpleEncoder!xReparentWindowReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_MapWindow,
+			simpleEncoder!xResourceReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_MapSubwindows,
+			simpleEncoder!xResourceReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_UnmapWindow,
+			simpleEncoder!xResourceReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_UnmapSubwindows,
+			simpleEncoder!xResourceReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_ConfigureWindow,
+			function Data (
+				// Request struct members
+				Window window,
+
+				// Optional parameters whose presence
+				// is indicated by a bit mask
+				in ref WindowConfiguration windowConfiguration,
+			) {
+				CARD16 mask;
+				auto values = windowConfiguration._serialize(mask);
+				mixin(populateRequestFromLocals!xConfigureWindowReq);
+				return Data(req.bytes) ~ Data(values.bytes);
+			},
+			void,
+		),
+
+		RequestSpec!(
+			X_CirculateWindow,
+			simpleEncoder!xCirculateWindowReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_GetGeometry,
+			simpleEncoder!xResourceReq,
+			simpleDecoder!xGetGeometryReply,
+		),
+
+		RequestSpec!(
+			X_QueryTree,
+			simpleEncoder!xResourceReq,
+			function void(
+				Data data,
+				void delegate(
+					Window root,
+					Window parent,
+					Window[] children,
+				) handler,
+			) {
+				auto reader = DataReader(data);
+				auto header = *reader.read!xQueryTreeReply().enforce("Unexpected reply size");
+				auto children = reader.read!Window(header.nChildren).enforce("Unexpected reply size");
+				enforce(reader.data.length == 0, "Unexpected reply size");
+
+				handler(
+					header.root,
+					header.parent,
+					children,
+				);
+			}
+		),
+
+		RequestSpec!(
+			X_InternAtom,
+			function Data (
+				// Request struct members
+				bool onlyIfExists,
+
+				// Extra data
+				const(char)[] name,
+
+			) {
+				auto nbytes = name.length.to!CARD16;
+				mixin(populateRequestFromLocals!xInternAtomReq);
+				return pad4(Data(req.bytes) ~ Data(name.bytes));
+			},
+			simpleDecoder!xInternAtomReply,
+		),
+
+		RequestSpec!(
+			X_GetAtomName,
+			simpleEncoder!xResourceReq,
+			function void(
+				Data data,
+				void delegate(
+					const(char)[] name,
+				) handler,
+			) {
+				auto reader = DataReader(data);
+				auto header = *reader.read!xGetAtomNameReply().enforce("Unexpected reply size");
+				auto name = reader.read!char(header.nameLength).enforce("Unexpected reply size");
+				enforce(reader.data.length < 4, "Unexpected reply size");
+
+				handler(
+					name,
+				);
+			}
+		),
+
+		RequestSpec!(
+			X_ChangeProperty,
+			function Data (
+				// Request struct members
+				CARD8 mode,
+				Window window,
+				Atom property,
+				Atom type,
+				CARD8 format,
+
+				// Extra data
+				const(ubyte)[] data,
+
+			) {
+				auto nUnits = (data.length * 8 / format).to!CARD32;
+				mixin(populateRequestFromLocals!xChangePropertyReq);
+				return pad4(Data(req.bytes) ~ Data(data.bytes));
+			},
+			void,
+		),
+
+		RequestSpec!(
+			X_DeleteProperty,
+			simpleEncoder!xDeletePropertyReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_GetProperty,
+			simpleEncoder!xGetPropertyReq,
+			function void(
+				Data data,
+				void delegate(
+					CARD8 format,
+					Atom propertyType,
+					CARD32 bytesAfter,
+					const(ubyte)[] value,
+				) handler,
+			) {
+				auto reader = DataReader(data);
+				auto header = *reader.read!xGetPropertyReply().enforce("Unexpected reply size");
+				auto dataLength = header.nItems * header.format / 8;
+				auto value = reader.read!ubyte(dataLength).enforce("Unexpected reply size");
+				enforce(reader.data.length < 4, "Unexpected reply size");
+
+				handler(
+					header.format,
+					header.propertyType,
+					header.bytesAfter,
+					value,
+				);
+			}
+		),
+
+		RequestSpec!(
+			X_ListProperties,
+			simpleEncoder!xResourceReq,
+			function void(
+				Data data,
+				void delegate(
+					Atom[] atoms,
+				) handler,
+			) {
+				auto reader = DataReader(data);
+				auto header = *reader.read!xListPropertiesReply().enforce("Unexpected reply size");
+				auto atoms = reader.read!Atom(header.nProperties).enforce("Unexpected reply size");
+				enforce(reader.data.length < 4, "Unexpected reply size");
+
+				handler(
+					atoms,
+				);
+			}
+		),
+
+		RequestSpec!(
+			X_SetSelectionOwner,
+			simpleEncoder!xSetSelectionOwnerReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_GetSelectionOwner,
+			simpleEncoder!xResourceReq,
+			simpleDecoder!xGetSelectionOwnerReply,
+		),
+
+		RequestSpec!(
+			X_ConvertSelection,
+			simpleEncoder!xConvertSelectionReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_SendEvent,
+			simpleEncoder!xSendEventReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_GrabPointer,
+			simpleEncoder!xGrabPointerReq,
+			simpleDecoder!xGrabPointerReply,
+		),
+
+		RequestSpec!(
+			X_UngrabPointer,
+			simpleEncoder!xResourceReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_GrabButton,
+			simpleEncoder!xGrabButtonReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_UngrabButton,
+			simpleEncoder!xUngrabButtonReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_ChangeActivePointerGrab,
+			simpleEncoder!xChangeActivePointerGrabReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_GrabKeyboard,
+			simpleEncoder!xGrabKeyboardReq,
+			simpleDecoder!xGrabKeyboardReply,
+		),
+
+		RequestSpec!(
+			X_UngrabKeyboard,
+			simpleEncoder!xResourceReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_GrabKey,
+			simpleEncoder!xGrabKeyReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_UngrabKey,
+			simpleEncoder!xUngrabKeyReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_AllowEvents,
+			simpleEncoder!xAllowEventsReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_GrabServer,
+			simpleEncoder!xEmptyReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_UngrabServer,
+			simpleEncoder!xEmptyReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_QueryPointer,
+			simpleEncoder!xResourceReq,
+			simpleDecoder!xQueryPointerReply,
+		),
+
+		RequestSpec!(
+			X_GetMotionEvents,
+			simpleEncoder!xGetMotionEventsReq,
+			function void(
+				Data data,
+				void delegate(
+					const(xTimecoord)[] events,
+				) handler,
+			) {
+				auto reader = DataReader(data);
+				auto header = *reader.read!xGetMotionEventsReply().enforce("Unexpected reply size");
+				auto events = reader.read!xTimecoord(header.nEvents).enforce("Unexpected reply size");
+				enforce(reader.data.length == 0, "Unexpected reply size");
+
+				handler(
+					events,
+				);
+			}
+		),
+
+		RequestSpec!(
+			X_TranslateCoords,
+			simpleEncoder!xTranslateCoordsReq,
+			simpleDecoder!xTranslateCoordsReply,
+		),
+
+		RequestSpec!(
+			X_WarpPointer,
+			simpleEncoder!xWarpPointerReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_SetInputFocus,
+			simpleEncoder!xSetInputFocusReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_GetInputFocus,
+			simpleEncoder!xEmptyReq,
+			simpleDecoder!xGetInputFocusReply,
+		),
+
+		RequestSpec!(
+			X_QueryKeymap,
+			simpleEncoder!xEmptyReq,
+			simpleDecoder!xQueryKeymapReply,
+		),
+
+		RequestSpec!(
+			X_OpenFont,
+			simpleEncoder!xOpenFontReq,
+			void,
+		),
+
+		RequestSpec!(
+			X_CloseFont,
+			simpleEncoder!xResourceReq,
+			void,
+		),
+
+		// RequestSpec!(
+		// 	X_QueryFont,
+		// 	simpleEncoder!xResourceReq,
+		// 	TODO
+		// ),
+
 		// ...
 
 		RequestSpec!(
 			X_CreateGC,
 			function Data (
-				// xCreateGCReq struct members
+				// Request struct members
 				GContext gc,
 				Drawable drawable,
 
@@ -374,7 +804,7 @@ private:
 		RequestSpec!(
 			X_ImageText8,
 			function Data (
-				// xImageTextReq struct members
+				// Request struct members
 				Drawable drawable,
 				GContext gc,
 				INT16 x,
@@ -396,7 +826,7 @@ private:
 		RequestSpec!(
 			X_PolyFillRectangle,
 			function Data (
-				// xPolyFillRectangleReq struct members
+				// Request struct members
 				Drawable drawable,
 				GContext gc,
 
@@ -407,14 +837,6 @@ private:
 				mixin(populateRequestFromLocals!xPolyFillRectangleReq);
 				return Data(req.bytes) ~ Data(rectangles.bytes);
 			},
-			void,
-		),
-
-		// ...
-
-		RequestSpec!(
-			X_MapWindow,
-			simpleEncoder!xResourceReq,
 			void,
 		),
 	);
@@ -664,7 +1086,7 @@ if (args.length % 2 == 0)
 	static foreach (i; 0 .. args.length / 2)
 		mixin Field!i;
 
-	CARD32[] _serialize(ref CARD32 mask) const
+	CARD32[] _serialize(Mask)(ref Mask mask) const
 	{
 		CARD32[] result;
 		static foreach (i; 0 .. _args.length / 2)
