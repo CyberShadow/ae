@@ -174,6 +174,18 @@ subPackage {
 
 ---------------------------
 
+subPackage {
+	name "x11"
+	targetType "sourceLibrary"
+	dependency "ae" version="*" path="."
+	dependency "libx11" version="0.0.1"
+	sourceFiles \
+		"sys/sendinput.d" \
+		"net/x11/*"
+}
+
+---------------------------
+
 # These modules provide a unified interface using different network backends.
 # They are self-registering, so, have to be in different Dub packages
 # (as Dub includes all modules whether they are imported or not).
