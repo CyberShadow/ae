@@ -318,6 +318,7 @@ private:
 			enum bool isPertinentFieldIdx =
 				name != "type" &&
 				name != "sequenceNumber" &&
+				name != "length" &&
 				(name.length < 3 || name[0..3] != "pad");
 		}
 		alias FieldIdxType(size_t index) = typeof(Res.tupleof[index]);
