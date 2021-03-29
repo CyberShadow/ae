@@ -226,12 +226,21 @@ unittest
 /// of 0, unlike the struct.
 alias BoxedVoid = void[0];
 
+/// Resolves to `BoxedVoid` if `T` is `void`, or to `T` otherwise.
+template BoxVoid(T)
+{
+	static if (is(T == void))
+		alias BoxVoid = BoxedVoid;
+	else
+		alias BoxVoid = T;
+}
+
 /// D does not allow void variables or parameters.
 /// As such, there is no "common type" for functions that return void
 /// and non-void.
 /// To allow generic metaprogramming in such cases, this function will
 /// "box" a void expression to a different type.
-auto boxVoid(T)(lazy T expr)
+BoxVoid!T boxVoid(T)(lazy T expr)
 {
 	static if (is(T == void))
 	{
