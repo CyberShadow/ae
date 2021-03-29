@@ -1068,7 +1068,8 @@ private:
 	void onEvent(Data packet)
 	{
 		auto pEvent = DataReader(packet).peek!xEvent;
-		auto eventType = (*pEvent).u.type;
+		auto eventType = (*pEvent).u.type & 0x7F;
+		// bool artificial = !!((*pEvent).u.type >> 7);
 		foreach (Spec; EventSpecs)
 		{
 			if (Spec.type == eventType)
