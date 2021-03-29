@@ -15,6 +15,7 @@
 module ae.net.x11;
 
 import std.algorithm.searching;
+import std.ascii : toLower;
 import std.conv : to;
 import std.exception;
 import std.meta;
@@ -50,6 +51,60 @@ public
     alias CARD32    Time;
     alias CARD8     KeyCode;
     alias CARD32    KeySym;
+}
+
+/// Used for CreateWindow and ChangeWindowAttributes.
+struct WindowAttributes
+{
+	/// This will generate `Nullable` fields `backPixmap`, `backPixel`, ...
+	mixin Optionals!(
+		CWBackPixmap      , Pixmap               ,
+		CWBackPixel       , CARD32               ,
+		CWBorderPixmap    , Pixmap               ,
+		CWBorderPixel     , CARD32               ,
+		CWBitGravity      , typeof(ForgetGravity),
+		CWWinGravity      , typeof(UnmapGravity) ,
+		CWBackingStore    , typeof(NotUseful)    ,
+		CWBackingPlanes   , CARD32               ,
+		CWBackingPixel    , CARD32               ,
+		CWOverrideRedirect, BOOL                 ,
+		CWSaveUnder       , BOOL                 ,
+		CWEventMask       , typeof(NoEventMask)  ,
+		CWDontPropagate   , typeof(NoEventMask)  ,
+		CWColormap        , Colormap             ,
+		CWCursor          , Cursor               ,
+	);
+}
+
+/// Used for CreateGC, ChangeGC and CopyGC.
+struct GCAttributes
+{
+	/// This will generate `Nullable` fields `c_function`, `planeMask`, ...
+	mixin Optionals!(
+		GCFunction          , typeof(GXclear)       ,
+		GCPlaneMask         , CARD32                ,
+		GCForeground        , CARD32                ,
+		GCBackground        , CARD32                ,
+		GCLineWidth         , CARD16                ,
+		GCLineStyle         , typeof(LineSolid)     ,
+		GCCapStyle          , typeof(CapNotLast)    ,
+		GCJoinStyle         , typeof(JoinMiter)     ,
+		GCFillStyle         , typeof(FillSolid)     ,
+		GCFillRule          , typeof(EvenOddRule)   ,
+		GCTile              , Pixmap                ,
+		GCStipple           , Pixmap                ,
+		GCTileStipXOrigin   , INT16                 ,
+		GCTileStipYOrigin   , INT16                 ,
+		GCFont              , Font                  ,
+		GCSubwindowMode     , typeof(ClipByChildren),
+		GCGraphicsExposures , BOOL                  ,
+		GCClipXOrigin       , INT16                 ,
+		GCClipYOrigin       , INT16                 ,
+		GCClipMask          , Pixmap                ,
+		GCDashOffset        , CARD16                ,
+		GCDashList          , CARD8                 ,
+		GCArcMode           , typeof(ArcChord)      ,
+	);
 }
 
 /// Implements the X11 protocol as a client.
@@ -159,7 +214,10 @@ final class X11Client
 		return rid;
 	}
 
-	mixin((){
+	/// To avoid repetition, methods for sending packets and handlers for events are generated.
+	/// This will generate senders such as sendCreateWindow,
+	/// and event handlers such as handleExpose.
+	enum generatedCode = (){
 		string code;
 
 		foreach (i, Spec; RequestSpecs)
@@ -185,7 +243,9 @@ final class X11Client
 		}
 
 		return code;
-	}());
+	}();
+	// pragma(msg, generatedCode);
+	mixin(generatedCode);
 
 private:
 	struct RequestSpec(args...)
@@ -278,25 +338,7 @@ private:
 
 				// Optional parameters whose presence
 				// is indicated by a bit mask
-
-				// Note: this is very ugly, but I'm looking forward to
-				// named arguments making this much nicer to use.
-
-				Nullable!Pixmap                  backgroundPixmap   = Nullable!Pixmap.init,
-				Nullable!CARD32                  backgroundPixel    = Nullable!CARD32.init,
-				Nullable!Pixmap                  borderPixmap       = Nullable!Pixmap.init,
-				Nullable!CARD32                  borderPixel        = Nullable!CARD32.init,
-				Nullable!(typeof(ForgetGravity)) bitGravity         = Nullable!(typeof(ForgetGravity)).init,
-				Nullable!(typeof(UnmapGravity))  winGravity         = Nullable!(typeof(UnmapGravity)).init,
-				Nullable!(typeof(NotUseful))     backingStore       = Nullable!(typeof(NotUseful)).init,
-				Nullable!CARD32                  backingPlanes      = Nullable!CARD32.init,
-				Nullable!CARD32                  backingPixel       = Nullable!CARD32.init,
-				Nullable!BOOL                    overrideRedirect   = Nullable!BOOL.init,
-				Nullable!BOOL                    saveUnder          = Nullable!BOOL.init,
-				Nullable!(typeof(NoEventMask))   eventMask          = Nullable!(typeof(NoEventMask)).init,
-				Nullable!(typeof(NoEventMask))   doNotPropagateMask = Nullable!(typeof(NoEventMask)).init,
-				Nullable!Colormap                colormap           = Nullable!Colormap.init,
-				Nullable!Cursor                  cursor             = Nullable!Cursor.init,
+				in ref WindowAttributes windowAttributes,
 			) {
 				xCreateWindowReq req;
 				req.depth = depth;
@@ -310,33 +352,7 @@ private:
 				req.c_class = c_class;
 				req.visual = visual;
 
-				CARD32[] values;
-				void putValue(T)(Nullable!T param, typeof(CWBackPixmap) mask)
-				{
-					assert(req.mask < mask);
-					if (!param.isNull)
-					{
-						req.mask |= mask;
-						values ~= param.get();
-					}
-				}
-
-				putValue(backgroundPixmap, CWBackPixmap);
-				putValue(backgroundPixel, CWBackPixel);
-				putValue(borderPixmap, CWBorderPixmap);
-				putValue(borderPixel, CWBorderPixel);
-				putValue(bitGravity, CWBitGravity);
-				putValue(winGravity, CWWinGravity);
-				putValue(backingStore, CWBackingStore);
-				putValue(backingPlanes, CWBackingPlanes);
-				putValue(backingPixel, CWBackingPixel);
-				putValue(overrideRedirect, CWOverrideRedirect);
-				putValue(saveUnder, CWSaveUnder);
-				putValue(eventMask, CWEventMask);
-				putValue(doNotPropagateMask, CWDontPropagate);
-				putValue(colormap, CWColormap);
-				putValue(cursor, CWCursor);
-
+				auto values = windowAttributes._serialize(req.mask);
 				return Data(req.bytes) ~ Data(values.bytes);
 			},
 			void,
@@ -353,94 +369,13 @@ private:
 
 				// Optional parameters whose presence
 				// is indicated by a bit mask
-
-				Nullable!(typeof(GXclear))        c_function         = Nullable!(typeof(GXclear)).init,
-				Nullable!(CARD32)                 planeMask          = Nullable!(CARD32).init,
-				Nullable!(CARD32)                 foreground         = Nullable!(CARD32).init,
-				Nullable!(CARD32)                 background         = Nullable!(CARD32).init,
-				Nullable!(CARD16)                 lineWidth          = Nullable!(CARD16).init,
-				Nullable!(typeof(LineSolid))      lineStyle          = Nullable!(typeof(LineSolid)).init,
-				Nullable!(typeof(CapNotLast))     capStyle           = Nullable!(typeof(CapNotLast)).init,
-				Nullable!(typeof(JoinMiter))      joinStyle          = Nullable!(typeof(JoinMiter)).init,
-				Nullable!(typeof(FillSolid))      fillStyle          = Nullable!(typeof(FillSolid)).init,
-				Nullable!(typeof(EvenOddRule))    fillRule           = Nullable!(typeof(EvenOddRule)).init,
-				Nullable!(Pixmap)                 tile               = Nullable!(Pixmap).init,
-				Nullable!(Pixmap)                 stipple            = Nullable!(Pixmap).init,
-				Nullable!(INT16)                  tileStippleXOrigin = Nullable!(INT16).init,
-				Nullable!(INT16)                  tileStippleYOrigin = Nullable!(INT16).init,
-				Nullable!(Font)                   font               = Nullable!(Font).init,
-				Nullable!(typeof(ClipByChildren)) subwindowMode      = Nullable!(typeof(ClipByChildren)).init,
-				Nullable!(BOOL)                   graphicsExposures  = Nullable!(BOOL).init,
-				Nullable!(INT16)                  clipXOrigin        = Nullable!(INT16).init,
-				Nullable!(INT16)                  clipYOrigin        = Nullable!(INT16).init,
-				Nullable!(Pixmap)                 clipMask           = Nullable!(Pixmap).init,
-				Nullable!(CARD16)                 dashOffset         = Nullable!(CARD16).init,
-				Nullable!(CARD8)                  dashes             = Nullable!(CARD8).init,
-				Nullable!(typeof(ArcChord))       arcMode            = Nullable!(typeof(ArcChord)).init,
+				in ref GCAttributes gcAttributes,
 			) {
 				xCreateGCReq req;
 				req.gc = gc;
 				req.drawable = drawable;
 
-				CARD32[] values;
-				void putValue(T)(Nullable!T param, typeof(GCFunction) mask)
-				{
-					assert(req.mask < mask);
-					if (!param.isNull)
-					{
-						req.mask |= mask;
-						values ~= param.get();
-					}
-				}
-
-				// GCFunction			c_function	typeof(Clear)
-				// GCPlaneMask			planeMask	CARD32
-				// GCForeground			foreground	CARD32
-				// GCBackground			background	CARD32
-				// GCLineWidth			lineWidth	CARD16
-				// GCLineStyle			lineStyle	typeof(Solid)
-				// GCCapStyle			capStyle	typeof(NotLast)
-				// GCJoinStyle			joinStyle	typeof(Miter)
-				// GCFillStyle			fillStyle	typeof(Solid)
-				// GCFillRule			fillRule	typeof(EvenOdd)
-				// GCTile				tile	Pixmap                               
-				// GCStipple			stipple	Pixmap                               
-				// GCTileStipXOrigin	tileStippleXOrigin	INT16                    
-				// GCTileStipYOrigin	tileStippleYOrigin	INT16                    
-				// GCFont				font	FONT                                 
-				// GCSubwindowMode		subwindowMode	typeof(ClipByChildren)       
-				// GCGraphicsExposures	graphicsExposures	BOOL                     
-				// GCClipXOrigin		clipXOrigin	INT16                            
-				// GCClipYOrigin		clipYOrigin	INT16                            
-				// GCClipMask			clipMask	Pixmap or None                   
-				// GCDashOffset			dashOffset	CARD16                           
-				// GCDashList			dashes	CARD8                                
-				// GCArcMode			arcMode	typeof(Chord)
-
-				putValue(c_function, GCFunction		);
-				putValue(planeMask, GCPlaneMask		);
-				putValue(foreground, GCForeground	);
-				putValue(background, GCBackground	);
-				putValue(lineWidth, GCLineWidth		);
-				putValue(lineStyle, GCLineStyle		);
-				putValue(capStyle, GCCapStyle		);
-				putValue(joinStyle, GCJoinStyle		);
-				putValue(fillStyle, GCFillStyle		);
-				putValue(fillRule, GCFillRule		);
-				putValue(tile, GCTile			);
-				putValue(stipple, GCStipple		);
-				putValue(tileStippleXOrigin, GCTileStipXOrigin);
-				putValue(tileStippleYOrigin, GCTileStipYOrigin);
-				putValue(font, GCFont			);
-				putValue(subwindowMode, GCSubwindowMode	);
-				putValue(graphicsExposures, GCGraphicsExposures);
-				putValue(clipXOrigin, GCClipXOrigin	);
-				putValue(clipYOrigin, GCClipYOrigin	);
-				putValue(clipMask, GCClipMask		);
-				putValue(dashOffset, GCDashOffset	);
-				putValue(dashes, GCDashList		);
-				putValue(arcMode, GCArcMode		);
-
+				auto values = gcAttributes._serialize(req.mask);
 				return Data(req.bytes) ~ Data(values.bytes);
 			},
 			void,
@@ -728,7 +663,43 @@ private:
 	}
 }
 
+// ************************************************************************
+
 private:
+
+mixin template Optionals(args...)
+if (args.length % 2 == 0)
+{
+	alias _args = args; // DMD bug workaround
+
+	private mixin template Field(size_t i)
+	{
+		alias Type = args[i * 2 + 1];
+		enum maskName = __traits(identifier, args[i * 2]);
+		enum fieldName = toLower(maskName[2]) ~ maskName[3 .. $];
+		enum prefix = is(typeof(mixin("(){int " ~ fieldName ~ "; }()"))) ? "" : "c_";
+		mixin(`Nullable!Type ` ~ prefix ~ fieldName ~ ';');
+	}
+
+	static foreach (i; 0 .. args.length / 2)
+		mixin Field!i;
+
+	CARD32[] _serialize(ref CARD32 mask) const
+	{
+		CARD32[] result;
+		static foreach (i; 0 .. _args.length / 2)
+			if (!this.tupleof[i].isNull)
+			{
+				enum fieldMask = _args[i * 2];
+				assert(mask < fieldMask);
+				result ~= this.tupleof[i].get();
+				mask |= fieldMask;
+			}
+		return result;
+	}
+}
+
+// ************************************************************************
 
 import std.traits;
 
