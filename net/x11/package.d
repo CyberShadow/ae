@@ -132,6 +132,11 @@ extern(C) struct xEmptyReq
 
 /// Implements the X11 protocol as a client.
 /// Allows connecting to a local or remote X11 server.
+///
+/// Note: Because of heavy use of code generation,
+/// this class's API may be a little opaque.
+/// You may instead find the example in demo/x11/demo.d
+/// more illuminating.
 final class X11Client
 {
 	/// Connect to the default X server

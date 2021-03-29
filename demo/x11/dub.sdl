@@ -1,0 +1,6 @@
+name "ae-demo-x11"
+mainSourceFile "demo.d"
+targetType "executable"
+
+dependency "ae" version="*" path="../../"
+dependency "ae:x11" version="*" path="../../"
