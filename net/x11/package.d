@@ -882,7 +882,22 @@ private:
 		EventSpec!(SelectionRequest, simpleDecoder!(xEvent.SelectionRequest)),
 		EventSpec!(SelectionNotify , simpleDecoder!(xEvent.SelectionNotify )),
 		EventSpec!(ColormapNotify  , simpleDecoder!(xEvent.Colormap        )),
-		EventSpec!(ClientMessage   , simpleDecoder!(xEvent.ClientMessage   )),
+		EventSpec!(ClientMessage   ,
+			function void(
+				Data data,
+				void delegate(
+					Atom type,
+					ubyte[20] bytes,
+				) handler,
+			) {
+				auto reader = DataReader(data);
+				auto packet = *reader.read!(xEvent.ClientMessage)().enforce("Unexpected reply size");
+				handler(
+					packet.b.type,
+					cast(ubyte[20])packet.b.bytes,
+				);
+			}
+		),
 		EventSpec!(MappingNotify   , simpleDecoder!(xEvent.MappingNotify   )),
 	//	EventSpec!(GenericEvent    , simpleDecoder!(xGenericEvent          )),
 	);
