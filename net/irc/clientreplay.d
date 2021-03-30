@@ -9,7 +9,7 @@
  *
  * Authors:
  *   Stéphan Kochen <stephan@kochen.nl>
- *   Vladimir Panteleev <vladimir@thecybershadow.net>
+ *   Vladimir Panteleev <ae@cy.md>
  *   Vincent Povirk <madewokherd@gmail.com>
  *   Simon Arlott
  */

@@ -8,7 +8,7 @@
  *   can obtain one at http://mozilla.org/MPL/2.0/.
  *
  * Authors:
- *   Vladimir Panteleev <vladimir@thecybershadow.net>
+ *   Vladimir Panteleev <ae@cy.md>
  */
 
 module ae.sys.btrfs.clone_range;

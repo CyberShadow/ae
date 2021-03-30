@@ -9,7 +9,7 @@
  *
  * Authors:
  *   Simon Arlott
- *   Vladimir Panteleev <vladimir@thecybershadow.net>
+ *   Vladimir Panteleev <ae@cy.md>
  */
 
 module ae.sys.timing;

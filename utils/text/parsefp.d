@@ -13,7 +13,7 @@ Authors:   $(HTTP digitalmars.com, Walter Bright),
            Shin Fujishiro,
            Adam D. Ruppe,
            Kenji Hara,
-           Vladimir Panteleev <vladimir@thecybershadow.net>
+           Vladimir Panteleev <ae@cy.md>
 */
 
 module ae.utils.text.parsefp;
