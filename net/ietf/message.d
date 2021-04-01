@@ -101,6 +101,9 @@ class Rfc850Message
 	/// Reflow options (RFC 2646).
 	bool flowed, delsp;
 
+	/// Additional Content-Type "markup" option.
+	string markup;
+
 	/// For a multipart message, contains the child parts.
 	/// May nest more than one level.
 	Rfc850Message[] parts;
@@ -167,6 +170,7 @@ class Rfc850Message
 		mimeType = toLower(contentType.value);
 		flowed = contentType.properties.get("format", "fixed").icmp("flowed")==0;
 		delsp = contentType.properties.get("delsp", "no").icmp("yes") == 0;
+		markup = contentType.properties.get("markup", null);
 
 		if (rawContent)
 		{
@@ -493,7 +497,11 @@ class Rfc850Message
 		headers["From"] = format(`%s <%s>`, author, authorEmail);
 		headers["Subject"] = subject;
 		headers["Newsgroups"] = xref.map!(x => x.group)().join(",");
-		headers["Content-Type"] = format("text/plain; charset=utf-8; format=%s; delsp=%s", flowed ? "flowed" : "fixed", delsp ? "yes" : "no");
+		headers["Content-Type"] = format("text/plain; charset=utf-8; format=%s; delsp=%s%s",
+			flowed ? "flowed" : "fixed",
+			delsp ? "yes" : "no",
+			markup ? "; markup=" ~ markup : null,
+		);
 		headers["Content-Transfer-Encoding"] = "8bit";
 		if (references.length)
 		{
