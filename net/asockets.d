@@ -236,7 +236,7 @@ else // Use select
 		/// Debug AA to check for dangling socket references.
 		debug GenericSocket[socket_t] socketHandles;
 
-		void delegate()[] idleHandlers;
+		void delegate()[] nextTickHandlers, idleHandlers;
 
 	public:
 		/// Register a socket with the manager.
@@ -296,6 +296,17 @@ else // Use select
 			writeset = new SocketSet(setSize);
 			while (true)
 			{
+				if (nextTickHandlers.length)
+				{
+					auto thisTickHandlers = nextTickHandlers;
+					nextTickHandlers = null;
+
+					foreach (handler; thisTickHandlers)
+						handler();
+
+					continue;
+				}
+
 				uint minSize = 0;
 				version(Windows)
 					minSize = cast(uint)sockets.length;
@@ -358,7 +369,7 @@ else // Use select
 					mainTimer.isWaiting() ? "with" : "no",
 					idleHandlers.length,
 				);
-				if (!haveActive && !mainTimer.isWaiting())
+				if (!haveActive && !mainTimer.isWaiting() && !nextTickHandlers.length)
 				{
 					debug (ASOCKETS) stderr.writeln("No more sockets or timer events, exiting loop.");
 					break;
@@ -471,6 +482,14 @@ else // Use select
 
 			assert(false, "select() reported events available, but no registered sockets are set");
 		}
+	}
+
+	/// Schedule a function to run on the next event loop iteration.
+	/// Can be used to queue logic to run once all current execution frames exit.
+	/// Similar to e.g. process.nextTick in Node.
+	void onNextTick(ref SocketManager socketManager, void delegate() dg) pure @safe nothrow
+	{
+		socketManager.nextTickHandlers ~= dg;
 	}
 
 	// Use UFCS to allow removeIdleHandler to have a predicate with context
