@@ -19,6 +19,8 @@ import std.traits : CommonType;
 
 import ae.net.asockets : socketManager, onNextTick;
 
+debug (no_ae_promise) {} else debug debug = ae_promise;
+
 /**
    A promise for a value `T` or error `E`.
 
@@ -68,6 +70,11 @@ import ae.net.asockets : socketManager, onNextTick;
 
    - `finally` is called `finish` (because the former is a reserved D
      keyword).
+
+   - In debug builds, resolved `Promise` instances check on
+     destruction that their value / error was passed on to a handler
+     (unless they have been successfully fulfilled to a `void` value).
+      Such leaks are reported to the standard error stream.
 */
 final class Promise(T, E : Throwable = Exception)
 {
@@ -83,6 +90,7 @@ private:
 	alias A = typeof(Box.tupleof);
 
 	PromiseState state;
+	debug (ae_promise) bool resultUsed;
 
 	union
 	{
@@ -143,6 +151,25 @@ private:
 	{
 		assert(this.state == PromiseState.following);
 		doReject(e);
+	}
+
+	debug (ae_promise)
+	~this() @nogc
+	{
+		if (state == PromiseState.pending || state == PromiseState.following || resultUsed)
+			return;
+		static if (is(T == void))
+			if (state == PromiseState.fulfilled)
+				return;
+		// Throwing anything here or doing anything else non-@nogc
+		// will just cause an `InvalidMemoryOperationError`, so
+		// `printf` is our best compromise.  Even if we could throw,
+		// the stack trace would not be useful due to the
+		// nondeterministic nature of the GC.
+		import core.stdc.stdio : fprintf, stderr;
+		fprintf(stderr, "Leaked %s %s\n",
+			state == PromiseState.fulfilled ? "fulfilled".ptr : "rejected".ptr,
+			typeof(this).stringof.ptr);
 	}
 
 public:
@@ -223,6 +250,8 @@ public:
 				callSoon(&rejectHandler);
 				break;
 		}
+
+		debug (ae_promise) resultUsed = true;
 		return next;
 	}
 
@@ -275,6 +304,8 @@ public:
 				callSoon(&rejectHandler);
 				break;
 		}
+
+		debug (ae_promise) resultUsed = true;
 		return next;
 	}
 
@@ -316,6 +347,8 @@ public:
 				callSoon(&handler);
 				break;
 		}
+
+		debug (ae_promise) resultUsed = true;
 		return next;
 	}
 }
