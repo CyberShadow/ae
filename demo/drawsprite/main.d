@@ -41,10 +41,10 @@ final class MyApplication : Application
 		//auto canvas = s.lock();
 		//scope(exit) s.unlock();
 
-		int x0 = (s.width  - image.w) / 2;
-		int y0 = (s.height - image.h) / 2;
+		xy_t x0 = (s.width  - image.w) / 2;
+		xy_t y0 = (s.height - image.h) / 2;
 		//image.blitTo(canvas, x0, y0);
-		s.draw(x0, y0, source, 0, 0, image.w, image.h);
+		s.draw(cast(int)x0, cast(int)y0, source, 0, 0, cast(int)image.w, cast(int)image.h);
 	}
 
 	override int run(string[] args)

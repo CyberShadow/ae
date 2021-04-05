@@ -47,8 +47,8 @@ final class MyApplication : Application
 
 		ubyte randByte() { return cast(ubyte)uniform(0, 256); }
 		BGRX randColor() { return BGRX(randByte(), randByte(), randByte()); }
-		int randX() { return uniform(0, canvas.w); }
-		int randY() { return uniform(0, canvas.h); }
+		xy_t randX() { return uniform(0, canvas.w); }
+		xy_t randY() { return uniform(0, canvas.h); }
 
 		enum Shape
 		{

@@ -54,7 +54,7 @@ final class MyApplication : Application
 		image = image.init; // Force redraw next frame
 	}
 
-	void renderImage(int w, int h)
+	void renderImage(xy_t w, xy_t h)
 	{
 		image.size(w, h);
 		image.fill(Color.init);

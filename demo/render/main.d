@@ -13,6 +13,7 @@
 
 module ae.demo.render.main;
 
+import std.conv : to;
 import std.random;
 
 import ae.ui.app.application;
@@ -72,11 +73,11 @@ final class MyApplication : Application
 
 		foreach (uint i, img; imgs)
 		{
-			s.draw(i*128, 300, img, 0, 0, img.image.w, img.image.h);
+			s.draw(i*128, 300, img, 0, 0, img.image.w.to!int, img.image.h.to!int);
 			s.draw(
 				i*128 + x+img.image.w/4  , 428 + img.image.h/4  ,
 				i*128 + x+img.image.w/4*3, 428 + img.image.h/4*3,
-				img, 0, 0, img.image.w, img.image.h);
+				img, 0, 0, img.image.w.to!int, img.image.h.to!int);
 		}
 
 		static int offset;
@@ -88,7 +89,7 @@ final class MyApplication : Application
 			w = w.crop(w.w/4, w.h/4, w.w/4*3, w.h/4*3).toRef;
 		}
 		imgT.textureVersion++;
-		s.draw(400, 50, imgT, 0, 0, imgT.image.w, imgT.image.h);
+		s.draw(400, 50, imgT, 0, 0, imgT.image.w.to!int, imgT.image.h.to!int);
 	}
 
 	void checker(CANVAS)(CANVAS img, int level, int offset)
