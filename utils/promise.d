@@ -74,7 +74,7 @@ debug (no_ae_promise) {} else debug debug = ae_promise;
    - In debug builds, resolved `Promise` instances check on
      destruction that their value / error was passed on to a handler
      (unless they have been successfully fulfilled to a `void` value).
-      Such leaks are reported to the standard error stream.
+     Such leaks are reported to the standard error stream.
 */
 final class Promise(T, E : Throwable = Exception)
 {
@@ -190,7 +190,8 @@ public:
 	}
 
 	/// Registers the specified fulfillment and rejection handlers.
-	/// If the promise is already resolved, 
+	/// If the promise is already resolved, they are called
+	/// as soon as possible (but not immediately).
 	Promise!(Unpromise!R, F) then(R, F = E)(R delegate(A) onFulfilled, R delegate(E) onRejected = null) nothrow
 	{
 		static if (!is(T : R))
