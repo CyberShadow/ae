@@ -391,13 +391,20 @@ struct StructFromParams(alias fun, bool voidInitializeRequired = false)
 		{
 			enum n = toDec(i);
 
+			code ~= `ParameterTypeTuple!fun[` ~ n ~ `] `;
+
+			static if (ParameterIdentifierTuple!fun[i].length)
+				code ~= ParameterIdentifierTuple!fun[i];
+			else
+				code ~= "_param_" ~ toDec(i);
+
 			static if (is(ParameterDefaultValueTuple!fun[i] == void))
 				static if (voidInitializeRequired)
-					code ~= `ParameterTypeTuple!fun[` ~ n ~ `] ` ~ ParameterIdentifierTuple!fun[i] ~ ` = void;`;
+					code ~= ` = void;`;
 				else
-					code ~= `ParameterTypeTuple!fun[` ~ n ~ `] ` ~ ParameterIdentifierTuple!fun[i] ~ `;`;
+					code ~= `;`;
 			else
-				code ~= `ParameterTypeTuple!fun[` ~ n ~ `] ` ~ ParameterIdentifierTuple!fun[i] ~ ` = ParameterDefaultValueTuple!fun[` ~ n ~ `];`;
+				code ~= ` = ParameterDefaultValueTuple!fun[` ~ n ~ `];`;
 		}
 		return code;
 	}());
@@ -409,6 +416,13 @@ unittest
 	alias S = StructFromParams!fun;
 	static assert(is(typeof(S.a) == string));
 	static assert(S.init.b == 42);
+}
+
+unittest
+{
+	static void fun(string, int = 42) {}
+	alias S = StructFromParams!(typeof(&fun));
+	static assert(is(typeof(S.tupleof[0]) == string));
 }
 
 // ************************************************************************
