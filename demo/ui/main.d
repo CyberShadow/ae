@@ -11,7 +11,7 @@
  *   Vladimir Panteleev <ae@cy.md>
  */
 
-module ae.demo.test.main;
+module ae.demo.ui.main;
 
 import std.conv;
 

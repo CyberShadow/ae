@@ -11,6 +11,8 @@
  *   Vladimir Panteleev <ae@cy.md>
  */
 
+module ae.demo.x11.demo;
+
 import ae.net.asockets;
 import ae.net.x11;
 import ae.utils.array;
