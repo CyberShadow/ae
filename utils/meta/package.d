@@ -381,9 +381,15 @@ unittest
 
 /// Generates a struct containing fields with names, types, and default values
 /// corresponding to a function's parameter list.
-struct StructFromParams(alias fun, bool voidInitializeRequired = false)
+struct StructFromParams(args...)
+if (args.length == 1 || args.length == 2)
 {
 	mixin((){
+		alias fun = args[0];
+		static if (args.length == 1)
+			enum bool voidInitializeRequired = false;
+		else
+			enum bool voidInitializeRequired = args[1];
 		import ae.utils.text.ascii : toDec;
 
 		string code;
@@ -391,7 +397,7 @@ struct StructFromParams(alias fun, bool voidInitializeRequired = false)
 		{
 			enum n = toDec(i);
 
-			code ~= `ParameterTypeTuple!fun[` ~ n ~ `] `;
+			code ~= `ParameterTypeTuple!(args[0])[` ~ n ~ `] `;
 
 			static if (ParameterIdentifierTuple!fun[i].length)
 				code ~= ParameterIdentifierTuple!fun[i];
@@ -404,7 +410,7 @@ struct StructFromParams(alias fun, bool voidInitializeRequired = false)
 				else
 					code ~= `;`;
 			else
-				code ~= ` = ParameterDefaultValueTuple!fun[` ~ n ~ `];`;
+				code ~= ` = ParameterDefaultValueTuple!(args[0])[` ~ n ~ `];`;
 		}
 		return code;
 	}());
@@ -421,7 +427,8 @@ unittest
 unittest
 {
 	static void fun(string, int = 42) {}
-	alias S = StructFromParams!(typeof(&fun));
+	alias Fun = typeof(&fun);
+	alias S = StructFromParams!Fun;
 	static assert(is(typeof(S.tupleof[0]) == string));
 }
 
