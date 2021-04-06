@@ -173,6 +173,18 @@ private:
 	}
 
 public:
+	/// Work-around for DMD bug 21804:
+	/// https://issues.dlang.org/show_bug.cgi?id=21804
+	/// If your `then` callback argument is a tuple,
+	/// insert this call before the `then` call.
+	/// (Needs to be done only once per `Promise!T` instance.)
+	static if (!is(T == void))
+	typeof(this) dmd21804workaround()
+	{
+		then((result) {});
+		return this;
+	}
+
 	/// Fulfill this promise, with the given value (if applicable).
 	void fulfill(A value) nothrow
 	{
