@@ -412,3 +412,79 @@ unittest
 		test2.then({});
 	}
 }
+
+// ****************************************************************************
+
+/// Wait for all promises to be resolved, or for any to be rejected.
+Promise!(T[], E) all(T, E)(Promise!(T, E)[] promises...)
+if (!is(T == void))
+{
+	auto allPromise = new typeof(return);
+	auto results = new T[promises.length];
+	size_t numResolved;
+	foreach (i, p; promises)
+		(i, p) {
+			p.then((result) {
+				if (allPromise)
+				{
+					results[i] = result;
+					if (++numResolved == promises.length)
+						allPromise.fulfill(results);
+				}
+			}, (error) {
+				allPromise.reject(error);
+				allPromise = null; // ignore successive resolves
+			});
+		}(i, p);
+	return allPromise;
+}
+
+/// ditto
+Promise!(void, E) all(E)(Promise!(void, E)[] promises...)
+{
+	auto allPromise = new typeof(return);
+	size_t numResolved;
+	foreach (i, p; promises)
+		(i, p) {
+			p.then({
+				if (allPromise && ++numResolved == promises.length)
+					allPromise.fulfill();
+			}, (error) {
+				allPromise.reject(error);
+				allPromise = null; // ignore successive resolves
+			});
+		}(i, p);
+	return allPromise;
+}
+
+unittest
+{
+	int result;
+	auto p1 = new Promise!int;
+	auto p2 = new Promise!int;
+	auto p3 = new Promise!int;
+	p2.fulfill(2);
+	auto pAll = all([p1, p2, p3]);
+	p1.fulfill(1);
+	pAll.dmd21804workaround.then((values) { result = values[0] + values[1] + values[2]; });
+	p3.fulfill(3);
+	socketManager.loop();
+	assert(result == 6);
+}
+
+unittest
+{
+	int called;
+	auto p1 = new Promise!void;
+	auto p2 = new Promise!void;
+	auto p3 = new Promise!void;
+	p2.fulfill();
+	auto pAll = all([p1, p2, p3]);
+	p1.fulfill();
+	pAll.then({ called = true; });
+	socketManager.loop();
+	assert(!called);
+	p3.fulfill();
+	socketManager.loop();
+	assert(called);
+}
