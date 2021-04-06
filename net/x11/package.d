@@ -32,6 +32,7 @@ import ae.net.asockets;
 import ae.utils.array;
 import ae.utils.exception : CaughtException;
 import ae.utils.meta;
+import ae.utils.promise;
 import ae.utils.text.ascii : toDec;
 
 /// These are always 32-bit in the protocol,
@@ -252,22 +253,29 @@ final class X11Client
 		{
 			enum index = toDec(i);
 			assert(Spec.reqName[0 .. 2] == "X_");
-			code ~= "void send" ~ Spec.reqName[2 .. $] ~ "(Parameters!(RequestSpecs[" ~ index ~ "].encoder) params, ";
 			enum haveReply = !is(Spec.decoder == void);
 			if (haveReply)
-				code ~= "Parameters!(RequestSpecs[" ~ index ~ "].decoder)[1] callback";
-			code ~= ") { sendRequest(RequestSpecs[" ~ index ~ "].reqType, RequestSpecs[" ~ index ~ "].encoder(params), ";
+				code ~= "Promise!(ReturnType!(RequestSpecs[" ~ index ~ "].decoder))";
+			else
+				code ~= "void";
+			code ~= " send" ~ Spec.reqName[2 .. $] ~ "(Parameters!(RequestSpecs[" ~ index ~ "].encoder) params) { ";
 			if (haveReply)
-				code ~= "(Data data) { RequestSpecs[" ~ index ~ "].decoder(data, callback); }";
+				code ~= `auto p = new typeof(return);`;
+			code ~= "sendRequest(RequestSpecs[" ~ index ~ "].reqType, RequestSpecs[" ~ index ~ "].encoder(params), ";
+			if (haveReply)
+				code ~= "(Data data) { p.fulfill(RequestSpecs[" ~ index ~ "].decoder(data)); }";
 			else
 				code ~= "null";
-			code ~= "); }\n";
+			code ~= ");";
+			if (haveReply)
+				code ~= "return p;";
+			code ~=" }\n";
 		}
 
 		foreach (i, Spec; EventSpecs)
 		{
 			enum index = toDec(i);
-			code ~= "Parameters!(EventSpecs[" ~ index ~ "].decoder)[1] handle" ~ Spec.name ~ ";\n";
+			code ~= "void delegate(ReturnType!(EventSpecs[" ~ index ~ "].decoder)) handle" ~ Spec.name ~ ";\n";
 		}
 
 		return code;
@@ -283,6 +291,7 @@ private:
 		enum reqName = __traits(identifier, args[0]);
 		alias encoder = args[1];
 		alias decoder = args[2];
+		static assert(is(decoder == void) || !is(ReturnType!decoder == void));
 	}
 
 	/// Instantiates to a function which accepts arguments and
@@ -326,26 +335,33 @@ private:
 				name != "length" &&
 				(name.length < 3 || name[0..3] != "pad");
 		}
+		static struct DecodedResult
+		{
+			mixin((){
+				import ae.utils.text.ascii : toDec;
+
+				string code;
+				foreach (i; RangeTuple!(Res.tupleof.length))
+					static if (isPertinentFieldIdx!i)
+						code ~= `typeof(Res.tupleof)[` ~ toDec(i) ~ `] ` ~ __traits(identifier, Res.tupleof[i]) ~ ";";
+				return code;
+			}());
+		}
 		alias FieldIdxType(size_t index) = typeof(Res.tupleof[index]);
 		enum pertinentFieldIndices = Filter!(isPertinentFieldIdx, RangeTuple!(Res.tupleof.length));
 
-		void simpleDecoder(
+		DecodedResult simpleDecoder(
 			Data data,
-			void delegate(staticMap!(FieldIdxType, pertinentFieldIndices)) handler,
 		) {
 			enforce(Res.sizeof < sz_xGenericReply || data.length == Res.sizeof,
 				"Unexpected reply size");
 			auto res = cast(Res*)data.contents.ptr;
 
-			staticMap!(FieldIdxType, pertinentFieldIndices) args;
+			DecodedResult result;
+			foreach (i; RangeTuple!(pertinentFieldIndices.length))
+				result.tupleof[i] = res.tupleof[pertinentFieldIndices[i]];
 
-			foreach (i; RangeTuple!(args.length))
-			{
-				enum structIndex = pertinentFieldIndices[i];
-				args[i] = res.tupleof[structIndex];
-			}
-
-			handler(args);
+			return result;
 		}
 	}
 
@@ -482,20 +498,19 @@ private:
 		RequestSpec!(
 			X_QueryTree,
 			simpleEncoder!xResourceReq,
-			function void(
-				Data data,
-				void delegate(
-					Window root,
-					Window parent,
-					Window[] children,
-				) handler,
-			) {
+			(Data data)
+			{
 				auto reader = DataReader(data);
 				auto header = *reader.read!xQueryTreeReply().enforce("Unexpected reply size");
 				auto children = reader.read!Window(header.nChildren).enforce("Unexpected reply size");
 				enforce(reader.data.length == 0, "Unexpected reply size");
-
-				handler(
+				struct Result
+				{
+					Window root;
+					Window parent;
+					Window[] children;
+				}
+				return Result(
 					header.root,
 					header.parent,
 					children,
@@ -523,20 +538,14 @@ private:
 		RequestSpec!(
 			X_GetAtomName,
 			simpleEncoder!xResourceReq,
-			function void(
-				Data data,
-				void delegate(
-					const(char)[] name,
-				) handler,
-			) {
+			(Data data)
+			{
 				auto reader = DataReader(data);
 				auto header = *reader.read!xGetAtomNameReply().enforce("Unexpected reply size");
 				auto name = reader.read!char(header.nameLength).enforce("Unexpected reply size");
 				enforce(reader.data.length < 4, "Unexpected reply size");
 
-				handler(
-					name,
-				);
+				return name.idup;
 			}
 		),
 
@@ -570,22 +579,22 @@ private:
 		RequestSpec!(
 			X_GetProperty,
 			simpleEncoder!xGetPropertyReq,
-			function void(
-				Data data,
-				void delegate(
-					CARD8 format,
-					Atom propertyType,
-					CARD32 bytesAfter,
-					const(ubyte)[] value,
-				) handler,
-			) {
+			(Data data)
+			{
 				auto reader = DataReader(data);
 				auto header = *reader.read!xGetPropertyReply().enforce("Unexpected reply size");
 				auto dataLength = header.nItems * header.format / 8;
 				auto value = reader.read!ubyte(dataLength).enforce("Unexpected reply size");
 				enforce(reader.data.length < 4, "Unexpected reply size");
 
-				handler(
+				struct Result
+				{
+					CARD8 format;
+					Atom propertyType;
+					CARD32 bytesAfter;
+					const(ubyte)[] value;
+				}
+				return Result(
 					header.format,
 					header.propertyType,
 					header.bytesAfter,
@@ -597,20 +606,14 @@ private:
 		RequestSpec!(
 			X_ListProperties,
 			simpleEncoder!xResourceReq,
-			function void(
-				Data data,
-				void delegate(
-					Atom[] atoms,
-				) handler,
-			) {
+			(Data data)
+			{
 				auto reader = DataReader(data);
 				auto header = *reader.read!xListPropertiesReply().enforce("Unexpected reply size");
 				auto atoms = reader.read!Atom(header.nProperties).enforce("Unexpected reply size");
 				enforce(reader.data.length < 4, "Unexpected reply size");
 
-				handler(
-					atoms,
-				);
+				return atoms.idup;
 			}
 		),
 
@@ -719,20 +722,14 @@ private:
 		RequestSpec!(
 			X_GetMotionEvents,
 			simpleEncoder!xGetMotionEventsReq,
-			function void(
-				Data data,
-				void delegate(
-					const(xTimecoord)[] events,
-				) handler,
-			) {
+			(Data data)
+			{
 				auto reader = DataReader(data);
 				auto header = *reader.read!xGetMotionEventsReply().enforce("Unexpected reply size");
 				auto events = reader.read!xTimecoord(header.nEvents).enforce("Unexpected reply size");
 				enforce(reader.data.length == 0, "Unexpected reply size");
 
-				handler(
-					events,
-				);
+				return events.idup;
 			}
 		),
 
@@ -888,16 +885,17 @@ private:
 		EventSpec!(SelectionNotify , simpleDecoder!(xEvent.SelectionNotify )),
 		EventSpec!(ColormapNotify  , simpleDecoder!(xEvent.Colormap        )),
 		EventSpec!(ClientMessage   ,
-			function void(
+			function(
 				Data data,
-				void delegate(
-					Atom type,
-					ubyte[20] bytes,
-				) handler,
 			) {
 				auto reader = DataReader(data);
 				auto packet = *reader.read!(xEvent.ClientMessage)().enforce("Unexpected reply size");
-				handler(
+				struct Result
+				{
+					Atom type;
+					ubyte[20] bytes;
+				}
+				return Result(
 					packet.b.type,
 					cast(ubyte[20])packet.b.bytes,
 				);
@@ -1096,7 +1094,7 @@ private:
 			{
 				auto handler = __traits(getMember, this, "handle" ~ Spec.name);
 				if (handler)
-					return Spec.decoder(packet, handler);
+					return handler(Spec.decoder(packet));
 				else
 					throw new Exception("No event handler for event: " ~ Spec.name);
 			}

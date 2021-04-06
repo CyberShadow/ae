@@ -13,9 +13,13 @@
 
 module ae.demo.x11.demo;
 
+import std.algorithm.iteration;
+import std.array;
+
 import ae.net.asockets;
 import ae.net.x11;
 import ae.utils.array;
+import ae.utils.promise;
 
 // Pro tip: Build with -debug=PRINTDATA to see the raw bytes sent and
 // received from the X server!
@@ -26,17 +30,19 @@ void main()
 
 	// Maintain a dictionary of known interred atoms.
 	Atom[string] atoms;
-	void getAtom(string name, void delegate(Atom) callback)
+	Promise!Atom getAtom(string name)
 	{
+		auto p = new Promise!Atom;
 		if (auto patom = name in atoms)
-			callback(*patom);
+			p.fulfill(*patom);
 		else
-			x11.sendInternAtom(false, name,
-				(Atom atom)
-				{
-					atoms[name] = atom;
-					callback(atom);
+			x11.sendInternAtom(false, name)
+				.dmd21804workaround
+ 				.then((result) {
+					atoms[name] = result.atom;
+					p.fulfill(result.atom);
 				});
+		return p;
 	}
 
 	// Our window, and the context we use to draw on it.
@@ -75,52 +81,32 @@ void main()
 
 		// Announce our support of the WM_DELETE_WINDOW window manager
 		// protocol.  To do that, we need to intern some atoms first.
-		getAtom("WM_PROTOCOLS",
-			(Atom WM_PROTOCOLS)
-			{
-				getAtom("WM_DELETE_WINDOW",
-					(Atom WM_DELETE_WINDOW)
-					{
-						getAtom("ATOM",
-							(Atom ATOM)
-							{
-								x11.sendChangeProperty(
-									PropModeReplace,
-									wid,
-									WM_PROTOCOLS, ATOM,
-									32,
-									[WM_DELETE_WINDOW].bytes,
-								);
-							});
-					});
-				
+		["WM_PROTOCOLS", "WM_DELETE_WINDOW", "ATOM"]
+			.map!getAtom
+			.array
+			.all
+			.then((result) {
+				x11.sendChangeProperty(
+					PropModeReplace,
+					wid,
+					atoms["WM_PROTOCOLS"], atoms["ATOM"],
+					32,
+					[atoms["WM_DELETE_WINDOW"]].bytes,
+				);
 			});
 	};
 
 	// The expose event informs us when it's time to repaint our window.
 	// Register a handler here.
-	x11.handleExpose = (
-		Window window,
-		CARD16 x,
-		CARD16 y,
-		CARD16 width,
-		CARD16 height,
-		CARD16 count,
-	) {
-		if (window == wid)
+	x11.handleExpose = (event) {
+		if (event.window == wid)
 		{
 			x11.sendPolyFillRectangle(wid, gc, [xRectangle(0, 0, ushort.max, ushort.max)]);
 			// Query the current window geometry, so that we can draw the text in the center.
-			x11.sendGetGeometry(wid, (
-					CARD8 depth,
-					Window root,
-					INT16 x,
-					INT16 y,
-					CARD16 width,
-					CARD16 height,
-					CARD16 borderWidth
-				) {
-					x11.sendImageText8(wid, gc, width / 2, height / 2, "Hello X11!");
+			x11.sendGetGeometry(wid)
+				.dmd21804workaround
+				.then((result) {
+					x11.sendImageText8(wid, gc, result.width / 2, result.height / 2, "Hello X11!");
 				});
 		}
 	};
@@ -128,13 +114,10 @@ void main()
 	// Register a handler for the client message event, so that we can
 	// be notified of when the window manager is asking our window to
 	// please go away.
-	x11.handleClientMessage = (
-		Atom type,
-		ubyte[20] bytes,
-	) {
-		if (type == atoms["WM_PROTOCOLS"])
+	x11.handleClientMessage = (event) {
+		if (event.type == atoms["WM_PROTOCOLS"])
 		{
-			auto messageAtoms = bytes.fromBytes!(Atom[])();
+			auto messageAtoms = event.bytes.fromBytes!(Atom[])();
 			if (messageAtoms[0] == atoms["WM_DELETE_WINDOW"])
 			{
 				// As the X11 connection is the only object in the
