@@ -52,7 +52,7 @@ alias L16 COLOR;
 Image!COLOR canvas;
 float cf(float x) { assert(canvas.w == canvas.h); return x*canvas.w; }
 int   ci(float x) { assert(canvas.w == canvas.h); return cast(int)(x*canvas.w); }
-T cbound(T)(T x) { return bound(x, 0, canvas.w); }
+int cbound(int x) { return bound(x, 0, cast(int)canvas.w); }
 auto BLACK = COLOR(0);
 auto WHITE = COLOR(COLOR.ChannelType.max);
 
@@ -446,10 +446,10 @@ class Ship : GameObject
 			auto cy = ci(y)-bgy0;
 			procedural!((x, y)
 			{
-				int dx = x-cx;
-				int dy = y-cy;
-				int sx = x;
-				int sy = y;
+				xy_t dx = x-cx;
+				xy_t dy = y-cy;
+				xy_t sx = x;
+				xy_t sy = y;
 				float f = dist(dx, dy) / cx;
 				if (f < 1f && f > 0f)
 				{
