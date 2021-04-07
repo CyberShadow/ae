@@ -181,7 +181,8 @@ public:
 	static if (!is(T == void))
 	typeof(this) dmd21804workaround()
 	{
-		then((result) {});
+		if (false)
+			then((result) {});
 		return this;
 	}
 
