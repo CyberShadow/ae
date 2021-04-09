@@ -153,13 +153,14 @@ unittest
 }
 
 /// Return true if all of T's fields are the same type.
-@property bool isHomogenous(T)()
+@property bool isHomogeneous(T)()
 {
 	foreach (i, f; T.init.tupleof)
 		if (!is(typeof(T.init.tupleof[i]) == typeof(T.init.tupleof[0])))
 			return false;
 	return true;
 }
+deprecated alias isHomogenous = isHomogeneous;
 
 /// Resolves to `true` if tuple `T` contains a value whose type is `X`.
 template isValueOfTypeInTuple(X, T...)

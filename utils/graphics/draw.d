@@ -442,7 +442,7 @@ private mixin template FixMath(ubyte coordinateBitsParam = 16)
 
 	enum coordinateBits = coordinateBitsParam;
 
-	static assert(COLOR.homogenous, "Asymmetric color types not supported, fix me!");
+	static assert(COLOR.homogeneous, "Asymmetric color types not supported, fix me!");
 	/// Fixed-point type, big enough to hold a coordinate, with fractionary precision corresponding to channel precision.
 	alias fix  = SignedBitsType!(COLOR.channelBits   + coordinateBits);
 	/// Type to hold temporary values for multiplication and division

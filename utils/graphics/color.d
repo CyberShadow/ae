@@ -42,13 +42,14 @@ struct Color(FieldTuple...)
 
 	/// Whether or not all channel fields have the same base type.
 	// Only "true" supported for now, may change in the future (e.g. for 5:6:5)
-	enum homogenous = isHomogenous!Fields();
+	enum homogeneous = isHomogeneous!Fields();
+	deprecated alias homogenous = homogeneous;
 
 	/// The number of fields in this color type.
 	enum channels = Fields.init.tupleof.length;
 
 	/// Additional properties for homogeneous colors.
-	static if (homogenous)
+	static if (homogeneous)
 	{
 		alias ChannelType = typeof(Fields.init.tupleof[0]);
 		enum channelBits = valueBits!ChannelType;
@@ -400,7 +401,7 @@ unittest
 	RGB x = cast(RGB)c;
 }
 
-/// Obtains the type of each channel for homogenous colors.
+/// Obtains the type of each channel for homogeneous colors.
 template ChannelType(T)
 {
 	///
@@ -421,7 +422,7 @@ template ChangeChannelType(COLOR, T)
 template ChangeChannelType(COLOR, T)
 	if (is(COLOR : Color!Spec, Spec...))
 {
-	static assert(COLOR.homogenous, "Can't change ChannelType of non-homogenous Color");
+	static assert(COLOR.homogeneous, "Can't change ChannelType of non-homogeneous Color");
 	alias ChangeChannelType = Color!(T, COLOR.Spec[1..$]);
 }
 

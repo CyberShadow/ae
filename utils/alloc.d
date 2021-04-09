@@ -21,7 +21,7 @@
  *
  * Allocator kinds:
  *
- * * Homogenous allocators, once instantiated, can only allocate values
+ * * Homogeneous allocators, once instantiated, can only allocate values
  *   only of the type specified in the template parameter. Attempting to
  *   allocate a different type will result in a compile-time error.
  *
@@ -254,7 +254,7 @@ template FreeListNode(T)
 }
 
 
-/// Homogenous linked list allocator.
+/// Homogeneous linked list allocator.
 /// Supports O(1) deletion.
 /// Does not support bulk allocation.
 struct FreeListAllocator(ALLOCATOR_TYPE, alias ALLOCATOR = heapAllocator)
@@ -614,7 +614,7 @@ struct GrowingBufferAllocator(BASE_TYPE=void*, alias ALLOCATOR = heapAllocator)
 /// Thrown when the buffer of an allocator is exhausted.
 class BufferExhaustedException : Exception { this() { super("Allocator buffer exhausted"); } }
 
-/// Homogenous allocator which uses a given buffer.
+/// Homogeneous allocator which uses a given buffer.
 /// Throws BufferExhaustedException if the buffer is exhausted.
 struct BufferAllocator(BASE_TYPE=ubyte)
 {
@@ -645,7 +645,7 @@ struct BufferAllocator(BASE_TYPE=ubyte)
 	}
 }
 
-/// Homogenous allocator which uses a static buffer of a given size.
+/// Homogeneous allocator which uses a static buffer of a given size.
 /// Throws BufferExhaustedException if the buffer is exhausted.
 /// Needs to be manually initialized before use.
 struct StaticBufferAllocator(size_t SIZE, BASE_TYPE=ubyte)
