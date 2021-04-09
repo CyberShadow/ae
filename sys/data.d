@@ -531,7 +531,7 @@ abstract class DataWrapper
 	abstract void setSize(size_t newSize); /// Resize `contents` up to `capacity`.
 	abstract @property size_t capacity() const; /// Maximum possible size.
 
-	debug ~this()
+	debug ~this() @nogc
 	{
 		debug(DATA_REFCOUNT) debugLog("%.*s.~this, references==%d", this.classinfo.name.length, this.classinfo.name.ptr, references);
 		assert(references == 0, "Deleting DataWrapper with non-zero reference count");
@@ -645,7 +645,7 @@ final class MemoryDataWrapper : DataWrapper
 	}
 
 	/// Destructor - destroys the wrapped data.
-	~this()
+	~this() @nogc
 	{
 		free(data, capacity);
 		data = null;
@@ -663,7 +663,7 @@ final class MemoryDataWrapper : DataWrapper
 	size_t size() const { return _size; }
 
 	@property override
-	size_t capacity() const { return _capacity; }
+	size_t capacity() const @nogc { return _capacity; }
 
 	override void setSize(size_t newSize)
 	{
@@ -728,7 +728,7 @@ final class MemoryDataWrapper : DataWrapper
 			return core.stdc.malloc(size);
 	}
 
-	static void free(void* p, size_t size)
+	static void free(void* p, size_t size) @nogc
 	{
 		debug
 		{

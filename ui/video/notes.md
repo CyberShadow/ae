@@ -111,7 +111,7 @@ The above plan relies on two conditions:
 		/// Used when a pointer is needed to existing pixel memory
 		abstract PixelInfo getPixels();
 
-		~this()
+		~this() @nogc
 		{
 			foreach (r; renderData)
 				if (r)

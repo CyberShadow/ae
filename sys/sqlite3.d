@@ -31,7 +31,7 @@ final class SQLite
 		sqenforce(sqlite3_open_v2(toStringz(fn), &db, readOnly ? SQLITE_OPEN_READONLY : SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, null));
 	} ///
 
-	~this()
+	~this() /*@nogc*/
 	{
 		sqlite3_close(db);
 	}
@@ -333,7 +333,7 @@ final class SQLite
 			return to!string(sqlite3_column_name(stmt, idx));
 		}
 
-		~this()
+		~this() /*@nogc*/
 		{
 			sqlite3_finalize(stmt);
 		}

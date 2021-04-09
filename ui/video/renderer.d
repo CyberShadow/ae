@@ -145,7 +145,7 @@ class TextureSource
 	/// Used when a pointer is needed to existing pixel memory
 	abstract TextureCanvas getPixels();
 
-	~this()
+	~this() @nogc
 	{
 		foreach (r; renderData)
 			if (r)

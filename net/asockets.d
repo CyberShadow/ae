@@ -217,7 +217,7 @@ version(LIBEV)
 		/// Interested in write notifications (onWritable)?
 		@property final void notifyWrite(bool value) { setWatcherState(evWrite, value, EV_WRITE); }
 
-		debug ~this()
+		debug ~this() @nogc
 		{
 			// The LIBEV SocketManager holds no references to registered sockets.
 			// TODO: Add a doubly-linked list?

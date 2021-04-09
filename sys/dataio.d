@@ -153,7 +153,7 @@ public:
 			return 0;
 	}
 
-	~this()
+	~this() @nogc
 	{
 		// Can't allocate in destructors.
 

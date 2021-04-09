@@ -15,7 +15,8 @@ module ae.sys.datamm;
 
 import std.mmfile;
 import std.typecons;
-debug import std.stdio;
+
+debug(DATA_REFCOUNT) import std.stdio, core.stdc.stdio;
 
 import ae.sys.data;
 
@@ -39,9 +40,9 @@ class MappedDataWrapper : DataWrapper
 	} ///
 
 	debug(DATA_REFCOUNT)
-	~this()
+	~this() @nogc
 	{
-		writefln("? -> %s: Deleted MappedDataWrapper", cast(void*)this);
+		printf("? -> %p: Deleted MappedDataWrapper\n", cast(void*)this);
 	}
 
 	override @property inout(void)[] contents() inout { return mappedData; } ///

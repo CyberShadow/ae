@@ -26,7 +26,7 @@ bool gcRan()
 
 	static class Beacon
 	{
-		~this()
+		~this() @nogc
 		{
 			destroyed = true;
 		}
@@ -92,7 +92,7 @@ unittest
 	{
 		static bool tested;
 
-		~this()
+		~this() @nogc
 		{
 			assert(inCollect());
 			tested = true;

@@ -55,7 +55,7 @@ class Config
 				null) == ERROR_SUCCESS, "RegCreateKeyEx failed");
 		} ///
 
-		~this()
+		~this() @nogc
 		{
 			if (key)
 				RegCloseKey(key);
@@ -164,7 +164,7 @@ class Config
 			instances ~= this;
 		} ///
 
-		~this()
+		~this() @nogc
 		{
 			assert(!dirty, "Dirty config destruction");
 		}

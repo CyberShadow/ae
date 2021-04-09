@@ -129,7 +129,7 @@ final class SDL2Shell : Shell
 			audio.stop();
 	} ///
 
-	~this()
+	~this() @nogc
 	{
 		SDL_Quit();
 	}
