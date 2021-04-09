@@ -17,6 +17,8 @@ public import ae.utils.graphics.color;
 public import ae.utils.graphics.image;
 public import ae.utils.graphics.view;
 
+import ae.utils.meta : enumLength;
+
 /// Abstract class for a video renderer.
 class Renderer
 {
@@ -104,7 +106,6 @@ enum Renderers
 	SDLSoftware, ///
 	SDLOpenGL,	 ///
 	SDL2,		 ///
-	max
 }
 
 /// Base class for all renderer-specific texture data
@@ -129,7 +130,7 @@ class TextureSource
 {
 	// TODO: make this extensible for external renderer implementations.
 	/// Renderer-specific texture data.
-	TextureRenderData[Renderers.max] renderData;
+	TextureRenderData[enumLength!Renderers] renderData;
 
 	/// Source version number of the texture.
 	uint textureVersion = 1;

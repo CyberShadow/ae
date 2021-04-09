@@ -99,7 +99,7 @@ The above plan relies on two conditions:
 	/// Base class for logical textures
 	class TextureSource
 	{
-		TextureRenderData[Renderers.max] renderData;
+		TextureRenderData[enumLength!Renderers] renderData;
 
 		uint textureVersion;
 
