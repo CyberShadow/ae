@@ -524,7 +524,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 			static if (is(typeof(&statTimeToStdTime!"birth")))
 			@property SysTime timeCreated()
 			{
-				return statTimeToStdTime!"m"(*needStat!(StatTarget.linkTarget)());
+				return statTimeToStdTime!"birth"(*needStat!(StatTarget.linkTarget)());
 			}
 
 			/// Returns the size in bytes of this directory entry,
