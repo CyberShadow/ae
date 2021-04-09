@@ -29,7 +29,7 @@ void sendCopyData(HWND hWnd, DWORD n, in void[] buf)
 	SendMessage(hWnd, WM_COPYDATA, 0, cast(LPARAM)&cds);
 }
 
-enum MAPVK_VK_TO_VSC = 0;
+private enum MAPVK_VK_TO_VSC = 0;
 
 /// Simulate keyboard input.
 void keyDown(ubyte c) { keybd_event(c, cast(ubyte)MapVirtualKey(c, MAPVK_VK_TO_VSC), 0              , 0); }

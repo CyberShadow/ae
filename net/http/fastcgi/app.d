@@ -252,7 +252,7 @@ class FastCGIProtoConnection : FastCGIConnection
 		sendRecord(header, contentData);
 	}
 
-	override void onRecord(ref FCGI_RecordHeader header, Data contentData)
+	protected override void onRecord(ref FCGI_RecordHeader header, Data contentData)
 	{
 		switch (header.type)
 		{
@@ -500,7 +500,7 @@ class FastCGIResponderConnection : FastCGIProtoConnection
 		override void dataEnd() { throw new Exception("Unexpected FCGI_DATA"); }
 	}
 
-	override Request createRequest() { return new ResponderRequest; }
+	protected override Request createRequest() { return new ResponderRequest; }
 
 	/// User-supplied callback for handling incoming requests.
 	void delegate(ref CGIRequest, void delegate(HttpResponse)) handleRequest;
@@ -518,7 +518,7 @@ class FastCGIResponderServer : FastCGIAppSocketServer
 	/// User-supplied callback for handling incoming requests.
 	void delegate(ref CGIRequest, void delegate(HttpResponse)) handleRequest;
 
-	override void createConnection(IConnection connection)
+	protected override void createConnection(IConnection connection)
 	{
 		auto fconn = new FastCGIResponderConnection(connection);
 		fconn.log = this.log;

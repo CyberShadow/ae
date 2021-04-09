@@ -58,7 +58,7 @@ ulong getCurrentThreadID()
 
 // ************************************************************************
 
-struct ProcessParams
+private struct ProcessParams
 {
 	const(string[string]) environment = null;
 	std.process.Config config = std.process.Config.none;

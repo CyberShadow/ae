@@ -11,7 +11,8 @@
  *   Vladimir Panteleev <ae@cy.md>
  */
 
-module ae.utils.serialization.sini;
+deprecated module ae.utils.serialization.sini;
+deprecated:
 
 import std.exception;
 import std.range;

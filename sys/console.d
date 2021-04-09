@@ -16,7 +16,7 @@ module ae.sys.console;
 version(Windows)
 {
 	import core.sys.windows.windows;
-	UINT oldCP, oldOutputCP;
+	private UINT oldCP, oldOutputCP;
 
 	shared static this()
 	{

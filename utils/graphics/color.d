@@ -106,7 +106,7 @@ struct Color(FieldTuple...)
 			{
 				auto v0 = c0.tupleof[i];
 				auto v1 = c1.tupleof[i];
-				auto vr = .blend(v1, v0, x);
+				auto vr = ._blend(v1, v0, x);
 				r.tupleof[i] = vr;
 			}
 		return r;
@@ -134,7 +134,7 @@ struct Color(FieldTuple...)
 			{
 				auto v0 = __traits(getMember, c0, name);
 				auto v1 = __traits(getMember, c1, name);
-				f = .blend(v1, v0, c1.a);
+				f = ._blend(v1, v0, c1.a);
 			}
 		}
 		return r;
@@ -586,5 +586,5 @@ unittest
 
 // ***************************************************************************
 
-// TODO: deprecate
-T blend(T)(T f, T b, T a) if (is(typeof(f*a+flipBits(b)))) { return cast(T) ( ((f*a) + (b*flipBits(a))) / T.max ); }
+T _blend(T)(T f, T b, T a) if (is(typeof(f*a+flipBits(b)))) { return cast(T) ( ((f*a) + (b*flipBits(a))) / T.max ); }
+deprecated alias blend = _blend;

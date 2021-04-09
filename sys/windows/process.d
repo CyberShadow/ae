@@ -26,7 +26,7 @@ mixin(importWin32!q{winuser});
 import ae.sys.windows.exception;
 import ae.sys.windows.text;
 
-alias wenforce = ae.sys.windows.exception.wenforce;
+private alias wenforce = ae.sys.windows.exception.wenforce;
 
 pragma(lib, "user32");
 
@@ -34,7 +34,7 @@ static if (_WIN32_WINNT >= 0x500) {
 
 /// Wraps a created Windows process.
 /// Similar to `std.process.Pid`
-struct CreatedProcessImpl
+struct _CreatedProcessImpl
 {
 	PROCESS_INFORMATION pi;
 	alias pi this;
@@ -53,8 +53,8 @@ struct CreatedProcessImpl
 		CloseHandle(pi.hThread);
 	}
 }
+alias CreatedProcess = RefCounted!_CreatedProcessImpl; /// ditto
 
-alias RefCounted!CreatedProcessImpl CreatedProcess;
 /// Create a Windows process.
 CreatedProcess createProcess(string applicationName, string commandLine, STARTUPINFOW si = STARTUPINFOW.init)
 {
@@ -72,10 +72,10 @@ CreatedProcess createProcess(string applicationName, string commandLine, string 
 	return result;
 }
 
-enum TOKEN_ADJUST_SESSIONID = 0x0100;
+private enum TOKEN_ADJUST_SESSIONID = 0x0100;
 //enum SecurityImpersonation = 2;
 //enum TokenPrimary = 1;
-alias extern(Windows) BOOL function(
+private alias extern(Windows) BOOL function(
   HANDLE hToken,
   DWORD dwLogonFlags,
   LPCWSTR lpApplicationName,
@@ -158,7 +158,7 @@ CreatedProcess createDesktopUserProcess(string applicationName, string commandLi
 mixin(importWin32!q{tlhelp32});
 
 /// Wraps a `Toolhelp32Snapshot` handle.
-struct ToolhelpSnapshotImpl
+struct _ToolhelpSnapshotImpl
 {
 	HANDLE hSnapshot;
 
@@ -168,7 +168,7 @@ struct ToolhelpSnapshotImpl
 	}
 }
 
-alias RefCounted!ToolhelpSnapshotImpl ToolhelpSnapshot;
+alias RefCounted!_ToolhelpSnapshotImpl ToolhelpSnapshot; /// ditto
 
 /// `CreateToolhelp32Snapshot` wrapper.
 ToolhelpSnapshot createToolhelpSnapshot(DWORD dwFlags, DWORD th32ProcessID=0)
@@ -295,7 +295,7 @@ void writeProcessVar(T)(HANDLE h, RemoteAddress addr, auto ref T v)
 struct RemoteProcessVarImpl(T)
 {
 	T local; /// Cached local value.
-	@property T* localPtr() { return &local; }
+	private @property T* localPtr() { return &local; }
 	RemoteAddress remotePtr; /// Address in remote process.
 	HANDLE hProcess; /// Process handle.
 

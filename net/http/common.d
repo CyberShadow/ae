@@ -653,6 +653,7 @@ unittest
 }
 
 // TODO: optimize / move to HtmlWriter
+deprecated("Use ae.utils.xml.entities")
 string httpEscape(string str)
 {
 	string result;

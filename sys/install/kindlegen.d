@@ -43,6 +43,7 @@ class KindleGenInstaller : Installer
 		urlDigests["https://dump.cy.md/204a2a4cc3e95e1a0dbbb9e52a7bc482/KindleGen_Mac_i386_v2_9.zip"         ] = "efa5ad0b05650f7f71543535ea2b232bb5fec571";
 	} ///
 
+protected:
 	@property override string[] requiredExecutables() { return ["kindlegen"]; }
 
 	override void installImpl(string target)

@@ -25,7 +25,7 @@ struct PersistentStringSet
 {
 	import ae.utils.aa : HashSet;
 
-	static HashSet!string load(string fileName)
+	static HashSet!string _load(string fileName)
 	{
 		import std.file : readText;
 		import std.string : splitLines;
@@ -33,7 +33,7 @@ struct PersistentStringSet
 		return HashSet!string(fileName.readText().splitLines());
 	} ///
 
-	static void save(string fileName, HashSet!string data)
+	static void _save(string fileName, HashSet!string data)
 	{
 		import std.array : join;
 		import ae.sys.file : atomicWrite;
@@ -41,8 +41,8 @@ struct PersistentStringSet
 		atomicWrite(fileName, data.keys.join("\n"));
 	} ///
 
-	alias Cache = FileCache!(load, save, FlushPolicy.manual);
-	Cache cache;
+	private alias Cache = FileCache!(_load, _save, FlushPolicy.manual);
+	private Cache cache;
 
 	this(string fileName) { cache = Cache(fileName); } ///
 

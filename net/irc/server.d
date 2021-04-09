@@ -31,7 +31,7 @@ import ae.utils.text;
 
 import ae.net.irc.common;
 
-alias std.string.indexOf indexOf;
+private alias std.string.indexOf indexOf;
 
 /// IRC server.
 class IrcServer

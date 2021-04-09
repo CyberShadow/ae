@@ -79,7 +79,7 @@ class CachedCurlNetwork : Network
 		int maxRedirects = int.min;
 	} ///
 
-	/*private*/ static void req(CachedCurlNetwork instance, ref const Request request, string target, string metadataPath)
+	/*private*/ static void _req(CachedCurlNetwork instance, ref const Request request, string target, string metadataPath)
 	{
 		with (instance)
 		{
@@ -169,7 +169,7 @@ class CachedCurlNetwork : Network
 	{
 		Metadata metadata; ///
 
-		this(Metadata metadata, string fn = __FILE__, size_t ln = __LINE__)
+		private this(Metadata metadata, string fn = __FILE__, size_t ln = __LINE__)
 		{
 			this.metadata = metadata;
 			super("Request failed: " ~ metadata.statusLine.reason, fn, ln);
@@ -185,7 +185,7 @@ class CachedCurlNetwork : Network
 		auto metadataPath = path ~ ".metadata";
 		if (path.exists && path.timeLastModified.stdTime < epoch)
 			path.remove();
-		cached!req(this, request, path, metadataPath);
+		cached!_req(this, request, path, metadataPath);
 		return Response(path, metadataPath);
 	}
 

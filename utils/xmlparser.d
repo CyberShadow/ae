@@ -12,7 +12,8 @@
  *   Vladimir Panteleev <ae@cy.md>
  */
 
-module ae.utils.xmlparser;
+deprecated module ae.utils.xmlparser;
+deprecated:
 
 import std.exception;
 import std.functional;

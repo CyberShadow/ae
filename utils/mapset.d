@@ -145,7 +145,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		} ///
 
 		private hash_t hash;
-		size_t totalMembers;
+		private size_t totalMembers;
 
 		hash_t toHash() const
 		{

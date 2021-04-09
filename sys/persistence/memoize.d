@@ -28,8 +28,8 @@ static import ae.utils.json;
 /// std.functional.memoize variant with automatic persistence
 struct PersistentMemoized(alias fun, FlushPolicy flushPolicy = FlushPolicy.atThreadExit)
 {
-	alias AA = ReturnType!fun[string];
-	private JsonFileCache!(AA, flushPolicy) memo;
+	alias _AA = ReturnType!fun[string];
+	private JsonFileCache!(_AA, flushPolicy) memo;
 
 	this(string fileName) { memo.fileName = fileName; } ///
 
@@ -78,9 +78,9 @@ unittest
 /// As above, but with synchronization
 struct SynchronizedPersistentMemoized(alias fun, FlushPolicy flushPolicy = FlushPolicy.atThreadExit)
 {
-	alias AA = ReturnType!fun[string];
-	private JsonFileCache!(AA, flushPolicy) memo;
-	Object mutex;
+	alias _AA = ReturnType!fun[string];
+	private JsonFileCache!(_AA, flushPolicy) memo;
+	private Object mutex;
 
 	this(string fileName)
 	{

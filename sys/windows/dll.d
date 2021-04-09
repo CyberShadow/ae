@@ -37,7 +37,7 @@ mixin template DynamicLoad(alias F, string DLL, string NAME=__traits(identifier,
 {
 	static import std.traits;
 
-	static std.traits.ReturnType!F loader(ARGS...)(ARGS args)
+	static std.traits.ReturnType!F _loader(ARGS...)(ARGS args)
 	{
 		import ae.sys.windows.exception;
 		import ae.sys.windows.imports;
@@ -50,7 +50,7 @@ mixin template DynamicLoad(alias F, string DLL, string NAME=__traits(identifier,
 		return fp(args);
 	}
 
-	mixin(`alias loader!(std.traits.ParameterTypeTuple!F) ` ~ NAME ~ `;`);
+	mixin(`alias _loader!(std.traits.ParameterTypeTuple!F) ` ~ NAME ~ `;`);
 }
 
 /// Ditto

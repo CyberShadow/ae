@@ -55,25 +55,25 @@ version (Windows)
 		return toUTF8(path);
 	}
 
-	/*private*/ string getAppDir(int csidl, string appName = null)
+	/*private*/ string _getAppDir(int csidl, string appName = null)
 	{
 		return getShellPath(csidl) ~ `\` ~ (appName ? appName : getExecutableName());
 	}
 
-	/*private*/ string[] getAppDirs(int csidl, string appName = null)
+	/*private*/ string[] _getAppDirs(int csidl, string appName = null)
 	{
-		return [thisExePath.dirName(), getAppDir(csidl, appName)];
+		return [thisExePath.dirName(), _getAppDir(csidl, appName)];
 	}
 
-	alias getLocalAppProfile   = bindArgs!(getAppDir, CSIDL_LOCAL_APPDATA);
-	alias getRoamingAppProfile = bindArgs!(getAppDir, CSIDL_APPDATA);
+	alias getLocalAppProfile   = _bindArgs!(_getAppDir, CSIDL_LOCAL_APPDATA); ///
+	alias getRoamingAppProfile = _bindArgs!(_getAppDir, CSIDL_APPDATA);       ///
 
-	alias getConfigDir  = getRoamingAppProfile;
-	alias getDataDir    = getRoamingAppProfile;
-	alias getCacheDir   = getLocalAppProfile;
+	alias getConfigDir  = getRoamingAppProfile; ///
+	alias getDataDir    = getRoamingAppProfile; ///
+	alias getCacheDir   = getLocalAppProfile;   ///
 
-	alias getConfigDirs = bindArgs!(getAppDir, CSIDL_LOCAL_APPDATA);;
-	alias getDataDirs   = bindArgs!(getAppDir, CSIDL_LOCAL_APPDATA);;
+	alias getConfigDirs = _bindArgs!(_getAppDir, CSIDL_LOCAL_APPDATA); ///
+	alias getDataDirs   = _bindArgs!(_getAppDir, CSIDL_LOCAL_APPDATA); ///
 }
 else // POSIX
 {
@@ -85,7 +85,7 @@ else // POSIX
 	import std.process;
 	import std.string;
 
-	alias toLower = std.ascii.toLower;
+	private alias toLower = std.ascii.toLower;
 
 	private string getPosixAppName(string appName)
 	{
@@ -100,7 +100,7 @@ else // POSIX
 		return s2;
 	}
 
-	struct XdgDir
+	private struct XdgDir
 	{
 		string homeVarName;
 		string homeDefaultValue;
@@ -132,26 +132,26 @@ else // POSIX
 
 	}
 
-	immutable XdgDir xdgData   = XdgDir("XDG_DATA_HOME"  , "~/.local/share", "XDG_DATA_DIRS"  , "/usr/local/share/:/usr/share/");
-	immutable XdgDir xdgConfig = XdgDir("XDG_CONFIG_HOME", "~/.config"     , "XDG_CONFIG_DIRS", "/etc/xdg");
-	immutable XdgDir xdgCache  = XdgDir("XDG_CACHE_HOME" , "~/.cache"      );
+	immutable XdgDir _xdgData   = XdgDir("XDG_DATA_HOME"  , "~/.local/share", "XDG_DATA_DIRS"  , "/usr/local/share/:/usr/share/");
+	immutable XdgDir _xdgConfig = XdgDir("XDG_CONFIG_HOME", "~/.config"     , "XDG_CONFIG_DIRS", "/etc/xdg");
+	immutable XdgDir _xdgCache  = XdgDir("XDG_CACHE_HOME" , "~/.cache"      );
 
-	/*private*/ string getXdgAppDir(alias xdgDir)(string appName = null)
+	/*private*/ string _getXdgAppDir(alias xdgDir)(string appName = null)
 	{
 		return xdgDir.getAppHome(appName);
 	}
 
-	/*private*/ string[] getXdgAppDirs(alias xdgDir)(string appName = null)
+	/*private*/ string[] _getXdgAppDirs(alias xdgDir)(string appName = null)
 	{
 		return xdgDir.getAppDirs(appName);
 	}
 
-	alias getDataDir    = getXdgAppDir!xdgData;
-	alias getConfigDir  = getXdgAppDir!xdgConfig;
-	alias getCacheDir   = getXdgAppDir!xdgCache;
+	alias getDataDir    = _getXdgAppDir!_xdgData;    ///
+	alias getConfigDir  = _getXdgAppDir!_xdgConfig;  ///
+	alias getCacheDir   = _getXdgAppDir!_xdgCache;   ///
 
-	alias getDataDirs   = getXdgAppDirs!xdgData;
-	alias getConfigDirs = getXdgAppDirs!xdgConfig;
+	alias getDataDirs   = _getXdgAppDirs!_xdgData;   ///
+	alias getConfigDirs = _getXdgAppDirs!_xdgConfig; ///
 }
 
 /// Get the base name of the current executable.
@@ -161,9 +161,9 @@ string getExecutableName()
 	return thisExePath().baseName();
 }
 
-/*private*/ template bindArgs(alias fun, CTArgs...)
+/*private*/ template _bindArgs(alias fun, CTArgs...)
 {
-	auto bindArgs(RTArgs...)(auto ref RTArgs rtArgs)
+	auto _bindArgs(RTArgs...)(auto ref RTArgs rtArgs)
 	{
 		return fun(CTArgs, rtArgs);
 	}

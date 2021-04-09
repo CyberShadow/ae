@@ -185,7 +185,7 @@ version (linux)
 		return Rect!int(xwa.x, xwa.y, xwa.x + xwa.width, xwa.y + xwa.height);
 	}
 
-	float ease(float t, float speed)
+	private float ease(float t, float speed)
 	{
 		import std.math : pow, abs;
 		speed = 0.3f + speed * 0.4f;
@@ -196,7 +196,7 @@ version (linux)
 	}
 
 	static if (haveX11)
-	T xEnforce(T)(T cond, string msg)
+	private T xEnforce(T)(T cond, string msg)
 	{
 		return enforce(cond, msg);
 	}

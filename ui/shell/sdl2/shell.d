@@ -255,7 +255,7 @@ final class SDL2Shell : Shell
 		}
 	}
 
-	bool reinitPending;
+	protected bool reinitPending;
 }
 
 /// Wraps SDL library errors.

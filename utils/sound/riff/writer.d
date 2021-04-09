@@ -20,7 +20,7 @@ import std.range;
 import ae.utils.sound.riff.common;
 import ae.utils.array : staticArray;
 
-struct ValueReprRange(T)
+private struct ValueReprRange(T)
 {
 	ubyte[T.sizeof] bytes;
 	size_t p;
@@ -36,9 +36,9 @@ struct ValueReprRange(T)
 	@property size_t length() { return T.sizeof - p; }
 }
 
-auto valueReprRange(T)(auto ref T t) { return ValueReprRange!T(t); }
+private auto valueReprRange(T)(auto ref T t) { return ValueReprRange!T(t); }
 
-auto fourCC(char[4] name)
+private auto fourCC(char[4] name)
 {
 	return valueReprRange(name);
 }

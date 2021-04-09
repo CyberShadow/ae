@@ -116,12 +116,6 @@ public:
 		conn.handleReadData = &onReadData;
 	} ///
 
-	void onNonIdle()
-	{
-		if (pingSent)
-			pingSent = false;
-	}
-
 	/// Send `line`, plus a newline.
 	void send(string line)
 	{
@@ -141,6 +135,12 @@ public:
 	void delegate(string line) handleReadLine;
 
 private:
+	void onNonIdle()
+	{
+		if (pingSent)
+			pingSent = false;
+	}
+
 	void onReadData(Data data)
 	{
 		string line = (cast(string)data.toHeap()).chomp("\r");
@@ -170,9 +170,9 @@ private:
 }
 
 // TODO: this is server-specific
-const string IRC_NICK_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-`";
-const string IRC_USER_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-const string IRC_HOST_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.";
+deprecated const string IRC_NICK_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-`";
+deprecated const string IRC_USER_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+deprecated const string IRC_HOST_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.";
 
 /// Numeric IRC replies.
 enum Reply

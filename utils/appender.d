@@ -214,7 +214,7 @@ public:
 		return result;
 	}
 
-	template CanPutAll(U...)
+	private template CanPutAll(U...)
 	{
 		static if (U.length==0)
 			enum bool CanPutAll = true;

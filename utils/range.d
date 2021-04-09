@@ -78,6 +78,7 @@ struct FastArrayRange(T, bool CHECKED=isDebug)
 
 auto fastArrayRange(T)(T[] arr) { return FastArrayRange!T(arr); } /// ditto
 
+// TODO move to ae.utils.array
 /// Returns a slice for the memory from `a` to `b`.
 T[] ptrSlice(T)(T* a, T* b)
 {

@@ -13,6 +13,8 @@
 
 module ae.utils.meta.proxy;
 
+deprecated:
+
 import std.traits;
 
 import ae.utils.meta : I;

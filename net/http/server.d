@@ -315,7 +315,7 @@ public:
 	}
 
 	/// Accept more requests on the same connection?
-	bool acceptMore() { return true; }
+	protected bool acceptMore() { return true; }
 
 	/// Finalize writing the response.
 	/// Headers and data should have already been sent.
@@ -356,7 +356,8 @@ public:
 class HttpServer
 {
 	enum defaultTimeout = 30.seconds; /// The default timeout used for incoming connections.
-public:
+
+// public:
 	this(Duration timeout = defaultTimeout)
 	{
 		assert(timeout > Duration.zero);

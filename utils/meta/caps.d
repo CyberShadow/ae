@@ -19,7 +19,7 @@ enum haveChildTrait = is(typeof({ struct S { int i; } S s; __traits(child, s, S.
 
 // ************************************************************************
 
-struct TestFieldAliasBinding
+private struct TestFieldAliasBinding
 {
 	static template T(alias a)
 	{
@@ -47,7 +47,7 @@ enum haveFieldAliasBinding = __traits(compiles, TestFieldAliasBinding.test());
 
 // ************************************************************************
 
-struct TestMethodAliasBinding
+private struct TestMethodAliasBinding
 {
 	static template T(alias a)
 	{
@@ -73,7 +73,7 @@ enum haveMethodAliasBinding = __traits(compiles, TestMethodAliasBinding.test());
 
 // ************************************************************************
 
-struct TestAliasCtxInference
+private struct TestAliasCtxInference
 {
 	struct A
 	{
@@ -105,7 +105,7 @@ enum haveAliasCtxInference = __traits(compiles, TestAliasCtxInference.test());
 
 // ************************************************************************
 
-struct TestAliasStructBinding
+private struct TestAliasStructBinding
 {
 	struct S(alias fun)
 	{
@@ -134,7 +134,7 @@ enum haveAliasStructBinding = __traits(compiles, TestAliasStructBinding.test());
 
 // ************************************************************************
 
-struct TestDualContext
+private struct TestDualContext
 {
 	struct S
 	{
@@ -165,3 +165,6 @@ else
 
 /// Does this compiler support `static foreach`?
 enum haveStaticForeach = is(typeof(mixin(q{(){ static foreach (x; []) {}}})));
+
+/// Does this compiler have UDA support?
+enum haveUDA = __traits(compiles, __traits(getAttributes, Object));

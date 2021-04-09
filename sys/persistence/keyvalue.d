@@ -198,7 +198,7 @@ struct KeyValueDatabase
 
 	SQLite sqlite; /// SQLite database instance. Initialized automatically.
 
-	@property SQLite getSQLite()
+	@property SQLite _getSQLite()
 	{
 		if (sqlite is null)
 		{
@@ -208,7 +208,7 @@ struct KeyValueDatabase
 		return sqlite;
 	}
 
-	alias getSQLite this;
+	alias _getSQLite this;
 }
 
 unittest

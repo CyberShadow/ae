@@ -39,9 +39,9 @@ import ae.utils.json;
 import ae.utils.meta;
 import ae.utils.regex;
 
-alias ensureDirExists = ae.sys.file.ensureDirExists;
+private alias ensureDirExists = ae.sys.file.ensureDirExists;
 
-version (Windows)
+version (Windows) private
 {
 	import ae.sys.install.dmc;
 	import ae.sys.install.msys;
@@ -224,7 +224,7 @@ class DManager : ICacheHost
 			this.verify = this.outer.verifyWorkTree;
 		} ///
 
-		override void log(string s) { return this.outer.log(s); }
+		protected override void log(string s) { return this.outer.log(s); }
 	}
 
 	/// The meta-repository, which contains the sub-project submodules.
@@ -237,25 +237,25 @@ class DManager : ICacheHost
 			if (!repoDir.exists)
 			{
 				log("Cloning initial repository...");
-				atomic!performClone(config.local.repoUrl, repoDir);
+				atomic!_performClone(config.local.repoUrl, repoDir);
 			}
 
 			return Git(repoDir);
 		}
 
-		static void performClone(string url, string target)
+		static void _performClone(string url, string target)
 		{
 			import ae.sys.cmd;
 			run(["git", "clone", url, target]);
 		}
 
-		override void performCheckout(string hash)
+		protected override void performCheckout(string hash)
 		{
 			super.performCheckout(hash);
 			submodules = null;
 		}
 
-		string[string][string] submoduleCache;
+		protected string[string][string] submoduleCache;
 
 		/// Get submodule commit hashes at the given commit-ish.
 		string[string] getSubmoduleCommits(string head)
@@ -336,7 +336,7 @@ class DManager : ICacheHost
 			return Git(dir);
 		}
 
-		override void needHead(string hash)
+		protected override void needHead(string hash)
 		{
 			if (!autoClean)
 				super.needHead(hash);
@@ -897,9 +897,9 @@ EOF");
 	/// The dmd executable
 	final class DMD : Component
 	{
-		@property override string submoduleName  () { return "dmd"; }
-		@property override string[] sourceDependencies() { return []; }
-		@property override string[] dependencies() { return []; }
+		protected @property override string submoduleName  () { return "dmd"; }
+		protected @property override string[] sourceDependencies() { return []; }
+		protected @property override string[] dependencies() { return []; }
 
 		/// DMD build configuration.
 		struct Config
@@ -952,7 +952,7 @@ EOF");
 			@JSONOptional bool useVC;
 		}
 
-		@property override string configString()
+		protected @property override string configString()
 		{
 			static struct FullConfig
 			{
@@ -983,7 +983,7 @@ EOF");
 		/// Name of the Visual Studio build platform to use.
 		@property string vsPlatform     () { return config.build.components.dmd.dmdModel == "64" ? "x64" : "Win32"; }
 
-		override void performBuild()
+		protected override void performBuild()
 		{
 			// We need an older DMC for older DMD versions
 			string dmcVer = null;
@@ -1181,7 +1181,7 @@ EOF");
 			);
 		}
 
-		override void performStage()
+		protected override void performStage()
 		{
 			if (config.build.components.dmd.useVC)
 			{
@@ -1284,13 +1284,13 @@ EOS";
 			}
 		}
 
-		override void updateEnv(ref Environment env)
+		protected override void updateEnv(ref Environment env)
 		{
 			// Add the DMD we built for Phobos/Druntime/Tools
 			env.vars["PATH"] = buildPath(buildDir, "bin").absolutePath() ~ pathSeparator ~ env.vars["PATH"];
 		}
 
-		override void performTest()
+		protected override void performTest()
 		{
 			foreach (dep; ["dmd", "druntime", "phobos"])
 				getComponent(dep).needBuild(true);
@@ -1349,12 +1349,12 @@ EOS";
 	/// In older versions of D, Druntime depended on Phobos modules.
 	final class PhobosIncludes : Component
 	{
-		@property override string submoduleName() { return "phobos"; }
-		@property override string[] sourceDependencies() { return []; }
-		@property override string[] dependencies() { return []; }
-		@property override string configString() { return null; }
+		protected @property override string submoduleName() { return "phobos"; }
+		protected @property override string[] sourceDependencies() { return []; }
+		protected @property override string[] dependencies() { return []; }
+		protected @property override string configString() { return null; }
 
-		override void performStage()
+		protected override void performStage()
 		{
 			foreach (f; ["std", "etc", "crc32.d"])
 				if (buildPath(sourceDir, f).exists)
@@ -1368,11 +1368,11 @@ EOS";
 	/// Druntime. Installs only import files, but builds the library too.
 	final class Druntime : Component
 	{
-		@property override string submoduleName    () { return "druntime"; }
-		@property override string[] sourceDependencies() { return ["phobos", "phobos-includes"]; }
-		@property override string[] dependencies() { return ["dmd"]; }
+		protected @property override string submoduleName    () { return "druntime"; }
+		protected @property override string[] sourceDependencies() { return ["phobos", "phobos-includes"]; }
+		protected @property override string[] dependencies() { return ["dmd"]; }
 
-		@property override string configString()
+		protected @property override string configString()
 		{
 			static struct FullConfig
 			{
@@ -1386,7 +1386,7 @@ EOS";
 			).toJson();
 		}
 
-		override void performBuild()
+		protected override void performBuild()
 		{
 			foreach (model; config.build.components.common.models)
 			{
@@ -1415,7 +1415,7 @@ EOS";
 			}
 		}
 
-		override void performStage()
+		protected override void performStage()
 		{
 			cp(
 				buildPath(sourceDir, "import"),
@@ -1423,7 +1423,7 @@ EOS";
 			);
 		}
 
-		override void performTest()
+		protected override void performTest()
 		{
 			getComponent("druntime").needBuild(true);
 			getComponent("dmd").needInstalled();
@@ -1465,11 +1465,11 @@ EOS";
 	/// Phobos library and imports.
 	final class Phobos : Component
 	{
-		@property override string submoduleName    () { return "phobos"; }
-		@property override string[] sourceDependencies() { return []; }
-		@property override string[] dependencies() { return ["druntime", "dmd"]; }
+		protected @property override string submoduleName    () { return "phobos"; }
+		protected @property override string[] sourceDependencies() { return []; }
+		protected @property override string[] dependencies() { return ["druntime", "dmd"]; }
 
-		@property override string configString()
+		protected @property override string configString()
 		{
 			static struct FullConfig
 			{
@@ -1483,9 +1483,9 @@ EOS";
 			).toJson();
 		}
 
-		string[] targets;
+		private string[] targets;
 
-		override void performBuild()
+		protected override void performBuild()
 		{
 			getComponent("dmd").needSource();
 			getComponent("dmd").needInstalled();
@@ -1564,7 +1564,7 @@ EOS";
 			}
 		}
 
-		override void performStage()
+		protected override void performStage()
 		{
 			assert(targets.length, "Phobos stage without build");
 			foreach (lib; targets)
@@ -1574,7 +1574,7 @@ EOS";
 				);
 		}
 
-		override void performTest()
+		protected override void performTest()
 		{
 			getComponent("druntime").needBuild(true);
 			getComponent("phobos").needBuild(true);
@@ -1632,13 +1632,13 @@ EOS";
 	/// It predates the tools package.
 	final class RDMD : Component
 	{
-		@property override string submoduleName() { return "tools"; }
-		@property override string[] sourceDependencies() { return []; }
-		@property override string[] dependencies() { return ["dmd", "druntime", "phobos"]; }
+		protected @property override string submoduleName() { return "tools"; }
+		protected @property override string[] sourceDependencies() { return []; }
+		protected @property override string[] dependencies() { return ["dmd", "druntime", "phobos"]; }
 
-		@property string model() { return config.build.components.common.models.get(0); }
+		private @property string model() { return config.build.components.common.models.get(0); }
 
-		@property override string configString()
+		protected @property override string configString()
 		{
 			static struct FullConfig
 			{
@@ -1650,7 +1650,7 @@ EOS";
 			).toJson();
 		}
 
-		override void performBuild()
+		protected override void performBuild()
 		{
 			foreach (dep; ["dmd", "druntime", "phobos", "phobos-includes"])
 				getComponent(dep).needInstalled();
@@ -1679,7 +1679,7 @@ EOS";
 				run([dmd, "-m" ~ this.model] ~ args, env.vars, sourceDir);
 		}
 
-		override void performStage()
+		protected override void performStage()
 		{
 			cp(
 				buildPath(sourceDir, "rdmd" ~ binExt),
@@ -1687,7 +1687,7 @@ EOS";
 			);
 		}
 
-		override void performTest()
+		protected override void performTest()
 		{
 			auto env = baseEnvironment;
 			version (Windows)
@@ -1728,13 +1728,13 @@ EOS";
 	/// Tools package with all its components, including rdmd.
 	final class Tools : Component
 	{
-		@property override string submoduleName() { return "tools"; }
-		@property override string[] sourceDependencies() { return []; }
-		@property override string[] dependencies() { return ["dmd", "druntime", "phobos"]; }
+		protected @property override string submoduleName() { return "tools"; }
+		protected @property override string[] sourceDependencies() { return []; }
+		protected @property override string[] dependencies() { return ["dmd", "druntime", "phobos"]; }
 
-		@property string model() { return config.build.components.common.models.get(0); }
+		private @property string model() { return config.build.components.common.models.get(0); }
 
-		@property override string configString()
+		protected @property override string configString()
 		{
 			static struct FullConfig
 			{
@@ -1748,7 +1748,7 @@ EOS";
 			).toJson();
 		}
 
-		override void performBuild()
+		protected override void performBuild()
 		{
 			getComponent("dmd").needSource();
 			foreach (dep; ["dmd", "druntime", "phobos"])
@@ -1760,7 +1760,7 @@ EOS";
 			run(getMake(env) ~ ["-f", makeFileName, "DMD=" ~ dmd] ~ config.build.components.common.makeArgs ~ getPlatformMakeVars(env, this.model) ~ dMakeArgs, env.vars, sourceDir);
 		}
 
-		override void performStage()
+		protected override void performStage()
 		{
 			foreach (os; buildPath(sourceDir, "generated").dirEntries(SpanMode.shallow))
 				foreach (de; os.buildPath(this.model).dirEntries(SpanMode.shallow))
@@ -1772,9 +1772,9 @@ EOS";
 	/// Website (dlang.org). Only buildable on POSIX.
 	final class Website : Component
 	{
-		@property override string submoduleName() { return "dlang.org"; }
-		@property override string[] sourceDependencies() { return ["druntime", "phobos", "dub"]; }
-		@property override string[] dependencies() { return ["dmd", "druntime", "phobos", "rdmd"]; }
+		protected @property override string submoduleName() { return "dlang.org"; }
+		protected @property override string[] sourceDependencies() { return ["druntime", "phobos", "dub"]; }
+		protected @property override string[] dependencies() { return ["dmd", "druntime", "phobos", "rdmd"]; }
 
 		/// Website build configuration.
 		struct Config
@@ -1787,7 +1787,7 @@ EOS";
 			deprecated alias noDateTime = diffable;
 		}
 
-		@property override string configString()
+		protected @property override string configString()
 		{
 			static struct FullConfig
 			{
@@ -1921,17 +1921,17 @@ EOS";
 			}
 		}
 
-		override void performBuild()
+		protected override void performBuild()
 		{
 			make(Target.build);
 		}
 
-		override void performTest()
+		protected override void performTest()
 		{
 			make(Target.test);
 		}
 
-		override void performStage()
+		protected override void performStage()
 		{
 			foreach (item; ["web", "dlangspec.tex", "dlangspec.html"])
 			{
@@ -1946,17 +1946,17 @@ EOS";
 	/// Extras not built from source (DigitalMars and third-party tools and libraries)
 	final class Extras : Component
 	{
-		@property override string submoduleName() { return null; }
-		@property override string[] sourceDependencies() { return []; }
-		@property override string[] dependencies() { return []; }
-		@property override string configString() { return null; }
+		protected @property override string submoduleName() { return null; }
+		protected @property override string[] sourceDependencies() { return []; }
+		protected @property override string[] dependencies() { return []; }
+		protected @property override string configString() { return null; }
 
-		override void performBuild()
+		protected override void performBuild()
 		{
 			needExtras();
 		}
 
-		override void performStage()
+		protected override void performStage()
 		{
 			auto extrasDir = needExtras();
 
@@ -1988,12 +1988,12 @@ EOS";
 	/// libcurl DLL and import library for Windows.
 	final class Curl : Component
 	{
-		@property override string submoduleName() { return null; }
-		@property override string[] sourceDependencies() { return []; }
-		@property override string[] dependencies() { return []; }
-		@property override string configString() { return null; }
+		protected @property override string submoduleName() { return null; }
+		protected @property override string[] sourceDependencies() { return []; }
+		protected @property override string[] dependencies() { return []; }
+		protected @property override string configString() { return null; }
 
-		override void performBuild()
+		protected override void performBuild()
 		{
 			version (Windows)
 				needCurl();
@@ -2001,7 +2001,7 @@ EOS";
 				log("Not on Windows, skipping libcurl download");
 		}
 
-		override void performStage()
+		protected override void performStage()
 		{
 			version (Windows)
 			{
@@ -2026,7 +2026,7 @@ EOS";
 				log("Not on Windows, skipping libcurl install");
 		}
 
-		override void updateEnv(ref Environment env)
+		protected override void updateEnv(ref Environment env)
 		{
 			env.vars["PATH"] = buildPath(buildDir, "bin").absolutePath() ~ pathSeparator ~ env.vars["PATH"];
 		}
@@ -2035,18 +2035,18 @@ EOS";
 	/// The Dub package manager and build tool
 	final class Dub : Component
 	{
-		@property override string submoduleName() { return "dub"; }
-		@property override string[] sourceDependencies() { return []; }
-		@property override string[] dependencies() { return []; }
-		@property override string configString() { return null; }
+		protected @property override string submoduleName() { return "dub"; }
+		protected @property override string[] sourceDependencies() { return []; }
+		protected @property override string[] dependencies() { return []; }
+		protected @property override string configString() { return null; }
 
-		override void performBuild()
+		protected override void performBuild()
 		{
 			auto env = baseEnvironment;
 			run([dmd, "-i", "-run", "build.d"], env.vars, sourceDir);
 		}
 
-		override void performStage()
+		protected override void performStage()
 		{
 			cp(
 				buildPath(sourceDir, "bin", "dub" ~ binExt),
@@ -2121,9 +2121,9 @@ EOS";
 
 	// ***************************** GitHub API ******************************
 
-	GitHub github;
+	private GitHub github;
 
-	ref GitHub needGitHub()
+	private ref GitHub needGitHub()
 	{
 		if (github is GitHub.init)
 		{
@@ -2464,7 +2464,7 @@ EOS";
 		log("hostDC=" ~ env.deps.hostDC);
 	}
 
-	void needKindleGen(ref Environment env)
+	protected void needKindleGen(ref Environment env)
 	{
 		needInstaller();
 		kindleGenInstaller.requireLocal(false);
@@ -2472,7 +2472,7 @@ EOS";
 	}
 
 	version (Windows)
-	void needMSYS(ref Environment env)
+	protected void needMSYS(ref Environment env)
 	{
 		needInstaller();
 		MSYS.msysCORE.requireLocal(false);
@@ -2491,16 +2491,16 @@ EOS";
 
 	/// Get DMD unbuildable extras
 	/// (proprietary DigitalMars utilities, 32-bit import libraries)
-	string needExtras()
+	protected string needExtras()
 	{
 		import ae.utils.meta : I, singleton;
 
 		static class DExtrasInstaller : Installer
 		{
-			@property override string name() { return "dmd-localextras"; }
+			protected @property override string name() { return "dmd-localextras"; }
 			string url = "http://semitwist.com/download/app/dmd-localextras.7z";
 
-			override void installImpl(string target)
+			protected override void installImpl(string target)
 			{
 				url
 					.I!save()
@@ -2522,17 +2522,17 @@ EOS";
 
 	/// Get libcurl for Windows (DLL and import libraries)
 	version (Windows)
-	string needCurl()
+	protected string needCurl()
 	{
 		import ae.utils.meta : I, singleton;
 
 		static class DCurlInstaller : Installer
 		{
-			@property override string name() { return "libcurl-" ~ curlVersion; }
+			protected @property override string name() { return "libcurl-" ~ curlVersion; }
 			string curlVersion = "7.47.1";
 			@property string url() { return "http://downloads.dlang.org/other/libcurl-" ~ curlVersion ~ "-WinSSL-zlib-x86-x64.zip"; }
 
-			override void installImpl(string target)
+			protected override void installImpl(string target)
 			{
 				url
 					.I!save()
@@ -2553,7 +2553,7 @@ EOS";
 	}
 
 	version (Windows)
-	void needDMC(ref Environment env, string ver = null)
+	protected void needDMC(ref Environment env, string ver = null)
 	{
 		tempError++; scope(success) tempError--;
 
@@ -2572,14 +2572,14 @@ EOS";
 	}
 
 	version (Windows)
-	auto getVSInstaller()
+	protected auto getVSInstaller()
 	{
 		needInstaller();
 		return vs2013community;
 	}
 
 	version (Windows)
-	static string msvcModelStr(string model, string str32, string str64)
+	protected static string msvcModelStr(string model, string str32, string str64)
 	{
 		switch (model)
 		{
@@ -2595,13 +2595,13 @@ EOS";
 	}
 
 	version (Windows)
-	static string msvcModelDir(string model, string dir64 = "x86_amd64")
+	protected static string msvcModelDir(string model, string dir64 = "x86_amd64")
 	{
 		return msvcModelStr(model, null, dir64);
 	}
 
 	version (Windows)
-	void needVC(ref Environment env, string model)
+	protected void needVC(ref Environment env, string model)
 	{
 		tempError++; scope(success) tempError--;
 
@@ -2658,7 +2658,7 @@ EOS";
 		SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
 	}
 
-	version (OSX)
+	version (OSX) protected
 	{
 		bool needWorkingCCChecked;
 		void needWorkingCC()
@@ -2792,7 +2792,7 @@ EOS";
 	/// Unbuildable versions are saved in the cache as a single empty file with this name.
 	enum unbuildableMarker = "unbuildable";
 
-	DCache cacheEngine;
+	private DCache cacheEngine; /// Caches builds.
 
 	DCache needCacheEngine()
 	{
@@ -2805,7 +2805,7 @@ EOS";
 		return cacheEngine;
 	} /// ditto
 
-	void cp(string src, string dst)
+	protected void cp(string src, string dst)
 	{
 		needCacheEngine().cp(src, dst);
 	}
@@ -2821,13 +2821,13 @@ EOS";
 		;
 	}
 
-	string componentNameFromKey(string key)
+	protected string componentNameFromKey(string key)
 	{
 		auto parts = key.split("-");
 		return parts[0..$-2].join("-");
 	}
 
-	string[][] getKeyOrder(string key)
+	protected string[][] getKeyOrder(string key)
 	{
 		if (key !is null)
 			return [getComponentKeyOrder(componentNameFromKey(key))];
@@ -2841,7 +2841,7 @@ EOS";
 		needCacheEngine().optimize();
 	}
 
-	bool shouldPurge(string key)
+	protected bool shouldPurge(string key)
 	{
 		auto files = cacheEngine.listFiles(key);
 		if (files.canFind(unbuildableMarker))
@@ -2942,7 +2942,7 @@ EOS";
 	/// passing to it any additional parameters.
 	/// Note: Currently unused. Was previously used
 	/// for unmerging things using interactive rebase.
-	abstract string getCallbackCommand();
+	deprecated abstract string getCallbackCommand();
 
-	void callback(string[] args) { assert(false); }
+	deprecated void callback(string[] args) { assert(false); }
 }

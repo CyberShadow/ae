@@ -77,7 +77,8 @@
  *   Vladimir Panteleev <ae@cy.md>
  */
 
-module ae.utils.alloc;
+deprecated module ae.utils.alloc;
+deprecated:
 
 import std.conv : emplace;
 import std.traits : fullyQualifiedName;

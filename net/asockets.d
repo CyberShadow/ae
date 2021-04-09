@@ -50,10 +50,10 @@ version(LIBEV)
 version(Windows)
 {
 	import core.sys.windows.windows : Sleep;
-	enum USE_SLEEP = true; // avoid convoluted mix of static and runtime conditions
+	private enum USE_SLEEP = true; // avoid convoluted mix of static and runtime conditions
 }
 else
-	enum USE_SLEEP = false;
+	private enum USE_SLEEP = false;
 
 /// Flags that determine socket wake-up events.
 int eventCounter;
@@ -442,7 +442,7 @@ else // Use select
 		}
 
 		debug (ASOCKETS)
-		void printSets(SocketSet readset, SocketSet writeset)
+		private void printSets(SocketSet readset, SocketSet writeset)
 		{
 			foreach (GenericSocket conn; sockets)
 			{
@@ -458,7 +458,7 @@ else // Use select
 			}
 		}
 
-		void handleEvent(SocketSet readset, SocketSet writeset)
+		private void handleEvent(SocketSet readset, SocketSet writeset)
 		{
 			debug (ASOCKETS)
 			{
@@ -508,8 +508,7 @@ else // Use select
 	}
 
 	/// Unregister a function previously registered with `addIdleHandler`.
-	static bool isFun(T)(T a, T b) { return a is b; }
-	void removeIdleHandler(alias pred=isFun, Args...)(ref SocketManager socketManager, Args args)
+	void removeIdleHandler(alias pred=(a, b) => a is b, Args...)(ref SocketManager socketManager, Args args)
 	{
 		foreach (i, idleHandler; socketManager.idleHandlers)
 			if (pred(idleHandler, args))
@@ -568,7 +567,7 @@ public:
 	/// allow getting the address of connections that are already disconnected
 	private Address[2] cachedAddress;
 
-	/*private*/ final @property Address address(bool local)()
+	/*private*/ final @property Address _address(bool local)()
 	{
 		if (cachedAddress[local] !is null)
 			return cachedAddress[local];
@@ -603,14 +602,14 @@ public:
 		}
 	}
 
-	alias localAddress = address!true;
-	alias remoteAddress = address!false;
+	alias localAddress = _address!true; /// Retrieve this socket's local address.
+	alias remoteAddress = _address!false; /// Retrieve this socket's remote address.
 
-	/*private*/ final @property string addressStr(bool local)() nothrow
+	/*private*/ final @property string _addressStr(bool local)() nothrow
 	{
 		try
 		{
-			auto a = address!local;
+			auto a = _address!local;
 			if (a is null)
 				return "[null address]";
 			string host = a.toAddrString();
@@ -629,8 +628,8 @@ public:
 			return "[error: " ~ e.msg ~ "]";
 	}
 
-	alias localAddressStr = addressStr!true;
-	alias remoteAddressStr = addressStr!false;
+	alias localAddressStr = _addressStr!true; /// Retrieve this socket's local address, as a string.
+	alias remoteAddressStr = _addressStr!false; /// Retrieve this socket's remote address, as a string.
 
 	/// Don't block the process from exiting, even if the socket is ready to receive data.
 	/// TODO: Not implemented with libev
@@ -1730,7 +1729,7 @@ public:
 			connectHandler();
 	}
 
-	final void initializeImpl(AddressFamily family, SocketType type, ProtocolType protocol)
+	private final void initializeImpl(AddressFamily family, SocketType type, ProtocolType protocol)
 	{
 		assert(state == ConnectionState.disconnected, "Attempting to initialize a %s socket".format(state));
 		assert(!conn);

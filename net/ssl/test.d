@@ -18,6 +18,8 @@ import std.exception;
 import ae.net.asockets;
 import ae.net.ssl;
 
+package(ae):
+
 version (SSL_test)
 	void testSSL(SSLProvider ssl) {}
 else:

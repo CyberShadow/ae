@@ -77,7 +77,8 @@ class XmlNode
 	/// Start and end offset within the input.
 	ulong startPos, endPos;
 
-	this(ref StringStream s) { parseInto!XmlParseConfig(this, s, null); }
+	private this(ref StringStream s) { parseInto!XmlParseConfig(this, s, null); }
+
 	/// Create and parse from input.
 	this(string s) { auto ss = StringStream(s); this(ss); }
 
@@ -302,7 +303,7 @@ class XmlDocument : XmlNode
 		tag = "<Root>";
 	} ///
 
-	this(ref StringStream s) { this(); parseInto!XmlParseConfig(this, s); }
+	private this(ref StringStream s) { this(); parseInto!XmlParseConfig(this, s); }
 
 	/// Create and parse from input.
 	this(string s) { auto ss = StringStream(s); this(ss); }
@@ -384,10 +385,10 @@ static:
 }
 
 /// Parse an SGML-ish string into an XmlNode
-alias parse = parseString!XmlNode;
+alias parse = _parseString!XmlNode;
 
 /// Parse an SGML-ish string into an XmlDocument
-alias parseDocument = parseString!XmlDocument;
+alias parseDocument = _parseString!XmlDocument;
 
 /// Parse an XML string into an XmlDocument.
 alias xmlParse = parseDocument!XmlParseConfig;
@@ -395,9 +396,9 @@ alias xmlParse = parseDocument!XmlParseConfig;
 private:
 
 public // alias
-template parseString(Node)
+template _parseString(Node)
 {
-	Node parseString(Config)(string s)
+	Node _parseString(Config)(string s)
 	{
 		auto ss = StringStream(s);
 		alias f = parseStream!Node;

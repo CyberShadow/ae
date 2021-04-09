@@ -20,16 +20,12 @@ public import ae.ui.timer.timer;
 import ae.ui.app.application;
 import ae.sys.timing;
 
-alias ae.sys.timing.Timer SysTimer;
-alias ae.ui.timer.timer.Timer Timer;
+private alias ae.sys.timing.Timer SysTimer;
+private alias ae.ui.timer.timer.Timer Timer;
 
 /// A simple thread-based `Timer` implementation.
 final class ThreadTimer : Timer
 {
-    SysTimer sysTimer;
-    Semaphore semaphore;
-    shared bool prodding;
-
     this()
     {
     	sysTimer = new SysTimer;
@@ -37,7 +33,12 @@ final class ThreadTimer : Timer
 		auto thread = new Thread(&threadProc);
 		thread.isDaemon = true;
 		thread.start();
-    }
+    } ///
+
+protected:
+    SysTimer sysTimer;
+    Semaphore semaphore;
+    shared bool prodding;
 
 	override TimerEvent setTimeout (AppCallback fn, uint ms) { return new ThreadTimerEvent(fn, ms, false); }
 	override TimerEvent setInterval(AppCallback fn, uint ms) { return new ThreadTimerEvent(fn, ms, true ); }

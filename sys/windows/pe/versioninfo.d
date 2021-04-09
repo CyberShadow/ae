@@ -50,6 +50,7 @@ struct VersionInfoParser
 	}
 	Node root; /// The root node.
 
+private:
 	Node readNode()
 	{
 		auto size = read!ushort() - ushort.sizeof;

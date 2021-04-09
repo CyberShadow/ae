@@ -31,7 +31,7 @@ import ae.utils.meta;
 import ae.utils.text.parsefp;
 import ae.utils.textout;
 
-alias indexOf = std.string.indexOf;
+private alias indexOf = std.string.indexOf;
 
 public import ae.utils.text.ascii : ascii, DecimalSize, toDec, toDecFixed, asciiToLower, asciiToUpper;
 public import ae.utils.array : contains;
@@ -943,7 +943,7 @@ enum significantDigits(T : real) = 2 + 2 * T.sizeof;
 /// Format string for a FP type which includes all necessary
 /// significant digits
 enum fpFormatString(T) = "%." ~ text(significantDigits!T) ~ "g";
-template cWidthString(T)
+private template cWidthString(T)
 {
 	static if (is(Unqual!T == float))
 		enum cWidthString = "";
@@ -1096,7 +1096,7 @@ void putFP(Writer, F)(auto ref Writer writer, F v)
 /// Wraps the result of `fpToString` in a non-allocating stringifiable struct.
 struct FPAsString(T)
 {
-	typeof(fpToBuf(T.init)) buf;
+	private typeof(fpToBuf(T.init)) buf;
 
 	this(T f)
 	{

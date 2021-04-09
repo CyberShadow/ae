@@ -132,7 +132,7 @@ class Installer
 			addToPath();
 	}
 
-	bool addedToPath;
+	private bool addedToPath;
 
 	/// Change this process's PATH environment variable to include the
 	/// path to this component's executable directories.
@@ -174,7 +174,7 @@ class Installer
 	// ----------------------------------------------------
 
 final:
-//protected: // https://issues.dlang.org/show_bug.cgi?id=14528
+protected:
 	static string saveLocation(string url)
 	{
 		return buildPath(installationDirectory, url.fileNameFromURL());

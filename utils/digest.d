@@ -19,6 +19,7 @@ import ae.sys.cmd;
 import ae.utils.text;
 import ae.utils.array;
 
+deprecated ("Use std.digest.hmac")
 ubyte[] hmac_sha1(string message, ubyte[] privateKey)
 {
 	return
@@ -188,61 +189,64 @@ uint murmurHash2(in void[] data, uint seed=0)
 	return h;
 }
 
-import ae.utils.digest_murmurhash3;
+deprecated import ae.utils.digest_murmurhash3;
 
-uint murmurHash3_32(in void[] data, uint seed=0)
+deprecated ("Use std.digest.murmurhash")
 {
-	uint result;
-	MurmurHash3_x86_32(data.ptr, cast(uint)data.length, seed, &result);
-	return result;
-}
+	uint murmurHash3_32(in void[] data, uint seed=0)
+	{
+		uint result;
+		MurmurHash3_x86_32(data.ptr, cast(uint)data.length, seed, &result);
+		return result;
+	}
 
-alias uint[4] MH3Digest128;
+	alias uint[4] MH3Digest128;
 
-MH3Digest128 murmurHash3_x86_128(in void[] data, uint seed=0)
-{
-	MH3Digest128 result;
-	MurmurHash3_x86_128(data.ptr, cast(uint)data.length, seed, &result);
-	return result;
-}
+	MH3Digest128 murmurHash3_x86_128(in void[] data, uint seed=0)
+	{
+		MH3Digest128 result;
+		MurmurHash3_x86_128(data.ptr, cast(uint)data.length, seed, &result);
+		return result;
+	}
 
-MH3Digest128 murmurHash3_x64_128(in void[] data, uint seed=0)
-{
-	MH3Digest128 result;
-	MurmurHash3_x64_128(data.ptr, cast(uint)data.length, seed, &result);
-	return result;
-}
+	MH3Digest128 murmurHash3_x64_128(in void[] data, uint seed=0)
+	{
+		MH3Digest128 result;
+		MurmurHash3_x64_128(data.ptr, cast(uint)data.length, seed, &result);
+		return result;
+	}
 
-/// Select version optimized for target platform.
-/// WARNING: Output depends on platform.
-version(D_LP64)
-	alias murmurHash3_x64_128 murmurHash3_128;
-else
-	alias murmurHash3_x86_128 murmurHash3_128;
+	/// Select version optimized for target platform.
+	/// WARNING: Output depends on platform.
+	version(D_LP64)
+		alias murmurHash3_x64_128 murmurHash3_128;
+	else
+		alias murmurHash3_x86_128 murmurHash3_128;
 
-string digestToStringMH3(MH3Digest128 digest)
-{
-	import std.string;
-	return format("%08X%08X%08X%08X", digest[0], digest[1], digest[2], digest[3]);
-}
+	string digestToStringMH3(MH3Digest128 digest)
+	{
+		import std.string;
+		return format("%08X%08X%08X%08X", digest[0], digest[1], digest[2], digest[3]);
+	}
 
-unittest
-{
-	assert(murmurHash3_32("The quick brown fox jumps over the lazy dog") == 0x2e4ff723);
-	assert(murmurHash3_32("The quick brown fox jumps over the lazy cog") == 0xf08200fc);
+	unittest
+	{
+		assert(murmurHash3_32("The quick brown fox jumps over the lazy dog") == 0x2e4ff723);
+		assert(murmurHash3_32("The quick brown fox jumps over the lazy cog") == 0xf08200fc);
 
-	assert(murmurHash3_x86_128("The quick brown fox jumps over the lazy dog") == [ 0x2f1583c3 , 0xecee2c67 , 0x5d7bf66c , 0xe5e91d2c ]);
-	assert(murmurHash3_x86_128("The quick brown fox jumps over the lazy cog") == [ 0x0ed64388 , 0x3e9ae779 , 0x97034593 , 0x49b3f32f ]);
+		assert(murmurHash3_x86_128("The quick brown fox jumps over the lazy dog") == [ 0x2f1583c3 , 0xecee2c67 , 0x5d7bf66c , 0xe5e91d2c ]);
+		assert(murmurHash3_x86_128("The quick brown fox jumps over the lazy cog") == [ 0x0ed64388 , 0x3e9ae779 , 0x97034593 , 0x49b3f32f ]);
 
-	assert(murmurHash3_x64_128("The quick brown fox jumps over the lazy dog") == [ 0xbc071b6c , 0xe34bbc7b , 0xc49a9347 , 0x7a433ca9 ]);
-	assert(murmurHash3_x64_128("The quick brown fox jumps over the lazy cog") == [ 0xff85269a , 0x658ca970 , 0xa68e5c3e , 0x43fee3ea ]);
+		assert(murmurHash3_x64_128("The quick brown fox jumps over the lazy dog") == [ 0xbc071b6c , 0xe34bbc7b , 0xc49a9347 , 0x7a433ca9 ]);
+		assert(murmurHash3_x64_128("The quick brown fox jumps over the lazy cog") == [ 0xff85269a , 0x658ca970 , 0xa68e5c3e , 0x43fee3ea ]);
 
-	assert(digestToStringMH3(murmurHash3_x86_128("The quick brown fox jumps over the lazy dog")) == "2F1583C3ECEE2C675D7BF66CE5E91D2C");
+		assert(digestToStringMH3(murmurHash3_x86_128("The quick brown fox jumps over the lazy dog")) == "2F1583C3ECEE2C675D7BF66CE5E91D2C");
+	}
 }
 
 // ************************************************************************
 
-public import std.digest.md;
+deprecated public import std.digest.md;
 
 /// Get digest string of given data.
 /// Short-hand for std.digest.md5Of (and similar) and toHexString.
@@ -290,60 +294,63 @@ unittest
 
 // ************************************************************************
 
-/// HMAC digest with a hash algorithm.
-/// Params:
-///   Algorithm = std.digest-compatible hash type
-///   blockSize = Algorithm block size, in bytes
-///   key       = Secret key bytes
-///   message   = Message data
-template HMAC(alias Algorithm, size_t blockSize)
+deprecated("Use std.digest.hmac")
 {
-	alias Digest = typeof(Algorithm.init.finish());
-
-	Digest HMAC(in ubyte[] key, in ubyte[] message)
+	/// HMAC digest with a hash algorithm.
+	/// Params:
+	///   Algorithm = std.digest-compatible hash type
+	///   blockSize = Algorithm block size, in bytes
+	///   key       = Secret key bytes
+	///   message   = Message data
+	template HMAC(alias Algorithm, size_t blockSize)
 	{
-		ubyte[blockSize] keyBlock = 0;
-		if (key.length > blockSize)
-			keyBlock[0..Digest.length] = digest!Algorithm(key)[];
-		else
-			keyBlock[0..key.length] = key[];
+		alias Digest = typeof(Algorithm.init.finish());
 
-		ubyte[blockSize] oKeyPad = 0x5C; oKeyPad[] ^= keyBlock[];
-		ubyte[blockSize] iKeyPad = 0x36; iKeyPad[] ^= keyBlock[];
+		Digest HMAC(in ubyte[] key, in ubyte[] message)
+		{
+			ubyte[blockSize] keyBlock = 0;
+			if (key.length > blockSize)
+				keyBlock[0..Digest.length] = digest!Algorithm(key)[];
+			else
+				keyBlock[0..key.length] = key[];
 
-		Algorithm oHash;
-		oHash.start();
-		oHash.put(oKeyPad[]);
+			ubyte[blockSize] oKeyPad = 0x5C; oKeyPad[] ^= keyBlock[];
+			ubyte[blockSize] iKeyPad = 0x36; iKeyPad[] ^= keyBlock[];
 
-		Algorithm iHash;
-		iHash.start();
-		iHash.put(iKeyPad[]);
-		iHash.put(message);
-		auto iDigest = iHash.finish();
+			Algorithm oHash;
+			oHash.start();
+			oHash.put(oKeyPad[]);
 
-		oHash.put(iDigest[]);
-		auto oDigest = oHash.finish();
+			Algorithm iHash;
+			iHash.start();
+			iHash.put(iKeyPad[]);
+			iHash.put(message);
+			auto iDigest = iHash.finish();
 
-		return oDigest;
+			oHash.put(iDigest[]);
+			auto oDigest = oHash.finish();
+
+			return oDigest;
+		}
 	}
-}
 
-auto HMAC_MD5    ()(in ubyte[] key, in ubyte[] message) { import std.digest.md ; return HMAC!(MD5   , 64)(key, message); }
-auto HMAC_SHA1   ()(in ubyte[] key, in ubyte[] message) { import std.digest.sha; return HMAC!(SHA1  , 64)(key, message); }
-auto HMAC_SHA256 ()(in ubyte[] key, in ubyte[] message) { import std.digest.sha; return HMAC!(SHA256, 64)(key, message); }
+	auto HMAC_MD5    ()(in ubyte[] key, in ubyte[] message) { import std.digest.md ; return HMAC!(MD5   , 64)(key, message); }
+	auto HMAC_SHA1   ()(in ubyte[] key, in ubyte[] message) { import std.digest.sha; return HMAC!(SHA1  , 64)(key, message); }
+	auto HMAC_SHA256 ()(in ubyte[] key, in ubyte[] message) { import std.digest.sha; return HMAC!(SHA256, 64)(key, message); }
 
-unittest
-{
-	import std.string : representation;
-	import std.conv : hexString;
+	unittest
+	{
+		import std.string : representation;
+		import std.conv : hexString;
 
-	assert(HMAC_MD5([], []) == hexString!"74e6f7298a9c2d168935f58c001bad88".representation);
-	assert(HMAC_SHA1([], []) == hexString!"fbdb1d1b18aa6c08324b7d64b71fb76370690e1d".representation);
-	assert(HMAC_SHA256([], []) == hexString!"b613679a0814d9ec772f95d778c35fc5ff1697c493715653c6c712144292c5ad".representation);
+		assert(HMAC_MD5([], []) == hexString!"74e6f7298a9c2d168935f58c001bad88".representation);
+		assert(HMAC_SHA1([], []) == hexString!"fbdb1d1b18aa6c08324b7d64b71fb76370690e1d".representation);
+		assert(HMAC_SHA256([], []) == hexString!"b613679a0814d9ec772f95d778c35fc5ff1697c493715653c6c712144292c5ad".representation);
 
-	auto message = "The quick brown fox jumps over the lazy dog".representation;
-	auto key = "key".representation;
-	assert(HMAC_MD5   (key, message) == hexString!"80070713463e7749b90c2dc24911e275".representation);
-	assert(HMAC_SHA1  (key, message) == hexString!"de7c9b85b8b78aa6bc8a7a36f70a90701c9db4d9".representation);
-	assert(HMAC_SHA256(key, message) == hexString!"f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8".representation);
+		auto message = "The quick brown fox jumps over the lazy dog".representation;
+		auto key = "key".representation;
+		assert(HMAC_MD5   (key, message) == hexString!"80070713463e7749b90c2dc24911e275".representation);
+		assert(HMAC_SHA1  (key, message) == hexString!"de7c9b85b8b78aa6bc8a7a36f70a90701c9db4d9".representation);
+		assert(HMAC_SHA256(key, message) == hexString!"f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8".representation);
+	}
 }

@@ -41,6 +41,7 @@ class DMDInstaller : Installer
 	/// Used as the default version to install.
 	enum currentVersion = text(__VERSION__)[0] ~ "." ~ text(__VERSION__)[1..$] ~ ".0";
 
+protected:
 	version (Windows)
 		enum modelString = "";
 	else

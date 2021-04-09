@@ -29,11 +29,11 @@ public import ae.sys.install.common;
 /// Installs old versions of DMC.
 class LegacyDMCInstaller : Installer
 {
-	@property override string name() { return "DigitalMars C++" ~ (ver ? " v" ~ ver[0] ~ "." ~ ver[1..$] : null); }
-	@property override string subdirectory() { return "dm" ~ ver; }
+	protected @property override string name() { return "DigitalMars C++" ~ (ver ? " v" ~ ver[0] ~ "." ~ ver[1..$] : null); }
+	protected @property override string subdirectory() { return "dm" ~ ver; }
 
-	@property override string[] requiredExecutables() { return ["dmc", "link"]; }
-	@property override string[] binPaths() { return ["bin"]; }
+	protected @property override string[] requiredExecutables() { return ["dmc", "link"]; }
+	protected @property override string[] binPaths() { return ["bin"]; }
 
 	string ver;    /// Version to install
 	string dmcURL; /// URL to DigitalMars C
@@ -56,7 +56,7 @@ class LegacyDMCInstaller : Installer
 		urlDigests["http://downloads.dlang.org/other/dm857c.zip"				 ] = "c6bbaf8b872bfb1c82e611ef5e249dd19eab5272";
 	}
 
-	override void installImpl(string target)
+	protected override void installImpl(string target)
 	{
 		auto dmcDir =
 			dmcURL
@@ -76,7 +76,7 @@ class DMCInstaller : LegacyDMCInstaller
 	string optlinkURL = null; /// URL to OPTLINK .zip file to install on top of the DMC one
 	string dmdURL = "http://downloads.dlang.org/releases/2.x/2.074.0/dmd.2.074.0.windows.7z"; /// URL to DMD .zip file with latest snn.lib
 
-	@property override string subdirectory() { return super.subdirectory ~ "-snn2074-optlink80017"; }
+	protected @property override string subdirectory() { return super.subdirectory ~ "-snn2074-optlink80017"; }
 
 	this()
 	{
@@ -90,7 +90,7 @@ class DMCInstaller : LegacyDMCInstaller
 		urlDigests["http://downloads.dlang.org/releases/2.x/2.074.0/dmd.2.074.0.windows.7z"] = "b2f491a448a674c0c3854ffa6b38b2da638c0ea0";
 	}
 
-	override void installImpl(string target)
+	protected override void installImpl(string target)
 	{
 		super.installImpl(target);
 

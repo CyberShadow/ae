@@ -208,7 +208,7 @@ mixin template ComplementWrapperBehavior(alias WrapperBehavior, Params...)
 final:
 	mixin WrapperBehavior;
 
-	void moreMagic() {}
+	void _moreMagic() {}
 
 	/// The default implementations.
 	static if (!is(typeof(adjustHint)))
@@ -219,7 +219,7 @@ final:
 		int adjustPos(int pos, int size, int hint, Params params) { return pos; } /// ditto
 }
 
-mixin template OneDirectionCustomWrapper(alias WrapperBehavior, Params...)
+private mixin template OneDirectionCustomWrapper(alias WrapperBehavior, Params...)
 {
 	private Params params;
 	static if (Params.length)
@@ -232,7 +232,7 @@ mixin template OneDirectionCustomWrapper(alias WrapperBehavior, Params...)
 	mixin ComplementWrapperBehavior!(WrapperBehavior, Params);
 }
 
-class WCustomWrapper(alias WrapperBehavior, Params...) : Wrapper
+private class WCustomWrapper(alias WrapperBehavior, Params...) : Wrapper
 {
 	override void arrange(int rw, int rh)
 	{
@@ -247,7 +247,7 @@ class WCustomWrapper(alias WrapperBehavior, Params...) : Wrapper
 	mixin OneDirectionCustomWrapper!(WrapperBehavior, Params);
 }
 
-class HCustomWrapper(alias WrapperBehavior, Params...) : Wrapper
+private class HCustomWrapper(alias WrapperBehavior, Params...) : Wrapper
 {
 	override void arrange(int rw, int rh)
 	{
@@ -262,7 +262,7 @@ class HCustomWrapper(alias WrapperBehavior, Params...) : Wrapper
 	mixin OneDirectionCustomWrapper!(WrapperBehavior, Params);
 }
 
-class CustomWrapper(alias WrapperBehavior, Params...) : Wrapper
+private class CustomWrapper(alias WrapperBehavior, Params...) : Wrapper
 {
 	override void arrange(int rw, int rh)
 	{
@@ -287,7 +287,7 @@ class CustomWrapper(alias WrapperBehavior, Params...) : Wrapper
 	mixin ComplementWrapperBehavior!(WrapperBehavior, Params);
 }
 
-mixin template DeclareWrapper(string name, alias WrapperBehavior, Params...)
+mixin template _DeclareWrapper(string name, alias WrapperBehavior, Params...)
 {
 	mixin(`alias WCustomWrapper!(WrapperBehavior, Params) W`~name~`;`);
 	mixin(`alias HCustomWrapper!(WrapperBehavior, Params) H`~name~`;`);
@@ -302,7 +302,7 @@ private mixin template SizeBehavior()
 	}
 }
 /// Wrapper to override the parent hint to a specific size.
-mixin DeclareWrapper!("Size", SizeBehavior, RelativeSize);
+mixin _DeclareWrapper!("Size", SizeBehavior, RelativeSize);
 
 private mixin template ShrinkBehavior()
 {
@@ -313,7 +313,7 @@ private mixin template ShrinkBehavior()
 }
 /// Wrapper to override the parent hint to 0, thus making
 /// the wrapped control as small as it can be.
-mixin DeclareWrapper!("Shrink", ShrinkBehavior);
+mixin _DeclareWrapper!("Shrink", ShrinkBehavior);
 
 private mixin template CenterBehavior()
 {
@@ -329,7 +329,7 @@ private mixin template CenterBehavior()
 	}
 }
 /// If content is smaller than parent hint, center the content and use parent hint for own size.
-mixin DeclareWrapper!("Center", CenterBehavior);
+mixin _DeclareWrapper!("Center", CenterBehavior);
 
 private mixin template PadBehavior()
 {
@@ -352,7 +352,7 @@ private mixin template PadBehavior()
 	}
 }
 /// Add some padding on both sides of the content.
-mixin DeclareWrapper!("Pad", PadBehavior, RelativeSize);
+mixin _DeclareWrapper!("Pad", PadBehavior, RelativeSize);
 
 // ***************************************************************************
 

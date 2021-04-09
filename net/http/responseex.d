@@ -86,7 +86,7 @@ public:
 		return serveData(Data(data), "text/plain; charset=utf-8");
 	}
 
-	static bool checkPath(string path)
+	private static bool checkPath(string path)
 	{
 		if (!path.length)
 			return true;
@@ -95,7 +95,7 @@ public:
 		return true;
 	}
 
-	static void detectMime(string name, ref Headers headers)
+	private static void detectMime(string name, ref Headers headers)
 	{
 		// Special case: .svgz
 		if (name.endsWith(".svgz"))

@@ -131,7 +131,7 @@ private:
 /// Represents a video stream as a D range of frames.
 struct VideoInputStream
 {
-	RefCounted!VideoInputStreamImpl impl;
+	private RefCounted!VideoInputStreamImpl impl;
 	this(File f, string[] ffmpegArgs) { impl.initialize(f, "-", ffmpegArgs); } ///
 	this(string fn, string[] ffmpegArgs) { impl.initialize(stdin, fn, ffmpegArgs); } ///
 	@property ref Image!BGR front() return { return impl.front; } ///

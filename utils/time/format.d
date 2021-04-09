@@ -283,7 +283,7 @@ deprecated void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime())
 	putTimeImpl!fmt(sink, t);
 }
 
-void putTimeImpl(alias fmt, S)(ref S sink, SysTime t)
+private void putTimeImpl(alias fmt, S)(ref S sink, SysTime t)
 {
 	FormatContext!(char) context;
 	context.t = t;

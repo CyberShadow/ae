@@ -11,7 +11,8 @@
  *   Vladimir Panteleev <ae@cy.md>
  */
 
-module ae.utils.bench;
+deprecated module ae.utils.bench;
+deprecated:
 
 import std.datetime;
 import ae.sys.timing;

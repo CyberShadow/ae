@@ -13,6 +13,8 @@
 
 module ae.ui.app.windows.main;
 
+version (Windows):
+
 import core.runtime;
 import std.utf;
 

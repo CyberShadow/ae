@@ -48,6 +48,7 @@ class VisualStudioInstaller
 	{
 		string packageName; ///
 
+	protected:
 		@property override string name() { return "Visual Studio %d %s (%s)".format(year, edition, packageName); }
 		@property override string subdirectory() { return "vs%s-%s".format(year, edition.toLower()); }
 
@@ -77,14 +78,14 @@ class VisualStudioInstaller
 				.I!save();
 		}
 
-		public static void decompileMSITo(string msi, string target)
+		public static void _decompileMSITo(string msi, string target)
 		{
 			wixInstaller.require();
 			auto status = spawnProcess(["dark", msi, "-o", target]).wait();
 			enforce(status == 0, "dark failed");
 		}
-		public static string setExtensionWXS(string fn) { return fn.setExtension(".wxs"); }
-		alias decompileMSI = withTarget!(setExtensionWXS, cachedAction!(decompileMSITo, "Decompiling %s to %s..."));
+		public static string _setExtensionWXS(string fn) { return fn.setExtension(".wxs"); }
+		alias decompileMSI = withTarget!(_setExtensionWXS, cachedAction!(_decompileMSITo, "Decompiling %s to %s..."));
 
 		static void installWXS(string wxs, string target)
 		{

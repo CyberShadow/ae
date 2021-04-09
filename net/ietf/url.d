@@ -79,7 +79,7 @@ unittest
 /// which characters to encode.
 template UrlEncoder(alias isCharAllowed, char escape = '%')
 {
-	bool[256] genCharAllowed()
+	private bool[256] genCharAllowed()
 	{
 		bool[256] result;
 		foreach (c; 0..256)
@@ -87,7 +87,7 @@ template UrlEncoder(alias isCharAllowed, char escape = '%')
 		return result;
 	}
 
-	immutable bool[256] charAllowed = genCharAllowed();
+	private immutable bool[256] charAllowed = genCharAllowed();
 
 	struct UrlEncoder(Sink)
 	{

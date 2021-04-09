@@ -59,7 +59,7 @@ struct INotify
 	}
 
 	/// Identifies an inotify watch.
-	static struct WatchDescriptor { int wd; }
+	static struct WatchDescriptor { private int wd; }
 
 	/// Callback type.
 	alias INotifyHandler = void delegate(in char[] name, Mask mask, uint cookie);

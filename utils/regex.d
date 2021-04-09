@@ -45,7 +45,7 @@ unittest
 	assert(!"abc".match(re!`^\d+$`));
 }
 
-void convertCaptures(C, T...)(C captures, out T values)
+private void convertCaptures(C, T...)(C captures, out T values)
 {
 	assert(values.length == captures.length-1, "Capture group count mismatch: %s arguments / %s capture groups".format(values.length, captures.length-1));
 	foreach (n, ref value; values)

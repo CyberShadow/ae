@@ -25,7 +25,7 @@ import ae.utils.aa;
 /// insensitivity and multiple values per key.
 struct Headers
 {
-	struct Header { string name, value; }
+	private struct Header { string name, value; }
 
 	private Header[][CIAsciiString] headers;
 

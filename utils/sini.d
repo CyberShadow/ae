@@ -27,7 +27,7 @@ import ae.utils.exception;
 import ae.utils.meta : boxVoid, unboxVoid;
 import ae.utils.appender : FastAppender;
 
-alias std.string.indexOf indexOf;
+private alias indexOf = std.string.indexOf;
 
 /// Represents the user-defined behavior for handling a node in a
 /// structured INI file's hierarchy.
@@ -227,7 +227,7 @@ unittest
 	assert(count==2);
 }
 
-enum isNestingType(T) = isAssociativeArray!T || is(T == struct);
+private enum isNestingType(T) = isAssociativeArray!T || is(T == struct);
 
 private enum isAALike(U, S) = is(typeof(
 	(ref U v)

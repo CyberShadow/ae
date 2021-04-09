@@ -523,14 +523,14 @@ class ManagedRepository
 
 	// State saving and checking
 
-	struct FileState
+	private struct FileState
 	{
 		bool isLink;
 		ulong size;
 		StdTime modificationTime;
 	}
 
-	FileState getFileState(string file)
+	private FileState getFileState(string file)
 	{
 		assert(verify);
 		auto path = git.path.buildPath(file);
@@ -538,7 +538,7 @@ class ManagedRepository
 		return FileState(de.isSymlink, de.size, de.timeLastModified.stdTime);
 	}
 
-	alias RepositoryState = FileState[string];
+	private alias RepositoryState = FileState[string];
 
 	/// Return the working tree "state".
 	/// This returns a file list, along with size and modification time.

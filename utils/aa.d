@@ -1019,11 +1019,11 @@ public:
 		}
 	}
 
-	/*private*/ template addSetFunc(AddMode mode)
+	/*private*/ template _addSetFunc(AddMode mode)
 	{
 		static if (haveValues)
 		{
-			ref ReturnType!void addSetFunc(AK, AV)(auto ref AK key, auto ref AV value)
+			ref ReturnType!void _addSetFunc(AK, AV)(auto ref AK key, auto ref AV value)
 			if (is(AK : K) && is(AV : V))
 			{
 				return addImpl!mode(key, () => value);
@@ -1031,7 +1031,7 @@ public:
 		}
 		else
 		{
-			ref ReturnType!void addSetFunc(AK)(auto ref AK key)
+			ref ReturnType!void _addSetFunc(AK)(auto ref AK key)
 			if (is(AK : K))
 			{
 				ValueVarType value; // void[0]
@@ -1041,12 +1041,12 @@ public:
 	}
 
 	/// Add an item.
-	alias add = addSetFunc!(AddMode.add);
+	alias add = _addSetFunc!(AddMode.add);
 
 	/// Ensure a key exists (with the given value).
 	/// When `multi==true`, replaces all previous entries with this key.
 	/// Otherwise, behaves identically to `add`.
-	alias set = addSetFunc!(AddMode.replace);
+	alias set = _addSetFunc!(AddMode.replace);
 
 	/// Add `value` only if `key` is not present.
 	static if (haveValues)

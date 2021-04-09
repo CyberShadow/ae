@@ -111,7 +111,7 @@ final class SQLite
 	/// `sqlite3_stmt*` wrapper.
 	final class PreparedStatement
 	{
-		sqlite3_stmt* stmt;
+		private sqlite3_stmt* stmt;
 
 		/// `sqlite3_bind_XXX` wrapper.
 		void bind(int idx, int v)

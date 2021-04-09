@@ -12,7 +12,8 @@
  *   Vladimir Panteleev <ae@cy.md>
  */
 
-module ae.utils.xmldom;
+deprecated module ae.utils.xmldom;
+deprecated:
 
 import std.exception;
 

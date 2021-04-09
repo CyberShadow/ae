@@ -41,7 +41,7 @@ else
 version (X86_64)
 	version = Intel;
 
-version (Intel)
+private version (Intel)
 {
 	version (DigitalMars)
 		enum x86RegSizePrefix(T) =

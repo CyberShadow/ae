@@ -54,7 +54,7 @@ WindowIterator windowIterator(string szClassName, string szWindowName, HWND hPar
 
 private static wchar[0xFFFF] textBuf = void;
 
-string windowStringQuery(alias FUNC)(HWND h)
+string _windowStringQuery(alias FUNC)(HWND h)
 {
 	SetLastError(0);
 	auto result = FUNC(h, textBuf.ptr, textBuf.length);
@@ -70,8 +70,8 @@ string windowStringQuery(alias FUNC)(HWND h)
 	}
 }
 
-alias windowStringQuery!GetClassNameW  getClassName ; /// `GetClassNameW` wrapper.
-alias windowStringQuery!GetWindowTextW getWindowText; /// `GetWIndowTextW` wrapper.
+alias _windowStringQuery!GetClassNameW  getClassName ; /// `GetClassNameW` wrapper.
+alias _windowStringQuery!GetWindowTextW getWindowText; /// `GetWIndowTextW` wrapper.
 
 /// Create an utility hidden window.
 HWND createHiddenWindow(string name, WNDPROC proc)

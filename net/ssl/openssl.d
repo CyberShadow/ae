@@ -290,26 +290,6 @@ class OpenSSLAdapter : SSLAdapter
 		initialize();
 	} /// `SSLAdapter` method implementation.
 
-	private final void initialize()
-	{
-		final switch (context.kind)
-		{
-			case OpenSSLContext.Kind.client: SSL_connect(sslHandle).sslEnforce(); break;
-			case OpenSSLContext.Kind.server: SSL_accept (sslHandle).sslEnforce(); break;
-		}
-		connectionState = ConnectionState.connecting;
-		updateState();
-
-		if (context.verify && hostname && context.kind == OpenSSLContext.Kind.client)
-		{
-			SSL_set_hostflags(sslHandle, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
-			SSL_set1_host(sslHandle, hostname).sslEnforce("SSL_set1_host");
-		}
-	}
-
-	MemoryBIO r; // BIO for incoming ciphertext
-	MemoryBIO w; // BIO for outgoing ciphertext
-
 	override void onReadData(Data data)
 	{
 		debug(OPENSSL_DATA) stderr.writefln("OpenSSL: { Got %d incoming bytes from network", data.length);
@@ -389,9 +369,78 @@ class OpenSSLAdapter : SSLAdapter
 	override @property ConnectionState state()
 	{
 		return connectionState;
+	} /// ditto
+
+	override void disconnect(string reason, DisconnectType type)
+	{
+		debug(OPENSSL) stderr.writefln("OpenSSL: disconnect called ('%s')", reason);
+		if (!SSL_in_init(sslHandle))
+		{
+			debug(OPENSSL) stderr.writefln("OpenSSL: Calling SSL_shutdown");
+			SSL_shutdown(sslHandle);
+			connectionState = ConnectionState.disconnecting;
+			updateState();
+		}
+		else
+			debug(OPENSSL) stderr.writefln("OpenSSL: In init, not calling SSL_shutdown");
+		debug(OPENSSL) stderr.writefln("OpenSSL: SSL_shutdown done, flushing");
+		debug(OPENSSL) stderr.writefln("OpenSSL: SSL_shutdown output flushed");
+		super.disconnect(reason, type);
+	} /// ditto
+
+	override void onDisconnect(string reason, DisconnectType type)
+	{
+		debug(OPENSSL) stderr.writefln("OpenSSL: onDisconnect ('%s'), calling SSL_free", reason);
+		r.clear();
+		w.clear();
+		SSL_free(sslHandle);
+		sslHandle = null;
+		r = MemoryBIO.init; // Was owned by sslHandle, destroyed by SSL_free
+		w = MemoryBIO.init; // ditto
+		connectionState = ConnectionState.disconnected;
+		debug(OPENSSL) stderr.writeln("OpenSSL: onDisconnect: SSL_free called, calling super.onDisconnect");
+		super.onDisconnect(reason, type);
+		debug(OPENSSL) stderr.writeln("OpenSSL: onDisconnect finished");
+	} /// ditto
+
+	override void setHostName(string hostname, ushort port = 0, string service = null)
+	{
+		this.hostname = cast(char*)hostname.toStringz();
+		SSL_set_tlsext_host_name(sslHandle, cast(char*)this.hostname);
+	} /// ditto
+
+	override OpenSSLCertificate getHostCertificate()
+	{
+		return new OpenSSLCertificate(SSL_get_certificate(sslHandle).sslEnforce());
+	} /// ditto
+
+	override OpenSSLCertificate getPeerCertificate()
+	{
+		return new OpenSSLCertificate(SSL_get_peer_certificate(sslHandle).sslEnforce());
+	} /// ditto
+
+protected:
+	MemoryBIO r; // BIO for incoming ciphertext
+	MemoryBIO w; // BIO for outgoing ciphertext
+
+	private final void initialize()
+	{
+		final switch (context.kind)
+		{
+			case OpenSSLContext.Kind.client: SSL_connect(sslHandle).sslEnforce(); break;
+			case OpenSSLContext.Kind.server: SSL_accept (sslHandle).sslEnforce(); break;
+		}
+		connectionState = ConnectionState.connecting;
+		updateState();
+
+		if (context.verify && hostname && context.kind == OpenSSLContext.Kind.client)
+		{
+			SSL_set_hostflags(sslHandle, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+			SSL_set1_host(sslHandle, hostname).sslEnforce("SSL_set1_host");
+		}
 	}
 
-	final void updateState()
+	protected final void updateState()
 	{
 		// Flush any accumulated outgoing ciphertext to the network
 		if (w.data.length)
@@ -424,38 +473,6 @@ class OpenSSLAdapter : SSLAdapter
 		}
 	}
 
-	override void disconnect(string reason, DisconnectType type)
-	{
-		debug(OPENSSL) stderr.writefln("OpenSSL: disconnect called ('%s')", reason);
-		if (!SSL_in_init(sslHandle))
-		{
-			debug(OPENSSL) stderr.writefln("OpenSSL: Calling SSL_shutdown");
-			SSL_shutdown(sslHandle);
-			connectionState = ConnectionState.disconnecting;
-			updateState();
-		}
-		else
-			debug(OPENSSL) stderr.writefln("OpenSSL: In init, not calling SSL_shutdown");
-		debug(OPENSSL) stderr.writefln("OpenSSL: SSL_shutdown done, flushing");
-		debug(OPENSSL) stderr.writefln("OpenSSL: SSL_shutdown output flushed");
-		super.disconnect(reason, type);
-	}
-
-	override void onDisconnect(string reason, DisconnectType type)
-	{
-		debug(OPENSSL) stderr.writefln("OpenSSL: onDisconnect ('%s'), calling SSL_free", reason);
-		r.clear();
-		w.clear();
-		SSL_free(sslHandle);
-		sslHandle = null;
-		r = MemoryBIO.init; // Was owned by sslHandle, destroyed by SSL_free
-		w = MemoryBIO.init; // ditto
-		connectionState = ConnectionState.disconnected;
-		debug(OPENSSL) stderr.writeln("OpenSSL: onDisconnect: SSL_free called, calling super.onDisconnect");
-		super.onDisconnect(reason, type);
-		debug(OPENSSL) stderr.writeln("OpenSSL: onDisconnect finished");
-	}
-
 	alias send = SSLAdapter.send;
 
 	void sslError(int ret, string msg)
@@ -473,22 +490,6 @@ class OpenSSLAdapter : SSLAdapter
 			default:
 				sslEnforce(false, "%s failed - error code %s".format(msg, err));
 		}
-	}
-
-	override void setHostName(string hostname, ushort port = 0, string service = null)
-	{
-		this.hostname = cast(char*)hostname.toStringz();
-		SSL_set_tlsext_host_name(sslHandle, cast(char*)this.hostname);
-	}
-
-	override OpenSSLCertificate getHostCertificate()
-	{
-		return new OpenSSLCertificate(SSL_get_certificate(sslHandle).sslEnforce());
-	}
-
-	override OpenSSLCertificate getPeerCertificate()
-	{
-		return new OpenSSLCertificate(SSL_get_peer_certificate(sslHandle).sslEnforce());
 	}
 }
 

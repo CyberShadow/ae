@@ -742,7 +742,7 @@ struct NormalizedArray(T, alias normalize)
 	bool opEquals(    const typeof(this) other) const { return std.algorithm.cmp(normalize(arr), normalize(other.arr))==0; } ///
 	bool opEquals(ref const typeof(this) other) const { return std.algorithm.cmp(normalize(arr), normalize(other.arr))==0; } ///
 
-	hash_t toHashReal() const
+	private hash_t toHashReal() const
 	{
 		import std.digest.crc;
 		CRC32 crc;

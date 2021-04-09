@@ -23,7 +23,7 @@ import ae.utils.time.common;
 import ae.utils.time.parse;
 import ae.utils.zlib;
 import ae.utils.gzip;
-alias zlib = ae.utils.zlib;
+private alias zlib = ae.utils.zlib;
 
 /// Controls which caching headers are sent to clients.
 enum CachePolicy

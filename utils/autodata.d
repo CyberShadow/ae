@@ -48,7 +48,7 @@ template AutoCompare()
 
 	@trusted private hash_t _AutoDataHash() const
 	{
-		HashDataHandler handler;
+		_HashDataHandler handler;
 		handler.hasher.Begin();
 		processData!(void, q{}, q{})(handler);
 		return handler.hasher.End();
@@ -56,7 +56,7 @@ template AutoCompare()
 
 	private bool _AutoDataEquals(_AutoDataOtherTypeReference other) const
 	{
-		auto handler = EqualsDataHandler!_AutoDataTypeReference(cast(_AutoDataTypeReference) other);
+		auto handler = _EqualsDataHandler!_AutoDataTypeReference(cast(_AutoDataTypeReference) other);
 		if (handler.other is null)
 			return false;
 		return processData!(bool, q{auto _AutoDataOther = handler.other;}, q{return true;})(handler);
@@ -64,7 +64,7 @@ template AutoCompare()
 
 	private int _AutoDataCmp(_AutoDataOtherTypeReference other) const
 	{
-		auto handler = CmpDataHandler!_AutoDataTypeReference(cast(_AutoDataTypeReference) other);
+		auto handler = _CmpDataHandler!_AutoDataTypeReference(cast(_AutoDataTypeReference) other);
 		if (handler.other is null)
 			return false;
 		return processData!(int, q{auto _AutoDataOther = handler.other;}, "return 0;")(handler);
@@ -82,7 +82,7 @@ template AutoToString()
 
 	string _AutoDataToString() const
 	{
-		ToStringDataHandler handler;
+		_ToStringDataHandler handler;
 		return processData!(string, "string _AutoDataResult;", "return _AutoDataResult;")(handler);
 	}
 }
@@ -100,8 +100,8 @@ template ProcessAllData()
 	}
 }
 
-/// For data handlers that only need to look at the raw data (currently only HashDataHandler)
-template RawDataHandlerWrapper()
+/// For data handlers that only need to look at the raw data (currently only _HashDataHandler)
+template _RawDataHandlerWrapper()
 {
 	template getMixin(T, string name, bool reverseSort)
 	{
@@ -132,9 +132,9 @@ template RawDataHandlerWrapper()
 	}
 }
 
-struct HashDataHandler
+struct _HashDataHandler
 {
-	mixin RawDataHandlerWrapper;
+	mixin _RawDataHandlerWrapper;
 
 	MurmurHash2A hasher;
 
@@ -144,7 +144,7 @@ struct HashDataHandler
 	}
 }
 
-struct EqualsDataHandler(O)
+struct _EqualsDataHandler(O)
 {
 	O other;
 
@@ -162,7 +162,7 @@ struct EqualsDataHandler(O)
 	}
 }
 
-struct CmpDataHandler(O)
+struct _CmpDataHandler(O)
 {
 	O other;
 
@@ -212,7 +212,7 @@ struct CmpDataHandler(O)
 	}
 }
 
-struct ToStringDataHandler
+struct _ToStringDataHandler
 {
 	template getMixinSingle(T, string name)
 	{

@@ -31,8 +31,8 @@ import ae.utils.path;
 
 public import std.typecons : No, Yes;
 
-alias wcscmp = core.stdc.wchar_.wcscmp;
-alias wcslen = core.stdc.wchar_.wcslen;
+deprecated alias wcscmp = core.stdc.wchar_.wcscmp;
+deprecated alias wcslen = core.stdc.wchar_.wcslen;
 
 version(Windows) import ae.sys.windows.imports;
 
@@ -188,6 +188,7 @@ version (Windows) static import ae.sys.windows.misc;
 */
 template listDir(alias handler)
 {
+private: // (This is an eponymous template, so this is to aid documentation generators.)
 	/*non-static*/ struct Context
 	{
 		// Tether to handler alias context
@@ -199,13 +200,14 @@ template listDir(alias handler)
 	}
 
 	/// A pointer to this type will be passed to the `listDir` predicate.
-	static struct Entry
+	public static struct Entry
 	{
 		version (Posix)
 		{
 			dirent* ent; /// POSIX `dirent`.
 
-			stat_t[enumLength!StatTarget] statBuf;
+			private stat_t[enumLength!StatTarget] statBuf;
+
 			/// Result of `stat` call.
 			/// Other values are the same as `errno`.
 			enum StatResult : int
@@ -241,7 +243,7 @@ template listDir(alias handler)
 		// Recursion
 
 		Entry* parent; ///
-		Context* context;
+		private Context* context;
 
 		/// Request recursion on the current `entry`.
 		version (Posix)
@@ -413,7 +415,7 @@ template listDir(alias handler)
 				return data.statResult[target] == StatResult.statOK;
 			}
 
-			ErrnoException statError(StatTarget target)()
+			private ErrnoException statError(StatTarget target)()
 			{
 				errno = data.statResult[target];
 				return new ErrnoException("Failed to stat " ~
@@ -607,7 +609,7 @@ template listDir(alias handler)
 		// The length of the buffer on the stack.
 		enum initialPathBufLength = 256;
 
-		static void scan(DIR* dir, int dirFD, Entry* parentEntry)
+		private static void scan(DIR* dir, int dirFD, Entry* parentEntry)
 		{
 			Entry entry = void;
 			entry.parent = parentEntry;
@@ -746,7 +748,7 @@ template listDir(alias handler)
 		}
 	}
 
-	void listDir(Path)(Path dirPath)
+	public void listDir(Path)(Path dirPath)
 	if (isPath!Path)
 	{
 		import std.internal.cstring;
@@ -879,7 +881,7 @@ unittest
 
 // ************************************************************************
 
-string buildPath2(string[] segments...) { return segments.length ? buildPath(segments) : null; }
+private string buildPath2(string[] segments...) { return segments.length ? buildPath(segments) : null; }
 
 /// Shell-like expansion of ?, * and ** in path components
 DirEntry[] fileList(string pattern)
@@ -1410,7 +1412,7 @@ version (Windows)
 		static mixin(importWin32!q{winnt});
 
 	/// Common code for creating Windows reparse points.
-	void createReparsePoint(string reparseBufferName, string extraInitialization, string reparseTagName)(in char[] target, in char[] print, in char[] link)
+	private void createReparsePoint(string reparseBufferName, string extraInitialization, string reparseTagName)(in char[] target, in char[] print, in char[] link)
 	{
 		mixin(importWin32!q{winbase});
 		mixin(importWin32!q{windef});
@@ -1617,7 +1619,7 @@ version (linux)
 		int passno; /// fsck order
 	}
 
-	string unescapeMountString(in char[] s)
+	private string unescapeMountString(in char[] s)
 	{
 		string result;
 
@@ -1700,12 +1702,12 @@ version (linux)
 {
 	import core.sys.linux.sys.xattr;
 	import core.stdc.errno;
-	alias ENOATTR = ENODATA;
+	private alias ENOATTR = ENODATA;
 
 	/// AA-like object for accessing a file's extended attributes.
 	struct XAttrs(Obj, string funPrefix)
 	{
-		Obj obj;
+		private Obj obj;
 
 		mixin("alias getFun = " ~ funPrefix ~ "getxattr;");
 		mixin("alias setFun = " ~ funPrefix ~ "setxattr;");
@@ -2584,9 +2586,9 @@ deprecated alias obtainUsing = cached;
 /// atomically.
 /// Note: Consider using atomic!syncWrite or
 /// atomic!syncUpdate instead.
-alias atomic!writeProxy atomicWrite;
+alias atomicWrite = atomic!_writeProxy;
 deprecated alias safeWrite = atomicWrite;
-/*private*/ void writeProxy(string target, in void[] data)
+/*private*/ void _writeProxy(string target, in void[] data)
 {
 	std.file.write(target, data);
 }
@@ -2608,7 +2610,7 @@ unittest
 
 	std.file.write(fn, "test");
 
-	cachedDg!0(&writeProxy, fn, "test2");
+	cachedDg!0(&_writeProxy, fn, "test2");
 	assert(fn.readText() == "test");
 }
 

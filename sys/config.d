@@ -61,7 +61,7 @@ class Config
 				RegCloseKey(key);
 		}
 
-		T readImpl(T)(string name, T defaultValue)
+		private T readImpl(T)(string name, T defaultValue)
 		{
 			try
 			{
@@ -95,7 +95,7 @@ class Config
 				return defaultValue;
 		}
 
-		void writeImpl(T)(string name, T value)
+		private void writeImpl(T)(string name, T value)
 		{
 			static if (is(T : const(char[]))) // strings
 			{
@@ -169,7 +169,7 @@ class Config
 			assert(!dirty, "Dirty config destruction");
 		}
 
-		T readImpl(T)(string name, T defaultValue = T.init)
+		private T readImpl(T)(string name, T defaultValue = T.init)
 		{
 			auto pvalue = name in values;
 			if (pvalue)
@@ -178,7 +178,7 @@ class Config
 				return defaultValue;
 		}
 
-		void writeImpl(T)(string name, T value)
+		private void writeImpl(T)(string name, T value)
 			if (is(typeof(to!string(T.init))))
 		{
 			values[name] = to!string(value);

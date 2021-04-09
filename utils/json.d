@@ -136,10 +136,10 @@ struct PrettyJsonWriter(Output, alias indent = '\t', alias newLine = '\n', alias
 	JsonWriter!Output jsonWriter; /// Underlying writer.
 	alias jsonWriter this;
 
-	bool indentPending;
-	uint indentLevel;
+	private bool indentPending;
+	private uint indentLevel;
 
-	void putIndent()
+	private void putIndent()
 	{
 		if (indentPending)
 		{
@@ -149,7 +149,7 @@ struct PrettyJsonWriter(Output, alias indent = '\t', alias newLine = '\n', alias
 		}
 	}
 
-	void putNewline()
+	private void putNewline()
 	{
 		if (!indentPending)
 		{
@@ -1030,7 +1030,7 @@ template NonSerialized(fields...)
 	mixin(mixNonSerializedFields(stringofArray!fields()));
 }
 
-string mixNonSerializedFields(string[] fields)
+private string mixNonSerializedFields(string[] fields)
 {
 	string result;
 	foreach (field; fields)

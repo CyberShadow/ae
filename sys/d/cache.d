@@ -25,7 +25,7 @@ import std.string;
 import ae.sys.file;
 import ae.utils.meta;
 
-alias copy = std.file.copy; // https://issues.dlang.org/show_bug.cgi?id=14817
+private alias copy = std.file.copy; // https://issues.dlang.org/show_bug.cgi?id=14817
 
 /// An interface that needs to be implemented by `DCache` users.
 interface ICacheHost
@@ -124,6 +124,7 @@ abstract class DirCacheBase : DCache
 			cacheDir.mkdirRecurse();
 	} ///
 
+protected:
 	override string[] getEntries() const
 	{
 		return !cacheDir.exists ? null :
@@ -183,6 +184,7 @@ class TempCache : DirCacheBase
 		finalize();
 	} ///
 
+protected:
 	alias cacheHost this; // https://issues.dlang.org/show_bug.cgi?id=5973
 
 	override @property string name() const { return "none"; }
@@ -209,6 +211,7 @@ class DirCache : DirCacheBase
 	mixin GenerateConstructorProxies;
 	alias cacheHost this; // https://issues.dlang.org/show_bug.cgi?id=5973
 
+protected:
 	override @property string name() const { return "directory"; }
 
 	size_t dedupedFiles;
@@ -324,16 +327,6 @@ class DirCache : DirCacheBase
 /// items is a little slower.
 class GitCache : DCache
 {
-	import std.process;
-	import ae.sys.git;
-
-	Git git;
-
-	/// Builds are pinned by refs namespaced by this prefix.
-	static const refPrefix = "refs/ae-sys-d-cache/";
-
-	override @property string name() const { return "git"; }
-
 	this(string cacheDir, ICacheHost cacheHost)
 	{
 		super(cacheDir, cacheHost);
@@ -347,6 +340,17 @@ class GitCache : DCache
 		}
 		git = Git(cacheDir);
 	} ///
+
+	/// Builds are pinned by refs namespaced by this prefix.
+	static const refPrefix = "refs/ae-sys-d-cache/";
+
+protected:
+	import std.process;
+	import ae.sys.git;
+
+	Git git;
+
+	override @property string name() const { return "git"; }
 
 	override string[] getEntries() const
 	{

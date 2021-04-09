@@ -1,5 +1,6 @@
 /**
  * Method binding - using alias inference patch
+ * Currently dysfunctional.
  *
  * License:
  *   This Source Code Form is subject to the terms of
@@ -16,6 +17,10 @@ module ae.utils.meta.binding;
 import ae.utils.meta : thisOf;
 import ae.utils.meta.caps;
 import ae.utils.meta.reference;
+
+/// TODO: update to use the new __traits(child)
+
+deprecated:
 
 /// Create unbound functor of a method
 template unboundFunctorOf(alias f)

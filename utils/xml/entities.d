@@ -290,10 +290,11 @@ shared static this()
 import core.stdc.stdio;
 import std.array;
 import std.exception;
+import std.string : indexOf;
 import std.utf;
 import ae.utils.textout;
 
-/*private*/ public string encodeEntitiesImpl(bool unicode, alias pred)(string str)
+/*private*/ public string _encodeEntitiesImpl(bool unicode, alias pred)(string str)
 {
 	size_t i = 0;
 	while (i < str.length)
@@ -309,16 +310,16 @@ import ae.utils.textout;
 			StringBuilder sb;
 			sb.preallocate(str.length * 11 / 10);
 			sb.put(str[0..o]);
-			sb.putEncodedEntitiesImpl!(unicode, pred)(str[o..$]);
+			sb._putEncodedEntitiesImpl!(unicode, pred)(str[o..$]);
 			return sb.get();
 		}
 	}
 	return str;
 }
 
-/*private*/ public template putEncodedEntitiesImpl(bool unicode, alias pred)
+/*private*/ public template _putEncodedEntitiesImpl(bool unicode, alias pred)
 {
-	void putEncodedEntitiesImpl(Sink, S)(ref Sink sink, S str)
+	void _putEncodedEntitiesImpl(Sink, S)(ref Sink sink, S str)
 	{
 		size_t start = 0, i = 0;
 		while (i < str.length)
@@ -340,10 +341,10 @@ import ae.utils.textout;
 }
 
 /// Encode HTML entities and return the resulting string.
-public alias encodeEntities = encodeEntitiesImpl!(false, (char c) => c=='<' || c=='>' || c=='"' || c=='\'' || c=='&');
+public alias encodeEntities = _encodeEntitiesImpl!(false, (char c) => c=='<' || c=='>' || c=='"' || c=='\'' || c=='&');
 
 /// Write a string to a sink, encoding HTML entities.
-public alias putEncodedEntities = putEncodedEntitiesImpl!(false, (char c) => c=='<' || c=='>' || c=='"' || c=='\'' || c=='&');
+public alias putEncodedEntities = _putEncodedEntitiesImpl!(false, (char c) => c=='<' || c=='>' || c=='"' || c=='\'' || c=='&');
 
 /// Encode all known characters as HTML entities.
 public string encodeAllEntities(string str)

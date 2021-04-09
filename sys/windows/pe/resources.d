@@ -68,12 +68,12 @@ struct ResourceParser
 		string name; /// Entry name (if it is identified by a name).
 		uint id; /// Entry ID (if it is identified by an ID).
 		bool isDirectory; /// True if this entry is another directory.
-		union Contents
+		private union Contents
 		{
 			Directory directory;
 			DirectoryData data;
 		}
-		Contents contents;
+		private Contents contents;
 		ref @property Directory directory() return { assert(isDirectory); return contents.directory; } /// Return the contents as a subdirectory.
 		ref @property DirectoryData data() return { assert(!isDirectory); return contents.data; } /// Return the contents as data.
 	}
@@ -85,6 +85,7 @@ struct ResourceParser
 		void[] data;   ///
 	}
 
+private:
 	Directory readDirectory(uint offset)
 	{
 		enforce(offset + IMAGE_RESOURCE_DIRECTORY.sizeof <= data.length, "Out-of-bounds directory offset");

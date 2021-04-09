@@ -22,7 +22,7 @@ import std.exception;
 /// See https://github.com/D-Programming-Language/druntime/pull/711
 static if (!is(core.time.MonoTime))
 {
-	struct MonoTime
+	deprecated struct MonoTime
 	{
 		enum max = MonoTime(ulong.max);
 

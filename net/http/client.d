@@ -304,13 +304,13 @@ class HttpsClient : HttpClient
 		super(timeout);
 	}
 
-	override IConnection adaptConnection(IConnection conn)
+	protected override IConnection adaptConnection(IConnection conn)
 	{
 		adapter = ssl.createAdapter(ctx, conn);
 		return adapter;
 	}
 
-	override void request(HttpRequest request)
+	protected override void request(HttpRequest request)
 	{
 		super.request(request);
 		if (conn.state == ConnectionState.connecting)

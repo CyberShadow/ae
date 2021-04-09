@@ -13,6 +13,8 @@
 
 module ae.utils.meta.binding_v1;
 
+deprecated:
+
 import std.traits;
 
 import ae.utils.meta.caps;

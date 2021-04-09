@@ -40,19 +40,19 @@ template ValueTuple(T...)
 	alias T ValueTuple;
 }
 
-template RangeTupleImpl(size_t N, R...)
+template _RangeTupleImpl(size_t N, R...)
 {
 	static if (N==R.length)
-		alias R RangeTupleImpl;
+		alias R _RangeTupleImpl;
 	else
-		alias RangeTupleImpl!(N, ValueTuple!(R, R.length)) RangeTupleImpl;
+		alias _RangeTupleImpl!(N, ValueTuple!(R, R.length)) _RangeTupleImpl;
 }
 
 /// Generate a tuple containing integers from 0 to N-1.
 /// Useful for static loop unrolling. (staticIota)
 template RangeTuple(size_t N)
 {
-	alias RangeTupleImpl!(N, ValueTuple!()) RangeTuple;
+	alias _RangeTupleImpl!(N, ValueTuple!()) RangeTuple;
 }
 
 /// Expand an array to a tuple.
@@ -122,19 +122,20 @@ unittest
 /// Example: FieldList!(ubyte, "r", "g", "b", ushort, "a");
 mixin template FieldList(Fields...)
 {
-	mixin(GenFieldList!(void, Fields));
+	mixin(_GenFieldList!(void, Fields));
 }
 
-template GenFieldList(T, Fields...)
+template _GenFieldList(T, Fields...)
 {
+	///
 	static if (Fields.length == 0)
-		enum GenFieldList = "";
+		enum _GenFieldList = "";
 	else
 	{
 		static if (is(typeof(Fields[0]) == string))
-			enum GenFieldList = T.stringof ~ " " ~ Fields[0] ~ ";\n" ~ GenFieldList!(T, Fields[1..$]);
+			enum _GenFieldList = T.stringof ~ " " ~ Fields[0] ~ ";\n" ~ _GenFieldList!(T, Fields[1..$]);
 		else
-			enum GenFieldList = GenFieldList!(Fields[0], Fields[1..$]);
+			enum _GenFieldList = _GenFieldList!(Fields[0], Fields[1..$]);
 	}
 }
 
@@ -354,8 +355,7 @@ unittest
 /// returned. Preserves field names (as parameter names) and default values.
 template structFun(S)
 {
-	string gen()
-	{
+	mixin((){
 		import std.algorithm.iteration : map;
 		import std.array : join;
 		import std.format : format;
@@ -371,9 +371,7 @@ template structFun(S)
 			"	typeof(S.init.tupleof[%d]) %s = S.init.tupleof[%d],\n".format(n, names[n], n)
 			).join() ~
 			`) { return S(` ~ names.join(", ") ~ "); }";
-	}
-
-	mixin(gen());
+	}());
 }
 
 unittest
@@ -563,9 +561,9 @@ unittest
 // ************************************************************************
 
 // Using a compiler with UDA support?
-enum HAVE_UDA = __traits(compiles, __traits(getAttributes, Object));
+deprecated alias HAVE_UDA = haveUDA;
 
-static if (HAVE_UDA)
+static if (haveUDA)
 {
 	/*
 	template hasAttribute(T, alias D)
@@ -587,21 +585,21 @@ static if (HAVE_UDA)
 		///
 		static if (is(Args[0]))
 		{
-			template isTypeOrValueInTuple(T, Args...)
+			template _isTypeOrValueInTuple(T, Args...)
 			{
 				static if (!Args.length)
-					enum isTypeOrValueInTuple = false;
+					enum _isTypeOrValueInTuple = false;
 				else
 				static if (is(Args[0] == T))
-					enum isTypeOrValueInTuple = true;
+					enum _isTypeOrValueInTuple = true;
 				else
 				static if (is(typeof(Args[0]) == T))
-					enum isTypeOrValueInTuple = true;
+					enum _isTypeOrValueInTuple = true;
 				else
-					enum isTypeOrValueInTuple = isTypeOrValueInTuple!(T, Args[1..$]);
+					enum _isTypeOrValueInTuple = _isTypeOrValueInTuple!(T, Args[1..$]);
 			}
 
-			enum bool hasAttribute = isTypeOrValueInTuple!(Args[0], __traits(getAttributes, Args[1]));
+			enum bool hasAttribute = _isTypeOrValueInTuple!(Args[0], __traits(getAttributes, Args[1]));
 		}
 		else
 			enum bool hasAttribute = staticIndexOf!(Args[0], __traits(getAttributes, Args[1])) != -1;
@@ -802,12 +800,12 @@ alias I(alias A) = A;
 /// Skips template and mixin ancestors until it finds a struct or class.
 template thisOf(alias f)
 {
-	alias p = I!(__traits(parent, f));
+	alias _p = I!(__traits(parent, f));
 	///
-	static if (is(p == class) || is(p == struct) || is(p == union))
-		alias thisOf = p;
+	static if (is(_p == class) || is(_p == struct) || is(_p == union))
+		alias thisOf = _p;
 	else
-		alias thisOf = thisOf!p;
+		alias thisOf = thisOf!_p;
 }
 
 // ************************************************************************

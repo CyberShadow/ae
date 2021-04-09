@@ -31,6 +31,8 @@ final class GnuWin32Component : Installer
 	string componentName;
 
 	this(string componentName) { this.componentName = componentName; } ///
+
+protected:
 	@property override string name() { return "%s (GnuWin32)".format(componentName); }
 	@property override string subdirectory() { return "gnuwin32"; }
 	@property override string[] binPaths() { return ["bin"]; }

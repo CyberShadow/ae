@@ -30,7 +30,7 @@ import ae.utils.text;
 
 private enum OptionType { switch_, option, parameter }
 
-struct OptionImpl(OptionType type_, T_, string description_, char shorthand_, string placeholder_, string name_)
+struct _OptionImpl(OptionType type_, T_, string description_, char shorthand_, string placeholder_, string name_)
 {
 	enum type = type_;
 	alias T = T_;
@@ -51,20 +51,20 @@ struct OptionImpl(OptionType type_, T_, string description_, char shorthand_, st
 /// An on/off switch (e.g. --verbose). Does not have a value, other than its presence.
 template Switch(string description=null, char shorthand=0, string name=null)
 {
-	alias Switch = OptionImpl!(OptionType.switch_, bool, description, shorthand, null, name);
+	alias Switch = _OptionImpl!(OptionType.switch_, bool, description, shorthand, null, name);
 }
 
 /// An option with a value (e.g. --tries N). The default placeholder depends on the type
 /// (N for numbers, STR for strings).
 template Option(T, string description=null, string placeholder=null, char shorthand=0, string name=null)
 {
-	alias Option = OptionImpl!(OptionType.option, T, description, shorthand, placeholder, name);
+	alias Option = _OptionImpl!(OptionType.option, T, description, shorthand, placeholder, name);
 }
 
 /// An ordered parameter.
 template Parameter(T, string description=null, string name=null)
 {
-	alias Parameter = OptionImpl!(OptionType.parameter, T, description, 0, null, name);
+	alias Parameter = _OptionImpl!(OptionType.parameter, T, description, 0, null, name);
 }
 
 /// Specify this as the description to hide the option from --help output.
@@ -72,7 +72,7 @@ enum hiddenOption = "hiddenOption";
 
 private template OptionValueType(T)
 {
-	static if (is(T == OptionImpl!Args, Args...))
+	static if (is(T == _OptionImpl!Args, Args...))
 		alias OptionValueType = T.T;
 	else
 		alias OptionValueType = T;
@@ -80,7 +80,7 @@ private template OptionValueType(T)
 
 private OptionValueType!T* optionValue(T)(ref T option)
 {
-	static if (is(T == OptionImpl!Args, Args...))
+	static if (is(T == _OptionImpl!Args, Args...))
 		return &option.value;
 	else
 		return &option;
@@ -88,7 +88,7 @@ private OptionValueType!T* optionValue(T)(ref T option)
 
 private template isParameter(T)
 {
-	static if (is(T == OptionImpl!Args, Args...))
+	static if (is(T == _OptionImpl!Args, Args...))
 		enum isParameter = T.type == OptionType.parameter;
 	else
 	static if (is(T == bool))
@@ -111,7 +111,7 @@ private template isOptionArray(Param)
 
 private template optionShorthand(T)
 {
-	static if (is(T == OptionImpl!Args, Args...))
+	static if (is(T == _OptionImpl!Args, Args...))
 		enum optionShorthand = T.shorthand;
 	else
 		enum char optionShorthand = 0;
@@ -119,7 +119,7 @@ private template optionShorthand(T)
 
 private template optionDescription(T)
 {
-	static if (is(T == OptionImpl!Args, Args...))
+	static if (is(T == _OptionImpl!Args, Args...))
 		enum optionDescription = T.description;
 	else
 		enum string optionDescription = null;
@@ -129,7 +129,7 @@ private enum bool optionHasDescription(T) = !isHiddenOption!T && optionDescripti
 
 private template optionPlaceholder(T)
 {
-	static if (is(T == OptionImpl!Args, Args...))
+	static if (is(T == _OptionImpl!Args, Args...))
 	{
 		static if (T.placeholder.length)
 			enum optionPlaceholder = T.placeholder;
@@ -151,7 +151,7 @@ private template optionPlaceholder(T)
 
 private template optionName(T, string paramName)
 {
-	static if (is(T == OptionImpl!Args, Args...))
+	static if (is(T == _OptionImpl!Args, Args...))
 		static if (T.name)
 			enum optionName = T.name;
 		else
@@ -162,7 +162,7 @@ private template optionName(T, string paramName)
 
 private template isHiddenOption(T)
 {
-	static if (is(T == OptionImpl!Args, Args...))
+	static if (is(T == _OptionImpl!Args, Args...))
 		static if (T.description is hiddenOption)
 			enum isHiddenOption = true;
 		else
@@ -399,7 +399,7 @@ string getUsageFormatString(alias FUN)()
 		else
 		{
 			string switchText = "--" ~ names[i].identifierToCommandLineKeyword();
-			static if (is(Param == OptionImpl!Args, Args...))
+			static if (is(Param == _OptionImpl!Args, Args...))
 				static if (Param.type == OptionType.option)
 					switchText ~= (optionPlaceholder!Param.canFind('=') ? ' ' : '=') ~ optionPlaceholder!Param;
 			return switchText;

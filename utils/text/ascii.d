@@ -33,29 +33,30 @@ alias string ascii;
 /// representation of any number of this basic integer type.
 template DecimalSize(T : ulong)
 {
-	alias U = Unqual!T;
-	static if (is(U == ubyte))
+	alias _U = Unqual!T;
+	///
+	static if (is(_U == ubyte))
 		enum DecimalSize = 3;
 	else
-	static if (is(U == byte))
+	static if (is(_U == byte))
 		enum DecimalSize = 4;
 	else
-	static if (is(U == ushort))
+	static if (is(_U == ushort))
 		enum DecimalSize = 5;
 	else
-	static if (is(U == short))
+	static if (is(_U == short))
 		enum DecimalSize = 6;
 	else
-	static if (is(U == uint))
+	static if (is(_U == uint))
 		enum DecimalSize = 10;
 	else
-	static if (is(U == int))
+	static if (is(_U == int))
 		enum DecimalSize = 11;
 	else
-	static if (is(U == ulong))
+	static if (is(_U == ulong))
 		enum DecimalSize = 20;
 	else
-	static if (is(U == long))
+	static if (is(_U == long))
 		enum DecimalSize = 20;
 	else
 		static assert(false, "Unknown type for DecimalSize");
@@ -264,12 +265,12 @@ shared static this()
 	}
 }
 
-void xlat(alias TABLE, T)(T[] buf)
+void _xlat(alias TABLE, T)(T[] buf)
 {
 	foreach (ref c; buf)
 		c = TABLE[c];
 }
 
 /// Lowercases or uppercases a string in-place.
-alias xlat!(asciiLower, char) asciiToLower;
-alias xlat!(asciiUpper, char) asciiToUpper; /// ditto
+alias _xlat!(asciiLower, char) asciiToLower;
+alias _xlat!(asciiUpper, char) asciiToUpper; /// ditto

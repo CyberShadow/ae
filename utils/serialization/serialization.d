@@ -11,7 +11,8 @@
  *   Vladimir Panteleev <ae@cy.md>
  */
 
-module ae.utils.serialization.serialization;
+deprecated module ae.utils.serialization.serialization;
+deprecated:
 
 import std.conv;
 import std.format;

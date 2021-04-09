@@ -24,8 +24,10 @@ public import ae.sys.install.common;
 /// Installs an MSYS component.
 final class MSYSComponent : Installer
 {
-	string componentName, testFile, url;
 	this(string componentName, string testFile, string url) { this.componentName = componentName; this.testFile = testFile; this.url = url; } ///
+
+protected:
+	string componentName, testFile, url;
 
 	@property override string name() { return "%s (MSYS)".format(componentName); }
 	@property override string subdirectory() { return "msys"; }

@@ -29,6 +29,7 @@ class WixInstaller : Installer
 {
 	string wixVersion = "3.10.4"; /// Version to install.
 
+protected:
 	@property override string[] requiredExecutables() { return ["candle", "dark", "heat", "light", "lit", "lux", "melt", "nit", "pyro", "retina", "shine", "smoke", "torch"]; }
 
 	override void installImpl(string target)

@@ -264,9 +264,6 @@ class WindowsTerm : FileTerm
 		return !!GetConsoleScreenBufferInfo(f.windowsHandle, &info);
 	}
 
-	HANDLE handle;
-	WORD attributes, origAttributes;
-
 	this(File f)
 	{
 		this.f = f;
@@ -279,6 +276,9 @@ class WindowsTerm : FileTerm
 	} ///
 
 protected:
+	HANDLE handle;
+	WORD attributes, origAttributes;
+
 	final void setAttribute(bool background)(Color c)
 	{
 		enum shift = background ? 4 : 0;
@@ -358,7 +358,7 @@ private Term globalTerm;
 } /// ditto
 
 version (ae_sys_term_demo)
-void main()
+private void main()
 {
 	auto t = term;
 	foreach (bg; -1 .. 16)

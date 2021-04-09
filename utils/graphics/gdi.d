@@ -62,8 +62,8 @@ struct GDICanvas(COLOR)
 
 	/// Geometry.
 	xy_t w, h;
-	StorageType* pixelData;
-	sizediff_t pixelStride;
+	private StorageType* pixelData;
+	private sizediff_t pixelStride;
 
 	/// `DirectView` interface.
 	inout(StorageType)[] scanline(xy_t y) inout

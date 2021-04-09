@@ -28,7 +28,7 @@ enum FlushPolicy
 	// TODO: this can actually be a bitmask
 }
 
-bool delayed(FlushPolicy policy) { return policy > FlushPolicy.manual; }
+private bool delayed(FlushPolicy policy) { return policy > FlushPolicy.manual; }
 
 /// Placeholder `DataPutter` argument to indicate no writing.
 struct None {}
@@ -204,6 +204,7 @@ struct FileCache(alias DataGetter, alias DataPutter = None, FlushPolicy flushPol
 // Sleep between writes to make sure timestamps differ
 version(unittest) import core.thread;
 
+package
 version (Windows)
 	enum filesystemTimestampGranularity = 10.msecs;
 else

@@ -23,6 +23,16 @@ class SevenZipInstaller : Installer
 {
 	string url = "http://downloads.sourceforge.net/sevenzip/7za920.zip"; /// Download URL.
 
+	/// "7za" or "7z", depending on which is available.
+	@property string exe()
+	{
+		if (haveExecutable("7za"))
+			return "7za";
+		else
+			return "7z";
+	}
+
+protected:
 	@property override string name() { return "7-Zip"; }
 	@property override string subdirectory() { return "7z"; }
 
@@ -41,15 +51,6 @@ class SevenZipInstaller : Installer
 	@property override bool availableOnSystem()
 	{
 		return haveExecutable("7z") || haveExecutable("7za");
-	}
-
-	/// "7za" or "7z", depending on which is available.
-	@property string exe()
-	{
-		if (haveExecutable("7za"))
-			return "7za";
-		else
-			return "7z";
 	}
 
 	static this()

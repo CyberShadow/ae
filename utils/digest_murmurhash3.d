@@ -9,7 +9,10 @@
 // non-native version will be less than optimal.
 
 
+// deprecated
 module ae.utils.digest_murmurhash3;
+
+deprecated:
 
 private:
 

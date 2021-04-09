@@ -43,7 +43,7 @@ struct CustomXmlFormatter(char indentCharP, uint indentSizeP)
 
 	mixin template Mixin(alias formatter)
 	{
-		uint indentLevel = 0;
+		private uint indentLevel = 0;
 
 		/// Implementation of formatter interface.
 		void newLine()
@@ -76,7 +76,7 @@ struct CustomXmlWriter(WRITER, Formatter)
 	Formatter formatter;
 	mixin Formatter.Mixin!formatter;
 
-	debug // verify well-formedness
+	private debug // verify well-formedness
 	{
 		string[] tagStack;
 		void pushTag(string tag) { tagStack ~= tag; }

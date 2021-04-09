@@ -125,7 +125,7 @@ struct PE
 }
 
 // UFCS helper
-T interpretAs(T)(ubyte[] data, size_t offset)
+private T interpretAs(T)(ubyte[] data, size_t offset)
 {
 	return *cast(T*)(data.ptr + offset);
 }

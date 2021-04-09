@@ -11,8 +11,9 @@
  *   Vladimir Panteleev <ae@cy.md>
  */
 
-module ae.utils.async;
+deprecated module ae.utils.async;
 
+deprecated:
 void asyncApply(T)(T[] arr, void delegate(T value, void delegate() next) f, void delegate() done = null)
 {
 	size_t index = 0;

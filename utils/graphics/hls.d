@@ -14,10 +14,10 @@ struct HLS(COLOR, HLSTYPE=ushort, HLSTYPE HLSMAX=240)
 	// H,L, and S vary over 0-HLSMAX
 	// HLSMAX BEST IF DIVISIBLE BY 6
 
-	alias COLOR.ChannelType RGBTYPE;
+	private alias RGBTYPE = COLOR.ChannelType;
 
 	// R,G, and B vary over 0-RGBMAX
-	enum RGBMAX = RGBTYPE.max;
+	private enum RGBMAX = RGBTYPE.max;
 
 	/// Hue is undefined if Saturation is 0 (grey-scale)
 	/// This value determines where the Hue scrollbar is

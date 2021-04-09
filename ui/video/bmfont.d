@@ -21,14 +21,15 @@ import ae.utils.graphics.fonts.draw;
 /// and `ProceduralTextureSource` .
 final class FontTextureSource(Font) : ProceduralTextureSource
 {
-	Font font;
-	Renderer.COLOR color;
-
 	this(Font font, Renderer.COLOR color)
 	{
 		this.font = font;
 		this.color = color;
 	} ///
+
+protected:
+	Font font;
+	Renderer.COLOR color;
 
 	override void getSize(out int width, out int height)
 	{

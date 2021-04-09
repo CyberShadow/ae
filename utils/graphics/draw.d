@@ -130,7 +130,7 @@ unittest
 
 // ***************************************************************************
 
-enum CheckHLine =
+private enum CheckHLine =
 q{
 	static if (CHECKED)
 	{
@@ -141,7 +141,7 @@ q{
 	assert(x1 <= x2);
 };
 
-enum CheckVLine =
+private enum CheckVLine =
 q{
 	static if (CHECKED)
 	{
@@ -436,7 +436,7 @@ void thickLinePoly(V, COLOR)(auto ref V v, Coord[] coords, xy_t r, COLOR c)
 
 // ************************************************************************************************************************************
 
-mixin template FixMath(ubyte coordinateBitsParam = 16)
+private mixin template FixMath(ubyte coordinateBitsParam = 16)
 {
 	import ae.utils.meta : SignedBitsType, UnsignedBitsType;
 
