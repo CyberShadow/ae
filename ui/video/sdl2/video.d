@@ -20,6 +20,7 @@ import ae.ui.video.sdl2common.video;
 import ae.ui.video.renderer;
 import ae.ui.video.sdl2.renderer;
 
+/// `Video` implementation backed by `SDL2SoftwareRenderer`.
 class SDL2SoftwareVideo : SDL2CommonVideo
 {
 protected:
@@ -29,6 +30,7 @@ protected:
 	}
 }
 
+/// `Video` implementation backed by `SDL2Renderer`.
 class SDL2Video : SDL2CommonVideo
 {
 protected:

@@ -19,14 +19,15 @@ import std.string;
 import ae.sys.windows.imports;
 mixin(importWin32!q{winnt});
 
+/// Parses a Portable Executable file.
 struct PE
 {
-	ubyte[] data;
+	ubyte[] data; /// File data bytes.
 
-	PIMAGE_DOS_HEADER dosHeader;
-	PIMAGE_NT_HEADERS32 ntHeaders;
-	IMAGE_SECTION_HEADER[] sectionHeaders;
-	IMAGE_DATA_DIRECTORY[] dataDirectories;
+	PIMAGE_DOS_HEADER dosHeader; /// Extracted headers.
+	PIMAGE_NT_HEADERS32 ntHeaders; /// ditto
+	IMAGE_SECTION_HEADER[] sectionHeaders; /// ditto
+	IMAGE_DATA_DIRECTORY[] dataDirectories; /// ditto
 
 	this(void[] exe)
 	{
@@ -48,7 +49,7 @@ struct PE
 		auto sectionsEnd = sectionsStart + ntHeaders.FileHeader.NumberOfSections * IMAGE_SECTION_HEADER.sizeof;
 		enforce(sectionsEnd <= data.length, "Not enough data for section headers");
 		sectionHeaders = cast(IMAGE_SECTION_HEADER[])(data[sectionsStart .. sectionsEnd]);
-	}
+	} ///
 
 	/// Translate a file offset to the relative virtual address
 	/// (address relative to the image base).

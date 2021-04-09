@@ -82,6 +82,7 @@ string toUtf8(in ascii data, string cp, bool force = false)
 	}
 }
 
+/// True if `data` contains non-ASCII characters.
 bool hasHighAsciiChars(in ascii data)
 {
 	foreach (char b; data)
@@ -90,6 +91,7 @@ bool hasHighAsciiChars(in ascii data)
 	return false;
 }
 
+/// Replaces non-ASCII characters (with the high bit set) with the Unicode replacement character.
 string stripNonAscii(in ascii data)
 {
 	wchar[] result = new wchar[data.length];
@@ -99,7 +101,7 @@ string stripNonAscii(in ascii data)
 }
 
 
-immutable shared wstring[string] codepages;
+immutable shared wstring[string] codepages; /// High part of known 8-bit code pages.
 
 shared static this()
 {

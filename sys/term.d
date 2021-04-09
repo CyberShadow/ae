@@ -23,31 +23,31 @@ abstract class Term
 	/// The 16 standard VGA/ANSI colors plus a "none" pseudo-color.
 	enum Color : byte
 	{
-		none          = -1, /// transparent or default
+		none          = -1                , /// transparent or default
 
-		black         = 0,
+		black         = 0                 , ///
 
-		red           = 1 << 0,
-		green         = 1 << 1,
-		blue          = 1 << 2,
+		red           = 1 << 0            , ///
+		green         = 1 << 1            , ///
+		blue          = 1 << 2            , ///
 
-		yellow        = red | green       ,
-		magenta       = red |         blue,
-		cyan          =       green | blue,
-		gray          = red | green | blue,
+		yellow        = red | green       , ///
+		magenta       = red |         blue, ///
+		cyan          =       green | blue, ///
+		gray          = red | green | blue, ///
 
-		darkGray      = bright | black,
-		brightRed     = bright | red,
-		brightGreen   = bright | green,
-		brightBlue    = bright | blue,
-		brightYellow  = bright | yellow,
-		brightMagenta = bright | magenta,
-		brightCyan    = bright | cyan,
-		white         = bright | gray,
+		darkGray      = bright | black    , ///
+		brightRed     = bright | red      , ///
+		brightGreen   = bright | green    , ///
+		brightBlue    = bright | blue     , ///
+		brightYellow  = bright | yellow   , ///
+		brightMagenta = bright | magenta  , ///
+		brightCyan    = bright | cyan     , ///
+		white         = bright | gray     , ///
 
 		// Place this definition after the colors so that e.g.
 		// std.conv prefers the color name over this flag name.
-		bright        = 1 << 3,
+		bright        = 1 << 3, /// (mask)
 	}
 
 	private enum mixColorAliases(T) = (){
@@ -63,8 +63,8 @@ abstract class Term
 	}();
 
 	/// Color wrapping formatting operations for put.
-	struct ForegroundColor { Color c; mixin(mixColorAliases!ForegroundColor); }
-	struct BackgroundColor { Color c; mixin(mixColorAliases!BackgroundColor); } /// ditto
+	struct ForegroundColor { Color c; /***/ mixin(mixColorAliases!ForegroundColor); }
+	struct BackgroundColor { Color c; /***/ mixin(mixColorAliases!BackgroundColor); } /// ditto
 
 	/// Shorthands
 	alias fg = ForegroundColor;
@@ -166,7 +166,7 @@ protected:
 /// Base class for File-based terminal implementations.
 abstract class FileTerm : Term
 {
-	File f;
+	File f; ///
 
 protected:
 	override void putText(in char[] s) { f.rawWrite(s); }
@@ -178,7 +178,7 @@ class DumbTerm : FileTerm
 	this(File f)
 	{
 		this.f = f;
-	}
+	} ///
 
 protected:
 	override void setTextColor(Color c) {}
@@ -189,6 +189,8 @@ protected:
 /// ANSI escape sequence based terminal.
 class ANSITerm : FileTerm
 {
+	/// Returns true if `f` is a TTY and `TERM`
+	/// is set to anything other than "dumb".
 	static bool isTerm(File f)
 	{
 		version (Posix)
@@ -205,6 +207,7 @@ class ANSITerm : FileTerm
 		return true;
 	}
 
+	/// Convert a `Color` to an ANSI color number.
 	static int ansiColor(Color c, bool background)
 	{
 		if (c < -1 || c > Color.white)
@@ -226,7 +229,7 @@ class ANSITerm : FileTerm
 	this(File f)
 	{
 		this.f = f;
-	}
+	} ///
 
 protected:
 	override void setTextColor(Color c)
@@ -254,6 +257,7 @@ class WindowsTerm : FileTerm
 	import core.sys.windows.wincon : CONSOLE_SCREEN_BUFFER_INFO, GetConsoleScreenBufferInfo, SetConsoleTextAttribute;
 	import ae.sys.windows.exception : wenforce;
 
+	/// Returns true if `f` is a Windows console.
 	static bool isTerm(File f)
 	{
 		CONSOLE_SCREEN_BUFFER_INFO info;
@@ -272,7 +276,7 @@ class WindowsTerm : FileTerm
 		GetConsoleScreenBufferInfo(handle, &info)
 			.wenforce("GetConsoleScreenBufferInfo");
 		attributes = origAttributes = info.wAttributes;
-	}
+	} ///
 
 protected:
 	final void setAttribute(bool background)(Color c)
@@ -340,18 +344,18 @@ Term makeTerm(File f = stderr)
 		return new DumbTerm(f);
 }
 
-/// Get or set a Term implementation for the current thread (creating one if necessary).
 private Term globalTerm;
+/// Get or set a `Term` implementation for the current thread (creating one if necessary).
 @property Term term()
 {
 	if (!globalTerm)
 		globalTerm = makeTerm();
 	return globalTerm;
-}
-@property Term term(Term newTerm) /// ditto
+} /// ditto
+@property Term term(Term newTerm)
 {
 	return globalTerm = newTerm;
-}
+} /// ditto
 
 version (ae_sys_term_demo)
 void main()

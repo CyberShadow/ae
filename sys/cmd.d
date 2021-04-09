@@ -23,6 +23,7 @@ import std.string;
 
 import ae.sys.file;
 
+/// Returns a very unique name for a temporary file.
 string getTempFileName(string extension)
 {
 	import std.random;
@@ -39,6 +40,7 @@ string getTempFileName(string extension)
 	));
 }
 
+/// Like `thisProcessID`, but for threads.
 ulong getCurrentThreadID()
 {
 	version (Windows)
@@ -151,6 +153,7 @@ T[] pipe(T, Params...)(string[] args, in T[] input, Params params)
 
 // ************************************************************************
 
+/// Wrapper for the `iconv` program.
 ubyte[] iconv(in void[] data, string inputEncoding, string outputEncoding)
 {
 	auto args = ["timeout", "30", "iconv", "-f", inputEncoding, "-t", outputEncoding];
@@ -158,6 +161,7 @@ ubyte[] iconv(in void[] data, string inputEncoding, string outputEncoding)
 	return cast(ubyte[])result;
 }
 
+/// ditto
 string iconv(in void[] data, string inputEncoding)
 {
 	import std.utf;
@@ -172,6 +176,7 @@ unittest
 	assert(iconv("Hello"w, "UTF-16LE") == "Hello");
 }
 
+/// Wrapper for the `sha1sum` program.
 string sha1sum(in void[] data)
 {
 	auto output = cast(string)pipe(["sha1sum", "-b", "-"], data);
@@ -203,6 +208,7 @@ void setEnvironment(string[string] env)
 			environment.remove(k);
 }
 
+/// Expand Windows-like variable placeholders (`"%VAR%"`) in the given string.
 string expandWindowsEnvVars(alias getenv = environment.get)(string s)
 {
 	import std.array;
@@ -234,6 +240,8 @@ unittest
 
 // ************************************************************************
 
+/// Like `std.process.wait`, but with a timeout.
+/// If the timeout is exceeded, the program is killed.
 int waitTimeout(Pid pid, Duration time)
 {
 	bool ok = false;

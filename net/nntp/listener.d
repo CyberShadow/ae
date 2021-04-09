@@ -21,8 +21,10 @@ import std.typecons;
 import ae.sys.timing;
 import ae.sys.log;
 
+/// `NntpListener` polls with this interval.
 const POLL_PERIOD = 2.seconds;
 
+/// NNTP client which polls the server for new messages.
 class NntpListener
 {
 private:
@@ -122,18 +124,18 @@ public:
 	{
 		client = scoped!NntpClient(log);
 		client.handleDisconnect = &onDisconnect;
-	}
+	} ///
 
 	void connect(string server)
 	{
 		this.server = server;
 		reconnect();
-	}
+	} ///
 
 	void disconnect()
 	{
 		client.disconnect();
-	}
+	} ///
 
 	void startPolling(string lastDate = null)
 	{
@@ -142,7 +144,8 @@ public:
 		this.lastDate = lastDate;
 		if (connected)
 			poll();
-	}
+	} ///
 
+	/// Called when NEWNEWS reports a new message.
 	void delegate(string[] lines, string num, string id) handleMessage;
 }

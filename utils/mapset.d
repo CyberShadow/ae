@@ -71,8 +71,8 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	/// rather than a D associative array, so we do that here.
 	struct Pair
 	{
-		DimValue value;
-		MapSet set;
+		DimValue value; ///
+		MapSet set; ///
 
 		int opCmp(ref const typeof(this) other) const
 		{
@@ -80,13 +80,13 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 				return value.opCmp(other.value);
 			else
 				return value < other.value ? -1 : value > other.value ? 1 : 0;
-		}
+		} ///
 	}
 
 	struct Node
 	{
-		DimName dim;
-		Pair[] children;
+		DimName dim; ///
+		Pair[] children; ///
 
 		immutable this(DimName dim, immutable Pair[] children)
 		{
@@ -119,14 +119,14 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 				totalMembers += pair.set.count;
 			}
 			this.totalMembers = totalMembers;
-		}
+		} ///
 
 		immutable this(DimName dim, immutable MapSet[DimValue] children)
 		{
 			auto childrenList = children.byKeyValue.map!(kv => Pair(kv.key, kv.value)).array;
 			childrenList.sort();
 			this(dim, cast(immutable) childrenList);
-		}
+		} ///
 
 		void toString(scope void delegate(const(char)[]) sink) const
 		{
@@ -142,7 +142,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 				sink.formattedWrite("%s : %s", pair.value, pair.set);
 			}
 			sink(" ] }");
-		}
+		} ///
 
 		private hash_t hash;
 		size_t totalMembers;
@@ -150,13 +150,13 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		hash_t toHash() const
 		{
 			return hash;
-		}
+		} ///
 
 		bool opEquals(ref const typeof(this) s) const
 		{
 			return hash == s.hash && dim == s.dim && children == s.children;
-		}
-	}
+		} ///
+	} ///
 
 	/// Indicates the empty set.
 	/// May only occur at the top level (never as a subset).
@@ -428,6 +428,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		}());
 	}
 
+	/// Apply `fn` over subsets, and return a new `MapSet`.
 	/*private*/ MapSet lazyMap(scope MapSet delegate(MapSet) fn) const
 	{
 		// Defer allocation until the need to mutate
@@ -874,6 +875,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		}());
 	}
 
+	/// Swap the two adjacent dimensions which are `depth` dimensions away.
 	/*private*/ MapSet swapDepth(size_t depth) const
 	{
 		if (this is emptySet || this is unitSet) return this;
@@ -921,7 +923,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			sink("{[]}");
 		else
 			sink.formattedWrite!"%s"(*root);
-	}
+	} ///
 
 	hash_t toHash() const
 	{
@@ -929,7 +931,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 			this is emptySet ? 0 :
 			this is unitSet ? 1 :
 			root.toHash();
-	}
+	} ///
 
 	bool opEquals(const typeof(this) s) const
 	{
@@ -938,7 +940,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		if (this is emptySet || this is unitSet || s is emptySet || s is unitSet)
 			return this is s;
 		return *root == *s.root;
-	}
+	} ///
 }
 
 unittest
@@ -1017,20 +1019,25 @@ unittest
 /// variations of that variable are processed in one iteration.
 struct MapSetVisitor(A, V)
 {
+	/// Underlying `MapSet`.
 	alias Set = MapSet!(A, V);
-	Set set;
+	Set set; /// ditto
 
-	struct Var
+	/// Internal state.
+	/*private*/ public
 	{
-		A name;
-		const(V)[] values;
-		size_t pos;
+		struct Var
+		{
+			A name; ///
+			const(V)[] values; ///
+			size_t pos; ///
+		}
+		Var[] stack;
+		size_t stackPos;
+		V[A] singularValues, resolvedValues; // Faster than workingSet.all(name)[0]
+		private HashSet!A dirtyValues; // Accumulate MapSet.set calls
+		private Set workingSet;
 	}
-	Var[] stack;
-	size_t stackPos;
-	V[A] singularValues, resolvedValues; // Faster than workingSet.all(name)[0]
-	private HashSet!A dirtyValues; // Accumulate MapSet.set calls
-	private Set workingSet;
 
 	this(Set set)
 	{
@@ -1038,7 +1045,7 @@ struct MapSetVisitor(A, V)
 		foreach (dim, values; set.getDimsAndValues())
 			if (values.length == 1)
 				singularValues[dim] = values.byKey.front;
-	}
+	} ///
 
 	/// Resets iteration to the beginning.
 	/// Equivalent to but faster than constructing a new MapSetVisitor
@@ -1091,6 +1098,7 @@ struct MapSetVisitor(A, V)
 		dirtyValues.clear();
 	}
 
+	/// Peek at the subset the algorithm is currently working with.
 	@property Set currentSubset()
 	{
 		assert(workingSet !is Set.emptySet, "Not iterating");

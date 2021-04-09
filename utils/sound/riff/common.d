@@ -13,12 +13,13 @@
 
 module ae.utils.sound.riff.common;
 
+/// RIFF "fmt" chunk.
 struct WaveFmt
 {
-	ushort format;
-	ushort numChannels;
-	uint sampleRate;
-	uint byteRate;
-	ushort blockAlign;
-	ushort bitsPerSample;
+	ushort format;        ///
+	ushort numChannels;	  ///
+	uint sampleRate;	  ///
+	uint byteRate;		  ///
+	ushort blockAlign;	  ///
+	ushort bitsPerSample; ///
 }

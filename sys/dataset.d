@@ -54,6 +54,7 @@ void[] joinToHeap(Data[] data)
 	return result;
 }
 
+/// Remove and return the specified number of bytes from the given `Data[]`.
 Data[] popFront(ref Data[] data, size_t amount)
 {
 	auto result = data.bytes[0..amount];
@@ -62,17 +63,18 @@ Data[] popFront(ref Data[] data, size_t amount)
 }
 
 /// Return a type that's indexable to access individual bytes,
-/// and sliceable to get an array of Data over the specified
-/// byte range. No actual Data concatenation is done.
+/// and sliceable to get an array of `Data` over the specified
+/// byte range. No actual `Data` concatenation is done.
 @property
 DataSetBytes bytes(Data[] data)
 {
 	return DataSetBytes(data);
 }
 
+/// ditto
 struct DataSetBytes
 {
-	Data[] data;
+	Data[] data; /// Underlying `Data[]`.
 
 	ubyte opIndex(size_t offset)
 	{
@@ -83,12 +85,12 @@ struct DataSetBytes
 			index++;
 		}
 		return (cast(ubyte[])data[index].contents)[offset];
-	}
+	} ///
 
 	Data[] opSlice()
 	{
 		return data;
-	}
+	} ///
 
 	Data[] opSlice(size_t start, size_t end)
 	{
@@ -116,7 +118,7 @@ struct DataSetBytes
 		range[$-1] = range[$-1][0..end];
 		range[0  ] = range[0  ][start..range[0].length];
 		return range;
-	}
+	} ///
 
 	@property
 	size_t length()
@@ -125,13 +127,13 @@ struct DataSetBytes
 		foreach (ref d; data)
 			result += d.length;
 		return result;
-	}
+	} ///
 
 	size_t opDollar(size_t pos)()
 	{
 		static assert(pos == 0);
 		return length;
-	}
+	} ///
 }
 
 unittest

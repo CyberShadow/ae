@@ -61,12 +61,12 @@ unittest
 /// Starts the chain by iterating over a tuple.
 struct ChainIterator(Next)
 {
-	Next next;
+	Next next; ///
 
 	this(ref Next next)
 	{
 		this.next = next;
-	}
+	} ///
 
 	bool opCall(Args...)(auto ref Args args)
 	{
@@ -74,12 +74,12 @@ struct ChainIterator(Next)
 			if (next(arg))
 				return true;
 		return false;
-	}
+	} ///
 }
 auto chainIterator(Next)(Next next)
 {
 	return ChainIterator!Next(next);
-}
+} /// ditto
 
 unittest
 {
@@ -102,13 +102,13 @@ struct ChainFunctor(alias fun)
 	auto opCall(Arg)(auto ref Arg arg)
 	{
 		return fun(arg);
-	}
+	} ///
 }
-auto chainFunctor(alias fun)() /// ditto
+auto chainFunctor(alias fun)()
 {
 	ChainFunctor!fun s;
 	return s;
-}
+} /// ditto
 
 ///
 static if (haveAliasStructBinding)
@@ -125,46 +125,47 @@ unittest
 /// Calls next only if pred(value) is true.
 struct ChainFilter(alias pred, Next)
 {
-	Next next;
+	Next next; ///
 
-	this(Next next) { this.next = next; }
+	this(Next next) { this.next = next; } ///
 
 	bool opCall(T)(auto ref T v)
 	{
 		if (pred(v))
 			return next(v);
 		return false;
-	}
+	} ///
 }
-template chainFilter(alias pred) /// ditto
+template chainFilter(alias pred)
 {
 	auto chainFilter(Next)(Next next)
 	{
 		return ChainFilter!(pred, Next)(next);
 	}
-}
+} /// ditto
 
+/// Iteration control.
 struct ChainControl(bool result, Next)
 {
-	Next next;
+	Next next; ///
 
-	this(Next next) { this.next = next; }
+	this(Next next) { this.next = next; } ///
 
 	bool opCall(T)(auto ref T v)
 	{
 		cast(void)next(v);
 		return result;
-	}
+	} ///
 }
-template chainControl(bool result) /// ditto
+template chainControl(bool result)
 {
 	auto chainControl(Next)(Next next)
 	{
 		return ChainControl!(result, Next)(next);
 	}
-}
-alias chainAll = chainControl!false; // Always continue iteration
-alias chainFirst = chainControl!true; // Stop iteration after this element
+} ///
+alias chainAll = chainControl!false; /// Always continue iteration
+alias chainFirst = chainControl!true; /// Stop iteration after this element
 
 ///
 static if (haveAliasStructBinding)
@@ -174,29 +175,31 @@ unittest
 	int b = 3;
 	int[] results;
 	foreach (i; 0..10)
-		chainFilter!(n => n % a == 0)(chainFilter!(n => n % b == 0)((int n) { results ~= n; return false; }))(i);
+		chainFilter!(n => n % a == 0)(
+			chainFilter!(n => n % b == 0)(
+				(int n) { results ~= n; return false; }))(i);
 	assert(results == [0, 6]);
 }
 
 /// Calls next with pred(value).
 struct ChainMap(alias pred, Next)
 {
-	Next next;
+	Next next; ///
 
-	this(Next next) { this.next = next; }
+	this(Next next) { this.next = next; } ///
 
 	bool opCall(T)(auto ref T v)
 	{
 		return next(pred(v));
-	}
+	} ///
 }
-template chainMap(alias pred) /// ditto
+template chainMap(alias pred)
 {
 	auto chainMap(Next)(Next next)
 	{
 		return ChainMap!(pred, Next)(next);
 	}
-}
+} /// ditto
 
 ///
 unittest

@@ -19,10 +19,14 @@ import ae.ui.audio.audio;
 /// A "shell" handles OS window management, input handling, and various other platform-dependent tasks.
 class Shell
 {
+	/// Run the main loop.
 	abstract void run();
 
+	/// Set window title.
 	abstract void setCaption(string caption);
 
+	/// Request the event loop to stop.
+	/// May be called from another thread.
 	void quit()
 	{
 		if (!quitting)
@@ -35,8 +39,8 @@ class Shell
 	/// Wake event thread with a no-op event.
 	abstract void prod();
 
-	Video video;
-	Audio audio;
+	Video video; /// `Video` implementation.
+	Audio audio; /// `Audio` implementation.
 
 protected:
 	bool quitting;
@@ -45,20 +49,20 @@ protected:
 /// Specifies the window / screen mode.
 enum ScreenMode
 {
-	windowed,
-	maximized,
-	fullscreen,
-	windowedFullscreen
+	windowed          , ///
+	maximized         , ///
+	fullscreen        , ///
+	windowedFullscreen, ///
 }
 
 /// The default / remembered screen settings.
 struct ShellSettings
 {
-	uint fullScreenX = 1024;
-	uint fullScreenY =  768;
-	uint windowSizeX =  800;
-	uint windowSizeY =  600;
-	int windowPosX   = int.min; // int.min means unset
-	int windowPosY   = int.min;
-	ScreenMode screenMode = ScreenMode.windowed;
+	uint fullScreenX = 1024; /// Full-screen resolution.
+	uint fullScreenY =  768; /// ditto
+	uint windowSizeX =  800; /// Window size.
+	uint windowSizeY =  600; /// ditto
+	int windowPosX   = int.min; /// Windows position. `int.min` means unset.
+	int windowPosY   = int.min; /// ditto
+	ScreenMode screenMode = ScreenMode.windowed; /// Window / screen mode.
 }

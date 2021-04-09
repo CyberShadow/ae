@@ -17,6 +17,8 @@ import ae.ui.video.renderer;
 import ae.utils.array;
 import ae.utils.graphics.fonts.draw;
 
+/// Adapter from a font (as in `ae.utils.graphics.fonts`)
+/// and `ProceduralTextureSource` .
 final class FontTextureSource(Font) : ProceduralTextureSource
 {
 	Font font;
@@ -26,7 +28,7 @@ final class FontTextureSource(Font) : ProceduralTextureSource
 	{
 		this.font = font;
 		this.color = color;
-	}
+	} ///
 
 	override void getSize(out int width, out int height)
 	{

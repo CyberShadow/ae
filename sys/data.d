@@ -168,6 +168,7 @@ public:
 		assert(this.length == size);
 	}
 
+	/// Create a new instance slicing all of the given wrapper's contents.
 	this(DataWrapper wrapper, bool mutable)
 	{
 		this.wrapper = wrapper;
@@ -209,6 +210,7 @@ public:
 	}
 */
 
+	/// Get contents
 	@property const(void)[] contents() const
 	{
 		return _contents;
@@ -230,21 +232,26 @@ public:
 		return cast(void[])_contents;
 	}
 
+	/// Get pointer to contents
 	@property const(void)* ptr() const
 	{
 		return contents.ptr;
 	}
 
+	/// Get pointer to mutable contents
 	@property void* mptr()
 	{
 		return mcontents.ptr;
 	}
 
+	/// Size in bytes of contents
 	@property size_t length() const
 	{
 		return contents.length;
 	}
+	alias opDollar = length; /// ditto
 
+	/// True if contents is unset
 	@property bool empty() const
 	{
 		return contents is null;
@@ -254,8 +261,9 @@ public:
 		if (is(T == bool))
 	{
 		return !empty;
-	}
+	} ///
 
+	/// Return maximum value that can be set to `length` without causing a reallocation
 	@property size_t capacity() const
 	{
 		if (wrapper is null)
@@ -311,6 +319,7 @@ public:
 			reallocate(newSize, newCapacity);
 	}
 
+	/// Resize contents
 	@property void length(size_t value)
 	{
 		if (value == length) // no change
@@ -320,8 +329,8 @@ public:
 		else                 // lengthen
 			expand(value, value);
 	}
-	alias length opDollar;
 
+	/// Create a copy of the data
 	@property Data dup() const
 	{
 		return Data(contents, true);
@@ -345,6 +354,7 @@ public:
 		}
 	}
 
+	/// Unreference contents, freeing it if this was the last reference.
 	void clear()
 	{
 		if (wrapper)
@@ -361,6 +371,8 @@ public:
 		contents = null;
 	}
 
+	/// Create a new `Data` containing the concatenation of `this` and `data`.
+	/// Does not preallocate for successive appends.
 	Data concat(const(void)[] data)
 	{
 		if (data.length==0)
@@ -371,20 +383,23 @@ public:
 		return result;
 	}
 
+	/// ditto
 	template opBinary(string op) if (op == "~")
 	{
 		Data opBinary(T)(const(T)[] data)
 		if (!hasIndirections!T)
 		{
 			return concat(data);
-		}
+		} ///
 
 		Data opBinary()(Data data)
 		{
 			return concat(data.contents);
-		}
+		} ///
 	}
 
+	/// Create a new `Data` containing the concatenation of `data` and `this`.
+	/// Does not preallocate for successive appends.
 	Data prepend(const(void)[] data)
 	{
 		Data result = Data(data.length + length);
@@ -393,13 +408,14 @@ public:
 		return result;
 	}
 
+	/// ditto
 	template opBinaryRight(string op) if (op == "~")
 	{
 		Data opBinaryRight(T)(const(T)[] data)
 		if (!hasIndirections!T)
 		{
 			return prepend(data);
-		}
+		} ///
 	}
 
 	private static size_t getPreallocSize(size_t length)
@@ -410,6 +426,8 @@ public:
 			return ((length-1) | (MAX_PREALLOC-1)) + 1;
 	}
 
+	/// Append data to this `Data`.
+	/// Unlike concatenation (`a ~ b`), appending (`a ~= b`) will preallocate.
 	Data append(const(void)[] data)
 	{
 		if (data.length==0)
@@ -422,31 +440,33 @@ public:
 		return this;
 	}
 
-	/// Note that unlike concatenation (a ~ b), appending (a ~= b) will preallocate.
+	/// ditto
 	template opOpAssign(string op) if (op == "~")
 	{
 		Data opOpAssign(T)(const(T)[] data)
 		if (!hasIndirections!T)
 		{
 			return append(data);
-		}
+		} ///
 
 		Data opOpAssign()(Data data)
 		{
 			return append(data.contents);
-		}
+		} ///
 
 		Data opOpAssign()(ubyte value) // hack?
 		{
 			return append((&value)[0..1]);
-		}
+		} ///
 	}
 
+	/// Returns a `Data` pointing at a slice of this `Data`'s contents.
 	Data opSlice()
 	{
 		return this;
 	}
 
+	/// ditto
 	Data opSlice(size_t x, size_t y)
 	in
 	{
@@ -470,7 +490,7 @@ public:
 		}
 	}
 
-	/// Return a new Data for the first size bytes, and slice this instance from size to end.
+	/// Return a new `Data` for the first `size` bytes, and slice this instance from size to end.
 	Data popFront(size_t size)
 	in
 	{
@@ -495,17 +515,21 @@ unittest
 
 // ************************************************************************
 
+/// How many bytes are currently in `Data`-owned memory.
 static /*thread-local*/ size_t dataMemory, dataMemoryPeak;
-static /*thread-local*/ uint   dataCount, allocCount;
+/// How many `DataWrapper` instances there are live currently.
+static /*thread-local*/ uint   dataCount;
+/// How many allocations have been done so far.
+static /*thread-local*/ uint   allocCount;
 
-// Abstract wrapper.
+/// Base abstract class which owns a block of memory.
 abstract class DataWrapper
 {
-	sizediff_t references = 1;
-	abstract @property inout(void)[] contents() inout;
-	abstract @property size_t size() const;
-	abstract void setSize(size_t newSize);
-	abstract @property size_t capacity() const;
+	sizediff_t references = 1; /// Reference count.
+	abstract @property inout(void)[] contents() inout; /// The owned memory
+	abstract @property size_t size() const;  /// Length of `contents`.
+	abstract void setSize(size_t newSize); /// Resize `contents` up to `capacity`.
+	abstract @property size_t capacity() const; /// Maximum possible size.
 
 	debug ~this()
 	{
@@ -514,8 +538,10 @@ abstract class DataWrapper
 	}
 }
 
+/// Set threshold of allocated memory to trigger a garbage collection.
 void setGCThreshold(size_t value) { MemoryDataWrapper.collectThreshold = value; }
 
+/// Allocate and construct a new class in `malloc`'d memory.
 C unmanagedNew(C, Args...)(auto ref Args args)
 if (is(C == class))
 {
@@ -526,6 +552,7 @@ if (is(C == class))
 	return cast(C)p;
 }
 
+/// Delete a class instance created with `unmanagedNew`.
 void unmanagedDelete(C)(C c)
 if (is(C == class))
 {

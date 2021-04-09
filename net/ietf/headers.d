@@ -21,20 +21,22 @@ import std.exception;
 import ae.utils.text;
 import ae.utils.aa;
 
-/// AA-like superset structure with the purpose of maintaining
-/// compatibility with the old HTTP string[string] headers field
+/// AA-like structure for storing headers, allowing for case
+/// insensitivity and multiple values per key.
 struct Headers
 {
 	struct Header { string name, value; }
 
 	private Header[][CIAsciiString] headers;
 
+	/// Initialize from a D associative array.
 	this(string[string] aa)
 	{
 		foreach (k, v; aa)
 			this.add(k, v);
 	}
 
+	/// ditto
 	this(string[][string] aa)
 	{
 		foreach (k, vals; aa)
@@ -49,12 +51,15 @@ struct Headers
 		return headers[CIAsciiString(name)][0].value;
 	}
 
+	/// Sets the given header to the given value, overwriting any previous values.
 	string opIndexAssign(string value, string name)
 	{
 		headers[CIAsciiString(name)] = [Header(name, value)];
 		return value;
 	}
 
+	/// If the given header exists, return a pointer to the first value.
+	/// Otherwise, return null.
 	inout(string)* opBinaryRight(string op)(string name) inout @nogc
 	if (op == "in")
 	{
@@ -64,12 +69,14 @@ struct Headers
 		return null;
 	}
 
+	/// Remove the given header.
+	/// Does nothing if the header was not present.
 	void remove(string name)
 	{
 		headers.remove(CIAsciiString(name));
 	}
 
-	// D forces these to be "ref"
+	/// Iterate over all headers, including multiple instances of the seame header.
 	int opApply(int delegate(ref string name, ref string value) dg)
 	{
 		int ret;
@@ -85,6 +92,7 @@ struct Headers
 	}
 
 	// Copy-paste because of https://issues.dlang.org/show_bug.cgi?id=7543
+	/// ditto
 	int opApply(int delegate(ref const(string) name, ref const(string) value) dg) const
 	{
 		int ret;
@@ -99,6 +107,8 @@ struct Headers
 		return ret;
 	}
 
+	/// Add a value for the given header.
+	/// Adds a new instance of the header if one already existed.
 	void add(string name, string value)
 	{
 		auto key = CIAsciiString(name);
@@ -108,17 +118,20 @@ struct Headers
 			headers[key] ~= Header(name, value);
 	}
 
+	/// Retrieve the value of the given header if it is present, otherwise return `def`.
 	string get(string key, string def) const
 	{
 		return getLazy(key, def);
 	}
 
+	/// Lazy version of `get`.
 	string getLazy(string key, lazy string def) const
 	{
 		auto pvalue = key in this;
 		return pvalue ? *pvalue : def;
 	}
 
+	/// Retrieve all values of the given header.
 	inout(string)[] getAll(string key) inout
 	{
 		inout(string)[] result;
@@ -127,18 +140,22 @@ struct Headers
 		return result;
 	}
 
+	/// If the given header is not yet present, add it with the given value.
 	ref string require(string key, lazy string value)
 	{
 		return headers.require(CIAsciiString(key), [Header(key, value)])[0].value;
 	}
 
+	/// True-ish if any headers have been set.
 	bool opCast(T)() const
 		if (is(T == bool))
 	{
 		return !!headers;
 	}
 
-	/// Warning: discards repeating headers
+	/// Converts to a D associative array,
+	/// with at most one value per header.
+	/// Warning: discards repeating headers!
 	string[string] opCast(T)() const
 		if (is(T == string[string]))
 	{
@@ -148,6 +165,7 @@ struct Headers
 		return result;
 	}
 
+	/// Converts to a D associative array.
 	string[][string] opCast(T)() inout
 		if (is(T == string[][string]))
 	{
@@ -157,6 +175,7 @@ struct Headers
 		return result;
 	}
 
+	/// Creates and returns a copy of this `Headers` instance.
 	@property Headers dup() const
 	{
 		Headers c;
@@ -165,6 +184,7 @@ struct Headers
 		return c;
 	}
 
+	/// Returns the number of headers and values (including duplicate headers).
 	@property size_t length() const
 	{
 		return headers.length;
@@ -197,7 +217,10 @@ unittest
 	test(constHeaders);
 }
 
-/// Normalize capitalization
+/// Attempts to normalize the capitalization of a header name to a
+/// likely form.
+/// This involves capitalizing all words, plus rules to uppercase
+/// common acronyms used in header names, such as "IP" and "ETag".
 string normalizeHeaderName(string header) pure
 {
 	alias std.ascii.toUpper toUpper;
@@ -234,12 +257,15 @@ unittest
 	assert(normalizeHeaderName("X-ORIGINATING-IP") == "X-Originating-IP");
 }
 
+/// Decodes headers of the form
+/// `"main-value; param1=value1; param2=value2"`
 struct TokenHeader
 {
-	string value;
-	string[string] properties;
+	string value; /// The main header value.
+	string[string] properties; /// Following properties, as a D associative array.
 }
 
+/// ditto
 TokenHeader decodeTokenHeader(string s)
 {
 	string take(char until)

@@ -49,45 +49,53 @@ private struct StringStream
 
 // ************************************************************************
 
+/// The type of an `XmlNode`.
 enum XmlNodeType
 {
-	None,
-	Root,
-	Node,
-	Comment,
-	Meta,
-	DocType,
-	CData,
-	Text,
-	Raw, // Never created during parsing. Programs can put raw XML fragments in `Raw` nodes to emit it as-is.
+	None    , /// Initial value. Never created during parsing.
+	Root    , /// The root node. Contains top-level nodes as children.
+	Node    , /// XML tag.
+	Comment , /// XML comment.
+	Meta    , /// XML processing instruction.
+	DocType , /// XML doctype declaration.
+	CData   , /// CDATA node.
+	Text    , /// Text node.
+	Raw     , /// Never created during parsing. Programs can put raw XML fragments in `Raw` nodes to emit it as-is.
 }
 
+/// Type used to hold a tag node's attributes.
 alias XmlAttributes = OrderedMap!(string, string);
 
+/// An XML node.
 class XmlNode
 {
-	string tag;
-	XmlAttributes attributes;
-	XmlNode parent;
-	XmlNode[] children;
-	XmlNodeType type;
+	string tag; /// The tag name, or the contents for text / comment / CDATA nodes.
+	XmlAttributes attributes; /// Tag attributes.
+	XmlNode parent; /// Parent node.
+	XmlNode[] children; /// Children nodes.
+	XmlNodeType type; /// Node type.
+	/// Start and end offset within the input.
 	ulong startPos, endPos;
 
 	this(ref StringStream s) { parseInto!XmlParseConfig(this, s, null); }
+	/// Create and parse from input.
 	this(string s) { auto ss = StringStream(s); this(ss); }
 
+	/// Create a new node.
 	this(XmlNodeType type = XmlNodeType.None, string tag = null)
 	{
 		this.type = type;
 		this.tag = tag;
 	}
 
+	/// Set an attribute with the given value.
 	XmlNode addAttribute(string name, string value)
 	{
 		attributes[name] = value;
 		return this;
 	}
 
+	/// Add a child node, making this node its parent.
 	XmlNode addChild(XmlNode child)
 	{
 		child.parent = this;
@@ -95,6 +103,7 @@ class XmlNode
 		return this;
 	}
 
+	/// Return XML string.
 	override string toString() const
 	{
 		XmlWriter writer;
@@ -102,6 +111,7 @@ class XmlNode
 		return writer.output.get();
 	}
 
+	/// Return pretty-printed XML string (with indentation).
 	string toPrettyString() const
 	{
 		PrettyXmlWriter writer;
@@ -109,6 +119,7 @@ class XmlNode
 		return writer.output.get();
 	}
 
+	/// Write to an `XmlWriter`.
 	final void writeTo(XmlWriter)(ref XmlWriter output) const
 	{
 		void writeChildren()
@@ -180,6 +191,8 @@ class XmlNode
 		}
 	}
 
+	/// Attempts to retrieve the text contents of this node.
+	/// `<br>` tags are converted to newlines.
 	@property string text()
 	{
 		final switch (type)
@@ -206,6 +219,7 @@ class XmlNode
 		}
 	}
 
+	/// Returns the first immediate child which is a tag and has the tag name `tag`.
 	final XmlNode findChild(string tag)
 	{
 		foreach (child; children)
@@ -214,6 +228,7 @@ class XmlNode
 		return null;
 	}
 
+	/// Returns all immediate children which are a tag and have the tag name `tag`.
 	final XmlNode[] findChildren(string tag)
 	{
 		XmlNode[] result;
@@ -223,6 +238,7 @@ class XmlNode
 		return result;
 	}
 
+	/// Like `findChild`, but throws an exception if no such node is found.
 	final XmlNode opIndex(string tag)
 	{
 		auto node = findChild(tag);
@@ -231,6 +247,8 @@ class XmlNode
 		return node;
 	}
 
+	/// Like `findChildren[index]`, but throws an
+	/// exception if there are not enough such nodes.
 	final XmlNode opIndex(string tag, size_t index)
 	{
 		auto nodes = findChildren(tag);
@@ -239,14 +257,17 @@ class XmlNode
 		return nodes[index];
 	}
 
+	/// Returns the immediate child with the given index.
 	final ref XmlNode opIndex(size_t index)
 	{
 		return children[index];
 	}
 
+	/// Returns the number of children nodes.
 	final @property size_t length() { return children.length; }
-	alias opDollar = length;
+	alias opDollar = length; /// ditto
 
+	/// Iterates over immediate children.
 	int opApply(int delegate(ref XmlNode) dg)
 	{
 		int result = 0;
@@ -260,6 +281,7 @@ class XmlNode
 		return result;
 	}
 
+	/// Creates a deep copy of this node.
 	final @property XmlNode dup()
 	{
 		auto result = new XmlNode(type, tag);
@@ -271,17 +293,21 @@ class XmlNode
 	}
 }
 
+/// Root node representing a parsed XML document.
 class XmlDocument : XmlNode
 {
 	this()
 	{
 		super(XmlNodeType.Root);
 		tag = "<Root>";
-	}
+	} ///
 
 	this(ref StringStream s) { this(); parseInto!XmlParseConfig(this, s); }
+
+	/// Create and parse from input.
 	this(string s) { auto ss = StringStream(s); this(ss); }
 
+	/// Creates a deep copy of this document.
 	final @property XmlDocument dup()
 	{
 		auto result = new XmlDocument();
@@ -326,9 +352,9 @@ enum NodeCloseMode
 struct XmlParseConfig
 {
 static:
-	NodeCloseMode nodeCloseMode(string tag) { return NodeCloseMode.always; }
-	bool preserveWhitespace(string tag) { return false; }
-	enum optionalParameterValues = false;
+	NodeCloseMode nodeCloseMode(string tag) { return NodeCloseMode.always; } ///
+	bool preserveWhitespace(string tag) { return false; } ///
+	enum optionalParameterValues = false; ///
 }
 
 /// Configuration for strict parsing of HTML5.
@@ -343,7 +369,7 @@ static:
 		"command", "embed" , "hr"   , "img" ,
 		"input"  , "keygen", "link" , "meta",
 		"param"  , "source", "track", "wbr" ,
-	];
+	]; ///
 
 	NodeCloseMode nodeCloseMode(string tag)
 	{
@@ -351,18 +377,19 @@ static:
 			? NodeCloseMode.never
 			: NodeCloseMode.always
 		;
-	}
+	} ///
 
-	enum optionalParameterValues = true;
-	bool preserveWhitespace(string tag) { return false; /*TODO*/ }
+	enum optionalParameterValues = true; ///
+	bool preserveWhitespace(string tag) { return false; /*TODO*/ } ///
 }
 
 /// Parse an SGML-ish string into an XmlNode
 alias parse = parseString!XmlNode;
 
-/// Parse an SGML-ish StringStream into an XmlDocument
+/// Parse an SGML-ish string into an XmlDocument
 alias parseDocument = parseString!XmlDocument;
 
+/// Parse an XML string into an XmlDocument.
 alias xmlParse = parseDocument!XmlParseConfig;
 
 private:

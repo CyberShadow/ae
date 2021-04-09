@@ -28,18 +28,46 @@ import ae.utils.text;
 
 debug(OAUTH) import std.stdio : stderr;
 
+/// OAuth configuration.
 struct OAuthConfig
 {
-	string consumerKey;
-	string consumerSecret;
+	string consumerKey;    ///
+	string consumerSecret; ///
 }
 
+/**
+   Implements an OAuth client session.
+
+   Example:
+   ---
+   OAuthSession session;
+   session.config.consumerKey    = "(... obtain from service ...)";
+   session.config.consumerSecret = "(... obtain from service ...)";
+   session.token                 = "(... obtain from service ...)";
+   session.tokenSecret           = "(... obtain from service ...)";
+
+   ...
+
+   UrlParameters parameters;
+   parameters["payload"] = "(... some data here ...)";
+   auto request = new HttpRequest;
+   auto queryString = parameters.byPair.map!(p => session.encode(p.key) ~ "=" ~ session.encode(p.value)).join("&");
+   auto baseURL = "https://api.example.com/endpoint";
+   auto fullURL = baseURL ~ "?" ~ queryString;
+   request.resource = fullURL;
+   request.method = "POST";
+   request.headers["Authorization"] = session.prepareRequest(baseURL, "POST", parameters).oauthHeader;
+   httpRequest(request, null);
+   ---
+*/
 struct OAuthSession
 {
-	OAuthConfig config;
+	OAuthConfig config; ///
 
+	///
 	string token, tokenSecret;
 
+	/// Signs a request and returns the relevant parameters for the "Authorization" header.
 	UrlParameters prepareRequest(string requestUrl, string method, UrlParameters[] parameters...)
 	{
 		UrlParameters oauthParams;
@@ -53,6 +81,7 @@ struct OAuthSession
 		return oauthParams;
 	}
 
+	/// Calculates the signature for a request.
 	string signRequest(string method, string requestUrl, UrlParameters[] parameters...)
 	{
 		string paramStr;
@@ -109,6 +138,7 @@ struct OAuthSession
 		assert(signature == "tnnArxj06cWHq44gCs1OSKk/jLY=");
 	}
 
+	/// Alias to `oauthEncode`.
 	alias encode = oauthEncode;
 }
 
@@ -122,4 +152,5 @@ string oauthHeader(UrlParameters oauthParams)
 }
 
 static import std.ascii;
+/// Performs URL encoding as required by OAuth.
 static alias oauthEncode = encodeUrlPart!(c => std.ascii.isAlphaNum(c) || c=='-' || c=='.' || c=='_' || c=='~');

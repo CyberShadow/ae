@@ -33,15 +33,17 @@ pragma(lib, "gdi32");
 /// A canvas with added GDI functionality.
 struct GDICanvas(COLOR)
 {
+	/// Storage type used by the GDI buffer.
 	static if (is(COLOR == bool))
 		alias StorageType = OneBitStorageBE;
 	else
 		alias StorageType = PlainStorageUnit!COLOR;
 
+	/// Wraps and owns the Windows API objects.
 	struct Data
 	{
-		HDC hdc;
-		HBITMAP hbm;
+		HDC hdc;     /// Windows GDI DC handle.
+		HBITMAP hbm; /// Windows GDI bitmap handle.
 
 		@disable this(this);
 
@@ -56,12 +58,14 @@ struct GDICanvas(COLOR)
 		}
 	}
 
-	RefCounted!Data data;
+	RefCounted!Data data; /// Reference to the Windows API objects.
 
+	/// Geometry.
 	xy_t w, h;
 	StorageType* pixelData;
 	sizediff_t pixelStride;
 
+	/// `DirectView` interface.
 	inout(StorageType)[] scanline(xy_t y) inout
 	{
 		assert(y>=0 && y<h);
@@ -94,8 +98,9 @@ struct GDICanvas(COLOR)
 		SelectObject(data.hdc, data.hbm);
 		pixelData = cast(StorageType*)pvBits;
 		pixelStride = bitmapPixelStride!StorageType(w);
-	}
+	} ///
 
+	/// Forwards Windows GDI calls.
 	auto opDispatch(string F, A...)(A args)
 		if (is(typeof(mixin(F~"(data.hdc, args)"))))
 	{
@@ -103,6 +108,7 @@ struct GDICanvas(COLOR)
 	}
 }
 
+///
 unittest
 {
 	alias RGB = ae.utils.graphics.color.RGB;

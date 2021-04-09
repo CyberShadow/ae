@@ -36,6 +36,7 @@ struct btrfs_ioctl_clone_range_args
 
 public:
 
+/// Submit a `BTRFS_IOC_FILE_CLONE_RANGE` ioctl.
 void cloneRange(
 	ref const File srcFile, ulong srcOffset,
 	ref const File dstFile, ulong dstOffset,

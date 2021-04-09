@@ -23,6 +23,7 @@ mixin(importWin32!q{winuser});
 import ae.ui.app.application;
 import ae.utils.exception;
 
+/// A generic entry point for applications running on Windows.
 extern (Windows)
 int WinMain(HINSTANCE hInstance,
             HINSTANCE hPrevInstance,

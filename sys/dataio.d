@@ -38,6 +38,8 @@ template readStreamData()
 
 static import std.stdio;
 
+/// Read the entire file `f` into a `Data` instance.
+/// If `f` does not have a size, read it in 1MB chunks.
 Data readFileData(std.stdio.File f)
 {
 	Data result;
@@ -62,6 +64,7 @@ Data readFileData(std.stdio.File f)
 	return result;
 }
 
+/// Read the entire file at the given `filename` into a `Data` instance.
 Data readData(string filename)
 {
 	auto f = std.stdio.File(filename, "rb");
@@ -96,8 +99,9 @@ public:
 		cFileName = fileName.toStringz();
 		if (exists(fileName))
 			remove(fileName);
-	}
+	} ///
 
+	/// Swap out the contents.
 	void unload()
 	{
 		if (!_data.empty && _data.length >= MIN_SIZE)
@@ -108,13 +112,14 @@ public:
 		}
 	}
 
+	/// Returns `true` if the contents is in memory.
 	bool isLoaded()
 	{
-		return !exists(fileName);
+		return !exists(fileName); // wat
 	}
 
-	// Getter
-	Data data()
+	/// Retrieves the contents, swapping it in if necessary.
+	@property Data data()
 	{
 		if (!_data.length)
 		{
@@ -127,8 +132,8 @@ public:
 		return _data;
 	}
 
-	// Setter
-	void data(Data data)
+	/// Sets the contents.
+	@property void data(Data data)
 	{
 		debug(SwappedData) log(fileName ~ " - Setting");
 		if (exists(fileName))
@@ -136,6 +141,7 @@ public:
 		_data = data;
 	}
 
+	/// Returns the size of the contents in bytes.
 	size_t length()
 	{
 		if (!_data.empty)

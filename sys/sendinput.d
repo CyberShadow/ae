@@ -28,6 +28,7 @@ import ae.utils.math;
 
 version (linux)
 {
+	/// Are X11 bindings available?
 	enum haveX11 = is(typeof({ import deimos.X11.X; }));
 	//version = HAVE_X11;
 
@@ -46,6 +47,10 @@ version (linux)
 	static if (haveX11)
 	{
 		private static Display* dpy;
+
+		/// Get X Display, connecting to the X server first
+		/// if that hasn't been done yet in this thread.
+		/// The connection is closed automatically on thread exit.
 		Display* getDisplay()
 		{
 			if (!dpy)
@@ -61,6 +66,7 @@ version (linux)
 		}
 	}
 
+	/// Move the mouse cursor.
 	void setMousePos(int x, int y)
 	{
 		static if (haveX11)
@@ -75,11 +81,13 @@ version (linux)
 			enforce(spawnProcess(["xdotool", "mousemove", text(x), text(y)]).wait() == 0, "xdotool failed");
 	}
 
+	/// Type used for window IDs.
 	static if (haveX11)
 		alias Window = deimos.X11.X.Window;
 	else
 		alias Window = uint;
 
+	/// Return a screen capture of the given window.
 	auto captureWindow(Window window)
 	{
 		static if (haveX11)
@@ -95,6 +103,7 @@ version (linux)
 		}
 	}
 
+	/// Return a screen capture of some sub-rectangle of the given window.
 	void captureWindowRect(Window window, Rect!int r, ref Image!BGRA image)
 	{
 		static if (haveX11)
@@ -113,6 +122,7 @@ version (linux)
 			assert(false, "TODO");
 	}
 
+	/// ditto
 	auto captureWindowRect(Window window, Rect!int r)
 	{
 		Image!BGRA image;
@@ -120,6 +130,7 @@ version (linux)
 		return image;
 	}
 
+	/// Return a capture of some sub-rectangle of the screen.
 	auto captureRect(Rect!int r, ref Image!BGRA image)
 	{
 		static if (haveX11)
@@ -131,6 +142,7 @@ version (linux)
 			assert(false, "TODO");
 	}
 
+	/// ditto
 	auto captureRect(Rect!int r)
 	{
 		Image!BGRA image;
@@ -138,6 +150,7 @@ version (linux)
 		return image;
 	}
 
+	/// Read a single pixel.
 	auto getPixel(int x, int y)
 	{
 		static if (haveX11)
@@ -150,6 +163,8 @@ version (linux)
 			assert(false, "TODO");
 	}
 
+	/// Find a window using its name.
+	/// Throws an exception if there are no results, or there is more than one match.
 	Window findWindowByName(string name)
 	{
 		// TODO haveX11
@@ -158,6 +173,7 @@ version (linux)
 		return result.output.chomp.to!Window;
 	}
 
+	/// Obtain a window's coordinates on the screen.
 	static if (haveX11)
 	Rect!int getWindowGeometry(Window window)
 	{
@@ -185,6 +201,7 @@ version (linux)
 		return enforce(cond, msg);
 	}
 
+	/// Smoothly move the mouse from one coordinate to another.
 	void easeMousePos(int x0, int y0, int x1, int y1, Duration duration)
 	{
 		auto xSpeed = uniform01!float;
@@ -210,6 +227,7 @@ version (linux)
 		setMousePos(x1, y1);
 	}
 
+	/// Send a mouse button press or release.
 	void mouseButton(int button, bool down)
 	{
 		// TODO haveX11

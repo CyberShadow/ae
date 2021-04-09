@@ -163,4 +163,5 @@ else
 
 // ************************************************************************
 
+/// Does this compiler support `static foreach`?
 enum haveStaticForeach = is(typeof(mixin(q{(){ static foreach (x; []) {}}})));

@@ -39,6 +39,7 @@ mixin(importWin32!q{winbase});
 mixin(importWin32!q{windef});
 mixin(importWin32!q{wininet});
 
+/// WinINet-based `Network` implementation.
 class WinINetNetwork : Network
 {
 private:
@@ -197,7 +198,7 @@ public:
 		auto hReq = hNet.I!openUrl(url);
 		hReq.I!checkOK();
 		hReq.I!doDownload(&f.rawWrite!ubyte);
-	}
+	} ///
 
 	override void[] getFile(string url)
 	{
@@ -207,7 +208,7 @@ public:
 		hReq.I!checkOK();
 		hReq.I!doDownload(&result.put!(ubyte[]));
 		return result.data;
-	}
+	} ///
 
 	override void[] post(string url, in void[] data)
 	{
@@ -222,7 +223,7 @@ public:
 		auto result = appender!(ubyte[]);
 		hReq.I!doDownload(&result.put!(ubyte[]));
 		return result.data;
-	}
+	} ///
 
 	override bool urlOK(string url)
 	{
@@ -239,7 +240,7 @@ public:
 		}
 		catch (Exception e)
 			return false;
-	}
+	} ///
 
 	override string resolveRedirect(string url)
 	{
@@ -252,7 +253,7 @@ public:
 
 		auto location = hReq.I!httpQueryString(HTTP_QUERY_LOCATION);
 		return location ? url.applyRelativeURL(location) : null;
-	}
+	} ///
 
 	override HttpResponse httpRequest(HttpRequest request)
 	{
@@ -280,7 +281,7 @@ public:
 
 		hReq.I!doDownload((ubyte[] bytes) { response.data ~= Data(bytes, true); });
 		return response;
-	}
+	} ///
 }
 
 static this()

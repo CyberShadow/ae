@@ -67,6 +67,7 @@ static this()
 	//enforce(TickDuration.ticksPerSec != 0, "TickDuration not available on this system");
 }
 
+/// Manages and schedules a list of timer tasks.
 final class Timer
 {
 private:
@@ -289,6 +290,7 @@ public:
 	}
 }
 
+/// Represents a task that needs to run at some point in the future.
 final class TimerTask
 {
 private:
@@ -301,8 +303,6 @@ private:
 
 	debug(TIMER_TRACK) string[] creationStackTrace, additionStackTrace;
 
-	alias void delegate(Timer timer, TimerTask task) Handler;
-
 public:
 	this(Duration delay, Handler handler = null)
 	{
@@ -310,7 +310,7 @@ public:
 		_delay = delay;
 		handleTask = handler;
 		debug(TIMER_TRACK) creationStackTrace = getStackTrace();
-	}
+	} ///
 
 	/// Return whether the task is scheduled to run on a Timer.
 	bool isWaiting()
@@ -318,6 +318,7 @@ public:
 		return owner !is null;
 	}
 
+	/// Remove this task from the scheduler.
 	void cancel()
 	{
 		assert(isWaiting(), "This TimerTask is not active");
@@ -333,11 +334,14 @@ public:
 		assert(isWaiting());
 	}
 
+	/// The duration that this task is scheduled to run after.
+	/// Changing the delay is only allowed for inactive tasks.
 	@property Duration delay()
 	{
 		return _delay;
 	}
 
+	/// ditto
 	@property void delay(Duration delay)
 	{
 		assert(delay >= Duration.zero, "Setting TimerTask delay to a negative Duration");
@@ -345,7 +349,9 @@ public:
 		_delay = delay;
 	}
 
-	Handler handleTask;
+	/// Called when this timer task fires.
+	alias Handler = void delegate(Timer timer, TimerTask task);
+	Handler handleTask; /// ditto
 }
 
 /// The default timer
@@ -358,6 +364,7 @@ static this()
 
 // ********************************************************************************************************************
 
+/// Convenience function to schedule and return a `TimerTask` that runs `handler` after `delay` once.
 TimerTask setTimeout(Args...)(void delegate(Args) handler, Duration delay, Args args)
 {
 	auto task = new TimerTask(delay, (Timer timer, TimerTask task) { handler(args); });
@@ -365,6 +372,7 @@ TimerTask setTimeout(Args...)(void delegate(Args) handler, Duration delay, Args 
 	return task;
 }
 
+/// Convenience function to schedule and return a `TimerTask` that runs `handler` after `delay` repeatedly.
 TimerTask setInterval(Args...)(void delegate(Args) handler, Duration delay, Args args)
 {
 	auto task = new TimerTask(delay, (Timer timer, TimerTask task) { mainTimer.add(task); handler(args); });
@@ -372,6 +380,7 @@ TimerTask setInterval(Args...)(void delegate(Args) handler, Duration delay, Args
 	return task;
 }
 
+/// Calls `task.cancel`.
 void clearTimeout(TimerTask task)
 {
 	task.cancel();

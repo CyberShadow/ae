@@ -18,34 +18,37 @@ module ae.net.irc.clientreplay;
 
 import ae.net.asockets;
 
+/// `IConnection` implementation which replays an `IrcClient` log file.
 class IrcClientLogSource : IConnection
 {
+	/// `IConnection` stubs.
 	bool isConnected;
-	@property ConnectionState state() { return isConnected ? ConnectionState.connected : ConnectionState.disconnected; }
+	@property ConnectionState state() { return isConnected ? ConnectionState.connected : ConnectionState.disconnected; } /// ditto
 
-	void send(Data[] data, int priority) {}
-	alias send = IConnection.send;
+	void send(Data[] data, int priority) {} /// ditto
+	alias send = IConnection.send; /// ditto
 
-	void disconnect(string reason = defaultDisconnectReason, DisconnectType type = DisconnectType.requested) {}
+	void disconnect(string reason = defaultDisconnectReason, DisconnectType type = DisconnectType.requested) {} /// ditto
 
-	@property void handleConnect(ConnectHandler value) { connectHandler = value; }
+	@property void handleConnect(ConnectHandler value) { connectHandler = value; } /// ditto
 	private ConnectHandler connectHandler;
 
 	@property void handleReadData(ReadDataHandler value)
 	{
 		readDataHandler = value;
-	}
+	} /// ditto
 	private ReadDataHandler readDataHandler;
 
-	@property void handleDisconnect(DisconnectHandler value) {}
-	@property void handleBufferFlushed(BufferFlushedHandler value) {}
+	@property void handleDisconnect(DisconnectHandler value) {} /// ditto
+	@property void handleBufferFlushed(BufferFlushedHandler value) {} /// ditto
 
 	void recv(Data data)
 	{
 		if (readDataHandler)
 			readDataHandler(data);
-	}
+	} /// ditto
 
+	/// Play this log file.
 	void run(string fn)
 	{
 		import std.algorithm;

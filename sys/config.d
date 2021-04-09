@@ -18,6 +18,11 @@ import std.ascii;
 import ae.sys.file;
 import ae.sys.paths;
 
+/// Cross-platform API for storing and retrieving
+/// the application's configuration.
+/// On Windows, the Windows registry is used.
+/// On POSIX, configuration is stored in the XDG
+/// configuration directory (`"~/.config"`).
 class Config
 {
 	version (Windows)
@@ -48,7 +53,7 @@ class Config
 				null,
 				&key,
 				null) == ERROR_SUCCESS, "RegCreateKeyEx failed");
-		}
+		} ///
 
 		~this()
 		{
@@ -110,7 +115,7 @@ class Config
 				static assert(0, "Can't write values of type " ~ T.stringof);
 		}
 
-		void save() {}
+		void save() {} /// Flush unwritten changes.
 
 	private:
 		HKEY key;
@@ -157,7 +162,7 @@ class Config
 						values[line[0..p].idup] = line[p+1..$].idup;
 				}
 			instances ~= this;
-		}
+		} ///
 
 		~this()
 		{
@@ -180,6 +185,7 @@ class Config
 			dirty = true;
 		}
 
+		/// Flush unwritten changes.
 		void save()
 		{
 			if (!dirty)
@@ -205,6 +211,7 @@ class Config
 		}
 	}
 
+	/// Read value.
 	T read(T)(string name, T defaultValue = T.init)
 	{
 		static if (is(T==struct))
@@ -228,6 +235,7 @@ class Config
 			static assert(0, "Can't read values of type " ~ T.stringof);
 	}
 
+	/// Write value.
 	void write(T)(string name, T v)
 	{
 		static if (is(T==struct))

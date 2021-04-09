@@ -43,6 +43,7 @@ auto fourCC(char[4] name)
 	return valueReprRange(name);
 }
 
+/// Serialize a chunk and data as a range of bytes.
 auto riffChunk(R)(char[4] name, R data)
 {
 	return chain(
@@ -52,6 +53,7 @@ auto riffChunk(R)(char[4] name, R data)
 	);
 }
 
+/// Serialize a range of samples into a range of bytes representing a RIFF file.
 auto makeRiff(R)(R r, uint sampleRate = 44100)
 {
 	alias Sample = typeof(r.front);

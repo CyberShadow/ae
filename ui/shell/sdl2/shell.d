@@ -28,10 +28,11 @@ import ae.ui.timer.timer;
 
 //!!version(Posix) pragma(lib, "dl"); // for Derelict
 
+/// `Shell` implementation using SDL2.
 final class SDL2Shell : Shell
 {
-	Application application;
-	SDL2CommonVideo sdlVideo;
+	Application application; ///
+	SDL2CommonVideo sdlVideo; ///
 
 	this(Application application)
 	{
@@ -54,7 +55,7 @@ final class SDL2Shell : Shell
 			SDL_JoystickEventState(SDL_ENABLE);
 			SDL_JoystickOpen(0);
 		}
-	}
+	} ///
 
 	/// A version of SDL_WaitEvent that sleeps less than 10ms at a time.
 	private int waitEvent()
@@ -126,7 +127,7 @@ final class SDL2Shell : Shell
 
 		if (audio)
 			audio.stop();
-	}
+	} ///
 
 	~this()
 	{
@@ -144,7 +145,7 @@ final class SDL2Shell : Shell
 	override void prod()
 	{
 		runInMainThread(null);
-	}
+	} ///
 
 	override void setCaption(string caption)
 	{
@@ -156,8 +157,9 @@ final class SDL2Shell : Shell
 				SDL_SetWindowTitle(sdlVideo.window, toStringz(caption));
 			}
 		});
-	}
+	} ///
 
+	/// Translate an SDL button index to a `MouseButton`.
 	MouseButton translateMouseButton(ubyte sdlButton)
 	{
 		switch (sdlButton)
@@ -172,8 +174,10 @@ final class SDL2Shell : Shell
 		}
 	}
 
+	/// Highest SDL_BUTTON constant.
 	enum SDL_BUTTON_LAST = SDL_BUTTON_X2;
 
+	/// Translate an SDL buttons mask to a `MouseButtons`.
 	MouseButtons translateMouseButtons(uint sdlButtons)
 	{
 		MouseButtons result;
@@ -183,6 +187,7 @@ final class SDL2Shell : Shell
 		return result;
 	}
 
+	/// Handle a single `SDL_Event`.
 	void handleEvent(SDL_Event* event)
 	{
 		switch (event.type)
@@ -253,11 +258,13 @@ final class SDL2Shell : Shell
 	bool reinitPending;
 }
 
+/// Wraps SDL library errors.
 class SdlException : Exception
 {
-	this(string message) { super(message); }
+	this(string message) { super(message); } ///
 }
 
+/// ditto
 T sdlEnforce(T)(T result, string message = null)
 {
 	if (!result)
@@ -265,6 +272,7 @@ T sdlEnforce(T)(T result, string message = null)
 	return result;
 }
 
+/// Translation table from SDL key indices to `Key`.
 Key[SDL_NUM_SCANCODES] sdlKeys;
 
 shared static this()

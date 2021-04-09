@@ -123,12 +123,12 @@ struct GCAttributes
 	);
 }
 
-/// xReq equivalent for requests with no arguments.
+/// `xReq` equivalent for requests with no arguments.
 extern(C) struct xEmptyReq
 {
-    CARD8 reqType;
-    CARD8 pad;
-    CARD16 length;
+    CARD8 reqType; /// As in `xReq`.
+    CARD8 pad;     /// ditto
+    CARD16 length; /// ditto
 }
 
 /// Implements the X11 protocol as a client.
@@ -209,14 +209,14 @@ final class X11Client
 	immutable(xPixmapFormat)[] pixmapFormats; /// ditto
 	struct Root
 	{
-		xWindowRoot root;
+		xWindowRoot root; /// Root window information.
 		struct Depth
 		{
-			xDepth depth;
-			immutable(xVisualType)[] visualTypes;
-		}
-		Depth[] depths;
-	}
+			xDepth depth; /// Color depth information.
+			immutable(xVisualType)[] visualTypes; /// ditto
+		} /// Supported depths.
+		Depth[] depths; /// ditto
+	} /// ditto
 	Root[] roots; /// ditto
 
 	/// Generate a new resource ID, which can be used

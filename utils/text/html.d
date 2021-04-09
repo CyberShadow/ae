@@ -15,6 +15,8 @@ module ae.utils.text.html;
 
 import ae.utils.textout;
 
+/// Encodes special HTML characters (`'<'`, `'>'`, `'&'`) into HTML entities.
+/// If `inAttribute` is `true`, `'"'` and `'\''` are also encoded.
 string encodeHtmlEntities(bool inAttribute = true)(string s)
 {
 	StringBuilder result;

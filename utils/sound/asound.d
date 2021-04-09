@@ -22,11 +22,13 @@ import std.traits;
 /// Return the ALSA format name corresponding to the given type.
 template aSoundFormat(T)
 {
+	///
 	version(LittleEndian)
 		enum aSoundEndianness = "_LE";
 	else
 		enum aSoundEndianness = "_BE";
 
+	///
 	static if (is(T==ubyte))
 		enum aSoundFormat = "U8";
 	else
@@ -54,6 +56,7 @@ template aSoundFormat(T)
 		static assert(false, "Can't represent sample type in asound format: " ~ T.stringof);
 }
 
+/// Play a wave (range of samples) using `aplay`.
 void playWave(Wave)(Wave wave, int sampleRate = 44100)
 {
 	alias Sample = typeof(wave.front);

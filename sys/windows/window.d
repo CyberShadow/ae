@@ -25,6 +25,7 @@ mixin(importWin32!q{winuser});
 import ae.sys.windows.exception;
 import ae.sys.windows.text;
 
+/// `FindWindowExW` wrapper as a D range interface.
 struct WindowIterator
 {
 private:
@@ -33,15 +34,15 @@ private:
 
 public:
 	@property
-	bool empty() const { return h is null; }
+	bool empty() const { return h is null; } ///
 
 	@property
-	HWND front() const { return cast(HWND)h; }
+	HWND front() const { return cast(HWND)h; } ///
 
 	void popFront()
 	{
 		h = FindWindowExW(hParent, h, szClassName, szWindowName);
-	}
+	} ///
 }
 
 WindowIterator windowIterator(string szClassName, string szWindowName, HWND hParent=null)
@@ -49,7 +50,7 @@ WindowIterator windowIterator(string szClassName, string szWindowName, HWND hPar
 	auto iterator = WindowIterator(toWStringz(szClassName), toWStringz(szWindowName), hParent);
 	iterator.popFront(); // initiate search
 	return iterator;
-}
+} /// ditto
 
 private static wchar[0xFFFF] textBuf = void;
 
@@ -69,8 +70,8 @@ string windowStringQuery(alias FUNC)(HWND h)
 	}
 }
 
-alias windowStringQuery!GetClassNameW  getClassName;
-alias windowStringQuery!GetWindowTextW getWindowText;
+alias windowStringQuery!GetClassNameW  getClassName ; /// `GetClassNameW` wrapper.
+alias windowStringQuery!GetWindowTextW getWindowText; /// `GetWIndowTextW` wrapper.
 
 /// Create an utility hidden window.
 HWND createHiddenWindow(string name, WNDPROC proc)

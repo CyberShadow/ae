@@ -98,6 +98,7 @@ unittest
 }
 
 // Uses memchr (not Boyer-Moore), best for short strings.
+/// An implementation of `replace` optimized for common cases (short strings).
 T[] fastReplace(T)(T[] what, T[] from, T[] to)
 	if (T.sizeof == 1) // TODO (uses memchr)
 {
@@ -255,6 +256,7 @@ unittest
 	test("foo", "foobar", "bar");
 }
 
+/// An implementation of `split` optimized for common cases. Allocates only once.
 T[][] fastSplit(T, U)(T[] s, U d)
 	if (is(Unqual!T == Unqual!U))
 {
@@ -291,6 +293,8 @@ T[][] fastSplit(T, U)(T[] s, U d)
 	return result;
 }
 
+/// Like `splitLines`, but does not attempt to split on Unicode line endings.
+/// Only splits on `"\r"`, `"\n"`, and `"\r\n"`.
 T[][] splitAsciiLines(T)(T[] text)
 	if (is(Unqual!T == char))
 {
@@ -345,6 +349,7 @@ unittest
 		assert(s.split == s.asciiSplit, format("Got %s, expected %s", s.asciiSplit, s.split));
 }
 
+/// Like `strip`, but only removes ASCII whitespace.
 T[] asciiStrip(T)(T[] s)
 	if (is(Unqual!T == char))
 {
@@ -355,6 +360,7 @@ T[] asciiStrip(T)(T[] s)
 	return s;
 }
 
+///
 unittest
 {
 	string s = "Hello, world!";
@@ -385,6 +391,7 @@ T[][] segmentByWhitespace(T)(T[] s)
 	return segments;
 }
 
+/// Replaces runs of ASCII whitespace which contain a newline (`'\n'`) into a single space.
 T[] newlinesToSpaces(T)(T[] s)
 	if (is(Unqual!T == char))
 {
@@ -395,6 +402,7 @@ T[] newlinesToSpaces(T)(T[] s)
 	return slices.join();
 }
 
+/// Replaces all runs of ASCII whitespace with a single space.
 ascii normalizeWhitespace(ascii s)
 {
 	auto slices = segmentByWhitespace(strip(s));
@@ -404,11 +412,14 @@ ascii normalizeWhitespace(ascii s)
 	return slices.join();
 }
 
+///
 unittest
 {
 	assert(normalizeWhitespace(" Mary  had\ta\nlittle\r\n\tlamb") == "Mary had a little lamb");
 }
 
+/// Splits out words from a camel-cased string.
+/// All-uppercase words are returned as a single word.
 string[] splitByCamelCase(string s)
 {
 	string[] result;
@@ -425,12 +436,14 @@ string[] splitByCamelCase(string s)
 	return result;
 }
 
+///
 unittest
 {
 	assert(splitByCamelCase("parseIPString") == ["parse", "IP", "String"]);
 	assert(splitByCamelCase("IPString") == ["IP", "String"]);
 }
 
+/// Join an array of words into a camel-cased string.
 string camelCaseJoin(string[] arr)
 {
 	if (!arr.length)
@@ -712,6 +725,7 @@ string hexDump(const(void)[] b)
 
 import std.conv;
 
+/// Parses `s` as a hexadecimal number into an integer of type `T`.
 T fromHex(T : ulong = uint, C)(const(C)[] s)
 {
 	T result = parse!T(s, 16);
@@ -719,6 +733,8 @@ T fromHex(T : ulong = uint, C)(const(C)[] s)
 	return result;
 }
 
+/// Parses `hex` into an array of bytes.
+/// `hex.length` should be even.
 ubyte[] arrayFromHex(in char[] hex)
 {
 	auto buf = new ubyte[hex.length/2];
@@ -726,13 +742,15 @@ ubyte[] arrayFromHex(in char[] hex)
 	return buf;
 }
 
+/// Policy for `parseHexDigit`.
 struct HexParseConfig
 {
-	bool checked = true;
-	bool lower = true;
-	bool upper = true;
+	bool checked = true; /// Throw on invalid digits.
+	bool lower   = true; /// Accept lower-case digits.
+	bool upper   = true; /// Accept upper-case digits.
 }
 
+/// Parse a single hexadecimal digit according to the policy in `config`.
 ubyte parseHexDigit(HexParseConfig config = HexParseConfig.init)(char c)
 {
 	static assert(config.lower || config.upper,
@@ -766,6 +784,7 @@ ubyte parseHexDigit(HexParseConfig config = HexParseConfig.init)(char c)
 	}
 }
 
+/// Parses `hex` into the given array `buf`.
 void arrayFromHex(HexParseConfig config = HexParseConfig.init)(in char[] hex, ubyte[] buf)
 {
 	assert(buf.length == hex.length/2, "Wrong buffer size for arrayFromHex");
@@ -776,6 +795,7 @@ void arrayFromHex(HexParseConfig config = HexParseConfig.init)(in char[] hex, ub
 		);
 }
 
+/// Parses `hex` into the given array `buf`.
 /// Fast version for static arrays of known length.
 void sarrayFromHex(HexParseConfig config = HexParseConfig.init, size_t N, Hex)(ref const Hex hex, ref ubyte[N] buf)
 if (is(Hex == char[N*2]))
@@ -821,8 +841,10 @@ unittest
 				}
 }
 
+/// Conversion from bytes to hexadecimal strings.
 template toHex(alias digits = hexDigits)
 {
+	/// Dynamic array version.
 	char[] toHex(in ubyte[] data, char[] buf) pure
 	{
 		assert(buf.length == data.length*2);
@@ -834,6 +856,7 @@ template toHex(alias digits = hexDigits)
 		return buf;
 	}
 
+	/// Static array version.
 	char[n*2] toHex(size_t n)(in ubyte[n] data) pure
 	{
 		char[n*2] buf;
@@ -845,6 +868,7 @@ template toHex(alias digits = hexDigits)
 		return buf;
 	}
 
+	/// Allocating version.
 	string toHex(in ubyte[] data) pure
 	{
 		auto buf = new char[data.length*2];
@@ -857,8 +881,9 @@ template toHex(alias digits = hexDigits)
 	}
 }
 
-alias toLowerHex = toHex!lowerHexDigits;
+alias toLowerHex = toHex!lowerHexDigits; /// ditto
 
+/// Conversion an integer type to a fixed-length hexadecimal string.
 void toHex(T : ulong, size_t U = T.sizeof*2)(T n, ref char[U] buf)
 {
 	Unqual!T x = n;
@@ -890,6 +915,7 @@ unittest
 	assert(buf == "01234567");
 }
 
+/// ditto
 char[T.sizeof*2] toHex(T : ulong)(T n)
 {
 	char[T.sizeof*2] buf;
@@ -928,6 +954,7 @@ template cWidthString(T)
 	static if (is(Unqual!T == real))
 		enum cWidthString = "L";
 }
+/// C format string to exactly format a floating-point type `T`.
 enum fpCFormatString(T) = "%." ~ text(significantDigits!T) ~ cWidthString!T ~ "g";
 
 private auto safeSprintf(size_t N, Args...)(ref char[N] buf, auto ref Args args) @trusted @nogc
@@ -1010,12 +1037,6 @@ private auto fpToBuf(Q)(Q val) @safe nothrow @nogc
 	return buf;
 }
 
-void putFP(Writer, F)(auto ref Writer writer, F v)
-{
-	writer.put(fpToBuf(v).data);
-}
-
-
 /// Get shortest string representation of a FP type that still converts to exactly the same number.
 template fpToString(F)
 {
@@ -1056,7 +1077,7 @@ template fpToString(F)
 	}
 }
 
-alias doubleToString = fpToString!double;
+alias doubleToString = fpToString!double; ///
 
 unittest
 {
@@ -1065,7 +1086,14 @@ unittest
 	alias crealToString = fpToString!(const(real));
 }
 
-/// Wraps the result of a fpToString in a non-allocating stringifiable struct.
+/// Like `fpToString`, but writes the result to a sink.
+void putFP(Writer, F)(auto ref Writer writer, F v)
+{
+	writer.put(fpToBuf(v).data);
+}
+
+
+/// Wraps the result of `fpToString` in a non-allocating stringifiable struct.
 struct FPAsString(T)
 {
 	typeof(fpToBuf(T.init)) buf;
@@ -1073,12 +1101,12 @@ struct FPAsString(T)
 	this(T f)
 	{
 		buf = fpToBuf(f);
-	}
+	} ///
 
 	string toString() const pure nothrow
 	{
 		return buf.data.idup;
-	}
+	} ///
 
 	void toString(W)(ref W w) const
 	{
@@ -1087,7 +1115,7 @@ struct FPAsString(T)
 		else
 			foreach (c; buf.data)
 				w.put(c);
-	}
+	} ///
 }
 FPAsString!T fpAsString(T)(T f) { return FPAsString!T(f); } /// ditto
 
@@ -1099,6 +1127,8 @@ unittest
 	assert(buf.data == "0.1");
 }
 
+/// Get shortest string representation of a numeric
+/// type that still converts to exactly the same number.
 string numberToString(T)(T v)
 	if (isNumeric!T)
 {
@@ -1180,6 +1210,9 @@ string selectBestFrom(in string[] items, string target, float threshold = 0.7)
 
 // ************************************************************************
 
+/// Generate a random string with the given parameters.
+/// `std.random` is used as the source of randomness.
+/// Not cryptographically secure.
 string randomString()(int length=20, string chars="abcdefghijklmnopqrstuvwxyz")
 {
 	import std.random;

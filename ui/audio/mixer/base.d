@@ -15,8 +15,12 @@ module ae.ui.audio.mixer.base;
 
 import ae.ui.audio.source.base;
 
+/// Abstract mixer interface.
 class Mixer
 {
+	/// Add a sound to the mixer.
 	abstract void playSound(SoundSource sound);
+
+	/// Mix sounds and fill the given buffer.
 	abstract void fillBuffer(SoundSample[] buffer) nothrow;
 }

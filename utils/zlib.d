@@ -19,6 +19,7 @@ import std.exception;
 
 import ae.sys.data;
 
+/// Thrown on zlib errors.
 class ZlibException : Exception
 {
 	private static string getmsg(int err) nothrow @nogc pure @safe
@@ -43,18 +44,26 @@ class ZlibException : Exception
 			super(to!string(zs.msg));
 		else
 			super(getmsg(err));
-	}
+	} ///
 
-	this(string msg) { super(msg); }
+	this(string msg) { super(msg); } ///
 }
 
-enum ZlibMode { normal, raw, gzipOnly, gzipAuto }
+/// File format.
+enum ZlibMode
+{
+	normal,   /// Normal deflate stream.
+	raw,      /// Raw deflate stream.
+	gzipOnly, /// gzip deflate stream. Require gzip input.
+	gzipAuto, /// Output and detect gzip, but do not require it.
+}
 
+/// Compression/decompression options.
 struct ZlibOptions
 {
-	int deflateLevel = Z_DEFAULT_COMPRESSION;
-	int windowBits = 15; /// 8..15 - actual windowBits, without additional meaning
-	ZlibMode mode;
+	int deflateLevel = Z_DEFAULT_COMPRESSION; /// Compression level.
+	int windowBits = 15; /// Window size (8..15) - actual windowBits, without additional meaning
+	ZlibMode mode; /// File format.
 
 	invariant()
 	{
@@ -80,8 +89,10 @@ private:
 	}
 }
 
+/// Implements a zlib compression or decompression process.
 struct ZlibProcess(bool COMPRESSING)
 {
+	/// Initialize zlib.
 	void init(ZlibOptions options = ZlibOptions.init)
 	{
 		static if (COMPRESSING)
@@ -92,6 +103,7 @@ struct ZlibProcess(bool COMPRESSING)
 			zenforce(inflateInit2(&zs, options.zwindowBits));
 	}
 
+	/// Process one chunk of data.
 	void processChunk(Data chunk)
 	{
 		if (!chunk.length)
@@ -113,6 +125,7 @@ struct ZlibProcess(bool COMPRESSING)
 		} while (zs.avail_in);
 	}
 
+	/// Signal end of input and flush.
 	Data[] flush()
 	{
 		if (zs.avail_out == 0)
@@ -125,6 +138,7 @@ struct ZlibProcess(bool COMPRESSING)
 		return outputChunks;
 	}
 
+	/// Process all input.
 	static Data[] process(Data[] input, ZlibOptions options = ZlibOptions.init)
 	{
 		typeof(this) zp;
@@ -134,6 +148,7 @@ struct ZlibProcess(bool COMPRESSING)
 		return zp.flush();
 	}
 
+	/// Process input and return output as a single contiguous `Data`.
 	static Data process(Data input, ZlibOptions options = ZlibOptions.init)
 	{
 		return process([input], options).joinData();
@@ -198,12 +213,13 @@ private:
 	}
 }
 
-alias ZlibProcess!true  ZlibDeflater;
-alias ZlibProcess!false ZlibInflater;
+alias ZlibProcess!true  ZlibDeflater; /// ditto
+alias ZlibProcess!false ZlibInflater; /// ditto
 
-alias ZlibDeflater.process compress;
-alias ZlibInflater.process uncompress;
+alias ZlibDeflater.process compress;   ///
+alias ZlibInflater.process uncompress; ///
 
+/// Shorthand for compressing at a certain level.
 Data compress(Data input, int level)
 {
 	return compress(input, ZlibOptions(level));

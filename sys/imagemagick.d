@@ -13,6 +13,7 @@
 
 module ae.sys.imagemagick;
 
+/// Obtains the ImageMagick installation path from the Windows registry.
 version(Windows)
 string imageMagickPath(string value = "BinPath")
 {
@@ -24,6 +25,8 @@ string imageMagickPath(string value = "BinPath")
 		.value_SZ;
 }
 
+/// Returns a likely working program name for a given ImageMagick
+/// program.
 string imageMagickBinary(string program)
 {
 	version(Windows)

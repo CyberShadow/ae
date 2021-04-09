@@ -34,7 +34,7 @@ import ae.utils.meta;
 
 struct Color(FieldTuple...)
 {
-	alias Spec = FieldTuple;
+	alias Spec = FieldTuple; ///
 	mixin FieldList!FieldTuple;
 
 	// A "dumb" type to avoid cyclic references.
@@ -47,6 +47,7 @@ struct Color(FieldTuple...)
 	/// The number of fields in this color type.
 	enum channels = Fields.init.tupleof.length;
 
+	/// Additional properties for homogeneous colors.
 	static if (homogenous)
 	{
 		alias ChannelType = typeof(Fields.init.tupleof[0]);
@@ -65,6 +66,7 @@ struct Color(FieldTuple...)
 		return r;
 	}
 
+	/// Additional properties for integer colors.
 	static if (is(ChannelType:uint))
 	{
 		enum typeof(this) black = monochrome(0);
@@ -236,6 +238,7 @@ struct Color(FieldTuple...)
 		return r;
 	}
 
+	/// Implements conversion to a similar color type.
 	T opCast(T)() const
 	if (is(T==struct) && structFields!T == structFields!Fields)
 	{
@@ -260,6 +263,8 @@ struct Color(FieldTuple...)
 		return result;
 	}
 
+	/// Returns an instance of this color type
+	/// with all fields set at their minimum values.
 	static @property Color min()
 	{
 		Color result;
@@ -272,6 +277,8 @@ struct Color(FieldTuple...)
 		return result;
 	}
 
+	/// Returns an instance of this color type
+	/// with all fields set at their maximum values.
 	static @property Color max()
 	{
 		Color result;
@@ -283,27 +290,32 @@ struct Color(FieldTuple...)
 }
 
 // The "x" has the special meaning of "padding" and is ignored in some circumstances
-alias Color!(ubyte  , "r", "g", "b"     ) RGB    ;
-alias Color!(ushort , "r", "g", "b"     ) RGB16  ;
-alias Color!(ubyte  , "r", "g", "b", "x") RGBX   ;
-alias Color!(ushort , "r", "g", "b", "x") RGBX16 ;
-alias Color!(ubyte  , "r", "g", "b", "a") RGBA   ;
-alias Color!(ushort , "r", "g", "b", "a") RGBA16 ;
 
-alias Color!(ubyte  , "b", "g", "r"     ) BGR    ;
-alias Color!(ubyte  , "b", "g", "r", "x") BGRX   ;
-alias Color!(ubyte  , "b", "g", "r", "a") BGRA   ;
+/// Definitions for common color types.
+version(all)
+{
+	alias Color!(ubyte  , "r", "g", "b"     ) RGB    ;
+	alias Color!(ushort , "r", "g", "b"     ) RGB16  ;
+	alias Color!(ubyte  , "r", "g", "b", "x") RGBX   ;
+	alias Color!(ushort , "r", "g", "b", "x") RGBX16 ;
+	alias Color!(ubyte  , "r", "g", "b", "a") RGBA   ;
+	alias Color!(ushort , "r", "g", "b", "a") RGBA16 ;
 
-alias Color!(ubyte  , "l"               ) L8     ;
-alias Color!(ushort , "l"               ) L16    ;
-alias Color!(ubyte  , "l", "a"          ) LA     ;
-alias Color!(ushort , "l", "a"          ) LA16   ;
+	alias Color!(ubyte  , "b", "g", "r"     ) BGR    ;
+	alias Color!(ubyte  , "b", "g", "r", "x") BGRX   ;
+	alias Color!(ubyte  , "b", "g", "r", "a") BGRA   ;
 
-alias Color!(byte   , "l"               ) S8     ;
-alias Color!(short  , "l"               ) S16    ;
+	alias Color!(ubyte  , "l"               ) L8     ;
+	alias Color!(ushort , "l"               ) L16    ;
+	alias Color!(ubyte  , "l", "a"          ) LA     ;
+	alias Color!(ushort , "l", "a"          ) LA16   ;
 
-alias Color!(float  , "r", "g", "b"     ) RGBf   ;
-alias Color!(double , "r", "g", "b"     ) RGBd   ;
+	alias Color!(byte   , "l"               ) S8     ;
+	alias Color!(short  , "l"               ) S16    ;
+
+	alias Color!(float  , "r", "g", "b"     ) RGBf   ;
+	alias Color!(double , "r", "g", "b"     ) RGBd   ;
+}
 
 unittest
 {
@@ -391,6 +403,7 @@ unittest
 /// Obtains the type of each channel for homogenous colors.
 template ChannelType(T)
 {
+	///
 	static if (is(T == struct))
 		alias ChannelType = T.ChannelType;
 	else
@@ -415,15 +428,17 @@ template ChangeChannelType(COLOR, T)
 static assert(is(ChangeChannelType!(RGB, ushort) == RGB16));
 static assert(is(ChangeChannelType!(int, ushort) == ushort));
 
-/// Wrapper around ExpandNumericType to only expand numeric types.
+/// Wrapper around ExpandNumericType to only expand integer types.
 template ExpandIntegerType(T, size_t bits)
 {
+	///
 	static if (is(T:real))
 		alias ExpandIntegerType = T;
 	else
 		alias ExpandIntegerType = ExpandNumericType!(T, bits);
 }
 
+/// Resolves to a Color instance with its ChannelType expanded by BYTES bytes.
 alias ExpandChannelType(COLOR, int BYTES) =
 	ChangeChannelType!(COLOR,
 		ExpandNumericType!(ChannelType!COLOR, BYTES * 8));
@@ -451,8 +466,9 @@ alias PlainStorageUnit(Color) = Color[1];
 /// (1-bit, 2-bit, 4-bit etc.)
 struct BitStorageUnit(ValueType, size_t valueBits, StorageType, bool bigEndian)
 {
-	StorageType storageValue;
+	StorageType storageValue; /// Raw value.
 
+	/// Array operations.
 	enum length = StorageType.sizeof * 8 / valueBits;
 	static assert(length * valueBits == StorageType.sizeof * 8, "Slack bits?");
 
@@ -462,7 +478,7 @@ struct BitStorageUnit(ValueType, size_t valueBits, StorageType, bool bigEndian)
 			index = length - 1 - index;
 		auto shift = index * valueBits;
 		return cast(ValueType)((storageValue >> shift) & valueMask);
-	}
+	} /// ditto
 
 	ValueType opIndexAssign(ValueType value, size_t index)
 	{
@@ -472,7 +488,7 @@ struct BitStorageUnit(ValueType, size_t valueBits, StorageType, bool bigEndian)
 		StorageType mask = flipBits(cast(StorageType)(valueMask << shift));
 		storageValue = (storageValue & mask) | cast(StorageType)(cast(StorageType)value << shift);
 		return value;
-	}
+	} /// ditto
 private:
 	enum StorageType valueMask = ((cast(StorageType)1) << valueBits) - 1;
 }
@@ -491,6 +507,7 @@ enum size_t storageColorBits(StorageType) = StorageType.sizeof * 8 / StorageType
 /// True when we can take the address of an individual color within a storage unit.
 enum bool isStorageColorLValue(StorageType) = is(typeof({ StorageType s = void; return &s[0]; }()));
 
+/// Construct a `StorageType` with all colors set to the indicated value.
 StorageType solidStorageUnit(StorageType)(StorageColor!StorageType color)
 {
 	StorageType s;
@@ -504,13 +521,17 @@ StorageType solidStorageUnit(StorageType)(StorageColor!StorageType color)
 /// Calculate an interpolated color on a gradient with multiple points
 struct Gradient(Value, Color)
 {
+	/// Gradient points.
 	struct Point
 	{
-		Value value;
-		Color color;
+		Value value; /// Distance along the gradient.
+		Color color; /// Color at this point.
 	}
-	Point[] points;
+	Point[] points; /// ditto
 
+	/// Obtain the value at the given position.
+	/// If `value` is before the first point, the first point's color is returned.
+	/// If `value` is after the last point, the last point's color is returned.
 	Color get(Value value) const
 	{
 		assert(points.length, "Gradient must have at least one point");

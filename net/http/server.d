@@ -38,19 +38,21 @@ public import ae.net.http.common;
 
 debug(HTTP) import std.stdio : stderr;
 
+/// The base class for an incoming connection to a HTTP server,
+/// unassuming of transport.
 class BaseHttpServerConnection
 {
 public:
-	TimeoutAdapter timer;
-	IConnection conn;
+	TimeoutAdapter timer; /// Time-out adapter.
+	IConnection conn; /// Connection used for this HTTP connection.
 
-	HttpRequest currentRequest;
-	bool persistent;
+	HttpRequest currentRequest; /// The current in-flight request.
+	bool persistent; /// Whether we will keep the connection open after the request is handled.
 
-	bool connected = true;
-	Logger log;
+	bool connected = true; /// Are we connected now?
+	Logger log; /// Optional HTTP log.
 
-	void delegate(HttpRequest request) handleRequest;
+	void delegate(HttpRequest request) handleRequest; /// Callback to handle a fully received request.
 
 protected:
 	Data[] inBuffer;
@@ -222,47 +224,7 @@ protected:
 	}
 
 public:
-	final void sendHeaders(Headers headers, HttpStatusCode status, string statusMessage = null)
-	{
-		assert(status, "Unset status code");
-
-		if (!statusMessage)
-			statusMessage = HttpResponse.getStatusMessage(status);
-
-		StringBuilder respMessage;
-		auto protocolVersion = currentRequest ? currentRequest.protocolVersion : "1.0";
-		respMessage.put("HTTP/", protocolVersion, " ");
-
-		if (banner && "X-Powered-By" !in headers)
-			headers["X-Powered-By"] = banner;
-
-		if ("Date" !in headers)
-			headers["Date"] = httpTime(Clock.currTime());
-
-		if ("Connection" !in headers)
-		{
-			if (persistent && protocolVersion=="1.0")
-				headers["Connection"] = "Keep-Alive";
-			else
-			if (!persistent && protocolVersion=="1.1")
-				headers["Connection"] = "close";
-		}
-
-		respMessage.put("%d %s\r\n".format(status, statusMessage));
-		foreach (string header, string value; headers)
-			respMessage.put(header, ": ", value, "\r\n");
-
-		debug (HTTP) debugLog("Response headers:\n> %s", respMessage.get().chomp().replace("\r\n", "\n> "));
-
-		respMessage.put("\r\n");
-		conn.send(Data(respMessage.get()));
-	}
-
-	final void sendHeaders(HttpResponse response)
-	{
-		sendHeaders(response.headers, response.status, response.statusMessage);
-	}
-
+	/// Send the given HTTP response.
 	final void sendResponse(HttpResponse response)
 	{
 		assert(response.status != 0);
@@ -300,6 +262,53 @@ public:
 		logRequest(currentRequest, response);
 	}
 
+	/// Send these headers only.
+	/// Low-level alternative to `sendResponse`.
+	final void sendHeaders(Headers headers, HttpStatusCode status, string statusMessage = null)
+	{
+		assert(status, "Unset status code");
+
+		if (!statusMessage)
+			statusMessage = HttpResponse.getStatusMessage(status);
+
+		StringBuilder respMessage;
+		auto protocolVersion = currentRequest ? currentRequest.protocolVersion : "1.0";
+		respMessage.put("HTTP/", protocolVersion, " ");
+
+		if (banner && "X-Powered-By" !in headers)
+			headers["X-Powered-By"] = banner;
+
+		if ("Date" !in headers)
+			headers["Date"] = httpTime(Clock.currTime());
+
+		if ("Connection" !in headers)
+		{
+			if (persistent && protocolVersion=="1.0")
+				headers["Connection"] = "Keep-Alive";
+			else
+			if (!persistent && protocolVersion=="1.1")
+				headers["Connection"] = "close";
+		}
+
+		respMessage.put("%d %s\r\n".format(status, statusMessage));
+		foreach (string header, string value; headers)
+			respMessage.put(header, ": ", value, "\r\n");
+
+		debug (HTTP) debugLog("Response headers:\n> %s", respMessage.get().chomp().replace("\r\n", "\n> "));
+
+		respMessage.put("\r\n");
+		conn.send(Data(respMessage.get()));
+	}
+
+	/// ditto
+	final void sendHeaders(HttpResponse response)
+	{
+		sendHeaders(response.headers, response.status, response.statusMessage);
+	}
+
+	/// Send this data only.
+	/// Headers should have already been sent.
+	/// Low-level alternative to `sendResponse`.
 	final void sendData(Data[] data)
 	{
 		conn.send(data);
@@ -308,6 +317,9 @@ public:
 	/// Accept more requests on the same connection?
 	bool acceptMore() { return true; }
 
+	/// Finalize writing the response.
+	/// Headers and data should have already been sent.
+	/// Low-level alternative to `sendResponse`.
 	final void closeResponse()
 	{
 		if (persistent && acceptMore)
@@ -336,12 +348,14 @@ public:
 		}
 	}
 
+	/// Retrieve the remote address of the peer, as a string.
 	abstract @property string remoteAddressStr(HttpRequest r);
 }
 
+/// Basic unencrypted HTTP 1.0/1.1 server.
 class HttpServer
 {
-	enum defaultTimeout = 30.seconds;
+	enum defaultTimeout = 30.seconds; /// The default timeout used for incoming connections.
 public:
 	this(Duration timeout = defaultTimeout)
 	{
@@ -351,8 +365,11 @@ public:
 		conn = new TcpServer();
 		conn.handleClose = &onClose;
 		conn.handleAccept = &onAccept;
-	}
+	} ///
 
+	/// Listen on the given TCP address and port.
+	/// If port is 0, listen on a random available port.
+	/// Returns the port that the server is actually listening on.
 	ushort listen(ushort port, string addr = null)
 	{
 		port = conn.listen(port, addr);
@@ -362,6 +379,7 @@ public:
 		return port;
 	}
 
+	/// Listen on the given addresses.
 	void listen(AddressInfo[] addresses)
 	{
 		conn.listen(addresses);
@@ -370,6 +388,7 @@ public:
 				log("Listening on " ~ formatAddress(protocol, address) ~ " [" ~ to!string(address.addressFamily) ~ "]");
 	}
 
+	/// Stop listening, and close idle client connections.
 	void close()
 	{
 		debug(HTTP) stderr.writeln("Shutting down");
@@ -384,6 +403,7 @@ public:
 				connection.conn.disconnect("HTTP server shutting down");
 	}
 
+	/// Optional HTTP request log.
 	Logger log;
 
 	/// Single-ended doubly-linked list of active connections
@@ -394,8 +414,13 @@ public:
 	/// Callback for an incoming request.
 	void delegate(HttpRequest request, HttpServerConnection conn) handleRequest;
 
+	/// What to send in the `"X-Powered-By"` header.
 	string banner = "ae.net.http.server (+https://github.com/CyberShadow/ae)";
-	string remoteIPHeader; // For reverse proxies
+
+	/// If set, the name of the header which will be used to obtain
+	/// the actual IP of the connecting peer.  Useful when this
+	/// `HttpServer` is behind a reverse proxy.
+	string remoteIPHeader;
 
 protected:
 	TcpServer conn;
@@ -428,23 +453,26 @@ protected:
 	}
 }
 
-/// HTTPS server. Set SSL parameters on ctx after instantiation.
-/// Example:
-/// ---
-///	auto s = new HttpsServer();
-///	s.ctx.enableDH(4096);
-///	s.ctx.enableECDH();
-///	s.ctx.setCertificate("server.crt");
-///	s.ctx.setPrivateKey("server.key");
-/// ---
+/**
+   HTTPS server. Set SSL parameters on ctx after instantiation.
+
+   Example:
+   ---
+   auto s = new HttpsServer();
+   s.ctx.enableDH(4096);
+   s.ctx.enableECDH();
+   s.ctx.setCertificate("server.crt");
+   s.ctx.setPrivateKey("server.key");
+   ---
+*/
 class HttpsServer : HttpServer
 {
-	SSLContext ctx;
+	SSLContext ctx; /// The SSL context.
 
 	this()
 	{
 		ctx = ssl.createContext(SSLContext.Kind.server);
-	}
+	} ///
 
 protected:
 	override @property string protocol() { return "https"; }
@@ -455,14 +483,17 @@ protected:
 	}
 }
 
+/// Standard TCP-based HTTP server connection.
 final class HttpServerConnection : BaseHttpServerConnection
 {
-	TcpConnection tcp;
-	HttpServer server;
+	TcpConnection tcp; /// The TCP transport.
+	HttpServer server; /// `HttpServer` owning this connection.
+	/// Cached local and remote addresses.
 	Address localAddress, remoteAddress;
 
 	mixin DListLink;
 
+	/// Retrieves the remote peer address, honoring `remoteIPHeader` if set.
 	override @property string remoteAddressStr(HttpRequest r)
 	{
 		if (server.remoteIPHeader)
@@ -507,6 +538,9 @@ protected:
 	override string formatLocalAddress(HttpRequest r) { return formatAddress(protocol, localAddress, r.host, r.port); }
 }
 
+/// `BaseHttpServerConnection` implementation with files, allowing to
+/// e.g. read a request from standard input and write the response to
+/// standard output.
 version (Posix)
 final class FileHttpServerConnection : BaseHttpServerConnection
 {
@@ -520,9 +554,9 @@ final class FileHttpServerConnection : BaseHttpServerConnection
 		);
 
 		super(c);
-	}
+	} ///
 
-	override @property string remoteAddressStr(HttpRequest r) { return "-"; }
+	override @property string remoteAddressStr(HttpRequest r) { return "-"; } /// Stub.
 
 protected:
 	import std.stdio : File, stdin, stdout;
@@ -532,6 +566,7 @@ protected:
 	override string formatLocalAddress(HttpRequest r) { return protocol ~ "://"; }
 }
 
+/// Formats a remote address for logging.
 string formatAddress(string protocol, Address address, string vhost = null, ushort logPort = 0)
 {
 	string addr = address.toAddrString();

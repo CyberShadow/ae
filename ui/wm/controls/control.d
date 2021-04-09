@@ -21,19 +21,24 @@ import ae.ui.video.renderer;
 /// Root control class.
 class Control
 {
+	/// Geometry.
 	int x, y, w, h;
 
+	/// Event handlers.
 	void handleMouseDown(int x, int y, MouseButton button) {}
-	void handleMouseUp(int x, int y, MouseButton button) {}
-	void handleMouseMove(int x, int y, MouseButtons buttons) {}
+	void handleMouseUp(int x, int y, MouseButton button) {} /// ditto
+	void handleMouseMove(int x, int y, MouseButtons buttons) {} /// ditto
 
+	/// Renderer.
 	abstract void render(Renderer r, int x, int y);
 
+	/// Parent getter.
 	final @property ContainerControl parent()
 	{
 		return _parent;
 	}
 
+	/// Parent setter.
 	final @property void parent(ContainerControl newParent)
 	{
 		if (_parent)
@@ -64,6 +69,7 @@ private:
 /// An abstract base class for a control with children.
 class ContainerControl : Control
 {
+	/// Find the child control at the given coordinates.
 	final Control controlAt(int x, int y)
 	{
 		foreach (child; children)
@@ -72,6 +78,7 @@ class ContainerControl : Control
 		return null;
 	}
 
+	/// Propagates the event to the control at the given coordinates.
 	override void handleMouseDown(int x, int y, MouseButton button)
 	{
 		auto child = controlAt(x, y);
@@ -84,15 +91,16 @@ class ContainerControl : Control
 		auto child = controlAt(x, y);
 		if (child)
 			child.handleMouseUp(x-child.x, y-child.y, button);
-	}
+	} /// ditto
 
 	override void handleMouseMove(int x, int y, MouseButtons buttons)
 	{
 		auto child = controlAt(x, y);
 		if (child)
 			child.handleMouseMove(x-child.x, y-child.y, buttons);
-	}
+	} /// ditto
 
+	/// Renders all children.
 	override void render(Renderer s, int x, int y)
 	{
 		// background should be rendered by a subclass or parent
@@ -100,11 +108,13 @@ class ContainerControl : Control
 			child.render(s, x+child.x, y+child.y);
 	}
 
+	/// Children getter.
 	final @property Control[] children()
 	{
 		return _children;
 	}
 
+	/// Makes this control the given control's parent.
 	final typeof(this) addChild(Control control)
 	{
 		control.parent = this;
@@ -148,7 +158,7 @@ class StaticFitContainerControl : ContainerControl
 		}
 		w = maxX;
 		h = maxY;
-	}
+	} ///
 }
 
 // ***************************************************************************
@@ -157,17 +167,18 @@ class StaticFitContainerControl : ContainerControl
 /// Sizes are summed together.
 struct RelativeSize
 {
-	int px;
-	float ratio;
+	int px; /// Flat size in pixels.
+	float ratio; /// Parent size ratio.
 	// TODO: Add "em", when we have variable font sizes?
 
+	/// Get total resulting size.
 	int toPixels(int parentSize) pure const { return px + cast(int)(parentSize*ratio); }
 
 	RelativeSize opBinary(string op)(RelativeSize other)
 		if (op == "+" || op == "-")
 	{
 		return mixin("RelativeSize(this.px"~op~"other.px, this.ratio"~op~"other.ratio)");
-	}
+	} ///
 }
 
 /// Usage: 50.px
@@ -187,7 +198,7 @@ class Wrapper : ContainerControl
 		child.arrange(rw, rh);
 		this.w = child.w;
 		this.h = child.h;
-	}
+	} ///
 }
 
 
@@ -199,12 +210,13 @@ final:
 
 	void moreMagic() {}
 
+	/// The default implementations.
 	static if (!is(typeof(adjustHint)))
 		int adjustHint(int hint, Params params) { return hint; }
 	static if (!is(typeof(adjustSize)))
-		int adjustSize(int size, int hint, Params params) { return size; }
+		int adjustSize(int size, int hint, Params params) { return size; } /// ditto
 	static if (!is(typeof(adjustPos)))
-		int adjustPos(int pos, int size, int hint, Params params) { return pos; }
+		int adjustPos(int pos, int size, int hint, Params params) { return pos; } /// ditto
 }
 
 mixin template OneDirectionCustomWrapper(alias WrapperBehavior, Params...)
@@ -230,7 +242,7 @@ class WCustomWrapper(alias WrapperBehavior, Params...) : Wrapper
 		this.w = adjustSize(child.w, rw, params);
 		this.h = child.h;
 		child.x = adjustPos(child.x, child.w, rw, params);
-	}
+	} ///
 
 	mixin OneDirectionCustomWrapper!(WrapperBehavior, Params);
 }
@@ -347,13 +359,14 @@ mixin DeclareWrapper!("Pad", PadBehavior, RelativeSize);
 /// Space out controls in a 2D grid, according to their dimensions and resizability.
 class Table : ContainerControl
 {
+	/// Table size.
 	uint rows, cols;
 
 	this(uint rows, uint cols)
 	{
 		this.rows = rows;
 		this.cols = cols;
-	}
+	} ///
 
 	override void arrange(int rw, int rh)
 	{
@@ -418,33 +431,33 @@ class Table : ContainerControl
 			child.y = rowOffsets[row];
 			child.arrange(colSizes[col], rowSizes[col]);
 		}
-	}
+	} ///
 }
 
 /// 1D table for a row of controls.
 class Row : Table
 {
-	this() { super(0, 0); }
+	this() { super(0, 0); } ///
 
 	override void arrange(int rw, int rh)
 	{
 		rows = 1;
 		cols = cast(uint)children.length;
 		super.arrange(rw, rh);
-	}
+	} ///
 }
 
 /// 1D table for a column of controls.
 class Column : Table
 {
-	this() { super(0, 0); }
+	this() { super(0, 0); } ///
 
 	override void arrange(int rw, int rh)
 	{
 		rows = cast(uint)children.length;
 		cols = 1;
 		super.arrange(rw, rh);
-	}
+	} ///
 }
 
 // ***************************************************************************
@@ -469,7 +482,7 @@ class Layers : ContainerControl
 					h = child.h, changed = true;
 			}
 		} while (changed);
-	}
+	} ///
 }
 
 // ***************************************************************************
@@ -482,9 +495,10 @@ final class RootControl : ContainerControl
 	{
 		foreach (child; children)
 			child.arrange(w, h);
-	}
+	} ///
 
-	// Expose "arrange", which is "protected", to WMApplication
+	// Expose "arrange", which is "protected", to `WMApplication`
+	/// Called by `WMApplication` to notify of size changes.
 	final void sizeChanged()
 	{
 		arrange(w, h);

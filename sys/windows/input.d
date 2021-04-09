@@ -19,6 +19,7 @@ mixin(importWin32!q{winbase});
 mixin(importWin32!q{windef});
 mixin(importWin32!q{winuser});
 
+/// Send WM_COPYDATA to the specified window.
 void sendCopyData(HWND hWnd, DWORD n, in void[] buf)
 {
 	COPYDATASTRUCT cds;
@@ -30,8 +31,9 @@ void sendCopyData(HWND hWnd, DWORD n, in void[] buf)
 
 enum MAPVK_VK_TO_VSC = 0;
 
+/// Simulate keyboard input.
 void keyDown(ubyte c) { keybd_event(c, cast(ubyte)MapVirtualKey(c, MAPVK_VK_TO_VSC), 0              , 0); }
-void keyUp  (ubyte c) { keybd_event(c, cast(ubyte)MapVirtualKey(c, MAPVK_VK_TO_VSC), KEYEVENTF_KEYUP, 0); }
+void keyUp  (ubyte c) { keybd_event(c, cast(ubyte)MapVirtualKey(c, MAPVK_VK_TO_VSC), KEYEVENTF_KEYUP, 0); } /// ditto
 
 void press(ubyte c, uint delay=0)
 {
@@ -39,10 +41,10 @@ void press(ubyte c, uint delay=0)
 	Sleep(delay);
 	if (c) keyUp(c);
 	Sleep(delay);
-}
+} /// ditto
 
-void keyDownOn(HWND h, ubyte c) { PostMessage(h, WM_KEYDOWN, c, MapVirtualKey(c, MAPVK_VK_TO_VSC) << 16); }
-void keyUpOn  (HWND h, ubyte c) { PostMessage(h, WM_KEYUP  , c, MapVirtualKey(c, MAPVK_VK_TO_VSC) << 16); }
+void keyDownOn(HWND h, ubyte c) { PostMessage(h, WM_KEYDOWN, c, MapVirtualKey(c, MAPVK_VK_TO_VSC) << 16); } /// ditto
+void keyUpOn  (HWND h, ubyte c) { PostMessage(h, WM_KEYUP  , c, MapVirtualKey(c, MAPVK_VK_TO_VSC) << 16); } /// ditto
 
 void pressOn(HWND h, ubyte c, uint delay=0)
 {
@@ -50,4 +52,4 @@ void pressOn(HWND h, ubyte c, uint delay=0)
 	Sleep(delay);
 	if (c) keyUpOn(h, c);
 	Sleep(delay);
-}
+} /// ditto

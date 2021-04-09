@@ -20,6 +20,7 @@
 
 module ae.sys.shutdown;
 
+/// Register a handler to be called when a shutdown is requested.
 /// Warning: the delegate may be called in an arbitrary thread.
 void addShutdownHandler(void delegate(scope const(char)[] reason) fn)
 {

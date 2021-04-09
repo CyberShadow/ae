@@ -24,6 +24,7 @@ import ae.utils.math;
 /// Supports uniform distributions and basic operations on them (sum / product).
 struct Range(T)
 {
+	/// Low, high, and average points.
 	T lo, hi, avg;
 	private bool uniform;
 
@@ -41,7 +42,7 @@ struct Range(T)
 		V b   = mixin("hi "  ~ op ~ " u");
 		V avg = mixin("avg " ~ op ~ " u");
 		return Range!V(min(a, b), max(a, b), avg, uniform);
-	}
+	} ///
 
 	auto opBinaryRight(string op, U)(U u) const
 	if (is(U : real))
@@ -51,7 +52,7 @@ struct Range(T)
 		V b   = mixin("u " ~ op ~ " hi");
 		V avg = mixin("u " ~ op ~ " avg");
 		return Range!V(min(a, b), max(a, b), avg, uniform);
-	}
+	} ///
 
 	auto opBinary(string op, R)(R r) const
 	if (is(R : Range!U, U))
@@ -62,7 +63,7 @@ struct Range(T)
 		auto d = mixin("hi " ~ op ~ " r.hi");
 		auto avg = mixin("avg " ~ op ~ " r.avg");
 		return range(min(a, b, c, d), max(a, b, c, d), avg);
-	}
+	} ///
 
 	auto opCast(T)() const
 	if (is(T : Range!U, U))
@@ -71,13 +72,14 @@ struct Range(T)
 			return range(cast(U)lo, cast(U)hi, cast(U)avg);
 		else
 			assert(false);
-	}
+	} ///
 
 	Range!U to(U)() const
 	{
 		return range(cast(U)lo, cast(U)hi, cast(U)avg);
-	}
+	} ///
 
+	/// Apply a `prob` chance that `this` equals `val`.
 	Range!T fuzzyAssign(Range!T val, double prob = 0.5)
 	{
 		assert(prob >= 0 && prob <= 1);
@@ -96,6 +98,7 @@ struct Range(T)
 		return r;
 	}
 
+	/// ditto
 	Range!T fuzzyAssign(T val, double prob = 0.5)
 	{
 		return fuzzyAssign(range(val), prob);
@@ -111,19 +114,21 @@ struct Range(T)
 			return format("%s..%s", lo, hi);
 		else
 			return format("%s..%s..%s", lo, avg, hi);
-	}
+	} ///
 }
 
-Range!T range(T)(T lo, T hi, T avg) { return Range!T(lo, hi, avg, false); }
-Range!T range(T)(T lo, T hi) { return Range!T(lo, hi, (lo + hi) / 2, true); }
-Range!T range(T)(T val) { return Range!T(val, val, val, true); }
+Range!T range(T)(T lo, T hi, T avg) { return Range!T(lo, hi, avg, false); } /// ditto
+Range!T range(T)(T lo, T hi) { return Range!T(lo, hi, (lo + hi) / 2, true); } /// ditto
+Range!T range(T)(T val) { return Range!T(val, val, val, true); } /// ditto
 
+///
 unittest
 {
 	assert(range(1, 2) + 1 == range(2, 3));
 	assert(1 + range(1, 2) == range(2, 3));
 }
 
+///
 unittest
 {
 	auto a = range(10, 20);
@@ -139,22 +144,29 @@ unittest
 	assert(a == range(10, 25, 20));
 }
 
+// ****************************************************************************
+
 /// Indicates the probability of a certain event.
 struct Probability
 {
-	double p;
+	double p; /// [0,1]
 
-	bool isImpossible() const @nogc { return p == 0; }
-	bool isPossible() const @nogc { return p > 0; }
-	bool isCertain() const @nogc { return p == 1; }
+	bool isImpossible() const @nogc { return p == 0; } ///
+	bool isPossible() const @nogc { return p > 0; } ///
+	bool isCertain() const @nogc { return p == 1; } ///
 }
 
+/// Apply `doIf` if `p` is possible.
+/// `doIf` receives the probability of the event (non-zero).
 void cond(alias doIf)(Probability p)
 {
 	if (p.p > 0)
 		doIf(p.p);
 }
 
+/// Apply `doIf` if `p` is possible,
+/// and/or `doElse` if `!p` is possible,
+/// `doIf` and `doElse` receive the probability of their respective event (non-zero).
 void cond(alias doIf, alias doElse)(Probability p)
 {
 	if (p.p > 0)
@@ -163,10 +175,15 @@ void cond(alias doIf, alias doElse)(Probability p)
 		doElse(1 - p.p);
 }
 
+/// Return the probability of event `a` not occurring.
 Probability not(Probability a) { return Probability(1 - a.p); }
+/// Return the probability of both unrelated events `a` and `b` occurring.
 Probability and(Probability a, Probability b) { return Probability(a.p * b.p); }
+/// Return the probability of at least one of the unrelated events `a` and `b` occurring.
 Probability or (Probability a, Probability b) { return not(and(not(a), not(b))); }
 
+/// Return the probability that `a` `op` `b`, where `op` is `<` / `<=` / `>` / `>=`,
+/// and `a` and `b` are numbers or ranges representing a uniform distribution.
 template cmp(string op)
 if (op.isOneOf("<", "<=", ">", ">="))
 {

@@ -18,6 +18,7 @@ import std.exception;
 
 public import core.sys.posix.signal;
 
+/// Handler callback type.
 alias void delegate() nothrow @system SignalHandler;
 
 // https://github.com/D-Programming-Language/druntime/pull/759
@@ -36,6 +37,7 @@ version(FreeBSD) private
 	enum SIG_SETMASK = 3;
 }
 
+/// Register a handler for a POSIX signal.
 void addSignalHandler(int signum, SignalHandler fn)
 {
 	handlers[signum].add(fn, {
@@ -45,6 +47,7 @@ void addSignalHandler(int signum, SignalHandler fn)
 	});
 }
 
+/// Unregister a previously registered signal handler.
 void removeSignalHandler(int signum, SignalHandler fn)
 {
 	handlers[signum].remove(fn, {

@@ -55,8 +55,8 @@ enum isDirectView(T) =
 mixin template DirectView()
 {
 	import std.traits : Unqual;
-	alias StorageType = Unqual!(typeof(scanline(0)[0]));
-	alias COLOR = Unqual!(typeof(StorageType.init[0]));
+	alias StorageType = Unqual!(typeof(scanline(0)[0])); ///
+	alias COLOR = Unqual!(typeof(StorageType.init[0])); ///
 
 	/// Implements the view[x, y] operator.
 	auto ref inout(COLOR) opIndex(xy_t x, xy_t y) inout
@@ -67,16 +67,16 @@ mixin template DirectView()
 	/// Allows array-like view[y][x] access.
 	static struct Row
 	{
-		StorageType[] scanline;
+		StorageType[] scanline; ///
 		auto ref inout(COLOR) opIndex(xy_t x) inout
 		{
 			return scanline[x / StorageType.length][x % StorageType.length];
-		}
+		} ///
 	}
-	Row opIndex(xy_t y) /// ditto
+	Row opIndex(xy_t y)
 	{
 		return Row(scanline(y));
-	}
+	} /// ditto
 
 	/// Implements the view[x, y] = c operator.
 	COLOR opIndexAssign(COLOR value, xy_t x, xy_t y)
@@ -162,6 +162,7 @@ void blitTo(SRC, DST)(auto ref SRC src, auto ref DST dst, xy_t x, xy_t y)
 	src.blitTo(dst.crop(x, y, x+src.w, y+src.h));
 }
 
+/// Like `blitTo`, but only the intersecting part of the two images.
 void safeBlitTo(SRC, DST)(auto ref SRC src, auto ref DST dst, xy_t x, xy_t y)
 {
 	// TODO: refactor into safeCrop
@@ -204,20 +205,20 @@ void size(V)(auto ref V src, xy_t w, xy_t h)
 mixin template Warp(V)
 	if (isView!V)
 {
-	V src;
+	V src; /// Underlying source view.
 
 	auto ref ViewColor!V opIndex(xy_t x, xy_t y)
 	{
 		warp(x, y);
 		return src[x, y];
-	}
+	} ///
 
 	static if (isWritableView!V)
 	ViewColor!V opIndexAssign(ViewColor!V value, xy_t x, xy_t y)
 	{
 		warp(x, y);
 		return src[x, y] = value;
-	}
+	} ///
 }
 
 /// Crop a view to the specified rectangle.
@@ -628,8 +629,8 @@ unittest
 /// Similar to Warp, but allows warped coordinates to go out of bounds.
 mixin template SafeWarp(V)
 {
-	V src;
-	ViewColor!V defaultColor;
+	V src; /// Underlying source view.
+	ViewColor!V defaultColor; /// Return this color when out-of-bounds.
 
 	auto ref ViewColor!V opIndex(xy_t x, xy_t y)
 	{
@@ -638,7 +639,7 @@ mixin template SafeWarp(V)
 			return src[x, y];
 		else
 			return defaultColor;
-	}
+	} ///
 
 	static if (isWritableView!V)
 	ViewColor!V opIndexAssign(ViewColor!V value, xy_t x, xy_t y)
@@ -648,7 +649,7 @@ mixin template SafeWarp(V)
 			return src[x, y] = value;
 		else
 			return defaultColor;
-	}
+	} ///
 }
 
 /// Rotate a view at an arbitrary angle (specified in radians),
@@ -823,6 +824,8 @@ template trim(alias fun)
 	}
 }
 
+/// Returns the smallest window containing all
+/// pixels that are not fully transparent.
 alias trimAlpha = trim!(c => c.a);
 
 // ***************************************************************************

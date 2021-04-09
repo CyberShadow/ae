@@ -18,11 +18,14 @@ import std.array;
 
 import ae.utils.xml.lite;
 
+/// Returns `true` if node `n` is a tag, and its tag name is `tag`.
 bool isTag(XmlNode n, string tag, XmlNodeType type = XmlNodeType.Node)
 {
 	return n.type == type && n.tag ==  tag;
 }
 
+/// Like `isTag`, but if `n` does not satisfy the criteria and it has one child node,
+/// check it recursively instead. Returns the satisfying node or `null`.
 XmlNode findOnlyChild(XmlNode n, string tag, XmlNodeType type = XmlNodeType.Node)
 {
 	return n.isTag(tag, type) ? n :
@@ -30,6 +33,7 @@ XmlNode findOnlyChild(XmlNode n, string tag, XmlNodeType type = XmlNodeType.Node
 		n.children[0].findOnlyChild(tag, type);
 }
 
+/// ditto
 XmlNode findOnlyChild(XmlNode n, XmlNodeType type)
 {
 	return n.type == type ? n :
@@ -37,6 +41,7 @@ XmlNode findOnlyChild(XmlNode n, XmlNodeType type)
 		n.children[0].findOnlyChild(type);
 }
 
+/// Search recursively for all nodes which are tags and have the tag name `tag`.
 XmlNode[] findNodes(XmlNode n, string tag)
 {
 	if (n.isTag(tag))
@@ -44,6 +49,7 @@ XmlNode[] findNodes(XmlNode n, string tag)
 	return n.children.map!(n => findNodes(n, tag)).join;
 }
 
+/// Create a new node with the given properties.
 XmlNode newNode(XmlNodeType type, string tag, string[string] attributes = null, XmlNode[] children = null)
 {
 	auto node = new XmlNode(type, tag);
@@ -52,11 +58,13 @@ XmlNode newNode(XmlNodeType type, string tag, string[string] attributes = null, 
 	return node;
 }
 
+/// Create a tag new node with the given properties.
 XmlNode newNode(string tag, string[string] attributes = null, XmlNode[] children = null)
 {
 	return newNode(XmlNodeType.Node, tag, attributes, children);
 }
 
+/// Create a text node with the given contents.
 XmlNode newTextNode(string text)
 {
 	return newNode(XmlNodeType.Text, text);

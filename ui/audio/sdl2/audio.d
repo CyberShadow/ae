@@ -20,6 +20,7 @@ import ae.ui.audio.audio;
 import ae.ui.audio.source.base;
 import ae.ui.shell.sdl2.shell;
 
+/// SDL2 implementation of `Audio`.
 class SDL2Audio : Audio
 {
 	override void start(Application application)
@@ -38,12 +39,12 @@ class SDL2Audio : Audio
 		sdlEnforce(SDL_OpenAudio(&spec, null) >= 0, "SDL_OpenAudio");
 
 		SDL_PauseAudio(0);
-	}
+	} ///
 
 	override void stop()
 	{
 		SDL_CloseAudio();
-	}
+	} ///
 
 	private static extern(C) void callback(void *userData, ubyte *bufferPtr, int length) nothrow
 	{

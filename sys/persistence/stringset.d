@@ -31,7 +31,7 @@ struct PersistentStringSet
 		import std.string : splitLines;
 
 		return HashSet!string(fileName.readText().splitLines());
-	}
+	} ///
 
 	static void save(string fileName, HashSet!string data)
 	{
@@ -39,37 +39,38 @@ struct PersistentStringSet
 		import ae.sys.file : atomicWrite;
 
 		atomicWrite(fileName, data.keys.join("\n"));
-	}
+	} ///
 
 	alias Cache = FileCache!(load, save, FlushPolicy.manual);
 	Cache cache;
 
-	this(string fileName) { cache = Cache(fileName); }
+	this(string fileName) { cache = Cache(fileName); } ///
 
 	auto opBinaryRight(string op)(string key)
 	if (op == "in")
 	{
 		return key in cache;
-	}
+	} ///
 
 	void add(string key)
 	{
 		assert(key !in cache);
 		cache.add(key);
 		cache.save();
-	}
+	} ///
 
 	void remove(string key)
 	{
 		assert(key in cache);
 		cache.remove(key);
 		cache.save();
-	}
+	} ///
 
-	@property string[] lines() { return cache.keys; }
-	@property size_t length() { return cache.length; }
+	@property string[] lines() { return cache.keys; } ///
+	@property size_t length() { return cache.length; } ///
 }
 
+///
 unittest
 {
 	import std.file, std.conv, core.thread;

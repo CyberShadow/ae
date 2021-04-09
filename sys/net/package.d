@@ -21,6 +21,7 @@ import ae.net.http.common;
 import ae.net.ietf.url;
 import ae.sys.file;
 
+/// Base interface for basic network operations.
 class Network
 {
 	/// Download file located at the indicated URL,
@@ -60,6 +61,7 @@ class Network
 		assert(false);
 	}
 
+	/// Perform a HTTP request.
 	HttpResponse httpRequest(HttpRequest request)
 	{
 		notImplemented();
@@ -84,6 +86,6 @@ static this()
 /// UFCS-able global synonym functions.
 void downloadFile(string url, string target) { net.downloadFile(url, target); }
 void[] getFile(string url) { return net.getFile(url); } /// ditto
-void[] post(string url, void[] data) { return net.post(url, data); }
+void[] post(string url, void[] data) { return net.post(url, data); } /// ditto
 bool urlOK(string url) { return net.urlOK(url); } /// ditto
 string resolveRedirect(string url) { return net.resolveRedirect(url); } /// ditto

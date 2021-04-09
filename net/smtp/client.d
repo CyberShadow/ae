@@ -28,22 +28,23 @@ import ae.utils.array;
 /// One SmtpClient instance connects, sends one message, and disconnects.
 class SmtpClient
 {
+	/// Current connection state.
 	enum State
 	{
-		none,
-		connecting,
-		greeting,
-		hello,
-		mailFrom,
-		rcptTo,
-		data,
-		sendingData,
-		quit,
-		done,
-		error
+		none,        ///
+		connecting,	 ///
+		greeting,	 ///
+		hello,		 ///
+		mailFrom,	 ///
+		rcptTo,		 ///
+		data,		 ///
+		sendingData, ///
+		quit,		 ///
+		done,		 ///
+		error,		 ///
 	}
 
-	@property State state() { return _state; }
+	@property State state() { return _state; } /// ditto
 
 	this(Logger log, string localDomain, string server, ushort port = 25)
 	{
@@ -51,12 +52,14 @@ class SmtpClient
 		this.localDomain = localDomain;
 		this.server = server;
 		this.port = port;
-	}
+	} ///
 
-	void delegate() handleSent;
-	void delegate() handleStateChanged;
-	void delegate(string message) handleError;
+	void delegate() handleSent; /// Called when the message is successfully sent.
+	void delegate() handleStateChanged; /// Called when `state` changes.
+	void delegate(string message) handleError; /// Called on error.
 
+	/// Send a message.
+	/// `from` and `to` are the envelope `MAIL FROM` and `RCPT TO` addresses.
 	void sendMessage(string from, string to, string[] data)
 	{
 		assert(state == State.none || state == State.done, "SmtpClient busy");

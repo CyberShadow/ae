@@ -23,6 +23,7 @@ import ae.sys.timing;
 alias ae.sys.timing.Timer SysTimer;
 alias ae.ui.timer.timer.Timer Timer;
 
+/// A simple thread-based `Timer` implementation.
 final class ThreadTimer : Timer
 {
     SysTimer sysTimer;

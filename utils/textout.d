@@ -17,6 +17,7 @@ import ae.utils.appender;
 
 // **************************************************************************
 
+/// Resolves to `true` when `T` can accept strings via `.put`.
 template isStringSink(T)
 {
 	enum isStringSink = is(typeof(T.init.put("Test")));
@@ -25,8 +26,9 @@ deprecated alias IsStringSink = isStringSink;
 
 // **************************************************************************
 
-alias FastAppender!(immutable(char)) StringBuilder;
-alias FastAppender!           char   StringBuffer;
+/// Appender instantiations for building strings.
+alias FastAppender!(immutable(char)) StringBuilder; /// Immutable (single-use) variant.
+alias FastAppender!           char   StringBuffer ; /// Reusable variant.
 
 static assert(isStringSink!StringBuilder);
 static assert(isStringSink!StringBuffer);
@@ -51,13 +53,14 @@ unittest
 
 // **************************************************************************
 
+/// Output range which writes to a static buffer.
 struct StaticBuf(T, size_t size)
 {
-	T[size] buf;
-	size_t pos;
-	void put(T v) { buf[pos++] = v; }
-	void put(in T[] v) { buf[pos..pos+v.length] = v[]; pos+=v.length; }
-	inout(T)[] data() inout { return buf[0..pos]; }
+	T[size] buf; /// The buffer.
+	size_t pos; /// Current position.
+	void put(T v) { buf[pos++] = v; } ///
+	void put(in T[] v) { buf[pos..pos+v.length] = v[]; pos+=v.length; } ///
+	inout(T)[] data() inout { return buf[0..pos]; } /// Retrieve what was written so far.
 }
 
 // **************************************************************************
@@ -65,10 +68,10 @@ struct StaticBuf(T, size_t size)
 /// Sink which simply counts how much data is written to it.
 struct CountingWriter(T)
 {
-	size_t count;
+	size_t count; /// Number of elements written.
 
-	void put(T v) { count++; }
-	void put(in T[] v) { count += v.length; }
+	void put(T v) { count++; } ///
+	void put(in T[] v) { count += v.length; } ///
 }
 
 // **************************************************************************
@@ -77,19 +80,19 @@ struct CountingWriter(T)
 /// No reallocation, no bounds check - unsafe.
 struct BlindWriter(T)
 {
-	T* ptr;
+	T* ptr; /// Write target.
 
 	void put(T v)
 	{
 		*ptr++ = v;
-	}
+	} ///
 
 	void put(in T[] v)
 	{
 		import core.stdc.string;
 		memcpy(ptr, v.ptr, v.length*T.sizeof);
 		ptr += v.length;
-	}
+	} ///
 }
 
 static assert(isStringSink!(BlindWriter!char));
@@ -147,7 +150,7 @@ T[] countCopy(T, alias putter)()
 	assert(writer.ptr = buf.ptr + buf.length);
 
 	return buf;
-}
+} /// ditto
 
 // **************************************************************************
 
@@ -178,6 +181,7 @@ void put(S, N)(ref S sink, N n)
 	sink.putDecimal(n);
 }
 
+/// Write a number `n` in decimal to `sink`.
 void putDecimal(S, N)(ref S sink, N n)
 {
 	char[DecimalSize!N] buf = void;

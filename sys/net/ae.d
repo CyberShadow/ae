@@ -21,6 +21,7 @@ import ae.sys.net;
 
 static import std.file;
 
+/// `Network` implementation based on `ae.net`.
 class AENetwork : Network
 {
 	private Data getData(string url)
@@ -42,12 +43,12 @@ class AENetwork : Network
 	{
 		Data data = getData(url);
 		std.file.write(target, data.contents);
-	}
+	} ///
 
 	override void[] getFile(string url)
 	{
 		return getData(url).toHeap;
-	}
+	} ///
 
 	override void[] post(string url, in void[] data)
 	{
@@ -62,7 +63,7 @@ class AENetwork : Network
 		socketManager.loop();
 		assert(got);
 		return result.toHeap;
-	}
+	} ///
 
 	override bool urlOK(string url)
 	{
@@ -81,17 +82,17 @@ class AENetwork : Network
 						result = false;
 					else
 						result = response.status == HttpStatusCode.OK;
-				}
+				} ///
 			);
 
 			socketManager.loop();
-		}
+		} ///
 		catch (Exception e)
 			return false;
 
 		assert(got);
 		return result;
-	}
+	} ///
 
 	override string resolveRedirect(string url)
 	{
@@ -111,14 +112,14 @@ class AENetwork : Network
 					result = response.headers.get("Location", null);
 					if (result)
 						result = url.applyRelativeURL(result);
-				}
-			}
+				} ///
+			} ///
 		);
 
 		socketManager.loop();
 		assert(got);
 		return result;
-	}
+	} ///
 
 	override HttpResponse httpRequest(HttpRequest request)
 	{
@@ -131,13 +132,13 @@ class AENetwork : Network
 					throw new Exception(disconnectReason);
 				else
 					result = response;
-			}
+			} ///
 		);
 
 		socketManager.loop();
 		assert(result);
 		return result;
-	}
+	} ///
 }
 
 static this()

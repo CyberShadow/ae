@@ -20,11 +20,20 @@ import std.uni;
 
 import ae.utils.text;
 
+/// A plain-text paragraph.
 struct Paragraph
 {
-	string quotePrefix, text;
+	/// The leading part of the paragraph (identical for all lines in
+	/// the encoded form). Generally some mix of `'>'` and space
+	/// characters.
+	string quotePrefix;
+
+	/// The contents of the paragraph.
+	string text;
 }
 
+/// Specifies the format for how line breaks and paragraphs are
+/// encoded in a message.
 enum WrapFormat
 {
 	fixed,       /// One paragraph per line
@@ -34,6 +43,8 @@ enum WrapFormat
 	input,       /// As emitted by Rfc850Message.replyTemplate
 }
 
+/// Parses a message body holding text in the
+/// specified format, and returns parsed paragraphs.
 Paragraph[] unwrapText(string text, WrapFormat wrapFormat)
 {
 	auto lines = text.splitAsciiLines();
@@ -202,9 +213,10 @@ Paragraph[] unwrapText(string text, WrapFormat wrapFormat)
 	return paragraphs;
 }
 
+/// The default value of `wrapText`'s `margin` parameter.
 enum DEFAULT_WRAP_LENGTH = 66;
 
-/// Returns wrapped text in the WrapFormat.flowed format.
+/// Returns wrapped text in the `WrapFormat.flowed` format.
 string wrapText(Paragraph[] paragraphs, int margin = DEFAULT_WRAP_LENGTH)
 {
 	string[] lines;

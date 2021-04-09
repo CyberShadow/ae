@@ -128,29 +128,32 @@ private:
 	Image!BGR frame;
 }
 
+/// Represents a video stream as a D range of frames.
 struct VideoInputStream
 {
 	RefCounted!VideoInputStreamImpl impl;
-	this(File f, string[] ffmpegArgs) { impl.initialize(f, "-", ffmpegArgs); }
-	this(string fn, string[] ffmpegArgs) { impl.initialize(stdin, fn, ffmpegArgs); }
-	@property ref Image!BGR front() return { return impl.front; }
-	@property bool empty() { return impl.empty; }
-	void popFront() { impl.popFront(); }
+	this(File f, string[] ffmpegArgs) { impl.initialize(f, "-", ffmpegArgs); } ///
+	this(string fn, string[] ffmpegArgs) { impl.initialize(stdin, fn, ffmpegArgs); } ///
+	@property ref Image!BGR front() return { return impl.front; } ///
+	@property bool empty() { return impl.empty; } ///
+	void popFront() { impl.popFront(); } ///
 }
 //alias RefCounted!VideoStreamImpl VideoStream;
 deprecated alias VideoStream = VideoInputStream;
 
+/// Creates a `VideoInputStream` from the given file.
 VideoInputStream streamVideo(File f, string[] ffmpegArgs = null) { return VideoInputStream(f, ffmpegArgs); }
-VideoInputStream streamVideo(string fn, string[] ffmpegArgs = null) { return VideoInputStream(fn, ffmpegArgs); }
+VideoInputStream streamVideo(string fn, string[] ffmpegArgs = null) { return VideoInputStream(fn, ffmpegArgs); } /// ditto
 
 // ----------------------------------------------------------------------------
 
+/// Represents a video encoding process as a D output range of frames.
 struct VideoOutputStream
 {
 	void put(ref Image!BGR frame)
 	{
 		output.rawWrite(frame.toBMP);
-	}
+	} ///
 
 	@disable this(this);
 
@@ -183,6 +186,7 @@ struct VideoOutputStream
 		pid = spawnProcess(args, pipes.readEnd, f);
 	}
 
+	/// Begin encoding to the given file with the given parameters.
 	this(File f, string[] ffmpegArgs = null, string[] inputArgs = null)
 	{
 		this(f, "-", ffmpegArgs, inputArgs);
@@ -191,7 +195,7 @@ struct VideoOutputStream
 	this(string fn, string[] ffmpegArgs = null, string[] inputArgs = null)
 	{
 		this(stdin, fn, ffmpegArgs, inputArgs);
-	}
+	} /// ditto
 
 private:
 	import std.process;

@@ -28,9 +28,10 @@ public import ae.utils.graphics.view;
 /// with a known distance between each row.
 struct ImageRef(COLOR, StorageType = PlainStorageUnit!COLOR)
 {
+	/// Geometry.
 	xy_t w, h;
 	size_t pitch; /// In bytes, not COLORs
-	StorageType* pixels;
+	StorageType* pixels; /// Pointer to the first pixel.
 
 	/// Returns an array for the pixels at row y.
 	inout(StorageType)[] scanline(xy_t y) inout
@@ -73,8 +74,9 @@ unittest
 /// with each scanline consisting of one or more `StorageType`.
 struct Image(COLOR, StorageType = PlainStorageUnit!COLOR)
 {
+	/// Geometry.
 	xy_t w, h;
-	StorageType[] pixels;
+	StorageType[] pixels; /// Array of pixels, in row-major order.
 
 	/// Returns an array for the pixels at row y.
 	inout(StorageType)[] scanline(xy_t y) inout
@@ -90,7 +92,7 @@ struct Image(COLOR, StorageType = PlainStorageUnit!COLOR)
 	this(xy_t w, xy_t h)
 	{
 		size(w, h);
-	}
+	} ///
 
 	/// Does not scale image
 	void size(xy_t w, xy_t h)
@@ -125,6 +127,7 @@ unittest
 // https://d.puremagic.com/issues/show_bug.cgi?id=12426
 // https://d.puremagic.com/issues/show_bug.cgi?id=12433
 
+/// Resolves to an `Image` with the same color type as the view `V`.
 alias ViewImage(V) = Image!(ViewColor!V);
 
 /// Copy the given view into the specified target.
@@ -154,6 +157,8 @@ unittest
 	v.copy(c);
 }
 
+/// Resolves to an `Image` with the same color type as the element
+/// type of the view range `R`.
 alias ElementViewImage(R) = ViewImage!(ElementType!R);
 
 /// Splice multiple images horizontally.
@@ -440,13 +445,18 @@ if (isView!SRC && is(StorageColor!StorageType == ViewColor!SRC))
 
 import std.traits;
 
-// Workaround for https://d.puremagic.com/issues/show_bug.cgi?id=12433
+/// Workaround for https://issues.dlang.org/show_bug.cgi?id=12433
+version (all)
+{
+	/// Placeholder type used where an output color is specified,
+	/// which indicates that the output color type should be the same as the input color.
+	struct InputColor {}
+	/// Resolves `COLOR` to `INPUT` if it is `InputColor`.
+	alias GetInputColor(COLOR, INPUT) = Select!(is(COLOR == InputColor), INPUT, COLOR);
 
-struct InputColor {}
-alias GetInputColor(COLOR, INPUT) = Select!(is(COLOR == InputColor), INPUT, COLOR);
-
-struct TargetColor {}
-enum isTargetColor(C, TARGET) = is(C == TargetColor) || is(C == ViewColor!TARGET);
+	struct TargetColor {}
+	enum isTargetColor(C, TARGET) = is(C == TargetColor) || is(C == ViewColor!TARGET);
+}
 
 // ***************************************************************************
 
@@ -604,11 +614,13 @@ unittest
 
 static import ae.utils.graphics.bitmap;
 
-// Different software have different standards regarding alpha without a V4 header.
-// ImageMagick will write BMPs with alpha without a V4 header, but not all software will read them.
+/// Whether to use a V4 BMP header for the given color type.
+/// Different software have different standards regarding alpha without a V4 header.
+/// ImageMagick will write BMPs with alpha without a V4 header, but not all software will read them.
 enum bitmapNeedV4HeaderForWrite(COLOR) = is(COLOR == struct) && !is(COLOR == BGR) && !is(COLOR == BGRX);
-enum bitmapNeedV4HeaderForRead (COLOR) = is(COLOR == struct) && !is(COLOR == BGR) && !is(COLOR == BGRX) && !is(COLOR == BGRA);
+enum bitmapNeedV4HeaderForRead (COLOR) = is(COLOR == struct) && !is(COLOR == BGR) && !is(COLOR == BGRX) && !is(COLOR == BGRA); /// ditto
 
+/// Calculates `bV4RedMask` etc. values for the given color type.
 uint[4] bitmapChannelMasks(COLOR)()
 {
 	uint[4] result;
@@ -648,6 +660,7 @@ uint[4] bitmapChannelMasks(COLOR)()
 	return result;
 }
 
+/// Calculates the BMP pixel stride for the given `StorageType` and width.
 @property size_t bitmapPixelStride(StorageType)(xy_t w)
 {
 	auto rowBits = w * storageColorBits!StorageType;
@@ -655,8 +668,10 @@ uint[4] bitmapChannelMasks(COLOR)()
 	return rowBits / 8;
 }
 
+/// Resolves to the storage type to use for the given `COLOR`.
 template BMPStorageType(COLOR)
 {
+	///
 	static if (is(COLOR == bool))
 		alias BMPStorageType = OneBitStorageBE;
 	else
@@ -829,13 +844,16 @@ unittest
 
 // ***************************************************************************
 
+/// The PNG file signature.
 static immutable ubyte[8] pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]; // \211   P   N   G  \r  \n \032 \n
 
+/// A PNG chunk.
 struct PNGChunk
 {
-	char[4] type;
-	const(void)[] data;
+	char[4] type; /// Chunk type.
+	const(void)[] data; /// Chunk contents.
 
+	/// Calculate the CRC32.
 	uint crc32()
 	{
 		import std.digest.crc;
@@ -850,31 +868,34 @@ struct PNGChunk
 	{
 		this.type[] = type[];
 		this.data = data;
-	}
+	} ///
 }
 
-enum PNGColourType : ubyte { G, RGB=2, PLTE, GA, RGBA=6 }
-enum PNGCompressionMethod : ubyte { DEFLATE }
-enum PNGFilterMethod : ubyte { ADAPTIVE }
-enum PNGInterlaceMethod : ubyte { NONE, ADAM7 }
+/// PNG image attributes.
+enum PNGColourType : ubyte { G, /***/ RGB=2, /***/ PLTE, /***/ GA, /***/ RGBA=6 /***/ }
+enum PNGCompressionMethod : ubyte { DEFLATE /***/ } /// ditto
+enum PNGFilterMethod : ubyte { ADAPTIVE /***/ } /// ditto
+enum PNGInterlaceMethod : ubyte { NONE, /***/ ADAM7 /***/ } /// ditto
 
-enum PNGFilterAdaptive : ubyte { NONE, SUB, UP, AVERAGE, PAETH }
+enum PNGFilterAdaptive : ubyte { NONE, /***/ SUB, /***/ UP, /***/ AVERAGE, /***/ PAETH /***/ } /// ditto
 
+/// PNG header (IHDR).
 align(1)
 struct PNGHeader
 {
 align(1):
+	///
 	ubyte[4] width, height;
-	ubyte colourDepth;
-	PNGColourType colourType;
-	PNGCompressionMethod compressionMethod;
-	PNGFilterMethod filterMethod;
-	PNGInterlaceMethod interlaceMethod;
+	ubyte colourDepth; ///
+	PNGColourType colourType; ///
+	PNGCompressionMethod compressionMethod; ///
+	PNGFilterMethod filterMethod; ///
+	PNGInterlaceMethod interlaceMethod; ///
 	static assert(PNGHeader.sizeof == 13);
 }
 
-struct PNGChunkHeader { ubyte[4] length; char[4] type; }
-struct PNGChunkFooter { ubyte[4] crc32; }
+struct PNGChunkHeader { ubyte[4] length; /***/ char[4] type; /***/ } /// PNG chunk header and footer.
+struct PNGChunkFooter { ubyte[4] crc32; /***/ } /// ditto
 
 /// Creates a PNG file.
 /// Only basic PNG features are supported
@@ -944,6 +965,7 @@ ubyte[] toPNG(SRC)(auto ref SRC src, int compressionLevel = 5)
 	return makePNG(chunks);
 }
 
+/// Construct a PNG file out of the given PNG chunks.
 ubyte[] makePNG(PNGChunk[] chunks)
 {
 	import std.bitmanip : nativeToBigEndian;

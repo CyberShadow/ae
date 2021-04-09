@@ -35,8 +35,8 @@ class LegacyDMCInstaller : Installer
 	@property override string[] requiredExecutables() { return ["dmc", "link"]; }
 	@property override string[] binPaths() { return ["bin"]; }
 
-	string dmcURL;
-	string ver;
+	string ver;    /// Version to install
+	string dmcURL; /// URL to DigitalMars C
 
 	this(string ver)
 	{
@@ -46,7 +46,7 @@ class LegacyDMCInstaller : Installer
 			dmcURL = "http://downloads.dlang.org/other/dm" ~ ver ~ "c.zip";
 		else
 			dmcURL = "http://ftp.digitalmars.com/Digital_Mars_C++/Patch/dm" ~ ver ~ "c.zip";
-	}
+	} ///
 
 	static this()
 	{
@@ -73,15 +73,15 @@ class LegacyDMCInstaller : Installer
 class DMCInstaller : LegacyDMCInstaller
 {
 	//string optlinkURL = "http://downloads.dlang.org/other/optlink-8.00.15.zip";
-	string optlinkURL = null;
-	string dmdURL = "http://downloads.dlang.org/releases/2.x/2.074.0/dmd.2.074.0.windows.7z";
+	string optlinkURL = null; /// URL to OPTLINK .zip file to install on top of the DMC one
+	string dmdURL = "http://downloads.dlang.org/releases/2.x/2.074.0/dmd.2.074.0.windows.7z"; /// URL to DMD .zip file with latest snn.lib
 
 	@property override string subdirectory() { return super.subdirectory ~ "-snn2074-optlink80017"; }
 
 	this()
 	{
 		super("857");
-	}
+	} ///
 
 	static this()
 	{
@@ -128,4 +128,4 @@ class DMCInstaller : LegacyDMCInstaller
 	}
 }
 
-alias dmcInstaller = singleton!DMCInstaller;
+alias dmcInstaller = singleton!DMCInstaller; /// ditto

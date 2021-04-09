@@ -16,4 +16,5 @@ module ae.utils.xml.common;
 
 import ae.utils.exception;
 
+/// Exception thrown on XML parsing errors.
 mixin DeclareException!q{XmlParseException};

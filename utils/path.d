@@ -100,11 +100,13 @@ unittest
 import std.process : environment;
 import std.string : split;
 
+/// Return the PATH environment variable, split into individual paths.
 @property string[] pathDirs()
 {
 	return environment["PATH"].split(pathSeparator);
 }
 
+/// Returns `true` if a program with the given name can be found in PATH.
 bool haveExecutable(string name)
 {
 	return findExecutable(name, pathDirs) !is null;

@@ -29,6 +29,9 @@ import ae.sys.persistence;
 import ae.utils.meta;
 import ae.utils.path;
 
+/// Base class for an installer - a process to acquire and set up some
+/// third-party software or component to some temporary location, so
+/// that we can then invoke and use it.
 class Installer
 {
 	/// Where all software will be unpacked
@@ -131,6 +134,8 @@ class Installer
 
 	bool addedToPath;
 
+	/// Change this process's PATH environment variable to include the
+	/// path to this component's executable directories.
 	void addToPath()
 	{
 		if (addedToPath)

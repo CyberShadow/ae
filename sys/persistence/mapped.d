@@ -19,7 +19,6 @@ import std.typecons;
 
 /// Map a file onto a D type.
 /// Experimental.
-
 struct Mapped(T)
 {
 	this(string fn)
@@ -27,7 +26,7 @@ struct Mapped(T)
 		if (!fn.exists)
 			std.file.write(fn, [T.init]);
 		__mapped_file = __mapped_makeFile(fn);
-	}
+	} ///
 
 	private static auto __mapped_makeFile(string fn)
 	{
@@ -48,6 +47,7 @@ struct Mapped(T)
 	alias __mapped_data this;
 }
 
+///
 unittest
 {
 	static struct S

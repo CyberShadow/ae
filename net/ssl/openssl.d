@@ -65,11 +65,13 @@ debug(OPENSSL) import std.stdio : stderr;
 
 // ***************************************************************************
 
+/// Are the current Deimos OpenSSL bindings 1.1 or newer?
 static if (is(typeof(OPENSSL_MAKE_VERSION)))
 	enum isOpenSSL11 = OPENSSL_VERSION_NUMBER >= OPENSSL_MAKE_VERSION(1, 1, 0, 0);
 else
 	enum isOpenSSL11 = false;
 
+/// `mixin` this in your program to link to OpenSSL.
 mixin template SSLUseLib()
 {
 	static if (ae.net.ssl.openssl.isOpenSSL11)
@@ -133,26 +135,28 @@ shared static this()
 
 // ***************************************************************************
 
+/// `SSLProvider` implementation.
 class OpenSSLProvider : SSLProvider
 {
 	override SSLContext createContext(SSLContext.Kind kind)
 	{
 		return new OpenSSLContext(kind);
-	}
+	} ///
 
 	override SSLAdapter createAdapter(SSLContext context, IConnection next)
 	{
 		auto ctx = cast(OpenSSLContext)context;
 		assert(ctx, "Not an OpenSSLContext");
 		return new OpenSSLAdapter(ctx, next);
-	}
+	} ///
 }
 
+/// `SSLContext` implementation.
 class OpenSSLContext : SSLContext
 {
-	SSL_CTX* sslCtx;
-	Kind kind;
-	Verify verify;
+	SSL_CTX* sslCtx; /// The C OpenSSL context object.
+	Kind kind; /// Client or server.
+	Verify verify; ///
 
 	this(Kind kind)
 	{
@@ -173,12 +177,12 @@ class OpenSSLContext : SSLContext
 		setCipherList(["ALL", "!MEDIUM", "!LOW", "!aNULL", "!eNULL", "!SSLv2", "!DH"]);
 
 		SSL_CTX_set_default_verify_paths(sslCtx);
-	}
+	} ///
 
 	override void setCipherList(string[] ciphers)
 	{
 		SSL_CTX_set_cipher_list(sslCtx, ciphers.join(":").toStringz()).sslEnforce();
-	}
+	} /// `SSLContext` method implementation.
 
 	override void enableDH(int bits)
 	{
@@ -203,26 +207,26 @@ class OpenSSLContext : SSLContext
 		ubyte gen = 2;
 		dh.g = BN_bin2bn(&gen, gen.sizeof, null);
 		SSL_CTX_set_tmp_dh(sslCtx, dh).sslEnforce();
-	}
+	} /// ditto
 
 	override void enableECDH()
 	{
 		auto ecdh = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1).sslEnforce();
 		scope(exit) EC_KEY_free(ecdh);
 		SSL_CTX_set_tmp_ecdh(sslCtx, ecdh).sslEnforce();
-	}
+	} /// ditto
 
 	override void setCertificate(string path)
 	{
 		SSL_CTX_use_certificate_chain_file(sslCtx, toStringz(path))
 			.sslEnforce("Failed to load certificate file " ~ path);
-	}
+	} /// ditto
 
 	override void setPrivateKey(string path)
 	{
 		SSL_CTX_use_PrivateKey_file(sslCtx, toStringz(path), SSL_FILETYPE_PEM)
 			.sslEnforce("Failed to load private key file " ~ path);
-	}
+	} /// ditto
 
 	override void setPeerVerify(Verify verify)
 	{
@@ -234,7 +238,7 @@ class OpenSSLContext : SSLContext
 		];
 		SSL_CTX_set_verify(sslCtx, modes[verify], null);
 		this.verify = verify;
-	}
+	} /// ditto
 
 	override void setPeerRootCertificate(string path)
 	{
@@ -246,12 +250,12 @@ class OpenSSLContext : SSLContext
 			auto list = SSL_load_client_CA_file(szPath).sslEnforce();
 			SSL_CTX_set_client_CA_list(sslCtx, list);
 		}
-	}
+	} /// ditto
 
 	override void setFlags(int flags)
 	{
 		SSL_CTX_set_options(sslCtx, flags).sslEnforce();
-	}
+	} /// ditto
 }
 
 static this()
@@ -261,12 +265,13 @@ static this()
 
 // ***************************************************************************
 
+/// `SSLAdapter` implementation.
 class OpenSSLAdapter : SSLAdapter
 {
-	SSL* sslHandle;
-	OpenSSLContext context;
-	ConnectionState connectionState;
-	const(char)* hostname;
+	SSL* sslHandle; /// The C OpenSSL connection object.
+	OpenSSLContext context; ///
+	ConnectionState connectionState; ///
+	const(char)* hostname; ///
 
 	this(OpenSSLContext context, IConnection next)
 	{
@@ -278,12 +283,12 @@ class OpenSSLAdapter : SSLAdapter
 
 		if (next.state == ConnectionState.connected)
 			initialize();
-	}
+	} ///
 
 	override void onConnect()
 	{
 		initialize();
-	}
+	} /// `SSLAdapter` method implementation.
 
 	private final void initialize()
 	{
@@ -350,7 +355,7 @@ class OpenSSLAdapter : SSLAdapter
 			else
 				throw e;
 		}
-	}
+	} /// `SSLAdapter` method implementation.
 
 	override void send(Data[] data, int priority = DEFAULT_PRIORITY)
 	{
@@ -379,7 +384,7 @@ class OpenSSLAdapter : SSLAdapter
 			}
 		}
 		updateState();
-	}
+	} /// ditto
 
 	override @property ConnectionState state()
 	{
@@ -487,14 +492,15 @@ class OpenSSLAdapter : SSLAdapter
 	}
 }
 
+/// `SSLCertificate` implementation.
 class OpenSSLCertificate : SSLCertificate
 {
-	X509* x509;
+	X509* x509; /// The C OpenSSL certificate object.
 
 	this(X509* x509)
 	{
 		this.x509 = x509;
-	}
+	} ///
 
 	override string getSubjectName()
 	{
@@ -502,7 +508,7 @@ class OpenSSLCertificate : SSLCertificate
 		X509_NAME_oneline(X509_get_subject_name(x509), buf.ptr, buf.length);
 		buf[$-1] = 0;
 		return buf.ptr.to!string();
-	}
+	} /// `SSLCertificate` method implementation.
 }
 
 // ***************************************************************************
@@ -515,7 +521,7 @@ struct MemoryBIO
 	this(const(void)[] data)
 	{
 		bio_ = BIO_new_mem_buf(cast(void*)data.ptr, data.length.to!int);
-	}
+	} ///
 
 	void set(const(void)[] data)
 	{
@@ -526,9 +532,9 @@ struct MemoryBIO
 			bptr.data[0..bptr.length] = cast(char[])data;
 		}
 		BIO_set_mem_buf(bio, bptr, BIO_CLOSE);
-	}
+	} ///
 
-	void clear() { set(null); }
+	void clear() { set(null); } ///
 
 	@property BIO* bio()
 	{
@@ -538,19 +544,20 @@ struct MemoryBIO
 			BIO_set_close(bio_, BIO_CLOSE);
 		}
 		return bio_;
-	}
+	} ///
 
 	const(void)[] data()
 	{
 		BUF_MEM *bptr;
 		BIO_get_mem_ptr(bio, &bptr);
 		return bptr.data[0..bptr.length];
-	}
+	} ///
 
 private:
 	BIO* bio_;
 }
 
+/// Convert an OpenSSL error into a thrown D exception.
 T sslEnforce(T)(T v, string message = null)
 {
 	if (v)

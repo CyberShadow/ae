@@ -13,12 +13,23 @@
 
 module ae.ui.audio.source.base;
 
+/// Base class of a sound source.
 class AbstractSoundSource(Sample)
 {
+	/// Returns number of samples per second.
 	abstract uint getSampleRate() const nothrow;
+
+	/// Returns number of channels per sample.
 	abstract size_t getNumChannels() const nothrow;
-	abstract bool procedural() const nothrow; /// requires copySamples
+
+	/// If true, `getSamples` is not available - samples can only be read with `copySamples`.
+	abstract bool procedural() const nothrow;
+
+	/// Fill `buffer` with samples from `channel` starting with the position `start`.
 	abstract size_t copySamples(size_t channel, size_t start, Sample[] buffer) const nothrow;
+
+	/// Retrieve a slice of an internal buffer containing the samples.
+	/// Only available if `procedural` is `false`.
 	abstract const(Sample)[] getSamples(size_t channel, size_t start, size_t maxLength) const nothrow;
 }
 

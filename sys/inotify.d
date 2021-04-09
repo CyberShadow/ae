@@ -25,42 +25,46 @@ import std.string;
 import ae.net.asockets;
 import ae.utils.meta : singleton;
 
+/// An inotify connection.
 struct INotify
 {
 	/// http://man7.org/linux/man-pages/man7/inotify.7.html
 	enum Mask : uint32_t
 	{
-		access        = IN_ACCESS       ,
-		modify        = IN_MODIFY       ,
-		attrib        = IN_ATTRIB       ,
-		closeWrite    = IN_CLOSE_WRITE  ,
-		closeNoWrite  = IN_CLOSE_NOWRITE,
-		open          = IN_OPEN         ,
-		movedFrom     = IN_MOVED_FROM   ,
-		movedTo       = IN_MOVED_TO     ,
-		create        = IN_CREATE       ,
-		remove        = IN_DELETE       ,
-		removeSelf    = IN_DELETE_SELF  ,
-		moveSelf      = IN_MOVE_SELF    ,
+		access        = IN_ACCESS       , ///
+		modify        = IN_MODIFY       , ///
+		attrib        = IN_ATTRIB       , ///
+		closeWrite    = IN_CLOSE_WRITE  , ///
+		closeNoWrite  = IN_CLOSE_NOWRITE, ///
+		open          = IN_OPEN         , ///
+		movedFrom     = IN_MOVED_FROM   , ///
+		movedTo       = IN_MOVED_TO     , ///
+		create        = IN_CREATE       , ///
+		remove        = IN_DELETE       , ///
+		removeSelf    = IN_DELETE_SELF  , ///
+		moveSelf      = IN_MOVE_SELF    , ///
 
-		unmount       = IN_UMOUNT       ,
-		qOverflow     = IN_Q_OVERFLOW   ,
-		ignored       = IN_IGNORED      ,
-		close         = IN_CLOSE        ,
-		move          = IN_MOVE         ,
-		onlyDir       = IN_ONLYDIR      ,
-		dontFollow    = IN_DONT_FOLLOW  ,
-		exclUnlink    = IN_EXCL_UNLINK  ,
-		maskAdd       = IN_MASK_ADD     ,
-		isDir         = IN_ISDIR        ,
-		oneShot       = IN_ONESHOT      ,
-		allEvents     = IN_ALL_EVENTS   ,
+		unmount       = IN_UMOUNT       , ///
+		qOverflow     = IN_Q_OVERFLOW   , ///
+		ignored       = IN_IGNORED      , ///
+		close         = IN_CLOSE        , ///
+		move          = IN_MOVE         , ///
+		onlyDir       = IN_ONLYDIR      , ///
+		dontFollow    = IN_DONT_FOLLOW  , ///
+		exclUnlink    = IN_EXCL_UNLINK  , ///
+		maskAdd       = IN_MASK_ADD     , ///
+		isDir         = IN_ISDIR        , ///
+		oneShot       = IN_ONESHOT      , ///
+		allEvents     = IN_ALL_EVENTS   , ///
 	}
 
+	/// Identifies an inotify watch.
 	static struct WatchDescriptor { int wd; }
 
+	/// Callback type.
 	alias INotifyHandler = void delegate(in char[] name, Mask mask, uint cookie);
 
+	/// Add an inotify watch.  Returns the inotify watch descriptor.
 	WatchDescriptor add(string path, Mask mask, INotifyHandler handler)
 	{
 		if (fd < 0)
@@ -71,6 +75,7 @@ struct INotify
 		return WatchDescriptor(wd);
 	}
 
+	/// Remove an inotify watch using its descriptor.
 	void remove(WatchDescriptor wd)
 	{
 		auto result = inotify_rm_watch(fd, wd.wd);
@@ -135,8 +140,10 @@ private:
 	}
 }
 
+/// The global inotify connection.
 INotify iNotify;
 
+///
 unittest
 {
 	import std.file, ae.sys.file;

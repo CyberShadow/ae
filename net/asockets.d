@@ -67,6 +67,7 @@ version(LIBEV)
 	// Also use the "data" field as a flag to indicate whether the watcher is active
 	// (data is null when the watcher is stopped).
 
+	/// `libev`-based event loop implementation.
 	struct SocketManager
 	{
 	private:
@@ -165,6 +166,7 @@ version(LIBEV)
 			count--;
 		}
 
+		/// Returns the number of registered sockets.
 		size_t size()
 		{
 			return count;
@@ -225,6 +227,7 @@ version(LIBEV)
 }
 else // Use select
 {
+	/// `select`-based event loop implementation.
 	struct SocketManager
 	{
 	private:
@@ -279,6 +282,7 @@ else // Use select
 			assert(false, "Socket not registered");
 		}
 
+		/// Returns the number of registered sockets.
 		size_t size()
 		{
 			return sockets.length;
@@ -493,6 +497,8 @@ else // Use select
 	}
 
 	// Use UFCS to allow removeIdleHandler to have a predicate with context
+	/// Register a function to be called when the event loop is idle,
+	/// and would otherwise sleep.
 	void addIdleHandler(ref SocketManager socketManager, void delegate() handler)
 	{
 		foreach (i, idleHandler; socketManager.idleHandlers)
@@ -501,6 +507,7 @@ else // Use select
 		socketManager.idleHandlers ~= handler;
 	}
 
+	/// Unregister a function previously registered with `addIdleHandler`.
 	static bool isFun(T)(T a, T b) { return a is b; }
 	void removeIdleHandler(alias pred=isFun, Args...)(ref SocketManager socketManager, Args args)
 	{
@@ -635,6 +642,7 @@ public:
 
 	deprecated alias daemon = daemonRead;
 
+	/// Enable TCP keep-alive on the socket with the given settings.
 	final void setKeepAlive(bool enabled=true, int time=10, int interval=5)
 	{
 		assert(conn, "Attempting to set keep-alive on an uninitialized socket");
@@ -649,6 +657,7 @@ public:
 			conn.setOption(SocketOptionLevel.SOCKET, SocketOption.KEEPALIVE, false);
 	}
 
+	/// Returns a string containing the class name, address, and file descriptor.
 	override string toString() const
 	{
 		import std.string : format, split;
@@ -658,13 +667,16 @@ public:
 
 // ***************************************************************************
 
+/// Classifies the cause of the disconnect.
+/// Can be used to decide e.g. when it makes sense to reconnect.
 enum DisconnectType
 {
-	requested, // initiated by the application
-	graceful,  // peer gracefully closed the connection
-	error      // abnormal network condition
+	requested, /// Initiated by the application.
+	graceful,  /// The peer gracefully closed the connection.
+	error      /// Some abnormal network condition.
 }
 
+/// Used to indicate the state of a connection throughout its lifecycle.
 enum ConnectionState
 {
 	/// The initial state, or the state after a disconnect was fully processed.
@@ -695,9 +707,14 @@ bool disconnectable(ConnectionState state) { return state >= ConnectionState.res
 /// Common interface for connections and adapters.
 interface IConnection
 {
+	/// `send` queues data for sending in one of five queues, indexed
+	/// by a numeric priority.
+	/// `MAX_PRIORITY` is the highest (least urgent) priority index.
+	/// `DEFAULT_PRIORITY` is the default priority
 	enum MAX_PRIORITY = 4;
-	enum DEFAULT_PRIORITY = 2;
+	enum DEFAULT_PRIORITY = 2; /// ditto
 
+	/// This is the default value for the `disconnect` `reason` string parameter.
 	static const defaultDisconnectReason = "Software closed the connection";
 
 	/// Get connection state.
@@ -744,6 +761,9 @@ interface IConnection
 
 // ***************************************************************************
 
+/// Implementation of `IConnection` using a socket.
+/// Implements receiving data when readable and sending queued data
+/// when writable.
 class Connection : GenericSocket, IConnection
 {
 private:
@@ -944,6 +964,8 @@ public:
 	/// ditto
 	alias send = IConnection.send;
 
+	/// Cancel all queued `Data` packets with the given priority.
+	/// Does not cancel any partially-sent `Data`.
 	final void clearQueue(int priority)
 	{
 		if (priority == partiallySent)
@@ -965,6 +987,7 @@ public:
 		updateFlags();
 	}
 
+	/// Returns true if any queues have pending data.
 	@property
 	final bool writePending()
 	{
@@ -974,6 +997,8 @@ public:
 		return false;
 	}
 
+	/// Returns true if there are any queued `Data` which have not yet
+	/// begun to be sent.
 	final bool queuePresent(int priority = DEFAULT_PRIORITY)
 	{
 		if (priority == partiallySent)
@@ -985,11 +1010,13 @@ public:
 			return outQueue[priority].length > 0;
 	}
 
+	/// Returns the number of queued `Data` at the given priority.
 	final size_t packetsQueued(int priority = DEFAULT_PRIORITY)
 	{
 		return outQueue[priority].length;
 	}
 
+	/// Returns the number of queued bytes at the given priority.
 	final size_t bytesQueued(int priority = DEFAULT_PRIORITY)
 	{
 		size_t bytes;
@@ -1012,11 +1039,13 @@ public:
 	/// Callback for when a connection was closed.
 	@property final void handleDisconnect(DisconnectHandler value) { disconnectHandler = value; updateFlags(); }
 
-	/// Callback setter for when all queued data has been sent.
 	private BufferFlushedHandler bufferFlushedHandler;
+	/// Callback setter for when all queued data has been sent.
 	@property final void handleBufferFlushed(BufferFlushedHandler value) { bufferFlushedHandler = value; updateFlags(); }
 }
 
+/// Implements a stream connection.
+/// Queued `Data` is allowed to be fragmented.
 class StreamConnection : Connection
 {
 protected:
@@ -1120,7 +1149,7 @@ public:
 	this(Socket conn)
 	{
 		super(conn);
-	}
+	} ///
 }
 
 // ***************************************************************************
@@ -1137,7 +1166,7 @@ class FileConnection : StreamConnection
 		auto conn = new Socket(cast(socket_t)fileno, AddressFamily.UNSPEC);
 		conn.blocking = false;
 		super(conn);
-	}
+	} ///
 
 protected:
 	import core.sys.posix.unistd : read, write;
@@ -1156,6 +1185,7 @@ protected:
 /// Separates reading and writing, e.g. for stdin/stdout.
 class Duplex : IConnection
 {
+	///
 	IConnection reader, writer;
 
 	this(IConnection reader, IConnection writer)
@@ -1166,7 +1196,7 @@ class Duplex : IConnection
 		writer.handleConnect = &onConnect;
 		reader.handleDisconnect = &onDisconnect;
 		writer.handleDisconnect = &onDisconnect;
-	}
+	} ///
 
 	@property ConnectionState state()
 	{
@@ -1174,7 +1204,7 @@ class Duplex : IConnection
 			return ConnectionState.disconnecting;
 		else
 			return reader.state < writer.state ? reader.state : writer.state;
-	}
+	} ///
 
 	/// Queue Data for sending.
 	void send(Data[] data, int priority)
@@ -1328,6 +1358,7 @@ public:
 		debug (ASOCKETS) stderr.writefln("New TcpConnection @ %s", cast(void*)this);
 	}
 
+	///
 	alias connect = SocketConnection.connect; // raise overload
 
 	/// Start establishing a connection.
@@ -1477,7 +1508,7 @@ public:
 
 	this()
 	{
-	}
+	} ///
 
 	/// Creates a Server with the given sockets.
 	/// The sockets must have already had `bind` and `listen` called on them.
@@ -1487,6 +1518,7 @@ public:
 			listeners ~= new Listener(socket);
 	}
 
+	/// Returns all listening addresses.
 	final @property Address[] localAddresses()
 	{
 		Address[] result;
@@ -1495,6 +1527,7 @@ public:
 		return result;
 	}
 
+	/// Returns `true` if the server is listening for incoming connections.
 	final @property bool isListening()
 	{
 		return listening;
@@ -1553,13 +1586,14 @@ protected:
 public:
 	this()
 	{
-	}
+	} ///
 
 	this(Socket[] sockets...)
 	{
 		super(sockets);
-	}
+	} /// Construct from the given sockets.
 
+	///
 	alias listen = SocketServer.listen; // raise overload
 
 	/// Start listening on this socket.
@@ -1600,6 +1634,7 @@ public:
 	deprecated("Use SocketServer.fromStdin")
 	static TcpServer fromStdin() { return cast(TcpServer) cast(void*) SocketServer.fromStdin; }
 
+	/// Delegate to be called when a connection is accepted.
 	@property final void handleAccept(void delegate(TcpConnection incoming) value) { super.handleAccept((SocketConnection c) => value(cast(TcpConnection)c)); }
 }
 
@@ -1687,7 +1722,7 @@ public:
 		debug (ASOCKETS) stderr.writefln("New UdpConnection @ %s", cast(void*)this);
 	}
 
-	/// Initialize with the given AddressFamily, without binding to an address.
+	/// Initialize with the given `AddressFamily`, without binding to an address.
 	final void initialize(AddressFamily family, SocketType type = SocketType.DGRAM, ProtocolType protocol = ProtocolType.UDP)
 	{
 		initializeImpl(family, type, protocol);
@@ -1806,6 +1841,7 @@ unittest
 /// By itself, does nothing.
 class ConnectionAdapter : IConnection
 {
+	/// The next connection in the chain (towards the raw transport).
 	IConnection next;
 
 	this(IConnection next)
@@ -1814,9 +1850,9 @@ class ConnectionAdapter : IConnection
 		next.handleConnect = &onConnect;
 		next.handleDisconnect = &onDisconnect;
 		next.handleBufferFlushed = &onBufferFlushed;
-	}
+	} ///
 
-	@property ConnectionState state() { return next.state; }
+	@property ConnectionState state() { return next.state; } ///
 
 	/// Queue Data for sending.
 	void send(Data[] data, int priority)
@@ -1892,7 +1928,7 @@ class LineBufferedAdapter : ConnectionAdapter
 	this(IConnection next)
 	{
 		super(next);
-	}
+	} ///
 
 	/// Append a line to the send buffer.
 	void send(string line)
@@ -1975,24 +2011,9 @@ class TimeoutAdapter : ConnectionAdapter
 	{
 		debug (ASOCKETS) stderr.writefln("New TimeoutAdapter @ %s", cast(void*)this);
 		super(next);
-	}
+	} ///
 
-	void cancelIdleTimeout()
-	{
-		debug (ASOCKETS) stderr.writefln("TimeoutAdapter.cancelIdleTimeout @ %s", cast(void*)this);
-		assert(idleTask !is null);
-		assert(idleTask.isWaiting());
-		idleTask.cancel();
-	}
-
-	void resumeIdleTimeout()
-	{
-		debug (ASOCKETS) stderr.writefln("TimeoutAdapter.resumeIdleTimeout @ %s", cast(void*)this);
-		assert(idleTask !is null);
-		assert(!idleTask.isWaiting());
-		mainTimer.add(idleTask);
-	}
-
+	/// Set the `Duration` indicating the period of inactivity after which to take action.
 	final void setIdleTimeout(Duration duration)
 	{
 		debug (ASOCKETS) stderr.writefln("TimeoutAdapter.setIdleTimeout @ %s", cast(void*)this);
@@ -2014,6 +2035,8 @@ class TimeoutAdapter : ConnectionAdapter
 		mainTimer.add(idleTask);
 	}
 
+	/// Manually mark this connection as non-idle, restarting the idle timer.
+	/// `handleNonIdle` will be called, if set.
 	void markNonIdle()
 	{
 		debug (ASOCKETS) stderr.writefln("TimeoutAdapter.markNonIdle @ %s", cast(void*)this);
@@ -2021,6 +2044,24 @@ class TimeoutAdapter : ConnectionAdapter
 			handleNonIdle();
 		if (idleTask && idleTask.isWaiting())
 			idleTask.restart();
+	}
+
+	/// Stop the idle timer.
+	void cancelIdleTimeout()
+	{
+		debug (ASOCKETS) stderr.writefln("TimeoutAdapter.cancelIdleTimeout @ %s", cast(void*)this);
+		assert(idleTask !is null);
+		assert(idleTask.isWaiting());
+		idleTask.cancel();
+	}
+
+	/// Restart the idle timer.
+	void resumeIdleTimeout()
+	{
+		debug (ASOCKETS) stderr.writefln("TimeoutAdapter.resumeIdleTimeout @ %s", cast(void*)this);
+		assert(idleTask !is null);
+		assert(!idleTask.isWaiting());
+		mainTimer.add(idleTask);
 	}
 
 	/// Callback for when a connection has stopped responding.

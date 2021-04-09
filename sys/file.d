@@ -173,7 +173,19 @@ import ae.utils.range : nullTerminated;
 // http://d.puremagic.com/issues/show_bug.cgi?id=7016
 version (Windows) static import ae.sys.windows.misc;
 
-/// Fast templated directory iterator
+/**
+   Fast templated directory iterator
+
+   Example:
+   ---
+   string[] entries;
+   listDir!((e) {
+	   entries ~= e.fullName.relPath(tmpDir);
+	   if (e.entryIsDir)
+		   e.recurse();
+   })(tmpDir);
+   ---
+*/
 template listDir(alias handler)
 {
 	/*non-static*/ struct Context
@@ -186,26 +198,31 @@ template listDir(alias handler)
 		FSChar[] pathBuf;
 	}
 
+	/// A pointer to this type will be passed to the `listDir` predicate.
 	static struct Entry
 	{
 		version (Posix)
 		{
-			dirent* ent;
+			dirent* ent; /// POSIX `dirent`.
 
 			stat_t[enumLength!StatTarget] statBuf;
+			/// Result of `stat` call.
+			/// Other values are the same as `errno`.
 			enum StatResult : int
 			{
-				noInfo = 0,
-				statOK = int.max,
-				unknownError = int.min,
-				// other values are the same as errno
+				noInfo       =       0, /// Not called yet.
+				statOK       = int.max, /// All OK
+				unknownError = int.min, /// `errno` returned 0 or `int.max`
 			}
+
+			int dirFD; /// POSIX directory file descriptor.
 		}
 		version (Windows)
 		{
-			WIN32_FIND_DATAW findData;
+			WIN32_FIND_DATAW findData; /// Windows `WIN32_FIND_DATAW`.
 		}
 
+		// Cached values.
 		// Cleared (memset to 0) for every directory entry.
 		struct Data
 		{
@@ -223,13 +240,12 @@ template listDir(alias handler)
 
 		// Recursion
 
-		Entry* parent;
+		Entry* parent; ///
 		Context* context;
 
+		/// Request recursion on the current `entry`.
 		version (Posix)
 		{
-			int dirFD;
-
 			void recurse()
 			{
 				import core.sys.posix.fcntl;
@@ -247,6 +263,7 @@ template listDir(alias handler)
 				scan(subdir, fd, &this);
 			}
 		}
+		else
 		version (Windows)
 		{
 			void recurse()
@@ -258,11 +275,15 @@ template listDir(alias handler)
 			}
 		}
 
+		/// Stop iteration.
 		void stop() { context.timeToStop = true; }
 
 		// Name
 
-		const(FSChar)* baseNameFSPtr() pure nothrow @nogc // fastest
+		/// Returns a pointer to the base file name, as a
+		/// null-terminated string, in the operating system's
+		/// character type.  Fastest.
+		const(FSChar)* baseNameFSPtr() pure nothrow @nogc
 		{
 			version (Posix) return ent.d_name.ptr;
 			version (Windows) return findData.cFileName.ptr;
@@ -278,7 +299,9 @@ template listDir(alias handler)
 			assert(false, "File name buffer is not null-terminated");
 		}
 
-		const(FSChar)[] baseNameFS() pure nothrow @nogc // fast
+		/// Returns the base file name, as a D character array, in the
+		/// operating system's character type.  Fast.
+		const(FSChar)[] baseNameFS() pure nothrow @nogc
 		{
 			if (!data.baseNameFS)
 			{
@@ -288,6 +311,7 @@ template listDir(alias handler)
 			return data.baseNameFS;
 		}
 
+		/// Returns the base file name as a D string.  Allocates.
 		string baseName() // allocates
 		{
 			if (!data.baseName)
@@ -319,12 +343,15 @@ template listDir(alias handler)
 			}
 		}
 
+		/// Returns the full file name, as a D character array, in the
+		/// operating system's character type.  Fast.
 		const(FSChar)[] fullNameFS() nothrow @nogc // fast
 		{
 			needFullPath();
 			return context.pathBuf[0 .. data.pathTailPos];
 		}
 
+		/// Returns the full file name as a D string.  Allocates.
 		string fullName() // allocates
 		{
 			if (!data.fullName)
@@ -336,11 +363,14 @@ template listDir(alias handler)
 
 		version (Posix)
 		{
+			/// We can stat two different things on POSIX: the directory entry itself,
+			/// or the link target (if the directory entry is a symbolic link).
 			enum StatTarget
 			{
-				dirEntry,   // do not dereference (lstat)
-				linkTarget, // dereference
+				dirEntry,   /// do not dereference (lstat)
+				linkTarget, /// dereference
 			}
+
 			private bool tryStat(StatTarget target)() nothrow @nogc
 			{
 				if (data.statResult[target] == StatResult.noInfo)
@@ -391,6 +421,8 @@ template listDir(alias handler)
 					": " ~ fullName);
 			}
 
+			/// Return the result of `stat` / `lstat` (depending on `target`)
+			/// for this `Entry`, performing it first if necessary.
 			stat_t* needStat(StatTarget target)()
 			{
 				if (!tryStat!target)
@@ -449,11 +481,14 @@ template listDir(alias handler)
 				return ltIsType(DT_DIR, S_IFDIR);
 			}
 
+			/// Returns the raw POSIX attributes of this directory entry.
 			@property uint attributes()
 			{
 				return needStat!(StatTarget.linkTarget)().st_mode;
 			}
 
+			/// Returns the raw POSIX attributes of this directory entry,
+			/// or the link target if this directory entry is a symlink.
 			@property uint linkAttributes()
 			{
 				return needStat!(StatTarget.dirEntry)().st_mode;
@@ -461,32 +496,44 @@ template listDir(alias handler)
 
 			// Other attributes
 
+			/// Returns the "c" time of this directory entry,
+			/// or the link target if this directory entry is a symlink.
 			@property SysTime timeStatusChanged()
 			{
 				return statTimeToStdTime!"c"(*needStat!(StatTarget.linkTarget)());
 			}
 
+			/// Returns the "a" time of this directory entry,
+			/// or the link target if this directory entry is a symlink.
 			@property SysTime timeLastAccessed()
 			{
 				return statTimeToStdTime!"a"(*needStat!(StatTarget.linkTarget)());
 			}
 
+			/// Returns the "m" time of this directory entry,
+			/// or the link target if this directory entry is a symlink.
 			@property SysTime timeLastModified()
 			{
 				return statTimeToStdTime!"m"(*needStat!(StatTarget.linkTarget)());
 			}
 
+			/// Returns the "birth" time of this directory entry,
+			/// or the link target if this directory entry is a symlink.
 			static if (is(typeof(&statTimeToStdTime!"birth")))
 			@property SysTime timeCreated()
 			{
 				return statTimeToStdTime!"m"(*needStat!(StatTarget.linkTarget)());
 			}
 
+			/// Returns the size in bytes of this directory entry,
+			/// or the link target if this directory entry is a symlink.
 			@property ulong size()
 			{
 				return needStat!(StatTarget.linkTarget)().st_size;
 			}
 
+			/// Returns the inode number of this directory entry,
+			/// or the link target if this directory entry is a symlink.
 			@property ulong fileID()
 			{
 				static if (__traits(compiles, ent.d_ino))
@@ -498,46 +545,56 @@ template listDir(alias handler)
 
 		version (Windows)
 		{
+			/// Returns true if this is a directory, or a reparse point pointing to one.
 			@property bool isDir() const pure nothrow
 			{
 				return (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 			}
 
+			/// Returns true if this is a file, or a reparse point pointing to one.
 			@property bool isFile() const pure nothrow
 			{
 				return !isDir;
 			}
 
+			/// Returns true if this is a reparse point.
 			@property bool isSymlink() const pure nothrow
 			{
 				return (findData.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
 			}
 
+			/// Returns true if this is a directory.
+			/// You probably want to use this one to decide whether to recurse.
 			@property bool entryIsDir() const pure nothrow
 			{
 				return isDir && !isSymlink;
 			}
 
+			/// Returns the size in bytes of this directory entry.
 			@property ulong size() const pure nothrow
 			{
 				return makeUlong(findData.nFileSizeLow, findData.nFileSizeHigh);
 			}
 
+			/// Returns the creation time of this directory entry.
 			@property SysTime timeCreated() const
 			{
 				return FILETIMEToSysTime(&findData.ftCreationTime);
 			}
 
+			/// Returns the last access time of this directory entry.
 			@property SysTime timeLastAccessed() const
 			{
 				return FILETIMEToSysTime(&findData.ftLastAccessTime);
 			}
 
+			/// Returns the last modification time of this directory entry.
 			@property SysTime timeLastModified() const
 			{
 				return FILETIMEToSysTime(&findData.ftLastWriteTime);
 			}
 
+			/// Returns the 64-bit unique file index of this file.
 			@property ulong fileID()
 			{
 				return getFileID(fullName);
@@ -945,6 +1002,7 @@ version (Posix)
 	import core.sys.posix.sys.stat;
 	import core.sys.posix.unistd;
 
+	/// Get the ID of the user owning this file.
 	int getOwner(string fn)
 	{
 		stat_t s;
@@ -952,6 +1010,7 @@ version (Posix)
 		return s.st_uid;
 	}
 
+	/// Get the ID of the group owning this file.
 	int getGroup(string fn)
 	{
 		stat_t s;
@@ -959,6 +1018,7 @@ version (Posix)
 		return s.st_gid;
 	}
 
+	/// Set the owner user and group of this file.
 	void setOwner(string fn, int uid, int gid)
 	{
 		errnoEnforce(chown(toStringz(fn), uid, gid) == 0, "chown: " ~ fn);
@@ -1000,6 +1060,7 @@ version (Windows)
 	static import ae.sys.windows.exception;
 }
 
+/// Catch common Phobos exception types corresponding to file operations.
 bool collectOSError(alias checkCError, alias checkWinError)(scope void delegate() operation)
 {
 	mixin(() {
@@ -1048,6 +1109,7 @@ bool collectOSError(alias checkCError, alias checkWinError)(scope void delegate(
 	}());
 }
 
+/// Collect a "file not found" error.
 alias collectNotFoundError = collectOSError!(
 	errno => errno == core.stdc.errno.ENOENT,
 	(code) { version(Windows) return
@@ -1055,6 +1117,7 @@ alias collectNotFoundError = collectOSError!(
 			 code == core.sys.windows.winerror.ERROR_PATH_NOT_FOUND; },
 );
 
+///
 unittest
 {
 	auto fn = deleteme;
@@ -1067,6 +1130,7 @@ unittest
 		assert(!dg.collectNotFoundError);
 }
 
+/// Collect a "file already exists" error.
 alias collectFileExistsError = collectOSError!(
 	errno => errno == core.stdc.errno.EEXIST,
 	(code) { version(Windows) return
@@ -1074,6 +1138,7 @@ alias collectFileExistsError = collectOSError!(
 			 code == core.sys.windows.winerror.ERROR_ALREADY_EXISTS; },
 );
 
+///
 unittest
 {
 	auto fn = deleteme;
@@ -1256,6 +1321,7 @@ void recreateEmptyDirectory()(string dir)
 	mkdir(dir);
 }
 
+/// Copy a directory recursively.
 void copyRecurse(DirEntry src, string dst)
 {
 	version (Posix)
@@ -1267,8 +1333,10 @@ void copyRecurse(DirEntry src, string dst)
 	foreach (de; src.dirEntries(SpanMode.shallow))
 		copyRecurse(de, dst.buildPath(de.baseName));
 }
-void copyRecurse(string src, string dst) { copyRecurse(DirEntry(src), dst); }
+void copyRecurse(string src, string dst) { copyRecurse(DirEntry(src), dst); } /// ditto
 
+/// Return true if the given file would be hidden from directory listings.
+/// Returns true for files starting with `'.'`, and, on Windows, hidden files.
 bool isHidden()(string fn)
 {
 	if (baseName(fn).startsWith("."))
@@ -1341,6 +1409,7 @@ version (Windows)
 	static if (__traits(compiles, { mixin importWin32!q{winnt}; }))
 		static mixin(importWin32!q{winnt});
 
+	/// Common code for creating Windows reparse points.
 	void createReparsePoint(string reparseBufferName, string extraInitialization, string reparseTagName)(in char[] target, in char[] print, in char[] link)
 	{
 		mixin(importWin32!q{winbase});
@@ -1392,6 +1461,7 @@ version (Windows)
 		DeviceIoControl(hLink, FSCTL_SET_REPARSE_POINT, buf.ptr, buf.length.to!DWORD(), null, 0, &dwRet, null).wenforce("DeviceIoControl");
 	}
 
+	/// Attempt to acquire the specified privilege.
 	void acquirePrivilege(S)(S name)
 	{
 		mixin(importWin32!q{winbase});
@@ -1425,6 +1495,7 @@ version (Windows)
 		createReparsePoint!(q{MountPointReparseBuffer}, q{}, q{IO_REPARSE_TAG_MOUNT_POINT})(target, null, link);
 	}
 
+	/// Windows implementation of `std.file.symlink`.
 	void symlink()(in char[] original, in char[] link)
 	{
 		mixin(importWin32!q{winnt});
@@ -1438,7 +1509,7 @@ version (Windows)
 	}
 }
 else
-	alias std.file.symlink dirLink;
+	alias std.file.symlink dirLink; /// `std.file.symlink` is used to implement `dirLink` on POSIX.
 
 version(Windows) version(unittest) static mixin(importWin32!q{winnt});
 
@@ -1460,6 +1531,7 @@ unittest
 
 version (Windows)
 {
+	/// Create a hard link.
 	void hardLink()(string src, string dst)
 	{
 		mixin(importWin32!q{w32api});
@@ -1497,13 +1569,14 @@ version (Windows)
 }
 version (Posix)
 {
+	/// Create a hard link.
 	void hardLink()(string src, string dst)
 	{
 		import core.sys.posix.unistd;
 		errnoEnforce(link(toUTFz!(const char*)(src), toUTFz!(const char*)(dst)) == 0, "link() failed: " ~ dst);
 	}
 
-	alias deleteHardLink = remove;
+	alias deleteHardLink = remove; /// `std.file.remove` is used to implement `deleteHardLink` on POSIX.
 }
 
 unittest
@@ -1517,6 +1590,7 @@ unittest
 
 version (Posix)
 {
+	/// Wrapper around the C `realpath` function.
 	string realPath(string path)
 	{
 		// TODO: Windows version
@@ -1532,6 +1606,7 @@ version (Posix)
 // /proc/self/mounts parsing
 version (linux)
 {
+	/// A parsed line from /proc/self/mounts.
 	struct MountInfo
 	{
 		string spec; /// device path
@@ -1570,6 +1645,7 @@ version (linux)
 		assert(unescapeMountString(`\040`) == " ");
 	}
 
+	/// Parse a line from /proc/self/mounts.
 	MountInfo parseMountInfo(in char[] line)
 	{
 		const(char)[][6] parts;
@@ -1636,12 +1712,14 @@ version (linux)
 		mixin("alias removeFun = " ~ funPrefix ~ "removexattr;");
 		mixin("alias listFun = " ~ funPrefix ~ "listxattr;");
 
+		/// True if extended attributes are supported on this filesystem.
 		bool supported()
 		{
 			auto size = getFun(obj, "user.\x01", null, 0);
 			return size >= 0 || errno != EOPNOTSUPP;
 		}
 
+		/// Read an extended attribute.
 		void[] opIndex(string key)
 		{
 			auto cKey = key.toStringz();
@@ -1656,6 +1734,7 @@ version (linux)
 			return buf;
 		}
 
+		/// Check if an extended attribute is present.
 		bool opBinaryRight(string op)(string key)
 		if (op == "in")
 		{
@@ -1671,18 +1750,21 @@ version (linux)
 			assert(false);
 		}
 
+		/// Write an extended attribute.
 		void opIndexAssign(in void[] value, string key)
 		{
 			auto ret = setFun(obj, key.toStringz(), value.ptr, value.length, 0);
 			errnoEnforce(ret == 0, __traits(identifier, setFun));
 		}
 
+		/// Delete an extended attribute.
 		void remove(string key)
 		{
 			auto ret = removeFun(obj, key.toStringz());
 			errnoEnforce(ret == 0, __traits(identifier, removeFun));
 		}
 
+		/// Return a list of all extended attribute names.
 		string[] keys()
 		{
 			size_t size = 0;
@@ -1707,21 +1789,26 @@ version (linux)
 		}
 	}
 
+	/// Return `XAttrs` for the given path,
+	/// or the link destination if the path leads to as symbolic link.
 	auto xAttrs(string path)
 	{
 		return XAttrs!(const(char)*, "")(path.toStringz());
 	}
 
+	/// Return `XAttrs` for the given path.
 	auto linkXAttrs(string path)
 	{
 		return XAttrs!(const(char)*, "l")(path.toStringz());
 	}
 
+	/// Return `XAttrs` for the given open file.
 	auto xAttrs(ref const File f)
 	{
 		return XAttrs!(int, "f")(f.fileno);
 	}
 
+	///
 	unittest
 	{
 		if (!xAttrs(".").supported)
@@ -1790,6 +1877,7 @@ version (Windows)
 	}
 }
 
+/// Obtain the hard link count for the given file.
 uint hardLinkCount(string fn)
 {
 	version (Windows)
@@ -1838,6 +1926,8 @@ unittest
 	}
 }
 
+/// Argument-reversed version of `std.file.write`,
+/// usable at the end of an UFCS chain.
 static if (is(typeof({ import std.stdio : toFile; })))
 {
 	static import std.stdio;
@@ -2066,6 +2156,7 @@ private version(Windows)
 	}
 }
 
+/// Truncate the given file to the given size.
 void truncate(File f, ulong length)
 {
 	f.flush();
@@ -2085,6 +2176,7 @@ unittest
 	assert("test.txt".readText == "xyz");
 }
 
+/// Calculate the digest of a file.
 auto fileDigest(Digest)(string fn)
 {
 	import std.range.primitives;
@@ -2095,6 +2187,7 @@ auto fileDigest(Digest)(string fn)
 	return digest;
 }
 
+/// Calculate the MD5 hash of a file.
 template mdFile()
 {
 	import std.digest.md;
@@ -2110,6 +2203,7 @@ unittest
 	assert(mdFile("test.txt").toHexString() == "6CD3556DEB0DA54BCA060B4C39479839");
 }
 
+/// Calculate the digest of a file, and memoize it.
 auto fileDigestCached(Digest)(string fn)
 {
 	static typeof(Digest.init.finish())[ulong] cache;
@@ -2120,6 +2214,7 @@ auto fileDigestCached(Digest)(string fn)
 	return cache[id] = fileDigest!Digest(fn);
 }
 
+/// Calculate the MD5 hash of a file, and memoize it.
 template mdFileCached()
 {
 	import std.digest.md;
@@ -2268,9 +2363,10 @@ void syncUpdate()(string fn, in void[] data)
 
 version(Windows) import ae.sys.windows.exception;
 
+/// Create a named pipe, and allow interacting with it using a `std.stdio.File`.
 struct NamedPipeImpl
 {
-	immutable string fileName;
+	immutable string fileName; ///
 
 	/// Create a named pipe, and reserve a filename.
 	this()(string name)
@@ -2331,7 +2427,7 @@ struct NamedPipeImpl
 private:
 	File f;
 }
-alias NamedPipe = RefCounted!NamedPipeImpl;
+alias NamedPipe = RefCounted!NamedPipeImpl; /// ditto
 
 import ae.utils.textout : StringBuilder;
 
@@ -2406,6 +2502,8 @@ import std.traits;
 import std.typetuple;
 import ae.utils.meta;
 
+/// Parameter names that `atomic` assumes
+/// indicate a destination file by default.
 enum targetParameterNames = "target/to/name/dst";
 
 /// Wrap an operation which creates a file or directory,
@@ -2516,6 +2614,9 @@ unittest
 
 // ****************************************************************************
 
+/// Composes a function which generates a file name
+/// with a function which creates the file.
+/// Returns the file name.
 template withTarget(alias targetGen, alias fun)
 {
 	auto withTarget(Args...)(auto ref Args args)

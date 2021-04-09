@@ -24,9 +24,10 @@ import ae.utils.meta : singleton, I;
 
 public import ae.sys.install.common;
 
+/// Installs the Wix MSI toolkit.
 class WixInstaller : Installer
 {
-	string wixVersion = "3.10.4";
+	string wixVersion = "3.10.4"; /// Version to install.
 
 	@property override string[] requiredExecutables() { return ["candle", "dark", "heat", "light", "lit", "lux", "melt", "nit", "pyro", "retina", "shine", "smoke", "torch"]; }
 
@@ -48,4 +49,4 @@ class WixInstaller : Installer
 	}
 }
 
-alias wixInstaller = singleton!WixInstaller;
+alias wixInstaller = singleton!WixInstaller; /// ditto

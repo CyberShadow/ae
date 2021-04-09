@@ -20,17 +20,27 @@ import ae.sys.sqlite3;
 public import ae.sys.sqlite3 : SQLiteException;
 debug(DATABASE) import std.stdio : stderr;
 
+/// A higher-level wrapper around `SQLite`,
+/// providing automatic initialization,
+/// cached prepared statements,
+/// and schema migrations.
 struct Database
 {
+	/// Database file name.
 	string dbFileName;
+
+	/// Schema definition, starting with the initial version, and followed by migration instructions.
+	/// SQLite `user_version` is used to keep track of the current version.
+	/// Successive versions of applications should only extend this array by adding new items at the end.
 	string[] schema;
 
 	this(string dbFileName, string[] schema = null)
 	{
 		this.dbFileName = dbFileName;
 		this.schema = schema;
-	}
+	} ///
 
+	/// Return an `SQLite.PreparedStatement`, caching it.
 	SQLite.PreparedStatement stmt(string sql)()
 	{
 		debug(DATABASE) stderr.writeln(sql);
@@ -40,6 +50,7 @@ struct Database
 		return statement;
 	}
 
+	/// ditto
 	SQLite.PreparedStatement stmt(string sql)
 	{
 		debug(DATABASE) stderr.writeln(sql);
@@ -55,6 +66,7 @@ struct Database
 
 	private SQLite instance;
 
+	/// Return a handle to the database, creating it first if necessary.
 	@property SQLite db()
 	{
 		if (instance)
@@ -89,6 +101,9 @@ struct Database
 	}
 }
 
+/// Return the first value of the given iterator.
+/// Can be used to select the only value of an SQL query
+/// (such as `"SELECT COUNT(*) FROM ..."`).
 T selectValue(T, Iter)(Iter iter)
 {
 	foreach (T val; iter)

@@ -15,6 +15,7 @@ module ae.ui.video.video;
 
 import ae.ui.app.application;
 
+/// Abstract video driver interface.
 class Video
 {
 public:

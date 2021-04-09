@@ -16,6 +16,8 @@ module ae.utils.meta.x;
 // Based on idea from Timon Gehr.
 // http://forum.dlang.org/post/jdiu5s$13bo$1@digitalmars.com
 
+/// Pre-processes a D code mixin, allowing
+/// interpolation using @(...) sequences.
 template X(string x)
 {
 	enum X = xImpl(x);
@@ -44,6 +46,7 @@ private string xImpl(string x)
 	return `"` ~ r ~ `"`;
 }
 
+///
 unittest
 {
 	enum VAR = "aoeu";

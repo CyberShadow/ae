@@ -18,6 +18,7 @@ import std.string;
 
 import ae.utils.array;
 
+/// Calculate the full URL given a base and a target relative URL.
 string applyRelativeURL(string base, string rel)
 {
 	{
@@ -44,6 +45,7 @@ string applyRelativeURL(string base, string rel)
 	}
 }
 
+///
 unittest
 {
 	assert(applyRelativeURL("http://example.com/", "index.html") == "http://example.com/index.html");
@@ -56,11 +58,14 @@ unittest
 	assert(applyRelativeURL("http://example.com/http://archived.website", "/http://archived.website/2") == "http://example.com/http://archived.website/2");
 }
 
+/// Return a likely base file name given a URL,
+/// stripping the host/port/path and query string.
 string fileNameFromURL(string url)
 {
 	return url.split("?")[0].split("/")[$-1];
 }
 
+///
 unittest
 {
 	assert(fileNameFromURL("http://example.com/index.html") == "index.html");
@@ -70,8 +75,8 @@ unittest
 
 // ***************************************************************************
 
-/// Encode an URL part using a custom function to decide
-/// characters to encode.
+/// Encode an URL part using a custom predicate to decide
+/// which characters to encode.
 template UrlEncoder(alias isCharAllowed, char escape = '%')
 {
 	bool[256] genCharAllowed()
@@ -86,8 +91,9 @@ template UrlEncoder(alias isCharAllowed, char escape = '%')
 
 	struct UrlEncoder(Sink)
 	{
-		Sink sink;
+		Sink sink; /// Output will go here.
 
+		/// Feed input here.
 		void put(in char[] s)
 		{
 			foreach (c; s)
@@ -100,11 +106,12 @@ template UrlEncoder(alias isCharAllowed, char escape = '%')
 					sink.put(hexDigits[cast(ubyte)c & 15]);
 				}
 		}
-	}
+	} ///
 }
 
 import ae.utils.textout : countCopy;
 
+/// Encode an URL part using a custom predicate.
 string encodeUrlPart(alias isCharAllowed, char escape = '%')(string s) pure
 {
 	alias UrlPartEncoder = UrlEncoder!(isCharAllowed, escape);
@@ -126,6 +133,8 @@ string encodeUrlPart(alias isCharAllowed, char escape = '%')(string s) pure
 
 import std.ascii;
 
+/// Encode a URL parameter, escaping all non-alpha-numeric characters
+/// except `'-'` and `'_'`.
 alias encodeUrlParameter = encodeUrlPart!(c => isAlphaNum(c) || c=='-' || c=='_');
 
 unittest
@@ -133,10 +142,14 @@ unittest
 	assert(encodeUrlParameter("abc?123") == "abc%3F123");
 }
 
+// ***************************************************************************
+
 import ae.utils.aa : MultiAA;
 
+/// Type to hold decoded URL query string parameters.
 alias UrlParameters = MultiAA!(string, string);
 
+/// Encodes URL parameters into a query string (without a leading `'?'`)).
 string encodeUrlParameters(UrlParameters dic)
 {
 	string[] segs;
@@ -145,10 +158,11 @@ string encodeUrlParameters(UrlParameters dic)
 	return join(segs, "&");
 }
 
-string encodeUrlParameters(string[string] dic) { return encodeUrlParameters(UrlParameters(dic)); }
+string encodeUrlParameters(string[string] dic) { return encodeUrlParameters(UrlParameters(dic)); } /// ditto
 
 import ae.utils.text;
 
+/// Decodes a single URL parameter.
 string decodeUrlParameter(bool plusToSpace=true, char escape = '%')(string encoded)
 {
 	string s;
@@ -166,6 +180,7 @@ string decodeUrlParameter(bool plusToSpace=true, char escape = '%')(string encod
 	return s;
 }
 
+/// Decodes URL parameters from a query string. (Do not include the leading `'?'`).
 UrlParameters decodeUrlParameters(string qs)
 {
 	UrlParameters dic;

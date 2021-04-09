@@ -18,6 +18,7 @@ import core.sys.windows.windows;
 
 import std.utf;
 
+/// Convert from a potentially zero-terminated wide string.
 string fromWString(in wchar[] buf)
 {
 	foreach (i, c; buf)
@@ -26,6 +27,7 @@ string fromWString(in wchar[] buf)
 	return toUTF8(buf);
 }
 
+/// Convert from a zero-terminated wide string.
 string fromWString(in wchar* buf)
 {
 	if (!buf) return null;
@@ -34,6 +36,7 @@ string fromWString(in wchar* buf)
 	return toUTF8(buf[0..p-buf]);
 }
 
+/// Convert to a zero-terminated wide string.
 LPCWSTR toWStringz(string s)
 {
 	return s is null ? null : toUTF16z(s);

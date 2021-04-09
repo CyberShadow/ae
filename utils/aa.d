@@ -97,7 +97,7 @@ static if (!haveObjectUpdateWithVoidUpdate)
 	alias update = updateVoid;
 }
 else
-	alias updateVoid = object.update;
+	alias updateVoid = object.update; /// Use `object.update` for void update function
 
 // Inject overload
 static if (__traits(hasMember, object, "update"))
@@ -184,7 +184,8 @@ unittest
 
 // ***************************************************************************
 
-struct KeyValuePair(K, V) { K key; V value; }
+/// Key/value pair
+struct KeyValuePair(K, V) { K key; /***/ V value; /***/ }
 
 /// Get key/value pairs from AA
 deprecated KeyValuePair!(K, V)[] pairs(K, V)(V[K] aa)
@@ -691,19 +692,24 @@ public:
 		}
 	}
 
+	/// Returns all keys as an array.
 	@property auto keys(this This)() { return byKey.array; }
+
+	/// Returns all values as an array.
 	@property auto values(this This)() { return byValue.array; }
 
 	// *** Query (search by key) ***
 
 	static if (ordered)
 	{
+		/// Returns index of key `k`.
 		size_t indexOf()(auto ref const K k)
 		{
 			auto p = k in lookup;
 			return p ? (*p)[0] : -1;
 		}
 
+		/// Returns all indices of key `k`.
 		size_t[] indicesOf()(auto ref const K k)
 		{
 			auto p = k in lookup;
@@ -1387,13 +1393,13 @@ if (is(typeof(input.front.length) : size_t) && input.front.length == 2)
 	return OrderedMap!(K, V)(input);
 }
 
-auto orderedMap(R)(R input) /// ditto
+auto orderedMap(R)(R input)
 if (is(typeof(input.front.key)) && is(typeof(input.front.value)) && !is(typeof(input.front.length)))
 {
 	alias K = typeof(input.front.key);
 	alias V = typeof(input.front.value);
 	return OrderedMap!(K, V)(input);
-}
+} /// ditto
 
 unittest
 {
@@ -1447,6 +1453,7 @@ unittest
 	assert(s in set);
 }
 
+/// Construct a set from the range `r`.
 auto toSet(R)(R r)
 {
 	alias E = ElementType!R;
@@ -1486,6 +1493,8 @@ unittest
 
 // ***************************************************************************
 
+/// An ordered set of `T`, which retains
+/// the order in which elements are added.
 alias OrderedSet(T) = HashCollection!(T, void, true, false);
 
 unittest
@@ -1528,6 +1537,7 @@ unittest
 		assert(v == 2);
 }
 
+/// Construct an ordered set from the range `r`.
 auto orderedSet(R)(R r)
 {
 	alias E = ElementType!R;

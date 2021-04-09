@@ -27,6 +27,7 @@ import ae.utils.meta;
 
 alias copy = std.file.copy; // https://issues.dlang.org/show_bug.cgi?id=14817
 
+/// An interface that needs to be implemented by `DCache` users.
 interface ICacheHost
 {
 	/// An optimization helper which provides a linear order in which keys should be optimized
@@ -43,8 +44,8 @@ interface ICacheHost
 /// Abstract base class.
 abstract class DCache
 {
-	string cacheDir;
-	ICacheHost cacheHost;
+	string cacheDir; /// Directory which will hold the cached builds.
+	ICacheHost cacheHost; /// Callback interface.
 
 	alias cacheHost this;
 
@@ -52,7 +53,7 @@ abstract class DCache
 	{
 		this.cacheDir = cacheDir;
 		this.cacheHost = cacheHost;
-	}
+	} ///
 
 	/// Get name of this cache engine.
 	abstract @property string name() const;
@@ -121,7 +122,7 @@ abstract class DirCacheBase : DCache
 		super(cacheDir, cacheHost);
 		if (!cacheDir.exists)
 			cacheDir.mkdirRecurse();
-	}
+	} ///
 
 	override string[] getEntries() const
 	{
@@ -180,7 +181,7 @@ class TempCache : DirCacheBase
 	{
 		super(cacheDir, cacheHost);
 		finalize();
-	}
+	} ///
 
 	alias cacheHost this; // https://issues.dlang.org/show_bug.cgi?id=5973
 
@@ -327,6 +328,8 @@ class GitCache : DCache
 	import ae.sys.git;
 
 	Git git;
+
+	/// Builds are pinned by refs namespaced by this prefix.
 	static const refPrefix = "refs/ae-sys-d-cache/";
 
 	override @property string name() const { return "git"; }
@@ -343,7 +346,7 @@ class GitCache : DCache
 			;
 		}
 		git = Git(cacheDir);
-	}
+	} ///
 
 	override string[] getEntries() const
 	{

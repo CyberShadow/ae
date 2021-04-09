@@ -16,16 +16,17 @@ module ae.sys.gc;
 /// Warning: This structure is currently internal, and may change arbitrarily.
 struct GCStats
 {
-    size_t poolsize;        // total size of pool
-    size_t usedsize;        // bytes allocated
-    size_t freeblocks;      // number of blocks marked FREE
-    size_t freelistsize;    // total of memory on free lists
-    size_t pageblocks;      // number of blocks marked PAGE
+    size_t poolsize;        /// total size of pool
+    size_t usedsize;        /// bytes allocated
+    size_t freeblocks;      /// number of blocks marked FREE
+    size_t freelistsize;    /// total of memory on free lists
+    size_t pageblocks;      /// number of blocks marked PAGE
 }
 
 /// Warning: This function is currently internal, and may change arbitrarily.
 extern (C) GCStats gc_stats();
 
+/// ditto
 void GC_getStats(ref GCStats stats)
 {
 	stats = gc_stats();

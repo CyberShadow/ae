@@ -23,13 +23,14 @@ import ae.ui.app.application;
 import ae.ui.shell.shell;
 import ae.ui.shell.sdl2.shell;
 
+/// `Video` implementation for SDL2.
 class SDL2CommonVideo : ThreadedVideo
 {
 	override void getScreenSize(out uint width, out uint height)
 	{
 		width = screenWidth;
 		height = screenHeight;
-	}
+	} ///
 
 	override void shutdown()
 	{
@@ -39,10 +40,10 @@ class SDL2CommonVideo : ThreadedVideo
 			SDL_DestroyWindow(window);
 			window = null;
 		}
-	}
+	} ///
 
-	SDL_Window* window;
-	SDL_Renderer* renderer;
+	SDL_Window* window; /// SDL window object.
+	SDL_Renderer* renderer; /// SDL renderer object.
 
 protected:
 	override @property bool initializeVideoInRenderThread()

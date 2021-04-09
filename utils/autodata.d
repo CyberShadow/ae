@@ -17,13 +17,16 @@ import ae.utils.digest;
 import std.traits;
 public import std.conv;
 
+/// Returns a string mixin for processing the field with the name `name`.
 string addAutoField(string name, bool reverseSort = false)
 {
 	return `mixin(typeof(handler).getMixin!(typeof(` ~ name ~ `), "` ~ name ~ `", ` ~ (reverseSort ? "true" : "false") ~`));`;
 }
 
+/// Automatically implements `opCmp`, `opEquals`, and `toHash` using `processData`
 template AutoCompare()
 {
+	///
 	static if (is(typeof(this)==class))
 	{
 		alias typeof(this) _AutoDataTypeReference;
@@ -68,8 +71,10 @@ template AutoCompare()
 	}
 }
 
+/// Automatically implements `toString` using `processData`
 template AutoToString()
 {
+	///
 	static if (is(typeof(this)==class))
 		override string toString() const { return _AutoDataToString(); }
 	else // struct
@@ -82,8 +87,10 @@ template AutoToString()
 	}
 }
 
+/// Automatically implements `processData` which processes all fields.
 template ProcessAllData()
 {
+	///
 	R processData(R, string prolog, string epilog, H)(ref H handler) const
 	{
 		mixin(prolog);

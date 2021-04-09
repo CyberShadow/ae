@@ -18,6 +18,7 @@ import std.experimental.allocator.common : stateSize;
 import std.experimental.allocator.gc_allocator : GCAllocator;
 import std.traits;
 
+/// Optimized appender. Not copyable.
 struct FastAppender(I, Allocator = GCAllocator)
 {
 	static assert(T.sizeof == 1, "TODO");
@@ -90,6 +91,7 @@ private:
 	}
 
 public:
+	/// The allocator.
 	static if (stateSize!Allocator)
 		Allocator allocator;
 	else
@@ -168,7 +170,7 @@ public:
 		}
 	}
 
-	alias put = putEx;
+	alias put = putEx; /// Output range shim.
 
 	/// Unsafe. Use together with preallocate().
 	void uncheckedPut(U...)(U items) @system
@@ -226,6 +228,7 @@ public:
 		}
 	}
 
+	/// `~=` support.
 	void opOpAssign(string op, U)(U item)
 		if (op=="~" && is(typeof(put!U)))
 	{
@@ -249,11 +252,13 @@ public:
 		return cast(I[])start[0..cursor-start];
 	}
 
+	/// How many items can be appended without a reallocation.
 	@property size_t capacity()
 	{
 		return end-start;
 	}
 
+	/// Resize backing buffer to the given capacity.
 	@property void capacity(size_t value)
 	{
 		immutable current = end - start;
@@ -261,6 +266,7 @@ public:
 		reserve(value - length);
 	}
 
+	/// How many items have been written so far.
 	@property size_t length()
 	{
 		return cursor-start;

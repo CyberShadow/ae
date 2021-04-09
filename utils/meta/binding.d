@@ -32,7 +32,7 @@ struct UnboundFunctorOf(alias f)
 
 	alias R = RefType!(thisOf!f);
 	auto bind(R r) { return boundFunctorOf!f(r); }
-}
+} /// ditto
 
 /// Create bound functor of a method
 template boundFunctorOf(alias f)

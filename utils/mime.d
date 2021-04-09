@@ -16,6 +16,7 @@ module ae.utils.mime;
 import std.string;
 import std.path;
 
+/// Return a likely MIME type for a file with the given name.
 string guessMime(string fileName, string defaultResult = null)
 {
 	string ext = toLower(extension(fileName));

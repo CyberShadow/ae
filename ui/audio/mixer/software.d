@@ -18,14 +18,15 @@ import std.algorithm.mutation;
 import ae.ui.audio.mixer.base;
 import ae.ui.audio.source.base;
 
+/// Software mixer implementation.
 class SoftwareMixer : Mixer
 {
 	struct Stream
 	{
-		SoundSource source;
-		size_t pos;
-	}
-	Stream[] streams;
+		SoundSource source; ///
+		size_t pos; ///
+	} /// Currently playing streams.
+	Stream[] streams; /// ditto
 
 	override void playSound(SoundSource sound)
 	{
@@ -35,7 +36,7 @@ class SoftwareMixer : Mixer
 		streams ~= Stream(sound, 0);
 
 		// TODO: check sample rate
-	}
+	} ///
 
 	// Temporary storage of procedural streams
 	private SoundSample[] streamBuffer;
@@ -67,5 +68,5 @@ class SoftwareMixer : Mixer
 			}
 			stream.pos += buffer.length;
 		}
-	}
+	} ///
 }

@@ -21,30 +21,35 @@ import std.range;
 import ae.utils.math;
 import ae.utils.range;
 
+/// Simple wave generator.
 auto squareWave(T)(real interval)
 {
 	return infiniteIota!size_t
 		.map!(n => cast(T)(T.max + cast(int)(n * 2 / interval) % 2));
 }
 
+/// ditto
 auto sawToothWave(T)(real interval)
 {
 	return infiniteIota!size_t
 		.map!(n => cast(T)((n % interval * 2 - interval) * T.max / interval));
 }
 
+/// ditto
 auto triangleWave(T)(real interval)
 {
 	return infiniteIota!size_t
 		.map!(n => cast(T)((abs(n % interval * 2 - interval) * 2 - interval) * T.max / interval));
 }
 
+/// ditto
 auto sineWave(T)(real interval)
 {
 	return infiniteIota!size_t
 		.map!(n => (sin(n * 2 * PI / interval) * T.max).to!T);
 }
 
+/// ditto
 auto whiteNoise(T)()
 {
 	import std.random;
@@ -52,6 +57,7 @@ auto whiteNoise(T)()
 		.map!(n => cast(T)Xorshift(cast(uint)n).front);
 }
 
+/// ditto
 auto whiteNoiseSqr(T)()
 {
 	import std.random;
@@ -59,7 +65,7 @@ auto whiteNoiseSqr(T)()
 		.map!(n => Xorshift(cast(uint)n).front % 2 ? T.max : T.min);
 }
 
-// Fade out this wave (multiply samples by a linearly descending factor).
+/// Fade out this wave (multiply samples by a linearly descending factor).
 auto fade(W)(W w)
 {
 	alias T = typeof(w.front);
@@ -67,7 +73,7 @@ auto fade(W)(W w)
 	return dur.iota.map!(p => cast(T)(w[p] * (dur-p) / dur));
 }
 
-// Stretch a wave with linear interpolation
+/// Stretch a wave with linear interpolation.
 auto stretch(W)(W wave, real factor)
 {
 	static if (is(typeof(wave.length)))

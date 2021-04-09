@@ -32,6 +32,8 @@ pragma(lib, "user32");
 
 static if (_WIN32_WINNT >= 0x500) {
 
+/// Wraps a created Windows process.
+/// Similar to `std.process.Pid`
 struct CreatedProcessImpl
 {
 	PROCESS_INFORMATION pi;
@@ -53,11 +55,13 @@ struct CreatedProcessImpl
 }
 
 alias RefCounted!CreatedProcessImpl CreatedProcess;
+/// Create a Windows process.
 CreatedProcess createProcess(string applicationName, string commandLine, STARTUPINFOW si = STARTUPINFOW.init)
 {
 	return createProcess(applicationName, commandLine, null, si);
 }
 
+/// ditto
 CreatedProcess createProcess(string applicationName, string commandLine, string currentDirectory, STARTUPINFOW si = STARTUPINFOW.init)
 {
 	CreatedProcess result;
@@ -153,6 +157,7 @@ CreatedProcess createDesktopUserProcess(string applicationName, string commandLi
 
 mixin(importWin32!q{tlhelp32});
 
+/// Wraps a `Toolhelp32Snapshot` handle.
 struct ToolhelpSnapshotImpl
 {
 	HANDLE hSnapshot;
@@ -165,6 +170,7 @@ struct ToolhelpSnapshotImpl
 
 alias RefCounted!ToolhelpSnapshotImpl ToolhelpSnapshot;
 
+/// `CreateToolhelp32Snapshot` wrapper.
 ToolhelpSnapshot createToolhelpSnapshot(DWORD dwFlags, DWORD th32ProcessID=0)
 {
 	ToolhelpSnapshot result;
@@ -174,6 +180,7 @@ ToolhelpSnapshot createToolhelpSnapshot(DWORD dwFlags, DWORD th32ProcessID=0)
 	return result;
 }
 
+/// D ranges wrapping iteration over `Toolhelp32Snapshot` lists.
 struct ToolhelpIterator(STRUCT, alias FirstFunc, alias NextFunc)
 {
 private:
@@ -190,34 +197,36 @@ private:
 
 public:
 	@property
-	bool empty() const { return bSuccess == 0; }
+	bool empty() const { return bSuccess == 0; } ///
 
 	@property
-	ref STRUCT front() { return s; }
+	ref STRUCT front() { return s; } ///
 
 	void popFront()
 	{
 		bSuccess = NextFunc(snapshot.hSnapshot, &s);
-	}
+	} ///
 }
 
-alias ToolhelpIterator!(PROCESSENTRY32, Process32First, Process32Next) ProcessIterator;
-@property ProcessIterator processes(ToolhelpSnapshot snapshot) { return ProcessIterator(snapshot); }
+alias ProcessIterator = ToolhelpIterator!(PROCESSENTRY32, Process32First, Process32Next); /// ditto
+@property ProcessIterator processes(ToolhelpSnapshot snapshot) { return ProcessIterator(snapshot); } /// ditto
 
-alias ToolhelpIterator!(THREADENTRY32, Thread32First, Thread32Next) ThreadIterator;
-@property ThreadIterator threads(ToolhelpSnapshot snapshot) { return ThreadIterator(snapshot); }
+alias ThreadIterator = ToolhelpIterator!(THREADENTRY32, Thread32First, Thread32Next); /// ditto
+@property ThreadIterator threads(ToolhelpSnapshot snapshot) { return ThreadIterator(snapshot); } /// ditto
 
-alias ToolhelpIterator!(MODULEENTRY32, Module32First, Module32Next) ModuleIterator;
-@property ModuleIterator modules(ToolhelpSnapshot snapshot) { return ModuleIterator(snapshot); }
+alias ModuleIterator = ToolhelpIterator!(MODULEENTRY32, Module32First, Module32Next); /// ditto
+@property ModuleIterator modules(ToolhelpSnapshot snapshot) { return ModuleIterator(snapshot); } /// ditto
 
-alias ToolhelpIterator!(HEAPLIST32, Heap32ListFirst, Heap32ListNext) HeapIterator;
-@property HeapIterator heaps(ToolhelpSnapshot snapshot) { return HeapIterator(snapshot); }
+alias HeapIterator = ToolhelpIterator!(HEAPLIST32, Heap32ListFirst, Heap32ListNext); /// ditto
+@property HeapIterator heaps(ToolhelpSnapshot snapshot) { return HeapIterator(snapshot); } /// ditto
 
 // --------------------------------------------------------------------------
 
+/// Maintains a list of currently running processes,
+/// and notifies the caller about new or exited processes.
 struct ProcessWatcher
 {
-	PROCESSENTRY32[DWORD] oldProcesses;
+	PROCESSENTRY32[DWORD] oldProcesses; ///
 
 	void update(void delegate(ref PROCESSENTRY32) oldHandler, void delegate(ref PROCESSENTRY32) newHandler, bool handleExisting = false)
 	{
@@ -239,13 +248,14 @@ struct ProcessWatcher
 		}
 
 		oldProcesses = newProcesses;
-	}
+	} ///
 }
 
 } // _WIN32_WINNT >= 0x500
 
 // ***************************************************************************
 
+/// Read/WriteProcessMemory helpers.
 alias ubyte* RemoteAddress;
 
 void readProcessMemory(HANDLE h, RemoteAddress addr, void[] data)
@@ -253,54 +263,57 @@ void readProcessMemory(HANDLE h, RemoteAddress addr, void[] data)
 	size_t c;
 	wenforce(ReadProcessMemory(h, addr, data.ptr, data.length, &c), "ReadProcessMemory");
 	enforce(c==data.length, "Not all data read");
-}
+} /// ditto
 
 void writeProcessMemory(HANDLE h, RemoteAddress addr, const(void)[] data)
 {
 	size_t c;
 	wenforce(WriteProcessMemory(h, addr, data.ptr, data.length, &c), "WriteProcessMemory");
 	enforce(c==data.length, "Not all data written");
-}
+} /// ditto
 
 void readProcessVar(T)(HANDLE h, RemoteAddress addr, T* v)
 {
 	h.readProcessMemory(addr, v[0..1]);
-}
+} /// ditto
 
 T readProcessVar(T)(HANDLE h, RemoteAddress addr)
 {
 	T v;
 	h.readProcessVar(addr, &v);
 	return v;
-}
+} /// ditto
 
 void writeProcessVar(T)(HANDLE h, RemoteAddress addr, auto ref T v)
 {
 	h.writeProcessMemory(addr, (&v)[0..1]);
-}
+} /// ditto
 
+/// Binding to a variable located in another process.
+/// Automatically allocates and deallocates remote memory.
+/// Use .read() and .write() to update local/remote data.
 struct RemoteProcessVarImpl(T)
 {
-	T local;
+	T local; /// Cached local value.
 	@property T* localPtr() { return &local; }
-	RemoteAddress remotePtr;
-	HANDLE hProcess;
+	RemoteAddress remotePtr; /// Address in remote process.
+	HANDLE hProcess; /// Process handle.
 
 	this(HANDLE hProcess)
 	{
 		this.hProcess = hProcess;
 		remotePtr = cast(RemoteAddress)wenforce(VirtualAllocEx(hProcess, null, T.sizeof, MEM_COMMIT, PAGE_READWRITE));
-	}
+	} ///
 
 	void read()
 	{
 		readProcessMemory (hProcess, remotePtr, localPtr[0..1]);
-	}
+	} ///
 
 	void write()
 	{
 		writeProcessMemory(hProcess, remotePtr, localPtr[0..1]);
-	}
+	} ///
 
 	~this()
 	{
@@ -308,10 +321,7 @@ struct RemoteProcessVarImpl(T)
 	}
 }
 
-/// Binding to a variable located in another process.
-/// Automatically allocates and deallocates remote memory.
-/// Use .read() and .write() to update local/remote data.
 template RemoteProcessVar(T)
 {
 	alias RefCounted!(RemoteProcessVarImpl!T) RemoteProcessVar;
-}
+} /// ditto

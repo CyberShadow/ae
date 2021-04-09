@@ -59,6 +59,7 @@ template RangeTuple(size_t N)
 /// The array value must be known during compilation.
 template ArrayToTuple(alias arr, Elements...)
 {
+	///
 	static if (arr.length)
 		alias ArrayToTuple = ArrayToTuple!(arr[1..$], ValueTuple!(Elements, arr[0]));
 	else
@@ -73,12 +74,13 @@ unittest
 }
 
 /// Expand a static array to a tuple.
-/// Unlike ArrayToTuple, the array may be a runtime variable.
+/// Unlike `ArrayToTuple`, the array may be a runtime variable.
 template expand(alias arr, size_t offset = 0)
 	if (isStaticArray!(typeof(arr)))
 {
 	import std.typetuple : AliasSeq;
 
+	///
 	static if (arr.length == offset)
 		alias expand = AliasSeq!();
 	else
@@ -101,6 +103,7 @@ unittest
 /// Otherwise, return A for a regular runtime foreach.
 template CTIterate(alias A)
 {
+	///
 	static if (is(typeof(ArrayToTuple!A)))
 		enum CTIterate = ArrayToTuple!A;
 	else
@@ -157,8 +160,10 @@ unittest
 	return true;
 }
 
+/// Resolves to `true` if tuple `T` contains a value whose type is `X`.
 template isValueOfTypeInTuple(X, T...)
 {
+	///
 	static if (T.length==0)
 		enum bool isValueOfTypeInTuple = false;
 	else
@@ -178,8 +183,10 @@ unittest
 	static assert( isValueOfTypeInTuple!(int, "a", int, Object, 42));
 }
 
+/// Returns the first value in `T` of type `X`.
 template findValueOfTypeInTuple(X, T...)
 {
+	///
 	static if (T.length==0)
 		static assert(false, "Can't find value of type " ~ X.stringof ~ " in specified tuple");
 	else
@@ -229,6 +236,7 @@ alias BoxedVoid = void[0];
 /// Resolves to `BoxedVoid` if `T` is `void`, or to `T` otherwise.
 template BoxVoid(T)
 {
+	///
 	static if (is(T == void))
 		alias BoxVoid = BoxedVoid;
 	else
@@ -281,8 +289,10 @@ unittest
 
 // ************************************************************************
 
-// http://d.puremagic.com/issues/show_bug.cgi?id=7805
-static template stringofArray(Args...)
+/// Apply `.stringof` over `Args` and
+/// return the result as a `string[]`.
+static // http://d.puremagic.com/issues/show_bug.cgi?id=7805
+template stringofArray(Args...)
 {
 	static string[] stringofArray()
 	{
@@ -504,6 +514,8 @@ unittest
 	assert(a==11 && b==21 && c == 31 && d == 10);
 }
 
+/// Resolves to `true` if there exists a non-`void`
+/// common type for all elements of `T`.
 enum bool haveCommonType(T...) = is(CommonType!T) && !is(CommonType!T == void);
 
 /// Lazily evaluate and return first true-ish result; otherwise return last result.
@@ -562,7 +574,7 @@ static if (HAVE_UDA)
 	}
 	*/
 
-	/// Detects types and values of the given type
+	/// Detects types and values of the given type.
 	template hasAttribute(Args...)
 		if (Args.length == 2)
 	{
@@ -572,6 +584,7 @@ static if (HAVE_UDA)
 		import std.typetuple : staticIndexOf;
 		import std.traits : staticMap;
 
+		///
 		static if (is(Args[0]))
 		{
 			template isTypeOrValueInTuple(T, Args...)
@@ -594,6 +607,7 @@ static if (HAVE_UDA)
 			enum bool hasAttribute = staticIndexOf!(Args[0], __traits(getAttributes, Args[1])) != -1;
 	}
 
+	/// Retrieves the attribute (type or value of the given type).
 	template getAttribute(T, alias D)
 	{
 		enum T getAttribute = findValueOfTypeInTuple!(T, __traits(getAttributes, D));
@@ -618,11 +632,13 @@ static if (HAVE_UDA)
 }
 else
 {
+	/// Stub (unsupported)>
 	template hasAttribute(T, alias D)
 	{
 		enum bool hasAttribute = false;
 	}
 
+	/// ditto
 	template getAttribute(T, alias D)
 	{
 		static assert(false, "This D compiler has no UDA support.");
@@ -787,6 +803,7 @@ alias I(alias A) = A;
 template thisOf(alias f)
 {
 	alias p = I!(__traits(parent, f));
+	///
 	static if (is(p == class) || is(p == struct) || is(p == union))
 		alias thisOf = p;
 	else
@@ -800,6 +817,7 @@ template thisOf(alias f)
 /// floating-point types.
 template valueBits(T)
 {
+	///
 	static if (is(T : ulong))
 		enum valueBits = T.sizeof * 8;
 	else
@@ -817,6 +835,7 @@ static assert(valueBits!double == 53);
 /// with at least the indicated number of bits of precision.
 template ResizeNumericType(T, uint bits)
 {
+	///
 	static if (is(T : ulong))
 		static if (isSigned!T)
 			alias ResizeNumericType = SignedBitsType!bits;
@@ -853,6 +872,7 @@ alias ExpandNumericType(T, uint additionalBits) =
 /// type of the same kind instead.
 template TryExpandNumericType(T, uint additionalBits)
 {
+	///
 	static if (is(typeof(ExpandNumericType!(T, additionalBits))))
 		alias TryExpandNumericType = ExpandNumericType!(T, additionalBits);
 	else
@@ -868,9 +888,10 @@ template TryExpandNumericType(T, uint additionalBits)
 			static assert(false, "Don't know how to expand type: " ~ T.stringof);
 }
 
-/// Unsigned integer type big enough to fit N bits of precision.
+/// Integer type big enough to fit N bits of precision.
 template UnsignedBitsType(uint bits)
 {
+	///
 	static if (bits <= 8)
 		alias ubyte UnsignedBitsType;
 	else
@@ -886,6 +907,7 @@ template UnsignedBitsType(uint bits)
 		static assert(0, "No integer type big enough to fit " ~ bits.stringof ~ " bits");
 }
 
+/// ditto
 template SignedBitsType(uint bits)
 {
 	alias Signed!(UnsignedBitsType!bits) SignedBitsType;

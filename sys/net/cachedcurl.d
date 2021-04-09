@@ -35,6 +35,8 @@ import ae.utils.digest;
 import ae.utils.json;
 import ae.utils.time;
 
+/// libcurl-based implementation of `Network` which caches responses.
+/// Allows quickly re-running some deterministic process without redownloading all URLs.
 class CachedCurlNetwork : Network
 {
 	/// Curl HTTP object
@@ -56,23 +58,26 @@ class CachedCurlNetwork : Network
 	this()
 	{
 		http = HTTP();
-	}
+	} ///
 
+	/// Response metadata.
 	static struct Metadata
 	{
-		HTTP.StatusLine statusLine;
-		string[][string] headers;
+		HTTP.StatusLine statusLine; /// HTTP status line.
+		string[][string] headers; /// HTTP response headers.
 	}
 
 	static struct Request
 	{
-		string url;
-		HTTP.Method method = HTTP.Method.get;
-		const(void)[] data;
-		const(string[2])[] headers;
+		string url; ///
+		HTTP.Method method = HTTP.Method.get; ///
+		const(void)[] data; ///
+		const(string[2])[] headers; ///
 
-		int maxRedirects = int.min; // choose depending or method
-	}
+		/// Maximum number of redirects to follow.
+		/// By default, choose a number appropriate to the method.
+		int maxRedirects = int.min;
+	} ///
 
 	/*private*/ static void req(CachedCurlNetwork instance, ref const Request request, string target, string metadataPath)
 	{
@@ -128,36 +133,41 @@ class CachedCurlNetwork : Network
 
 	static struct Response
 	{
-		string responsePath;
-		string metadataPath;
+		string responsePath; /// Path to response data.
+		string metadataPath; /// Path to response metadata.
 
+		/// Returns the response data, if it was successful.
 		@property ubyte[] responseData()
 		{
 			checkOK();
 			return cast(ubyte[])std.file.read(responsePath);
 		}
 
+		/// Returns the response metadata.
 		@property Metadata metadata()
 		{
 			return metadataPath.exists ? metadataPath.readText.jsonParse!Metadata : Metadata.init;
 		}
 
+		/// Check if the response succeeded.
 		@property bool ok()
 		{
 			return metadata.statusLine.code / 100 == 2;
 		}
 
+		/// Check if the response succeeded, and throws an error if not.
 		ref Response checkOK() return
 		{
 			if (!ok)
 				throw new CachedCurlException(metadata);
 			return this;
 		}
-	}
+	} ///
 
+	/// Exception thrown for failed requests (server errors).
 	static class CachedCurlException : Exception
 	{
-		Metadata metadata;
+		Metadata metadata; ///
 
 		this(Metadata metadata, string fn = __FILE__, size_t ln = __LINE__)
 		{
@@ -166,6 +176,7 @@ class CachedCurlNetwork : Network
 		}
 	}
 
+	/// Perform a raw request and return information about the resulting cached response.
 	Response cachedReq(ref const Request request)
 	{
 		auto hash = getDigestString!MD5(request.url ~ cast(char)request.method ~ request.data);
@@ -178,6 +189,7 @@ class CachedCurlNetwork : Network
 		return Response(path, metadataPath);
 	}
 
+	/// ditto
 	Response cachedReq(string url, HTTP.Method method, in void[] data = null)
 	{
 		auto req = Request(url, method, data);
@@ -187,22 +199,22 @@ class CachedCurlNetwork : Network
 	string downloadFile(string url)
 	{
 		return cachedReq(url, HTTP.Method.get).checkOK.responsePath;
-	}
+	} /// Download a file and return the response path.
 
 	override void downloadFile(string url, string target)
 	{
 		std.file.copy(downloadFile(url), target);
-	}
+	} ///
 
 	override void[] getFile(string url)
 	{
 		return cachedReq(url, HTTP.Method.get).responseData;
-	}
+	} ///
 
 	override bool urlOK(string url)
 	{
 		return cachedReq(url, HTTP.Method.get).ok;
-	}
+	} ///
 
 	override string resolveRedirect(string url)
 	{
@@ -214,12 +226,12 @@ class CachedCurlNetwork : Network
 				.get("location", null)
 				.enforce("Not a redirect: " ~ url)
 				[$-1]);
-	}
+	} ///
 
 	override void[] post(string url, in void[] data)
 	{
 		return cachedReq(url, HTTP.Method.post, data).responseData;
-	}
+	} ///
 
 	override HttpResponse httpRequest(HttpRequest request)
 	{
@@ -254,10 +266,10 @@ class CachedCurlNetwork : Network
 				response.headers.add(name, value);
 		response.data = [readData(resp.responsePath)];
 		return response;
-	}
+	} ///
 }
 
-alias CachedCurlException = CachedCurlNetwork.CachedCurlException;
+alias CachedCurlException = CachedCurlNetwork.CachedCurlException; ///
 
 static this()
 {

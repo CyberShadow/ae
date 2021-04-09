@@ -21,6 +21,7 @@ import std.string : toStringz;
 import std.conv : to;
 import std.traits;
 
+/// `sqlite3*` wrapper.
 final class SQLite
 {
 	private sqlite3* db;
@@ -28,13 +29,14 @@ final class SQLite
 	this(string fn, bool readOnly = false)
 	{
 		sqenforce(sqlite3_open_v2(toStringz(fn), &db, readOnly ? SQLITE_OPEN_READONLY : SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, null));
-	}
+	} ///
 
 	~this()
 	{
 		sqlite3_close(db);
 	}
 
+	/// Run a simple query, provided as an SQL string.
 	auto query(string sql)
 	{
 		struct Iterator
@@ -85,26 +87,33 @@ final class SQLite
 		return Iterator(sql, db);
 	}
 
+	/// Run a simple query, discarding the result.
 	void exec(string sql)
 	{
 		foreach (cells, columns; query(sql))
 			break;
 	}
 
+	/// Return the ID of the last inserted row.
+	/// (`sqlite3_last_insert_rowid`)
 	@property long lastInsertRowID()
 	{
 		return sqlite3_last_insert_rowid(db);
 	}
 
+	/// Return the number of changed rows.
+	/// (`sqlite3_changes`)
 	@property int changes()
 	{
 		return sqlite3_changes(db);
 	}
 
+	/// `sqlite3_stmt*` wrapper.
 	final class PreparedStatement
 	{
 		sqlite3_stmt* stmt;
 
+		/// `sqlite3_bind_XXX` wrapper.
 		void bind(int idx, int v)
 		{
 			sqlite3_bind_int(stmt, idx, v);
@@ -113,34 +122,35 @@ final class SQLite
 		void bind(int idx, long v)
 		{
 			sqlite3_bind_int64(stmt, idx, v);
-		}
+		} /// ditto
 
 		void bind(int idx, double v)
 		{
 			sqlite3_bind_double(stmt, idx, v);
-		}
+		} /// ditto
 
 		void bind(int idx, in char[] v)
 		{
 			sqlite3_bind_text(stmt, idx, v.ptr, to!int(v.length), SQLITE_TRANSIENT);
-		}
+		} /// ditto
 
 		void bind(int idx, in wchar[] v)
 		{
 			sqlite3_bind_text16(stmt, idx, v.ptr, to!int(v.length*2), SQLITE_TRANSIENT);
-		}
+		} /// ditto
 
 		void bind(int idx, void* n)
 		{
 			assert(n is null);
 			sqlite3_bind_null(stmt, idx);
-		}
+		} /// ditto
 
 		void bind(int idx, in void[] v)
 		{
 			sqlite3_bind_blob(stmt, idx, v.ptr, to!int(v.length), SQLITE_TRANSIENT);
-		}
+		} /// ditto
 
+		/// Bind all arguments according to their type, in order.
 		void bindAll(T...)(T args)
 		{
 			foreach (int n, arg; args)
@@ -167,11 +177,13 @@ final class SQLite
 			}
 		}
 
+		/// Calls `sqlite3_reset`.
 		void reset()
 		{
 			sqenforce(sqlite3_reset(stmt));
 		}
 
+		/// Binds the given arguments and executes the prepared statement, discarding the result.
 		void exec(T...)(T args)
 		{
 			static if (T.length)
@@ -179,9 +191,10 @@ final class SQLite
 			while (step()) {}
 		}
 
+		/// Binds the given arguments and executes the prepared statement, returning the results as an iterator.
 		static struct Iterator
 		{
-			PreparedStatement stmt;
+			PreparedStatement stmt; ///
 
 			@trusted int opApply(U...)(int delegate(ref U args) @system dg)
 			{
@@ -219,9 +232,10 @@ final class SQLite
 					}
 				}
 				return res;
-			}
+			} ///
 		}
 
+		/// ditto
 		Iterator iterate(T...)(T args)
 		{
 			static if (T.length)
@@ -229,6 +243,7 @@ final class SQLite
 			return Iterator(this);
 		}
 
+		/// Returns the value of a column by its index, as the given D type.
 		T column(T)(int idx)
 		{
 			static if (is(T == string))
@@ -273,12 +288,14 @@ final class SQLite
 			}
 		}
 
+		/// Returns the value of all columns, as the given D types.
 		void columns(T...)(ref T args)
 		{
 			foreach (i, arg; args)
 				args[i] = column!(typeof(arg))(i);
 		}
 
+		/// Returns the value of all columns, as an array of the given D type (`string` by default).
 		T[] getArray(T=string)()
 		{
 			T[] result = new T[dataCount()];
@@ -287,6 +304,9 @@ final class SQLite
 			return result;
 		}
 
+		/// Returns the value of all columns as an associative array,
+		/// with the column names as the key,
+		/// and the values with given D type (`string` by default).
 		T[string] getAssoc(T=string)()
 		{
 			T[string] result;
@@ -295,16 +315,19 @@ final class SQLite
 			return result;
 		}
 
+		/// `sqlite3_column_count` wrapper.
 		int columnCount()
 		{
 			return sqlite3_column_count(stmt);
 		}
 
+		/// `sqlite3_data_count` wrapper.
 		int dataCount()
 		{
 			return sqlite3_data_count(stmt);
 		}
 
+		/// Returns the column name by its index, as a D string.
 		string columnName(int idx)
 		{
 			return to!string(sqlite3_column_name(stmt, idx));
@@ -316,6 +339,7 @@ final class SQLite
 		}
 	}
 
+	/// Construct a prepared statement.
 	PreparedStatement prepare(string sql)
 	{
 		auto s = new PreparedStatement;
@@ -330,14 +354,14 @@ final class SQLite
 	}
 }
 
+/// Exception class thrown on SQLite errors.
 class SQLiteException : Exception
 {
-	int code;
+	int code; ///
 
 	this(sqlite3* db, int code)
 	{
 		this.code = code;
 		super(to!string(sqlite3_errmsg(db)) ~ " (" ~ to!string(code) ~ ")");
-	}
+	} ///
 }
-

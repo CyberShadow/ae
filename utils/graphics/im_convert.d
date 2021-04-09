@@ -18,6 +18,7 @@ import ae.sys.imagemagick;
 import ae.utils.graphics.color;
 import ae.utils.graphics.image;
 
+/// Invoke ImageMagick's `convert` program to parse the given data.
 auto parseViaIMConvert(COLOR)(const(void)[] data)
 {
 	string[] convertFlags;
@@ -37,6 +38,7 @@ auto parseViaIMConvert(COLOR)(const(void)[] data)
 	return pipe(["convert".imageMagickBinary()] ~ convertFlags ~ ["-[0]", "bmp:-"], data).viewBMP!COLOR();
 }
 
+/// ditto
 auto parseViaIMConvert(C = TargetColor, TARGET)(const(void)[] data, auto ref TARGET target)
 	if (isWritableView!TARGET && isTargetColor!(C, TARGET))
 {

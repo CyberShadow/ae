@@ -26,31 +26,41 @@ import libpng.pnglibconf;
 
 pragma(lib, "png");
 
+/// Reads an image using libpng.
+/// Image properties are specified at runtime.
+/// Lower-level interface.
 struct PNGReader
 {
 	// Settings
 
-	bool strict = true; // Throw on corrupt / invalid data vs. ignore errors as much as possible
-	enum Depth { d8, d16 } Depth depth;
-	enum Channels { gray, rgb, bgr } Channels channels;
-	enum Alpha { none, alpha, filler } Alpha alpha;
-	enum AlphaLocation { before, after } AlphaLocation alphaLocation;
+	/// Throw on corrupt / invalid data, as opposed to ignoring errors as much as possible.
+	bool strict = true;
+	/// Color depth.
+	enum Depth { d8, /***/ d16 /***/ } Depth depth; /// ditto
+	/// Color channels and order.
+	enum Channels { gray, /***/ rgb, /***/ bgr /***/ } Channels channels; /// ditto
+	/// Alpha channel presence.
+	enum Alpha { none, /***/ alpha, /***/ filler /***/ } Alpha alpha; /// ditto
+	/// Alpha channel location.
+	enum AlphaLocation { before, /***/ after /***/ } AlphaLocation alphaLocation; /// ditto
+	/// Background color when flattening alpha.
 	ubyte[] defaultColor;
 
 	// Callbacks
 
-	void delegate(int width, int height) infoHandler;
-	ubyte[] delegate(uint rowNum) rowGetter;
-	void delegate(uint rowNum, int pass) rowHandler;
-	void delegate() endHandler;
+	void delegate(int width, int height) infoHandler; /// Callback for receiving image information.
+	ubyte[] delegate(uint rowNum) rowGetter; /// Callback for querying where to save an image row.
+	void delegate(uint rowNum, int pass) rowHandler; /// Callback for image information.
+	void delegate() endHandler; /// Callback for decoding end.
 
 	// Data
 
-	size_t rowbytes;
-	uint passes;
+	size_t rowbytes; /// Bytes in a row. `rowGetter` should return a slice of this length.
+	uint passes; /// The number of passes needed to decode the image.
 
 	// Public interface
 
+	/// Initialize and begin decoding.
 	void init()
 	{
 		png_ptr = png_create_read_struct(
@@ -75,6 +85,7 @@ struct PNGReader
 		);
 	}
 
+	/// Feed image bytes into libpng.
 	void put(ubyte[] data)
 	{
 		png_process_data(png_ptr, info_ptr, data.ptr, data.length);
@@ -251,6 +262,9 @@ private:
 	}
 }
 
+/// Reads an `Image` using libpng.
+/// The PNG image is converted into the `Image` format.
+/// High-level interface.
 Image!COLOR decodePNG(COLOR)(ubyte[] data, bool strict = true)
 {
 	Image!COLOR img;

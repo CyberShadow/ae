@@ -18,24 +18,27 @@ import std.conv;
 import std.exception;
 import std.string;
 
+/// Parses PE VersionInfo resources.
 struct VersionInfoParser
 {
-	ubyte[] data;
+	ubyte[] data; /// All data.
 
 	this(void[] data)
 	{
 		enforce((cast(size_t)data.ptr) % 4 == 0, "Data must be DWORD-aligned");
 		this.data = cast(ubyte[])data;
 		root = readNode();
-	}
+	} ///
 
+	/// A `VersionInfo` node.
 	struct Node
 	{
-		string key;
-		bool isText;
-		void[] value;
-		Node[] children;
+		string key; ///
+		bool isText; ///
+		void[] value; ///
+		Node[] children; ///
 
+		/// Return the string contents of a text node.
 		@property string valueText()
 		{
 			if (!value.length)
@@ -45,7 +48,7 @@ struct VersionInfoParser
 			return str[0..$-1].to!string;
 		}
 	}
-	Node root;
+	Node root; /// The root node.
 
 	Node readNode()
 	{

@@ -54,7 +54,7 @@ mixin template StringMixinProxy(string targetPrefix)
 				auto ref opDispatch(this X, Args...)(auto ref Args args){ return mixin(targetPrefix~name~targs~q{(args)}); }
 			}
 		}
-	}
+	} ///
 }
 
 /// Instantiates to a type that points to a named
@@ -67,12 +67,13 @@ template SubProxy(alias S, string exp)
 	{
 		R _subProxy;
 
-		this(R s) { _subProxy = s; }
+		this(R s) { _subProxy = s; } ///
 
 		mixin StringMixinProxy!(q{_subProxy.} ~ exp);
 	}
 }
 
+/// Retrieves `__traits(parent, a)`.
 alias parentOf(alias a) = I!(__traits(parent, a));
 
 /// Returns a type that points to a sub-aggregate
@@ -102,7 +103,7 @@ template ScopeProxy(alias a)
 	{
 		R _scopeProxy;
 
-		this(R s) { _scopeProxy = s; }
+		this(R s) { _scopeProxy = s; } ///
 
 		mixin StringMixinProxy!q{__traits(child, _scopeProxy, a).};
 	}

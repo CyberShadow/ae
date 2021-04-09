@@ -32,6 +32,7 @@ import ae.utils.xmllite;
 
 public import ae.sys.install.common;
 
+/// Installs Visual Studio components.
 class VisualStudioInstaller
 {
 	this(int year, string edition, int webInstaller, string versionName)
@@ -40,11 +41,12 @@ class VisualStudioInstaller
 		this.edition = edition;
 		this.webInstaller = webInstaller;
 		this.versionName = versionName;
-	}
+	} ///
 
+	/// Installs a Visual Studio component.
 	class VisualStudioComponentInstaller : Installer
 	{
-		string packageName;
+		string packageName; ///
 
 		@property override string name() { return "Visual Studio %d %s (%s)".format(year, edition, packageName); }
 		@property override string subdirectory() { return "vs%s-%s".format(year, edition.toLower()); }
@@ -263,9 +265,12 @@ class VisualStudioInstaller
 		}
 	}
 
-	int year, webInstaller;
-	string edition, versionName;
+	int year; /// Version/year.
+	int webInstaller; /// Microsoft download number for the web installer.
+	string edition; /// Edition variant (e.g. "Express").
+	string versionName; /// Numeric version (e.g. "12.0").
 
+	/// Returns the paths to the "bin" directory for the given model.
 	/// Model is x86 (null), amd64, or x86_amd64
 	string[] modelBinPaths(string model)
 	{
@@ -301,6 +306,7 @@ class VisualStudioInstaller
 		return result;
 	}
 
+	/// Constructs a component installer for the given package.
 	VisualStudioComponentInstaller opIndex(string name)
 	{
 		return new VisualStudioComponentInstaller(name);
@@ -313,6 +319,7 @@ class VisualStudioInstaller
 		(new VisualStudioComponentInstaller()).getAllMSIs();
 	}
 
+	/// The full installation directory.
 	@property string directory() { return (new VisualStudioComponentInstaller()).directory; }
 
 private:
@@ -321,5 +328,5 @@ private:
 
 deprecated alias vs2013 = vs2013express;
 
-alias vs2013express   = singleton!(VisualStudioInstaller, 2013, "Express"  , 320697, "12.0");
-alias vs2013community = singleton!(VisualStudioInstaller, 2013, "Community", 517284, "12.0");
+alias vs2013express   = singleton!(VisualStudioInstaller, 2013, "Express"  , 320697, "12.0"); /// Visual Studio 2013 Express Edition
+alias vs2013community = singleton!(VisualStudioInstaller, 2013, "Community", 517284, "12.0"); /// Visual Studio 2013 Community Edition

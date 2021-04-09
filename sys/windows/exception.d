@@ -20,9 +20,11 @@ import std.string;
 
 import ae.sys.windows.text;
 
+/// Encapsulates a Windows API error code.
+/// Populates the message with an OS-provided error string.
 class WindowsException : Exception
 {
-	DWORD code;
+	DWORD code; /// The error code.
 
 	this(DWORD code, string str=null)
 	{
@@ -48,9 +50,10 @@ class WindowsException : Exception
 			message = str ~ ": " ~ message;
 
 		super(message);
-	}
+	} ///
 }
 
+/// `enforce` variant using `GetLastError`.
 T wenforce(T)(T cond, string str=null)
 {
 	if (cond)

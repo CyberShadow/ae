@@ -15,18 +15,20 @@ module ae.utils.meta.reference;
 
 import std.traits;
 
-/// typeof(new T) - what we use to refer to an allocated instance
+/// `typeof(new T)` - what we use to refer to an allocated instance
 template RefType(T)
 {
+	///
 	static if (is(T == class))
 		alias T RefType;
 	else
 		alias T* RefType;
 }
 
-/// Reverse of RefType
+/// Reverse of `RefType`
 template FromRefType(R)
 {
+	///
 	static if (is(T == class))
 		alias T FromRefType;
 	else
@@ -40,6 +42,7 @@ template FromRefType(R)
 /// A struct with T's instance size if T is a class, T itself otherwise.
 template StorageType(T)
 {
+	///
 	static if (is(T == class))
 	{
 		//alias void*[(__traits(classInstanceSize, T) + size_t.sizeof-1) / size_t.sizeof] StorageType;
@@ -48,7 +51,7 @@ template StorageType(T)
 		// Use a struct to allow new-ing the type (you can't new a static array directly)
 		struct StorageType
 		{
-			void*[(__traits(classInstanceSize, T) + size_t.sizeof-1) / size_t.sizeof] data;
+			void*[(__traits(classInstanceSize, T) + size_t.sizeof-1) / size_t.sizeof] data; /// Class data store.
 		}
 	}
 	else

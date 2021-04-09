@@ -29,54 +29,56 @@ import ae.utils.text.ascii : toDec;
 //       Run some benchmarks...
 struct FastArrayRange(T, bool CHECKED=isDebug)
 {
+	/// Current head and end.
 	T* ptr, end;
 
 	this(T[] arr)
 	{
 		ptr = arr.ptr;
 		end = ptr + arr.length;
-	}
+	} ///
 
 	@property T front()
 	{
 		static if (CHECKED)
 			assert(!empty);
 		return *ptr;
-	}
+	} ///
 
 	void popFront()
 	{
 		static if (CHECKED)
 			assert(!empty);
 		ptr++;
-	}
+	} ///
 
-	@property bool empty() { return ptr==end; }
+	@property bool empty() { return ptr==end; } ///
 
-	@property ref typeof(this) save() { return this; }
+	@property ref typeof(this) save() { return this; } ///
 
 	T opIndex(size_t index)
 	{
 		static if (CHECKED)
 			assert(index < end-ptr);
 		return ptr[index];
-	}
+	} ///
 
 	T[] opSlice()
 	{
 		return ptrSlice(ptr, end);
-	}
+	} ///
 
 	T[] opSlice(size_t from, size_t to)
 	{
 		static if (CHECKED)
 			assert(from <= to && to <= end-ptr);
 		return ptr[from..to];
-	}
+	} ///
 }
 
-auto fastArrayRange(T)(T[] arr) { return FastArrayRange!T(arr); }
+auto fastArrayRange(T)(T[] arr) { return FastArrayRange!T(arr); } /// ditto
 
+/// Returns a slice for the memory from `a` to `b`.
 T[] ptrSlice(T)(T* a, T* b)
 {
 	return a[0..b-a];
@@ -93,17 +95,18 @@ unittest
 /// Presents a null-terminated pointer (C-like string) as a range.
 struct NullTerminated(E)
 {
-	E* ptr;
-	bool empty() { return !*ptr; }
-	ref E front() { return *ptr; }
-	void popFront() { ptr++; }
-	auto save() { return this; }
+	E* ptr; /// Current head.
+	bool empty() { return !*ptr; } ///
+	ref E front() { return *ptr; } ///
+	void popFront() { ptr++; } ///
+	auto save() { return this; } ///
 }
 auto nullTerminated(E)(E* ptr)
 {
 	return NullTerminated!E(ptr);
-}
+} /// ditto
 
+///
 unittest
 {
 	void test(S)(S s)
@@ -142,33 +145,33 @@ unittest
 
 // ************************************************************************
 
+/// An infinite variant of `iota`.
 struct InfiniteIota(T)
 {
-	T front;
-	enum empty = false;
-	void popFront() { front++; }
-	T opIndex(T offset) { return front + offset; }
-	InfiniteIota save() { return this; }
+	T front; ///
+	enum empty = false; ///
+	void popFront() { front++; } ///
+	T opIndex(T offset) { return front + offset; } ///
+	InfiniteIota save() { return this; } ///
 }
-InfiniteIota!T infiniteIota(T)() { return InfiniteIota!T.init; }
+InfiniteIota!T infiniteIota(T)() { return InfiniteIota!T.init; } /// ditto
 
 // ************************************************************************
 
 /// Empty range of type E.
 struct EmptyRange(E)
 {
-	@property E front() { assert(false); }
-	void popFront() { assert(false); }
-	@property E back() { assert(false); }
-	void popBack() { assert(false); }
-	E opIndex(size_t) { assert(false); }
-	enum empty = true;
-	enum save = typeof(this).init;
-	enum size_t length = 0;
+	@property E front() { assert(false); } ///
+	void popFront() { assert(false); } ///
+	@property E back() { assert(false); } ///
+	void popBack() { assert(false); } ///
+	E opIndex(size_t) { assert(false); } ///
+	enum empty = true; ///
+	enum save = typeof(this).init; ///
+	enum size_t length = 0; ///
 }
 
-/// ditto
-EmptyRange!E emptyRange(E)() { return EmptyRange!E.init; }
+EmptyRange!E emptyRange(E)() { return EmptyRange!E.init; } /// ditto
 
 static assert(isInputRange!(EmptyRange!uint));
 static assert(isForwardRange!(EmptyRange!uint));
@@ -330,12 +333,12 @@ unittest
 /// https://forum.dlang.org/post/qnigarkuxxnqwdernhzv@forum.dlang.org
 struct PMap(R, Pred)
 {
-	R r;
-	Pred pred;
+	R r; /// Source range.
+	Pred pred; /// The predicate.
 
-	auto ref front() { return pred(r.front); }
+	auto ref front() { return pred(r.front); } ///
 	static if (__traits(hasMember, R, "back"))
-		auto ref back() { return pred(r.back); }
+		auto ref back() { return pred(r.back); } ///
 
 	alias r this;
 }

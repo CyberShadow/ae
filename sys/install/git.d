@@ -25,8 +25,10 @@ import ae.utils.meta : singleton, I;
 
 public import ae.sys.install.common;
 
+/// Installs the git version control system.
 class GitInstaller : Installer
 {
+	/// URL to download and install.
 	string url = "https://github.com/git-for-windows/git/releases/download/v2.21.0.windows.1/PortableGit-2.21.0-32-bit.7z.exe";
 
 	@property override string[] requiredExecutables() { return ["git"]; }
@@ -46,4 +48,4 @@ class GitInstaller : Installer
 	}
 }
 
-alias gitInstaller = singleton!GitInstaller;
+alias gitInstaller = singleton!GitInstaller; /// ditto

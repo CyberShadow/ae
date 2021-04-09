@@ -22,35 +22,35 @@ import ae.ui.video.renderer;
 /// Specialization of Application class which automatically handles framework messages.
 class WMApplication : Application
 {
-	Shell shell;
-	RootControl root;
+	Shell shell; /// `Shell` implementation.
+	RootControl root; /// The root control.
 
 	this()
 	{
 		root = new RootControl();
-	}
+	} ///
 
 	// ****************************** Event handlers *******************************
 
 	override void handleMouseDown(uint x, uint y, MouseButton button)
 	{
 		root.handleMouseDown(x, y, button);
-	}
+	} ///
 
 	override void handleMouseUp(uint x, uint y, MouseButton button)
 	{
 		root.handleMouseUp(x, y, button);
-	}
+	} ///
 
 	override void handleMouseMove(uint x, uint y, MouseButtons buttons)
 	{
 		root.handleMouseMove(x, y, buttons);
-	}
+	} ///
 
 	override void handleQuit()
 	{
 		shell.quit();
-	}
+	} ///
 
 	override void handleInit()
 	{
@@ -58,12 +58,12 @@ class WMApplication : Application
 		shell.video.getScreenSize(w, h);
 		root.w = w; root.h = h;
 		root.sizeChanged();
-	}
+	} ///
 
 	// ********************************* Rendering *********************************
 
 	override void render(Renderer s)
 	{
 		root.render(s, 0, 0);
-	}
+	} ///
 }

@@ -61,6 +61,7 @@ class ManagedRepository
 	/// Repository provider
 	abstract protected Git getRepo();
 
+	/// Base name of the repository directory
 	public @property string name() { return git.path.baseName; }
 
 	// Head
@@ -163,7 +164,7 @@ class ManagedRepository
 
 	// Clean
 
-	bool clean = false;
+	bool clean = false; /// True when we know that the repository is currently clean.
 
 	/// Ensure the repository's working copy is clean.
 	public void needClean()
@@ -192,6 +193,7 @@ class ManagedRepository
 
 	// Merge cache
 
+	/// How to merge a branch into another
 	enum MergeMode
 	{
 		merge,      /// git merge (commit with multiple parents) of the target and branch tips

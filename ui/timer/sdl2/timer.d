@@ -19,10 +19,11 @@ public import ae.ui.timer.timer;
 import ae.ui.app.application;
 import ae.ui.shell.sdl2.shell : sdlEnforce;
 
+/// SDL implementation of `Timer`.
 final class SDLTimer : Timer
 {
-	override TimerEvent setTimeout (AppCallback fn, uint ms) { return add(fn, ms, false); }
-	override TimerEvent setInterval(AppCallback fn, uint ms) { return add(fn, ms, true ); }
+	override TimerEvent setTimeout (AppCallback fn, uint ms) { return add(fn, ms, false); } ///
+	override TimerEvent setInterval(AppCallback fn, uint ms) { return add(fn, ms, true ); } ///
 
 private:
 	TimerEvent add(AppCallback fn, uint ms, bool recurring)

@@ -161,20 +161,21 @@ immutable ubyte[8][128] font8x8_basic = [
 	[ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]    // U+007F
 ];
 
+/// `Font` interface for `font8x8_basic`.
 struct Font8x8
 {
 	struct Glyph
 	{
-		enum width = 8;
-		const(ubyte)[] rows;
-	}
+		enum width = 8; ///
+		const(ubyte)[] rows; ///
+	} ///
 
 static:
-	enum height = 8;
-	enum maxWidth = Glyph.width;
-	enum maxGlyph = 0x80;
-	bool hasGlyph(dchar c) nothrow @nogc { return c < font8x8_basic.length; }
-	Glyph getGlyph(dchar c) nothrow @nogc { return Glyph(font8x8_basic[c][]); }
+	enum height = 8; ///
+	enum maxWidth = Glyph.width; ///
+	enum maxGlyph = 0x80; ///
+	bool hasGlyph(dchar c) nothrow @nogc { return c < font8x8_basic.length; } ///
+	Glyph getGlyph(dchar c) nothrow @nogc { return Glyph(font8x8_basic[c][]); } ///
 }
 
-immutable Font8x8 font8x8;
+immutable Font8x8 font8x8; /// ditto

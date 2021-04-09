@@ -24,8 +24,11 @@ import ae.sys.process : getCurrentUser;
 
 version (Posix) import core.sys.posix.unistd : geteuid;
 
-static File pidFile;
+static File pidFile; /// The PID file. Kept open and locked while the program is running.
 
+/// Create and lock a PID file.
+/// If the PID file exists and is locked, an exception is thrown.
+/// To use, simply call this function at the top of `main` to prevent multiple instances.
 void createPidFile(
 	string name = defaultPidFileName(),
 	string path = defaultPidFilePath())
@@ -39,11 +42,16 @@ void createPidFile(
 	pidFile.flush();
 }
 
+/// The default `name` argument for `createPidFile`.
+/// Returns a file name containing the username and program name.
 string defaultPidFileName()
 {
 	return text(getCurrentUser(), "-", thisExePath.baseName, ".pid");
 }
 
+/// The default `path` argument for `createPidFile`.
+/// Returns "/var/run" if running as root on POSIX,
+/// or the temporary directory otherwise.
 string defaultPidFilePath()
 {
 	version (Posix)

@@ -19,15 +19,18 @@ import ae.utils.graphics.color;
 import ae.utils.graphics.view;
 
 /// Predefined colorspaces.
-enum ColorSpace { sRGB }
+enum ColorSpace
+{
+	sRGB, /// https://en.wikipedia.org/wiki/SRGB
+}
 
 /// Contains a gamma ramp.
 /// LUM_BASETYPE and PIX_BASETYPE should be numeric types indicating
 /// the channel type for the colors that will be converted.
 struct GammaRamp(LUM_BASETYPE, PIX_BASETYPE)
 {
-	LUM_BASETYPE[PIX_BASETYPE.max+1] pix2lumValues;
-	PIX_BASETYPE[LUM_BASETYPE.max+1] lum2pixValues;
+	LUM_BASETYPE[PIX_BASETYPE.max+1] pix2lumValues; /// Calculated gamma ramp table.
+	PIX_BASETYPE[LUM_BASETYPE.max+1] lum2pixValues; /// ditto
 
 	/// Create a GammaRamp with the given gamma value.
 	this(double gamma)
@@ -70,12 +73,14 @@ struct GammaRamp(LUM_BASETYPE, PIX_BASETYPE)
 		}
 	}
 
+	/// Convert pixel value to linear luminosity.
 	auto pix2lum(PIXCOLOR)(PIXCOLOR c) const
 	{
 		alias LUMCOLOR = ChangeChannelType!(PIXCOLOR, LUM_BASETYPE);
 		return LUMCOLOR.op!q{b[a]}(c, pix2lumValues[]);
 	}
 
+	/// Convert linear luminosity to pixel value.
 	auto lum2pix(LUMCOLOR)(LUMCOLOR c) const
 	{
 		alias PIXCOLOR = ChangeChannelType!(LUMCOLOR, PIX_BASETYPE);

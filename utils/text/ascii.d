@@ -226,6 +226,7 @@ unittest
 
 // ************************************************************************
 
+/// Returns `true` if `s` does not contain any characters which are not in `chars`.
 bool containsOnlyChars(string s, string chars)
 {
 	foreach (c; s)
@@ -234,6 +235,7 @@ bool containsOnlyChars(string s, string chars)
 	return true;
 }
 
+/// Returns `true` if `s` contains only digits and is non-empty.
 bool isUnsignedInteger(string s)
 {
 	foreach (c; s)
@@ -242,6 +244,8 @@ bool isUnsignedInteger(string s)
 	return s.length > 0;
 }
 
+/// Returns `true` if `s` contains only digits
+/// (excluding an optional leading '-') and is non-empty.
 bool isSignedInteger(string s)
 {
 	return s.length && isUnsignedInteger(s[0] == '-' ? s[1..$] : s);
@@ -266,6 +270,6 @@ void xlat(alias TABLE, T)(T[] buf)
 		c = TABLE[c];
 }
 
-/// Mutates buffer in-place
+/// Lowercases or uppercases a string in-place.
 alias xlat!(asciiLower, char) asciiToLower;
 alias xlat!(asciiUpper, char) asciiToUpper; /// ditto

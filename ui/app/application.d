@@ -23,12 +23,12 @@ import ae.ui.video.renderer;
 // This class could theoretically be split up into more layers (ShellApplication, etc.)
 class Application
 {
-	Config config;
+	Config config; ///
 
 	this()
 	{
 		config = new Config(getName(), getCompanyName());
-	}
+	} ///
 
 	// ************************** Application information **************************
 
@@ -53,14 +53,15 @@ class Application
 		static if (is(typeof(getDesktopResolution)))
 			getDesktopResolution(settings.fullScreenX, settings.fullScreenY);
 		return settings;
-	}
+	} ///
 
+	/// Override these to customize application properties and requirements.
 	ShellSettings getShellSettings() { return config.read("ShellSettings", getDefaultShellSettings()); }
-	void setShellSettings(ShellSettings settings) { config.write("ShellSettings", settings); }
+	void setShellSettings(ShellSettings settings) { config.write("ShellSettings", settings); } /// ditto
 
-	bool isResizable() { return true; }
-	bool needSound() { return false; }
-	bool needJoystick() { return false; }
+	bool isResizable() { return true; } /// ditto
+	bool needSound() { return false; } /// ditto
+	bool needJoystick() { return false; } /// ditto
 
 	// ****************************** Event handlers *******************************
 
@@ -76,25 +77,26 @@ class Application
 	/// The window size can be accessed via shell.video.getScreenSize.
 	void handleInit() {}
 
-	void handleKeyDown(Key key/*, modifiers? */, dchar character) {}
-	void handleKeyUp(Key key/*, modifiers? */) {}
+	/// Override these to handle input.
+	void handleKeyDown(Key key/*, modifiers? */, dchar character) {} /// ditto
+	void handleKeyUp(Key key/*, modifiers? */) {} /// ditto
 
-	void handleMouseDown(uint x, uint y, MouseButton button) {}
-	void handleMouseUp(uint x, uint y, MouseButton button) {}
-	void handleMouseMove(uint x, uint y, MouseButtons buttons) {}
+	void handleMouseDown(uint x, uint y, MouseButton button) {} /// ditto
+	void handleMouseUp(uint x, uint y, MouseButton button) {} /// ditto
+	void handleMouseMove(uint x, uint y, MouseButtons buttons) {} /// ditto
 	//void handleMouseRelMove(int dx, int dy) {} /// when cursor is clipped
 
-	void handleJoyAxisMotion(int axis, short value) {}
-	void handleJoyHatMotion (int hat, JoystickHatState state) {}
-	void handleJoyButtonDown(int button) {}
-	void handleJoyButtonUp  (int button) {}
+	void handleJoyAxisMotion(int axis, short value) {} /// ditto
+	void handleJoyHatMotion (int hat, JoystickHatState state) {} /// ditto
+	void handleJoyButtonDown(int button) {} /// ditto
+	void handleJoyButtonUp  (int button) {} /// ditto
 
 	//void handleResize(uint w, uint h) {}
-	void handleQuit() {}
+	void handleQuit() {} /// ditto
 
 	// ********************************* Rendering *********************************
 
-	void render(Renderer r) {}
+	void render(Renderer r) {} /// Override to implement rendering.
 }
 
 private __gshared Application application;
@@ -111,7 +113,7 @@ int runApplication(string[] args)
 {
 	assert(application !is null, "Application object not set");
 	return application.run(args);
-}
+} ///
 
 /// Wraps a delegate that is to be called only from the application thread context.
 struct AppCallbackEx(A...)
@@ -121,7 +123,7 @@ struct AppCallbackEx(A...)
 	void bind(void delegate(A) f)
 	{
 		this.f = f;
-	}
+	} ///
 
 	/// Blocks.
 	void call(A args)
@@ -137,7 +139,7 @@ struct AppCallbackEx(A...)
 		if (is(T == bool))
 	{
 		return f !is null;
-	}
+	} ///
 }
 
-alias AppCallbackEx!() AppCallback;
+alias AppCallbackEx!() AppCallback; ///

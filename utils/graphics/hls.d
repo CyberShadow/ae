@@ -19,12 +19,13 @@ struct HLS(COLOR, HLSTYPE=ushort, HLSTYPE HLSMAX=240)
 	// R,G, and B vary over 0-RGBMAX
 	enum RGBMAX = RGBTYPE.max;
 
-	// Hue is undefined if Saturation is 0 (grey-scale)
-	// This value determines where the Hue scrollbar is
-	// initially set for achromatic colors
+	/// Hue is undefined if Saturation is 0 (grey-scale)
+	/// This value determines where the Hue scrollbar is
+	/// initially set for achromatic colors
 	enum UNDEFINED = HLSMAX*2/3;
 
 static:
+	/// Convert RGB to HLS.
 	void toHLS(COLOR rgb, out HLSTYPE h, out HLSTYPE l, out HLSTYPE s)
 	{
 		auto R = rgb.r;
@@ -90,6 +91,7 @@ static:
 			return cast(HLSTYPE)( n1 );
 	}
 
+	/// Convert HLS to RGB.
 	COLOR fromHLS(HLSTYPE hue, HLSTYPE lum, HLSTYPE sat)
 	{
 		COLOR c;
@@ -116,6 +118,7 @@ static:
 	}
 }
 
+///
 unittest
 {
 	import ae.utils.graphics.color;

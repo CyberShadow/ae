@@ -26,6 +26,8 @@ import ae.utils.meta.rcclass;
 import ae.utils.textout;
 import ae.utils.time;
 
+/// Directory where log files will be saved.
+/// The default is "logs".
 string logDir;
 
 private void init()
@@ -37,6 +39,7 @@ private void init()
 shared static this() { init(); }
 static this() { init(); }
 
+/// Default time format used for timestamps.
 enum TIME_FORMAT = "Y-m-d H:i:s.u";
 
 private SysTime getLogTime()
@@ -44,19 +47,21 @@ private SysTime getLogTime()
 	return Clock.currTime(UTC());
 }
 
+/// Base logger class.
 abstract class CLogger
 {
 public:
-	alias log opCall;
-
 	this(string name)
 	{
 		this.name = name;
 		open();
-	}
+	} ///
 
+	/// Log a line.
 	abstract void log(in char[] str);
+	alias opCall = log; /// ditto
 
+	/// Change the output (rotate) the log file.
 	void rename(string name)
 	{
 		close();
@@ -64,6 +69,7 @@ public:
 		open();
 	}
 
+	/// Close the log ifel.
 	void close() {}
 
 protected:
@@ -72,17 +78,18 @@ protected:
 	void open() {}
 	void reopen() {}
 }
-alias RCClass!CLogger Logger;
+alias Logger = RCClass!CLogger; /// ditto
 
+/// File logger without formatting.
 class CRawFileLogger : CLogger
 {
-	bool timestampedFilenames;
+	bool timestampedFilenames; /// Whether to include the current time in the log file name.
 
 	this(string name, bool timestampedFilenames = false)
 	{
 		this.timestampedFilenames = timestampedFilenames;
 		super(name);
-	}
+	} ///
 
 	private final void logStartLine()
 	{
@@ -114,7 +121,7 @@ class CRawFileLogger : CLogger
 		logStartLine();
 		logFragment(str);
 		logEndLine();
-	}
+	} ///
 
 protected:
 	string fileName;
@@ -139,15 +146,16 @@ protected:
 		f = File(fileName, "ab");
 	}
 }
-alias RCClass!CRawFileLogger RawFileLogger;
-alias rcClass!CRawFileLogger rawFileLogger;
+alias RawFileLogger = RCClass!CRawFileLogger; /// ditto
+alias rawFileLogger = rcClass!CRawFileLogger; /// ditto
 
+/// Basic file logger.
 class CFileLogger : CRawFileLogger
 {
 	this(string name, bool timestampedFilenames = false)
 	{
 		super(name, timestampedFilenames);
-	}
+	} ///
 
 	override void log(in char[] str)
 	{
@@ -171,14 +179,14 @@ class CFileLogger : CRawFileLogger
 		super.logFragment(buf[0..writer.ptr-buf.ptr]);
 		super.logFragment(str);
 		super.logEndLine();
-	}
+	} ///
 
 	override void close()
 	{
 		//assert(f !is null);
 		if (f.isOpen)
 			f.close();
-	}
+	} ///
 
 private:
 	int currentDay;
@@ -199,65 +207,69 @@ protected:
 		f.flush();
 	}
 }
-alias RCClass!CFileLogger FileLogger;
-alias rcClass!CFileLogger fileLogger;
+alias FileLogger = RCClass!CFileLogger; /// ditto
+alias fileLogger = rcClass!CFileLogger; /// ditto
 
+/// Logs to the console (standard error).
 class CConsoleLogger : CLogger
 {
 	this(string name)
 	{
 		super(name);
-	}
+	} ///
 
 	override void log(in char[] str)
 	{
 		stderr.write(name, ": ", str, "\n");
 		stderr.flush();
-	}
+	} ///
 }
-alias RCClass!CConsoleLogger ConsoleLogger;
-alias rcClass!CConsoleLogger consoleLogger;
+alias ConsoleLogger = RCClass!CConsoleLogger; /// ditto
+alias consoleLogger = rcClass!CConsoleLogger; /// ditto
 
+/// Logs to nowhere.
 class CNullLogger : CLogger
 {
-	this() { super(null); }
-	override void log(in char[] str) {}
+	this() { super(null); } ///
+	override void log(in char[] str) {} ///
 }
-alias RCClass!CNullLogger NullLogger;
-alias rcClass!CNullLogger nullLogger;
+alias NullLogger = RCClass!CNullLogger; /// ditto
+alias nullLogger = rcClass!CNullLogger; /// ditto
 
+/// Logs to several other loggers.
 class CMultiLogger : CLogger
 {
 	this(Logger[] loggers ...)
 	{
 		this.loggers = loggers.dup;
 		super(null);
-	}
+	} ///
 
 	override void log(in char[] str)
 	{
 		foreach (logger; loggers)
 			logger.log(str);
-	}
+	} ///
 
 	override void rename(string name)
 	{
 		foreach (logger; loggers)
 			logger.rename(name);
-	}
+	} ///
 
 	override void close()
 	{
 		foreach (logger; loggers)
 			logger.close();
-	}
+	} ///
 
 private:
 	Logger[] loggers;
 }
-alias RCClass!CMultiLogger MultiLogger;
-alias rcClass!CMultiLogger multiLogger;
+alias MultiLogger = RCClass!CMultiLogger; /// ditto
+alias multiLogger = rcClass!CMultiLogger; /// ditto
 
+/// Logs to a file and the console.
 class CFileAndConsoleLogger : CMultiLogger
 {
 	this(string name)
@@ -266,12 +278,12 @@ class CFileAndConsoleLogger : CMultiLogger
 		f = fileLogger(name);
 		c = consoleLogger(name);
 		super(f, c);
-	}
+	} ///
 }
-alias RCClass!CFileAndConsoleLogger FileAndConsoleLogger;
-alias rcClass!CFileAndConsoleLogger fileAndConsoleLogger;
+alias FileAndConsoleLogger = RCClass!CFileAndConsoleLogger; /// ditto
+alias fileAndConsoleLogger = rcClass!CFileAndConsoleLogger; /// ditto
 
-bool quiet;
+bool quiet; /// True if "-q" or ~--quiet" is present on the command line.
 
 shared static this()
 {

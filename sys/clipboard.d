@@ -26,6 +26,7 @@ version (Windows)
 	mixin(importWin32!q{winnls});
 	mixin(importWin32!q{winuser});
 
+	/// Put text into the clipboard.
 	void setClipboardText(string s)
 	{
 		auto ws = s.toUTF16();
@@ -49,6 +50,7 @@ version (Windows)
 		]);
 	}
 
+	/// Get text from the clipboard.
 	string getClipboardText()
 	{
 		static immutable DWORD[] textFormat = [CF_UNICODETEXT];
@@ -62,9 +64,10 @@ version (Windows)
 	/// One format entry in the Windows clipboard.
 	struct ClipboardFormat
 	{
-		DWORD format;
-		const (void)[] data;
+		DWORD format; /// The Windows clipboard format code, such as `CF_TEXT`.
+		const (void)[] data; /// Data in this format.
 
+		/// `GetClipboardFormatNameW` wrapper.
 		string getName()
 		{
 			import ae.utils.meta : progn;
@@ -111,6 +114,7 @@ version (Windows)
 		return result;
 	}
 
+	/// Set the clipboard with data in the specified formats.
 	void setClipboard(in ClipboardFormat[] formats)
 	{
 		wenforce(OpenClipboard(null), "OpenClipboard");
@@ -135,6 +139,7 @@ version (Posix)
 
 	import ae.utils.path;
 
+	/// Put text into the clipboard.
 	void setClipboardText(string s)
 	{
 		string[] cmdLine;
@@ -155,6 +160,7 @@ version (Posix)
 		enforce(pid.wait() == 0, cmdLine[0] ~ " failed");
 	}
 
+	/// Get text from the clipboard.
 	string getClipboardText()
 	{
 		string[] cmdLine;

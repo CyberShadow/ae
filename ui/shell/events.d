@@ -13,45 +13,49 @@
 
 module ae.ui.shell.events;
 
+/// Mouse button indices.
 enum MouseButton : ubyte
 {
-	Left,
-	Right,
-	Middle,
-	WheelUp,
-	WheelDown,
+	Left,       ///
+	Right,      ///
+	Middle,     ///
+	WheelUp,    ///
+	WheelDown,  ///
 	Max
 }
 
+/// Mouse button mask.
 enum MouseButtons : ubyte
 {
-	None = 0,
-	Left      = 1<<0,
-	Right     = 1<<1,
-	Middle    = 1<<2,
-	WheelUp   = 1<<3,
-	WheelDown = 1<<4
+	None      =    0, ///
+	Left      = 1<<0, ///
+	Right     = 1<<1, ///
+	Middle    = 1<<2, ///
+	WheelUp   = 1<<3, ///
+	WheelDown = 1<<4, ///
 }
 
+/// A few key definitions.
 enum Key
 {
-	unknown,
-	esc,
-	up,
-	down,
-	left,
-	right,
-	pageUp,
-	pageDown,
-	home,
-	end,
-	space
+	unknown  , ///
+	esc      , ///
+	up       , ///
+	down     , ///
+	left     , ///
+	right    , ///
+	pageUp   , ///
+	pageDown , ///
+	home     , ///
+	end      , ///
+	space    , ///
 }
 
+/// Joystick/D-pad directions.
 enum JoystickHatState
 {
-	up    = 1,
-	right = 2,
-	down  = 4,
-	left  = 8,
+	up    = 1, ///
+	right = 2, ///
+	down  = 4, ///
+	left  = 8, ///
 }

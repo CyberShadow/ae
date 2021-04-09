@@ -63,14 +63,20 @@ class DManager : ICacheHost
 {
 	// **************************** Configuration ****************************
 
-	struct Config /// DManager configuration.
+	/// DManager configuration.
+	struct Config
 	{
-		struct Build /// Build configuration
+		/// Build configuration
+		struct Build
 		{
+			/// Per-component build configuration.
 			struct Components
 			{
+				/// Explicitly enable or disable a component.
 				bool[string] enable;
 
+				/// Returns a list of all enabled components, whether
+				/// they're enabled explicitly or by default.
 				string[] getEnabledComponentNames()
 				{
 					foreach (componentName; enable.byKey)
@@ -82,11 +88,11 @@ class DManager : ICacheHost
 						.dup;
 				}
 
-				Component.CommonConfig common;
-				DMD.Config dmd;
-				Website.Config website;
+				Component.CommonConfig common; /// Configuration which applies to all components.
+				DMD.Config dmd; /// Configuration for building the compiler.
+				Website.Config website; /// Configuration for building the website.
 			}
-			Components components;
+			Components components; /// ditto
 
 			/// Additional environment variables.
 			/// Supports %VAR% expansion - see applyEnv.
@@ -147,7 +153,8 @@ class DManager : ICacheHost
 	/// Current build environment.
 	struct Environment
 	{
-		struct Deps /// Configuration for software dependencies
+		/// Configuration for software dependencies
+		struct Deps
 		{
 			string dmcDir;   /// Where dmc.zip is unpacked.
 			string vsDir;    /// Where Visual Studio is installed
@@ -174,6 +181,8 @@ class DManager : ICacheHost
 	/// This number increases with each incompatible change to cached data.
 	enum cacheVersion = 3;
 
+	/// Returns the path to cached data for the given cache engine
+	/// (as in `config.local.cache`).
 	string cacheEngineDir(string engineName)
 	{
 		// Keep compatibility with old cache paths
@@ -188,32 +197,37 @@ class DManager : ICacheHost
 		);
 	}
 
+	/// Executable file name suffix for the current platform.
 	version (Windows)
-	{
 		enum string binExt = ".exe";
-		enum configFileName = "sc.ini";
-	}
 	else
-	{
 		enum string binExt = "";
-		enum configFileName = "dmd.conf";
-	}
 
+	/// DMD configuration file name for the current platform.
+	version (Windows)
+		enum configFileName = "sc.ini";
+	else
+		enum configFileName = "dmd.conf";
+
+	/// Do we need to explicitly specify a `-conf=` switch to DMD
+	/// This is true when there exists a configuration file in the home directory.
 	static bool needConfSwitch() { return exists(std.process.environment.get("HOME", null).buildPath(configFileName)); }
 
 	// **************************** Repositories *****************************
 
+	/// Base class for a `DManager` Git repository.
 	class DManagerRepository : ManagedRepository
 	{
 		this()
 		{
 			this.offline = config.local.offline;
 			this.verify = this.outer.verifyWorkTree;
-		}
+		} ///
 
 		override void log(string s) { return this.outer.log(s); }
 	}
 
+	/// The meta-repository, which contains the sub-project submodules.
 	class MetaRepository : DManagerRepository
 	{
 		protected override Git getRepo()
@@ -243,6 +257,7 @@ class DManager : ICacheHost
 
 		string[string][string] submoduleCache;
 
+		/// Get submodule commit hashes at the given commit-ish.
 		string[string] getSubmoduleCommits(string head)
 		{
 			auto pcacheEntry = head in submoduleCache;
@@ -301,9 +316,19 @@ class DManager : ICacheHost
 		}
 	}
 
+	private MetaRepository metaRepo; /// ditto
+
+	MetaRepository getMetaRepo()
+	{
+		if (!metaRepo)
+			metaRepo = new MetaRepository;
+		return metaRepo;
+	} /// ditto
+
+	/// Sub-project repositories.
 	class SubmoduleRepository : DManagerRepository
 	{
-		string dir;
+		string dir; /// Full path to the repository.
 
 		protected override Git getRepo()
 		{
@@ -341,20 +366,9 @@ class DManager : ICacheHost
 		}
 	}
 
-	/// The meta-repository, which contains the sub-project submodules.
-	private MetaRepository metaRepo;
+	private SubmoduleRepository[string] submodules; /// ditto
 
-	MetaRepository getMetaRepo() /// ditto
-	{
-		if (!metaRepo)
-			metaRepo = new MetaRepository;
-		return metaRepo;
-	}
-
-	/// Sub-project repositories.
-	private SubmoduleRepository[string] submodules;
-
-	ManagedRepository getSubmodule(string name) /// ditto
+	ManagedRepository getSubmodule(string name)
 	{
 		assert(name, "This component is not associated with a submodule");
 		if (name !in submodules)
@@ -376,7 +390,7 @@ class DManager : ICacheHost
 		}
 
 		return submodules[name];
-	}
+	} /// ditto
 
 	// ***************************** Components ******************************
 
@@ -388,6 +402,7 @@ class DManager : ICacheHost
 
 		/// Corresponding subproject repository name.
 		@property abstract string submoduleName();
+		/// Corresponding subproject repository.
 		@property ManagedRepository submodule() { return getSubmodule(submoduleName); }
 
 		/// Configuration applicable to multiple (not all) components.
@@ -395,6 +410,7 @@ class DManager : ICacheHost
 		// Only serialize used fields.
 		struct CommonConfig
 		{
+			/// The default target model on this platform.
 			version (Windows)
 				enum defaultModel = "32";
 			else
@@ -407,11 +423,11 @@ class DManager : ICacheHost
 			/// Controls the models of the built Phobos and Druntime libraries.
 			string model = defaultModel;
 
-			@property string[] models() { return model.split(","); }
-			@property void models(string[] value) { this.model = value.join(","); }
+			@property string[] models() { return model.split(","); } /// Get/set `model` as list.
+			@property void models(string[] value) { this.model = value.join(","); } /// ditto
 
-			string[] makeArgs; /// Additional make parameters,
-			                   /// e.g. "HOST_CC=g++48"
+			/// Additional make parameters, e.g. "HOST_CC=g++48"
+			string[] makeArgs;
 		}
 
 		/// A string description of this component's configuration.
@@ -432,16 +448,16 @@ class DManager : ICacheHost
 		/// and is also used to calculate the cache key.
 		struct Metadata
 		{
-			int cacheVersion;
-			string name;
-			string commit;
-			string configString;
-			string[] sourceDepCommits;
-			Metadata[] dependencyMetadata;
-			@JSONOptional string cacheKey;
+			int cacheVersion; ///
+			string name; ///
+			string commit; ///
+			string configString; ///
+			string[] sourceDepCommits; ///
+			Metadata[] dependencyMetadata; ///
+			@JSONOptional string cacheKey; ///
 		}
 
-		Metadata getMetadata() /// ditto
+		Metadata getMetadata()
 		{
 			return Metadata(
 				cacheVersion,
@@ -456,14 +472,14 @@ class DManager : ICacheHost
 				).array(),
 				config.build.cacheKey,
 			);
-		}
+		} /// ditto
 
 		void saveMetaData(string target)
 		{
 			std.file.write(buildPath(target, "digger-metadata.json"), getMetadata().toJson());
 			// Use a separate file to avoid double-encoding JSON
 			std.file.write(buildPath(target, "digger-config.json"), configString);
-		}
+		} /// ditto
 
 		/// Calculates the cache key, which should be unique and immutable
 		/// for the same source, build parameters, and build algorithm.
@@ -477,7 +493,7 @@ class DManager : ICacheHost
 			);
 		}
 
-		@property string sourceDir() { return submodule.git.path; }
+		@property string sourceDir() { return submodule.git.path; } ///
 
 		/// Directory to which built files are copied to.
 		/// This will then be atomically added to the cache.
@@ -885,6 +901,7 @@ EOF");
 		@property override string[] sourceDependencies() { return []; }
 		@property override string[] dependencies() { return []; }
 
+		/// DMD build configuration.
 		struct Config
 		{
 			/// Whether to build a debug DMD.
@@ -959,9 +976,11 @@ EOF");
 				config.build.components.common.makeArgs,
 				config.build.components.common.model,
 			).toJson();
-		}
+		} ///
 
+		/// Name of the Visual Studio build configuration to use.
 		@property string vsConfiguration() { return config.build.components.dmd.debugDMD ? "Debug" : "Release"; }
+		/// Name of the Visual Studio build platform to use.
 		@property string vsPlatform     () { return config.build.components.dmd.dmdModel == "64" ? "x64" : "Win32"; }
 
 		override void performBuild()
@@ -1757,6 +1776,7 @@ EOS";
 		@property override string[] sourceDependencies() { return ["druntime", "phobos", "dub"]; }
 		@property override string[] dependencies() { return ["dmd", "druntime", "phobos", "rdmd"]; }
 
+		/// Website build configuration.
 		struct Config
 		{
 			/// Do not include timestamps, line numbers, or other
@@ -2039,6 +2059,8 @@ EOS";
 
 	private Component[string] components;
 
+	/// Retrieve a component by name
+	/// (as it would occur in `config.build.components.enable`).
 	Component getComponent(string name)
 	{
 		if (name !in components)
@@ -2088,6 +2110,7 @@ EOS";
 		return components[name];
 	}
 
+	/// Retrieve components built from the given submodule name.
 	Component[] getSubmoduleComponents(string submoduleName)
 	{
 		return components
@@ -2138,9 +2161,10 @@ EOS";
 		return getMetaRepo().update();
 	}
 
+	/// Indicates the state of a build customization.
 	struct SubmoduleState
 	{
-		string[string] submoduleCommits;
+		string[string] submoduleCommits; /// Commit hashes of submodules to build.
 	}
 
 	/// Begin customization, starting at the specified commit.
@@ -2150,7 +2174,7 @@ EOS";
 		return SubmoduleState(getMetaRepo().getSubmoduleCommits(commit));
 	}
 
-	alias MergeMode = ManagedRepository.MergeMode;
+	alias MergeMode = ManagedRepository.MergeMode; ///
 
 	/// Applies a merge onto the given SubmoduleState.
 	void merge(ref SubmoduleState submoduleState, string submoduleName, string[2] branch, MergeMode mode)
@@ -2210,6 +2234,7 @@ EOS";
 	private SubmoduleState submoduleState;
 	private bool incrementalBuild;
 
+	/// Returns the name of the cache engine being used.
 	@property string cacheEngineName()
 	{
 		if (incrementalBuild)
@@ -2227,9 +2252,9 @@ EOS";
 		return commit;
 	}
 
-	static const string[] defaultComponents = ["dmd", "druntime", "phobos-includes", "phobos", "rdmd"];
-	static const string[] additionalComponents = ["tools", "website", "extras", "curl", "dub"];
-	static const string[] allComponents = defaultComponents ~ additionalComponents;
+	static const string[] defaultComponents = ["dmd", "druntime", "phobos-includes", "phobos", "rdmd"]; /// Components enabled by default.
+	static const string[] additionalComponents = ["tools", "website", "extras", "curl", "dub"]; /// Components disabled by default.
+	static const string[] allComponents = defaultComponents ~ additionalComponents; /// All components that may be enabled and built.
 
 	/// Build the specified components according to the specified configuration.
 	void build(SubmoduleState submoduleState, bool incremental = false)
@@ -2295,6 +2320,7 @@ EOS";
 			getComponent(componentName).test();
 	}
 
+	/// Check if the given build is cached.
 	bool isCached(SubmoduleState submoduleState)
 	{
 		this.components = null;
@@ -2307,7 +2333,7 @@ EOS";
 		return true;
 	}
 
-	/// Returns the isCached state for all commits in the history of the given ref.
+	/// Returns the `isCached` state for all commits in the history of the given ref.
 	bool[string] getCacheState(string[string][string] history)
 	{
 		log("Enumerating cache entries...");
@@ -2763,6 +2789,7 @@ EOS";
 
 	// ******************************** Cache ********************************
 
+	/// Unbuildable versions are saved in the cache as a single empty file with this name.
 	enum unbuildableMarker = "unbuildable";
 
 	DCache cacheEngine;
@@ -2776,7 +2803,7 @@ EOS";
 			cacheEngine = createCache(cacheEngineName, cacheEngineDir(cacheEngineName), this);
 		}
 		return cacheEngine;
-	}
+	} /// ditto
 
 	void cp(string src, string dst)
 	{
@@ -2870,14 +2897,15 @@ EOS";
 
 	// **************************** Miscellaneous ****************************
 
+	/// Gets the D merge log (newest first).
 	struct LogEntry
 	{
-		string hash;
-		string[] message;
-		SysTime time;
+		string hash;      ///
+		string[] message; ///
+		SysTime time;     ///
 	}
 
-	/// Gets the D merge log (newest first).
+	/// ditto
 	LogEntry[] getLog(string refName = "refs/remotes/origin/master")
 	{
 		auto history = getMetaRepo().git.getHistory();

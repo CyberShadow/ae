@@ -44,11 +44,13 @@ public:
 		return this;
 	}
 
+	/// Utility function to serve HTML.
 	HttpResponseEx serveData(string data, string contentType = "text/html; charset=utf-8")
 	{
 		return serveData(Data(data), contentType);
 	}
 
+	/// Utility function to serve arbitrary data.
 	HttpResponseEx serveData(Data[] data, string contentType)
 	{
 		setStatus(HttpStatusCode.OK);
@@ -57,12 +59,18 @@ public:
 		return this;
 	}
 
+	/// ditto
 	HttpResponseEx serveData(Data data, string contentType)
 	{
 		return serveData([data], contentType);
 	}
 
+	/// If set, this is the name of the JSONP callback function to be
+	/// used in `serveJson`.
 	string jsonCallback;
+
+	/// Utility function to serialize and serve an arbitrary D value as JSON.
+	/// If `jsonCallback` is set, use JSONP instead.
 	HttpResponseEx serveJson(T)(T v)
 	{
 		string data = toJson(v);
@@ -72,6 +80,7 @@ public:
 			return serveData(data, "application/json");
 	}
 
+	/// Utility function to serve plain text.
 	HttpResponseEx serveText(string data)
 	{
 		return serveData(Data(data), "text/plain; charset=utf-8");
@@ -178,11 +187,8 @@ public:
 		return this;
 	}
 
-	static string loadTemplate(string filename, string[string] dictionary)
-	{
-		return parseTemplate(readText(filename), dictionary);
-	}
-
+	/// Fill a template using the given dictionary,
+	/// substituting `"<?var?>"` with `dictionary["var"]`.
 	static string parseTemplate(string data, string[string] dictionary)
 	{
 		import ae.utils.textout : StringBuilder;
@@ -206,6 +212,16 @@ public:
 		return sb.get();
 	}
 
+	/// Load a template from the given file name,
+	/// and fill it using the given dictionary.
+	static string loadTemplate(string filename, string[string] dictionary)
+	{
+		return parseTemplate(readText(filename), dictionary);
+	}
+
+	/// Serve `this.pageTemplate` as HTML, substituting `"<?title?>"`
+	/// with `title`, `"<?content?>"` with `contentHTML`, and other
+	/// tokens according to `pageTokens`.
 	void writePageContents(string title, string contentHTML)
 	{
 		string[string] dictionary = pageTokens.dup;
@@ -215,6 +231,9 @@ public:
 		headers["Content-Type"] = "text/html; charset=utf-8";
 	}
 
+	/// Serve `this.pageTemplate` as HTML, substituting `"<?title?>"`
+	/// with `title`, `"<?content?>"` with one `<p>` tag per `html`
+	/// item, and other tokens according to `pageTokens`.
 	void writePage(string title, string[] html ...)
 	{
 		if (!status)
@@ -230,6 +249,7 @@ public:
 		writePageContents(title, parseTemplate(contentTemplate, dictionary));
 	}
 
+	/// Return a likely reason (in English) for why a specified status code was served.
 	static string getStatusExplanation(HttpStatusCode code)
 	{
 		switch(code)
@@ -246,6 +266,8 @@ public:
 		}
 	}
 
+	/// Serve a nice error page using `this.errorTemplate`,
+	/// `this.errorTokens`, and `writePageContents`.
 	HttpResponseEx writeError(HttpStatusCode code, string details=null)
 	{
 		setStatus(code);
@@ -262,6 +284,8 @@ public:
 		return this;
 	}
 
+	/// Set a `"Refresh"` header requesting a refresh after the given
+	/// interval, optionally redirecting to another location.
 	void setRefresh(int seconds, string location=null)
 	{
 		auto refresh = to!string(seconds);
@@ -270,16 +294,19 @@ public:
 		headers["Refresh"] = refresh;
 	}
 
+	/// Apply `disableCache` on this response's headers.
 	void disableCache()
 	{
 		.disableCache(headers);
 	}
 
+	/// Apply `cacheForever` on this response's headers.
 	void cacheForever()
 	{
 		.cacheForever(headers);
 	}
 
+	/// Construct and return a copy of this `HttpResponseEx`.
 	HttpResponseEx dup()
 	{
 		auto c = new HttpResponseEx;
@@ -291,6 +318,8 @@ public:
 	}
 
 	/**
+	   Request a username and password.
+
 	   Usage:
 	   ---
 	   if (!response.authorize(request,
@@ -330,6 +359,7 @@ public:
 		return true;
 	}
 
+	/// The default page template, used for `writePage` and error pages.
 	static pageTemplate =
 `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 
@@ -366,17 +396,23 @@ public:
   </body>
 </html>`;
 
+	/// Additional variables to use when filling out page templates.
 	string[string] pageTokens;
 
+	/// The default template for the page's contents, used for
+	/// `writePage`.
 	static contentTemplate =
 `    <p><span style="font-weight: bold; font-size: 40px;"><?title?></span></p>
 <?content?>
 `;
 
+	/// The default template for error messages, used for `writeError`.
 	static errorTemplate =
 `    <p><span style="font-weight: bold; font-size: 40px;"><span style="color: #FF0000; font-size: 100px;"><?code?></span>(<?message?>)</span></p>
     <p><?explanation?></p>
     <p><?details?></p>
 `;
+
+	/// Additional variables to use when filling out error templates.
 	string[string] errorTokens;
 }

@@ -59,17 +59,21 @@ public:
 class HttpRequest : HttpMessage
 {
 public:
+	/// HTTP method, e.g., "GET".
 	string method = "GET";
+
+	/// If this request is going through a HTTP proxy server, this
+	/// should be set to its address.
 	string proxy;
 
 	this()
 	{
-	}
+	} ///
 
-	this(string resource)
+	this(string url)
 	{
-		this.resource = resource;
-	}
+		this.resource = url;
+	} ///
 
 	/// Resource part of URL (everything after the hostname)
 	@property string resource()
@@ -77,6 +81,7 @@ public:
 		return _resource;
 	}
 
+	/// Set the resource part of the URL, or the entire URL.
 	/// Setting the resource to a full URL will fill in the Host header, as well.
 	@property void resource(string value)
 	{
@@ -123,12 +128,16 @@ public:
 		return colon<0 ? _host : _host[0..colon];
 	}
 
+	/// Sets the hostname (and the `"Host"` header).
+	/// Must not include a port number.
+	/// Does not change the previously-set port number.
 	@property void host(string _host)
 	{
 		auto _port = this.port;
 		headers["Host"] = _port==protocolDefaultPort ? _host : _host ~ ":" ~ text(_port);
 	}
 
+	/// Retrieves the default port number for the currently set `protocol`.
 	@property ushort protocolDefaultPort()
 	{
 		switch (protocol)
@@ -142,7 +151,8 @@ public:
 		}
 	}
 
-	/// Port number, from Host header (defaults to 80)
+	/// Port number, from `"Host"` header.
+	/// Defaults to `protocolDefaultPort`.
 	@property ushort port()
 	{
 		if ("Host" in headers)
@@ -155,6 +165,9 @@ public:
 			return _port ? _port : protocolDefaultPort;
 	}
 
+	/// Sets the port number.
+	/// If it is equal to `protocolDefaultPort`, then it is not
+	/// included in the `"Host"` header.
 	@property void port(ushort _port)
 	{
 		if ("Host" in headers)
@@ -168,7 +181,7 @@ public:
 			this._port = _port;
 	}
 
-	/// Path part of request (until the ?)
+	/// Path part of request (until the `'?'`).
 	@property string path()
 	{
 		auto p = resource.indexOf('?');
@@ -178,7 +191,7 @@ public:
 			return resource;
 	}
 
-	/// Query string part of request (atfer the ?)
+	/// Query string part of request (atfer the `'?'`).
 	@property string queryString()
 	{
 		auto p = resource.indexOf('?');
@@ -198,7 +211,7 @@ public:
 			resource = resource ~ '?' ~ value;
 	}
 
-	/// AA of query string parameters
+	/// The query string parameters.
 	@property UrlParameters urlParameters()
 	{
 		return decodeUrlParameters(queryString);
@@ -216,7 +229,7 @@ public:
 		return protocol ~ "://" ~ host ~ (port==protocolDefaultPort ? null : ":" ~ to!string(port));
 	}
 
-	/// Reconstruct full URL from host, port and resource
+	/// Full URL.
 	@property string url()
 	{
 		return root ~ resource;
@@ -228,6 +241,7 @@ public:
 		return root ~ resource.findSplit("?")[0];
 	}
 
+	/// The hostname part of the proxy address, if any.
 	@property string proxyHost()
 	{
 		auto portstart = proxy.indexOf(':');
@@ -236,6 +250,7 @@ public:
 		return proxy;
 	}
 
+	/// The port number of the proxy address if it specified, otherwise `80`.
 	@property ushort proxyPort()
 	{
 		auto portstart = proxy.indexOf(':');
@@ -330,64 +345,67 @@ private:
 /// HTTP response status codes
 enum HttpStatusCode : ushort
 {
-	None = 0,
+	None                         =   0,  ///
 
-	Continue=100,
-	SwitchingProtocols=101,
+	Continue                     = 100,  ///
+	SwitchingProtocols           = 101,  ///
 
-	OK=200,
-	Created=201,
-	Accepted=202,
-	NonAuthoritativeInformation=203,
-	NoContent=204,
-	ResetContent=205,
-	PartialContent=206,
+	OK                           = 200,  ///
+	Created                      = 201,  ///
+	Accepted                     = 202,  ///
+	NonAuthoritativeInformation  = 203,  ///
+	NoContent                    = 204,  ///
+	ResetContent                 = 205,  ///
+	PartialContent               = 206,  ///
 
-	MultipleChoices=300,
-	MovedPermanently=301,
-	Found=302,
-	SeeOther=303,
-	NotModified=304,
-	UseProxy=305,
-	//(Unused)=306,
-	TemporaryRedirect=307,
+	MultipleChoices              = 300,  ///
+	MovedPermanently             = 301,  ///
+	Found                        = 302,  ///
+	SeeOther                     = 303,  ///
+	NotModified                  = 304,  ///
+	UseProxy                     = 305,  ///
+	//(Unused)                   = 306,  ///
+	TemporaryRedirect            = 307,  ///
 
-	BadRequest=400,
-	Unauthorized=401,
-	PaymentRequired=402,
-	Forbidden=403,
-	NotFound=404,
-	MethodNotAllowed=405,
-	NotAcceptable=406,
-	ProxyAuthenticationRequired=407,
-	RequestTimeout=408,
-	Conflict=409,
-	Gone=410,
-	LengthRequired=411,
-	PreconditionFailed=412,
-	RequestEntityTooLarge=413,
-	RequestUriTooLong=414,
-	UnsupportedMediaType=415,
-	RequestedRangeNotSatisfiable=416,
-	ExpectationFailed=417,
+	BadRequest                   = 400,  ///
+	Unauthorized                 = 401,  ///
+	PaymentRequired              = 402,  ///
+	Forbidden                    = 403,  ///
+	NotFound                     = 404,  ///
+	MethodNotAllowed             = 405,  ///
+	NotAcceptable                = 406,  ///
+	ProxyAuthenticationRequired  = 407,  ///
+	RequestTimeout               = 408,  ///
+	Conflict                     = 409,  ///
+	Gone                         = 410,  ///
+	LengthRequired               = 411,  ///
+	PreconditionFailed           = 412,  ///
+	RequestEntityTooLarge        = 413,  ///
+	RequestUriTooLong            = 414,  ///
+	UnsupportedMediaType         = 415,  ///
+	RequestedRangeNotSatisfiable = 416,  ///
+	ExpectationFailed            = 417,  ///
 
-	InternalServerError=500,
-	NotImplemented=501,
-	BadGateway=502,
-	ServiceUnavailable=503,
-	GatewayTimeout=504,
-	HttpVersionNotSupported=505
+	InternalServerError          = 500,  ///
+	NotImplemented               = 501,  ///
+	BadGateway                   = 502,  ///
+	ServiceUnavailable           = 503,  ///
+	GatewayTimeout               = 504,  ///
+	HttpVersionNotSupported      = 505,  ///
 }
 
 /// HTTP reply class
 class HttpResponse : HttpMessage
 {
 public:
-	HttpStatusCode status;
-	string statusMessage;
+	HttpStatusCode status; /// HTTP status code
+	string statusMessage; /// HTTP status message, if one was supplied
 
+	/// What Zlib compression level to use when compressing the reply.
 	int compressionLevel = 1;
 
+	/// Returns the message corresponding to the given `HttpStatusCode`,
+	/// or `null` if the code is unknown.
 	static string getStatusMessage(HttpStatusCode code)
 	{
 		switch(code)
@@ -447,6 +465,7 @@ public:
 		statusMessage = getStatusMessage(code);
 	}
 
+	/// Initializes this `HttpResponse` with the given `statusLine`.
 	final void parseStatusLine(string statusLine)
 	{
 		auto versionEnd = statusLine.indexOf(' ');
@@ -575,6 +594,7 @@ public:
 	}
 }
 
+/// Sets headers to request clients to not cache a response.
 void disableCache(ref Headers headers)
 {
 	headers["Expires"] = "Mon, 26 Jul 1997 05:00:00 GMT";  // disable IE caching
@@ -583,12 +603,14 @@ void disableCache(ref Headers headers)
 	headers["Pragma"] = "no-cache";
 }
 
+/// Sets headers to request clients to cache a response indefinitely.
 void cacheForever(ref Headers headers)
 {
 	headers["Expires"] = httpTime(Clock.currTime().add!"years"(1));
 	headers["Cache-Control"] = "public, max-age=31536000";
 }
 
+/// Formats a timestamp in the format used by HTTP (RFC 2822).
 string httpTime(SysTime time)
 {
 	// Apache is bad at timezones
@@ -657,12 +679,17 @@ string httpEscape(string str)
 
 public import ae.net.ietf.url : UrlParameters, encodeUrlParameter, encodeUrlParameters, decodeUrlParameter, decodeUrlParameters;
 
+/// Represents a part from a multipart/* message.
 struct MultipartPart
 {
+	/// The part's individual headers.
 	Headers headers;
+
+	/// The part's contents.
 	Data data;
 }
 
+/// Encode a multipart body with the given parts and boundary.
 Data encodeMultipart(MultipartPart[] parts, string boundary)
 {
 	Data data;
@@ -680,6 +707,7 @@ Data encodeMultipart(MultipartPart[] parts, string boundary)
 	return data;
 }
 
+/// Decode a multipart body using the given boundary.
 MultipartPart[] decodeMultipart(Data data, string boundary)
 {
 	auto s = cast(char[])data.contents;

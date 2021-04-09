@@ -15,13 +15,18 @@ module ae.ui.timer.timer;
 
 import ae.ui.app.application;
 
+/// Abstract timer interface.
 class Timer
 {
+	/// Run `fn` after `ms` milliseconds.
 	abstract TimerEvent setTimeout (AppCallback fn, uint ms);
+	/// Run `fn` every `ms` milliseconds.
 	abstract TimerEvent setInterval(AppCallback fn, uint ms);
 }
 
+/// Abstract interface for registered timer events.
 class TimerEvent
 {
+	/// Cancel the timer task.
 	abstract void cancel();
 }

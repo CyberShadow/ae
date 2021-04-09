@@ -28,10 +28,12 @@ static import ae.sys.net.cachedcurl;
 
 debug static import std.stdio;
 
-// Server-side test scripts are here:
-// https://gist.github.com/58df32ed1dbe64fffd0545f87d9321ad
-string testBaseURL = "http://thecybershadow.net/d/nettest/"; // should be HTTP
+/// Test endpoint base.
+/// Server-side test scripts are here:
+/// https://gist.github.com/58df32ed1dbe64fffd0545f87d9321ad
+string testBaseURL = "http://thecybershadow.net/d/nettest/"; // (must be HTTP)
 
+/// Test a `ae.sys.net.Network` implementation.
 void test(string moduleName, string className)()
 {
 	debug std.stdio.stderr.writeln("Testing " ~ className);

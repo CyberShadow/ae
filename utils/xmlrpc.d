@@ -19,6 +19,7 @@ import std.exception;
 
 import ae.utils.xml;
 
+/// Serialize a D value `v` to an XML node according to XML-RPC.
 XmlNode valueToXml(T)(T v)
 {
 	static if (is(T : string))
@@ -78,6 +79,7 @@ XmlNode valueToXml(T)(T v)
 		static assert(0, "Can't encode " ~ T.stringof ~ " to XML-RPC");
 }
 
+/// Format an XML-RPC method call.
 XmlDocument formatXmlRpcCall(T...)(string methodName, T params)
 {
 	auto paramsNode = new XmlNode(XmlNodeType.Node, "params");
@@ -101,6 +103,7 @@ XmlDocument formatXmlRpcCall(T...)(string methodName, T params)
 	return cast(XmlDocument)doc;
 }
 
+/// Parse a D value from an XML node according to XML-RPC.
 T parseXmlValue(T)(XmlNode value)
 {
 	enforce(value.type==XmlNodeType.Node && value.tag == "value", "Expected <value> node");
@@ -215,19 +218,23 @@ T parseXmlValue(T)(XmlNode value)
 		static assert(0, "Can't decode " ~ T.stringof ~ " from XML-RPC");
 }
 
+/// Exception class used for XML-RPC response errors.
 class XmlRpcException : Exception
 {
-	int faultCode;
-	string faultString;
+	int faultCode; ///
+	string faultString; ///
 
 	this(int faultCode, string faultString)
 	{
 		this.faultCode = faultCode;
 		this.faultString = faultString;
 		super(format("XML-RPC error %d (%s)", faultCode, faultString));
-	}
+	} ///
 }
 
+/// Parse an XML-RPC response.
+/// On success, return the response return value, deserialized as `T`.
+/// On failure, throw `XmlRpcException`.
 T parseXmlRpcResponse(T)(XmlDocument doc)
 {
 	auto methodResponse = doc["methodResponse"];

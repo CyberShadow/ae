@@ -21,13 +21,16 @@ import ae.utils.meta : singleton, I;
 
 public import ae.sys.install.common;
 
+/// Installs a GnuWin32 component.
 final class GnuWin32Component : Installer
 {
+	/// Template for component .zip files.
 	string urlTemplate = "http://gnuwin32.sourceforge.net/downlinks/%s-%s-zip.php";
 
+	/// Component to install.
 	string componentName;
-	this(string componentName) { this.componentName = componentName; }
 
+	this(string componentName) { this.componentName = componentName; } ///
 	@property override string name() { return "%s (GnuWin32)".format(componentName); }
 	@property override string subdirectory() { return "gnuwin32"; }
 	@property override string[] binPaths() { return ["bin"]; }
@@ -57,8 +60,10 @@ final class GnuWin32Component : Installer
 	}
 }
 
+/// `opDispatch` constructor for GnuWin32 component installers.
 struct GnuWin32
 {
+	/// Example: `GnuWin32.make.requireLocal(false);`.
 	static GnuWin32Component opDispatch(string name)()
 	{
 		alias component = singleton!(GnuWin32Component, name);

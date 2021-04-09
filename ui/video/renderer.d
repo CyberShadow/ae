@@ -20,22 +20,24 @@ public import ae.utils.graphics.view;
 /// Abstract class for a video renderer.
 class Renderer
 {
-	alias COLOR = BGRX;
+	alias COLOR = BGRX; /// The color type we use for all rendering.
 
 	/// BGRX/BGRA-only.
 	struct Bitmap
 	{
 		static assert(COLOR.sizeof == uint.sizeof);
+		/// `ae.utils.graphics.view` implementation.
 		alias StorageType = PlainStorageUnit!COLOR;
 
-		StorageType* pixels;
+		StorageType* pixels; /// ditto
+		/// ditto
 		xy_t w, h, stride;
 
 		inout(StorageType)[] scanline(xy_t y) inout
 		{
 			assert(y>=0 && y<h);
 			return pixels[stride*y..stride*(y+1)];
-		}
+		} /// ditto
 
 		mixin DirectView;
 	}
@@ -60,61 +62,86 @@ class Renderer
 
 	// **********************************************************************
 
+	/// Get geometry.
 	abstract @property uint width();
-	abstract @property uint height();
+	abstract @property uint height(); /// ditto
 
+	/// Set a single pixel.
 	abstract void putPixel(int x, int y, COLOR color);
 
-	struct Pixel { int x, y; COLOR color; }
+	/// Set some pixels.
+	struct Pixel { int x, /***/ y; /***/ COLOR color; /***/ }
 	void putPixels(Pixel[] pixels)
 	{
 		foreach (ref pixel; pixels)
 			putPixel(pixel.tupleof);
-	}
+	} /// ditto
 
+	/// Draw a straight line.
 	abstract void line(float x0, float y0, float x1, float y1, COLOR color);
+	/// Draw a vertical line.
 	void vline(int x, int y0, int y1, COLOR color) { line(x, y0, x, y1, color); }
+	/// Draw a horizontal line.
 	void hline(int x0, int x1, int y, COLOR color) { line(x0, y, x1, y, color); }
 
+	/// Draw a filled rectangle.
 	abstract void fillRect(int x0, int y0, int x1, int y1, COLOR color);
-	abstract void fillRect(float x0, float y0, float x1, float y1, COLOR color);
+	abstract void fillRect(float x0, float y0, float x1, float y1, COLOR color); /// ditto
 
+	/// Clear the entire surface.
 	abstract void clear();
 
+	/// Draw a texture.
 	abstract void draw(int x, int y, TextureSource source, int u0, int v0, int u1, int v1);
+
+	/// Draw a texture with scaling.
 	abstract void draw(float x0, float y0, float x1, float y1, TextureSource source, int u0, int v0, int u1, int v1);
 }
 
 /// Uniquely identify private data owned by different renderers
 enum Renderers
 {
-	SDLSoftware,
-	SDLOpenGL,
-	SDL2,
+	SDLSoftware, ///
+	SDLOpenGL,	 ///
+	SDL2,		 ///
 	max
 }
 
 /// Base class for all renderer-specific texture data
 class TextureRenderData
 {
+	/// If `true`, the `TextureSource` has been destroyed,
+	/// and so should this instance (in the render thread)>
 	bool destroyed;
+
+	/// Uploaded version number of the texture.
+	/// If it does not match `TextureSource.textureVersion`,
+	/// it needs to be updated.
 	uint textureVersion = 0;
 
+	/// Set to `true` when any `TextureRenderData`
+	/// needs to be destroyed.
 	static shared bool cleanupNeeded;
 }
 
 /// Base class for logical textures
 class TextureSource
 {
+	// TODO: make this extensible for external renderer implementations.
+	/// Renderer-specific texture data.
 	TextureRenderData[Renderers.max] renderData;
 
+	/// Source version number of the texture.
 	uint textureVersion = 1;
 
+	/// Common type used by `drawTo` / `getPixels`
 	alias ImageRef!(Renderer.COLOR) TextureCanvas;
 
+	/// Request the contents of this `TextureSource`.
 	/// Used when the target pixel memory is already allocated
 	abstract void drawTo(TextureCanvas dest);
 
+	/// Request the contents of this `TextureSource`.
 	/// Used when a pointer is needed to existing pixel memory
 	abstract TextureCanvas getPixels();
 
@@ -127,27 +154,34 @@ class TextureSource
 	}
 }
 
+/// Implementation of `TextureSource`
+/// using an `ae.utils.graphics.image.Image`.
 class ImageTextureSource : TextureSource
 {
-	Image!(Renderer.COLOR) image;
+	Image!(Renderer.COLOR) image; /// The image.
 
 	override void drawTo(TextureCanvas dest)
 	{
 		image.blitTo(dest);
-	}
+	} ///
 
 	override TextureCanvas getPixels()
 	{
 		return image.toRef();
-	}
+	} ///
 }
 
+/// Base class for `TextureSource` implementations
+/// where pixel data is calculated on request.
 class ProceduralTextureSource : TextureSource
 {
 	private Image!(Renderer.COLOR) cachedImage;
 
+	/// Query the size of the procedural texture
 	abstract void getSize(out int width, out int height);
 
+	/// Implementation of `getPixels` using
+	/// `drawTo` and a cached copy.
 	override TextureCanvas getPixels()
 	{
 		if (!cachedImage.w)

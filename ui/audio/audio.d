@@ -16,9 +16,10 @@ module ae.ui.audio.audio;
 import ae.ui.app.application;
 import ae.ui.audio.mixer.base;
 
+/// Abstract audio player interface.
 class Audio
 {
-	Mixer mixer;
+	Mixer mixer; ///
 
 	/// Start driver (Application dictates settings).
 	abstract void start(Application application);

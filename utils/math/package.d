@@ -13,25 +13,38 @@
 
 module ae.utils.math;
 
+/// Return `b` bound by `a` and `c` (i.e., `min(max(a, b), c)`).
 typeof(Ta+Tb+Tc) bound(Ta, Tb, Tc)(Ta a, Tb b, Tc c) { return a<b?b:a>c?c:a; }
-bool between(T)(T point, T a, T b) { return a <= point && point <= b; } /// Assumes points are sorted (was there a faster way?)
+
+/// Return true if `a <= point <= b`.
+bool between(T)(T point, T a, T b) { return a <= point && point <= b; }
+
+/// Return `x*x`.
 auto sqr(T)(T x) { return x*x; }
 
+/// If `x > y`, swaps `x` and `y`.
 void sort2(T)(ref T x, ref T y) { if (x > y) { T z=x; x=y; y=z; } }
 
+/// Performs linear interpolation.
+/// Returns the point between `low` and `high` corresponding to the point where `r` is between `rLow` and `rHigh`.
 T itpl(T, U)(T low, T high, U r, U rLow, U rHigh)
 {
 	import std.traits : Signed;
 	return cast(T)(low + (cast(Signed!T)high-cast(Signed!T)low) * (cast(Signed!U)r - cast(Signed!U)rLow) / (cast(Signed!U)rHigh - cast(Signed!U)rLow));
 }
 
+/// Returns the sign of `x`, i.e,
+/// `-1` if `x < 0`, `+1` if `x > 0`,, or `0` if `x == 0`.
 byte sign(T)(T x) { return x<0 ? -1 : x>0 ? 1 : 0; }
 
+/// Returns the logical value of `sign(b - a)`
+/// (but does not actually subtract to avoid overflow).
 int compare(T)(T a, T b)
 {
 	return a<b ? -1 : a>b ? 1 : 0;
 }
 
+/// Apply a binary operation consecutively to `args`.
 auto op(string OP, T...)(T args)
 {
 	auto result = args[0];
@@ -40,20 +53,26 @@ auto op(string OP, T...)(T args)
 	return result;
 }
 
+/// Sums `args`.
 auto sum(T...)(T args) { return op!"+"(args); }
+/// Averages `args`.
 auto average(T...)(T args) { return sum(args) / args.length; }
 
+/// Wraps a D binary operator into a function.
 template binary(string op)
 {
 	auto binary(A, B)(auto ref A a, auto ref B b) { return mixin(`a` ~ op ~ `b`); }
 }
+/// Aliases of D binary operators as functions. Usable in UFCS.
 alias eq = binary!"==";
-alias ne = binary!"!=";
-alias lt = binary!"<";
-alias gt = binary!">";
-alias le = binary!"<=";
-alias ge = binary!">=";
+alias ne = binary!"!="; /// ditto
+alias lt = binary!"<" ; /// ditto
+alias gt = binary!">" ; /// ditto
+alias le = binary!"<="; /// ditto
+alias ge = binary!">="; /// ditto
 
+/// Length of intersection of two segments on a line,
+/// or 0 if they do not intersect.
 T rangeIntersection(T)(T a0, T a1, T b0, T b1)
 {
 	import std.algorithm.comparison : min, max;
@@ -69,6 +88,8 @@ unittest
 	assert(rangeIntersection(0, 1, 2, 3) == 0);
 }
 
+/// Wraps a D unary operator into a function.
+/// Does not do integer promotion.
 template unary(char op)
 {
 	T unary(T)(T value)
@@ -94,7 +115,9 @@ unittest
 	static assert(is(typeof(b2) == ubyte));
 }
 
+/// Swap the byte order in an integer value.
 T swapBytes(T)(T b)
+if (is(T : uint))
 {
 	import core.bitop : bswap;
 	static if (b.sizeof == 1)
@@ -109,8 +132,14 @@ T swapBytes(T)(T b)
 		static assert(false, "Don't know how to bswap " ~ T.stringof);
 }
 
+/// True if `x` is some power of two, including `1`.
 bool isPowerOfTwo(T)(T x) { return (x & (x-1)) == 0; }
+
+/// Round up `x` to the next power of two.
+/// If `x` is already a power of two, returns `x`.
 T roundUpToPowerOfTwo(T)(T x) { return nextPowerOfTwo(x-1); }
+
+/// Return the next power of two after `x`, not including it.
 T nextPowerOfTwo(T)(T x)
 {
 	x |= x >>  1;
@@ -160,6 +189,7 @@ unittest
 /// that can store this many bits of data.
 template TypeForBits(uint bits)
 {
+	///
 	static if (bits <= 8)
 		alias TypeForBits = ubyte;
 	else
@@ -181,6 +211,7 @@ static assert(is(TypeForBits!9 == ushort));
 static assert(is(TypeForBits!64 == ulong));
 static assert(!is(TypeForBits!65));
 
+/// Saturate `v` to be the smallest value between itself and `args`.
 void minimize(T, Args...)(ref T v, Args args)
 if (is(typeof({ import std.algorithm.comparison : min; v = min(v, args); })))
 {
@@ -188,6 +219,7 @@ if (is(typeof({ import std.algorithm.comparison : min; v = min(v, args); })))
 	v = min(v, args);
 }
 
+/// Saturate `v` to be the largest value between itself and `args`.
 void maximize(T, Args...)(ref T v, Args args)
 if (is(typeof({ import std.algorithm.comparison : max; v = max(v, args); })))
 {

@@ -61,16 +61,22 @@ struct btrfs_ioctl_same_args
 
 public:
 
+/// Submit a `BTRFS_IOC_FILE_EXTENT_SAME` ioctl.
 struct Extent
 {
+	/// File containing the extent to deduplicate.
+	/// May occur more than once in `extents`.
 	File file;
+
+	/// The offset within the file of the extent, in bytes.
 	ulong offset;
 }
 
 struct SameExtentResult
 {
+	/// Sum of returned `bytes_deduped`.
 	ulong totalBytesDeduped;
-}
+} /// ditto
 
 SameExtentResult sameExtent(in Extent[] extents, ulong length)
 {
@@ -112,7 +118,7 @@ SameExtentResult sameExtent(in Extent[] extents, ulong length)
 	}
 
 	return result;
-}
+} /// ditto
 
 unittest
 {

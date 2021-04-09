@@ -43,20 +43,23 @@ struct IniHandler(S)
 	void delegate() sectionHandler;
 }
 
+/// Lexer output.
 struct IniLine(S)
 {
+	/// Line type.
 	enum Type
 	{
-		empty,
-		section,
-		value
+		empty,   ///
+		section, ///
+		value,   ///
 	}
 
-	Type type;
-	S name; // section or value
-	S value;
+	Type type; /// ditto
+	S name; /// Section or value name
+	S value; /// Value value
 }
 
+/// Lexer implementation.
 IniLine!S lexIniLine(S)(S line)
 if (isSomeString!S)
 {
@@ -324,6 +327,7 @@ private
 	}
 }
 
+/// Construct an `IniHandler` which parses an INI file into `v`.
 IniHandler!S makeIniHandler(S = string, U)(ref U v)
 {
 	static if (!is(U == Unqual!U))
@@ -556,10 +560,12 @@ unittest
 /// Can be later deserialized into a concrete type.
 struct IniFragment(S)
 {
-	S value;
-	struct Child { S name; IniFragment value; }
-	Child[] children;
+	S value; /// The raw value of this node.
+	struct Child { S name; /***/ IniFragment value; /***/ } /// Child nodes.
+	Child[] children; ///
 
+	/// Construct an `IniHandler` which parses into this
+	/// `IniFragment`, recording input.
 	IniHandler!S makeIniHandler(S_)()
 	{
 		static assert(is(S == S_),
@@ -578,6 +584,7 @@ struct IniFragment(S)
 		);
 	}
 
+	/// Replay into `handler`.
 	void visit(IniHandler!S handler) const
 	{
 		if (value)
@@ -593,6 +600,7 @@ struct IniFragment(S)
 		}
 	}
 
+	/// Replay, deserializing into `v`.
 	void deserializeInto(U)(ref U v) const
 	{
 		visit(v.makeIniHandler!S());
@@ -690,13 +698,15 @@ S loadInis(S)(in char[][] fileNames)
 /// Simple convenience formatter for writing INI files.
 struct IniWriter(O)
 {
-	O writer;
+	O writer; /// Underlying output.
 
+	/// Write a section name.
 	void startSection(string name)
 	{
 		writer.put('[', name, "]\n");
 	}
 
+	/// Write a name/value pair.
 	void writeValue(string name, string value)
 	{
 		writer.put(name, '=', value, '\n');
@@ -929,6 +939,7 @@ unittest
 	>".strip.splitLines.map!strip));
 }
 
+/// Like `updateIni`, but updates a file on disk.
 void updateIniFile(S)(string fileName, S name, S value)
 {
 	import std.file, std.stdio, std.utf;

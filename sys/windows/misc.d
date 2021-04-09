@@ -25,16 +25,19 @@ mixin(importWin32!q{winuser});
 import ae.sys.windows.exception;
 import ae.sys.windows.text;
 
+/// Construct a `LARGE_INTEGER`.
 LARGE_INTEGER largeInteger(long n) pure nothrow @nogc
 {
 	LARGE_INTEGER li; li.QuadPart = n; return li;
 }
 
+/// Construct a `ULARGE_INTEGER`.
 ULARGE_INTEGER ulargeInteger(ulong n) pure nothrow @nogc
 {
 	ULARGE_INTEGER li; li.QuadPart = n; return li;
 }
 
+/// Construct an `ulong` from two `DWORD`s using `ULANGE_INTEGER`.
 ulong makeUlong(DWORD dwLow, DWORD dwHigh) pure nothrow @nogc
 {
 	ULARGE_INTEGER li;
@@ -47,6 +50,7 @@ ulong makeUlong(DWORD dwLow, DWORD dwHigh) pure nothrow @nogc
 
 // Messages
 
+/// Pump pending messages.
 void processWindowsMessages()()
 {
 	MSG m;
@@ -57,6 +61,7 @@ void processWindowsMessages()()
 	}
 }
 
+/// Pump messages until a WM_QUIT.
 void messageLoop()()
 {
 	MSG m;
@@ -69,11 +74,13 @@ void messageLoop()()
 
 // ***************************************************************************
 
+/// `MessageBoxW` wrapper.
 int messageBox()(string message, string title, int style=0)
 {
 	return MessageBoxW(null, toWStringz(message), toWStringz(title), style);
 }
 
+/// `GetLastInputInfo` wrapper.
 uint getLastInputInfo()()
 {
 	LASTINPUTINFO lii = { LASTINPUTINFO.sizeof };

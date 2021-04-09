@@ -17,9 +17,11 @@ import ae.utils.meta : singleton, I;
 
 public import ae.sys.install.common;
 
+/// Installs the 7-Zip archiving tool.
+/// Windows-only.
 class SevenZipInstaller : Installer
 {
-	string url = "http://downloads.sourceforge.net/sevenzip/7za920.zip";
+	string url = "http://downloads.sourceforge.net/sevenzip/7za920.zip"; /// Download URL.
 
 	@property override string name() { return "7-Zip"; }
 	@property override string subdirectory() { return "7z"; }
@@ -41,6 +43,7 @@ class SevenZipInstaller : Installer
 		return haveExecutable("7z") || haveExecutable("7za");
 	}
 
+	/// "7za" or "7z", depending on which is available.
 	@property string exe()
 	{
 		if (haveExecutable("7za"))

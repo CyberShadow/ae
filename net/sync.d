@@ -119,16 +119,24 @@ private:
 	}
 
 public:
+	/// Constructor.
+	/// Params:
+	///  daemon  = If `Yes.daemon` (the default), don't block the event
+	///            loop from exiting until `close` is called.
 	this(Flag!"daemon" daemon = Yes.daemon)
 	{
 		socket = new AnchorSocket(daemon);
 	}
 
+	/// Run the specified delegate in the origin thread,
+	/// without waiting for it to finish.
 	void runAsync(Dg dg) nothrow @nogc
 	{
 		runCommand(Command(dg));
 	}
 
+	/// Run the specified delegate in the origin thread,
+	/// and wait for it to finish.
 	void runWait(Dg dg)
 	{
 		scope semaphore = new Semaphore();
@@ -136,6 +144,7 @@ public:
 		semaphore.wait();
 	}
 
+	/// Close the connection to the main thread.
 	void close()
 	{
 		socket.pinger.close();

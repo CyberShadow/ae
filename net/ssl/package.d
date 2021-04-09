@@ -15,53 +15,82 @@ module ae.net.ssl;
 
 import ae.net.asockets : IConnection, ConnectionAdapter;
 
+/// Abstract interface for an SSL context provider.
 class SSLProvider
 {
+	/// Create an SSL context of the given kind (client or server).
 	abstract SSLContext createContext(SSLContext.Kind kind);
+
+	/// Create a connection adapter using the given context.
 	abstract SSLAdapter createAdapter(SSLContext context, IConnection next);
 }
 
+/// The default (null) `SSLProvider` implementation.
+/// Throws an assertion failure.
 class NoSSLProvider : SSLProvider
 {
 	override SSLContext createContext(SSLContext.Kind kind)
 	{
 		assert(false, "SSL implementation not set");
-	}
+	} ///
 
 	override SSLAdapter createAdapter(SSLContext context, IConnection next)
 	{
 		assert(false, "SSL implementation not set");
-	}
+	} ///
 }
 
+/// Abstract interface for an SSL context.
 abstract class SSLContext
 {
-	enum Kind { client, server }
-	enum Verify { none, verify, require }
+	/// Context kind.
+	enum Kind
+	{
+		client, ///
+		server,	///
+	}
 
-	abstract void setCipherList(string[] ciphers);
-	abstract void enableDH(int bits);
-	abstract void enableECDH();
-	abstract void setCertificate(string path);
-	abstract void setPrivateKey(string path);
-	abstract void setPeerVerify(Verify verify);
-	abstract void setPeerRootCertificate(string path);
-	abstract void setFlags(int); // implementation-specific
+	/// Whether to verify the peer certificate.
+	enum Verify
+	{
+		none,    /// Do not verify or require.
+		verify,  /// Verify the certificate if one is specified.
+		require, /// Require a certificate and verify it.
+	}
+
+	abstract void setCipherList(string[] ciphers);     /// Configure OpenSSL-like cipher list.
+	abstract void enableDH(int bits);                  /// Enable Diffie-Hellman key exchange with the specified key size.
+	abstract void enableECDH();                        /// Enable elliptic-curve DH key exchange.
+	abstract void setCertificate(string path);         /// Load and use a local certificate from the given file.
+	abstract void setPrivateKey(string path);          /// Load and use the certificate private key from the given file.
+	abstract void setPeerVerify(Verify verify);        /// Configure peer certificate verification.
+	abstract void setPeerRootCertificate(string path); /// Require that peer certificates are signed by the specified root certificate.
+	abstract void setFlags(int);                       /// Configure provider-specific flags.
 }
 
+/// Base class for a connection adapter with TLS encryption.
 abstract class SSLAdapter : ConnectionAdapter
 {
-	this(IConnection next) { super(next); }
+	this(IConnection next) { super(next); } ///
+
+	/// Specifies the expected host name (used for peer verification).
 	abstract void setHostName(string hostname, ushort port = 0, string service = null);
+
+	/// Retrieves the host (local) certificate.
 	abstract SSLCertificate getHostCertificate();
+
+	/// Retrieves the peer (remote) certificate.
 	abstract SSLCertificate getPeerCertificate();
 }
 
+/// Abstract interface for an SSL certificate.
 abstract class SSLCertificate
 {
+	/// Returns the full certificate subject name.
 	abstract string getSubjectName();
 }
 
+/// The current global SSL provider.
 SSLProvider ssl;
 
 static this()

@@ -30,6 +30,7 @@ static this()
 	IMG_Init(IMG_INIT_JPG | IMG_INIT_PNG);
 }
 
+/// Loads an `Image` using `SDL_Image`.
 auto loadImage(string path, ref Image!RGBX target = *new Image!RGBX)
 {
 	auto surface = IMG_Load(toStringz(path));

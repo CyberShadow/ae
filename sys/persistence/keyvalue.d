@@ -26,21 +26,26 @@ import ae.utils.json;
 /// Non-string keys/values are JSON-encoded.
 struct KeyValueStore(K, V)
 {
-	KeyValueDatabase* db;
-	string tableName;
+	KeyValueDatabase* db; ///
+	string tableName; ///
 
+	/// Constructor with `KeyValueDatabase` and `tableName`.
+	/// Allows using the same database file for multiple key/value tables.
 	this(KeyValueDatabase* db, string tableName = "values")
 	{
 		this.db = db;
 		this.tableName = tableName;
 	}
 
+	/// Constructor with file name.
+	/// Creates a new `KeyValueDatabase` for private use.
 	this(string fn)
 	{
 		auto db = new KeyValueDatabase(fn);
 		this(db);
 	}
 
+	/// Implements common D associative array operations.
 	V opIndex()(auto ref K k)
 	{
 		checkInitialized();
@@ -55,7 +60,7 @@ struct KeyValueStore(K, V)
 		foreach (SqlType!V v; sqlGet.iterate(toSqlType(k)))
 			return fromSqlType!V(v);
 		return defaultValue;
-	}
+	} /// ditto
 
 	V getOrAdd()(auto ref K k, lazy V defaultValue)
 	{
@@ -65,7 +70,7 @@ struct KeyValueStore(K, V)
 		auto v = defaultValue();
 		sqlSet.exec(toSqlType(k), toSqlType(v));
 		return v;
-	}
+	} /// ditto
 
 	bool opBinaryRight(string op)(auto ref K k)
 	if (op == "in")
@@ -74,20 +79,20 @@ struct KeyValueStore(K, V)
 		foreach (int count; sqlExists.iterate(toSqlType(k)))
 			return count > 0;
 		assert(false);
-	}
+	} /// ditto
 
 	auto ref V opIndexAssign()(auto ref V v, auto ref K k)
 	{
 		checkInitialized();
 		sqlSet.exec(toSqlType(k), toSqlType(v));
 		return v;
-	}
+	} /// ditto
 
 	void remove()(auto ref K k)
 	{
 		checkInitialized();
 		sqlDelete.exec(toSqlType(k));
-	}
+	} /// ditto
 
 	@property int length()
 	{
@@ -95,7 +100,7 @@ struct KeyValueStore(K, V)
 		foreach (int count; sqlLength.iterate())
 			return count;
 		assert(false);
-	}
+	} /// ditto
 
 private:
 	static SqlType!T toSqlType(T)(auto ref T v)
@@ -186,11 +191,12 @@ private:
 	}
 }
 
+/// A `KeyValueDatabase` holds one or more key/value tables (`KeyValueStore`).
 struct KeyValueDatabase
 {
-	string fileName;
+	string fileName; /// Database file name.
 
-	SQLite sqlite;
+	SQLite sqlite; /// SQLite database instance. Initialized automatically.
 
 	@property SQLite getSQLite()
 	{

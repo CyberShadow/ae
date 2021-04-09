@@ -17,26 +17,29 @@ module ae.utils.bitmanip;
 import std.bitmanip;
 import std.traits;
 
+/// Stores `T` in big-endian byte order.
 struct BigEndian(T)
 {
 	private ubyte[T.sizeof] _endian_bytes;
 	@property T _endian_value() const { return cast(T)bigEndianToNative!(OriginalType!T)(_endian_bytes); }
 	@property void _endian_value(T value) { _endian_bytes = nativeToBigEndian(OriginalType!T(value)); }
 	alias _endian_value this;
-	alias opAssign = _endian_value;
-	this(T value) { _endian_value(value); }
+	alias opAssign = _endian_value; ///
+	this(T value) { _endian_value(value); } ///
 }
 
+/// Stores `T` in little-endian byte order.
 struct LittleEndian(T)
 {
 	private ubyte[T.sizeof] _endian_bytes;
 	@property T _endian_value() const { return cast(T)littleEndianToNative!(OriginalType!T)(_endian_bytes); }
 	@property void _endian_value(T value) { _endian_bytes = nativeToLittleEndian(OriginalType!T(value)); }
 	alias _endian_value this;
-	alias opAssign = _endian_value;
-	this(T value) { _endian_value(value); }
+	alias opAssign = _endian_value; ///
+	this(T value) { _endian_value(value); } ///
 }
 
+///
 unittest
 {
 	union U

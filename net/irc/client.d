@@ -539,18 +539,24 @@ public:
 	/// How to convert the IRC 8-bit data to and from UTF-8 (D strings must be valid UTF-8).
 	string function(in char[]) decoder = &rawToUTF8, encoder = &UTF8ToRaw;
 
+	/// An IRC channel.
 	struct Channel
 	{
+		/// Visible users in this channel.
 		bool[string] users;
 	}
 
+	/// A user that we know of.
 	struct User
 	{
+		/// Number of channels that we can see the user in.
 		int channelsJoined; // acts as a reference count
-		string username, hostname;
-		string realname;
+		/// User information.
+		string username, hostname, realname;
 	}
 
+	/// Get a channel's canonical name,
+	/// using the observed name if known.
 	string canonicalChannelName(string channel)
 	{
 		string channelLower = rfc1459toLower(channel);
@@ -563,6 +569,8 @@ public:
 		}
 	}
 
+	/// Get a user's canonical name,
+	/// using the observed name if known.
 	string canonicalUserName(string user)
 	{
 		string userLower = rfc1459toLower(user);
@@ -572,6 +580,8 @@ public:
 			return user;
 	}
 
+	/// Get a user or channel's canonical name,
+	/// using the observed name if known.
 	string canonicalName(string name)
 	{
 		string nameLower = rfc1459toLower(name);
@@ -587,6 +597,7 @@ public:
 				return name;
 	}
 
+	/// Get the list of channels that we can see a user in.
 	string[] getUserChannels(string name)
 	{
 		string[] result;
@@ -604,7 +615,7 @@ public:
 		conn.handleReadLine = &onReadLine;
 		conn.handleInactivity = &onSocketInactivity;
 		conn.handleTimeout = &onSocketTimeout;
-	}
+	} ///
 
 	/// Returns true if the connection was successfully established,
 	/// and we have authorized ourselves to the server

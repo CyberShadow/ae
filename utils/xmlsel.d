@@ -113,13 +113,14 @@ XmlNode[] find(XmlNode[] roots, string selector, bool allowEmpty = true)
 XmlNode find(XmlNode roots, string selector)
 {
 	return find([roots], selector, false)[0];
-}
+} /// ditto
 
 XmlNode[] findAll(XmlNode roots, string selector)
 {
 	return find([roots], selector);
-}
+} /// ditto
 
+///
 unittest
 {
 	enum xmlText =

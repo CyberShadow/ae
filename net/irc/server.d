@@ -33,30 +33,33 @@ import ae.net.irc.common;
 
 alias std.string.indexOf indexOf;
 
+/// IRC server.
 class IrcServer
 {
 	// This class is currently intentionally written for readability, not performance.
 	// Performance and scalability could be greatly improved by using numeric indices for users and channels
 	// instead of associative arrays.
 
-	/// Server configuration
-	string hostname, password, network;
+	string hostname; /// Hostname to announce.  Defaults to the current machine's hostname.
+	string password; /// If set, require this password to be specified using PASS.
+	string network; /// If set, announce as the "NETWORK=".
+	/// Require that nicknames match the given regular expression.
 	string nicknameValidationPattern = "^[a-zA-Z][a-zA-Z0-9\\-`\\|\\[\\]\\{\\}_^]{0,14}$";
-	uint nicknameMaxLength = 15; /// For the announced capabilities
-	string serverVersion = "ae.net.irc.server";
-	string[] motd;
-	string chanTypes = "#&";
-	SysTime creationTime;
-	string operPassword;
+	uint nicknameMaxLength = 15; /// For the announced capabilities.
+	string serverVersion = "ae.net.irc.server"; /// Announced in MOTD.
+	string[] motd; /// Additional MOTD lines to send.
+	string chanTypes = "#&"; /// Character prefixes indicating channels.
+	SysTime creationTime; /// Announced in MOTD. Defaults to class construction time.
+	string operPassword; /// If set, allow obtaining OPER status using the specified password.
 
 	/// Channels can't be created by users, and don't disappear when they're empty
 	bool staticChannels;
 	/// If set, masks all IPs to the given mask
 	string addressMask;
 
-	Logger log;
+	Logger log; /// Optional log.
 
-	/// Client connection and information
+	/// Abstract client connection and information.
 	abstract static class Client
 	{
 		/// How to convert the IRC 8-bit data to and from UTF-8 (D strings must be valid UTF-8).
@@ -64,14 +67,17 @@ class IrcServer
 
 		/// Registration details
 		string nickname, password;
+		/// ditto
 		string username, hostname, servername, realname;
-		bool identified;
-		string prefix, publicPrefix; /// Full nick!user@host
+		bool identified; /// Pretend that we obtained the username from an `ident` server?
+		/// Full `"nick!user@host"`. `publicPrefix` is what everyone except the user themself and opers see.
+		string prefix, publicPrefix;
+		/// Away reason, if away.
 		string away;
 
-		bool registered;
-		Modes modes;
-		MonoTime lastActivity;
+		bool registered; /// Registration completed successfully?
+		Modes modes; /// User modes.
+		MonoTime lastActivity; ///
 
 		Channel[] getJoinedChannels()
 		{
@@ -80,18 +86,18 @@ class IrcServer
 				if (nickname.normalized in channel.members)
 					result ~= channel;
 			return result;
-		}
+		} ///
 
-		string realHostname() { return remoteAddress.toAddrString; }
-		string publicHostname() { return server.addressMask ? server.addressMask : realHostname; }
+		string realHostname() { return remoteAddress.toAddrString; } ///
+		string publicHostname() { return server.addressMask ? server.addressMask : realHostname; } ///
 		bool realHostnameVisibleTo(Client viewer)
 		{
 			return server.addressMask is null
 				|| viewer is this
 				|| viewer.modes.flags['o']; // Oper
-		}
-		string hostnameAsVisibleTo(Client viewer) { return realHostnameVisibleTo(viewer) ? realHostname : publicHostname; }
-		string prefixAsVisibleTo(Client viewer) { return realHostnameVisibleTo(viewer) ? prefix : publicPrefix; }
+		} ///
+		string hostnameAsVisibleTo(Client viewer) { return realHostnameVisibleTo(viewer) ? realHostname : publicHostname; } ///
+		string prefixAsVisibleTo(Client viewer) { return realHostnameVisibleTo(viewer) ? prefix : publicPrefix; } ///
 
 	protected:
 		IrcServer server;
@@ -1002,6 +1008,7 @@ class IrcServer
 		abstract void connDisconnect(string reason);
 	}
 
+	/// `Client` implementation backed by a real network connection.
 	static class NetworkClient : Client
 	{
 	protected:
@@ -1039,34 +1046,39 @@ class IrcServer
 	/// Statistics
 	ulong maxUsers, totalConnections;
 
+	/// IRC channel information.
 	final class Channel
 	{
-		string name;
-		string topic;
+		string name; /// Channel name (including any leading `'#'`).
+		string topic; /// Channel topic, if any.
 
-		Modes modes;
+		Modes modes; /// Channel modes.
 
+		/// Channel member (entry for a user who is in the channel).
 		struct Member
 		{
+			/// A mode that a user may or may not have when in a channel.
 			enum Mode
 			{
-				op,
-				voice,
+				op,    /// Channel operator. Can change channel properties.
+				voice, /// Has voice. May speak even when banned or the channel is moderated.
 				max
 			}
 
+			/// Bitmask for modes that a user has in the channel.
 			enum Modes
 			{
-				none  = 0,
-				op    = 1 << Mode.op,
-				voice = 1 << Mode.voice,
+				none  = 0,               ///
+				op    = 1 << Mode.op,    ///
+				voice = 1 << Mode.voice, ///
 
-				bypassM = op | voice, // which modes bypass +m
+				bypassM = op | voice,    /// Modes which bypass +m.
 			}
 
-			Client client;
-			Modes modes;
+			Client client; ///
+			Modes modes; ///
 
+			/// Does this member have the given mode?
 			bool modeSet(Mode mode) { return (modes & (1 << mode)) != 0; }
 			void setMode(Mode mode, bool value)
 			{
@@ -1075,8 +1087,10 @@ class IrcServer
 					modes |= modeMask;
 				else
 					modes &= ~modeMask;
-			}
+			} /// Set (enable or disable) the given mode for this channel member.
 
+			/// Returns the character used to indicate the user's highest channel mode
+			/// (e.g. `'@'` or `'+'`).
 			string modeChar()
 			{
 				foreach (mode; Mode.init..Mode.max)
@@ -1084,34 +1098,36 @@ class IrcServer
 						return [ChannelModes.memberModePrefixes[mode]];
 				return "";
 			}
+			/// Returns this member's name as it would appear in a RPL_NAMREPLY listing,
+			/// i.e. `modeChar` plus nickname.
 			string displayName() { return modeChar ~ client.nickname; }
 		}
 
-		Member[string] members;
+		Member[string] members; /// Channel members. The key is the normalized nickname.
 
 		this(string name)
 		{
 			this.name = name;
 			modes.flags['t'] = modes.flags['n'] = true;
-		}
+		} ///
 
 		void add(Client client)
 		{
 			auto modes = staticChannels || members.length ? Member.Modes.none : Member.Modes.op;
 			members[client.nickname.normalized] = Member(client, modes);
-		}
+		} ///
 
 		void remove(Client client)
 		{
 			members.remove(client.nickname.normalized);
 			if (!staticChannels && !members.length && !modes.flags['P'])
 				channels.remove(name.normalized);
-		}
+		} ///
 	}
 
-	Channel[string] channels;
+	Channel[string] channels; /// All channels on this server.
 
-	TcpServer conn;
+	TcpServer conn; /// Listening socket.
 
 	this()
 	{
@@ -1120,19 +1136,24 @@ class IrcServer
 
 		hostname = Socket.hostName;
 		creationTime = Clock.currTime;
-	}
+	} ///
 
+	/// Listen on the given address.
+	/// If port is 0, listen on a random available port.
+	/// Returns the actual listening port.
 	ushort listen(ushort port=6667, string addr = null)
 	{
 		port = conn.listen(port, addr);
 		return port;
 	}
 
+	/// Creates a new channel. The default modes are "+nt".
 	Channel createChannel(string name)
 	{
 		return channels[name.normalized] = new Channel(name);
 	}
 
+	/// Stop listening and disconnect all clients.
 	void close(string reason)
 	{
 		conn.close();
@@ -1199,13 +1220,15 @@ protected:
 	}
 }
 
+/// Check if the given string matches the given mask
+/// (e.g. when enforcing +b modes).
 bool maskMatch(string subject, string mask)
 {
 	import std.path;
 	return globMatch!(CaseSensitive.no)(subject, mask);
 }
 
-
+/// Encode a host name to be sent in a WHO / WHOIS reply.
 string safeHostname(string s)
 {
 	assert(s.length);
@@ -1214,8 +1237,10 @@ string safeHostname(string s)
 	return s;
 }
 
+/// The method used when normalizing user and channel names for lookup.
 alias rfc1459toUpper normalized;
 
+/// Split an IRC line into parameters.
 string[] ircSplit(string line)
 {
 	auto colon = line.indexOf(":");
@@ -1225,28 +1250,44 @@ string[] ircSplit(string line)
 		return line[0..colon].strip.split ~ [line[colon+1..$]];
 }
 
+/// Represents channel modes.
 struct Modes
 {
+	/// A mode may be a flag (e.g. +t), a string (e.g. +k), a number (e.g. +l), or a list of strings (generally masks, e.g. +b).
 	bool[char.max] flags;
-	string[char.max] strings;
-	long[char.max] numbers;
-	string[][char.max] masks;
+	string[char.max] strings; /// ditto
+	long[char.max] numbers; /// ditto
+	string[][char.max] masks; /// ditto
 }
 
+/// Common declarations for `ChannelModes` and `UserModes`.
 mixin template CommonModes()
 {
 //static immutable:
+	/// The type of the given mode character.
 	Type[char.max] modeTypes;
+	/// List of modes supported by this module.
 	string supported()       pure { return modeTypes.length.iota.filter!(m => modeTypes[m]        ).map!(m => cast(char)m).array; }
+	/// List of modes of the given type supported by this module.
 	string byType(Type type) pure { return modeTypes.length.iota.filter!(m => modeTypes[m] == type).map!(m => cast(char)m).array; }
 }
 
+/// Encodes static information about channel modes supported by this module.
 struct ChannelModes
 {
 static immutable:
-	enum Type { none, flag, member, mask, str, number }
+	enum Type
+	{
+		none,   ///
+		flag,	///
+		member,	///
+		mask,	///
+		str,	///
+		number,	///
+	} /// Mode types.
 	mixin CommonModes;
-	IrcServer.Channel.Member.Mode[char.max] memberModes;
+	IrcServer.Channel.Member.Mode[char.max] memberModes; /// Mappings from channel to member modes.
+	/// ditto
 	char[IrcServer.Channel.Member.Mode.max] memberModeChars, memberModePrefixes;
 
 	shared static this()
@@ -1268,12 +1309,17 @@ static immutable:
 	}
 }
 
+/// Encodes static information about user modes supported by this module.
 struct UserModes
 {
 static immutable:
-	enum Type { none, flag }
+	enum Type
+	{
+		none, ///
+		flag, ///
+	} /// Mode types.
 	mixin CommonModes;
-	bool[char.max] isSettable;
+	bool[char.max] isSettable; /// Can users change this mode for themselves?
 
 	shared static this()
 	{

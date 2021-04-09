@@ -21,7 +21,7 @@ import ae.utils.time;
 /// ATOM writer
 struct AtomFeedWriter
 {
-	XmlWriter xml;
+	XmlWriter xml; /// Target XML writer.
 
 	private void putTag(string name)(string content)
 	{
@@ -37,6 +37,7 @@ struct AtomFeedWriter
 		xml.endTag!name();
 	}
 
+	/// Start writing.
 	void startFeed(string feedUrl, string title, SysTime updated)
 	{
 		xml.startDocument();
@@ -56,6 +57,7 @@ struct AtomFeedWriter
 		putTimeTag!"updated"(updated);
 	}
 
+	/// Add an entry.
 	void putEntry(string url, string title, string authorName, SysTime time, string contentHtml, string link=null)
 	{
 		xml.startTag!"entry"();
@@ -85,6 +87,7 @@ struct AtomFeedWriter
 		xml.endTag!"entry"();
 	}
 
+	/// Finish writing.
 	void endFeed()
 	{
 		xml.endTag!"feed"();

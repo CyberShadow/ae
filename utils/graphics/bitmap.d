@@ -13,38 +13,50 @@
 
 module ae.utils.graphics.bitmap;
 
-alias int FXPT2DOT30;
-struct CIEXYZ { FXPT2DOT30 ciexyzX, ciexyzY, ciexyzZ; }
-struct CIEXYZTRIPLE { CIEXYZ ciexyzRed, ciexyzGreen, ciexyzBlue; }
-enum { BI_BITFIELDS = 3 }
+/// Additional definitions for types used in the BMP header.
+version (all)
+{
+	alias int FXPT2DOT30;
+	struct CIEXYZ { FXPT2DOT30 ciexyzX, /***/ ciexyzY, /***/ ciexyzZ; /***/ } 
+	struct CIEXYZTRIPLE { CIEXYZ ciexyzRed,  /***/ciexyzGreen,  /***/ciexyzBlue; /***/ } 
+	enum { BI_BITFIELDS = 3 /***/ }
+}
 
+/// Instantiates to a struct representing
+/// a BMP header at the given version.
 align(1)
 struct BitmapHeader(uint V)
 {
-	enum VERSION = V;
+	enum VERSION = V; ///
 
 align(1):
-	// BITMAPFILEHEADER
-	char[2] bfType = "BM";
-	uint    bfSize;
-	ushort  bfReserved1;
-	ushort  bfReserved2;
-	uint    bfOffBits;
+	/// BITMAPFILEHEADER
+	version (all)
+	{
+		char[2] bfType = "BM";
+		uint    bfSize;
+		ushort  bfReserved1;
+		ushort  bfReserved2;
+		uint    bfOffBits;
+	}
 
-	// BITMAPCOREINFO
-	uint   bcSize = this.sizeof - bcSize.offsetof;
-	int    bcWidth;
-	int    bcHeight;
-	ushort bcPlanes;
-	ushort bcBitCount;
-	uint   biCompression;
-	uint   biSizeImage;
-	uint   biXPelsPerMeter;
-	uint   biYPelsPerMeter;
-	uint   biClrUsed;
-	uint   biClrImportant;
+	/// BITMAPCOREINFO
+	version (all)
+	{
+		uint   bcSize = this.sizeof - bcSize.offsetof;
+		int    bcWidth;
+		int    bcHeight;
+		ushort bcPlanes;
+		ushort bcBitCount;
+		uint   biCompression;
+		uint   biSizeImage;
+		uint   biXPelsPerMeter;
+		uint   biYPelsPerMeter;
+		uint   biClrUsed;
+		uint   biClrImportant;
+	}
 
-	// BITMAPV4HEADER
+	/// BITMAPV4HEADER
 	static if (V>=4)
 	{
 		uint         bV4RedMask;
@@ -58,7 +70,7 @@ align(1):
 		uint         bV4GammaBlue;
 	}
 
-	// BITMAPV5HEADER
+	/// BITMAPV5HEADER
 	static if (V>=5)
 	{
 		uint        bV5Intent;

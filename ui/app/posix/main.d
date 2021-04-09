@@ -17,6 +17,7 @@ import std.stdio;
 import ae.utils.exception;
 import ae.ui.app.application;
 
+/// A generic entry point for applications running on POSIX.
 int main(string[] args)
 {
 	try

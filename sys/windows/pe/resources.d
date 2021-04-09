@@ -19,24 +19,30 @@ import std.exception;
 import ae.sys.windows.imports;
 mixin(importWin32!q{winnt});
 
+/// Parses Windows PE resources.
 struct ResourceParser
 {
-	ubyte[] data;
-	uint rva;
+	ubyte[] data; /// All data.
+	uint rva; /// RVA of data.
 
 	this(void[] data, uint rva)
 	{
 		this.data = cast(ubyte[])data;
 		this.rva = rva;
 		root = readDirectory(0);
-	}
+	} ///
 
+	/// Resource directory.
 	struct Directory
 	{
+		/// Directory properties.
 		uint characteristics, timestamp;
+		/// ditto
 		ushort majorVersion, minorVersion;
+		/// Directory entries.
 		DirectoryEntry[] entries;
 
+		/// Find an entry by ID.
 		ref DirectoryEntry opIndex(uint id)
 		{
 			foreach (ref entry; entries)
@@ -45,6 +51,7 @@ struct ResourceParser
 			throw new Exception("Can't find directory with this ID");
 		}
 
+		/// Find an entry by name.
 		ref DirectoryEntry opIndex(string name)
 		{
 			foreach (ref entry; entries)
@@ -53,27 +60,29 @@ struct ResourceParser
 			throw new Exception("Can't find directory with this name");
 		}
 	}
-	Directory root;
+	Directory root; /// The root directory.
 
+	/// An entry in a `Directory`.
 	struct DirectoryEntry
 	{
-		string name;
-		uint id;
-		bool isDirectory;
+		string name; /// Entry name (if it is identified by a name).
+		uint id; /// Entry ID (if it is identified by an ID).
+		bool isDirectory; /// True if this entry is another directory.
 		union Contents
 		{
 			Directory directory;
 			DirectoryData data;
 		}
 		Contents contents;
-		ref @property Directory directory() return { assert(isDirectory); return contents.directory; }
-		ref @property DirectoryData data() return { assert(!isDirectory); return contents.data; }
+		ref @property Directory directory() return { assert(isDirectory); return contents.directory; } /// Return the contents as a subdirectory.
+		ref @property DirectoryData data() return { assert(!isDirectory); return contents.data; } /// Return the contents as data.
 	}
 
+	/// Data contents of a `DirectoryEntry` with `!isDirectory`.
 	struct DirectoryData
 	{
-		uint codePage;
-		void[] data;
+		uint codePage; ///
+		void[] data;   ///
 	}
 
 	Directory readDirectory(uint offset)

@@ -15,6 +15,8 @@ module ae.sys.windows.imports;
 
 // Using a string mixin instead of a mixin template due to
 // https://issues.dlang.org/show_bug.cgi?id=15925
+/// String mixin for importing an appropriate package providing D
+/// bindings for the Windows API.
 template importWin32(string moduleName, string access = null, string selective = null)
 {
 	// All Druntime headers are version(Windows)

@@ -25,8 +25,20 @@ import core.time;
 
 public import ae.net.asockets : DisconnectType;
 
-struct GroupInfo { string name; int high, low; char mode; }
+/// Encodes a parsed entry of a LIST reply.
+struct GroupInfo
+{
+	/// Group name.
+	string name;
 
+	/// High and low water mark for the group.
+	int high, low;
+
+	/// The group's status on this server.
+	char mode;
+}
+
+/// Implements an NNTP client connection.
 class NntpClient
 {
 private:
@@ -204,8 +216,9 @@ public:
 	this(Logger log)
 	{
 		this.log = log;
-	}
+	} ///
 
+	/// Connect to the given server.
 	void connect(string server, void delegate() handleConnect=null)
 	{
 		auto tcp = new TcpConnection();
@@ -237,13 +250,16 @@ public:
 		tcp.connect(server, 119);
 	}
 
+	/// Disconnect.
 	void disconnect(string reason = IConnection.defaultDisconnectReason)
 	{
 		conn.disconnect(reason);
 	}
 
+	/// True when a connection is fully established and a greeting is received.
 	bool connected;
 
+	/// Send a LIST command.
 	void listGroups(void delegate(GroupInfo[] groups) handleGroups, void delegate(string) handleError=null)
 	{
 		queue(Command(["LIST"], true, [
@@ -261,6 +277,7 @@ public:
 		], handleError));
 	}
 
+	/// Send a GROUP command.
 	void selectGroup(string name, void delegate() handleSuccess=null, void delegate(string) handleError=null)
 	{
 		queue(Command(["GROUP " ~ name], true, [
@@ -271,6 +288,7 @@ public:
 		], handleError));
 	}
 
+	/// Send a LISTGROUP command.
 	void listGroup(string name, int from/* = 1*/, void delegate(string[] messages) handleListGroup, void delegate(string) handleError=null)
 	{
 		string line = from > 1 ? format("LISTGROUP %s %d-", name, from) : format("LISTGROUP %s", name);
@@ -283,8 +301,10 @@ public:
 		], handleError));
 	}
 
+	/// ditto
 	void listGroup(string name, void delegate(string[] messages) handleListGroup, void delegate(string) handleError=null) { listGroup(name, 1, handleListGroup, handleError); }
 
+	/// Send a XOVER command.
 	void listGroupXover(string name, int from/* = 1*/, void delegate(string[] messages) handleListGroup, void delegate(string) handleError=null)
 	{
 		// TODO: handle GROUP command failure
@@ -300,8 +320,10 @@ public:
 		], handleError));
 	}
 
+	/// ditto
 	void listGroupXover(string name, void delegate(string[] messages) handleListGroup, void delegate(string) handleError=null) { listGroupXover(name, 1, handleListGroup, handleError); }
 
+	/// Send an ARTICLE command.
 	void getMessage(string numOrID, void delegate(string[] lines, string num, string id) handleMessage, void delegate(string) handleError=null)
 	{
 		queue(Command(["ARTICLE " ~ numOrID], true, [
@@ -314,6 +336,7 @@ public:
 		], handleError));
 	}
 
+	/// Send a DATE command.
 	void getDate(void delegate(string date) handleDate, void delegate(string) handleError=null)
 	{
 		queue(Command(["DATE"], true, [
@@ -326,6 +349,7 @@ public:
 		], handleError));
 	}
 
+	/// Send a NEWNEWS command.
 	void getNewNews(string wildmat, string dateTime, void delegate(string[] messages) handleNewNews, void delegate(string) handleError=null)
 	{
 		queue(Command(["NEWNEWS " ~ wildmat ~ " " ~ dateTime], true, [
@@ -336,6 +360,7 @@ public:
 		], handleError));
 	}
 
+	/// Send a POST command.
 	void postMessage(string[] lines, void delegate() handlePosted=null, void delegate(string) handleError=null)
 	{
 		queue(Command(["POST"], false, [
@@ -358,6 +383,9 @@ public:
 		], handleError));
 	}
 
+	/// Called when the connection is disconnected.
 	void delegate(string reason, DisconnectType type) handleDisconnect;
+
+	/// Called when the command queue is empty.
 	void delegate() handleIdle;
 }

@@ -19,6 +19,8 @@ import ae.ui.video.video;
 import ae.ui.app.application;
 import ae.ui.video.renderer;
 
+/// Base `Video` class for implementations
+/// which run in a dedicated thread.
 class ThreadedVideo : Video
 {
 	this()
@@ -26,13 +28,13 @@ class ThreadedVideo : Video
 		starting = false;
 		renderThread = new Thread(&renderThreadProc);
 		renderThread.start();
-	}
+	} ///
 
 	override void shutdown()
 	{
 		stopping = quitting = true;
 		renderThread.join();
-	}
+	} ///
 
 	override void start(Application application)
 	{
@@ -46,7 +48,7 @@ class ThreadedVideo : Video
 		started = stopping = false;
 		starting = true;
 		while (!started) wait();
-	}
+	} ///
 
 	override void stop()
 	{
@@ -57,14 +59,14 @@ class ThreadedVideo : Video
 		if (!initializeVideoInRenderThread)
 			doneVary();
 		doneMain();
-	}
+	} ///
 
 	override void stopAsync(AppCallback callback)
 	{
 		stopCallback = callback;
 		stopped = false;
 		stopping = true;
-	}
+	} ///
 
 protected:
 	/// Allows varying the thread from which initVary gets called.

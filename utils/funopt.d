@@ -171,8 +171,10 @@ private template isHiddenOption(T)
 		enum isHiddenOption = false;
 }
 
+/// `funopt` configuration.
 struct FunOptConfig
 {
+	/// `getopt` configuration.
 	std.getopt.config[] getoptConfig;
 }
 
@@ -367,6 +369,7 @@ private string getProgramName(string program)
 
 private string escapeFmt(string s) { return s.replace("%", "%%"); }
 
+/// Constructs the `funopt` usage string.
 string getUsage(alias FUN)(string program)
 {
 	auto programName = getProgramName(program);
@@ -374,6 +377,8 @@ string getUsage(alias FUN)(string program)
 	return formatString.format(programName);
 }
 
+/// Constructs the `funopt` usage format string.
+/// `"%1$s"` is used instead of the program name.
 string getUsageFormatString(alias FUN)()
 {
 	alias ParameterTypeTuple!FUN Params;
@@ -466,6 +471,7 @@ string getUsageFormatString(alias FUN)()
 	return result;
 }
 
+/// Performs line wrapping for option descriptions.
 string optionWrap(string text, string firstIndent, size_t indentWidth)
 {
 	enum width = 79;
@@ -640,6 +646,7 @@ auto funoptDispatch(alias Actions, FunOptConfig config = FunOptConfig.init, alia
 	return funopt!(fun, myConfig, myUsageFun)(args);
 }
 
+/// Constructs the `funoptDispatch` usage string.
 string funoptDispatchUsage(alias Actions)()
 {
 	string result = "\nActions:\n";

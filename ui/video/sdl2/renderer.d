@@ -21,13 +21,15 @@ import ae.ui.shell.sdl2.shell;
 import ae.ui.video.renderer;
 import ae.ui.video.software.common;
 
+/// The SDL pixel format we use.
 enum PIXEL_FORMAT = SDL_DEFINE_PIXELFORMAT(SDL_PIXELTYPE_PACKED32, SDL_PACKEDORDER_XRGB, SDL_PACKEDLAYOUT_8888, 32, 4);
 
 /// Draw on a streaming SDL_Texture, and present it
 final class SDL2SoftwareRenderer : Renderer
 {
-	SDL_Texture* t;
-	SDL_Renderer* renderer;
+	SDL_Texture* t; /// The SDL texture object.
+	SDL_Renderer* renderer; /// The SDL renderer object.
+	/// Width and height.
 	uint w, h;
 
 	this(SDL_Renderer* renderer, uint w, uint h)
@@ -37,12 +39,12 @@ final class SDL2SoftwareRenderer : Renderer
 		this.h = h;
 
 		t = sdlEnforce(SDL_CreateTexture(renderer, PIXEL_FORMAT, SDL_TEXTUREACCESS_STREAMING, w, h), "SDL_CreateTexture failed");
-	}
+	} ///
 
 	override Bitmap fastLock()
 	{
 		assert(false, "Can't fastLock SDL2SoftwareRenderer");
-	}
+	} /// Not applicable - throws an `AssertError`
 
 	override Bitmap lock()
 	{
@@ -55,14 +57,14 @@ final class SDL2SoftwareRenderer : Renderer
 			locked = true;
 		}
 		return _bitmap;
-	}
+	} ///
 
 	override void unlock()
 	{
 		assert(locked);
 		SDL_UnlockTexture(t);
 		locked = false;
-	}
+	} ///
 
 	override void present()
 	{
@@ -71,24 +73,24 @@ final class SDL2SoftwareRenderer : Renderer
 
 		SDL_RenderCopy(renderer, t, null, null);
 		SDL_RenderPresent(renderer);
-	}
+	} ///
 
 	override void shutdown()
 	{
 		SDL_DestroyTexture(t);
-	}
+	} ///
 
 	// **********************************************************************
 
 	override @property uint width()
 	{
 		return w;
-	}
+	} ///
 
 	override @property uint height()
 	{
 		return h;
-	}
+	} ///
 
 	mixin SoftwareRenderer;
 
@@ -107,7 +109,8 @@ private:
 /// Use SDL 2 drawing APIs.
 final class SDL2Renderer : Renderer
 {
-	SDL_Renderer* renderer;
+	SDL_Renderer* renderer; /// SDL renderer object.
+	/// Width and height.
 	uint w, h;
 
 	this(SDL_Renderer* renderer, uint w, uint h)
@@ -115,29 +118,29 @@ final class SDL2Renderer : Renderer
 		this.renderer = renderer;
 		this.w = w;
 		this.h = h;
-	}
+	} ///
 
 	override Bitmap fastLock()
 	{
 		assert(false, "Can't fastLock SDL2Renderer");
-	}
+	} /// Not applicable - throws an `AssertError`
 
 	override Bitmap lock()
 	{
 		assert(false, "Not possible");
-	}
+	} /// ditto
 
 	override void unlock()
 	{
 		assert(false, "Not possible");
-	}
+	} /// ditto
 
 	override void present()
 	{
 		SDL_RenderPresent(renderer);
-	}
+	} ///
 
-	override void shutdown() {}
+	override void shutdown() {} ///
 
 	// **********************************************************************
 
@@ -145,49 +148,49 @@ final class SDL2Renderer : Renderer
 	{
 		SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.x);
 		SDL_RenderDrawPoint(renderer, x, y);
-	}
+	} ///
 
 	override void putPixels(Pixel[] pixels)
 	{
 		foreach (ref pixel; pixels)
 			putPixel(pixel.x, pixel.y, pixel.color);
-	}
+	} ///
 
 	override void line(float x0, float y0, float x1, float y1, COLOR color)
 	{
 		SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.x);
 		SDL_RenderDrawLine(renderer, cast(int)x0, cast(int)y0, cast(int)x1, cast(int)y1);
-	}
+	} ///
 
 	override void vline(int x, int y0, int y1, COLOR color)
 	{
 		SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.x);
 		SDL_RenderDrawLine(renderer, x, y0, x, y1);
-	}
+	} ///
 
 	override void hline(int x0, int x1, int y, COLOR color)
 	{
 		SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.x);
 		SDL_RenderDrawLine(renderer, x0, y, x1, y);
-	}
+	} ///
 
 	override void fillRect(int x0, int y0, int x1, int y1, COLOR color)
 	{
 		SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.x);
 		auto rect = SDL_Rect(x0, y0, x1-x0, y1-y0);
 		SDL_RenderFillRect(renderer, &rect);
-	}
+	} ///
 
 	override void fillRect(float x0, float y0, float x1, float y1, COLOR color)
 	{
 		fillRect(cast(int)x0, cast(int)y0, cast(int)x1, cast(int)y1, color);
-	}
+	} ///
 
 	override void clear()
 	{
 		SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
 		SDL_RenderClear(renderer);
-	}
+	} ///
 
 	override void draw(int x, int y, TextureSource source, int u0, int v0, int u1, int v1)
 	{
@@ -195,7 +198,7 @@ final class SDL2Renderer : Renderer
 		auto srcRect = SDL_Rect(u0, v0, u1-u0, v1-v0);
 		auto dstRect = SDL_Rect(x, y, u1-u0, v1-v0);
 		sdlEnforce(SDL_RenderCopy(renderer, data.t, &srcRect, &dstRect)==0, "SDL_RenderCopy");
-	}
+	} ///
 
 	override void draw(float x0, float y0, float x1, float y1, TextureSource source, int u0, int v0, int u1, int v1)
 	{
@@ -203,7 +206,7 @@ final class SDL2Renderer : Renderer
 		auto srcRect = SDL_Rect(u0, v0, u1-u0, v1-v0);
 		auto dstRect = SDL_Rect(cast(int)x0, cast(int)y0, cast(int)(x1-x0), cast(int)(y1-y0));
 		sdlEnforce(SDL_RenderCopy(renderer, data.t, &srcRect, &dstRect)==0, "SDL_RenderCopy");
-	}
+	} ///
 
 	// **********************************************************************
 
@@ -249,12 +252,12 @@ final class SDL2Renderer : Renderer
 	override @property uint width()
 	{
 		return w;
-	}
+	} ///
 
 	override @property uint height()
 	{
 		return h;
-	}
+	} ///
 }
 
 private final class SDLTextureRenderData : TextureRenderData

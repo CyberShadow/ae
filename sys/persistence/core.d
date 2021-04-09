@@ -17,18 +17,20 @@ import core.time;
 
 import std.traits;
 
+/// When to flush data.
 enum FlushPolicy
 {
-	none,
-	manual,
-	atScopeExit,
-	atThreadExit,
+	none,          /// Never. The cache is not writable.
+	manual,        /// Only manually (using `save`).
+	atScopeExit,   /// When the cache object is destroyed (object destructor).
+	atThreadExit,  /// When the thread exits (static destructor).
 	// TODO: immediate flushing. Could work only with values without mutable indirections.
 	// TODO: this can actually be a bitmask
 }
 
 bool delayed(FlushPolicy policy) { return policy > FlushPolicy.manual; }
 
+/// Placeholder `DataPutter` argument to indicate no writing.
 struct None {}
 
 /// Cache values in-memory, and automatically load/save them as needed via the specified functions.
@@ -38,6 +40,11 @@ struct None {}
 /// A bool key can be used to load a resource from disk only once (lazily),
 /// as is currently done with LoadPolicy.once.
 /// Delayed flush policies require a bool key, to avoid mid-air collisions.
+/// Params:
+///  DataGetter  = Callable which obtains a new copy of the data.
+///  KeyGetter   = Callable which (cheaply) obtains the current version of the data.
+///  DataPutter  = Callable which saves the data (or `None`).
+///  flushPolicy = When to save the data.
 mixin template CacheCore(alias DataGetter, alias KeyGetter, alias DataPutter = None, FlushPolicy flushPolicy = FlushPolicy.none)
 {
 	import std.traits;
@@ -48,8 +55,8 @@ mixin template CacheCore(alias DataGetter, alias KeyGetter, alias DataPutter = N
 
 	enum _CacheCore_readOnly = flushPolicy == FlushPolicy.none;
 
-	_CacheCore_Data cachedData;
-	_CacheCore_Key cachedDataKey;
+	_CacheCore_Data cachedData; /// The currently loaded version of the data.
+	_CacheCore_Key cachedDataKey; /// The key (version) of the last loaded version of the data.
 
 	void _CacheCore_update()
 	{
@@ -77,6 +84,9 @@ mixin template CacheCore(alias DataGetter, alias KeyGetter, alias DataPutter = N
 
 	static if (!_CacheCore_readOnly)
 	{
+		/// Save the data.
+		/// Obtain a fresh copy of the key afterwards
+		/// (by reading it again), unless `exiting` is true.
 		void save(bool exiting=false)()
 		{
 			if (cachedDataKey != _CacheCore_Key.init || cachedData != _CacheCore_Data.init)
@@ -122,17 +132,23 @@ mixin template CacheCore(alias DataGetter, alias KeyGetter, alias DataPutter = N
 	}
 }
 
-/// FileCache policy for when to (re)load data from disk.
+/// `FileCache` policy for when to (re)load data from disk.
 enum LoadPolicy
 {
-	automatic, /// "onModification" for FlushPolicy.none/manual, "once" for delayed
-	once,
-	onModification,
+	automatic,       /// `onModification` for `FlushPolicy.none`/`.manual`, `once` for delayed
+	once,            /// On first request.
+	onModification,  /// When the file's timestamp is updated.
 }
 
+/// Wraps some data stored in a file on disk.
+/// Params:
+///  DataGetter  = Callable which accepts a file name and returns its contents as some D value.
+///  DataPutter  = Callable which performs the reverse operation, writing the value to the file.
+///  flushPolicy = When to save changes to the data to disk.
+///  loadPolicy  = When to reload data from disk.
 struct FileCache(alias DataGetter, alias DataPutter = None, FlushPolicy flushPolicy = FlushPolicy.none, LoadPolicy loadPolicy = LoadPolicy.automatic)
 {
-	string fileName;
+	string fileName; /// File name containing the data.
 
 	static if (loadPolicy == LoadPolicy.automatic)
 		enum _FileCache_loadPolicy = flushPolicy.delayed() ? LoadPolicy.once : LoadPolicy.onModification;
@@ -196,6 +212,7 @@ else
 	enum filesystemTimestampGranularity = 1.seconds;
 }
 
+///
 unittest
 {
 	import std.file;

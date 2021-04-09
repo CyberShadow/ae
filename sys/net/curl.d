@@ -26,22 +26,23 @@ import ae.net.ietf.url;
 import ae.sys.data;
 import ae.sys.net;
 
+/// Implementation of `Network` using libcurl.
 class CurlNetwork : Network
 {
 	override void downloadFile(string url, string target)
 	{
 		std.file.write(target, getFile(url));
-	}
+	} ///
 
 	override void[] getFile(string url)
 	{
 		return get!(AutoProtocol, ubyte)(url);
-	}
+	} ///
 
 	override void[] post(string url, in void[] data)
 	{
 		return .post!ubyte(url, data);
-	}
+	} ///
 
 	override bool urlOK(string url)
 	{
@@ -54,7 +55,7 @@ class CurlNetwork : Network
 		}
 		catch (Exception e)
 			return false;
-	}
+	} ///
 
 	override string resolveRedirect(string url)
 	{
@@ -75,7 +76,7 @@ class CurlNetwork : Network
 		http.perform();
 
 		return result;
-	}
+	} ///
 
 	override HttpResponse httpRequest(HttpRequest request)
 	{
@@ -154,7 +155,7 @@ class CurlNetwork : Network
 			};
 		http.perform();
 		return response;
-	}
+	} ///
 }
 
 static this()

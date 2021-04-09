@@ -26,16 +26,19 @@ import ae.utils.meta : singleton, I;
 
 public import ae.sys.install.common;
 
+/// Installs a binary release of DMD
 class DMDInstaller : Installer
 {
-	string dmdVersion;
+	string dmdVersion; /// Version to install
 
 	this(string v = currentVersion)
 	{
 		dmdVersion = v;
-	}
+	} ///
 
 	// Note: we can't get the dot-release version. Assume ".0".
+	/// Version of DMD that this program was built with.
+	/// Used as the default version to install.
 	enum currentVersion = text(__VERSION__)[0] ~ "." ~ text(__VERSION__)[1..$] ~ ".0";
 
 	version (Windows)
@@ -273,4 +276,4 @@ class DMDInstaller : Installer
 	}
 }
 
-alias dmdInstaller = singleton!DMDInstaller;
+alias dmdInstaller = singleton!DMDInstaller; /// ditto

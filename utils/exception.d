@@ -16,6 +16,7 @@ module ae.utils.exception;
 import std.algorithm;
 import std.string;
 
+/// Stringify an exception chain.
 string formatException(Throwable e)
 {
 	string[] descriptions;
@@ -29,6 +30,8 @@ string formatException(Throwable e)
 
 import ae.utils.meta;
 
+/// Mixin to declare a new exception type with the given name.
+/// Automatically generates common constructors.
 mixin template DeclareException(string NAME, BASE = Exception)
 {
 	import ae.utils.meta.x;
@@ -67,11 +70,11 @@ class NoException : Exception
 	@disable this()
 	{
 		super(null);
-	}
+	} ///
 }
 
 /// Allows toggling catch blocks with -debug=NO_CATCH.
-/// To use, catch CaughtException instead of Exception in catch blocks.
+/// To use, catch `CaughtException` instead of `Exception` in catch blocks.
 debug(NO_CATCH)
 	alias CaughtException = NoException;
 else
@@ -108,6 +111,7 @@ unittest
 
 // --------------------------------------------------------------------------
 
+/// Extracts the stack trace from an exception's `toString`, as an array of lines.
 string[] getStackTrace(string until = __FUNCTION__, string since = "_d_run_main")
 {
 	string[] lines;
@@ -128,6 +132,7 @@ string[] getStackTrace(string until = __FUNCTION__, string since = "_d_run_main"
 import core.exception;
 import std.exception;
 
+/// Test helper. Asserts that `a` `op` `b`, and includes the values in the error message.
 template assertOp(string op)
 {
 	void assertOp(A, B)(auto ref A a, auto ref B b, string file=__FILE__, int line=__LINE__)
@@ -136,7 +141,7 @@ template assertOp(string op)
 			throw new AssertError("Assertion failed: %s %s %s".format(a, op, b), file, line);
 	}
 }
-alias assertEqual = assertOp!"==";
+alias assertEqual = assertOp!"=="; ///
 
 unittest
 {

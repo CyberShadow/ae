@@ -20,10 +20,11 @@ import core.memory;
 import ae.sys.windows.imports;
 mixin(importWin32!q{windows});
 
-ulong rdtsc() { asm { rdtsc; } }
+ulong rdtsc() { asm { rdtsc; } } /// Returns the result of the RDTSC instruction.
 
 private ulong benchStartTime;
 
+/// Begin benchmarking.
 void benchStart()
 {
 	GC.collect();
@@ -31,6 +32,7 @@ void benchStart()
 	benchStartTime = rdtsc();
 }
 
+/// Finish benchmarking, and return the elapsed ticks.
 ulong benchEnd()
 {
 	auto time = rdtsc() - benchStartTime;

@@ -23,6 +23,7 @@ private struct RCClassStore(C)
 	void[__traits(classInstanceSize, C)] data = void;
 }
 
+/// Wraps class type `C` into a reference-counting value type.
 struct RCClass(C)
 if (is(C == class))
 {
@@ -55,7 +56,7 @@ if (is(C == class))
 		_rcClassDestroy();
 		_rcClassStore = null;
 		return this;
-	}
+	} ///
 
 	ref typeof(this) opAssign(T)(auto ref T value)
 	if (is(T == RCClass!U, U) && is(typeof({U u; C c = u;})))
@@ -65,7 +66,7 @@ if (is(C == class))
 		if (_rcClassStore)
 			_rcClassStore.refCount++;
 		return this;
-	}
+	} ///
 
 	T opCast(T)()
 	if (is(T == RCClass!U, U) && is(typeof({C c; U u = c;})))
@@ -75,19 +76,19 @@ if (is(C == class))
 		if (_rcClassStore)
 			_rcClassStore.refCount++;
 		return result;
-	}
+	} ///
 
 	bool opCast(T)()
 	if (is(T == bool))
 	{
 		return !!_rcClassStore;
-	}
+	} ///
 
 	auto opCall(Args...)(auto ref Args args)
 	if (is(typeof(_rcClassGet.opCall(args))))
 	{
 		return _rcClassGet.opCall(args);
-	}
+	} ///
 
 	// lifetime
 
@@ -113,9 +114,9 @@ if (is(C == class))
 	}
 }
 
-// Use external factory function instead of static opCall to avoid
-// conflicting with class's non-static opCall
-
+/// Constructs a new reference-counted instance of `C`.
+/// (An external factory function is used instead of `static opCall`
+/// to avoid conflicting with the class's non-static `opCall`.)
 template rcClass(C)
 if (is(C == class))
 {

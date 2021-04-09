@@ -20,13 +20,14 @@ import ae.net.http.common;
 /// Encapsulates an HTTP status as a D exception.
 class HttpException : Exception
 {
+	/// The HTTP status code to return.
 	HttpStatusCode status;
 
 	this(HttpStatusCode status, string msg = null)
 	{
 		this.status = status;
 		super(msg);
-	}
+	} ///
 }
 
 ///

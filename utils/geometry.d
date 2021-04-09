@@ -18,8 +18,9 @@ import std.math;
 
 import ae.utils.math;
 
-enum TAU = 2*PI;
+enum TAU = 2*PI; /// τ=2π
 
+/// `sqrt` disambiguation for integers.
 auto sqrtx(T)(T x)
 {
 	static if (is(T : long))
@@ -28,74 +29,87 @@ auto sqrtx(T)(T x)
 		return std.math.sqrt(x);
 }
 
-auto dist (T)(T x, T y) { return sqrtx(x*x+y*y); }
-auto dist2(T)(T x, T y) { return       x*x+y*y ; }
+auto dist (T)(T x, T y) { return sqrtx(x*x+y*y); } /// Cartesian distance from origin.
+auto dist2(T)(T x, T y) { return       x*x+y*y ; } /// Square of Cartesian distance from origin.
 
+// *****************************************************************************
+
+// Intersection tests between various shapes.
+
+/// Point on a 2D plane.
 struct Point(T)
 {
+	/// The coordinates.
 	T x, y;
-	void translate(T dx, T dy) { x += dx; y += dy; }
-	Point!T getCenter() { return this; }
+	void translate(T dx, T dy) { x += dx; y += dy; } ///
+	Point!T getCenter() { return this; } ///
 }
-auto point(T...)(T args) { return Point!(CommonType!T)(args); }
+auto point(T...)(T args) { return Point!(CommonType!T)(args); } /// ditto
 
+/// Orthogonal rectangle.
 struct Rect(T)
 {
+	/// The coordinates.
 	T x0, y0, x1, y1;
-	@property T w() { return x1-x0; }
-	@property void w(T value) { x1 = x0 + value; }
-	@property T h() { return y1-y0; }
-	@property void h(T value) { y1 = y0 + value; }
-	void sort() { sort2(x0, x1); sort2(y0, y1); }
-	@property bool sorted() { return x0 <= x1 && y0 <= y1; }
-	void translate(T dx, T dy) { x0 += dx; y0 += dy; x1 += dx; y1 += dy; }
-	Point!T getCenter() { return Point!T(cast(T)average(x0, x1), cast(T)average(y0, y1)); }
+	@property T w() { return x1-x0; } /// Width.
+	@property void w(T value) { x1 = x0 + value; } /// Resize width by moving the second vertical edge.
+	@property T h() { return y1-y0; } /// Height.
+	@property void h(T value) { y1 = y0 + value; } /// Resize height by moving the second horizontal edge.
+	void sort() { sort2(x0, x1); sort2(y0, y1); } /// Flip coordinates if needed, so that `sorted` is `true`.
+	@property bool sorted() { return x0 <= x1 && y0 <= y1; } /// `x0<=x1 && y0<=y1`
+	void translate(T dx, T dy) { x0 += dx; y0 += dy; x1 += dx; y1 += dy; } ///
+	Point!T getCenter() { return Point!T(cast(T)average(x0, x1), cast(T)average(y0, y1)); } ///
 }
-auto rect(T...)(T args) { return Rect!(CommonType!T)(args); }
+auto rect(T...)(T args) { return Rect!(CommonType!T)(args); } /// ditto
 
 unittest
 {
 	Rect!int rint;
 }
 
+/// Circle on a plane.
 struct Circle(T)
 {
+	/// The coordinates and radius.
 	T x, y, r;
-	@property T diameter() { return 2*r; }
-	void translate(T dx, T dy) { x += dx; y += dy; }
-	Point!T getCenter() { return Point!T(x, y); }
+	@property T diameter() { return 2*r; } /// 2r
+	void translate(T dx, T dy) { x += dx; y += dy; } ///
+	Point!T getCenter() { return Point!T(x, y); } ///
 }
-auto circle(T...)(T args) { return Circle!(CommonType!T)(args); }
+auto circle(T...)(T args) { return Circle!(CommonType!T)(args); } /// ditto
 
-enum ShapeKind { none, point, rect, circle }
+/// Discriminated union between `Point`, `Rect` or `Circle`.
+enum ShapeKind { none, /***/ point, /***/ rect, /***/ circle /***/ }
 struct Shape(T)
 {
+	/// Wrapped shape.
 	ShapeKind kind;
 	union
 	{
-		Point!T point;
-		Rect!T rect;
-		Circle!T circle;
-	}
+		Point!T point; ///
+		Rect!T rect; ///
+		Circle!T circle; ///
+	} /// ditto
 
 	this(Point!T point)
 	{
 		this.kind = ShapeKind.point;
 		this.point = point;
-	}
+	} ///
 
 	this(Rect!T rect)
 	{
 		this.kind = ShapeKind.rect;
 		this.rect = rect;
-	}
+	} ///
 
 	this(Circle!T circle)
 	{
 		this.kind = ShapeKind.circle;
 		this.circle = circle;
-	}
+	} ///
 
+	/// Dispatches operations common to all shapes.
 	auto opDispatch(string s, T...)(T args)
 		if (is(typeof(mixin("point ." ~ s ~ "(args)"))) &&
 		    is(typeof(mixin("rect  ." ~ s ~ "(args)"))) &&
@@ -113,9 +127,10 @@ struct Shape(T)
 				assert(0);
 		}
 	}
-}
-auto shape(T)(T shape) { return Shape!(typeof(shape.tupleof[0]))(shape); }
+} /// ditto
+auto shape(T)(T shape) { return Shape!(typeof(shape.tupleof[0]))(shape); } /// ditto
 
+/// Intersection test.
 bool intersects(T)(Shape!T a, Shape!T b)
 {
 	switch (a.kind)
@@ -163,6 +178,7 @@ bool intersects(T)(Shape!T a, Shape!T b)
 	}
 }
 
+/// ditto
 bool intersects(T)(Circle!T circle, Rect!T rect)
 {
 	// http://stackoverflow.com/questions/401847/circle-rectangle-collision-detection-intersection

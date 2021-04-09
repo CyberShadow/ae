@@ -84,7 +84,8 @@ auto trOnly(T...)(ref return T values)
 	return Result(pvalues);
 }
 
-auto trOnly(T...)(T values) /// ditto
+/// ditto
+auto trOnly(T...)(T values)
 {
 	static struct Result
 	{

@@ -34,17 +34,19 @@ unittest
 
 import std.datetime;
 
+/// `typeof(SysTime.stdTime)`, the numeric type used to store absolute time in D.
 alias StdTime = typeof(SysTime.init.stdTime); // long
 
-/// Convert from StdTime to Duration
+/// Convert from `StdTime` to `Duration`.
 alias stdDur = hnsecs;
 
-/// Like SysTime.stdTime.
+/// Like `SysTime.stdTime`.
 @property StdTime stdTime(Duration d)
 {
 	return d.total!"hnsecs"();
 }
 
+/// `true` when the duration `d` is zero.
 @property bool empty(Duration d)
 {
 	return !d.stdTime;

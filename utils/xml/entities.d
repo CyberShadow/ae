@@ -16,7 +16,10 @@ module ae.utils.xml.entities;
 
 import ae.utils.xml.common;
 
+/// A mapping from HTML entity names to `dchar`.
 const dchar[string] entities;
+
+/// A mapping from `dchar` to the corresponding HTML entity name.
 /*const*/ string[dchar] entityNames;
 shared static this()
 {
@@ -336,9 +339,13 @@ import ae.utils.textout;
 	}
 }
 
+/// Encode HTML entities and return the resulting string.
 public alias encodeEntities = encodeEntitiesImpl!(false, (char c) => c=='<' || c=='>' || c=='"' || c=='\'' || c=='&');
+
+/// Write a string to a sink, encoding HTML entities.
 public alias putEncodedEntities = putEncodedEntitiesImpl!(false, (char c) => c=='<' || c=='>' || c=='"' || c=='\'' || c=='&');
 
+/// Encode all known characters as HTML entities.
 public string encodeAllEntities(string str)
 {
 	// TODO: optimize
@@ -354,6 +361,7 @@ public string encodeAllEntities(string str)
 import ae.utils.text;
 import std.conv;
 
+/// Decode HTML entities and return the resulting string.
 public string decodeEntities(string str)
 {
 	auto fragments = str.fastSplit('&');

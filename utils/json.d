@@ -25,6 +25,7 @@ import ae.utils.textout;
 
 // ************************************************************************
 
+/// Basic JSON writer.
 struct JsonWriter(Output)
 {
 	/// You can set this to something to e.g. write to another buffer.
@@ -100,38 +101,39 @@ struct JsonWriter(Output)
 	void beginArray()
 	{
 		output.putEx('[');
-	}
+	} ///
 
 	void endArray()
 	{
 		output.putEx(']');
-	}
+	} ///
 
 	void beginObject()
 	{
 		output.putEx('{');
-	}
+	} ///
 
 	void endObject()
 	{
 		output.putEx('}');
-	}
+	} ///
 
 	void putKey(in char[] key)
 	{
 		putString(key);
 		output.putEx(':');
-	}
+	} ///
 
 	void putComma()
 	{
 		output.putEx(',');
-	}
+	} ///
 }
 
+/// JSON writer with indentation.
 struct PrettyJsonWriter(Output, alias indent = '\t', alias newLine = '\n', alias pad = ' ')
 {
-	JsonWriter!Output jsonWriter;
+	JsonWriter!Output jsonWriter; /// Underlying writer.
 	alias jsonWriter this;
 
 	bool indentPending;
@@ -160,7 +162,7 @@ struct PrettyJsonWriter(Output, alias indent = '\t', alias newLine = '\n', alias
 	{
 		putIndent();
 		jsonWriter.putValue(v);
-	}
+	} ///
 
 	void beginArray()
 	{
@@ -168,7 +170,7 @@ struct PrettyJsonWriter(Output, alias indent = '\t', alias newLine = '\n', alias
 		jsonWriter.beginArray();
 		indentLevel++;
 		putNewline();
-	}
+	} ///
 
 	void endArray()
 	{
@@ -176,7 +178,7 @@ struct PrettyJsonWriter(Output, alias indent = '\t', alias newLine = '\n', alias
 		putNewline();
 		putIndent();
 		jsonWriter.endArray();
-	}
+	} ///
 
 	void beginObject()
 	{
@@ -184,7 +186,7 @@ struct PrettyJsonWriter(Output, alias indent = '\t', alias newLine = '\n', alias
 		jsonWriter.beginObject();
 		indentLevel++;
 		putNewline();
-	}
+	} ///
 
 	void endObject()
 	{
@@ -192,26 +194,28 @@ struct PrettyJsonWriter(Output, alias indent = '\t', alias newLine = '\n', alias
 		putNewline();
 		putIndent();
 		jsonWriter.endObject();
-	}
+	} ///
 
 	void putKey(in char[] key)
 	{
 		putIndent();
 		putString(key);
 		output.putEx(pad, ':', pad);
-	}
+	} ///
 
 	void putComma()
 	{
 		jsonWriter.putComma();
 		putNewline();
-	}
+	} ///
 }
 
+/// Abstract JSON serializer based on `Writer`.
 struct CustomJsonSerializer(Writer)
 {
-	Writer writer;
+	Writer writer; /// Output.
 
+	/// Put a serializable value.
 	void put(T)(T v)
 	{
 		static if (is(T X == Nullable!X))
@@ -322,6 +326,7 @@ struct CustomJsonSerializer(Writer)
 	}
 }
 
+/// JSON serializer with `StringBuilder` output.
 alias JsonSerializer = CustomJsonSerializer!(JsonWriter!StringBuilder);
 
 private struct Escapes
@@ -366,6 +371,7 @@ private struct Escapes
 
 // ************************************************************************
 
+/// Serialize `T` to JSON, and return the result as a string.
 string toJson(T)(T v)
 {
 	JsonSerializer serializer;
@@ -373,6 +379,7 @@ string toJson(T)(T v)
 	return serializer.writer.output.get();
 }
 
+///
 unittest
 {
 	struct X { int a; string b; }
@@ -389,6 +396,7 @@ unittest
 
 // ************************************************************************
 
+/// Serialize `T` to a pretty (indented) JSON string.
 string toPrettyJson(T)(T v)
 {
 	CustomJsonSerializer!(PrettyJsonWriter!StringBuilder) serializer;
@@ -396,6 +404,7 @@ string toPrettyJson(T)(T v)
 	return serializer.writer.output.get();
 }
 
+///
 unittest
 {
 	struct X { int a; string b; int[] c, d; }
@@ -934,6 +943,7 @@ private struct JsonParser(C)
 	}
 }
 
+/// Parse the JSON in string `s` and deserialize it into an instance of `T`.
 T jsonParse(T, C)(C[] s)
 {
 	auto parser = JsonParser!C(s);
@@ -984,6 +994,7 @@ unittest
 	jsonParse!(int[2])(`[ 1 , 2 ]`);
 }
 
+/// Parse the JSON in string `s` and deserialize it into `T`.
 void jsonParse(T, C)(C[] s, ref T result)
 {
 	auto parser = JsonParser!C(s);
@@ -1158,7 +1169,7 @@ unittest
 
 /// User-defined attribute - specify name for JSON object field.
 /// Useful when a JSON object may contain fields, the name of which are not valid D identifiers.
-struct JSONName { string name; }
+struct JSONName { string name; /***/ }
 
 private template getJsonName(S, string FIELD)
 {
@@ -1200,8 +1211,8 @@ unittest
 /// any type.
 struct JSONFragment
 {
-	string json;
-	bool opCast(T)() const if (is(T==bool)) { return !!json; }
+	string json; ///
+	bool opCast(T)() const if (is(T==bool)) { return !!json; } ///
 }
 
 unittest

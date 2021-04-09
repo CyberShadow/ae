@@ -18,17 +18,20 @@ import std.exception;
 
 import ae.utils.sound.riff.common;
 
+/// RIFF chunk.
 struct Chunk
 {
+	/// Chunk header.
 	struct Header
 	{
-		char[4] name;
-		uint length;
-		ubyte[0] data;
+		char[4] name;  ///
+		uint length;   ///
+		ubyte[0] data; /// Chunk data follows.
 	}
 
-	Header* header;
+	Header* header; /// ditto
 
+	/// Parse and consume one chunk from `data`.
 	this(ref ubyte[] data)
 	{
 		enforce(data.length >= Header.sizeof);
@@ -39,23 +42,28 @@ struct Chunk
 		data = data[header.length..$];
 	}
 
-	char[4] name() { return header.name; }
-	ubyte[] data() { return header.data.ptr[0..header.length]; }
+	char[4] name() { return header.name; } /// Chunk name (from header).
+	ubyte[] data() { return header.data.ptr[0..header.length]; } /// Chunk data.
 }
 
+/// Reads chunks from an array of bytes.
 struct Chunks
 {
-	ubyte[] data;
+	ubyte[] data; /// The array of bytes.
+	/// Range primitives.
 	bool empty() { return data.length == 0; }
-	Chunk front() { auto cData = data; return Chunk(cData); }
-	void popFront() { auto c = Chunk(data); }
+	Chunk front() { auto cData = data; return Chunk(cData); } /// ditto
+	void popFront() { auto c = Chunk(data); } /// ditto
 }
 
+/// Return a `Chunk` from `data`.
 auto readRiff(ubyte[] data)
 {
 	return Chunk(data);
 }
 
+/// Get samples from a parsed RIFF file.
+/// The format is expected to match `T`.
 auto getWave(T)(Chunk chunk)
 {
 	enforce(chunk.name == "RIFF", "Unknown file format");

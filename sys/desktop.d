@@ -22,6 +22,7 @@ version (Windows)
 
 	pragma(lib, "user32");
 
+	/// Get the desktop resolution.
 	void getDesktopResolution(out uint x, out uint y)
 	{
 		x = GetSystemMetrics(SM_CXSCREEN);

@@ -25,6 +25,10 @@
 
 module ae.net.shutdown;
 
+/// Register a handler to be called when a shutdown is requested.
+/// The handler should close network connections and cancel timers,
+/// thus removing all owned resources from the event loop which would
+/// block it from exiting cleanly.
 void addShutdownHandler(void delegate(scope const(char)[] reason) fn)
 {
 	handlers ~= fn;

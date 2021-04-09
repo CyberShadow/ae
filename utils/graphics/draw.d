@@ -152,6 +152,7 @@ q{
 	assert(y1 <= y2);
 };
 
+/// Draw a horizontal line.
 void hline(bool CHECKED=true, V, COLOR)(auto ref V v, xy_t x1, xy_t x2, xy_t y, COLOR c)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
@@ -166,6 +167,7 @@ void hline(bool CHECKED=true, V, COLOR)(auto ref V v, xy_t x1, xy_t x2, xy_t y, 
 			v[x, y] = c;
 }
 
+/// Draw a vertical line.
 void vline(bool CHECKED=true, V, COLOR)(auto ref V v, xy_t x, xy_t y1, xy_t y2, COLOR c)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
@@ -174,6 +176,7 @@ void vline(bool CHECKED=true, V, COLOR)(auto ref V v, xy_t x, xy_t y1, xy_t y2, 
 		v[x, y] = c;
 }
 
+/// Draw a line.
 void line(bool CHECKED=true, V, COLOR)(auto ref V v, xy_t x1, xy_t y1, xy_t x2, xy_t y2, COLOR c)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
@@ -242,6 +245,7 @@ void rect(bool CHECKED=true, V, COLOR)(auto ref V v, xy_t x1, xy_t y1, xy_t x2, 
 	v.vline!CHECKED(x2-1, y1, y2, c);
 }
 
+/// Draw a filled rectangle.
 void fillRect(bool CHECKED=true, V, COLOR)(auto ref V v, xy_t x1, xy_t y1, xy_t x2, xy_t y2, COLOR b) // [)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
@@ -259,6 +263,7 @@ void fillRect(bool CHECKED=true, V, COLOR)(auto ref V v, xy_t x1, xy_t y1, xy_t 
 		v.hline!false(x1, x2, y, b);
 }
 
+/// Draw a filled rectangle with an outline.
 void fillRect(bool CHECKED=true, V, COLOR)(auto ref V v, xy_t x1, xy_t y1, xy_t x2, xy_t y2, COLOR c, COLOR b) // [)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
@@ -267,6 +272,8 @@ void fillRect(bool CHECKED=true, V, COLOR)(auto ref V v, xy_t x1, xy_t y1, xy_t 
 		v.fillRect!CHECKED(x1+1, y1+1, x2-1, y2-1, b);
 }
 
+/// Recursively replace the color of all adjacent pixels of the same color,
+/// starting with the given coordinates.
 /// Unchecked! Make sure area is bounded.
 void uncheckedFloodFill(V, COLOR)(auto ref V v, xy_t x, xy_t y, COLOR c)
 	if (isDirectView!V && is(COLOR : ViewColor!V))
@@ -292,6 +299,7 @@ private void floodFillPtr(V, COLOR)(auto ref V v, COLOR* pp, COLOR c, COLOR f)
 			v.floodFillPtr(p, c, f);
 }
 
+/// Draw a filled circle.
 void fillCircle(V, COLOR)(auto ref V v, xy_t x, xy_t y, xy_t r, COLOR c)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
@@ -309,6 +317,7 @@ void fillCircle(V, COLOR)(auto ref V v, xy_t x, xy_t y, xy_t r, COLOR c)
 				v[px, py] = c;
 }
 
+/// Draw a filled sector (circle slice).
 void fillSector(V, COLOR)(auto ref V v, xy_t x, xy_t y, xy_t r0, xy_t r1, real a0, real a1, COLOR c)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
@@ -339,8 +348,15 @@ void fillSector(V, COLOR)(auto ref V v, xy_t x, xy_t y, xy_t r0, xy_t r1, real a
 		}
 }
 
-struct Coord { xy_t x, y; string toString() { import std.string; return format("%s", [this.tupleof]); } }
+/// Polygon point definition.
+struct Coord
+{
+	///
+	xy_t x, y;
+	string toString() { import std.string; return format("%s", [this.tupleof]); } ///
+}
 
+/// Draw a filled polygon with a variable number of points.
 void fillPoly(V, COLOR)(auto ref V v, Coord[] coords, COLOR f)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
@@ -388,7 +404,8 @@ void fillPoly(V, COLOR)(auto ref V v, Coord[] coords, COLOR f)
 	}
 }
 
-// No caps
+/// Draw a line of a given thickness.
+/// Does not draw caps.
 void thickLine(V, COLOR)(auto ref V v, xy_t x1, xy_t y1, xy_t x2, xy_t y2, xy_t r, COLOR c)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
@@ -408,7 +425,8 @@ void thickLine(V, COLOR)(auto ref V v, xy_t x1, xy_t y1, xy_t x2, xy_t y2, xy_t 
 	], c);
 }
 
-// No caps
+/// Draw a polygon of a given thickness.
+/// Does not draw caps.
 void thickLinePoly(V, COLOR)(auto ref V v, Coord[] coords, xy_t r, COLOR c)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
@@ -455,6 +473,7 @@ mixin template FixMath(ubyte coordinateBitsParam = 16)
 
 // ************************************************************************************************************************************
 
+/// Fill `v` with white noise.
 void whiteNoise(V)(V v)
 	if (isWritableView!V)
 {
@@ -558,18 +577,22 @@ private template softRoundShape(bool RING)
 	}
 }
 
+/// Draw a circle using a smooth interpolated line.
 void softRing(T, V, COLOR)(auto ref V v, T x, T y, T r0, T r1, T r2, COLOR color)
 	if (isWritableView!V && isNumeric!T && is(COLOR : ViewColor!V))
 {
 	v.softRoundShape!true(x, y, r0, r1, r2, color);
 }
 
+/// ditto
 void softCircle(T, V, COLOR)(auto ref V v, T x, T y, T r1, T r2, COLOR color)
 	if (isWritableView!V && isNumeric!T && is(COLOR : ViewColor!V))
 {
 	v.softRoundShape!false(x, y, cast(T)0, r1, r2, color);
 }
 
+/// Draw a 1x1 rectangle at fractional coordinates.
+/// Affects up to 4 pixels in the image.
 template aaPutPixel(bool CHECKED=true, bool USE_ALPHA=true)
 {
 	void aaPutPixel(F:float, V, COLOR, frac)(auto ref V v, F x, F y, COLOR color, frac alpha)
@@ -608,6 +631,7 @@ template aaPutPixel(bool CHECKED=true, bool USE_ALPHA=true)
 	}
 }
 
+/// ditto
 void aaPutPixel(bool CHECKED=true, F:float, V, COLOR)(auto ref V v, F x, F y, COLOR color)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
@@ -616,6 +640,7 @@ void aaPutPixel(bool CHECKED=true, F:float, V, COLOR)(auto ref V v, F x, F y, CO
 	f(v, x, y, color, 0);
 }
 
+/// Draw a horizontal line
 void hline(bool CHECKED=true, V, COLOR, frac)(auto ref V v, xy_t x1, xy_t x2, xy_t y, COLOR color, frac alpha)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
@@ -632,6 +657,7 @@ void hline(bool CHECKED=true, V, COLOR, frac)(auto ref V v, xy_t x1, xy_t x2, xy
 				p = COLOR.op!q{.blend(a, b, c)}(color, p, alpha);
 }
 
+/// Draw a vertical line
 void vline(bool CHECKED=true, V, COLOR, frac)(auto ref V v, xy_t x, xy_t y1, xy_t y2, COLOR color, frac alpha)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
@@ -651,6 +677,8 @@ void vline(bool CHECKED=true, V, COLOR, frac)(auto ref V v, xy_t x, xy_t y1, xy_
 		}
 }
 
+/// Draw a filled rectangle at fractional coordinates.
+/// Edges are anti-aliased.
 void aaFillRect(bool CHECKED=true, F:float, V, COLOR)(auto ref V v, F x1, F y1, F x2, F y2, COLOR color)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
@@ -675,6 +703,7 @@ void aaFillRect(bool CHECKED=true, F:float, V, COLOR)(auto ref V v, F x1, F y1, 
 	v.fillRect!CHECKED(x1i+1, y1i+1, x2i, y2i, color);
 }
 
+/// Draw an anti-aliased line.
 void aaLine(bool CHECKED=true, V, COLOR)(auto ref V v, float x1, float y1, float x2, float y2, COLOR color)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
@@ -689,6 +718,7 @@ void aaLine(bool CHECKED=true, V, COLOR)(auto ref V v, float x1, float y1, float
 			v.aaPutPixel!CHECKED(itpl(x1, x2, y, y1, y2), y, color);
 }
 
+/// ditto
 void aaLine(bool CHECKED=true, V, COLOR, frac)(auto ref V v, float x1, float y1, float x2, float y2, COLOR color, frac alpha)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
@@ -773,6 +803,7 @@ typeof(this) draw(bool CHECKED=true, SRCCANVAS)(xy_t x, xy_t y, SRCCANVAS v)
 	return this;
 }
 
+/// Downscale an image minding subpixel positioning on LCD screens.
 void subpixelDownscale()()
 	if (structFields!COLOR == ["r","g","b"] || structFields!COLOR == ["b","g","r"])
 {

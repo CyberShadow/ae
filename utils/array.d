@@ -122,6 +122,7 @@ unittest
 	assert(iarr.ptr);
 }
 
+/// C `memcmp` wrapper.
 int memcmp(in ubyte[] a, in ubyte[] b)
 {
 	assert(a.length == b.length);
@@ -138,6 +139,7 @@ void memmove(T)(T[] dst, in T[] src)
 	memmove(dst.ptr, src.ptr, dst.length * T.sizeof);
 }
 
+/// Performs binary operation `op` on every element of `a` and `b`.
 T[] vector(string op, T)(T[] a, T[] b)
 {
 	assert(a.length == b.length);
@@ -147,6 +149,7 @@ T[] vector(string op, T)(T[] a, T[] b)
 	return result;
 }
 
+/// Performs in-place binary operation `op` on every element of `a` and `b`.
 T[] vectorAssign(string op, T)(T[] a, T[] b)
 {
 	assert(a.length == b.length);
@@ -155,6 +158,7 @@ T[] vectorAssign(string op, T)(T[] a, T[] b)
 	return a;
 }
 
+/// Return `s` expanded to at least `l` elements, filling them with `c`.
 T[] padRight(T)(T[] s, size_t l, T c)
 {
 	auto ol = s.length;
@@ -166,6 +170,7 @@ T[] padRight(T)(T[] s, size_t l, T c)
 	return s;
 }
 
+/// Return a new `T[]` of length `l`, filled with `c`.
 T[] repeatOne(T)(T c, size_t l)
 {
 	T[] result = new T[l];
@@ -189,9 +194,10 @@ sizediff_t indexOf(T)(in T[] arr, in T[] val) /// ditto
 	if (!isSomeChar!T && is(typeof(arr.countUntil(val))))
 {
 	return arr.countUntil(val);
-}
+} /// ditto
 
-/// Index of element, no BS.
+/// Reimplementation of `std.algorithm.indexOf`,
+/// but with no auto-decoding.
 sizediff_t indexOfElement(T, D)(in T[] arr, auto ref const D val)
 	if (is(typeof(arr[0]==val)))
 {
@@ -237,11 +243,13 @@ unittest
 	assert(!"abracadabra".containsAt("ada", 99));
 }
 
+/// Returns `true` if one of the elements of `arr` contains `val`.
 bool isIn(T)(T val, in T[] arr)
 {
 	return arr.contains(val);
 }
 
+/// Returns `true` if one of the elements of `arr` contains `val`.
 bool isOneOf(T)(T val, T[] arr...)
 {
 	return arr.contains(val);
@@ -495,6 +503,8 @@ unittest
 
 import std.functional;
 
+/// Sorts `arr` in-place using counting sort.
+/// The difference between the lowest and highest element of `arr` shouldn't be too big.
 T[] countSort(alias value = "a", T)(T[] arr)
 {
 	alias unaryFun!value getValue;
@@ -524,14 +534,19 @@ T[] countSort(alias value = "a", T)(T[] arr)
 
 // ***************************************************************************
 
+/// Push `val` into `arr`, treating it like a stack.
 void stackPush(T)(ref T[] arr, auto ref T val)
 {
 	arr ~= val;
 }
+
+/// Push `val` into `arr`, treating it like a queue.
 alias stackPush queuePush;
 
+/// Peek at the front of `arr`, treating it like a stack.
 ref T stackPeek(T)(T[] arr) { return arr[$-1]; }
 
+/// Pop a value off the front of `arr`, treating it like a stack.
 ref T stackPop(T)(ref T[] arr)
 {
 	auto ret = &arr[$-1];
@@ -539,10 +554,13 @@ ref T stackPop(T)(ref T[] arr)
 	return *ret;
 }
 
+/// Peek at the front of `arr`, treating it like a queue.
 ref T queuePeek(T)(T[] arr) { return arr[0]; }
 
+/// Peek at the back of `arr`, treating it like a queue.
 ref T queuePeekLast(T)(T[] arr) { return arr[$-1]; }
 
+/// Pop a value off the front of `arr`, treating it like a queue.
 ref T queuePop(T)(ref T[] arr)
 {
 	auto ret = &arr[0];
@@ -551,11 +569,16 @@ ref T queuePop(T)(ref T[] arr)
 	return *ret;
 }
 
+/// Remove the first element of `arr` and return it.
 ref T shift(T)(ref T[] arr) { auto oldArr = arr; arr = arr[1..$]; return oldArr[0]; }
+
+/// Remove the `n` first elements of `arr` and return them.
 T[] shift(T)(ref T[] arr, size_t n) { T[] result = arr[0..n]; arr = arr[n..$]; return result; }
-T[N] shift(size_t N, T)(ref T[] arr) { T[N] result = cast(T[N])(arr[0..N]); arr = arr[N..$]; return result; }
+T[N] shift(size_t N, T)(ref T[] arr) { T[N] result = cast(T[N])(arr[0..N]); arr = arr[N..$]; return result; } /// ditto
+
+/// Insert elements in the front of `arr`.
 void unshift(T)(ref T[] arr, T value) { arr.insertInPlace(0, value); }
-void unshift(T)(ref T[] arr, T[] value) { arr.insertInPlace(0, value); }
+void unshift(T)(ref T[] arr, T[] value) { arr.insertInPlace(0, value); } /// ditto
 
 unittest
 {
@@ -678,11 +701,11 @@ deprecated unittest
 
 // ***************************************************************************
 
-// Equivalents of array(xxx(...)), but less parens and UFCS-able.
+/// Equivalents of `array(xxx(...))`.
 auto amap(alias pred, T)(T[] arr) { return array(map!pred(arr)); }
-auto afilter(alias pred, T)(T[] arr) { return array(filter!pred(arr)); }
-auto auniq(T)(T[] arr) { return array(uniq(arr)); }
-auto asort(alias pred, T)(T[] arr) { sort!pred(arr); return arr; }
+auto afilter(alias pred, T)(T[] arr) { return array(filter!pred(arr)); } /// ditto
+auto auniq(T)(T[] arr) { return array(uniq(arr)); } /// ditto
+auto asort(alias pred, T)(T[] arr) { sort!pred(arr); return arr; } /// ditto
 
 unittest
 {
@@ -690,6 +713,7 @@ unittest
 	assert([1, 2, 3].amap!(n => n*n)() == [1, 4, 9]);
 }
 
+/// Like `amap` but with a static array.
 auto amap(alias pred, T, size_t n)(T[n] arr)
 {
 	alias R = typeof(unaryFun!pred(arr[0]));
@@ -707,16 +731,16 @@ auto amap(alias pred, T, size_t n)(T[n] arr)
 ///   normalize = function which should return a range of normalized elements.
 struct NormalizedArray(T, alias normalize)
 {
-	T[] arr;
+	T[] arr; /// Underlying array.
 
-	this(T[] arr) { this.arr = arr; }
+	this(T[] arr) { this.arr = arr; } ///
 
-	int opCmp    (in T[]                 other) const { return std.algorithm.cmp(normalize(arr), normalize(other    ))   ; }
-	int opCmp    (    const typeof(this) other) const { return std.algorithm.cmp(normalize(arr), normalize(other.arr))   ; }
-	int opCmp    (ref const typeof(this) other) const { return std.algorithm.cmp(normalize(arr), normalize(other.arr))   ; }
-	bool opEquals(in T[]                 other) const { return std.algorithm.cmp(normalize(arr), normalize(other    ))==0; }
-	bool opEquals(    const typeof(this) other) const { return std.algorithm.cmp(normalize(arr), normalize(other.arr))==0; }
-	bool opEquals(ref const typeof(this) other) const { return std.algorithm.cmp(normalize(arr), normalize(other.arr))==0; }
+	int opCmp    (in T[]                 other) const { return std.algorithm.cmp(normalize(arr), normalize(other    ))   ; } ///
+	int opCmp    (    const typeof(this) other) const { return std.algorithm.cmp(normalize(arr), normalize(other.arr))   ; } ///
+	int opCmp    (ref const typeof(this) other) const { return std.algorithm.cmp(normalize(arr), normalize(other.arr))   ; } ///
+	bool opEquals(in T[]                 other) const { return std.algorithm.cmp(normalize(arr), normalize(other    ))==0; } ///
+	bool opEquals(    const typeof(this) other) const { return std.algorithm.cmp(normalize(arr), normalize(other.arr))==0; } ///
+	bool opEquals(ref const typeof(this) other) const { return std.algorithm.cmp(normalize(arr), normalize(other.arr))==0; } ///
 
 	hash_t toHashReal() const
 	{
@@ -731,7 +755,7 @@ struct NormalizedArray(T, alias normalize)
 	hash_t toHash() const nothrow @trusted
 	{
 		return (cast(hash_t delegate() nothrow @safe)&toHashReal)();
-	}
+	} ///
 }
 
 // ***************************************************************************

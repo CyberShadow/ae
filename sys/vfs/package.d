@@ -156,6 +156,7 @@ class VFS
 	void rmdirRecurse(string path) { assert(false, "Not implemented"); }
 }
 
+/// The VFS registry, a mapping from "protocol" (part before "://") to VFS implementation.
 VFS[string] registry;
 
 /// Test a VFS at a certain path. Must end with directory separator.
@@ -194,14 +195,14 @@ bool isVFSPath(string path)
 {
 	import ae.utils.text;
 	return path.contains("://");
-}
+} ///
 
 string getVFSName(string path)
 {
 	import std.string;
 	auto index = indexOf(path, "://");
 	return index > 0 ? path[0..index] : null;
-}
+} ///
 
 VFS getVFS(string path)
 {
@@ -209,7 +210,7 @@ VFS getVFS(string path)
 	auto pvfs = vfsName in registry;
 	assert(pvfs, "Unknown VFS: " ~ vfsName);
 	return *pvfs;
-}
+} ///
 
 private:
 

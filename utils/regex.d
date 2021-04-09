@@ -136,14 +136,14 @@ template extractCaptures(T...)
 	}
 }
 
-alias extractCapture = extractCaptures;
+alias extractCapture = extractCaptures; /// ditto
 
 auto extractCapture(S, R)(S s, R r)
 if (isSomeString!S)
 {
 	alias x = .extractCaptures!S;
 	return x(s, r);
-}
+} /// ditto
 
 ///
 unittest

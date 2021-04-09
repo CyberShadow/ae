@@ -27,6 +27,7 @@ mixin(importWin32!q{winnt});
 
 mixin(importWin32!(q{mmsystem}, q{public}, q{SND_ASYNC, SND_LOOP, SND_NOSTOP}));
 
+/// Play a wave using the Windows API.
 void playWave(Wave)(Wave wave, Duration duration, uint flags = 0)
 {
 	enum sampleRate = 44100;
@@ -34,6 +35,7 @@ void playWave(Wave)(Wave wave, Duration duration, uint flags = 0)
 	playRiff(makeRiff(wave.takeExactly(samples), sampleRate), flags);
 }
 
+/// Play a RIFF (range of bytes) using the Windows API.
 void playRiff(Riff)(Riff riff, uint flags = 0)
 {
 	import core.stdc.stdlib : malloc, free;

@@ -17,6 +17,7 @@ import ae.sys.persistence.core;
 
 // ****************************************************************************
 
+/// `FileCache` wrapper which stores a D type as JSON serialization.
 template JsonFileCache(T, FlushPolicy flushPolicy = FlushPolicy.none)
 {
 	import std.file;

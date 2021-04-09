@@ -139,9 +139,11 @@ struct Git
 			size_t index; /// Index in this `History` instance.
 			CommitID oid;  /// The commit hash.
 			time_t time;  /// UNIX time.
-			string author, committer; /// Raw author/committer lines. Use Authorship to parse.
+			string author;  /// Raw author/committer lines. Use Authorship to parse.
+			string committer;  /// ditto
 			string[] message; /// Commit message lines.
-			Commit*[] parents, children; /// Edges to neighboring commits. Children order is unspecified.
+			Commit*[] parents; /// Edges to neighboring commits. Children order is unspecified.
+			Commit*[] children; /// ditto
 
 			deprecated alias hash = oid;
 			deprecated alias id = index;
@@ -415,6 +417,7 @@ struct Git
 			/// Sort key to be used when constructing a tree object.
 			@property string sortName() const { return (mode & octal!40000) ? name ~ "/" : name; }
 
+			/// Implements comparison using `sortName`.
 			int opCmp(ref const TreeEntry b) const
 			{
 				return cmp(sortName, b.sortName);
@@ -507,7 +510,8 @@ struct Git
 	}
 	alias ObjectReader = RefCounted!ObjectReaderImpl; /// ditto
 
-	ObjectReader createObjectReader() /// ditto
+	/// ditto
+	ObjectReader createObjectReader()
 	{
 		auto pipes = this.pipe(`cat-file`, `--batch`);
 		return ObjectReader(pipes);
@@ -568,13 +572,13 @@ struct Git
 	}
 	alias ObjectWriter = RefCounted!ObjectWriterImpl; /// ditto
 
-	ObjectWriter createObjectWriter(string type) /// ditto
+	ObjectWriter createObjectWriter(string type)
 	{
 		auto pipes = this.pipe(`hash-object`, `-t`, type, `-w`, `--stdin-paths`);
 		return ObjectWriter(pipes);
-	}
+	} /// ditto
 
-	struct ObjectMultiWriterImpl /// ditto
+	struct ObjectMultiWriterImpl
 	{
 		private Git repo;
 
@@ -601,7 +605,7 @@ struct Git
 		CommitID write(in Object.ParsedCommit commit) { return CommitID(write(Object.createCommit(commit))); }
 		TreeID   write(in Object.TreeEntry[] entries) { return TreeID  (write(Object.createTree(entries))); } /// ditto
 		BlobID   write(immutable(ubyte)[] bytes     ) { return BlobID  (write(Object.createBlob(bytes))); } /// ditto
-	}
+	} /// ditto
 	alias ObjectMultiWriter = RefCounted!ObjectMultiWriterImpl; /// ditto
 
 	/// ditto

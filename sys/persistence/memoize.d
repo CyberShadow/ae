@@ -31,7 +31,7 @@ struct PersistentMemoized(alias fun, FlushPolicy flushPolicy = FlushPolicy.atThr
 	alias AA = ReturnType!fun[string];
 	private JsonFileCache!(AA, flushPolicy) memo;
 
-	this(string fileName) { memo.fileName = fileName; }
+	this(string fileName) { memo.fileName = fileName; } ///
 
 	ReturnType!fun opCall(ParameterTypeTuple!fun args)
 	{
@@ -44,7 +44,7 @@ struct PersistentMemoized(alias fun, FlushPolicy flushPolicy = FlushPolicy.atThr
 		if (p) return *p;
 		auto r = fun(args);
 		return memo[key] = r;
-	}
+	} ///
 }
 
 unittest
@@ -86,7 +86,7 @@ struct SynchronizedPersistentMemoized(alias fun, FlushPolicy flushPolicy = Flush
 	{
 		memo.fileName = fileName;
 		mutex = new Object;
-	}
+	} ///
 
 	ReturnType!fun opCall(ParameterTypeTuple!fun args)
 	{
@@ -103,5 +103,5 @@ struct SynchronizedPersistentMemoized(alias fun, FlushPolicy flushPolicy = Flush
 		auto r = fun(args);
 		synchronized (mutex)
 			return memo[key] = r;
-	}
+	} ///
 }

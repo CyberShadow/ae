@@ -15,31 +15,37 @@ module ae.utils.xmlwriter;
 
 import ae.utils.textout;
 
+/// Null formatter.
 struct NullXmlFormatter
 {
+	/// Implementation of formatter interface.
 	@property bool enabled() { return false; }
-	@property void enabled(bool value) {}
+	@property void enabled(bool value) {} /// ditto
 
 	mixin template Mixin(alias formatter)
 	{
+		/// Stubs.
 		void newLine() {}
-		void startLine() {}
-		void indent() {}
-		void outdent() {}
-	}
+		void startLine() {} /// ditto
+		void indent() {} /// ditto
+		void outdent() {} /// ditto
+	} /// ditto
 }
 
+/// Customizable formatter.
 struct CustomXmlFormatter(char indentCharP, uint indentSizeP)
 {
-	enum indentChar = indentCharP;
-	enum indentSize = indentSizeP;
+	enum indentChar = indentCharP; ///
+	enum indentSize = indentSizeP; ///
 
+	/// Implementation of formatter interface.
 	bool enabled = true;
 
 	mixin template Mixin(alias formatter)
 	{
 		uint indentLevel = 0;
 
+		/// Implementation of formatter interface.
 		void newLine()
 		{
 			if (formatter.enabled)
@@ -50,20 +56,23 @@ struct CustomXmlFormatter(char indentCharP, uint indentSizeP)
 		{
 			if (formatter.enabled)
 				output.allocate(indentLevel * formatter.indentSize)[] = formatter.indentChar;
-		}
+		} /// ditto
 
-		void indent () {                      indentLevel++; }
-		void outdent() { assert(indentLevel); indentLevel--; }
-	}
+		void indent () {                      indentLevel++; } /// ditto
+		void outdent() { assert(indentLevel); indentLevel--; } /// ditto
+	} /// ditto
 }
 
+/// Default formatter, configured with indentation consisting of one tab character.
 alias DefaultXmlFormatter = CustomXmlFormatter!('\t', 1);
 
+/// Customizable XML writer.
 struct CustomXmlWriter(WRITER, Formatter)
 {
 	/// You can set this to something to e.g. write to another buffer.
 	WRITER output;
 
+	/// Formatter instance.
 	Formatter formatter;
 	mixin Formatter.Mixin!formatter;
 
@@ -86,6 +95,7 @@ struct CustomXmlWriter(WRITER, Formatter)
 		bool inAttributes;
 	}
 
+	/// Write the beginning of an XML document.
 	void startDocument()
 	{
 		output.put(`<?xml version="1.0" encoding="UTF-8"?>`);
@@ -95,11 +105,13 @@ struct CustomXmlWriter(WRITER, Formatter)
 
 	deprecated alias text putText;
 
+	/// Write plain text (escaping entities).
 	void text(in char[] s)
 	{
 		escapedText!(EscapeScope.text)(s);
 	}
 
+	/// Write attribute contents.
 	alias attrText = escapedText!(EscapeScope.attribute);
 
 	private void escapedText(EscapeScope escapeScope)(in char[] s)
@@ -163,13 +175,15 @@ struct CustomXmlWriter(WRITER, Formatter)
 		debug pushTag(name);
 	};
 
+	/// Write opening a tag (no attributes).
 	void startTag(string name)() { enum STATIC = true;  mixin(mixStartTag); }
-	void startTag()(string name) { enum STATIC = false; mixin(mixStartTag); }
+	void startTag()(string name) { enum STATIC = false; mixin(mixStartTag); } /// ditto
 
 	// startTagWithAttributes
 
+	/// Write opening a tag (attributes follow).
 	void startTagWithAttributes(string name)() { enum STATIC = true;  enum OPEN = '<'; mixin(mixStartWithAttributesGeneric); }
-	void startTagWithAttributes()(string name) { enum STATIC = false; enum OPEN = '<'; mixin(mixStartWithAttributesGeneric); }
+	void startTagWithAttributes()(string name) { enum STATIC = false; enum OPEN = '<'; mixin(mixStartWithAttributesGeneric); } /// ditto
 
 	// addAttribute
 
@@ -186,11 +200,13 @@ struct CustomXmlWriter(WRITER, Formatter)
 		output.put('"');
 	};
 
+	/// Write tag attribute.
 	void addAttribute(string name)(string value)   { enum STATIC = true;  mixin(mixAddAttribute); }
-	void addAttribute()(string name, string value) { enum STATIC = false; mixin(mixAddAttribute); }
+	void addAttribute()(string name, string value) { enum STATIC = false; mixin(mixAddAttribute); } /// ditto
 
 	// endAttributes[AndTag]
 
+	/// Write end of attributes and begin tag contents.
 	void endAttributes()
 	{
 		debug assert(inAttributes, "Tag attributes not started");
@@ -200,6 +216,7 @@ struct CustomXmlWriter(WRITER, Formatter)
 		debug inAttributes = false;
 	}
 
+	/// Write end of attributes and tag.
 	void endAttributesAndTag() { enum CLOSE = "/>"; mixin(mixEndAttributesAndTagGeneric); }
 
 	// endTag
@@ -219,19 +236,22 @@ struct CustomXmlWriter(WRITER, Formatter)
 		debug popTag(name);
 	};
 
+	/// Write end of tag.
 	void endTag(string name)() { enum STATIC = true;  mixin(mixEndTag); }
-	void endTag()(string name) { enum STATIC = false; mixin(mixEndTag); }
+	void endTag()(string name) { enum STATIC = false; mixin(mixEndTag); } /// ditto
 
 	// Processing instructions
 
+	/// Write a processing instruction.
 	void startPI(string name)() { enum STATIC = true;  enum OPEN = "<?"; mixin(mixStartWithAttributesGeneric); }
-	void startPI()(string name) { enum STATIC = false; enum OPEN = "<?"; mixin(mixStartWithAttributesGeneric); }
-	void endPI() { enum CLOSE = "?>"; mixin(mixEndAttributesAndTagGeneric); }
+	void startPI()(string name) { enum STATIC = false; enum OPEN = "<?"; mixin(mixStartWithAttributesGeneric); } /// ditto
+	void endPI() { enum CLOSE = "?>"; mixin(mixEndAttributesAndTagGeneric); } /// ditto
 
 	// Doctypes
 
 	deprecated alias doctype putDoctype;
 
+	/// Write a DOCTYPE declaration.
 	void doctype(string text)
 	{
 		debug assert(!inAttributes, "Tag attributes not ended");
@@ -239,6 +259,7 @@ struct CustomXmlWriter(WRITER, Formatter)
 		newLine();
 	}
 
+	/// Write an XML comment.
 	void comment(string text)
 	{
 		debug assert(!inAttributes, "Tag attributes not ended");
@@ -255,7 +276,9 @@ deprecated template CustomXmlWriter(Writer, bool pretty)
 		alias CustomXmlWriter = CustomXmlWriter!(Writer, NullXmlFormatter);
 }
 
+/// XML writer with no formatting.
 alias CustomXmlWriter!(StringBuilder, NullXmlFormatter   ) XmlWriter;
+/// XML writer with formatting.
 alias CustomXmlWriter!(StringBuilder, DefaultXmlFormatter) PrettyXmlWriter;
 
 private:

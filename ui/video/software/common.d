@@ -23,43 +23,43 @@ mixin template SoftwareRenderer()
 	override void putPixel(int x, int y, COLOR color)
 	{
 		gd.safePut(bitmap, x, y, color);
-	}
+	} ///
 
 	override void putPixels(Pixel[] pixels)
 	{
 		foreach (ref pixel; pixels)
 			gd.safePut(bitmap, pixel.x, pixel.y, pixel.color);
-	}
+	} ///
 
 	override void line(float x0, float y0, float x1, float y1, COLOR color)
 	{
 		gd.aaLine(bitmap, x0, y0, x1, y1, color);
-	}
+	} ///
 
 	override void vline(int x, int y0, int y1, COLOR color)
 	{
 		gd.vline(bitmap, x, y0, y1, color);
-	}
+	} ///
 
 	override void hline(int x0, int x1, int y, COLOR color)
 	{
 		gd.hline(bitmap, x0, x1, y, color);
-	}
+	} ///
 
 	override void fillRect(int x0, int y0, int x1, int y1, COLOR color)
 	{
 		gd.fillRect(bitmap, x0, y0, x1, y1, color);
-	}
+	} ///
 
 	override void fillRect(float x0, float y0, float x1, float y1, COLOR color)
 	{
 		gd.aaFillRect(bitmap, x0, y0, x1, y1, color);
-	}
+	} ///
 
 	override void clear()
 	{
 		gd.clear(bitmap, COLOR.init);
-	}
+	} ///
 
 	override void draw(int x, int y, TextureSource source, int u0, int v0, int u1, int v1)
 	{
@@ -67,12 +67,12 @@ mixin template SoftwareRenderer()
 		// TODO: use drawTo when drawing entire image
 		// source.drawTo(w.toRef());
 		source.getPixels.crop(u0, v0, u1, v1).blitTo(w);
-	}
+	} ///
 
 	override void draw(float x0, float y0, float x1, float y1, TextureSource source, int u0, int v0, int u1, int v1)
 	{
 		// assert(0, "TODO");
-	}
+	} ///
 }
 
 unittest

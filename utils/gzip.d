@@ -36,6 +36,7 @@ private enum
 	FCOMMENT = 16
 }
 
+/// Calculate CRC32 from `Data[]`
 uint crc32(Data[] data)
 {
 	CRC32 crc;
@@ -50,6 +51,7 @@ unittest
 	assert(crc32([Data("ab"), Data("c")]) == 0x352441C2);
 }
 
+/// Add a Gzip header to deflated data.
 Data[] deflate2gzip(Data[] compressed, uint dataCrc, size_t dataLength)
 {
 	ubyte[] header;
@@ -67,13 +69,15 @@ Data[] deflate2gzip(Data[] compressed, uint dataCrc, size_t dataLength)
 	return [Data(header)] ~ compressed ~ [Data(footer)];
 }
 
+/// Compress data to Gzip.
 Data[] compress(Data[] data, ZlibOptions options = ZlibOptions.init)
 {
 	return deflate2gzip(zlib.compress(data, options), crc32(data), data.bytes.length);
 }
 
-Data compress(Data input) { return compress([input]).joinData(); }
+Data compress(Data input) { return compress([input]).joinData(); } /// ditto
 
+/// Strip thes Gzip header from `data`.
 Data[] gzipToRawDeflate(Data[] data)
 {
 	enforce(data.bytes.length >= 10, "Gzip too short");
@@ -93,6 +97,7 @@ Data[] gzipToRawDeflate(Data[] data)
 	return bytes[start..bytes.length-8];
 }
 
+/// Uncompress Gzip-compressed data.
 Data[] uncompress(Data[] data)
 {
 	while (data.length >= 2 && data[$-1].length < 4)
@@ -104,7 +109,7 @@ Data[] uncompress(Data[] data)
 	return uncompressed;
 }
 
-Data uncompress(Data input) { return uncompress([input]).joinData(); }
+Data uncompress(Data input) { return uncompress([input]).joinData(); } /// ditto
 
 unittest
 {

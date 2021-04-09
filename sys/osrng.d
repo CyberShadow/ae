@@ -37,6 +37,7 @@ version (Windows)
 	mixin(importWin32!q{wincrypt});
 	mixin(importWin32!q{windef});
 
+	/// Fill `buf` with random data.
 	void genRandom(ubyte[] buf)
 	{
 		HCRYPTPROV hCryptProv;
@@ -53,6 +54,7 @@ version (SecureARC4Random)
 		void arc4random_buf(scope void* buf, size_t nbytes) @system;
 	}
 
+	/// Fill `buf` with random data.
 	void genRandom(ubyte[] buf)
 	{
 		arc4random_buf(buf.ptr, buf.length);
@@ -64,6 +66,7 @@ version (Posix)
 	import std.stdio;
 	import std.exception;
 
+	/// Fill `buf` with random data.
 	void genRandom(ubyte[] buf)
 	{
 		auto f = File("/dev/urandom");

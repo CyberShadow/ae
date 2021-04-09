@@ -17,19 +17,23 @@ import std.traits;
 
 import ae.utils.math;
 
+/// "Long" integer, split into high and low halves.
+/// Params:
+///  bits = Number of bits in one half.
 struct LongInt(uint bits, bool signed)
 {
-	TypeForBits!bits low;
+	TypeForBits!bits low; ///
+	///
 	static if (signed)
 		Signed!(TypeForBits!bits) high;
 	else
 		TypeForBits!bits high;
 }
 
-alias LongInt(T) = LongInt!(T.sizeof * 8, isSigned!T);
+alias LongInt(T) = LongInt!(T.sizeof * 8, isSigned!T); /// ditto
 
-alias Cent = LongInt!long;
-alias UCent = LongInt!ulong;
+alias Cent = LongInt!long; /// 128-bit signed integer.
+alias UCent = LongInt!ulong; /// 128-bit unsigned integer.
 
 version (X86)
 	version = Intel;
@@ -62,6 +66,7 @@ version (Intel)
 	enum x86SignedOpPrefix(T) = isSigned!T ? "i" : "";
 }
 
+/// Calculate x86 long multiplication of `a` and `b`.
 LongInt!T longMul(T)(T a, T b)
 if (is(T : long) && T.sizeof >= 2)
 {
@@ -111,6 +116,7 @@ if (is(T : long) && T.sizeof >= 2)
 		static assert(false, "Not implemented on this architecture");
 }
 
+///
 unittest
 {
 	assert(longMul(1, 1) == LongInt!int(1, 0));
@@ -130,8 +136,14 @@ unittest
 	}
 }
 
-struct DivResult(T) { T quotient, remainder; }
+/// Calculate x86 long division of `a` and `b`.
+struct DivResult(T)
+{
+	///
+	T quotient, remainder;
+}
 
+/// ditto
 DivResult!T longDiv(T, L)(L a, T b)
 if (is(T : long) && T.sizeof >= 2 && is(L == LongInt!T))
 {
@@ -187,6 +199,7 @@ if (is(T : long) && T.sizeof >= 2 && is(L == LongInt!T))
 		static assert(false, "Not implemented on this architecture");
 }
 
+///
 unittest
 {
 	assert(longDiv(LongInt!int(1, 0), 1) == DivResult!int(1, 0));
