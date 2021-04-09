@@ -21,7 +21,6 @@ enum MouseButton : ubyte
 	Middle,     ///
 	WheelUp,    ///
 	WheelDown,  ///
-	Max
 }
 
 /// Mouse button mask.
