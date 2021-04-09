@@ -572,6 +572,12 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 				return isDir && !isSymlink;
 			}
 
+			/// Returns the raw Windows attributes of this directory entry.
+			@property uint attributes() const pure nothrow
+			{
+				return findData.dwFileAttributes;
+			}
+
 			/// Returns the size in bytes of this directory entry.
 			@property ulong size() const pure nothrow
 			{
