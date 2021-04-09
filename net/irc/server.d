@@ -1062,7 +1062,6 @@ class IrcServer
 			{
 				op,    /// Channel operator. Can change channel properties.
 				voice, /// Has voice. May speak even when banned or the channel is moderated.
-				max
 			}
 
 			/// Bitmask for modes that a user has in the channel.
@@ -1093,7 +1092,7 @@ class IrcServer
 			/// (e.g. `'@'` or `'+'`).
 			string modeChar()
 			{
-				foreach (mode; Mode.init..Mode.max)
+				foreach (mode; Mode.init..enumLength!Mode)
 					if ((1 << mode) & modes)
 						return [ChannelModes.memberModePrefixes[mode]];
 				return "";
@@ -1288,7 +1287,7 @@ static immutable:
 	mixin CommonModes;
 	IrcServer.Channel.Member.Mode[char.max] memberModes; /// Mappings from channel to member modes.
 	/// ditto
-	char[IrcServer.Channel.Member.Mode.max] memberModeChars, memberModePrefixes;
+	char[enumLength!(IrcServer.Channel.Member.Mode)] memberModeChars, memberModePrefixes;
 
 	shared static this()
 	{
