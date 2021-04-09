@@ -116,7 +116,7 @@ ref auto gammaRamp(LUM_BASETYPE, PIX_BASETYPE, alias value)()
 		static immutable Ramp ramp;
 
 		// Need to use static initialization instead of CTFE due to
-		// https://d.puremagic.com/issues/show_bug.cgi?id=12412
+		// https://issues.dlang.org/show_bug.cgi?id=12412
 		shared static this()
 		{
 			ramp = Ramp(value);

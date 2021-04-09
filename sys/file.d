@@ -2529,7 +2529,7 @@ auto atomic(alias impl, string targetName = targetParameterNames)(staticMap!(Unq
 /// ditto
 auto atomic(alias impl, size_t targetIndex)(staticMap!(Unqual, ParameterTypeTuple!impl) args)
 {
-	// idup for https://d.puremagic.com/issues/show_bug.cgi?id=12503
+	// idup for https://issues.dlang.org/show_bug.cgi?id=12503
 	auto target = args[targetIndex].idup;
 	auto temp = "%s.%s.%s.temp".format(target, thisProcessID, getCurrentThreadID);
 	if (temp.exists) temp.removeRecurse();
@@ -2540,7 +2540,7 @@ auto atomic(alias impl, size_t targetIndex)(staticMap!(Unqual, ParameterTypeTupl
 }
 
 /// ditto
-// Workaround for https://d.puremagic.com/issues/show_bug.cgi?id=12230
+// Workaround for https://issues.dlang.org/show_bug.cgi?id=12230
 // Can't be an overload because of https://issues.dlang.org/show_bug.cgi?id=13374
 //R atomicDg(string targetName = "target", R, Args...)(R delegate(Args) impl, staticMap!(Unqual, Args) args)
 auto atomicDg(size_t targetIndexA = size_t.max, Impl, Args...)(Impl impl, Args args)

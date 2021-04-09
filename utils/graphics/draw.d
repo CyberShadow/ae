@@ -25,7 +25,7 @@ import ae.utils.meta : structFields, SignedBitsType, UnsignedBitsType;
 version(unittest) import ae.utils.graphics.image;
 
 // Constraints could be simpler if this was fixed:
-// https://d.puremagic.com/issues/show_bug.cgi?id=12386
+// https://issues.dlang.org/show_bug.cgi?id=12386
 
 /// Get the pixel color at the specified coordinates,
 /// or fall back to the specified default value if

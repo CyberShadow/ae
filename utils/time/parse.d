@@ -367,7 +367,7 @@ version(unittest) import ae.utils.time.format;
 unittest
 {
 	const s0 = "Tue Jun 07 13:23:19 GMT+0100 2011";
-	//enum t = s0.parseTime!(TimeFormats.STD_DATE); // https://d.puremagic.com/issues/show_bug.cgi?id=12042
+	//enum t = s0.parseTime!(TimeFormats.STD_DATE); // https://issues.dlang.org/show_bug.cgi?id=12042
 	auto t = s0.parseTime!(TimeFormats.STD_DATE);
 	auto s1 = t.formatTime(TimeFormats.STD_DATE);
 	assert(s0 == s1, s0 ~ "/" ~ s1);

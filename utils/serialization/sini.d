@@ -32,7 +32,7 @@ struct IniParser(R)
 		{
 			struct Reader
 			{
-				// https://d.puremagic.com/issues/show_bug.cgi?id=12318
+				// https://issues.dlang.org/show_bug.cgi?id=12318
 				void dummy() {}
 
 				void read(Sink)(Sink sink)
@@ -51,7 +51,7 @@ struct IniParser(R)
 		{
 			struct Reader
 			{
-				// https://d.puremagic.com/issues/show_bug.cgi?id=12318
+				// https://issues.dlang.org/show_bug.cgi?id=12318
 				void dummy() {}
 
 				S read(Sink)(Sink sink)

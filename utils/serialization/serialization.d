@@ -331,7 +331,7 @@ template Deserializer(alias anchor)
 					else
 					static if (is(T == struct))
 					{
-						static immutable T dummy; // https://d.puremagic.com/issues/show_bug.cgi?id=12319
+						static immutable T dummy; // https://issues.dlang.org/show_bug.cgi?id=12319
 						foreach (i, ref field; p.tupleof)
 						{
 							// TODO: Name customization UDAs

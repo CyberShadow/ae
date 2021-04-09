@@ -121,11 +121,11 @@ unittest
 
 // Functions which need a target image to operate on are currenty declared
 // as two overloads. The code might be simplified if some of these get fixed:
-// https://d.puremagic.com/issues/show_bug.cgi?id=8074
-// https://d.puremagic.com/issues/show_bug.cgi?id=12386
-// https://d.puremagic.com/issues/show_bug.cgi?id=12425
-// https://d.puremagic.com/issues/show_bug.cgi?id=12426
-// https://d.puremagic.com/issues/show_bug.cgi?id=12433
+// https://issues.dlang.org/show_bug.cgi?id=8074
+// https://issues.dlang.org/show_bug.cgi?id=12386
+// https://issues.dlang.org/show_bug.cgi?id=12425
+// https://issues.dlang.org/show_bug.cgi?id=12426
+// https://issues.dlang.org/show_bug.cgi?id=12433
 
 /// Resolves to an `Image` with the same color type as the view `V`.
 alias ViewImage(V) = Image!(ViewColor!V);

@@ -115,7 +115,7 @@ mixin template CacheCore(alias DataGetter, alias KeyGetter, alias DataPutter = N
 		{
 			void _CacheCore_registerFlush()
 			{
-				// https://d.puremagic.com/issues/show_bug.cgi?id=12038
+				// https://issues.dlang.org/show_bug.cgi?id=12038
 				assert(!onStack(cast(void*)&this));
 				auto pthis = &this; // Silence "copying &this into allocated memory escapes a reference to parameter variable this"
 				_CacheCore_pending ~= pthis;

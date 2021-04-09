@@ -296,7 +296,7 @@ struct FreeListAllocator(ALLOCATOR_TYPE, alias ALLOCATOR = heapAllocator)
 /// Backend allocator Allocates from D's managed heap directly.
 struct HeapAllocator
 {
-// static: // https://d.puremagic.com/issues/show_bug.cgi?id=12207
+// static: // https://issues.dlang.org/show_bug.cgi?id=12207
 const:
 	RefType!T allocate(T)()
 	{
