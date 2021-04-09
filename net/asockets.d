@@ -96,7 +96,7 @@ version(LIBEV)
 		MonoTime lastNextEvent = MonoTime.max;
 
 		extern(C)
-		static void timerCallback(ev_loop_t* l, ev_timer* w, int revents)
+		static void timerCallback(ev_loop_t* l, ev_timer* w, int /*revents*/)
 		{
 			eventCounter++;
 			debug (ASOCKETS) writefln("Timer callback called.");
@@ -186,7 +186,7 @@ version(LIBEV)
 	{
 		private ev_io evRead, evWrite;
 
-		private void setWatcherState(ref ev_io ev, bool newValue, int event)
+		private void setWatcherState(ref ev_io ev, bool newValue, int /*event*/)
 		{
 			if (!conn)
 			{
@@ -420,7 +420,7 @@ else // Use select
 				else
 				if (idleHandlers.length)
 				{
-					import ae.utils.array;
+					import ae.utils.array : shift;
 					auto handler = idleHandlers.shift();
 
 					// Rotate the idle handler queue before running it,
@@ -507,7 +507,7 @@ else // Use select
 		foreach (i, idleHandler; socketManager.idleHandlers)
 			if (pred(idleHandler, args))
 			{
-				import std.algorithm;
+				import std.algorithm : remove;
 				socketManager.idleHandlers = socketManager.idleHandlers.remove(i);
 				return;
 			}
@@ -538,7 +538,7 @@ protected:
 	/// The socket this class wraps.
 	Socket conn;
 
-protected:
+// protected:
 	/// Retrieve the socket class this class wraps.
 	@property final Socket socket()
 	{
@@ -553,7 +553,7 @@ protected:
 	{
 	}
 
-	void onError(string reason)
+	void onError(string /*reason*/)
 	{
 	}
 
@@ -651,7 +651,7 @@ public:
 
 	override string toString() const
 	{
-		import std.string;
+		import std.string : format, split;
 		return "%s {this=%s, fd=%s}".format(this.classinfo.name.split(".")[$-1], cast(void*)this, conn ? conn.handle : -1);
 	}
 }
@@ -726,19 +726,19 @@ interface IConnection
 
 	/// Callback setter for when a connection has been established
 	/// (if applicable).
-	alias void delegate() ConnectHandler;
+	alias ConnectHandler = void delegate();
 	@property void handleConnect(ConnectHandler value); /// ditto
 
 	/// Callback setter for when new data is read.
-	alias void delegate(Data data) ReadDataHandler;
+	alias ReadDataHandler = void delegate(Data data);
 	@property void handleReadData(ReadDataHandler value); /// ditto
 
 	/// Callback setter for when a connection was closed.
-	alias void delegate(string reason, DisconnectType type) DisconnectHandler;
+	alias DisconnectHandler = void delegate(string reason, DisconnectType type);
 	@property void handleDisconnect(DisconnectHandler value); /// ditto
 
 	/// Callback setter for when all queued data has been sent.
-	alias void delegate() BufferFlushedHandler;
+	alias BufferFlushedHandler = void delegate();
 	@property void handleBufferFlushed(BufferFlushedHandler value); /// ditto
 }
 
@@ -998,7 +998,7 @@ public:
 		return bytes;
 	}
 
-public:
+// public:
 	private ConnectHandler connectHandler;
 	/// Callback for when a connection has been established.
 	@property final void handleConnect(ConnectHandler value) { connectHandler = value; updateFlags(); }
@@ -1763,7 +1763,7 @@ public:
 		return port;
 	}
 
-public:
+// public:
 	/// Where to send packets to.
 	Address remoteAddress;
 }
@@ -1772,7 +1772,7 @@ public:
 unittest
 {
 	auto server = new UdpConnection();
-	auto serverPort = server.bind("localhost", 0);
+	server.bind("localhost", 0);
 
 	auto client = new UdpConnection();
 	client.initialize(server.localAddress.addressFamily);
@@ -1910,7 +1910,7 @@ protected:
 	/// Called when data has been received.
 	final override void onReadData(Data data)
 	{
-		import std.string;
+		import std.string : indexOf;
 		auto oldBufferLength = inBuffer.length;
 		if (oldBufferLength)
 			inBuffer ~= data;
@@ -1919,7 +1919,7 @@ protected:
 
 		if (delimiter.length == 1)
 		{
-			import core.stdc.string; // memchr
+			import core.stdc.string : memchr;
 
 			char c = delimiter[0];
 			auto p = memchr(inBuffer.ptr + oldBufferLength, c, data.length);
@@ -2057,7 +2057,7 @@ protected:
 private:
 	TimerTask idleTask; // non-null if an idle timeout has been set
 
-	final void onTask_Idle(Timer timer, TimerTask task)
+	final void onTask_Idle(Timer /*timer*/, TimerTask /*task*/)
 	{
 		debug (ASOCKETS) stderr.writefln("TimeoutAdapter.onTask_Idle @ %s", cast(void*)this);
 		if (state == ConnectionState.disconnecting)

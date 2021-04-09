@@ -478,14 +478,14 @@ private:
 					ai.address = new UnixAddress(socketPath);
 					server.listen([ai]);
 
-					addShutdownHandler((scope const(char)[] reason) { socketPath.remove(); });
+					addShutdownHandler((scope const(char)[] /*reason*/) { socketPath.remove(); });
 				}
 				else
 					throw new Exception("UNIX sockets are not available on this platform");
 			}
 		}
 
-		addShutdownHandler((scope const(char)[] reason) { server.close(); });
+		addShutdownHandler((scope const(char)[] /*reason*/) { server.close(); });
 
 		server.handleAccept =
 			(SocketConnection incoming)
@@ -500,5 +500,5 @@ private:
 
 unittest
 {
-	Server!false testServer;
+	alias Test = Server!false;
 }

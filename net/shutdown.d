@@ -34,7 +34,7 @@ void addShutdownHandler(void delegate(scope const(char)[] reason) fn)
 
 deprecated void addShutdownHandler(void delegate() fn)
 {
-	addShutdownHandler((scope const(char)[] reason) { fn(); });
+	addShutdownHandler((scope const(char)[] /*reason*/) { fn(); });
 }
 
 /// Calls all registered handlers.
