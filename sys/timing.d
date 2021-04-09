@@ -404,7 +404,7 @@ bool throttle(ref MonoTime last, Duration span)
 	}
 }
 
-// http://d.puremagic.com/issues/show_bug.cgi?id=7016
+// https://issues.dlang.org/show_bug.cgi?id=7016
 version(unittest) static import ae.utils.array;
 
 unittest

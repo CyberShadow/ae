@@ -293,7 +293,7 @@ unittest
 
 /// Apply `.stringof` over `Args` and
 /// return the result as a `string[]`.
-static // http://d.puremagic.com/issues/show_bug.cgi?id=7805
+static // https://issues.dlang.org/show_bug.cgi?id=7805
 template stringofArray(Args...)
 {
 	static string[] stringofArray()

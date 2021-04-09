@@ -470,7 +470,7 @@ void httpPost(string url, UrlParameters vars, void delegate(string) resultHandle
 	return httpPost(url, [Data(encodeUrlParameters(vars))], "application/x-www-form-urlencoded", resultHandler, errorHandler);
 }
 
-// http://d.puremagic.com/issues/show_bug.cgi?id=7016
+// https://issues.dlang.org/show_bug.cgi?id=7016
 version (unittest)
 {
 	static import ae.net.http.server;

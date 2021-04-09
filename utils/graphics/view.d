@@ -689,7 +689,7 @@ auto rotate(V, COLOR)(auto ref V src, double angle,
 	return src.rotate(angle, defaultColor, src.w / 2.0 - 0.5, src.h / 2.0 - 0.5);
 }
 
-// http://d.puremagic.com/issues/show_bug.cgi?id=7016
+// https://issues.dlang.org/show_bug.cgi?id=7016
 version(unittest) static import ae.utils.geometry;
 
 unittest

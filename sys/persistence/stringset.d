@@ -17,7 +17,7 @@ import ae.sys.persistence.core;
 
 // ****************************************************************************
 
-// http://d.puremagic.com/issues/show_bug.cgi?id=7016
+// https://issues.dlang.org/show_bug.cgi?id=7016
 static import ae.sys.file;
 
 /// A string hashset, stored one line per entry.

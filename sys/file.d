@@ -170,7 +170,7 @@ version (Posix)
 
 import ae.utils.range : nullTerminated;
 
-// http://d.puremagic.com/issues/show_bug.cgi?id=7016
+// https://issues.dlang.org/show_bug.cgi?id=7016
 version (Windows) static import ae.sys.windows.misc;
 
 /**
@@ -1903,7 +1903,7 @@ uint hardLinkCount(string fn)
 	}
 }
 
-// http://d.puremagic.com/issues/show_bug.cgi?id=7016
+// https://issues.dlang.org/show_bug.cgi?id=7016
 version (unittest)
 	version (Windows)
 		import ae.sys.windows.misc : getWineVersion;
@@ -2298,7 +2298,7 @@ ascii readAscii()(string fileName)
 	return cast(ascii)readFile(openFile(fileName, "rb"));
 }
 
-// http://d.puremagic.com/issues/show_bug.cgi?id=7016
+// https://issues.dlang.org/show_bug.cgi?id=7016
 version(Posix) static import ae.sys.signals;
 
 /// Start a thread which writes data to f asynchronously.

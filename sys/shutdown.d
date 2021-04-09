@@ -72,7 +72,7 @@ void syncShutdown(scope const(char)[] reason) nothrow @system
 	}
 }
 
-// http://d.puremagic.com/issues/show_bug.cgi?id=7016
+// https://issues.dlang.org/show_bug.cgi?id=7016
 version(Posix)
 	import ae.sys.signals;
 else

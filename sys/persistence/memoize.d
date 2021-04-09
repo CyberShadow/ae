@@ -22,7 +22,7 @@ import ae.utils.json;
 
 // ****************************************************************************
 
-// http://d.puremagic.com/issues/show_bug.cgi?id=7016
+// https://issues.dlang.org/show_bug.cgi?id=7016
 static import ae.utils.json;
 
 /// std.functional.memoize variant with automatic persistence
