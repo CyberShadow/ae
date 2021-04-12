@@ -416,6 +416,17 @@ unittest
 
 // ****************************************************************************
 
+/// Returns a new `Promise!void` which is resolved.
+Promise!void resolve(E = Exception)() { auto p = new Promise!(void, E)(); p.fulfill(); return p; }
+
+/// Returns a new `Promise` which is resolved with the given value.
+Promise!T resolve(T, E = Exception)(T value) { auto p = new Promise!(T, E)(); p.fulfill(value); return p; }
+
+/// Returns a new `Promise` which is rejected with the given reason.
+Promise!(T, E) reject(T, E)(E reason) { auto p = new Promise!(T, E)(); p.reject(reason); return p; }
+
+// ****************************************************************************
+
 /// Wait for all promises to be resolved, or for any to be rejected.
 Promise!(T[], E) all(T, E)(Promise!(T, E)[] promises...)
 if (!is(T == void))
