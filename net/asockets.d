@@ -23,6 +23,7 @@ public import ae.sys.data;
 import core.stdc.stdint : int32_t;
 
 import std.exception;
+import std.parallelism : totalCPUs;
 import std.socket;
 import std.string : format;
 public import std.socket : Address, AddressInfo, Socket;
@@ -1486,7 +1487,7 @@ public:
 				conn.setOption(SocketOptionLevel.SOCKET, SocketOption.REUSEADDR, true);
 
 				conn.bind(addressInfo.address);
-				conn.listen(8);
+				conn.listen(totalCPUs * 2);
 
 				listeners ~= new Listener(conn);
 			}
