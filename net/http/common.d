@@ -402,6 +402,7 @@ public:
 	string statusMessage; /// HTTP status message, if one was supplied
 
 	/// What Zlib compression level to use when compressing the reply.
+	/// Set to a negative value to disable compression.
 	int compressionLevel = 1;
 
 	/// Returns the message corresponding to the given `HttpStatusCode`,
@@ -506,17 +507,21 @@ public:
 
 	protected void compressWithDeflate()
 	{
+		assert(compressionLevel >= 0);
 		data = zlib.compress(data, zlib.ZlibOptions(compressionLevel));
 	}
 
 	protected void compressWithGzip()
 	{
+		assert(compressionLevel >= 0);
 		data = gzip.compress(data, zlib.ZlibOptions(compressionLevel));
 	}
 
 	/// Called by the server to compress content, if possible/appropriate
 	final package void optimizeData(ref const Headers requestHeaders)
 	{
+		if (compressionLevel < 0)
+			return;
 		auto acceptEncoding = requestHeaders.get("Accept-Encoding", null);
 		if (acceptEncoding && "Content-Encoding" !in headers)
 		{
