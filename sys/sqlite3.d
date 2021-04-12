@@ -24,7 +24,8 @@ import std.traits;
 /// `sqlite3*` wrapper.
 final class SQLite
 {
-	private sqlite3* db;
+	/// C `sqlite3*` object.
+	sqlite3* db;
 
 	this(string fn, bool readOnly = false)
 	{
