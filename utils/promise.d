@@ -433,21 +433,26 @@ if (!is(T == void))
 {
 	auto allPromise = new typeof(return);
 	auto results = new T[promises.length];
-	size_t numResolved;
-	foreach (i, p; promises)
-		(i, p) {
-			p.then((result) {
-				if (allPromise)
-				{
-					results[i] = result;
-					if (++numResolved == promises.length)
-						allPromise.fulfill(results);
-				}
-			}, (error) {
-				allPromise.reject(error);
-				allPromise = null; // ignore successive resolves
-			});
-		}(i, p);
+	if (promises.length)
+	{
+		size_t numResolved;
+		foreach (i, p; promises)
+			(i, p) {
+				p.then((result) {
+					if (allPromise)
+					{
+						results[i] = result;
+						if (++numResolved == promises.length)
+							allPromise.fulfill(results);
+					}
+				}, (error) {
+					allPromise.reject(error);
+					allPromise = null; // ignore successive resolves
+				});
+			}(i, p);
+	}
+	else
+		allPromise.fulfill(results);
 	return allPromise;
 }
 
@@ -455,17 +460,22 @@ if (!is(T == void))
 Promise!(void, E) all(E)(Promise!(void, E)[] promises...)
 {
 	auto allPromise = new typeof(return);
-	size_t numResolved;
-	foreach (i, p; promises)
-		(i, p) {
-			p.then({
-				if (allPromise && ++numResolved == promises.length)
-					allPromise.fulfill();
-			}, (error) {
-				allPromise.reject(error);
-				allPromise = null; // ignore successive resolves
-			});
-		}(i, p);
+	if (promises.length)
+	{
+		size_t numResolved;
+		foreach (i, p; promises)
+			(i, p) {
+				p.then({
+					if (allPromise && ++numResolved == promises.length)
+						allPromise.fulfill();
+				}, (error) {
+					allPromise.reject(error);
+					allPromise = null; // ignore successive resolves
+				});
+			}(i, p);
+	}
+	else
+		allPromise.fulfill();
 	return allPromise;
 }
 
@@ -497,6 +507,16 @@ unittest
 	socketManager.loop();
 	assert(!called);
 	p3.fulfill();
+	socketManager.loop();
+	assert(called);
+}
+
+unittest
+{
+	Promise!void[] promises;
+	auto pAll = all(promises);
+	bool called;
+	pAll.then({ called = true; });
 	socketManager.loop();
 	assert(called);
 }
