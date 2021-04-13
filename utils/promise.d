@@ -438,7 +438,7 @@ if (!is(T == void))
 		size_t numResolved;
 		foreach (i, p; promises)
 			(i, p) {
-				p.then((result) {
+				p.dmd21804workaround.then((result) {
 					if (allPromise)
 					{
 						results[i] = result;
