@@ -389,6 +389,9 @@ class HttpServer
 				log("Listening on " ~ formatAddress(protocol, address) ~ " [" ~ to!string(address.addressFamily) ~ "]");
 	}
 
+	/// Get listen addresses.
+	@property Address[] localAddresses() { return conn.localAddresses; }
+
 	/// Stop listening, and close idle client connections.
 	void close()
 	{
