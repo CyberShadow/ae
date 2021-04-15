@@ -59,6 +59,7 @@ protected:
 	sizediff_t expect;
 	size_t responseSize;
 	bool requestProcessing; // user code is asynchronously processing current request
+	bool firstRequest = true;
 	Duration timeout = HttpServer.defaultTimeout;
 	bool timeoutActive;
 	string banner;
@@ -213,13 +214,31 @@ protected:
 
 	abstract string formatLocalAddress(HttpRequest r);
 
+	/// Idle connections are those which can be closed when the server
+	/// is shutting down.
 	final @property bool idle()
 	{
+		// Technically, with a persistent connection, we never know if
+		// there is a request on the wire on the way to us which we
+		// haven't received yet, so it's not possible to truly know
+		// when the connection is idle and can be safely closed.
+		// However, we do have the ability to do that for
+		// non-persistent connections - assume that a connection is
+		// never idle until we receive (and process) the first
+		// request.  Therefore, in deployments where clients require
+		// that an outstanding request is always processed before the
+		// server is shut down, non-persistent connections can be used
+		// (i.e. no attempt to reuse `HttpClient`) to achieve this.
+		if (firstRequest)
+			return false;
+
 		if (requestProcessing)
 			return false;
+
 		foreach (datum; inBuffer)
 			if (datum.length)
 				return false;
+
 		return true;
 	}
 
@@ -322,6 +341,7 @@ public:
 	/// Low-level alternative to `sendResponse`.
 	final void closeResponse()
 	{
+		firstRequest = false;
 		if (persistent && acceptMore)
 		{
 			// reset for next request
