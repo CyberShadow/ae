@@ -100,7 +100,18 @@ private:
 
 	PromiseHandler[] handlers;
 
-	void doFulfill(A value) nothrow
+	enum isNoThrow = is(typeof(delegate void(void delegate() fun) nothrow { try fun(); catch (E) {} }));
+
+	private struct PromiseHandler
+	{
+		static if (isNoThrow)
+			void delegate() nothrow dg;
+		else
+			void delegate() dg;
+		bool onFulfill, onReject;
+	}
+
+	void doFulfill(A value) /*nothrow*/
 	{
 		this.state = PromiseState.fulfilled;
 		this.value.tupleof = value;
@@ -110,7 +121,7 @@ private:
 		handlers = null;
 	}
 
-	void doReject(E e) nothrow
+	void doReject(E e) /*nothrow*/
 	{
 		this.state = PromiseState.rejected;
 		this.error = e;
@@ -121,7 +132,7 @@ private:
 	}
 
 	/// Implements the [[Resolve]](promise, x) resolution procedure.
-	void resolve(scope lazy T valueExpr) /* nothrow */
+	void resolve(scope lazy T valueExpr) /*nothrow*/
 	{
 		Box box;
 		static if (is(T == void))
@@ -133,7 +144,7 @@ private:
 	}
 
 	/// ditto
-	void resolve(Promise!(T, E) x) nothrow
+	void resolve(Promise!(T, E) x) /*nothrow*/
 	{
 		assert(x !is this, "Attempting to resolve a promise with itself");
 		assert(this.state == PromiseState.pending);
@@ -141,13 +152,13 @@ private:
 		x.then(&resolveFulfill, &resolveReject);
 	}
 
-	void resolveFulfill(A value) nothrow
+	void resolveFulfill(A value) /*nothrow*/
 	{
 		assert(this.state == PromiseState.following);
 		doFulfill(value);
 	}
 
-	void resolveReject(E e) nothrow
+	void resolveReject(E e) /*nothrow*/
 	{
 		assert(this.state == PromiseState.following);
 		doReject(e);
@@ -189,7 +200,7 @@ public:
 	}
 
 	/// Fulfill this promise, with the given value (if applicable).
-	void fulfill(A value) nothrow
+	void fulfill(A value) /*nothrow*/
 	{
 		assert(this.state == PromiseState.pending,
 			"This promise is already fulfilled, rejected, or following another promise.");
@@ -197,7 +208,7 @@ public:
 	}
 
 	/// Reject this promise, with the given exception.
-	void reject(E e) nothrow
+	void reject(E e) /*nothrow*/
 	{
 		assert(this.state == PromiseState.pending,
 			"This promise is already fulfilled, rejected, or following another promise.");
@@ -207,14 +218,14 @@ public:
 	/// Registers the specified fulfillment and rejection handlers.
 	/// If the promise is already resolved, they are called
 	/// as soon as possible (but not immediately).
-	Promise!(Unpromise!R, F) then(R, F = E)(R delegate(A) onFulfilled, R delegate(E) onRejected = null) nothrow
+	Promise!(Unpromise!R, F) then(R, F = E)(R delegate(A) onFulfilled, R delegate(E) onRejected = null) /*nothrow*/
 	{
 		static if (!is(T : R))
 			assert(onFulfilled, "Cannot implicitly propagate " ~ T.stringof ~ " to " ~ R.stringof ~ " due to null onFulfilled");
 
 		auto next = new typeof(return);
 
-		void fulfillHandler() nothrow
+		void fulfillHandler() /*nothrow*/
 		{
 			assert(this.state == PromiseState.fulfilled);
 			if (onFulfilled)
@@ -238,7 +249,7 @@ public:
 			}
 		}
 
-		void rejectHandler() nothrow
+		void rejectHandler() /*nothrow*/
 		{
 			assert(this.state == PromiseState.rejected);
 			if (onRejected)
@@ -274,7 +285,7 @@ public:
 	/// Special overload of `then` with no `onFulfilled` function.
 	/// In this scenario, `onRejected` can act as a filter,
 	/// converting errors into values for the next promise in the chain.
-	Promise!(CommonType!(Unpromise!R, T), F) then(R, F = E)(typeof(null) onFulfilled, R delegate(E) onRejected) nothrow
+	Promise!(CommonType!(Unpromise!R, T), F) then(R, F = E)(typeof(null) onFulfilled, R delegate(E) onRejected) /*nothrow*/
 	{
 		// The returned promise will be fulfilled with either
 		// `this.value` (if `this` is fulfilled), or the return value
@@ -283,7 +294,7 @@ public:
 
 		auto next = new typeof(return);
 
-		void fulfillHandler() nothrow
+		void fulfillHandler() /*nothrow*/
 		{
 			assert(this.state == PromiseState.fulfilled);
 			static if (is(C == void))
@@ -292,7 +303,7 @@ public:
 				next.fulfill(this.value.tupleof);
 		}
 
-		void rejectHandler() nothrow
+		void rejectHandler() /*nothrow*/
 		{
 			assert(this.state == PromiseState.rejected);
 			if (onRejected)
@@ -343,7 +354,7 @@ public:
 
 		auto next = new typeof(return);
 
-		void handler() nothrow
+		void handler() /*nothrow*/
 		{
 			assert(this.state == PromiseState.fulfilled || this.state == PromiseState.rejected);
 			try
@@ -379,12 +390,6 @@ private enum PromiseState
 	rejected,
 }
 
-private struct PromiseHandler
-{
-	void delegate() nothrow dg;
-	bool onFulfill, onReject;
-}
-
 private extern (C) void _d_print_throwable(Throwable t) @nogc;
 
 // The reverse operation is the `.resolve` overload.
@@ -404,7 +409,7 @@ private void callSoon(void delegate() dg) @safe nothrow { socketManager.onNextTi
 // test) is here: https://github.com/CyberShadow/ae-promises-tests
 nothrow unittest
 {
-	if (false)
+	static bool never; if (never)
 	{
 		Promise!int test;
 		test.then((int i) {});
@@ -412,9 +417,31 @@ nothrow unittest
 		test.then(null, (Exception e) {});
 		test.except((Exception e) {});
 		test.finish({});
+		test.fulfill(1);
+		test.reject(Exception.init);
 
 		Promise!void test2;
 		test2.then({});
+	}
+}
+
+// Non-Exception based errors
+unittest
+{
+	static bool never; if (never)
+	{
+		static class OtherException : Exception
+		{
+			this() { super(null); }
+		}
+
+		Promise!(int, OtherException) test;
+		test.then((int i) {});
+		test.then((int i) {}, (OtherException e) {});
+		test.then(null, (OtherException e) {});
+		test.except((OtherException e) {});
+		test.fulfill(1);
+		test.reject(OtherException.init);
 	}
 }
 
