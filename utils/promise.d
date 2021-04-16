@@ -170,6 +170,8 @@ private:
 		fprintf(stderr, "Leaked %s %s\n",
 			state == PromiseState.fulfilled ? "fulfilled".ptr : "rejected".ptr,
 			typeof(this).stringof.ptr);
+		if (state == PromiseState.rejected)
+			_d_print_throwable(this.error);
 	}
 
 public:
@@ -382,6 +384,8 @@ private struct PromiseHandler
 	void delegate() nothrow dg;
 	bool onFulfill, onReject;
 }
+
+private extern (C) void _d_print_throwable(Throwable t) @nogc;
 
 // The reverse operation is the `.resolve` overload.
 private template Unpromise(P)
