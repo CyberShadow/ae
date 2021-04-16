@@ -2339,6 +2339,37 @@ Thread writeFileAsync(File f, in void[] data)
 	return t;
 }
 
+/// Start a thread which reads data from f asynchronously.
+/// Call the returning delegate to obtain the read data,
+/// blocking until the read completes.
+ubyte[] delegate() readFileAsync(File f)
+{
+	static class Reader : Thread
+	{
+		File target;
+		ubyte[] data;
+
+		this(ref File f)
+		{
+			this.target = f;
+			this.data = data;
+			super(&run);
+		}
+
+		void run()
+		{
+			data = readFile(target);
+		}
+	}
+
+	auto t = new Reader(f);
+	t.start();
+	return {
+		t.join();
+		return t.data;
+	};
+}
+
 /// Write data to a file, and ensure it gets written to disk
 /// before this function returns.
 /// Consider using as atomic!syncWrite.
