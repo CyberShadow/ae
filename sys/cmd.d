@@ -20,6 +20,7 @@ import std.exception;
 import std.process;
 import std.stdio;
 import std.string;
+import std.traits;
 
 import ae.sys.file;
 
@@ -135,7 +136,8 @@ string query(Params...)(string[] args, Params params)
 /// std.process helper.
 /// Run a command, feed it the given input, and collect its output.
 /// Throw if it exited with non-zero status. Return output.
-T[] pipe(T, Params...)(string[] args, in T[] input, Params params)
+T[] pipe(T, Params...)(in T[] input, string[] args, Params params)
+if (!hasIndirections!T)
 {
 	auto parsed = ProcessParams(params);
 	T[] output;
@@ -151,13 +153,19 @@ T[] pipe(T, Params...)(string[] args, in T[] input, Params params)
 	return output;
 }
 
+deprecated T[] pipe(T, Params...)(string[] args, in T[] input, Params params)
+if (!hasIndirections!T)
+{
+	return pipe(input, args, params);
+}
+
 // ************************************************************************
 
 /// Wrapper for the `iconv` program.
 ubyte[] iconv(in void[] data, string inputEncoding, string outputEncoding)
 {
 	auto args = ["timeout", "30", "iconv", "-f", inputEncoding, "-t", outputEncoding];
-	auto result = pipe(args, data);
+	auto result = data.pipe(args);
 	return cast(ubyte[])result;
 }
 
@@ -179,7 +187,7 @@ unittest
 /// Wrapper for the `sha1sum` program.
 string sha1sum(in void[] data)
 {
-	auto output = cast(string)pipe(["sha1sum", "-b", "-"], data);
+	auto output = cast(string)data.pipe(["sha1sum", "-b", "-"]);
 	return output[0..40];
 }
 
