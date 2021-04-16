@@ -402,7 +402,7 @@ private void callSoon(void delegate() dg) @safe nothrow { socketManager.onNextTi
 // This is just a simple instantiation test.
 // The full test suite (D translation of the Promises/A+ conformance
 // test) is here: https://github.com/CyberShadow/ae-promises-tests
-unittest
+nothrow unittest
 {
 	if (false)
 	{
@@ -483,8 +483,9 @@ Promise!(void, E) all(E)(Promise!(void, E)[] promises...)
 	return allPromise;
 }
 
-unittest
+nothrow unittest
 {
+	import std.exception : assertNotThrown;
 	int result;
 	auto p1 = new Promise!int;
 	auto p2 = new Promise!int;
@@ -494,12 +495,13 @@ unittest
 	p1.fulfill(1);
 	pAll.dmd21804workaround.then((values) { result = values[0] + values[1] + values[2]; });
 	p3.fulfill(3);
-	socketManager.loop();
+	socketManager.loop().assertNotThrown;
 	assert(result == 6);
 }
 
-unittest
+nothrow unittest
 {
+	import std.exception : assertNotThrown;
 	int called;
 	auto p1 = new Promise!void;
 	auto p2 = new Promise!void;
@@ -508,19 +510,20 @@ unittest
 	auto pAll = all([p1, p2, p3]);
 	p1.fulfill();
 	pAll.then({ called = true; });
-	socketManager.loop();
+	socketManager.loop().assertNotThrown;
 	assert(!called);
 	p3.fulfill();
-	socketManager.loop();
+	socketManager.loop().assertNotThrown;
 	assert(called);
 }
 
-unittest
+nothrow unittest
 {
+	import std.exception : assertNotThrown;
 	Promise!void[] promises;
 	auto pAll = all(promises);
 	bool called;
 	pAll.then({ called = true; });
-	socketManager.loop();
+	socketManager.loop().assertNotThrown;
 	assert(called);
 }
