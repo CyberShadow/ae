@@ -21,6 +21,7 @@ import std.datetime;
 
 import ae.sys.sqlite3;
 import ae.sys.console;
+import ae.utils.text;
 
 void main(string[] args)
 {
@@ -53,12 +54,12 @@ void main(string[] args)
 		{
 			assert(row.length == rows[0].length);
 			foreach (i, cell; row)
-				widths[i] = max(widths[i], textWidth(cell));
+				widths[i] = widths[i].max(cell.textWidth());
 		}
 		foreach (j, row; rows)
 		{
-			auto rowLines = array(map!textLines(row));
-			auto lineCount = reduce!max(map!`a.length`(rowLines));
+			auto rowLines = row.map!splitAsciiLines().array();
+			auto lineCount = rowLines.map!(line => line.length).fold!max(size_t(0));
 
 			foreach (line; 0..lineCount)
 			{
@@ -66,7 +67,7 @@ void main(string[] args)
 				{
 					if (i) write(" │ ");
 					string col = line < lines.length ? lines[line] : null;
-					write(col, std.array.replicate(" ", widths[i]-col.length));
+					write(col, std.array.replicate(" ", widths[i] - std.utf.count(col)));
 				}
 				writeln();
 			}
@@ -100,24 +101,10 @@ void main(string[] args)
 import std.utf;
 import std.string;
 
-size_t textWidth(string s)
+size_t textWidth(string s) nothrow
 {
-	try
-	{
-		auto lines = splitLines(s);
-		size_t w = 0;
-		foreach (line; lines)
-			w = max(w, std.utf.count(line));
-		return w;
-	}
-	catch (Exception e)
-		return s.length;
-}
-
-string[] textLines(string s)
-{
-	try
-		return splitLines(s);
-	catch (Exception e)
-		return [s];
+	return s
+		.splitAsciiLines()
+		.map!(std.utf.count)
+		.fold!max(size_t(0));
 }
