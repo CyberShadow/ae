@@ -2241,7 +2241,7 @@ unittest
 }
 
 /// Read a File (which might be a stream) into an array
-void[] readFile(File f)
+ubyte[] readFile(File f)
 {
 	import std.range.primitives;
 	auto result = appender!(ubyte[]);
