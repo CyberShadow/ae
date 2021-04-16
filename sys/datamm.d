@@ -52,7 +52,7 @@ class MappedDataWrapper : DataWrapper
 }
 
 /// Returns a `Data` viewing a mapped file.
-auto mapFile(string name, MmMode mode, size_t from = 0, size_t to = 0)
+Data mapFile(string name, MmMode mode, size_t from = 0, size_t to = 0)
 {
 	auto wrapper = unmanagedNew!MappedDataWrapper(name, mode, from, to);
 	return Data(wrapper, mode != MmMode.read);
