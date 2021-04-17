@@ -70,6 +70,16 @@ private:
 		Command[queueSize] queue;
 		shared size_t writeIndex;
 
+		// Best-effort attempt at keeping `AnchorSocket` alive
+		// (non-daemon) when there are in-flight submissions,
+		// even when `daemon==true`.
+		// For this to work reliably, the target thread's event loop
+		// must have some reason to not exit (other than this
+		// `ThreadAnchor`) up until `runAsync` (in the sender thread)
+		// returns.
+		shared size_t numPending;
+		bool daemon;
+
 		this(bool daemon)
 		{
 			auto pair = tcpSocketPair();
@@ -77,12 +87,14 @@ private:
 			super(pair[0]);
 			pinger = pair[1];
 			this.handleReadData = &onReadData;
+			this.daemon = daemon;
 			this.daemonRead = daemon;
 		}
 
 		void onReadData(Data data)
 		{
-			foreach (index; cast(size_t[])data.contents)
+			auto indices = cast(size_t[])data.contents;
+			foreach (index; indices)
 			{
 				auto command = queue[index];
 				queue[index] = Command.init;
@@ -90,6 +102,8 @@ private:
 				if (command.semaphore)
 					command.semaphore.notify();
 			}
+			auto remaining = numPending.atomicFetchSub(indices.length) - indices.length;
+			this.daemonRead = daemon && remaining == 0;
 		}
 	}
 
@@ -115,6 +129,8 @@ private:
 		if (socket.queue[index].dg !is null)
 			assert(false, "ThreadAnchor queue overrun");
 		socket.queue[index] = command;
+		socket.daemonRead = false;
+		atomicOp!"+="(socket.numPending, 1);
 		sendCommand(index);
 	}
 
