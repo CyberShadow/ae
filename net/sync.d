@@ -36,10 +36,10 @@ import ae.net.asockets;
 	---
 	void onConnect(TcpConnection socket)
 	{
-		auto anchor = new ThreadAnchor;
+		auto mainThread = thisThread;
 		new Thread({
 			string s = readln();
-			anchor.runAsync({
+			mainThread.runAsync({
 				socket.send(s);
 				socket.disconnect();
 			});
@@ -179,4 +179,14 @@ unittest
 	socketManager.loop();
 	t.join();
 	assert(n==2);
+}
+
+/// Return a `ThreadAnchor` for the current thread.
+/// One instance is created and reused per thread.
+@property ThreadAnchor thisThread()
+{
+	static ThreadAnchor instance;
+	if (!instance)
+		instance = new ThreadAnchor();
+	return instance;
 }
