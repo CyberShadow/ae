@@ -13,6 +13,9 @@
 
 module ae.sys.datamm;
 
+import core.stdc.errno;
+
+import std.exception;
 import std.mmfile;
 import std.typecons;
 
@@ -33,7 +36,9 @@ class MappedDataWrapper : DataWrapper
 
 	this(string name, MmMode mode, size_t from, size_t to)
 	{
-		mmFile = scoped!MmFile(name, mode, 0, null);
+		mmFile = retryInterrupted({
+			return scoped!MmFile(name, mode, 0, null);
+		});
 		mappedData = (from || to) ? mmFile.Scoped_payload[from..(to ? to : mmFile.length)] : mmFile.Scoped_payload[];
 
 		debug(DATA_REFCOUNT) writefln("? -> %s [%s..%s]: Created MappedDataWrapper", cast(void*)this, contents.ptr, contents.ptr + contents.length);
@@ -56,4 +61,26 @@ Data mapFile(string name, MmMode mode, size_t from = 0, size_t to = 0)
 {
 	auto wrapper = unmanagedNew!MappedDataWrapper(name, mode, from, to);
 	return Data(wrapper, mode != MmMode.read);
+}
+
+private T retryInterrupted(T)(scope T delegate() dg)
+{
+	version (Posix)
+	{
+		while (true)
+		{
+			try
+			{
+				return dg();
+			}
+			catch (ErrnoException e)
+			{
+				if (e.errno == EINTR)
+					continue;
+				throw e;
+			}
+		}
+	}
+	else
+		return dg();
 }
