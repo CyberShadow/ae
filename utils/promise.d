@@ -194,11 +194,11 @@ public:
 	/// If your `then` callback argument is a tuple,
 	/// insert this call before the `then` call.
 	/// (Needs to be done only once per `Promise!T` instance.)
-	static if (!is(T == void))
 	typeof(this) dmd21804workaround()
 	{
-		if (false)
-			then((result) {});
+		static if (!is(T == void))
+			if (false)
+				then((A result) {});
 		return this;
 	}
 
