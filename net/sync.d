@@ -72,7 +72,7 @@ private:
 
 		this(bool daemon)
 		{
-			auto pair = socketPair();
+			auto pair = tcpSocketPair();
 			pair[0].blocking = false;
 			super(pair[0]);
 			pinger = pair[1];
@@ -189,4 +189,25 @@ unittest
 	if (!instance)
 		instance = new ThreadAnchor();
 	return instance;
+}
+
+/// A version of `std.socket.socketPair` which always creates TCP sockets, like on Windows.
+/// Used to work around https://stackoverflow.com/q/10899814/21501,
+/// i.e. AF_UNIX socket pairs' limit of not being able
+/// to enqueue more than 278 packets without blocking.
+private Socket[2] tcpSocketPair() @trusted
+{
+	Socket[2] result;
+
+	auto listener = new TcpSocket();
+	listener.setOption(SocketOptionLevel.SOCKET, SocketOption.REUSEADDR, true);
+	listener.bind(new InternetAddress(INADDR_LOOPBACK, InternetAddress.PORT_ANY));
+	auto addr = listener.localAddress;
+	listener.listen(1);
+
+	result[0] = new TcpSocket(addr);
+	result[1] = listener.accept();
+
+	listener.close();
+	return result;
 }
