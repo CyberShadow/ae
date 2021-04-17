@@ -504,20 +504,27 @@ if (is(P == Promise!(T, E), T, E))
 // ****************************************************************************
 
 /// Wait for all promises to be resolved, or for any to be rejected.
-Promise!(T[], E) all(T, E)(Promise!(T, E)[] promises...)
-if (!is(T == void))
+PromiseValueTransform!(P, x => [x]) all(P)(P[] promises...)
+if (is(P == Promise!(T, E), T, E))
 {
+	alias T = PromiseValue!P;
+
 	auto allPromise = new typeof(return);
-	auto results = new T[promises.length];
+
+	typeof(return).ValueTuple results;
+	static if (!is(T == void))
+		results[0] = new T[promises.length];
+
 	if (promises.length)
 	{
 		size_t numResolved;
 		foreach (i, p; promises)
 			(i, p) {
-				p.dmd21804workaround.then((result) {
+				p.dmd21804workaround.then((P.ValueTuple result) {
 					if (allPromise)
 					{
-						results[i] = result;
+						static if (!is(T == void))
+							results[0][i] = result[0];
 						if (++numResolved == promises.length)
 							allPromise.fulfill(results);
 					}
@@ -529,29 +536,6 @@ if (!is(T == void))
 	}
 	else
 		allPromise.fulfill(results);
-	return allPromise;
-}
-
-/// ditto
-Promise!(void, E) all(E)(Promise!(void, E)[] promises...)
-{
-	auto allPromise = new typeof(return);
-	if (promises.length)
-	{
-		size_t numResolved;
-		foreach (i, p; promises)
-			(i, p) {
-				p.then({
-					if (allPromise && ++numResolved == promises.length)
-						allPromise.fulfill();
-				}, (error) {
-					allPromise.reject(error);
-					allPromise = null; // ignore successive resolves
-				});
-			}(i, p);
-	}
-	else
-		allPromise.fulfill();
 	return allPromise;
 }
 
