@@ -42,7 +42,9 @@ auto parseViaIMConvert(COLOR)(const(void)[] data)
 		convertFlags ~= ["-type", "TrueColorAlpha"];
 		convertFlags ~= ["-alpha", "on"];
 	}
-	return pipe(["convert".imageMagickBinary()] ~ convertFlags ~ ["-[0]", "bmp:-"], data).viewBMP!COLOR();
+	return data
+		.pipe(["convert".imageMagickBinary()] ~ convertFlags ~ ["-[0]", "bmp:-"])
+		.viewBMP!COLOR();
 }
 
 /// ditto
