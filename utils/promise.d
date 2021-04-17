@@ -461,6 +461,48 @@ Promise!(T, E) reject(T, E)(E reason) { auto p = new Promise!(T, E)(); p.reject(
 
 // ****************************************************************************
 
+/// Get the value type of the promise `P`,
+/// i.e. its `T` parameter.
+template PromiseValue(P)
+{
+	///
+	static if (is(P == Promise!(T, E), T, E))
+		alias PromiseValue = T;
+	else
+		static assert(false);
+}
+
+/// Get the error type of the promise `P`,
+/// i.e. its `E` parameter.
+template PromiseError(P)
+{
+	///
+	static if (is(P == Promise!(T, E), T, E))
+		alias PromiseError = E;
+	else
+		static assert(false);
+}
+
+/// Construct a new Promise type based on `P`,
+/// if the given transformation was applied on the value type.
+/// If `P` is a `void` Promise, then the returned promise
+/// will also be `void`.
+template PromiseValueTransform(P, alias transform)
+if (is(P == Promise!(T, E), T, E))
+{
+	/// ditto
+	static if (is(P == Promise!(T, E), T, E))
+	{
+		static if (is(T == void))
+			private alias T2 = void;
+		else
+			private alias T2 = typeof({ T* value; return transform(*value); }());
+		alias PromiseValueTransform = Promise!(T2, E);
+	}
+}
+
+// ****************************************************************************
+
 /// Wait for all promises to be resolved, or for any to be rejected.
 Promise!(T[], E) all(T, E)(Promise!(T, E)[] promises...)
 if (!is(T == void))
