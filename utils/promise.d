@@ -86,7 +86,6 @@ private:
 			T value;
 	}
 
-	/// Either `(T)` or an empty tuple.
 	alias A = typeof(Box.tupleof);
 
 	PromiseState state;
@@ -186,6 +185,10 @@ private:
 	}
 
 public:
+	/// A tuple of this `Promise`'s value.
+	/// Either `(T)` or an empty tuple.
+	alias ValueTuple = A;
+
 	/// Work-around for DMD bug 21804:
 	/// https://issues.dlang.org/show_bug.cgi?id=21804
 	/// If your `then` callback argument is a tuple,
