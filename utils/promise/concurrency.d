@@ -69,24 +69,33 @@ if (is(ReturnType!fun == Promise!(T, E), T, E))
 					}
 					else
 					{
-						// Go to the thread that created the promise,
-						// and append a continuation which goes back to our thread
-						// and resolves the returned promise.
 						auto localThread = thisThread;
-						localPromise = new P;
-						entry.ownerThread.runAsync({
-							entry.realPromise.then((P.ValueTuple value) {
-								entry.resolved = true;
-								localThread.runAsync({
-									localPromise.fulfill(value);
-								});
-							}, (error) {
-								entry.resolved = true;
-								localThread.runAsync({
-									localPromise.reject(error);
+						if (entry.ownerThread is localThread)
+						{
+							// We are in the thread that owns this promise.
+							// Just return it.
+							localPromise = entry.realPromise;
+						}
+						else
+						{
+							// Go to the thread that created the promise,
+							// and append a continuation which goes back to our thread
+							// and resolves the returned promise.
+							localPromise = new P;
+							entry.ownerThread.runAsync({
+								entry.realPromise.then((P.ValueTuple value) {
+									entry.resolved = true;
+									localThread.runAsync({
+										localPromise.fulfill(value);
+									});
+								}, (error) {
+									entry.resolved = true;
+									localThread.runAsync({
+										localPromise.reject(error);
+									});
 								});
 							});
-						});
+						}
 					}
 				});
 			return localPromise;
