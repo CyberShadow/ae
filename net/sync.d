@@ -102,7 +102,7 @@ private:
 				if (command.semaphore)
 					command.semaphore.notify();
 			}
-			auto remaining = numPending.atomicFetchSub(indices.length) - indices.length;
+			auto remaining = numPending.atomicOp!"-="(indices.length);
 			this.daemonRead = daemon && remaining == 0;
 		}
 	}
