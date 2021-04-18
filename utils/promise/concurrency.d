@@ -16,6 +16,7 @@ module ae.utils.promise.concurrency;
 import std.traits;
 
 import ae.net.sync;
+import ae.utils.aa : updateVoid;
 import ae.utils.promise;
 
 /// Given a function `fun` which returns a promise,
@@ -53,7 +54,7 @@ if (is(ReturnType!fun == Promise!(T, E), T, E))
 			auto key = Key(args);
 
 			P localPromise;
-			synchronized cache.update(key,
+			synchronized cache.updateVoid(key,
 				{
 					localPromise = fun(args);
 					return new Entry(thisThread, localPromise);
