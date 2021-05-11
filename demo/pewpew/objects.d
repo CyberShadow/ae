@@ -66,6 +66,20 @@ float frands() { return uniform!`()`(-1.0f, 1.0f); }
 T ssqr(T)(T x) { return sqr(x) * sign(x); }
 float frands2() { return ssqr(frands()); }
 
+// Partial copy of ae.utils.graphics.draw.FixMath
+// TODO proper fixed-point type?
+private mixin template FixMath(ubyte coordinateBits = 16)
+{
+	import ae.utils.meta : SignedBitsType, UnsignedBitsType;
+
+	alias fix  = SignedBitsType!(COLOR.channelBits   + coordinateBits);
+	alias COLOR.ChannelType frac;
+
+	fix tofix(T:int  )(T x) { return cast(fix) (x<<COLOR.channelBits); }
+	fix tofix(T:float)(T x) { return cast(fix) (x*(1<<COLOR.channelBits)); }
+	frac fixfpart(fix x) { return cast(frac)x; }
+	frac tofracBounded(T:float)(T x) { return cast(frac) bound(tofix(x), 0, frac.max); }
+}
 mixin FixMath;
 
 enum Sound
