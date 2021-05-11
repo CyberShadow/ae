@@ -208,6 +208,9 @@ package
 version (Windows)
 	enum filesystemTimestampGranularity = 10.msecs;
 else
+static if (__VERSION__ > 2_072)
+	enum filesystemTimestampGranularity = 10.msecs;
+else
 {
 	// https://issues.dlang.org/show_bug.cgi?id=15803
 	enum filesystemTimestampGranularity = 1.seconds;
