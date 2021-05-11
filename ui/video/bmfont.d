@@ -27,6 +27,21 @@ final class FontTextureSource(Font) : ProceduralTextureSource
 		this.color = color;
 	} ///
 
+	/// Draw a string.
+	void drawText(S)(Renderer r, int x, int y, S s)
+	{
+		foreach (c; s)
+		{
+			if (font.hasGlyph(c))
+			{
+				auto g = font.getGlyph(c);
+				auto v = c * font.height;
+				r.draw(x, y, this, 0, v, g.width, v + font.height);
+				x += g.width;
+			}
+		}
+	}
+
 protected:
 	Font font;
 	Renderer.COLOR color;
@@ -43,20 +58,6 @@ protected:
 		{
 			dchar c = g;
 			dest.drawText(0, g * font.height, c.toArray, font, color);
-		}
-	}
-
-	void drawText(S)(Renderer r, int x, int y, S s)
-	{
-		foreach (c; s)
-		{
-			if (font.hasGlyph(c))
-			{
-				auto g = font.getGlyph(c);
-				auto v = c * font.height;
-				r.draw(x, y, this, 0, v, g.width, v + font.height);
-				x += g.width;
-			}
 		}
 	}
 }
