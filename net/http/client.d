@@ -38,14 +38,13 @@ public import ae.net.http.common;
 /// Generally used to send one HTTP request.
 class HttpClient
 {
-private:
+protected:
 	Connector connector;  // Bottom-level transport factory.
 	TimeoutAdapter timer; // Timeout adapter.
 	IConnection conn;     // Top-level abstract connection. Reused for new connections.
 
 	Data[] inBuffer;
 
-protected:
 	HttpRequest currentRequest;
 
 	HttpResponse currentResponse;
