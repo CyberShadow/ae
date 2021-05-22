@@ -1877,6 +1877,7 @@ class ConnectionAdapter : IConnection
 	protected void onReadData(Data data)
 	{
 		// onReadData should be fired only if readDataHandler is set
+		assert(readDataHandler, "onReadData caled with null readDataHandler");
 		readDataHandler(data);
 	}
 
