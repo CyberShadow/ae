@@ -859,16 +859,18 @@ protected:
 				// read data after processing it, but otherwise
 				// makes things simpler and safer all around.
 
+				Data data;
 				if (received < UNMANAGED_THRESHOLD)
 				{
 					// Copy to the managed heap
-					readDataHandler(Data(inBuffer[0 .. received].dup));
+					data = Data(inBuffer[0 .. received].dup);
 				}
 				else
 				{
 					// Copy to unmanaged memory
-					readDataHandler(Data(inBuffer[0 .. received], true));
+					data = Data(inBuffer[0 .. received], true);
 				}
+				readDataHandler(data);
 			}
 		}
 	}
