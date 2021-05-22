@@ -1895,7 +1895,7 @@ class ConnectionAdapter : IConnection
 
 	/// Callback for when a connection has been established.
 	@property void handleConnect(ConnectHandler value) { connectHandler = value; }
-	private ConnectHandler connectHandler;
+	protected ConnectHandler connectHandler;
 
 	/// Callback setter for when new data is read.
 	@property void handleReadData(ReadDataHandler value)
@@ -1903,15 +1903,15 @@ class ConnectionAdapter : IConnection
 		readDataHandler = value;
 		next.handleReadData = value ? &onReadData : null ;
 	}
-	private ReadDataHandler readDataHandler;
+	protected ReadDataHandler readDataHandler;
 
 	/// Callback setter for when a connection was closed.
 	@property void handleDisconnect(DisconnectHandler value) { disconnectHandler = value; }
-	private DisconnectHandler disconnectHandler;
+	protected DisconnectHandler disconnectHandler;
 
 	/// Callback setter for when all queued data has been written.
 	@property void handleBufferFlushed(BufferFlushedHandler value) { bufferFlushedHandler = value; }
-	private BufferFlushedHandler bufferFlushedHandler;
+	protected BufferFlushedHandler bufferFlushedHandler;
 }
 
 // ***************************************************************************
