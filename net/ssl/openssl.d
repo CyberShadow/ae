@@ -304,6 +304,12 @@ class OpenSSLAdapter : SSLAdapter
 
 		try
 		{
+			// We must buffer all cleartext data and send it off in a
+			// single `super.onReadData` call. It cannot be split up
+			// into multiple calls, because the `readDataHandler` may
+			// be set to null in the middle of our loop.
+			Data clearText;
+
 			while (true)
 			{
 				static ubyte[4096] buf;
@@ -313,10 +319,7 @@ class OpenSSLAdapter : SSLAdapter
 				if (result > 0)
 				{
 					updateState();
-					super.onReadData(Data(buf[0..result]));
-					// Stop if upstream decided to disconnect.
-					if (next.state != ConnectionState.connected)
-						return;
+					clearText ~= buf[0..result];
 				}
 				else
 				{
@@ -326,6 +329,7 @@ class OpenSSLAdapter : SSLAdapter
 				}
 			}
 			enforce(r.data.length == 0, "SSL did not consume all read data");
+			super.onReadData(clearText);
 		}
 		catch (CaughtException e)
 		{
