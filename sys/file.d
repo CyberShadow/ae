@@ -2259,7 +2259,7 @@ unittest
 
 /// Read exactly `buf.length` bytes and return true.
 /// On EOF, return false.
-bool readExactly(ref File f, ubyte[] buf)
+bool readExactly(File f, ubyte[] buf)
 {
 	if (!buf.length)
 		return true;
