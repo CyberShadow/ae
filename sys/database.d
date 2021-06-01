@@ -45,16 +45,21 @@ struct Database
 	{
 		debug(DATABASE) stderr.writeln(sql);
 		static SQLite.PreparedStatement statement = null;
-		if (!statement)
+		static Database statementDatabase; // Ensure the statement belongs to the current database
+		if (statementDatabase !is this)
+		{
 			statement = db.prepare(sql).enforce("Statement compilation failed: " ~ sql);
+			statementDatabase = this;
+		}
 		return statement;
 	}
+
+	private SQLite.PreparedStatement[const(void)*] cache;
 
 	/// ditto
 	SQLite.PreparedStatement stmt(string sql)
 	{
 		debug(DATABASE) stderr.writeln(sql);
-		static SQLite.PreparedStatement[const(void)*] cache;
 		auto pstatement = sql.ptr in cache;
 		if (pstatement)
 			return *pstatement;
