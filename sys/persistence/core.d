@@ -208,6 +208,9 @@ package
 version (Windows)
 	enum filesystemTimestampGranularity = 10.msecs;
 else
+version (OSX)
+	enum filesystemTimestampGranularity = 1.seconds;
+else
 static if (__VERSION__ > 2_072)
 	enum filesystemTimestampGranularity = 10.msecs;
 else
