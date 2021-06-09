@@ -28,6 +28,8 @@ import ae.utils.meta : structFields, hasAttribute, getAttribute, RangeTuple, I;
 import ae.utils.array : split1;
 import ae.utils.text;
 
+public static import std.getopt; // See ae.utils.main
+
 private enum OptionType { switch_, option, parameter }
 
 struct _OptionImpl(OptionType type_, T_, string description_, char shorthand_, string placeholder_, string name_)
