@@ -618,9 +618,8 @@ void cacheForever(ref Headers headers)
 /// Formats a timestamp in the format used by HTTP (RFC 2822).
 string httpTime(SysTime time)
 {
-	// Apache is bad at timezones
 	time.timezone = UTC();
-	return time.formatTime!(TimeFormats.RFC2822)();
+	return time.formatTime!(TimeFormats.HTTP)();
 }
 
 import std.algorithm : sort;
