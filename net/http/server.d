@@ -246,8 +246,6 @@ public:
 	/// Send the given HTTP response.
 	final void sendResponse(HttpResponse response)
 	{
-		assert(response.status != 0);
-
 		requestProcessing = false;
 		if (!response)
 		{
@@ -257,6 +255,7 @@ public:
 			response.statusMessage = HttpResponse.getStatusMessage(HttpStatusCode.InternalServerError);
 			response.data = [Data("Internal Server Error")];
 		}
+		assert(response.status != 0);
 
 		if (currentRequest)
 		{
