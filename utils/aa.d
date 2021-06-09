@@ -1248,7 +1248,7 @@ public:
 	{
 		lookup.clear();
 		static if (ordered)
-			items.length = 0;
+			items = null;
 	}
 }
 
@@ -1388,6 +1388,12 @@ unittest
 	OrderedMap!(string, int) m;
 	foreach (k, v; m)
 		k = k ~ k;
+}
+
+unittest
+{
+	struct S { @disable this(); }
+	const OrderedMap!(string, S) m;
 }
 
 /// Like assocArray
