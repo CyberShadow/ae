@@ -131,6 +131,7 @@ static:
 	const RFC3339 = `Y-m-d\TH:i:sP`   ; ///
 	const RSS     = `D, d M Y H:i:s O`; ///
 	const W3C     = `Y-m-d\TH:i:sP`   ; ///
+	const HTTP    = `D, d M y H:i:s \G\M\T`; /// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Date
 
 	const CTIME = `D M d H:i:s Y`; /// ctime/localtime format
 
