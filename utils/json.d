@@ -216,7 +216,7 @@ struct CustomJsonSerializer(Writer)
 	Writer writer; /// Output.
 
 	/// Put a serializable value.
-	void put(T)(T v)
+	void put(T)(auto ref T v)
 	{
 		static if (is(T X == Nullable!X))
 			if (v.isNull)
@@ -296,7 +296,7 @@ struct CustomJsonSerializer(Writer)
 		{
 			writer.beginObject();
 			bool first = true;
-			foreach (i, field; v.tupleof)
+			foreach (i, ref field; v.tupleof)
 			{
 				static if (!doSkipSerialize!(T, v.tupleof[i].stringof[2..$]))
 				{
@@ -372,7 +372,7 @@ private struct Escapes
 // ************************************************************************
 
 /// Serialize `T` to JSON, and return the result as a string.
-string toJson(T)(T v)
+string toJson(T)(auto ref T v)
 {
 	JsonSerializer serializer;
 	serializer.put(v);
