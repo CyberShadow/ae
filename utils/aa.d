@@ -215,7 +215,7 @@ V[] sortedValues(K, V)(in V[K] aa)
 }
 
 /// Merge source into target. Return target.
-V[K] merge(K, V)(auto ref V[K] target, in V[K] source)
+V[K] merge(K, V)(auto ref V[K] target, V[K] source)
 {
 	foreach (k, v; source)
 		target[k] = v;
@@ -234,6 +234,12 @@ unittest
 	assert(target == [1:1, 2:4, 3:3]);
 
 	assert(merge([1:1], [2:2]) == [1:1, 2:2]);
+}
+
+unittest
+{
+	ubyte[][string] a, b;
+	merge(a, b);
 }
 
 /// Slurp a range of two elements (or two-element struct/class) into an AA.
