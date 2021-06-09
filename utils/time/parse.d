@@ -223,13 +223,13 @@ private void parseToken(alias c, alias context)()
 				break;
 			case TimeFormatElement.timezoneOffsetWithoutColon:
 			{
-				if (peek() == TimeFormatElement.timezoneOffsetSeconds)
+				if (peek() == 'Z')
 				{
 					t = t[1..$];
 					tz = UTC();
 				}
 				else
-				if (peek() == TimeFormatElement.hour)
+				if (peek() == 'G')
 				{
 					enforce(take!3() == "GMT", "GMT expected");
 					tz = UTC();
