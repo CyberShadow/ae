@@ -564,7 +564,7 @@ public:
 		{
 			if ("If-Modified-Since" in requestHeaders &&
 				"Last-Modified" in headers &&
-				headers["Last-Modified"].parseTime!(TimeFormats.RFC2822) <= requestHeaders["If-Modified-Since"].parseTime!(TimeFormats.RFC2822))
+				headers["Last-Modified"].parseTime!(TimeFormats.HTTP) <= requestHeaders["If-Modified-Since"].parseTime!(TimeFormats.HTTP))
 			{
 				setStatus(HttpStatusCode.NotModified);
 				data = null;

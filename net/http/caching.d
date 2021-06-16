@@ -144,8 +144,8 @@ public:
 
 		if ("If-Modified-Since" in request.headers)
 		{
-			auto clientTime = request.headers["If-Modified-Since"].parseTime!(TimeFormats.RFC2822)();
-			auto serverTime = httpTime(lastModified)              .parseTime!(TimeFormats.RFC2822)(); // make sure to avoid any issues of fractional seconds, etc.
+			auto clientTime = request.headers["If-Modified-Since"].parseTime!(TimeFormats.HTTP)();
+			auto serverTime = httpTime(lastModified)              .parseTime!(TimeFormats.HTTP)(); // make sure to avoid any issues of fractional seconds, etc.
 			if (serverTime <= clientTime)
 			{
 				response.setStatus(HttpStatusCode.NotModified);
