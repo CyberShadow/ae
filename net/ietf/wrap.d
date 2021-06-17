@@ -92,7 +92,6 @@ Paragraph[] unwrapText(string text, WrapFormat wrapFormat)
 				if (paragraphs.length>0
 				 && paragraphs[$-1].quotePrefix==quotePrefix
 				 && paragraphs[$-1].text.endsWith(" ")
-				 && !line.startsWith(" ")
 				 && line.length
 				 && line != "-- "
 				 && paragraphs[$-1].text != "-- "
@@ -294,4 +293,7 @@ unittest
 	static assert(str.toUTF32().length < DEFAULT_WRAP_LENGTH);
 	static assert(str.length > DEFAULT_WRAP_LENGTH);
 	assert(wrapText(unwrapText(str, WrapFormat.fixed)).split("\n").length == 1);
+
+	// Allow wrapping and correctly unwrapping long sequences of spaces
+	assert(unwrapText("|  \n  |", WrapFormat.flowed) == [Paragraph("", "|   |")]);
 }
