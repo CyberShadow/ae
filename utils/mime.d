@@ -48,6 +48,8 @@ string guessMime(string fileName, string defaultResult = null)
 			return "image/jpeg";
 		case ".svg":
 			return "image/svg+xml";
+		case ".swf":
+			return "application/x-shockwave-flash";
 		case ".webm":
 			return "video/webm";
 		case ".wav":
