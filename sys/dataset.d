@@ -47,7 +47,8 @@ unittest
 
 /// Join an array of Data to a memory block on the managed heap.
 @property
-void[] joinToHeap(Data[] data)
+void[] joinToHeap(R)(R data)
+if (is(ElementType!R == Data))
 {
 	size_t size = 0;
 	foreach (ref d; data)
@@ -60,6 +61,11 @@ void[] joinToHeap(Data[] data)
 		pos += d.length;
 	}
 	return result;
+}
+
+unittest
+{
+	assert(cast(int[])([Data([1]), Data([2])].joinToHeap()) == [1, 2]);
 }
 
 /// Remove and return the specified number of bytes from the given `Data[]`.
