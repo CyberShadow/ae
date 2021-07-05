@@ -17,6 +17,20 @@ import std.range.primitives : ElementType;
 
 import ae.sys.data;
 
+/// Copy a `Data` array's contents to a specified buffer.
+void[] copyTo(R)(R data, void[] buffer)
+if (is(ElementType!R == Data))
+{
+	size_t pos = 0;
+	foreach (ref d; data)
+	{
+		buffer[pos .. pos + d.length] = d.contents[];
+		pos += d.length;
+	}
+	assert(pos == buffer.length);
+	return buffer;
+}
+
 /// Join an array of Data to a single Data.
 Data joinData(R)(R data)
 if (is(ElementType!R == Data))
@@ -31,12 +45,7 @@ if (is(ElementType!R == Data))
 	foreach (ref d; data)
 		size += d.length;
 	Data result = Data(size);
-	size_t pos = 0;
-	foreach (ref d; data)
-	{
-		result.mcontents[pos..pos+d.length] = d.contents[];
-		pos += d.length;
-	}
+	data.copyTo(result.mcontents);
 	return result;
 }
 
@@ -54,12 +63,7 @@ if (is(ElementType!R == Data))
 	foreach (ref d; data)
 		size += d.length;
 	auto result = new void[size];
-	size_t pos = 0;
-	foreach (ref d; data)
-	{
-		result[pos..pos+d.length] = d.contents[];
-		pos += d.length;
-	}
+	data.copyTo(result);
 	return result;
 }
 
