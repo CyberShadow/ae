@@ -19,6 +19,7 @@ module ae.utils.gzip;
 
 import std.exception;
 import std.conv;
+import std.range.primitives : ElementType;
 debug import std.stdio, std.file;
 
 import ae.sys.data;
@@ -37,7 +38,8 @@ private enum
 }
 
 /// Calculate CRC32 from `Data[]`
-uint crc32(Data[] data)
+uint crc32(R)(R data)
+if (is(ElementType!R == Data))
 {
 	CRC32 crc;
 	foreach (ref d; data)
