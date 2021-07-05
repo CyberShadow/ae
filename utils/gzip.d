@@ -23,6 +23,8 @@ import std.range.primitives : ElementType;
 debug import std.stdio, std.file;
 
 import ae.sys.data;
+import ae.utils.array;
+import ae.utils.bitmanip;
 
 static import zlib = ae.utils.zlib;
 public import ae.utils.zlib : ZlibOptions, ZlibMode;
@@ -102,12 +104,16 @@ Data[] gzipToRawDeflate(Data[] data)
 /// Uncompress Gzip-compressed data.
 Data[] uncompress(Data[] data)
 {
-	while (data.length >= 2 && data[$-1].length < 4)
-		data = data[0..$-2] ~ [data[$-2] ~ data[$-1]];
-	enforce(data.length && data[$-1].length >= 4, "No data to decompress");
+	auto bytes = data.bytes;
+	enforce(bytes.length >= 4, "No data to decompress");
+
 	ZlibOptions options; options.mode = ZlibMode.raw;
 	Data[] uncompressed = zlib.uncompress(gzipToRawDeflate(data), options);
-	enforce(uncompressed.bytes.length == *cast(uint*)(&data[$-1].contents[$-4]), "Decompressed data length mismatch");
+
+	LittleEndian!uint size;
+	bytes[$-4 .. $].copyTo(size.toArray);
+	enforce(cast(uint)uncompressed.bytes.length == size, "Decompressed data length mismatch");
+
 	return uncompressed;
 }
 
