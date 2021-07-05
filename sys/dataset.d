@@ -13,10 +13,13 @@
 
 module ae.sys.dataset;
 
+import std.range.primitives : ElementType;
+
 import ae.sys.data;
 
 /// Join an array of Data to a single Data.
-Data joinData(Data[] data)
+Data joinData(R)(R data)
+if (is(ElementType!R == Data))
 {
 	if (data.length == 0)
 		return Data();
@@ -35,6 +38,11 @@ Data joinData(Data[] data)
 		pos += d.length;
 	}
 	return result;
+}
+
+unittest
+{
+	assert(cast(int[])([Data([1]), Data([2])].joinData().contents) == [1, 2]);
 }
 
 /// Join an array of Data to a memory block on the managed heap.
