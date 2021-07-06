@@ -40,6 +40,26 @@ static if (__traits(hasMember, std.array, "staticArray"))
 else
 	pragma(inline, true) T[n] staticArray(T, size_t n)(auto ref T[n] a) { return a; }
 
+/// Convert a dynamic array to a static array
+template toStaticArray(size_t n)
+{
+	ref T[n] toStaticArray(T)(return T[] a)
+	{
+		assert(a.length == n, "Size mismatch");
+		return a[0 .. n];
+	}
+}
+
+unittest
+{
+	auto a = [1, 2, 3];
+	assert(a.toStaticArray!3 == [1, 2, 3]);
+
+	import std.range : chunks;
+	auto b = [1, 2, 3, 4];
+	assert(b.chunks(2).map!(toStaticArray!2).array == [[1, 2], [3, 4]]);
+}
+
 /// Return the value represented as an array of bytes.
 @property inout(ubyte)[] bytes(T)(ref inout(T) value)
 	if (!hasIndirections!T)
