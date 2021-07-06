@@ -41,7 +41,7 @@ public:
 	string protocol = "http";
 	string protocolVersion = "1.0";
 	Headers headers;
-	Data[] data;
+	DataVec data;
 	SysTime creationTime;
 
 	this()
@@ -496,10 +496,10 @@ public:
 	Data getContent()
 	{
 		if ("Content-Encoding" in headers && headers["Content-Encoding"]=="deflate")
-			return zlib.uncompress(data).joinData();
+			return zlib.uncompress(data[]).joinData();
 		else
 		if ("Content-Encoding" in headers && headers["Content-Encoding"]=="gzip")
-			return gzip.uncompress(data).joinData();
+			return gzip.uncompress(data[]).joinData();
 		else
 			return data.joinData();
 		assert(0);
@@ -508,13 +508,13 @@ public:
 	protected void compressWithDeflate()
 	{
 		assert(compressionLevel >= 0);
-		data = zlib.compress(data, zlib.ZlibOptions(compressionLevel));
+		data = zlib.compress(data[], zlib.ZlibOptions(compressionLevel));
 	}
 
 	protected void compressWithGzip()
 	{
 		assert(compressionLevel >= 0);
-		data = gzip.compress(data, zlib.ZlibOptions(compressionLevel));
+		data = gzip.compress(data[], zlib.ZlibOptions(compressionLevel));
 	}
 
 	/// Called by the server to compress content, if possible/appropriate
@@ -578,14 +578,14 @@ public:
 				auto ranges = (*prange)[6..$].split(",")[0].split("-").map!(s => s.length ? s.to!size_t : size_t.max)().array();
 				enforce(ranges.length == 2, "Bad range request");
 				ranges[1]++;
-				auto datum = DataSetBytes(this.data);
+				auto datum = this.data.bytes;
 				if (ranges[1] == size_t.min) // was not specified (size_t.max overflowed into 0)
 					ranges[1] = datum.length;
 				if (ranges[0] >= datum.length || ranges[0] >= ranges[1] || ranges[1] > datum.length)
 				{
 					//writeError(HttpStatusCode.RequestedRangeNotSatisfiable);
 					setStatus(HttpStatusCode.RequestedRangeNotSatisfiable);
-					data = [Data(statusMessage)];
+					data = DataVec(Data(statusMessage));
 					return;
 				}
 				else

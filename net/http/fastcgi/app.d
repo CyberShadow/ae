@@ -21,6 +21,7 @@ version (Windows)
 else
 	import core.stdc.errno;
 
+import std.algorithm.mutation : move;
 import std.algorithm.searching;
 import std.array;
 import std.bitmanip;
@@ -448,7 +449,7 @@ class FastCGIResponderConnection : FastCGIProtoConnection
 	protected final class ResponderRequest : Request
 	{
 		string[string] params;
-		Data[] inputData;
+		DataVec inputData;
 
 		override void begin()
 		{
@@ -469,7 +470,7 @@ class FastCGIResponderConnection : FastCGIProtoConnection
 		override void stdinEnd()
 		{
 			auto request = CGIRequest.fromAA(params);
-			request.data = inputData;
+			request.data = move(inputData);
 
 			try
 				this.outer.handleRequest(request, &sendResponse);

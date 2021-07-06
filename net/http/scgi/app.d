@@ -76,7 +76,7 @@ final class SCGIConnection
 				CGIRequest request;
 				request.vars = CGIVars.fromAA(headers);
 				request.headers = CGIRequest.decodeHeaders(headers, request.vars.serverProtocol ? request.vars.serverProtocol : "HTTP");
-				request.data = [buffer[headerEnd .. headerEnd + contentLength]];
+				request.data = DataVec(buffer[headerEnd .. headerEnd + contentLength]);
 				buffer = buffer[headerEnd + contentLength .. $];
 				handleRequest(request);
 			}
@@ -109,7 +109,8 @@ final class SCGIConnection
 			writeNPHHeaders(r, headers);
 		else
 			writeCGIHeaders(r, headers);
-		connection.send([Data(headers.get)] ~ r.data);
+		connection.send(Data(headers.get));
+		connection.send(r.data[]);
 		connection.disconnect("Response sent");
 	}
 

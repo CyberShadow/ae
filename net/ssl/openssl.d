@@ -341,7 +341,7 @@ class OpenSSLAdapter : SSLAdapter
 		}
 	} /// `SSLAdapter` method implementation.
 
-	override void send(Data[] data, int priority = DEFAULT_PRIORITY)
+	override void send(scope Data[] data, int priority = DEFAULT_PRIORITY)
 	{
 		assert(state == ConnectionState.connected, "Attempting to send to a non-connected socket");
 		while (data.length)
@@ -450,7 +450,7 @@ protected:
 		if (w.data.length)
 		{
 			debug(OPENSSL_DATA) stderr.writefln("OpenSSL: } Flushing %d outgoing bytes from OpenSSL to network", w.data.length);
-			next.send([Data(w.data)]);
+			next.send(Data(w.data));
 			w.clear();
 		}
 

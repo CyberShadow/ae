@@ -13,6 +13,7 @@
 
 module ae.net.http.caching;
 
+import std.algorithm.mutation : move;
 import std.datetime;
 
 import ae.net.http.common;
@@ -50,7 +51,7 @@ protected: // interface with descendant classes
 
 	/// Get uncompressed data. The call may be expensive,
 	/// result is cached (in uncompressedData).
-	abstract Data[] getData();
+	abstract DataVec getData();
 
 	/// Return last modified time.
 	/// Used for Last-Modified and If-Modified-Since headers.
@@ -90,28 +91,28 @@ protected: // interface with descendant classes
 	}
 
 private:
-	Data[] uncompressedDataCache, deflateDataCache, gzipDataCache;
+	DataVec uncompressedDataCache, deflateDataCache, gzipDataCache;
 	SysTime lastModified;
 
-	@property final Data[] uncompressedData()
+	@property final ref DataVec uncompressedData()
 	{
 		if (!uncompressedDataCache)
 			uncompressedDataCache = getData();
 		return uncompressedDataCache;
 	}
 
-	@property final Data[] deflateData()
+	@property final ref DataVec deflateData()
 	{
 		if (!deflateDataCache)
-			deflateDataCache = zlib.compress(uncompressedData, zlib.ZlibOptions(compressionLevel));
+			deflateDataCache = zlib.compress(uncompressedData[], zlib.ZlibOptions(compressionLevel));
 		return deflateDataCache;
 	}
 
-	@property final Data[] gzipData()
+	@property final ref DataVec gzipData()
 	{
-		// deflate2gzip doesn't actually make a copy of the compressed data (thanks to Data[]).
-		if (!gzipDataCache)
-			gzipDataCache = deflate2gzip(deflateData, crc32(uncompressedData), uncompressedData.bytes.length);
+		// deflate2gzip doesn't actually make a copy of the compressed data (thanks to DataVec).
+		if (!!gzipDataCache)
+			gzipDataCache = deflate2gzip(deflateData[], crc32(uncompressedData[]), uncompressedData.bytes.length);
 		return gzipDataCache;
 	}
 
@@ -125,13 +126,13 @@ private:
 		override void compressWithDeflate()
 		{
 			assert(data is uncompressedData);
-			data = deflateData;
+			data = deflateData.dup;
 		}
 
 		override void compressWithGzip()
 		{
 			assert(data is uncompressedData);
-			data = gzipData;
+			data = gzipData.dup;
 		}
 	}
 
@@ -154,7 +155,7 @@ public:
 		}
 
 		response.setStatus(HttpStatusCode.OK);
-		response.data = uncompressedData;
+		response.data = uncompressedData.dup;
 		final switch (cachePolicy)
 		{
 			case CachePolicy.unspecified:
@@ -190,7 +191,7 @@ private:
 	enum STAT_TIMEOUT = dur!"seconds"(1);
 
 protected:
-	override Data[] getData()
+	override DataVec getData()
 	{
 		if (!exists(filename) || !isFile(filename)) // TODO: 404
 			throw new Exception("Static resource does not exist on disk");
@@ -199,7 +200,7 @@ protected:
 		// mmap implies either file locking, or risk of bad data (file content changes, mapped length not)
 
 		import ae.sys.dataio : readData;
-		return [readData(filename)];
+		return DataVec(readData(filename));
 	}
 
 	override SysTime getLastModified()
@@ -237,26 +238,26 @@ public:
 class CachedResource : AbstractCachedResource
 {
 private:
-	Data[] data;
+	DataVec data;
 
 protected:
-	override Data[] getData()
+	override DataVec getData()
 	{
-		return data;
+		return data.dup;
 	}
 
 public:
 	///
-	this(Data[] data, string contentType)
+	this(DataVec data, string contentType)
 	{
-		this.data = data;
+		this.data = move(data);
 		this.contentType = contentType;
 	}
 
 	/// Update the contents.
-	void setData(Data[] data)
+	void setData(DataVec data)
 	{
-		this.data = data;
+		this.data = move(data);
 		invalidate();
 	}
 }

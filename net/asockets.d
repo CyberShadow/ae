@@ -17,6 +17,7 @@
 module ae.net.asockets;
 
 import ae.sys.timing;
+import ae.utils.array : toArray;
 import ae.utils.math;
 public import ae.sys.data;
 
@@ -727,15 +728,12 @@ interface IConnection
 	deprecated final @property bool disconnecting() { return state == ConnectionState.disconnecting; }
 
 	/// Queue Data for sending.
-	void send(Data[] data, int priority = DEFAULT_PRIORITY);
+	void send(scope Data[] data, int priority = DEFAULT_PRIORITY);
 
 	/// ditto
 	final void send(Data datum, int priority = DEFAULT_PRIORITY)
 	{
-		Data[1] data;
-		data[0] = datum;
-		this.send(data, priority);
-		data[] = Data.init;
+		this.send(datum.toArray, priority);
 	}
 
 	/// Terminate the connection.
@@ -787,7 +785,7 @@ protected:
 	abstract sizediff_t doReceive(void[] buffer);
 
 	/// The send buffers.
-	Data[][MAX_PRIORITY+1] outQueue;
+	DataVec[MAX_PRIORITY+1] outQueue;
 	/// Whether the first item from this queue (if any) has been partially sent (and thus can't be canceled).
 	int partiallySent = -1;
 
@@ -940,12 +938,12 @@ public:
 		socketManager.unregister(this);
 		conn.close();
 		conn = null;
-		outQueue[] = null;
+		outQueue[] = DataVec.init;
 		state = ConnectionState.disconnected;
 	}
 
 	/// Append data to the send buffer.
-	void send(Data[] data, int priority = DEFAULT_PRIORITY)
+	void send(scope Data[] data, int priority = DEFAULT_PRIORITY)
 	{
 		assert(state == ConnectionState.connected, "Attempting to send on a %s socket".format(state));
 		outQueue[priority] ~= data;
@@ -973,7 +971,7 @@ public:
 		if (priority == partiallySent)
 		{
 			assert(outQueue[priority].length > 0);
-			outQueue[priority] = outQueue[priority][0..1];
+			outQueue[priority].length = 1;
 		}
 		else
 			outQueue[priority] = null;
@@ -993,7 +991,7 @@ public:
 	@property
 	final bool writePending()
 	{
-		foreach (queue; outQueue)
+		foreach (ref queue; outQueue)
 			if (queue.length)
 				return true;
 		return false;
@@ -1094,13 +1092,11 @@ protected:
 				{
 					assert(partiallySent == -1 || partiallySent == priority);
 
-					auto pdata = queue.ptr; // pointer to first data
-
 					ptrdiff_t sent = 0;
-					if (pdata.length)
+					if (!queue.front.empty)
 					{
-						sent = doSend(pdata.contents);
-						debug (ASOCKETS) stderr.writefln("\t\t%s: sent %d/%d bytes", this, sent, pdata.length);
+						sent = doSend(queue.front.contents);
+						debug (ASOCKETS) stderr.writefln("\t\t%s: sent %d/%d bytes", this, sent, queue.front.length);
 					}
 					else
 					{
@@ -1115,22 +1111,22 @@ protected:
 							return onError("send() error: " ~ lastSocketError);
 					}
 					else
-					if (sent < pdata.length)
+					if (sent < queue.front.length)
 					{
 						if (sent > 0)
 						{
-							*pdata = (*pdata)[sent..pdata.length];
+							queue.front = queue.front[sent..queue.front.length];
 							partiallySent = priority;
 						}
 						return;
 					}
 					else
 					{
-						assert(sent == pdata.length);
+						assert(sent == queue.front.length);
 						//debug writefln("[%s] Sent data:", remoteAddressStr);
-						//debug writefln("%s", hexDump(pdata.contents[0..sent]));
-						pdata.clear();
-						queue = queue[1..$];
+						//debug writefln("%s", hexDump(queue.front.contents[0..sent]));
+						queue.front.clear();
+						queue.popFront();
 						partiallySent = -1;
 						if (queue.length == 0)
 							queue = null;
@@ -1209,7 +1205,7 @@ class Duplex : IConnection
 	} ///
 
 	/// Queue Data for sending.
-	void send(Data[] data, int priority)
+	void send(scope Data[] data, int priority)
 	{
 		writer.send(data, priority);
 	}
@@ -1669,9 +1665,7 @@ protected:
 		foreach (priority, ref queue; outQueue)
 			while (queue.length)
 			{
-				auto pdata = queue.ptr; // pointer to first data
-
-				auto sent = conn.sendTo(pdata.contents, remoteAddress);
+				auto sent = conn.sendTo(queue.front.contents, remoteAddress);
 
 				if (sent == Socket.ERROR)
 				{
@@ -1681,17 +1675,17 @@ protected:
 						return onError("send() error: " ~ lastSocketError);
 				}
 				else
-				if (sent < pdata.length)
+				if (sent < queue.front.length)
 				{
-					return onError("Sent only %d/%d bytes of the datagram!".format(sent, pdata.length));
+					return onError("Sent only %d/%d bytes of the datagram!".format(sent, queue.front.length));
 				}
 				else
 				{
-					assert(sent == pdata.length);
+					assert(sent == queue.front.length);
 					//debug writefln("[%s] Sent data:", remoteAddressStr);
 					//debug writefln("%s", hexDump(pdata.contents[0..sent]));
-					pdata.clear();
-					queue = queue[1..$];
+					queue.front.clear();
+					queue.popFront();
 					if (queue.length == 0)
 						queue = null;
 				}
@@ -1817,11 +1811,11 @@ unittest
 	string[] packets = ["Hello", "there"];
 	client.remoteAddress = server.localAddress;
 	client.send({
-		Data[] data;
+		DataVec data;
 		foreach (packet; packets)
 			data ~= Data(packet);
 		return data;
-	}());
+	}()[]);
 
 	server.handleReadData = (Data data)
 	{
@@ -1857,7 +1851,7 @@ class ConnectionAdapter : IConnection
 	@property ConnectionState state() { return next.state; } ///
 
 	/// Queue Data for sending.
-	void send(Data[] data, int priority)
+	void send(scope Data[] data, int priority)
 	{
 		next.send(data, priority);
 	}

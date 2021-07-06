@@ -82,7 +82,7 @@ void test(string moduleName, string className)()
 		auto request = new HttpRequest(testBaseURL ~ "testUrl5");
 		request.method = "PUT";
 		request.headers.add("Test-Request-Header", "foo");
-		request.data = [Data("bar")];
+		request.data = DataVec(Data("bar"));
 		auto response = net.httpRequest(request);
 		assert(response.status == HttpStatusCode.Accepted);
 		assert(response.statusMessage == "Custom Message");

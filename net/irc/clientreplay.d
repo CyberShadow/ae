@@ -25,7 +25,7 @@ class IrcClientLogSource : IConnection
 	bool isConnected;
 	@property ConnectionState state() { return isConnected ? ConnectionState.connected : ConnectionState.disconnected; } /// ditto
 
-	void send(Data[] data, int priority) {} /// ditto
+	void send(scope Data[] data, int priority) {} /// ditto
 	alias send = IConnection.send; /// ditto
 
 	void disconnect(string reason = defaultDisconnectReason, DisconnectType type = DisconnectType.requested) {} /// ditto

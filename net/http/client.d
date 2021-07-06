@@ -16,6 +16,7 @@
 
 module ae.net.http.client;
 
+import std.algorithm.mutation : move;
 import std.string;
 import std.conv;
 import std.datetime;
@@ -43,7 +44,7 @@ protected:
 	TimeoutAdapter timer; // Timeout adapter.
 	IConnection conn;     // Top-level abstract connection. Reused for new connections.
 
-	Data[] inBuffer;
+	DataVec inBuffer;
 
 	HttpRequest currentRequest;
 
@@ -94,7 +95,7 @@ protected:
 		}
 
 		conn.send(Data(reqMessage));
-		conn.send(request.data);
+		conn.send(request.data[]);
 	}
 
 	void onNewResponse(Data data)
@@ -144,19 +145,19 @@ protected:
 
 		if (inBuffer.bytes.length < expect)
 		{
-			onData(inBuffer);
+			onData(inBuffer[]);
 			conn.handleReadData = &onContinuation;
 		}
 		else
 		{
-			onData(inBuffer.bytes[0 .. expect]); // TODO: pipelining
+			onData(inBuffer.bytes[0 .. expect][]); // TODO: pipelining
 			onDone();
 		}
 
 		inBuffer.destroy();
 	}
 
-	void onData(Data[] data)
+	void onData(scope Data[] data)
 	{
 		currentResponse.data ~= data;
 	}
@@ -439,21 +440,21 @@ void httpGet(string url, void delegate(string) resultHandler, void delegate(stri
 }
 
 /// ditto
-void httpPost(string url, Data[] postData, string contentType, void delegate(Data) resultHandler, void delegate(string) errorHandler)
+void httpPost(string url, DataVec postData, string contentType, void delegate(Data) resultHandler, void delegate(string) errorHandler)
 {
 	auto request = new HttpRequest;
 	request.resource = url;
 	request.method = "POST";
 	if (contentType)
 		request.headers["Content-Type"] = contentType;
-	request.data = postData;
+	request.data = move(postData);
 	httpRequest(request, resultHandler, errorHandler);
 }
 
 /// ditto
-void httpPost(string url, Data[] postData, string contentType, void delegate(string) resultHandler, void delegate(string) errorHandler)
+void httpPost(string url, DataVec postData, string contentType, void delegate(string) resultHandler, void delegate(string) errorHandler)
 {
-	httpPost(url, postData, contentType,
+	httpPost(url, move(postData), contentType,
 		(Data data)
 		{
 			auto result = (cast(char[])data.contents).idup;
@@ -466,7 +467,7 @@ void httpPost(string url, Data[] postData, string contentType, void delegate(str
 /// ditto
 void httpPost(string url, UrlParameters vars, void delegate(string) resultHandler, void delegate(string) errorHandler)
 {
-	return httpPost(url, [Data(encodeUrlParameters(vars))], "application/x-www-form-urlencoded", resultHandler, errorHandler);
+	return httpPost(url, DataVec(Data(encodeUrlParameters(vars))), "application/x-www-form-urlencoded", resultHandler, errorHandler);
 }
 
 // https://issues.dlang.org/show_bug.cgi?id=7016

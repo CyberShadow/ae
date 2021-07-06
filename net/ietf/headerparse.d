@@ -31,7 +31,7 @@ import ae.utils.text;
  * heap.
  */
 /// ditto
-bool parseHeaders(ref Data[] data, out Headers headers)
+bool parseHeaders(ref DataVec data, out Headers headers)
 {
 	string dummy;
 	return parseHeadersImpl!false(data, dummy, headers);
@@ -39,7 +39,7 @@ bool parseHeaders(ref Data[] data, out Headers headers)
 
 /// As above, but treat the first line differently, and
 /// return it in firstLine.
-bool parseHeaders(ref Data[] data, out string firstLine, out Headers headers)
+bool parseHeaders(ref DataVec data, out string firstLine, out Headers headers)
 {
 	return parseHeadersImpl!true(data, firstLine, headers);
 }
@@ -53,7 +53,7 @@ Headers parseHeaders(string headerData)
 
 private:
 
-bool parseHeadersImpl(bool FIRST_LINE)(ref Data[] data, out string firstLine, out Headers headers)
+bool parseHeadersImpl(bool FIRST_LINE)(ref DataVec data, out string firstLine, out Headers headers)
 {
 	if (!data.length)
 		return false;
@@ -77,7 +77,8 @@ searchAgain:
 		{
 			// coagulate first two blocks
 			startFrom = data0.length > delim.length ? data0.length - (DELIM1.length-1) : 0;
-			data = [data[0] ~ data[1]] ~ data[2..$];
+			data[0] = data[0] ~ data[1];
+			data.remove(1);
 			goto searchAgain;
 		}
 		else
@@ -118,7 +119,7 @@ unittest
 {
 	void test(string message)
 	{
-		auto data = [Data(message)];
+		auto data = DataVec(Data(message));
 		Headers headers;
 		assert(parseHeaders(data, headers));
 		assert(headers["From"] == "John Smith <john@smith.net>");

@@ -15,6 +15,7 @@
 
 module ae.net.http.server;
 
+import std.algorithm.mutation : move;
 import std.conv;
 import std.datetime;
 import std.exception;
@@ -55,7 +56,7 @@ public:
 	void delegate(HttpRequest request) handleRequest; /// Callback to handle a fully received request.
 
 protected:
-	Data[] inBuffer;
+	DataVec inBuffer;
 	sizediff_t expect;
 	size_t responseSize;
 	bool requestProcessing; // user code is asynchronously processing current request
@@ -135,10 +136,10 @@ protected:
 				if (expect > inBuffer.bytes.length)
 					conn.handleReadData = &onContinuation;
 				else
-					processRequest(inBuffer.popFront(expect));
+					processRequest(inBuffer.shift(expect));
 			}
 			else
-				processRequest(null);
+				processRequest(DataVec.init);
 		}
 		catch (CaughtException e)
 		{
@@ -150,7 +151,7 @@ protected:
 				response.status = HttpStatusCode.InternalServerError;
 				response.statusMessage = HttpResponse.getStatusMessage(HttpStatusCode.InternalServerError);
 				response.headers["Content-Type"] = "text/plain";
-				response.data = [Data(e.toString())];
+				response.data = DataVec(Data(e.toString()));
 			}
 			sendResponse(response);
 		}
@@ -170,14 +171,14 @@ protected:
 		if (!requestProcessing && inBuffer.bytes.length >= expect)
 		{
 			debug (HTTP) debugLog("%s/%s", inBuffer.bytes.length, expect);
-			processRequest(inBuffer.popFront(expect));
+			processRequest(inBuffer.shift(expect));
 		}
 	}
 
-	final void processRequest(Data[] data)
+	final void processRequest(DataVec data)
 	{
 		debug (HTTP) debugLog("processRequest (%d bytes)", data.bytes.length);
-		currentRequest.data = data;
+		currentRequest.data = move(data);
 		timeoutActive = false;
 		timer.cancelIdleTimeout();
 		if (handleRequest)
@@ -253,7 +254,7 @@ public:
 			response = new HttpResponse();
 			response.status = HttpStatusCode.InternalServerError;
 			response.statusMessage = HttpResponse.getStatusMessage(HttpStatusCode.InternalServerError);
-			response.data = [Data("Internal Server Error")];
+			response.data = DataVec(Data("Internal Server Error"));
 		}
 		assert(response.status != 0);
 
@@ -270,7 +271,7 @@ public:
 
 		bool isHead = currentRequest ? currentRequest.method == "HEAD" : false;
 		if (response && response.data.length && !isHead)
-			sendData(response.data);
+			sendData(response.data[]);
 
 		responseSize = response ? response.data.bytes.length : 0;
 		debug (HTTP) debugLog("Sent response (%d bytes data)", responseSize);
@@ -327,7 +328,7 @@ public:
 	/// Send this data only.
 	/// Headers should have already been sent.
 	/// Low-level alternative to `sendResponse`.
-	final void sendData(Data[] data)
+	final void sendData(scope Data[] data)
 	{
 		conn.send(data);
 	}

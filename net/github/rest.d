@@ -189,7 +189,7 @@ struct GitHub
 		if (token)
 			request.headers["Authorization"] = "token " ~ token;
 		request.headers["Content-Type"] = "application/json";
-		request.data = [jsonData];
+		request.data = DataVec(jsonData);
 
 		auto response = net.httpRequest(request);
 		string result = cast(string)response.data.joinToHeap;

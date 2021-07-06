@@ -13,12 +13,14 @@
 
 module ae.sys.dataset;
 
+import std.algorithm.mutation : move;
 import std.range.primitives : ElementType;
 
 import ae.sys.data;
+import ae.utils.vec;
 
 /// Copy a `Data` array's contents to a specified buffer.
-void[] copyTo(R)(R data, void[] buffer)
+void[] copyTo(R)(auto ref R data, void[] buffer)
 if (is(ElementType!R == Data))
 {
 	size_t pos = 0;
@@ -32,7 +34,7 @@ if (is(ElementType!R == Data))
 }
 
 /// Join an array of Data to a single Data.
-Data joinData(R)(R data)
+Data joinData(R)(auto ref R data)
 if (is(ElementType!R == Data))
 {
 	if (data.length == 0)
@@ -56,7 +58,7 @@ unittest
 
 /// Join an array of Data to a memory block on the managed heap.
 @property
-void[] joinToHeap(R)(R data)
+void[] joinToHeap(R)(auto ref R data)
 if (is(ElementType!R == Data))
 {
 	size_t size = 0;
@@ -72,22 +74,24 @@ unittest
 	assert(cast(int[])([Data([1]), Data([2])].joinToHeap()) == [1, 2]);
 }
 
-/// Remove and return the specified number of bytes from the given `Data[]`.
-Data[] popFront(ref Data[] data, size_t amount)
+
+/// A vector of `Data` with deterministic lifetime.
+alias DataVec = Vec!Data;
+
+/// Remove and return the specified number of bytes from the given `Data` array.
+DataVec shift(ref DataVec data, size_t amount)
 {
-	auto result = data.bytes[0..amount];
-	data = data.bytes[amount..data.bytes.length];
+	auto bytes = data.bytes;
+	auto result = bytes[0..amount];
+	data = bytes[amount..bytes.length];
 	return result;
 }
 
 /// Return a type that's indexable to access individual bytes,
 /// and sliceable to get an array of `Data` over the specified
 /// byte range. No actual `Data` concatenation is done.
-@property
-DataSetBytes bytes(Data[] data)
-{
-	return DataSetBytes(data);
-}
+@property DataSetBytes bytes(Data[] data) { return DataSetBytes(data); }
+@property DataSetBytes bytes(ref DataVec data) { return DataSetBytes(data[]); } /// ditto
 
 /// ditto
 struct DataSetBytes
@@ -105,24 +109,24 @@ struct DataSetBytes
 		return (cast(ubyte[])data[index].contents)[offset];
 	} ///
 
-	Data[] opSlice()
+	DataVec opSlice()
 	{
-		return data;
+		return DataVec(data);
 	} ///
 
-	Data[] opSlice(size_t start, size_t end)
+	DataVec opSlice(size_t start, size_t end)
 	{
-		Data[] range = data;
+		auto range = DataVec(data);
 		while (range.length && range[0].length <= start)
 		{
 			start -= range[0].length;
 			end   -= range[0].length;
-			range = range[1..$];
+			range.popFront();
 		}
 		if (range.length==0)
 		{
 			assert(start==0, "Range error");
-			return null;
+			return range;
 		}
 
 		size_t endIndex = 0;
@@ -131,8 +135,7 @@ struct DataSetBytes
 			end -= range[endIndex].length;
 			endIndex++;
 		}
-		range = range[0..endIndex+1];
-		range = range.dup;
+		range.length = endIndex + 1;
 		range[$-1] = range[$-1][0..end];
 		range[0  ] = range[0  ][start..range[0].length];
 		return range;
@@ -156,12 +159,12 @@ struct DataSetBytes
 
 unittest
 {
-	Data[] ds;
+	DataVec ds;
 	string s;
 
-	ds = [
+	ds = DataVec(
 		Data("aaaaa"),
-	];
+	);
 	s = cast(string)(ds.joinToHeap);
 	assert(s == "aaaaa");
 	s = cast(string)(ds.bytes[].joinToHeap);
@@ -169,25 +172,28 @@ unittest
 	s = cast(string)(ds.bytes[1..4].joinToHeap);
 	assert(s == "aaa");
 
-	ds = [
+	ds = DataVec(
 		Data("aaaaa"),
 		Data("bbbbb"),
 		Data("ccccc"),
-	];
-	assert(ds.bytes[ 4]=='a');
-	assert(ds.bytes[ 5]=='b');
-	assert(ds.bytes[ 9]=='b');
-	assert(ds.bytes[10]=='c');
-	s = cast(string)(ds.bytes[ 3..12].joinToHeap);
+	);
+	auto dsb = ds.bytes;
+	assert(dsb.length == 15);
+	assert(dsb.length == 15);
+	assert(dsb[ 4]=='a');
+	assert(dsb[ 5]=='b');
+	assert(dsb[ 9]=='b');
+	assert(dsb[10]=='c');
+	s = cast(string)(dsb[ 3..12].joinToHeap);
 	assert(s == "aabbbbbcc");
 	s = cast(string)(ds.joinToHeap);
-	assert(s == "aaaaabbbbbccccc");
-	s = cast(string)(ds.bytes[ 0.. 6].joinToHeap);
+	assert(s == "aaaaabbbbbccccc", s);
+	s = cast(string)(dsb[ 0.. 6].joinToHeap);
 	assert(s == "aaaaab");
-	s = cast(string)(ds.bytes[ 9..15].joinToHeap);
+	s = cast(string)(dsb[ 9..15].joinToHeap);
 	assert(s == "bccccc");
-	s = cast(string)(ds.bytes[ 0.. 0].joinToHeap);
+	s = cast(string)(dsb[ 0.. 0].joinToHeap);
 	assert(s == "");
-	s = cast(string)(ds.bytes[15..15].joinToHeap);
+	s = cast(string)(dsb[15..15].joinToHeap);
 	assert(s == "");
 }

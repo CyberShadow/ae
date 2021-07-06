@@ -122,7 +122,7 @@ struct Vec(T)
 			{
 				newData = new T[newLength];
 				foreach (i; 0 .. data.length)
-					swap(data[i], newData[i]);
+					move(data[i], newData[i]);
 			}
 			data = newData;
 		}

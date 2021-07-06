@@ -41,7 +41,7 @@ private enum
 
 /// Calculate CRC32 from `Data[]`
 uint crc32(R)(R data)
-if (is(ElementType!R == Data))
+if (is(ElementType!R : const(Data)))
 {
 	CRC32 crc;
 	foreach (ref d; data)
@@ -56,7 +56,7 @@ unittest
 }
 
 /// Add a Gzip header to deflated data.
-Data[] deflate2gzip(Data[] compressed, uint dataCrc, size_t dataLength)
+DataVec deflate2gzip(scope Data[] compressed, uint dataCrc, size_t dataLength)
 {
 	ubyte[] header;
 	header.length = 10;
@@ -68,24 +68,26 @@ Data[] deflate2gzip(Data[] compressed, uint dataCrc, size_t dataLength)
 	header[9] = 3;     // TODO: set OS
 	uint[2] footer = [dataCrc, std.conv.to!uint(dataLength)];
 
-	compressed = compressed.bytes[2..compressed.bytes.length-4];
-
-	return [Data(header)] ~ compressed ~ [Data(footer)];
+	return DataVec(
+		Data(header),
+		compressed.bytes[2 .. $ - 4],
+		Data(footer),
+	);
 }
 
 /// Compress data to Gzip.
-Data[] compress(Data[] data, ZlibOptions options = ZlibOptions.init)
+DataVec compress(scope Data[] data, ZlibOptions options = ZlibOptions.init)
 {
-	return deflate2gzip(zlib.compress(data, options), crc32(data), data.bytes.length);
+	return deflate2gzip(zlib.compress(data, options)[], crc32(data), data.bytes.length);
 }
 
-Data compress(Data input) { return compress([input]).joinData(); } /// ditto
+Data compress(Data input) { return compress(input.toArray).joinData(); } /// ditto
 
-/// Strip thes Gzip header from `data`.
-Data[] gzipToRawDeflate(Data[] data)
+/// Strip the Gzip header from `data`.
+DataVec gzipToRawDeflate(scope Data[] data)
 {
-	enforce(data.bytes.length >= 10, "Gzip too short");
 	auto bytes = data.bytes;
+	enforce(bytes.length >= 10, "Gzip too short");
 	enforce(bytes[0] == 0x1F && bytes[1] == 0x8B, "Invalid Gzip signature");
 	enforce(bytes[2] == 0x08, "Unsupported Gzip compression method");
 	ubyte flg = bytes[3];
@@ -102,13 +104,13 @@ Data[] gzipToRawDeflate(Data[] data)
 }
 
 /// Uncompress Gzip-compressed data.
-Data[] uncompress(Data[] data)
+DataVec uncompress(scope Data[] data)
 {
 	auto bytes = data.bytes;
 	enforce(bytes.length >= 4, "No data to decompress");
 
 	ZlibOptions options; options.mode = ZlibMode.raw;
-	Data[] uncompressed = zlib.uncompress(gzipToRawDeflate(data), options);
+	DataVec uncompressed = zlib.uncompress(gzipToRawDeflate(data)[], options);
 
 	LittleEndian!uint size;
 	bytes[$-4 .. $].copyTo(size.toArray);
@@ -117,7 +119,7 @@ Data[] uncompress(Data[] data)
 	return uncompressed;
 }
 
-Data uncompress(Data input) { return uncompress([input]).joinData(); } /// ditto
+Data uncompress(Data input) { return uncompress(input.toArray).joinData(); } /// ditto
 
 unittest
 {
@@ -127,10 +129,10 @@ unittest
 		ubyte[] res = cast(ubyte[])uncompress(Data(def)).toHeap;
 		assert(res == src);
 
-		Data[] srcData;
+		DataVec srcData;
 		foreach (c; src)
 			srcData ~= Data([c]);
-		res = cast(ubyte[])uncompress(compress(srcData)).joinToHeap;
+		res = cast(ubyte[])uncompress(compress(srcData[])[]).joinToHeap;
 		assert(res == src);
 	}
 

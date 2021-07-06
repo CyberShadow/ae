@@ -98,27 +98,27 @@ class CurlNetwork : Network
 		foreach (name, value; request.headers)
 			http.addRequestHeader(name, value);
 
+		DataVec remainingData; // https://issues.dlang.org/show_bug.cgi?id=14261
 		if (request.data)
 		{
-			auto requestData = request.data.bytes;
-			http.contentLength = requestData.length;
-			auto remainingData = requestData;
+			remainingData = request.data.dup;
+			http.contentLength = request.data.bytes.length;
 			http.onSend =
 				(void[] buf)
 				{
-					size_t bytesToSend = min(buf.length, remainingData.length);
+					size_t bytesToSend = min(buf.length, remainingData.bytes.length);
 					if (!bytesToSend)
 						return 0;
-					auto dataToSend = remainingData[0 .. bytesToSend];
+					auto dataToSend = remainingData.bytes[0 .. bytesToSend];
 					{
 						size_t p = 0;
-						foreach (datum; dataToSend)
+						foreach (ref datum; dataToSend)
 						{
 							buf[p .. p + datum.length] = datum.contents;
 							p += datum.length;
 						}
 					}
-					remainingData = remainingData[bytesToSend .. $].bytes;
+					remainingData = remainingData.bytes[bytesToSend .. $];
 					return bytesToSend;
 				};
 			http.handle.onSeek =
@@ -127,7 +127,7 @@ class CurlNetwork : Network
 					switch (mode)
 					{
 						case CurlSeekPos.set:
-							remainingData = requestData[cast(size_t) offset .. $].bytes;
+							remainingData = request.data.bytes[cast(size_t) offset .. $];
 							return CurlSeek.ok;
 						default:
 							return CurlSeek.cantseek;

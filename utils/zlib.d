@@ -14,10 +14,12 @@
 module ae.utils.zlib;
 
 import etc.c.zlib;
+import std.algorithm.mutation : move;
 import std.conv;
 import std.exception;
 
 import ae.sys.data;
+import ae.utils.array;
 
 /// Thrown on zlib errors.
 class ZlibException : Exception
@@ -104,7 +106,7 @@ struct ZlibProcess(bool COMPRESSING)
 	}
 
 	/// Process one chunk of data.
-	void processChunk(Data chunk)
+	void processChunk(const Data chunk)
 	{
 		if (!chunk.length)
 			return;
@@ -126,7 +128,7 @@ struct ZlibProcess(bool COMPRESSING)
 	}
 
 	/// Signal end of input and flush.
-	Data[] flush()
+	DataVec flush()
 	{
 		if (zs.avail_out == 0)
 			allocChunk(adjustSize(zs.avail_in));
@@ -135,11 +137,11 @@ struct ZlibProcess(bool COMPRESSING)
 			allocChunk(zs.avail_out*2+1);
 
 		saveChunk();
-		return outputChunks;
+		return move(outputChunks);
 	}
 
 	/// Process all input.
-	static Data[] process(Data[] input, ZlibOptions options = ZlibOptions.init)
+	static DataVec process(scope const(Data)[] input, ZlibOptions options = ZlibOptions.init)
 	{
 		typeof(this) zp;
 		zp.init(options);
@@ -151,7 +153,7 @@ struct ZlibProcess(bool COMPRESSING)
 	/// Process input and return output as a single contiguous `Data`.
 	static Data process(Data input, ZlibOptions options = ZlibOptions.init)
 	{
-		return process([input], options).joinData();
+		return process(input.toArray, options).joinData();
 	}
 
 	~this()
@@ -162,7 +164,7 @@ struct ZlibProcess(bool COMPRESSING)
 private:
 	z_stream zs;
 	Data currentChunk;
-	Data[] outputChunks;
+	DataVec outputChunks;
 
 	static if (COMPRESSING)
 	{

@@ -264,7 +264,7 @@ class CachedCurlNetwork : Network
 		foreach (name, values; metadata.headers)
 			foreach (value; values)
 				response.headers.add(name, value);
-		response.data = [readData(resp.responsePath)];
+		response.data = DataVec(readData(resp.responsePath));
 		return response;
 	} ///
 }

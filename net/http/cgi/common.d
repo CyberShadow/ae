@@ -20,7 +20,7 @@ import std.exception : enforce;
 
 import ae.net.http.common : HttpRequest;
 import ae.net.ietf.headers : Headers;
-import ae.sys.data : Data;
+import ae.sys.data : Data, DataVec;
 import ae.utils.meta : getAttribute;
 
 /// Holds parsed CGI meta-variables.
@@ -64,7 +64,7 @@ struct CGIRequest
 {
 	CGIVars vars;    /// CGI meta-variables.
 	Headers headers; /// Request headers.
-	Data[] data;     /// Request data.
+	DataVec data;    /// Request data.
 
 	/// Parse from an environment block (represented as an associate array).
 	static typeof(this) fromAA(string[string] env)
@@ -128,6 +128,6 @@ class CGIHttpRequest : HttpRequest
 			port = cgi.vars.serverPort.to!ushort;
 		method = cgi.vars.requestMethod;
 		protocol = cgi.vars.serverProtocol;
-		data = cgi.data;
+		data = cgi.data.dup;
 	}
 }

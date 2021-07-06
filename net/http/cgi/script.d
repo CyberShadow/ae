@@ -25,7 +25,7 @@ import std.stdio : stdin, stdout, File;
 import ae.net.http.cgi.common;
 import ae.net.http.common;
 import ae.net.ietf.headers : Headers, normalizeHeaderName;
-import ae.sys.data : Data;
+import ae.sys.data : Data, DataVec;
 import ae.sys.file : readExactly;
 import ae.utils.text.ascii : toDec;
 
@@ -59,7 +59,7 @@ CGIRequest readCGIRequest(
 			auto data = Data(contentLength);
 			input.readExactly(cast(ubyte[])data.contents)
 				.enforce("EOF while reading content data");
-			request.data = [data];
+			request.data = DataVec(data);
 		}
 	}
 

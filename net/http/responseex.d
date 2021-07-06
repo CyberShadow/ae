@@ -14,6 +14,7 @@
 
 module ae.net.http.responseex;
 
+import std.algorithm.mutation : move;
 import std.algorithm.searching : skipOver, findSplit;
 import std.base64;
 import std.exception;
@@ -51,18 +52,18 @@ public:
 	}
 
 	/// Utility function to serve arbitrary data.
-	HttpResponseEx serveData(Data[] data, string contentType)
+	HttpResponseEx serveData(DataVec data, string contentType)
 	{
 		setStatus(HttpStatusCode.OK);
 		headers["Content-Type"] = contentType;
-		this.data = data;
+		this.data = move(data);
 		return this;
 	}
 
 	/// ditto
 	HttpResponseEx serveData(Data data, string contentType)
 	{
-		return serveData([data], contentType);
+		return serveData(DataVec(data), contentType);
 	}
 
 	/// If set, this is the name of the JSONP callback function to be
@@ -181,8 +182,8 @@ public:
 		detectMime(filename, headers);
 
 		headers["Last-Modified"] = httpTime(timeLastModified(filename));
-		//data = [mapFile(filename, MmMode.read)];
-		data = [readData(filename)];
+		//data = DataVec(mapFile(filename, MmMode.read));
+		data = DataVec(readData(filename));
 		setStatus(HttpStatusCode.OK);
 		return this;
 	}
@@ -227,7 +228,7 @@ public:
 		string[string] dictionary = pageTokens.dup;
 		dictionary["title"] = encodeEntities(title);
 		dictionary["content"] = contentHTML;
-		data = [Data(parseTemplate(pageTemplate, dictionary))];
+		data = DataVec(Data(parseTemplate(pageTemplate, dictionary)));
 		headers["Content-Type"] = "text/html; charset=utf-8";
 	}
 
