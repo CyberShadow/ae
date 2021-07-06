@@ -253,8 +253,8 @@ unittest
 	int[] todo, done;
 	chain(
 		only({ todo = [1, 2, 3]; }),
-		// eager will fail: todo.map!(n => { done ~= n; }),
-		lazyInitRange(() => todo.map!(n => { done ~= n; })),
+		// eager will fail: todo.map!(n => (){ done ~= n; }),
+		lazyInitRange(() => todo.map!(n => (){ done ~= n; })),
 	).each!(dg => dg());
 	assert(done == [1, 2, 3]);
 }
