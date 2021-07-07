@@ -814,10 +814,8 @@ version (unittest)
 
 @safe pure unittest
 {
-    // Fails only on Travis CI (not reproducible locally even with Travis CI docker image)
-    if (haveEnvVar("TRAVIS")) return;
-    // Same problem with BuildKite
-	if (haveEnvVar("BUILDKITE_AGENT_NAME")) return;
+    // Fails on some CI services (not reproducible locally even with Travis CI docker image)
+    if (haveEnvVar("TRAVIS") || haveEnvVar("GITHUB_ACTIONS") || haveEnvVar("BUILDKITE_AGENT_NAME")) return;
 
     import std.exception;
     import std.conv : ConvException;
