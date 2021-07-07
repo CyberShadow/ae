@@ -1,8 +1,0 @@
-language: d
-d: dmd-2.082.1
-os:
-  - linux
-  - osx
-script:
-  - dub test
-  - dub test ae:sys-net-test

@@ -1,4 +1,4 @@
-﻿[![Travis](https://travis-ci.org/CyberShadow/ae.svg?branch=master)](https://travis-ci.org/CyberShadow/ae) [![AppVeyor](https://ci.appveyor.com/api/projects/status/5stp93xj578fdwwc?svg=true)](https://ci.appveyor.com/project/CyberShadow/ae)
+﻿[![test](https://github.com/CyberShadow/ae/actions/workflows/test.yml/badge.svg)](https://github.com/CyberShadow/ae/actions/workflows/test.yml)
 
 About this library
 ==================
