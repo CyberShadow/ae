@@ -237,10 +237,13 @@ unittest
 	assert(cachedData == "Two");
 	auto mtime = FN.timeLastModified();
 
-	Thread.sleep(filesystemTimestampGranularity);
-	std.file.write(FN, "Three");
-	FN.setTimes(mtime, mtime);
-	assert(cachedData == "Two");
+	version (OSX) {} else // setTimes does not work on macOS 10.15 ?
+	{
+		Thread.sleep(filesystemTimestampGranularity);
+		std.file.write(FN, "Three");
+		FN.setTimes(mtime, mtime);
+		assert(cachedData == "Two");
+	}
 }
 
 // https://issues.dlang.org/show_bug.cgi?id=7016
