@@ -80,7 +80,8 @@ static if (!haveObjectUpdateWithVoidUpdate)
 			|| hasElaborateDestructor!V;
 		static if (haveObjectUpdate && !valueIsExpensiveToCopy)
 		{
-			.object.update(aa, key, create,
+			.object.update(aa, key,
+				delegate V() { return create(); },
 				(ref V v) { update(v); return v; });
 		}
 		else
