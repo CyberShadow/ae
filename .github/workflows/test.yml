@@ -12,10 +12,10 @@ jobs:
         - os: ubuntu-20.04
           dc: dmd-2.082.1
           arch: x86_64
-        # also test x86 (but only on Windows)
+        # also test 32-bit (but only on Windows)
         - os: windows-2019
           dc: dmd-2.097.0
-          arch: x86
+          arch: x86_mscoff # not x86 to avoid OPTLINK deadlock bugs
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
