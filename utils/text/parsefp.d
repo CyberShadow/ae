@@ -576,6 +576,8 @@ if (is(Target == string) &&
 
 @safe unittest
 {
+    if (inCI()) return;
+
     import std.exception;
     import std.math : isNaN, fabs;
     import std.meta : AliasSeq;
@@ -806,16 +808,17 @@ if (is(Target == string) &&
     x1 = *cast(longdouble *)&ld1;
 }
 
+// Fails on some CI services (not reproducible locally even with Travis CI docker image)
 version (unittest)
 {
     private @property bool haveEnvVarImpl(string s) { import std.process; return !!environment.get(s); }
     private @property bool haveEnvVar(string s) pure @trusted nothrow @nogc { return (cast(bool function(string) pure nothrow @nogc)&haveEnvVarImpl)(s); }
+    private bool inCI() pure @safe nothrow @nogc { return (haveEnvVar("TRAVIS") || haveEnvVar("GITHUB_ACTIONS") || haveEnvVar("BUILDKITE_AGENT_NAME")); }
 }
 
 @safe pure unittest
 {
-    // Fails on some CI services (not reproducible locally even with Travis CI docker image)
-    if (haveEnvVar("TRAVIS") || haveEnvVar("GITHUB_ACTIONS") || haveEnvVar("BUILDKITE_AGENT_NAME")) return;
+    if (inCI()) return;
 
     import std.exception;
     import std.conv : ConvException;
