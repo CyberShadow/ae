@@ -99,8 +99,8 @@ mixin template SSLUseLib()
 
 // Patch up incomplete Deimos bindings.
 
-static if (isOpenSSL11)
 private
+static if (isOpenSSL11)
 {
 	alias SSLv23_client_method = TLSv1_2_client_method;
 	alias SSLv23_server_method = TLSv1_2_server_method;
@@ -122,6 +122,13 @@ private
 	extern(C) BIGNUM *BN_get_rfc3526_prime_8192(BIGNUM *bn) nothrow;
 	alias get_rfc3526_prime_8192 = BN_get_rfc3526_prime_8192;
 	extern(C) int SSL_in_init(const SSL *s) nothrow;
+}
+else
+{
+	extern(C) void X509_VERIFY_PARAM_set_hostflags(X509_VERIFY_PARAM *param, uint flags) nothrow;
+	extern(C) X509_VERIFY_PARAM *SSL_get0_param(SSL *ssl) nothrow;
+	enum X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS = 0x4;
+	extern(C) int X509_VERIFY_PARAM_set1_host(X509_VERIFY_PARAM *param, const char *name, size_t namelen) nothrow;
 }
 
 // ***************************************************************************
@@ -439,8 +446,18 @@ protected:
 
 		if (context.verify && hostname && context.kind == OpenSSLContext.Kind.client)
 		{
-			SSL_set_hostflags(sslHandle, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
-			SSL_set1_host(sslHandle, hostname).sslEnforce("SSL_set1_host");
+			static if (!isOpenSSL11)
+			{
+				import core.stdc.string : strlen;
+				X509_VERIFY_PARAM* param = SSL_get0_param(sslHandle);
+				X509_VERIFY_PARAM_set_hostflags(param, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+				X509_VERIFY_PARAM_set1_host(param, hostname, strlen(hostname)).sslEnforce("X509_VERIFY_PARAM_set1_host");
+			}
+			else
+			{
+				SSL_set_hostflags(sslHandle, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+				SSL_set1_host(sslHandle, hostname).sslEnforce("SSL_set1_host");
+			}
 		}
 	}
 
