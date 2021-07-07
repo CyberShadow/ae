@@ -12,10 +12,9 @@ jobs:
         - os: windows-2019
           dc: dmd-2.082.1
           arch: x86
-        # macos-10.15 needs DMD 2.087.1 or later:
-        # https://github.com/dlang/druntime/commit/d4ff1c448d78dca14775571033fc7e583f904aa0
+        # 2.082.1 doesn't work in macos-10.15 needs DMD 2.087.1 or later:.
         - os: macos-10.15
-          dc: dmd-2.088.0
+          dc: dmd-2.097.0
           arch: x86_64
     runs-on: ${{ matrix.os }}
     steps:
