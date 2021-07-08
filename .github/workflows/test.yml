@@ -25,4 +25,4 @@ jobs:
           compiler: ${{ matrix.dc }}
       - run: dub test --arch=${{ matrix.arch }}
       - if: ${{ matrix.os != 'windows-2019' }} # https://github.com/dlang-community/setup-dlang/issues/47
-        run: dub test --arch=${{ matrix.arch }} ae:sys-net-test
+        run: dub test --arch=${{ matrix.arch }} :sys-net-test
