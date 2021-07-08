@@ -710,7 +710,7 @@ public:
 	static if (ordered)
 	{
 		/// Returns index of key `k`.
-		size_t indexOf()(auto ref const K k)
+		sizediff_t indexOf()(auto ref const K k)
 		{
 			auto p = k in lookup;
 			return p ? (*p)[0] : -1;
