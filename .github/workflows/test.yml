@@ -30,3 +30,12 @@ jobs:
 
       - if: ${{ matrix.os != 'windows-2019' }} # https://github.com/dlang-community/setup-dlang/issues/47
         run: dub test --arch=${{ matrix.arch }} :sys-net-test
+
+      - if: ${{ matrix.os == 'ubuntu-20.04' }}
+        run: dub test --arch=${{ matrix.arch }} :sqlite
+
+      - if: ${{ matrix.os == 'ubuntu-20.04' && matrix.dc == 'dmd-2.097.0' }} # old Dub versions can't fetch packages
+        run: dub test --arch=${{ matrix.arch }} :libpng
+
+      - if: ${{ matrix.dc == 'dmd-2.097.0' }}
+        run: dub test --arch=${{ matrix.arch }} :windows
