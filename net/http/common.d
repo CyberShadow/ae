@@ -579,9 +579,10 @@ public:
 				enforce(ranges.length == 2, "Bad range request");
 				ranges[1]++;
 				auto datum = this.data.bytes;
+				auto datumLength = datum.length;
 				if (ranges[1] == size_t.min) // was not specified (size_t.max overflowed into 0)
-					ranges[1] = datum.length;
-				if (ranges[0] >= datum.length || ranges[0] >= ranges[1] || ranges[1] > datum.length)
+					ranges[1] = datumLength;
+				if (ranges[0] >= datumLength || ranges[0] >= ranges[1] || ranges[1] > datumLength)
 				{
 					//writeError(HttpStatusCode.RequestedRangeNotSatisfiable);
 					setStatus(HttpStatusCode.RequestedRangeNotSatisfiable);
@@ -592,7 +593,7 @@ public:
 				{
 					setStatus(HttpStatusCode.PartialContent);
 					this.data = datum[ranges[0]..ranges[1]];
-					headers["Content-Range"] = "bytes %d-%d/%d".format(ranges[0], ranges[0] + this.data.bytes.length - 1, datum.length);
+					headers["Content-Range"] = "bytes %d-%d/%d".format(ranges[0], ranges[0] + this.data.bytes.length - 1, datumLength);
 				}
 			}
 		}
