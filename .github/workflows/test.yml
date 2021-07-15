@@ -22,14 +22,13 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Install D compiler
-        uses: dlang-community/setup-dlang@v1
+        uses: dlang-community/setup-dlang@1ccbc70a0eff7f264857b53c562aa45fd7f1e479
         with:
           compiler: ${{ matrix.dc }}
 
       - run: dub test --arch=${{ matrix.arch }}
 
-      - if: ${{ matrix.os != 'windows-2019' }} # https://github.com/dlang-community/setup-dlang/issues/47
-        run: dub test --arch=${{ matrix.arch }} :sys-net-test
+      - run: dub test --arch=${{ matrix.arch }} :sys-net-test
 
       - if: ${{ matrix.os == 'ubuntu-20.04' }}
         run: dub test --arch=${{ matrix.arch }} :sqlite
