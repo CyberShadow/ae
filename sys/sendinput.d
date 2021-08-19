@@ -25,6 +25,7 @@ import ae.utils.graphics.color;
 import ae.utils.graphics.image;
 import ae.utils.geometry : Rect;
 import ae.utils.math;
+import ae.utils.regex : escapeRE;
 
 version (linux)
 {
@@ -168,7 +169,7 @@ version (linux)
 	Window findWindowByName(string name)
 	{
 		// TODO haveX11
-		auto result = execute(["xdotool", "search", "--name", name]);
+		auto result = execute(["xdotool", "search", "--name", "^" ~ escapeRE(name) ~ "$"]);
 		enforce(result.status == 0, "xdotool failed");
 		return result.output.chomp.to!Window;
 	}
