@@ -620,6 +620,196 @@ Options:
 
 // ***************************************************************************
 
+private string escapeRoff(string s)
+{
+	string result;
+	foreach (c; s)
+	{
+		if (c == '\\')
+			result ~= '\\';
+		result ~= c;
+	}
+	return result;
+}
+
+/// Constructs a roff man page based on the `funopt` usage.
+string generateManPage(alias FUN)(
+	/// Program name, as it should appear in the header, synopsis etc.
+	/// If not specified, the identifier name of FUN is used.
+	string programName = null,
+	/// Long description for the DESCRIPTION section.
+	/// If not specified, we either use the function string UDA, or omit the section entirely.
+	string longDescription = null,
+	/// Short description for the NAME section.
+	/// If not specified, generated from the function string UDA.
+	string shortDescription = null,
+	/// Additional sections (BUGS, AUTHORS) to add at the end.
+	string footer = null,
+	/// Manual section
+	int section = 1,
+)
+{
+	if (!programName)
+		programName = __traits(identifier, FUN);
+
+	if (!longDescription)
+		static if (hasAttribute!(string, FUN))
+			longDescription = escapeRoff(getAttribute!(string, FUN));
+
+	if (!shortDescription && longDescription)
+	{
+		shortDescription = (longDescription ~ " ")
+			.findSplit(". ")[0]
+			.I!(s => toLower(s[0 .. 1]) ~ s[1 .. $]);
+		shortDescription.skipOver(programName ~ " ");
+	}
+
+	// Bold the program name at the start of the description
+	if (longDescription.skipOver(programName ~ " "))
+		longDescription = ".B " ~ programName ~ "\n" ~ longDescription;
+
+	alias ParameterTypeTuple!FUN Params;
+	enum names = [optionNames!FUN];
+	alias defaults = ParameterDefaultValueTuple!FUN;
+
+	string result;
+	result ~= ".TH %s %d\n".format(programName.toUpper, section);
+	result ~= ".SH NAME\n";
+	if (shortDescription)
+		result ~= "%s \\- %s\n".format(programName, shortDescription);
+	else
+		result ~= "%s\n".format(programName);
+	result ~= ".SH SYNOPSIS\n";
+	result ~= "\\fB%s\\fP".format(programName);
+
+	enum inSynopsis(Param) = isParameter!Param || !optionHasDescription!Param;
+	enum haveOmittedOptions = !allSatisfy!(inSynopsis, Params);
+	static if (haveOmittedOptions)
+	{
+		enum haveRequiredOptions = /*function bool*/(){
+			bool result = false;
+			foreach (i, Param; Params)
+				static if (!inSynopsis!Param && Param.type == OptionType.option && is(defaults[i] == void))
+					result = true;
+			return result;
+		}();
+		static if (haveRequiredOptions)
+			result ~= " \\fIOPTION\\fP...";
+		else
+			result ~= " [\\fIOPTION\\fP]...";
+	}
+
+	string getSwitchText(int i)()
+	{
+		alias Param = Params[i];
+		static if (isParameter!Param)
+			return "\\fI" ~ names[i].identifierToCommandLineParam() ~ "\\fP";
+		else
+		{
+			string switchText = "\\fB--" ~ names[i].identifierToCommandLineKeyword() ~ "\\fP";
+			static if (is(Param == _OptionImpl!Args, Args...))
+				static if (Param.type == OptionType.option)
+					switchText ~= (optionPlaceholder!Param.canFind('=') ? ' ' : '=') ~ "\\fI" ~ optionPlaceholder!Param ~ "\\fP";
+			return switchText;
+		}
+	}
+
+	string optionalEnd;
+	void flushOptional() { result ~= optionalEnd; optionalEnd = null; }
+	foreach (i, Param; Params)
+		static if (!isHiddenOption!Param && inSynopsis!Param)
+		{
+			static if (isParameter!Param)
+			{
+				result ~= " ";
+				static if (!is(defaults[i] == void))
+				{
+					result ~= "[";
+					optionalEnd ~= "]";
+				}
+				result ~= "\\fI" ~ names[i].identifierToCommandLineParam() ~ "\\fP";
+			}
+			else
+			{
+				flushOptional();
+				result ~= " [" ~ getSwitchText!i() ~ "]";
+			}
+			static if (isOptionArray!Param)
+				result ~= "...";
+		}
+	flushOptional();
+	result ~= "\n";
+
+	if (longDescription)
+	{
+		result ~= ".SH DESCRIPTION\n";
+		result ~= longDescription;
+		result ~= "\n";
+	}
+
+	enum haveDescriptions = anySatisfy!(optionHasDescription, Params);
+	static if (haveDescriptions)
+	{
+		result ~= ".SH OPTIONS\n\n";
+
+		foreach (i, Param; Params)
+			static if (optionHasDescription!Param)
+			{
+				result ~= ".TP\n";
+				auto c = optionShorthand!Param;
+				if (c)
+					result ~= "\\fB-%s\\fP, ".format(c);
+				result ~= getSwitchText!i() ~ "\n" ~ optionDescription!Param.escapeRoff ~ "\n\n";
+			}
+	}
+
+	result ~= footer;
+
+	return result;
+}
+
+unittest
+{
+	@(`Frobnicates whatsits.`)
+	void f1(
+		Switch!("Enable verbose logging", 'v') verbose,
+		Option!(int, "Number of tries") tries,
+		Option!(int, "Seconds to\nwait each try", "SECS", 0, "timeout") t,
+		in string filename,
+		string output = "default",
+		string[] extraFiles = null
+	)
+	{}
+
+	auto man = generateManPage!f1();
+	assert(man ==
+`.TH F1 1
+.SH NAME
+f1 \- frobnicates whatsits
+.SH SYNOPSIS
+\fBf1\fP \fIOPTION\fP... \fIFILENAME\fP [\fIOUTPUT\fP [\fIEXTRA-FILES\fP...]]
+.SH DESCRIPTION
+Frobnicates whatsits.
+.SH OPTIONS
+
+.TP
+\fB-v\fP, \fB--verbose\fP
+Enable verbose logging
+
+.TP
+\fB--tries\fP=\fIN\fP
+Number of tries
+
+.TP
+\fB--timeout\fP=\fISECS\fP
+Seconds to
+wait each try
+
+`, man);
+}
+
+// ***************************************************************************
+
 /// Dispatch the command line to a type's static methods, according to the
 /// first parameter on the given command line (the "action").
 /// String UDAs are used as usage documentation for generating --help output
