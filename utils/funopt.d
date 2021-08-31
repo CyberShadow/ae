@@ -658,8 +658,10 @@ string generateManPage(alias FUN)(
 
 	if (!shortDescription && longDescription)
 	{
-		shortDescription = (longDescription ~ " ")
-			.findSplit(". ")[0]
+		auto parts = (longDescription ~ " ").findSplit(". ");
+		if (!parts[2].length)
+			longDescription = null; // Move into shortDescription
+		shortDescription = parts[0]
 			.I!(s => toLower(s[0 .. 1]) ~ s[1 .. $]);
 		shortDescription.skipOver(programName ~ " ");
 	}
@@ -788,8 +790,6 @@ unittest
 f1 \- frobnicates whatsits
 .SH SYNOPSIS
 \fBf1\fP \fIOPTION\fP... \fIFILENAME\fP [\fIOUTPUT\fP [\fIEXTRA-FILES\fP...]]
-.SH DESCRIPTION
-Frobnicates whatsits.
 .SH OPTIONS
 
 .TP
