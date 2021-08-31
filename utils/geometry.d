@@ -43,6 +43,16 @@ struct Point(T)
 	T x, y;
 	void translate(T dx, T dy) { x += dx; y += dy; } ///
 	Point!T getCenter() { return this; } ///
+
+	Point!T opBinary(string op)(Point!T other) const
+	{
+		Point!T result = this;
+		mixin(`result.x ` ~ op ~ `= other.x;`);
+		mixin(`result.y ` ~ op ~ `= other.y;`);
+		return result;
+	} ///
+	auto dist2() const { return .dist2(x, y); } /// Square of Cartesian distance from origin.
+	auto dist() const { return .dist(x, y); } /// Cartesian distance from origin.
 }
 auto point(T...)(T args) { return Point!(CommonType!T)(args); } /// ditto
 
