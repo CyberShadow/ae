@@ -767,7 +767,10 @@ string generateManPage(alias FUN)(
 				auto c = optionShorthand!Param;
 				if (c)
 					result ~= "\\fB-%s\\fP, ".format(c);
-				result ~= getSwitchText!i() ~ "\n" ~ optionDescription!Param.escapeRoff ~ "\n\n";
+				auto description = optionDescription!Param
+					.replace("\n", "\n\n")
+					.escapeRoff;
+				result ~= getSwitchText!i() ~ "\n" ~ description ~ "\n\n";
 			}
 	}
 
@@ -782,7 +785,7 @@ unittest
 	void f1(
 		Switch!("Enable verbose logging", 'v') verbose,
 		Option!(int, "Number of tries") tries,
-		Option!(int, "Seconds to\nwait each try", "SECS", 0, "timeout") t,
+		Option!(int, "Seconds to wait each try", "SECS", 0, "timeout") t,
 		in string filename,
 		string output = "default",
 		string[] extraFiles = null
@@ -808,8 +811,7 @@ Number of tries
 
 .TP
 \fB--timeout\fP=\fISECS\fP
-Seconds to
-wait each try
+Seconds to wait each try
 
 `, man);
 }
