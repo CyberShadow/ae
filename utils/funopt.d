@@ -391,7 +391,19 @@ string getUsageFormatString(alias FUN)()
 	enum inSynopsis(Param) = isParameter!Param || !optionHasDescription!Param;
 	enum haveOmittedOptions = !allSatisfy!(inSynopsis, Params);
 	static if (haveOmittedOptions)
-		result ~= " [OPTION]...";
+	{
+		enum haveRequiredOptions = (){
+			bool result = false;
+			foreach (i, Param; Params)
+				static if (!inSynopsis!Param && Param.type == OptionType.option && is(defaults[i] == void))
+					result = true;
+			return result;
+		}();
+		static if (haveRequiredOptions)
+			result ~= " OPTION...";
+		else
+			result ~= " [OPTION]...";
+	}
 
 	string getSwitchText(int i)()
 	{
@@ -504,7 +516,7 @@ unittest
 
 	auto usage = getUsage!f1("program");
 	assert(usage ==
-"Usage: program [OPTION]... FILENAME [OUTPUT [EXTRA-FILES...]]
+"Usage: program OPTION... FILENAME [OUTPUT [EXTRA-FILES...]]
 
 Options:
   -v, --verbose       Enable verbose logging
