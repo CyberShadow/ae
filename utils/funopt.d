@@ -652,14 +652,20 @@ string generateManPage(alias FUN)(
 	if (!programName)
 		programName = __traits(identifier, FUN);
 
-	if (!longDescription)
-		static if (hasAttribute!(string, FUN))
-			longDescription = escapeRoff(getAttribute!(string, FUN));
+	string funDescription;
+	static if (hasAttribute!(string, FUN))
+		funDescription = getAttribute!(string, FUN).escapeRoff;
 
-	if (!shortDescription && longDescription)
+	string otherDescription;
+	if (funDescription)
+		otherDescription = funDescription;
+	else
+		otherDescription = longDescription;
+
+	if (!shortDescription && otherDescription)
 	{
-		auto parts = (longDescription ~ " ").findSplit(". ");
-		if (!parts[2].length)
+		auto parts = (otherDescription ~ " ").findSplit(". ");
+		if (!parts[2].length && otherDescription is longDescription)
 			longDescription = null; // Move into shortDescription
 		shortDescription = parts[0]
 			.I!(s => toLower(s[0 .. 1]) ~ s[1 .. $]);
