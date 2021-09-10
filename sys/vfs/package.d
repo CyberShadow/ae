@@ -55,6 +55,9 @@ void rmdirRecurse(string path) { return getVFS(path).rmdirRecurse(path); }
 /// Get MD5 digest of file at location.
 ubyte[16] mdFile(string path) { return getVFS(path).mdFile(path); }
 
+/// Create symbolic link.
+void symlink(string from, string to) { return getVFS(to).symlink(from, to); }
+
 /// std.file shims
 S readText(S = string)(string name)
 {
@@ -154,6 +157,9 @@ class VFS
 
 	/// Remove a directory and all its contents recursively.
 	void rmdirRecurse(string path) { assert(false, "Not implemented"); }
+
+	/// Create a symbolic link.
+	void symlink(string from, string to) { assert(false, "Not implemented"); }
 }
 
 /// The VFS registry, a mapping from "protocol" (part before "://") to VFS implementation.
@@ -229,6 +235,14 @@ class FS : VFS
 	override void rename(string from, string to) { std.file.rename(from, to); }
 	override void mkdirRecurse(string path) { std.file.mkdirRecurse(path); }
 	override ubyte[16] mdFile(string path) { return ae.sys.file.mdFile(path); }
+
+	override void symlink(string from, string to)
+	{
+		version (Windows)
+			ae.sys.file.symlink(from, to);
+		else
+			std.file.symlink(from, to);
+	}
 
 	override string[] listDir(string path)
 	{
