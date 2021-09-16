@@ -13,6 +13,7 @@
 
 module ae.utils.appender;
 
+import std.algorithm.comparison : max;
 import std.experimental.allocator : makeArray, stateSize;
 import std.experimental.allocator.common : stateSize;
 import std.experimental.allocator.gc_allocator : GCAllocator;
@@ -21,8 +22,6 @@ import std.traits;
 /// Optimized appender. Not copyable.
 struct FastAppender(I, Allocator = GCAllocator)
 {
-	static assert(T.sizeof == 1, "TODO");
-
 private:
 	enum PAGE_SIZE = 4096;
 	enum MIN_SIZE  = PAGE_SIZE / 2 + 1; // smallest size that can expand
@@ -44,18 +43,18 @@ private:
 			static if (is(Allocator == GCAllocator))
 			{
 				// std.allocator does not have opportunistic extend
-				import core.memory;
-				extended = GC.extend(start, newSize, newSize * 2);
+				import core.memory : GC;
+				extended = GC.extend(start, newSize * T.sizeof, newSize * 2 * T.sizeof) / T.sizeof;
 			}
 			else
 			{
-				static if (is(hasMember!(Allocator, "expand")))
+				static if (hasMember!(Allocator, "expand"))
 				{
-					auto buf = start[0..capacity];
-					if (allocator.expand(buf, newSize))
+					void[] buf = start[0..capacity];
+					if (allocator.expand(buf, newSize * T.sizeof))
 					{
 						assert(buf.ptr == start);
-						extended = buf.length;
+						extended = buf.length / T.sizeof;
 					}
 				}
 			}
@@ -66,7 +65,8 @@ private:
 			}
 		}
 
-		auto newCapacity = newSize < MIN_SIZE ? MIN_SIZE : newSize * 2;
+		enum minSize = max(1, MIN_SIZE / T.sizeof);
+		auto newCapacity = newSize < minSize ? minSize : newSize * 2;
 
 		version(none)
 		{
@@ -298,16 +298,18 @@ unittest
 	import std.experimental.allocator.mallocator;
 
 	foreach (Allocator; AliasSeq!(GCAllocator, Mallocator))
-	{
-		FastAppender!(char, Allocator) a;
-		assert(a.get == "");
-		a.put('a', "bcd", 'e');
-		assert(a.get == "abcde");
-		a.clear();
-		assert(a.get == "");
-		a.allocate(3)[] = 'x';
-		assert(a.get == "xxx");
-	}
+		foreach (C; AliasSeq!(char, wchar, dchar))
+		{
+			FastAppender!(C, Allocator) a;
+			assert(a.get == "");
+			immutable C[] s = "bcd";
+			a.put(C('a'), s, C('e'));
+			assert(a.get == "abcde");
+			a.clear();
+			assert(a.get == "");
+			a.allocate(3)[] = 'x';
+			assert(a.get == "xxx");
+		}
 }
 
 /// UFCS shim for classic output ranges, which only take a single-argument put.
