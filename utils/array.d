@@ -664,8 +664,6 @@ T[] skipUntil(T, D)(ref T[] source, D delim, bool orUntilEnd = false)
 	else
 		enum delimLength = 1;
 
-	static import std.string;
-
 	auto i = _indexOf(source, delim);
 	if (i < 0)
 	{
@@ -681,6 +679,52 @@ T[] skipUntil(T, D)(ref T[] source, D delim, bool orUntilEnd = false)
 	auto result = source[0..i];
 	source = source[i+delimLength..$];
 	return result;
+}
+
+/// Like `std.algorithm.skipOver`, but stops when
+/// `pred(suffix)` or `pred(suffix[0])` returns false.
+template skipWhile(alias pred)
+{
+	T[] skipWhile(T)(ref T[] source, bool orUntilEnd = false)
+	{
+		enum bool isSlice = is(typeof(pred(source[0..1])));
+		enum bool isElem  = is(typeof(pred(source[0]   )));
+		static assert(isSlice || isElem, "Can't skip " ~ T.stringof ~ " until " ~ pred.stringof);
+		static assert(isSlice != isElem, "Ambiguous types for skipWhile: " ~ T.stringof ~ " and " ~ pred.stringof);
+
+		foreach (i; 0 .. source.length)
+		{
+			bool match;
+			static if (isSlice)
+				match = pred(source[i .. $]);
+			else
+				match = pred(source[i]);
+			if (!match)
+			{
+				auto result = source[0..i];
+				source = source[i .. $];
+				return result;
+			}
+		}
+
+		if (orUntilEnd)
+		{
+			auto result = source;
+			source = null;
+			return result;
+		}
+		else
+			return null;
+	}
+}
+
+unittest
+{
+	import std.ascii : isDigit;
+
+	string s = "01234abcde";
+	auto p = s.skipWhile!isDigit;
+	assert(p == "01234" && s == "abcde", p ~ "|" ~ s);
 }
 
 deprecated("Use skipUntil instead")
