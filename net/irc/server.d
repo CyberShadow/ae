@@ -88,7 +88,7 @@ class IrcServer
 			return result;
 		} ///
 
-		string realHostname() { return remoteAddress.toAddrString; } ///
+		string realHostname() { return remoteAddress ? remoteAddress.toAddrString : "null"; } ///
 		string publicHostname() { return server.addressMask ? server.addressMask : realHostname; } ///
 		bool realHostnameVisibleTo(Client viewer)
 		{
