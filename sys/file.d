@@ -185,8 +185,11 @@ version (Windows) static import ae.sys.windows.misc;
 		   e.recurse();
    })(tmpDir);
    ---
+
+   If called with `Yes.includeRoot`, then the callback is
+   first called with the argument, even if it's not a directory.
 */
-template listDir(alias handler)
+template listDir(alias handler, Flag!q{includeRoot} includeRoot = No.includeRoot)
 {
 private: // (This is an eponymous template, so this is to aid documentation generators.)
 	/*non-static*/ struct Context
@@ -204,7 +207,8 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 	{
 		version (Posix)
 		{
-			dirent* ent; /// POSIX `dirent`.
+			private const(char)* name; /// Name relative to `dirFD`.
+			dirent* ent; /// POSIX `dirent`. May be null with `Yes.includeRoot`.
 
 			private stat_t[enumLength!StatTarget] statBuf;
 
@@ -228,7 +232,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 		// Cleared (memset to 0) for every directory entry.
 		struct Data
 		{
-			FSChar[] baseNameFS;
+			const(FSChar)[] baseNameFS;
 			string baseName;
 			string fullName;
 			size_t pathTailPos;
@@ -254,7 +258,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 				int flags = O_RDONLY;
 				static if (is(typeof(O_DIRECTORY)))
 					flags |= O_DIRECTORY;
-				auto fd = openat(dirFD, this.ent.d_name.ptr, flags);
+				auto fd = openat(dirFD, this.name, flags);
 				errnoEnforce(fd >= 0,
 					"Failed to open %s as subdirectory of directory %s"
 					.format(this.baseNameFS, this.parent.fullName));
@@ -287,7 +291,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 		/// character type.  Fastest.
 		const(FSChar)* baseNameFSPtr() pure nothrow @nogc
 		{
-			version (Posix) return ent.d_name.ptr;
+			version (Posix) return name;
 			version (Windows) return findData.cFileName.ptr;
 		}
 
@@ -307,7 +311,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 		{
 			if (!data.baseNameFS)
 			{
-				version (Posix) data.baseNameFS = fromStringz(ent.d_name);
+				version (Posix) data.baseNameFS = .fromStringz(name);
 				version (Windows) data.baseNameFS = fromStringz(findData.cFileName);
 			}
 			return data.baseNameFS;
@@ -382,7 +386,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 					{
 						// Yes, if we know this isn't a link from the directory entry.
 						static if (__traits(compiles, ent.d_type))
-							if (ent.d_type != DT_UNKNOWN && ent.d_type != DT_LNK)
+							if (ent && ent.d_type != DT_UNKNOWN && ent.d_type != DT_LNK)
 								goto reuse;
 						// Yes, if we already found out this isn't a link from an lstat call.
 						static if (target == StatTarget.linkTarget)
@@ -400,7 +404,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 					else
 					{
 						int flags = target == StatTarget.dirEntry ? AT_SYMLINK_NOFOLLOW : 0;
-						auto res = fstatat(dirFD, ent.d_name.ptr, &statBuf[target], flags);
+						auto res = fstatat(dirFD, name, &statBuf[target], flags);
 						if (res)
 						{
 							auto error = errno;
@@ -436,7 +440,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 			private bool deIsType(typeof(DT_REG) dType, typeof(S_IFREG) statType)
 			{
 				static if (__traits(compiles, ent.d_type))
-					if (ent.d_type != DT_UNKNOWN)
+					if (ent && ent.d_type != DT_UNKNOWN)
 						return ent.d_type == dType;
 
 				return (needStat!(StatTarget.dirEntry)().st_mode & S_IFMT) == statType;
@@ -459,7 +463,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 			private bool ltIsType(typeof(DT_REG) dType, typeof(S_IFREG) statType)
 			{
 				static if (__traits(compiles, ent.d_type))
-					if (ent.d_type != DT_UNKNOWN && ent.d_type != DT_LNK)
+					if (ent && ent.d_type != DT_UNKNOWN && ent.d_type != DT_LNK)
 						return ent.d_type == dType;
 
 				if (tryStat!(StatTarget.linkTarget)())
@@ -539,9 +543,9 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 			@property ulong fileID()
 			{
 				static if (__traits(compiles, ent.d_ino))
-					return ent.d_ino;
-				else
-					return needStat!(StatTarget.linkTarget)().st_ino;
+					if (ent)
+						return ent.d_ino;
+				return needStat!(StatTarget.linkTarget)().st_ino;
 			}
 		}
 
@@ -638,6 +642,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 					continue;
 
 				entry.ent = ent;
+				entry.name = ent.d_name.ptr;
 				entry.data = Entry.Data.init;
 				entry.context.callHandler(&entry);
 				if (entry.context.timeToStop)
@@ -773,27 +778,54 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 				free(context.pathBuf.ptr);
 		}
 
-		Entry rootEntry = void;
+		Entry rootEntry;
 		rootEntry.context = &context;
 
 		auto endPos = appendString(context.pathBuf, 0, dirPath);
 		rootEntry.data.pathTailPos = endPos - (endPos > 0 && context.pathBuf[endPos - 1].isDirSeparator() ? 1 : 0);
 		assert(rootEntry.data.pathTailPos > 0);
 
-		version (Posix)
+		static if (includeRoot)
 		{
-			auto dir = opendir(tempCString(dirPath));
-			checkDir(dir, dirPath);
+			version (Posix)
+			{
+				version (OSX)
+					enum AT_FDCWD = -2;
+				else
+					import core.sys.posix.fcntl : AT_FDCWD;
 
-			scan(dir, dirfd(dir), &rootEntry);
+				rootEntry.dirFD = AT_FDCWD;
+				rootEntry.ent = null;
+				auto name = tempCString(dirPath);
+				rootEntry.name = name;
+
+				context.callHandler(&rootEntry);
+			}
+			else
+			version (Windows)
+			{
+				while (rootEntry.data.pathTailPos && !context.pathBuf[rootEntry.data.pathTailPos].isDirSeparator())
+					rootEntry.data.pathTailPos--;
+				scan(&rootEntry);
+			}
 		}
 		else
-		version (Windows)
 		{
-			const WCHAR[] tailString = endPos == 0 || context.pathBuf[endPos - 1].isDirSeparator() ? "*.*\0"w : "\\*.*\0"w;
-			appendString(context.pathBuf, endPos, tailString);
+			version (Posix)
+			{
+				auto dir = opendir(tempCString(dirPath));
+				checkDir(dir, dirPath);
 
-			scan(&rootEntry);
+				scan(dir, dirfd(dir), &rootEntry);
+			}
+			else
+			version (Windows)
+			{
+				const WCHAR[] tailString = endPos == 0 || context.pathBuf[endPos - 1].isDirSeparator() ? "*.*\0"w : "\\*.*\0"w;
+				appendString(context.pathBuf, endPos, tailString);
+
+				scan(&rootEntry);
+			}
 		}
 	}
 
@@ -843,6 +875,25 @@ unittest
 	})(tmpDir);
 
 	assert(entries.length < 5 && entries[$-1][$-1].isDigit, text(entries));
+
+	// Test Yes.includeRoot
+	tmpDir.listDir!((e) {
+		assert(e.fullName == tmpDir, e.fullName ~ " != " ~ tmpDir);
+		assert(e.entryIsDir);
+	}, Yes.includeRoot);
+
+	entries = null;
+	tmpDir.listDir!((e) {
+		assert(equal(e.fullNameFS, e.fullName));
+		entries ~= e.fullName.relPath(tmpDir);
+		if (e.entryIsDir)
+			e.recurse();
+	}, Yes.includeRoot);
+
+	assert(equal(
+		entries.sort,
+		[".", "a", "b", "c", "c/1", "c/2"].map!(name => name.replace("/", dirSeparator)),
+	), text(entries));
 
 	// Symlink test
 	(){
