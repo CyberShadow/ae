@@ -483,14 +483,14 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 				return ltIsType(DT_DIR, S_IFDIR);
 			}
 
-			/// Returns the raw POSIX attributes of this directory entry.
+			/// Returns the raw POSIX attributes of this directory entry,
+			/// or the link target if this directory entry is a symlink.
 			@property uint attributes()
 			{
 				return needStat!(StatTarget.linkTarget)().st_mode;
 			}
 
-			/// Returns the raw POSIX attributes of this directory entry,
-			/// or the link target if this directory entry is a symlink.
+			/// Returns the raw POSIX attributes of this directory entry.
 			@property uint linkAttributes()
 			{
 				return needStat!(StatTarget.dirEntry)().st_mode;
