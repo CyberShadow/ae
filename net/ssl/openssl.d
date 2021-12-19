@@ -165,6 +165,9 @@ class OpenSSLContext : SSLContext
 	Kind kind; /// Client or server.
 	Verify verify; ///
 
+	ubyte[] psk; /// PSK (Pre-Shared Key) configuration.
+	string pskID; /// ditto
+
 	this(Kind kind)
 	{
 		this.kind = kind;
@@ -235,6 +238,12 @@ class OpenSSLContext : SSLContext
 			.sslEnforce("Failed to load private key file " ~ path);
 	} /// ditto
 
+	override void setPreSharedKey(string id, ubyte[] key)
+	{
+		pskID = id;
+		psk = key;
+	} /// ditto
+
 	override void setPeerVerify(Verify verify)
 	{
 		static const int[enumLength!Verify] modes =
@@ -286,6 +295,7 @@ class OpenSSLAdapter : SSLAdapter
 		super(next);
 
 		sslHandle = sslEnforce(SSL_new(context.sslCtx));
+		SSL_set_ex_data(sslHandle, 0, cast(void*)this).sslEnforce();
 		SSL_set_bio(sslHandle, r.bio, w.bio);
 
 		if (next.state == ConnectionState.connected)
@@ -436,6 +446,15 @@ protected:
 
 	private final void initialize()
 	{
+		if (context.psk)
+		{
+			final switch (context.kind)
+			{
+				case OpenSSLContext.Kind.client: SSL_set_psk_client_callback(sslHandle, &pskClientCallback); break;
+				case OpenSSLContext.Kind.server: SSL_set_psk_server_callback(sslHandle, &pskServerCallback); break;
+			}
+		}
+
 		final switch (context.kind)
 		{
 			case OpenSSLContext.Kind.client: SSL_connect(sslHandle).sslEnforce(); break;
@@ -459,6 +478,46 @@ protected:
 				SSL_set1_host(sslHandle, hostname).sslEnforce("SSL_set1_host");
 			}
 		}
+	}
+
+	extern (C) private static uint pskClientCallback(
+		SSL* ssl, const(char)* hint,
+		char* identity, uint max_identity_len, ubyte* psk,
+		uint max_psk_len)
+	{
+		auto self = cast(typeof(this))SSL_get_ex_data(ssl, 0);
+		if (self.context.pskID.length + 1 > max_identity_len ||
+			self.context.psk.length       > max_psk_len)
+		{
+			debug(OPENSSL) stderr.writeln("PSK or PSK ID too long");
+			return 0;
+		}
+
+		identity[0 .. self.context.pskID.length] = self.context.pskID[];
+		identity[     self.context.pskID.length] = 0;
+		psk[0 .. self.context.psk.length] = self.context.psk[];
+		return cast(uint)self.context.psk.length;
+	}
+
+	extern (C) private static uint pskServerCallback(
+		SSL* ssl, const(char)* identity,
+		ubyte* psk, uint max_psk_len)
+	{
+		auto self = cast(typeof(this))SSL_get_ex_data(ssl, 0);
+		auto identityStr = fromStringz(identity);
+		if (identityStr != self.context.pskID)
+		{
+			debug(OPENSSL) stderr.writefln("PSK ID mismatch: expected %s, got %s",
+				self.context.pskID, identityStr);
+			return 0;
+		}
+		if (self.context.psk.length > max_psk_len)
+		{
+			debug(OPENSSL) stderr.writeln("PSK too long");
+			return 0;
+		}
+		psk[0 .. self.context.psk.length] = self.context.psk[];
+		return cast(uint)self.context.psk.length;
 	}
 
 	protected final void updateState()
