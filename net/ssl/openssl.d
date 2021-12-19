@@ -165,7 +165,7 @@ class OpenSSLContext : SSLContext
 	Kind kind; /// Client or server.
 	Verify verify; ///
 
-	ubyte[] psk; /// PSK (Pre-Shared Key) configuration.
+	const(ubyte)[] psk; /// PSK (Pre-Shared Key) configuration.
 	string pskID; /// ditto
 
 	this(Kind kind)
@@ -238,7 +238,7 @@ class OpenSSLContext : SSLContext
 			.sslEnforce("Failed to load private key file " ~ path);
 	} /// ditto
 
-	override void setPreSharedKey(string id, ubyte[] key)
+	override void setPreSharedKey(string id, const(ubyte)[] key)
 	{
 		pskID = id;
 		psk = key;
