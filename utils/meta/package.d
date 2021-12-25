@@ -204,6 +204,23 @@ unittest
 	static assert(findValueOfTypeInTuple!(int, "a", int, Object, 42)==42);
 }
 
+/// Combines the getMember and allMembers traits, to return the
+/// parameter's members as aliases.
+template AllMembers(X...)
+if (X.length == 1)
+{
+	alias GetMember(string name) = __traits(getMember, X, name);
+	alias AllMembers = staticMap!(GetMember, __traits(allMembers, X));
+}
+
+unittest
+{
+	import std.typetuple : AliasSeq;
+
+	struct A { struct B {} struct C {} }
+	static assert(is(AllMembers!A == AliasSeq!(A.B, A.C)));
+}
+
 /// One past the biggest element of the enum T.
 /// Example: string[enumLength!E] arr;
 template enumLength(T)
