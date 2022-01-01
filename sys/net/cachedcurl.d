@@ -253,7 +253,7 @@ class CachedCurlNetwork : Network
 		req.data = request.data.joinToHeap;
 		foreach (name, value; request.headers)
 			req.headers ~= [name, value];
-		req.maxRedirects = 0;
+		req.maxRedirects = uint.max; // Do not follow redirects, return them as-is
 
 		auto resp = cachedReq(req);
 		auto metadata = resp.metadata;
