@@ -11,6 +11,7 @@ files=$(git ls-files)
 files=$(echo "$files" | grep '\.d$')
 
 files=$(echo "$files" | grep -vxF 'utils/graphics/sdlimage.d') # Needs SDLv1
+files=$(echo "$files" | grep -vxF 'utils/graphics/libpng.d') # Needs libpng
 files=$(echo "$files" | grep -vxF 'ui/app/windows/main.d') # Windows-only
 files=$(echo "$files" | grep -vxF 'utils/meta/proxy.d') # Needs __traits(child)
 files=$(echo "$files" | grep -v  '^utils/serialization/') # Needs __traits(child)
