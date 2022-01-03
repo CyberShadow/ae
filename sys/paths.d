@@ -74,6 +74,8 @@ version (Windows)
 
 	alias getConfigDirs = _bindArgs!(_getAppDir, CSIDL_LOCAL_APPDATA); ///
 	alias getDataDirs   = _bindArgs!(_getAppDir, CSIDL_LOCAL_APPDATA); ///
+
+	string getHomeDir() { return environment.get("USERPROFILE"); }
 }
 else // POSIX
 {
@@ -152,6 +154,8 @@ else // POSIX
 
 	alias getDataDirs   = _getXdgAppDirs!_xdgData;   ///
 	alias getConfigDirs = _getXdgAppDirs!_xdgConfig; ///
+
+	string getHomeDir() { return environment.get("HOME"); }
 }
 
 /// Get the base name of the current executable.
