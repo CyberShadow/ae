@@ -14,6 +14,7 @@
 
 module ae.net.x11;
 
+import std.algorithm.comparison : min;
 import std.algorithm.searching;
 import std.ascii : toLower;
 import std.conv : to;
@@ -163,7 +164,7 @@ private class X11SubProtocol
 			enum bool isPertinentFieldIdx =
 				name != "reqType" &&
 				name != "length" &&
-				(name.length < 3 || name[0..3] != "pad") &&
+				(name.length < 3 || name[0..min($, 3)] != "pad") &&
 				!ignoreFields.contains(name);
 		}
 		alias FieldIdxType(size_t index) = typeof(Req.tupleof[index]);
@@ -193,7 +194,7 @@ private class X11SubProtocol
 				name != "type" &&
 				name != "sequenceNumber" &&
 				name != "length" &&
-				(name.length < 3 || name[0..3] != "pad");
+				(name.length < 3 || name[0..min($, 3)] != "pad");
 		}
 		static struct DecodedResult
 		{
@@ -1307,7 +1308,7 @@ string populateRequestFromLocals(T)()
 		enum isPertinentField =
 			name != "reqType" &&
 			name != "length" &&
-			(name.length < 3 || name[0..3] != "pad");
+			(name.length < 3 || name[0..min($, 3)] != "pad");
 		if (isPertinentField)
 			code ~= "req." ~ name ~ " = " ~ name ~ ";\n";
 	}
