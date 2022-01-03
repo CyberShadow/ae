@@ -702,7 +702,7 @@ private:
 				return Result(
 					header.root,
 					header.parent,
-					children,
+					children.toHeap(),
 				);
 			}
 		),
@@ -734,7 +734,7 @@ private:
 				auto name = reader.read!char(header.nameLength).enforce("Unexpected reply size");
 				enforce(reader.data.length < 4, "Unexpected reply size");
 
-				return name.idup;
+				return name.toHeap();
 			}
 		),
 
@@ -787,7 +787,7 @@ private:
 					header.format,
 					header.propertyType,
 					header.bytesAfter,
-					value,
+					value.toHeap(),
 				);
 			}
 		),
@@ -802,7 +802,7 @@ private:
 				auto atoms = reader.read!Atom(header.nProperties).enforce("Unexpected reply size");
 				enforce(reader.data.length < 4, "Unexpected reply size");
 
-				return atoms.idup;
+				return atoms.toHeap();
 			}
 		),
 
@@ -918,7 +918,7 @@ private:
 				auto events = reader.read!xTimecoord(header.nEvents).enforce("Unexpected reply size");
 				enforce(reader.data.length == 0, "Unexpected reply size");
 
-				return events.idup;
+				return events.arr.idup;
 			}
 		),
 
@@ -1453,7 +1453,11 @@ if (!hasIndirections!T)
 		return !!data;
 	}
 
-	alias arr this;
+	@property T[] toHeap()
+	{
+		assert(data && data.length % T.sizeof == 0);
+		return cast(T[])data.toHeap;
+	}
 }
 
 /// Consumes bytes from a Data instance and returns them as typed objects on request.
