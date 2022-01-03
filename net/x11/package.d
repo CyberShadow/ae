@@ -21,6 +21,7 @@ import std.exception;
 import std.meta;
 import std.process : environment;
 import std.socket;
+import std.traits : hasIndirections, ReturnType;
 import std.typecons : Nullable;
 
 public import deimos.X11.X;
@@ -33,7 +34,6 @@ import ae.utils.array;
 import ae.utils.exception : CaughtException;
 import ae.utils.meta;
 import ae.utils.promise;
-import ae.utils.text.ascii : toDec;
 
 /// These are always 32-bit in the protocol,
 /// but are defined as possibly 64-bit in X.h.
@@ -131,159 +131,10 @@ extern(C) struct xEmptyReq
     CARD16 length; /// ditto
 }
 
-/// Implements the X11 protocol as a client.
-/// Allows connecting to a local or remote X11 server.
-///
-/// Note: Because of heavy use of code generation,
-/// this class's API may be a little opaque.
-/// You may instead find the example in demo/x11/demo.d
-/// more illuminating.
-final class X11Client
+/// Base class for definitions shared by the core X11 protocol and
+/// extensions.
+private class X11SubProtocol
 {
-	/// Connect to the default X server
-	/// (according to `$DISPLAY`).
-	this()
-	{
-		this(environment["DISPLAY"]);
-	}
-
-	/// Connect to the server described by the specified display
-	/// string.
-	this(string display)
-	{
-		this(parseDisplayString(display));
-	}
-
-	/// Parse a display string into connectable address specs.
-	static AddressInfo[] parseDisplayString(string display)
-	{
-		auto hostParts = display.findSplit(":");
-		enforce(hostParts, "Invalid display string: " ~ display);
-		enforce(!hostParts[2].startsWith(":"), "DECnet is unsupported");
-
-		enforce(hostParts[2].length, "No display number"); // Not to be confused with the screen number
-		auto displayNumber = hostParts[2].findSplit(".")[0];
-
-		string hostname = hostParts[0];
-		AddressInfo[] result;
-
-		version (Posix) // Try UNIX sockets first
-		if (!hostname.length)
-			foreach (useAbstract; [true, false]) // Try abstract UNIX sockets first
-			{
-				version (linux) {} else continue;
-				auto path = (useAbstract ? "\0" : "") ~ "/tmp/.X11-unix/X" ~ displayNumber;
-				auto addr = new UnixAddress(path);
-				result ~= AddressInfo(AddressFamily.UNIX, SocketType.STREAM, cast(ProtocolType)0, addr, path);
-			}
-
-		if (!hostname.length)
-			hostname = "localhost";
-
-		result ~= getAddressInfo(hostname, (X_TCP_PORT + displayNumber.to!ushort).to!string);
-		return result;
-	}
-
-	/// Connect to the given address specs.
-	this(AddressInfo[] ai)
-	{
-		conn = new SocketConnection;
-		conn.handleConnect = &onConnect;
-		conn.handleReadData = &onReadData;
-		conn.connect(ai);
-	}
-
-	SocketConnection conn; /// Underlying connection.
-
-	void delegate() handleConnect; /// Handler for when a connection is successfully established.
-	@property void handleDisconnect(void delegate(string, DisconnectType) dg) { conn.handleDisconnect = dg; } /// Setter for a disconnect handler.
-
-	void delegate(scope ref const xError error) handleError; /// Error handler
-
-	void delegate(Data event) handleGenericEvent; /// GenericEvent handler
-
-	/// Connection information received from the server.
-	xConnSetupPrefix connSetupPrefix;
-	xConnSetup connSetup; /// ditto
-	string vendor; /// ditto
-	immutable(xPixmapFormat)[] pixmapFormats; /// ditto
-	struct Root
-	{
-		xWindowRoot root; /// Root window information.
-		struct Depth
-		{
-			xDepth depth; /// Color depth information.
-			immutable(xVisualType)[] visualTypes; /// ditto
-		} /// Supported depths.
-		Depth[] depths; /// ditto
-	} /// ditto
-	Root[] roots; /// ditto
-
-	/// Generate a new resource ID, which can be used
-	/// to identify resources created by this connection.
-	CARD32 newRID()
-	{
-		auto counter = ridCounter++;
-		CARD32 rid = connSetup.ridBase;
-		ubyte counterBit = 0;
-		foreach (ridBit; 0 .. typeof(rid).sizeof * 8)
-		{
-			auto ridMask = CARD32(1) << ridBit;
-			if (connSetup.ridMask & ridMask) // May we use this bit?
-			{
-				// Copy the bit
-				auto bit = (counter >> counterBit) & 1;
-				rid |= bit << ridBit;
-
-				auto counterMask = typeof(counter)(1) << counterBit;
-				counter &= ~counterMask; // Clear the bit in the counter (for overflow check)
-			}
-		}
-		enforce(counter == 0, "RID counter overflow - too many RIDs");
-		return rid;
-	}
-
-	/// To avoid repetition, methods for sending packets and handlers for events are generated.
-	/// This will generate senders such as sendCreateWindow,
-	/// and event handlers such as handleExpose.
-	enum generatedCode = (){
-		string code;
-
-		foreach (i, Spec; RequestSpecs)
-		{
-			enum index = toDec(i);
-			assert(Spec.reqName[0 .. 2] == "X_");
-			enum haveReply = !is(Spec.decoder == void);
-			if (haveReply)
-				code ~= "Promise!(ReturnType!(RequestSpecs[" ~ index ~ "].decoder))";
-			else
-				code ~= "void";
-			code ~= " send" ~ Spec.reqName[2 .. $] ~ "(Parameters!(RequestSpecs[" ~ index ~ "].encoder) params) { ";
-			if (haveReply)
-				code ~= `auto p = new typeof(return);`;
-			code ~= "sendRequest(RequestSpecs[" ~ index ~ "].reqType, RequestSpecs[" ~ index ~ "].encoder(params), ";
-			if (haveReply)
-				code ~= "(Data data) { p.fulfill(RequestSpecs[" ~ index ~ "].decoder(data)); }";
-			else
-				code ~= "null";
-			code ~= ");";
-			if (haveReply)
-				code ~= "return p;";
-			code ~=" }\n";
-		}
-
-		foreach (i, Spec; EventSpecs)
-		{
-			enum index = toDec(i);
-			code ~= "void delegate(ReturnType!(EventSpecs[" ~ index ~ "].decoder)) handle" ~ Spec.name ~ ";\n";
-		}
-
-		return code;
-	}();
-	// pragma(msg, generatedCode);
-	mixin(generatedCode);
-
-private:
 	struct RequestSpec(args...)
 	if (args.length == 3)
 	{
@@ -294,9 +145,17 @@ private:
 		static assert(is(decoder == void) || !is(ReturnType!decoder == void));
 	}
 
+	struct EventSpec(args...)
+	if (args.length == 2)
+	{
+		enum name = __traits(identifier, args[0]);
+		enum type = args[0];
+		alias decoder = args[1];
+	}
+
 	/// Instantiates to a function which accepts arguments and
 	/// puts them into a struct, according to its fields.
-	static template simpleEncoder(Req)
+	static template simpleEncoder(Req, string[] ignoreFields = [])
 	{
 		template isPertinentFieldIdx(size_t index)
 		{
@@ -304,7 +163,8 @@ private:
 			enum bool isPertinentFieldIdx =
 				name != "reqType" &&
 				name != "length" &&
-				(name.length < 3 || name[0..3] != "pad");
+				(name.length < 3 || name[0..3] != "pad") &&
+				!ignoreFields.contains(name);
 		}
 		alias FieldIdxType(size_t index) = typeof(Req.tupleof[index]);
 		enum pertinentFieldIndices = Filter!(isPertinentFieldIdx, RangeTuple!(Req.tupleof.length));
@@ -365,6 +225,242 @@ private:
 		}
 	}
 
+	static Data pad4(Data packet)
+	{
+		packet.length = (packet.length + 3) / 4 * 4;
+		return packet;
+	}
+
+	/// Generates code based on `RequestSpecs` and `EventSpecs`.
+	/// Mix this into your extension definition to generate callable
+	/// methods and event handlers.
+	/// This mixin is also used to generate the core protocol glue code.
+	mixin template ProtocolGlue()
+	{
+		import std.traits : Parameters, ReturnType;
+		import std.exception : enforce;
+		import ae.sys.data : Data;
+
+		/// To avoid repetition, methods for sending packets and handlers for events are generated.
+		/// This will generate senders such as sendCreateWindow,
+		/// and event handlers such as handleExpose.
+
+		enum generatedCode = (){
+			import ae.utils.text.ascii : toDec;
+
+			string code;
+
+			foreach (i, Spec; RequestSpecs)
+			{
+				enum index = toDec(i);
+				assert(Spec.reqName[0 .. 2] == "X_");
+				enum haveReply = !is(Spec.decoder == void);
+				code ~= "public ";
+				if (haveReply)
+					code ~= "Promise!(ReturnType!(RequestSpecs[" ~ index ~ "].decoder))";
+				else
+					code ~= "void";
+				code ~= " send" ~ Spec.reqName[2 .. $] ~ "(Parameters!(RequestSpecs[" ~ index ~ "].encoder) params) { ";
+				if (haveReply)
+					code ~= `auto p = new typeof(return);`;
+				code ~= "sendRequest(RequestSpecs[" ~ index ~ "].reqType, RequestSpecs[" ~ index ~ "].encoder(params), ";
+				if (haveReply)
+					code ~= "(Data data) { p.fulfill(RequestSpecs[" ~ index ~ "].decoder(data)); }";
+				else
+					code ~= "null";
+				code ~= ");";
+				if (haveReply)
+					code ~= "return p;";
+				code ~=" }\n";
+			}
+
+			foreach (i, Spec; EventSpecs)
+			{
+				enum index = toDec(i);
+				code ~= "public void delegate(ReturnType!(EventSpecs[" ~ index ~ "].decoder)) handle" ~ Spec.name ~ ";\n";
+				code ~= "private void _handle" ~ Spec.name ~ "(Data packet) {\n";
+				code ~= "  enforce(handle" ~ Spec.name ~ ", `No event handler for event: " ~ Spec.name ~ "`);\n";
+				code ~= "  return handle" ~ Spec.name ~ "(EventSpecs[" ~ index ~ "].decoder(packet));\n";
+				code ~= "}\n";
+			}
+
+			code ~= "final private void registerEvents() {\n";
+			foreach (i, Spec; EventSpecs)
+				code ~= "  client.eventHandlers[firstEvent + " ~ toDec(Spec.type) ~ "] = &_handle" ~ Spec.name ~ ";\n";
+			code ~= "}";
+
+			return code;
+		}();
+		// pragma(msg, generatedCode);
+		mixin(generatedCode);
+
+		/// Helper version of `simpleEncoder` which skips the extension sub-opcode field
+		// Note: this should be in the `static if` block below, but that causes a recursive template instantiation
+		alias simpleExtEncoder(Req) = simpleEncoder!(Req, [reqTypeFieldName]);
+
+		// Extension helpers
+		static if (is(typeof(this) : X11Extension))
+		{
+			import std.traits : ReturnType;
+			import deimos.X11.Xproto : xQueryExtensionReply;
+
+			/// Forwarding constructor
+			this(X11Client client, ReturnType!(simpleDecoder!xQueryExtensionReply) result)
+			{
+				super(client, result);
+				registerEvents();
+			}
+
+			/// Plumbing from encoder to `X11Client.sendRequest`
+			private void sendRequest(BYTE reqType, Data requestData, void delegate(Data) handler)
+			{
+				assert(requestData.length >= BaseReq.sizeof);
+				assert(requestData.length % 4 == 0);
+				auto pReq = cast(BaseReq*)requestData.contents.ptr;
+				mixin(`pReq.` ~ reqTypeFieldName ~ ` = reqType;`);
+
+				return client.sendRequest(majorOpcode, requestData, handler);
+			}
+		}
+	}
+}
+
+/// Implements the X11 protocol as a client.
+/// Allows connecting to a local or remote X11 server.
+///
+/// Note: Because of heavy use of code generation,
+/// this class's API may be a little opaque.
+/// You may instead find the example in demo/x11/demo.d
+/// more illuminating.
+final class X11Client : X11SubProtocol
+{
+	/// Connect to the default X server
+	/// (according to `$DISPLAY`).
+	this()
+	{
+		this(environment["DISPLAY"]);
+	}
+
+	/// Connect to the server described by the specified display
+	/// string.
+	this(string display)
+	{
+		this(parseDisplayString(display));
+	}
+
+	/// Parse a display string into connectable address specs.
+	static AddressInfo[] parseDisplayString(string display)
+	{
+		auto hostParts = display.findSplit(":");
+		enforce(hostParts, "Invalid display string: " ~ display);
+		enforce(!hostParts[2].startsWith(":"), "DECnet is unsupported");
+
+		enforce(hostParts[2].length, "No display number"); // Not to be confused with the screen number
+		auto displayNumber = hostParts[2].findSplit(".")[0];
+
+		string hostname = hostParts[0];
+		AddressInfo[] result;
+
+		version (Posix) // Try UNIX sockets first
+		if (!hostname.length)
+			foreach (useAbstract; [true, false]) // Try abstract UNIX sockets first
+			{
+				version (linux) {} else continue;
+				auto path = (useAbstract ? "\0" : "") ~ "/tmp/.X11-unix/X" ~ displayNumber;
+				auto addr = new UnixAddress(path);
+				result ~= AddressInfo(AddressFamily.UNIX, SocketType.STREAM, cast(ProtocolType)0, addr, path);
+			}
+
+		if (!hostname.length)
+			hostname = "localhost";
+
+		result ~= getAddressInfo(hostname, (X_TCP_PORT + displayNumber.to!ushort).to!string);
+		return result;
+	}
+
+	/// Connect to the given address specs.
+	this(AddressInfo[] ai)
+	{
+		registerEvents();
+
+		conn = new SocketConnection;
+		conn.handleConnect = &onConnect;
+		conn.handleReadData = &onReadData;
+		conn.connect(ai);
+	}
+
+	SocketConnection conn; /// Underlying connection.
+
+	void delegate() handleConnect; /// Handler for when a connection is successfully established.
+	@property void handleDisconnect(void delegate(string, DisconnectType) dg) { conn.handleDisconnect = dg; } /// Setter for a disconnect handler.
+
+	void delegate(scope ref const xError error) handleError; /// Error handler
+
+	void delegate(Data event) handleGenericEvent; /// GenericEvent handler
+
+	/// Connection information received from the server.
+	xConnSetupPrefix connSetupPrefix;
+	xConnSetup connSetup; /// ditto
+	string vendor; /// ditto
+	immutable(xPixmapFormat)[] pixmapFormats; /// ditto
+	struct Root
+	{
+		xWindowRoot root; /// Root window information.
+		struct Depth
+		{
+			xDepth depth; /// Color depth information.
+			immutable(xVisualType)[] visualTypes; /// ditto
+		} /// Supported depths.
+		Depth[] depths; /// ditto
+	} /// ditto
+	Root[] roots; /// ditto
+
+	/// Generate a new resource ID, which can be used
+	/// to identify resources created by this connection.
+	CARD32 newRID()
+	{
+		auto counter = ridCounter++;
+		CARD32 rid = connSetup.ridBase;
+		ubyte counterBit = 0;
+		foreach (ridBit; 0 .. typeof(rid).sizeof * 8)
+		{
+			auto ridMask = CARD32(1) << ridBit;
+			if (connSetup.ridMask & ridMask) // May we use this bit?
+			{
+				// Copy the bit
+				auto bit = (counter >> counterBit) & 1;
+				rid |= bit << ridBit;
+
+				auto counterMask = typeof(counter)(1) << counterBit;
+				counter &= ~counterMask; // Clear the bit in the counter (for overflow check)
+			}
+		}
+		enforce(counter == 0, "RID counter overflow - too many RIDs");
+		return rid;
+	}
+
+	// For internal use. Used by extension implementations to register
+	// low level event handlers, via the `ProtocolGlue` mixin.
+	// Clients should use the handleXXX functions.
+	/*private*/ void delegate(Data packet)[0x80] eventHandlers;
+
+	/// Request an extension.
+	/// The promise is fulfilled with an instance of the extension
+	/// bound to the current connection, or null if the extension is
+	/// not available.
+	Promise!Ext requestExtension(Ext : X11Extension)()
+	{
+		return sendQueryExtension(Ext.name)
+			.dmd21804workaround
+			.then((result) {
+				if (result.present)
+					return new Ext(this, result);
+				else
+					return null;
+			});
+	}
+
+private:
 	alias RequestSpecs = AliasSeq!(
 		RequestSpec!(
 			X_CreateWindow,
@@ -862,14 +958,6 @@ private:
 		// ...
 	);
 
-	struct EventSpec(args...)
-	if (args.length == 2)
-	{
-		enum name = __traits(identifier, args[0]);
-		enum type = args[0];
-		alias decoder = args[1];
-	}
-
 	alias EventSpecs = AliasSeq!(
 		EventSpec!(KeyPress        , simpleDecoder!(xEvent.KeyButtonPointer)),
 		EventSpec!(KeyRelease      , simpleDecoder!(xEvent.KeyButtonPointer)),
@@ -923,11 +1011,10 @@ private:
 	//	EventSpec!(GenericEvent    , simpleDecoder!(xGenericEvent          )),
 	);
 
-	static Data pad4(Data packet)
-	{
-		packet.length = (packet.length + 3) / 4 * 4;
-		return packet;
-	}
+	@property X11Client client() { return this; }
+	enum firstEvent = 0;
+
+	mixin ProtocolGlue;
 
 	void onConnect()
 	{
@@ -1106,21 +1193,13 @@ private:
 		auto pEvent = DataReader(packet).peek!xEvent;
 		auto eventType = (*pEvent).u.type & 0x7F;
 		// bool artificial = !!((*pEvent).u.type >> 7);
-		foreach (Spec; EventSpecs)
-		{
-			if (Spec.type == eventType)
-			{
-				auto handler = __traits(getMember, this, "handle" ~ Spec.name);
-				if (handler)
-					return handler(Spec.decoder(packet));
-				else
-					throw new Exception("No event handler for event: " ~ Spec.name);
-			}
-		}
-		throw new Exception("Unrecognized event: " ~ eventType.to!string);
+		auto handler = eventHandlers[eventType];
+		if (!handler)
+			throw new Exception("Unrecognized event: " ~ eventType.to!string);
+		return handler(packet);
 	}
 
-	void sendRequest(BYTE reqType, Data requestData, void delegate(Data) handler)
+	/*private*/ public void sendRequest(BYTE reqType, Data requestData, void delegate(Data) handler)
 	{
 		assert(requestData.length >= sz_xReq);
 		assert(requestData.length % 4 == 0);
@@ -1134,6 +1213,52 @@ private:
 		conn.send(requestData);
 		sequenceNumber++;
 	}
+}
+
+// ************************************************************************
+
+/// Base class for X11 extensions.
+abstract class X11Extension : X11SubProtocol
+{
+	X11Client client;
+	CARD8 majorOpcode, firstEvent, firstError;
+
+	this(X11Client client, ReturnType!(simpleDecoder!xQueryExtensionReply) reply)
+	{
+		this.client = client;
+		this.majorOpcode = reply.major_opcode;
+		this.firstEvent = reply.first_event;
+		this.firstError = reply.first_error;
+	}
+}
+
+/// Example extension:
+version (none)
+class XEXAMPLE : X11Extension
+{
+	/// Mix this in to generate sendXXX and handleXXX declarations.
+	mixin ProtocolGlue;
+
+	/// The name by which to request the extension (as in X_QueryExtension).
+	enum name = XEXAMPLE_NAME;
+	/// The extension's base request type.
+	alias BaseReq = xXExampleReq;
+	/// The name of the field encoding the extension's opcode.
+	enum reqTypeFieldName = q{xexampleReqType};
+
+	/// Declare the extension's requests here.
+	alias RequestSpecs = AliasSeq!(
+		RequestSpec!(
+			X_XExampleRequest,
+			simpleExtEncoder!xXExampleRequestReq,
+			simpleDecoder!xXExampleRequestReply,
+		),
+	);
+
+	/// Declare the extension's events here.
+	alias EventSpecs = AliasSeq!(
+		EventSpec!(XExampleNotify, simpleDecoder!xXExampleNotifyEvent),
+	);
 }
 
 // ************************************************************************
@@ -1190,8 +1315,6 @@ string populateRequestFromLocals(T)()
 }
 
 // ************************************************************************
-
-import std.traits;
 
 /// Typed wrapper for Data.
 /// Because Data is reference counted, this type allows encapsulating
