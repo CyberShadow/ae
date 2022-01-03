@@ -347,6 +347,7 @@ final class X11Client : X11SubProtocol
 	this(string display)
 	{
 		this(parseDisplayString(display));
+		configureAuthentication(display);
 	}
 
 	/// Parse a display string into connectable address specs.
@@ -398,6 +399,97 @@ final class X11Client : X11SubProtocol
 	void delegate(scope ref const xError error) handleError; /// Error handler
 
 	void delegate(Data event) handleGenericEvent; /// GenericEvent handler
+
+	/// Authentication information used during connection.
+	string authorizationProtocolName;
+	ubyte[] authorizationProtocolData; /// ditto
+
+	private import std.stdio : File;
+
+	/// Automatically attempt to configure authentication by reading ~/.Xauthority.
+	void configureAuthentication(string display)
+	{
+		import std.path : expandTilde, buildPath;
+		import std.socket : Socket;
+		import ae.sys.paths : getHomeDir;
+
+		auto hostParts = display.findSplit(":");
+		auto host = hostParts[0];
+		if (!host.length)
+			return;
+		if (host == "localhost")
+			host = Socket.hostName;
+
+		auto number = hostParts[2];
+		number = number.findSplit(".")[0];
+
+		foreach (ref record; XAuthorityReader(File(getHomeDir.buildPath(".Xauthority"), "rb")))
+			if (record.address == host && record.number == number)
+			{
+				authorizationProtocolName = record.name;
+				authorizationProtocolData = record.data;
+				return;
+			}
+	}
+
+	/// Xauthority parsing.
+	struct AuthRecord
+	{
+		ushort family;
+		string address;
+		string number;
+		string name;
+		ubyte[] data;
+	}
+
+	struct XAuthorityReader
+	{
+		File f;
+
+		this(File f) { this.f = f; popFront(); }
+
+		AuthRecord front;
+		bool empty;
+
+		class EndOfFile : Throwable { this() { super(null); } }
+
+		void popFront()
+		{
+			bool atStart = true;
+
+			ushort readShort()
+			{
+				import ae.utils.bitmanip : BigEndian;
+				import ae.sys.file : readExactly;
+
+				BigEndian!ushort[1] result;
+				if (!f.readExactly(result.bytes[]))
+					throw atStart ? new EndOfFile : new Exception("Unexpected end of file");
+				atStart = false;
+				return result[0];
+			}
+
+			ubyte[] readBytes()
+			{
+				auto length = readShort();
+				auto result = new ubyte[length];
+				auto bytesRead = f.rawRead(result);
+				enforce(bytesRead.length == length, "Unexpected end of file");
+				return result;
+			}
+
+			try
+			{
+				front.family = readShort();
+				front.address = readBytes().fromBytes!string;
+				front.number = readBytes().fromBytes!string;
+				front.name = readBytes().fromBytes!string;
+				front.data = readBytes();
+			}
+			catch (EndOfFile)
+				empty = true;
+		}
+	} // ditto
 
 	/// Connection information received from the server.
 	xConnSetupPrefix connSetupPrefix;
@@ -1026,9 +1118,12 @@ private:
 			prefix.byteOrder = 'l';
 		prefix.majorVersion = X_PROTOCOL;
 		prefix.minorVersion = X_PROTOCOL_REVISION;
-		// no authentication
+		prefix.nbytesAuthProto6 = authorizationProtocolName.length.to!CARD16;
+		prefix.nbytesAuthString = authorizationProtocolData.length.to!CARD16;
 
 		conn.send(Data(prefix.bytes));
+		conn.send(pad4(Data(authorizationProtocolName)));
+		conn.send(pad4(Data(authorizationProtocolData)));
 	}
 
 	Data buffer;
