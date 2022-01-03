@@ -842,6 +842,24 @@ private:
 			},
 			void,
 		),
+
+		// ...
+
+		RequestSpec!(
+			X_QueryExtension,
+			function Data (
+				// Extra data
+				const(char)[] name,
+
+			) {
+				auto nbytes = name.length.to!ubyte;
+				mixin(populateRequestFromLocals!xQueryExtensionReq);
+				return pad4(Data(req.bytes) ~ Data(name.bytes));
+			},
+			simpleDecoder!xQueryExtensionReply,
+		),
+
+		// ...
 	);
 
 	struct EventSpec(args...)
