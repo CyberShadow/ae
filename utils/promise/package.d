@@ -548,8 +548,11 @@ if (is(P == Promise!(T, E), T, E))
 							allPromise.fulfill(results);
 					}
 				}, (error) {
-					allPromise.reject(error);
-					allPromise = null; // ignore successive resolves
+					if (allPromise)
+					{
+						allPromise.reject(error);
+						allPromise = null; // ignore successive resolves / rejects
+					}
 				});
 			}(i, p);
 	}
