@@ -144,6 +144,10 @@ private class X11SubProtocol
 		alias encoder = args[1];
 		alias decoder = args[2];
 		static assert(is(decoder == void) || !is(ReturnType!decoder == void));
+		static if (is(decoder == void))
+			alias ReturnType = void;
+		else
+			alias ReturnType = .ReturnType!decoder;
 	}
 
 	struct EventSpec(args...)
@@ -152,6 +156,7 @@ private class X11SubProtocol
 		enum name = __traits(identifier, args[0]);
 		enum type = args[0];
 		alias decoder = args[1];
+		alias ReturnType = .ReturnType!decoder;
 	}
 
 	/// Instantiates to a function which accepts arguments and
@@ -322,6 +327,22 @@ private class X11SubProtocol
 
 				return client.sendRequest(majorOpcode, requestData, handler);
 			}
+		}
+
+		/// Returns the `RequestSpec` for the request with the indicated opcode.
+		public template RequestSpecOf(CARD8 reqType)
+		{
+			static foreach (Spec; RequestSpecs)
+				static if (Spec.reqType == reqType)
+					alias RequestSpecOf = Spec;
+		}
+
+		/// Returns the `EventSpec` for the event with the indicated opcode.
+		public template EventSpecOf(CARD8 type)
+		{
+			static foreach (Spec; EventSpecs)
+				static if (Spec.type == type)
+					alias EventSpecOf = Spec;
 		}
 	}
 }
