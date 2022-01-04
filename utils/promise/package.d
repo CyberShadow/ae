@@ -88,7 +88,11 @@ private:
 	alias A = typeof(Box.tupleof);
 
 	PromiseState state;
-	debug (ae_promise) bool resultUsed;
+	debug (ae_promise)
+	{
+		bool resultUsed;
+		LeakedPromiseError leakedPromiseError; // printed when leaked
+	}
 
 	union
 	{
@@ -181,9 +185,21 @@ private:
 			typeof(this).stringof.ptr);
 		if (state == PromiseState.rejected)
 			_d_print_throwable(this.error);
+		_d_print_throwable(this.leakedPromiseError);
 	}
 
 public:
+	debug (ae_promise)
+	this() nothrow
+	{
+		// Record instantiation point
+		try
+			throw new LeakedPromiseError();
+		catch (LeakedPromiseError e)
+			leakedPromiseError = e;
+		catch (Throwable) {} // allow nothrow
+	}
+
 	/// A tuple of this `Promise`'s value.
 	/// Either `(T)` or an empty tuple.
 	alias ValueTuple = A;
@@ -392,7 +408,11 @@ private enum PromiseState
 	rejected,
 }
 
-private extern (C) void _d_print_throwable(Throwable t) @nogc;
+debug (ae_promise)
+{
+	private final class LeakedPromiseError : Throwable { this() { super("Created here:"); } }
+	private extern (C) void _d_print_throwable(Throwable t) @nogc;
+}
 
 // The reverse operation is the `.resolve` overload.
 private template Unpromise(P)
