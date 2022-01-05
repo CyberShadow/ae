@@ -14,6 +14,7 @@
 module ae.utils.promise;
 
 import std.functional;
+import std.meta : allSatisfy, AliasSeq;
 import std.traits : CommonType;
 
 import ae.net.asockets : socketManager, onNextTick;
@@ -480,6 +481,15 @@ Promise!(T, E) reject(T, E)(E reason) { auto p = new Promise!(T, E)(); p.reject(
 
 // ****************************************************************************
 
+/// Return `true` if `P` is a `Promise` instantiation.
+template isPromise(P)
+{
+	static if (is(P == Promise!(T, E), T, E))
+		enum isPromise = true;
+	else
+		enum isPromise = false;
+}
+
 /// Get the value type of the promise `P`,
 /// i.e. its `T` parameter.
 template PromiseValue(P)
@@ -604,4 +614,129 @@ nothrow unittest
 	pAll.then({ called = true; });
 	socketManager.loop().assertNotThrown;
 	assert(called);
+}
+
+private template AllResultImpl(size_t promiseIndex, size_t resultIndex, Promises...)
+{
+	static if (Promises.length == 0)
+	{
+		alias TupleMembers = AliasSeq!();
+		enum size_t[] mapping = [];
+	}
+	else
+	static if (is(PromiseValue!(Promises[0]) == void))
+	{
+		alias Next = AllResultImpl!(promiseIndex + 1, resultIndex, Promises[1..$]);
+		alias TupleMembers = Next.TupleMembers;
+		enum size_t[] mapping = [size_t(-1)] ~ Next.mapping;
+	}
+	else
+	{
+		alias Next = AllResultImpl!(promiseIndex + 1, resultIndex + 1, Promises[1..$]);
+		alias TupleMembers = AliasSeq!(PromiseValue!(Promises[0]), Next.TupleMembers);
+		enum size_t[] mapping = [resultIndex] ~ Next.mapping;
+	}
+}
+
+// Calculates a value type for a Promise suitable to hold the values of the given promises.
+// void-valued promises are removed; an empty list is converted to void.
+// Also calculates an index map from Promises indices to tuple member indices.
+private template AllResult(Promises...)
+{
+	alias Impl = AllResultImpl!(0, 0, Promises);
+	static if (Impl.TupleMembers.length == 0)
+		alias ResultType = void;
+	else
+	{
+		import std.typecons : Tuple;
+		alias ResultType = Tuple!(Impl.TupleMembers);
+	}
+}
+
+private alias PromiseBox(P) = P.Box;
+
+/// Heterogeneous variant, which resolves to a tuple.
+/// void promises' values are omitted from the result tuple.
+/// If all promises are void, then so is the result.
+Promise!(AllResult!Promises.ResultType) all(Promises...)(Promises promises)
+if (allSatisfy!(isPromise, Promises))
+{
+	AllResult!Promises.Impl.TupleMembers results;
+
+	auto allPromise = new typeof(return);
+
+	static if (promises.length)
+	{
+		size_t numResolved;
+		foreach (i, p; promises)
+		{
+			alias P = typeof(p);
+			alias T = PromiseValue!P;
+			p.dmd21804workaround.then((P.ValueTuple result) {
+				if (allPromise)
+				{
+					static if (!is(T == void))
+						results[AllResult!Promises.Impl.mapping[i]] = result[0];
+					if (++numResolved == promises.length)
+					{
+						static if (AllResult!Promises.Impl.TupleMembers.length)
+						{
+							import std.typecons : tuple;
+							allPromise.fulfill(tuple(results));
+						}
+						else
+							allPromise.fulfill();
+					}
+				}
+			}, (error) {
+				if (allPromise)
+				{
+					allPromise.reject(error);
+					allPromise = null; // ignore successive resolves / rejects
+				}
+			});
+		}
+	}
+	else
+		allPromise.fulfill();
+	return allPromise;
+}
+
+nothrow unittest
+{
+	import std.exception : assertNotThrown;
+	import ae.utils.meta : I;
+
+	int result;
+	auto p1 = new Promise!byte;
+	auto p2 = new Promise!void;
+	auto p3 = new Promise!int;
+	p2.fulfill();
+	auto pAll = all(p1, p2, p3);
+	p1.fulfill(1);
+	pAll.dmd21804workaround
+		.then(values => values.expand.I!((v1, v3) {
+			result = v1 + v3;
+	}));
+	p3.fulfill(3);
+	socketManager.loop().assertNotThrown;
+	assert(result == 4);
+}
+
+nothrow unittest
+{
+	bool ok;
+	import std.exception : assertNotThrown;
+	auto p1 = new Promise!void;
+	auto p2 = new Promise!void;
+	auto p3 = new Promise!void;
+	p2.fulfill();
+	auto pAll = all(p1, p2, p3);
+	p1.fulfill();
+	pAll.then({ ok = true; });
+	socketManager.loop().assertNotThrown;
+	assert(!ok);
+	p3.fulfill();
+	socketManager.loop().assertNotThrown;
+	assert(ok);
 }
