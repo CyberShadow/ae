@@ -404,6 +404,7 @@ final class X11Client : X11SubProtocol
 	/// Connect to the given address specs.
 	this(AddressInfo[] ai)
 	{
+		replyHandlers.length = 0x1_0000; // Allocate dynamically, to avoid bloating this.init
 		registerEvents();
 
 		conn = new SocketConnection;
@@ -1152,7 +1153,7 @@ private:
 	bool connected;
 
 	ushort sequenceNumber = 1;
-	void delegate(Data)[0x1_0000] replyHandlers;
+	void delegate(Data)[] replyHandlers;
 
 	uint ridCounter; // for newRID
 
