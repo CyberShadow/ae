@@ -12,7 +12,7 @@
  */
 
 /// Chains are a concept a bit like ranges,
-/// but which operate on heterogenous types
+/// but which operate on heterogeneous types
 /// (e.g. a tuple of values).
 
 /// Composition is done by a chain of functors.
