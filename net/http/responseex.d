@@ -27,6 +27,7 @@ public import ae.net.http.common;
 import ae.net.ietf.headers;
 import ae.sys.data;
 import ae.sys.dataio;
+import ae.sys.datamm;
 import ae.utils.array;
 import ae.utils.json;
 import ae.utils.xml;
@@ -182,8 +183,10 @@ public:
 		detectMime(filename, headers);
 
 		headers["Last-Modified"] = httpTime(timeLastModified(filename));
-		//data = DataVec(mapFile(filename, MmMode.read));
-		data = DataVec(readData(filename));
+		try
+			data = DataVec(mapFile(filename, MmMode.read));
+		catch (Exception)
+			data = DataVec(readData(filename));
 		setStatus(HttpStatusCode.OK);
 		return this;
 	}
