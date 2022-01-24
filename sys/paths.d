@@ -75,7 +75,7 @@ version (Windows)
 	alias getConfigDirs = _bindArgs!(_getAppDir, CSIDL_LOCAL_APPDATA); ///
 	alias getDataDirs   = _bindArgs!(_getAppDir, CSIDL_LOCAL_APPDATA); ///
 
-	string getHomeDir() { return environment.get("USERPROFILE"); }
+	string getHomeDir() { return getShellPath(CSIDL_PROFILE); }
 }
 else // POSIX
 {
