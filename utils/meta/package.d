@@ -209,7 +209,7 @@ unittest
 template AllMembers(X...)
 if (X.length == 1)
 {
-	alias GetMember(string name) = __traits(getMember, X, name);
+	alias GetMember(string name) = I!(__traits(getMember, X, name));
 	alias AllMembers = staticMap!(GetMember, __traits(allMembers, X));
 }
 
