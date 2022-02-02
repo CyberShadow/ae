@@ -549,18 +549,14 @@ final class X11Client : X11SubProtocol
 	{
 		auto counter = ridCounter++;
 		CARD32 rid = connSetup.ridBase;
-		ubyte counterBit = 0;
 		foreach (ridBit; 0 .. typeof(rid).sizeof * 8)
 		{
 			auto ridMask = CARD32(1) << ridBit;
 			if (connSetup.ridMask & ridMask) // May we use this bit?
 			{
-				// Copy the bit
-				auto bit = (counter >> counterBit) & 1;
+				auto bit = counter & 1;
+				counter >>= 1;
 				rid |= bit << ridBit;
-
-				auto counterMask = typeof(counter)(1) << counterBit;
-				counter &= ~counterMask; // Clear the bit in the counter (for overflow check)
 			}
 		}
 		enforce(counter == 0, "RID counter overflow - too many RIDs");
