@@ -36,6 +36,8 @@ import ae.utils.exception : CaughtException;
 import ae.utils.meta;
 import ae.utils.promise;
 
+debug(X11) import std.stdio : stderr;
+
 /// These are always 32-bit in the protocol,
 /// but are defined as possibly 64-bit in X.h.
 /// Redefine these in terms of the protocol we implement here.
@@ -225,7 +227,10 @@ private class X11SubProtocol
 
 			DecodedResult result;
 			foreach (i; RangeTuple!(pertinentFieldIndices.length))
+			{
 				result.tupleof[i] = res.tupleof[pertinentFieldIndices[i]];
+				debug(X11) stderr.writeln("[X11] << ", __traits(identifier, result.tupleof[i]), ": ", result.tupleof[i]);
+			}
 
 			return result;
 		}
@@ -246,6 +251,7 @@ private class X11SubProtocol
 		import std.traits : Parameters, ReturnType;
 		import std.exception : enforce;
 		import ae.sys.data : Data;
+		debug(X11) import std.stdio : stderr;
 
 		/// To avoid repetition, methods for sending packets and handlers for events are generated.
 		/// This will generate senders such as sendCreateWindow,
@@ -267,11 +273,15 @@ private class X11SubProtocol
 				else
 					code ~= "void";
 				code ~= " send" ~ Spec.reqName[2 .. $] ~ "(Parameters!(RequestSpecs[" ~ index ~ "].encoder) params) { ";
+				debug(X11) code ~= " struct Request { typeof(params) p; } stderr.writeln(`[X11] > " ~ Spec.reqName ~ ": `, Request(params));";
 				if (haveReply)
 					code ~= `auto p = new typeof(return);`;
 				code ~= "sendRequest(RequestSpecs[" ~ index ~ "].reqType, RequestSpecs[" ~ index ~ "].encoder(params), ";
 				if (haveReply)
-					code ~= "(Data data) { p.fulfill(RequestSpecs[" ~ index ~ "].decoder(data)); }";
+					debug (X11)
+						code ~= "(Data data) { auto decoded = RequestSpecs[" ~ index ~ "].decoder(data); struct DecodedReply { typeof(decoded) d; } stderr.writeln(`[X11] < " ~ Spec.reqName ~ ": `, DecodedReply(decoded)); p.fulfill(decoded); }";
+					else
+						code ~= "(Data data) { p.fulfill(RequestSpecs[" ~ index ~ "].decoder(data)); }";
 				else
 					code ~= "null";
 				code ~= ");";
@@ -286,7 +296,10 @@ private class X11SubProtocol
 				code ~= "public void delegate(ReturnType!(EventSpecs[" ~ index ~ "].decoder)) handle" ~ Spec.name ~ ";\n";
 				code ~= "private void _handle" ~ Spec.name ~ "(Data packet) {\n";
 				code ~= "  enforce(handle" ~ Spec.name ~ ", `No event handler for event: " ~ Spec.name ~ "`);\n";
-				code ~= "  return handle" ~ Spec.name ~ "(EventSpecs[" ~ index ~ "].decoder(packet));\n";
+				debug (X11)
+					code ~= "  auto decoded = EventSpecs[" ~ index ~ "].decoder(packet); struct DecodedEvent { typeof(decoded) d; } stderr.writeln(`[X11] < " ~ Spec.name ~ ": `, DecodedEvent(decoded)); return handle" ~ Spec.name ~ "(decoded);";
+				else
+					code ~= "  return handle" ~ Spec.name ~ "(EventSpecs[" ~ index ~ "].decoder(packet));\n";
 				code ~= "}\n";
 			}
 
@@ -1276,7 +1289,10 @@ private:
 							if (handleError)
 								handleError(*DataReader(packet).read!xError);
 							else
+							{
+								debug (X11) stderr.writeln(*DataReader(packet).read!xError);
 								throw new Exception("Protocol error");
+							}
 							break;
 						case X_Reply:
 							onReply(packet);
@@ -1427,7 +1443,10 @@ string populateRequestFromLocals(T)()
 			name != "length" &&
 			(name.length < 3 || name[0..min($, 3)] != "pad");
 		if (isPertinentField)
+		{
 			code ~= "req." ~ name ~ " = " ~ name ~ ";\n";
+			debug(X11) code ~= `stderr.writeln("[X11] >> ` ~ name ~ `: ", ` ~ name ~ `);`;
+		}
 	}
 	return code;
 }
