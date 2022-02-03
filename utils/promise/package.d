@@ -740,3 +740,61 @@ nothrow unittest
 	socketManager.loop().assertNotThrown;
 	assert(ok);
 }
+
+// ****************************************************************************
+
+/// Ordered promise queue, supporting asynchronous enqueuing / fulfillment.
+struct PromiseQueue(T, E = Exception)
+{
+	private alias P = Promise!(T, E);
+
+	private P[] fulfilled, waiting;
+
+	import ae.utils.array : queuePush, queuePop;
+
+	/// Retrieve the next fulfilled promise, or enqueue a waiting one.
+	P waitOne()
+	{
+		if (fulfilled.length)
+			return fulfilled.queuePop();
+
+		auto p = new P;
+		waiting.queuePush(p);
+		return p;
+	}
+
+	/// Fulfill one waiting promise, or enqueue a fulfilled one.
+	void fulfillOne(typeof(P.Box.tupleof) value)
+	{
+		if (waiting.length)
+			return waiting.queuePop.fulfill(value);
+
+		auto p = new P;
+		p.fulfill(value);
+		fulfilled.queuePush(p);
+	}
+}
+
+unittest
+{
+	PromiseQueue!int q;
+	q.fulfillOne(1);
+	q.fulfillOne(2);
+	int[] result;
+	q.waitOne().then((i) { result ~= i; });
+	q.waitOne().then((i) { result ~= i; });
+	socketManager.loop();
+	assert(result == [1, 2]);
+}
+
+unittest
+{
+	PromiseQueue!int q;
+	int[] result;
+	q.waitOne().then((i) { result ~= i; });
+	q.waitOne().then((i) { result ~= i; });
+	q.fulfillOne(1);
+	q.fulfillOne(2);
+	socketManager.loop();
+	assert(result == [1, 2]);
+}
