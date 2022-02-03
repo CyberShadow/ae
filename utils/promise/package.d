@@ -544,7 +544,7 @@ if (is(P == Promise!(T, E), T, E))
 // ****************************************************************************
 
 /// Wait for all promises to be resolved, or for any to be rejected.
-PromiseValueTransform!(P, x => [x]) all(P)(P[] promises...)
+PromiseValueTransform!(P, x => [x]) all(P)(P[] promises)
 if (is(P == Promise!(T, E), T, E))
 {
 	alias T = PromiseValue!P;
