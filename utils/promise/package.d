@@ -167,14 +167,19 @@ private:
 		doReject(e);
 	}
 
+	debug (ae_promise) bool ignoreLeak;
+
 	debug (ae_promise)
 	~this() @nogc
 	{
+		// Leak detection
 		if (state == PromiseState.pending || state == PromiseState.following || resultUsed)
 			return;
 		static if (is(T == void))
 			if (state == PromiseState.fulfilled)
 				return;
+		if (ignoreLeak)
+			return;
 		// Throwing anything here or doing anything else non-@nogc
 		// will just cause an `InvalidMemoryOperationError`, so
 		// `printf` is our best compromise.  Even if we could throw,
@@ -216,6 +221,12 @@ public:
 			if (false)
 				then((A result) {});
 		return this;
+	}
+
+	/// Ignore this promise leaking in debug builds.
+	void ignoreResult()
+	{
+		debug (ae_promise) ignoreLeak = true;
 	}
 
 	/// Fulfill this promise, with the given value (if applicable).
