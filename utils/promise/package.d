@@ -764,14 +764,18 @@ struct PromiseQueue(T, E = Exception)
 	}
 
 	/// Fulfill one waiting promise, or enqueue a fulfilled one.
-	void fulfillOne(typeof(P.Box.tupleof) value)
+	P fulfillOne(typeof(P.Box.tupleof) value)
 	{
 		if (waiting.length)
-			return waiting.queuePop.fulfill(value);
+		{
+			waiting.queuePop.fulfill(value);
+			return null;
+		}
 
 		auto p = new P;
 		p.fulfill(value);
 		fulfilled.queuePush(p);
+		return p;
 	}
 }
 
