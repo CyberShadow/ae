@@ -857,7 +857,16 @@ private:
 
 		RequestSpec!(
 			X_SendEvent,
-			simpleEncoder!xSendEventReq,
+			function Data (
+				bool propagate,
+				Window destination,
+				CARD32 eventMask,
+				xEvent event,
+			) {
+				auto eventdata = cast(byte[event.sizeof])event.bytes[0 .. event.sizeof];
+				mixin(populateRequestFromLocals!xSendEventReq);
+				return Data(req.bytes);
+			},
 			void,
 		),
 
