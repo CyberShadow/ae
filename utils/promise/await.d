@@ -26,7 +26,10 @@ Promise!(T, E) async(T, E = Exception)(lazy T task)
 	auto p = new Promise!T;
 	auto f = new Fiber({
 		try
-			p.fulfill(task);
+			static if (is(T == void))
+				task, p.fulfill();
+			else
+				p.fulfill(task);
 		catch (E e)
 			p.reject(e);
 	});
@@ -59,6 +62,7 @@ T await(T, E)(Promise!(T, E) p)
 	}
 }
 
+///
 unittest
 {
 	import ae.net.asockets : socketManager;
@@ -72,4 +76,12 @@ unittest
 	});
 	socketManager.loop();
 	assert(sum == 3);
+}
+
+unittest
+{
+	if (false)
+	{
+		async({}()).await();
+	}
 }
