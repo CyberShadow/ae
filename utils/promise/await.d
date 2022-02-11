@@ -32,7 +32,7 @@ Promise!(T, E) async(T, E = Exception)(lazy T task)
 				p.fulfill(task);
 		catch (E e)
 			p.reject(e);
-	});
+	}, 64 * 1024);
 	f.call();
 	return p;
 }
