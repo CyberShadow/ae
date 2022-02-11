@@ -344,7 +344,10 @@ final class SQLite
 	PreparedStatement prepare(string sql)
 	{
 		auto s = new PreparedStatement;
-		sqenforce(sqlite3_prepare_v2(db, toStringz(sql), -1, &s.stmt, null));
+		const(char)* tail;
+		auto sqlz = toStringz(sql);
+		sqenforce(sqlite3_prepare_v2(db, sqlz, -1, &s.stmt, &tail));
+		assert(tail == sqlz + sql.length, "Trailing SQL not compiled: " ~ sql[tail - sqlz .. $]);
 		return s;
 	}
 
