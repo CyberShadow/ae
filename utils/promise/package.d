@@ -89,11 +89,6 @@ private:
 	alias A = typeof(Box.tupleof);
 
 	PromiseState state;
-	debug (ae_promise)
-	{
-		bool resultUsed;
-		LeakedPromiseError leakedPromiseError; // printed when leaked
-	}
 
 	union
 	{
@@ -118,6 +113,8 @@ private:
 	{
 		this.state = PromiseState.fulfilled;
 		this.value.tupleof = value;
+		static if (!is(T == void))
+			debug (ae_promise) markAsUnused();
 		foreach (ref handler; handlers)
 			if (handler.onFulfill)
 				handler.dg();
@@ -128,6 +125,7 @@ private:
 	{
 		this.state = PromiseState.rejected;
 		this.error = e;
+		debug (ae_promise) markAsUnused();
 		foreach (ref handler; handlers)
 			if (handler.onReject)
 				handler.dg();
@@ -167,31 +165,64 @@ private:
 		doReject(e);
 	}
 
-	debug (ae_promise) bool ignoreLeak;
-
+	// This debug machinery tracks leaked promises, i.e. promises
+	// which have been fulfilled/rejected, but their result was never
+	// used (their .then method was never called).
 	debug (ae_promise)
-	~this() @nogc
 	{
-		// Leak detection
-		if (state == PromiseState.pending || state == PromiseState.following || resultUsed)
-			return;
-		static if (is(T == void))
-			if (state == PromiseState.fulfilled)
+		// Global doubly linked list of promises with unused results
+		static typeof(this) unusedHead, unusedTail;
+		typeof(this) unusedPrev, unusedNext;
+		bool isUnused() { return unusedPrev || (unusedHead is this); }
+
+		LeakedPromiseError leakedPromiseError;
+		bool resultUsed;
+
+		void markAsUnused()
+		{
+			if (resultUsed)
+				return; // An earlier `then` call has priority
+			assert(!isUnused);
+			if (unusedTail)
+			{
+				unusedPrev = unusedTail;
+				unusedTail.unusedNext = this;
+			}
+			unusedTail = this;
+			if (!unusedHead)
+				unusedHead = this;
+		}
+
+		void markAsUsed()
+		{
+			if (resultUsed)
 				return;
-		if (ignoreLeak)
-			return;
-		// Throwing anything here or doing anything else non-@nogc
-		// will just cause an `InvalidMemoryOperationError`, so
-		// `printf` is our best compromise.  Even if we could throw,
-		// the stack trace would not be useful due to the
-		// nondeterministic nature of the GC.
-		import core.stdc.stdio : fprintf, stderr;
-		fprintf(stderr, "Leaked %s %s\n",
-			state == PromiseState.fulfilled ? "fulfilled".ptr : "rejected".ptr,
-			typeof(this).stringof.ptr);
-		if (state == PromiseState.rejected)
-			_d_print_throwable(this.error);
-		_d_print_throwable(this.leakedPromiseError);
+			resultUsed = true;
+			if (isUnused)
+			{
+				if (unusedPrev) unusedPrev.unusedNext = unusedNext; else unusedHead = unusedNext;
+				if (unusedNext) unusedNext.unusedPrev = unusedPrev; else unusedTail = unusedPrev;
+			}
+		}
+
+		static ~this()
+		{
+			for (auto p = unusedHead; p; p = p.unusedNext)
+			{
+				// If these asserts fail, there is a bug in our debug machinery
+				assert(p.state != PromiseState.pending && p.state != PromiseState.following && !p.resultUsed);
+				static if (is(T == void))
+					assert(p.state != PromiseState.fulfilled);
+
+				import core.stdc.stdio : fprintf, stderr;
+				fprintf(stderr, "Leaked %s %s\n",
+					p.state == PromiseState.fulfilled ? "fulfilled".ptr : "rejected".ptr,
+					typeof(this).stringof.ptr);
+				if (p.state == PromiseState.rejected)
+					_d_print_throwable(p.error);
+				_d_print_throwable(p.leakedPromiseError);
+			}
+		}
 	}
 
 public:
@@ -226,7 +257,7 @@ public:
 	/// Ignore this promise leaking in debug builds.
 	void ignoreResult()
 	{
-		debug (ae_promise) ignoreLeak = true;
+		debug (ae_promise) markAsUsed();
 	}
 
 	/// Fulfill this promise, with the given value (if applicable).
@@ -308,7 +339,7 @@ public:
 				break;
 		}
 
-		debug (ae_promise) resultUsed = true;
+		debug (ae_promise) markAsUsed();
 		return next;
 	}
 
@@ -362,7 +393,7 @@ public:
 				break;
 		}
 
-		debug (ae_promise) resultUsed = true;
+		debug (ae_promise) markAsUsed();
 		return next;
 	}
 
@@ -405,7 +436,7 @@ public:
 				break;
 		}
 
-		debug (ae_promise) resultUsed = true;
+		debug (ae_promise) markAsUsed();
 		return next;
 	}
 }
