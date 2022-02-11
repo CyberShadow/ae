@@ -428,6 +428,9 @@ class DManager : ICacheHost
 
 			/// Additional make parameters, e.g. "HOST_CC=g++48"
 			string[] makeArgs;
+
+			/// Build debug versions of Druntime / Phobos.
+			bool debugLib;
 		}
 
 		/// A string description of this component's configuration.
@@ -1455,6 +1458,7 @@ EOS";
 				(target ? [target] : []) ~
 				["DMD=" ~ dmd] ~
 				(needHostDMD ? ["HOST_DMD=" ~ env.deps.hostDC] : []) ~
+				(config.build.components.common.debugLib ? ["BUILD=debug"] : []) ~
 				config.build.components.common.makeArgs ~
 				getPlatformMakeVars(env, model, quotePaths) ~
 				dMakeArgs;
@@ -1622,6 +1626,7 @@ EOS";
 				makeArgs ~
 				["DMD=" ~ dmd] ~
 				config.build.components.common.makeArgs ~
+				(config.build.components.common.debugLib ? ["BUILD=debug"] : []) ~
 				getPlatformMakeVars(env, model, quotePaths) ~
 				dMakeArgs;
 			run(args, env.vars, sourceDir);
