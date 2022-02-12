@@ -32,13 +32,25 @@ module ae.net.shutdown;
 void addShutdownHandler(void delegate(scope const(char)[] reason) fn)
 {
 	handlers ~= fn;
-	if (handlers.length == 1) // first
+	if (!registered)
 		register();
 }
 
 deprecated void addShutdownHandler(void delegate() fn)
 {
 	addShutdownHandler((scope const(char)[] /*reason*/) { fn(); });
+} /// ditto
+
+/// Remove a previously-registered handler.
+void removeShutdownHandler(void delegate(scope const(char)[] reason) fn)
+{
+	foreach (i, handler; handlers)
+		if (fn is handler)
+		{
+			handlers = handlers[0 .. i] ~ handlers[i+1 .. $];
+			return;
+		}
+	assert(false, "No such shutdown handler registered");
 }
 
 /// Calls all registered handlers.
@@ -62,6 +74,7 @@ import ae.sys.data;
 
 // Per-thread
 void delegate(scope const(char)[] reason)[] handlers;
+bool registered;
 
 final class ShutdownConnection : TcpConnection
 {
@@ -99,6 +112,7 @@ final class ShutdownConnection : TcpConnection
 
 void register()
 {
+	registered = true;
 	auto socket = new ShutdownConnection();
 	ae.sys.shutdown.addShutdownHandler(&socket.ping);
 }
