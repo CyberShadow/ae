@@ -174,16 +174,22 @@ mixin template VirtualEvent(string name)
 		{
 			typeof(self) p;
 
+			debug bool used; // Debug trap / workaround for https://issues.dlang.org/show_bug.cgi?id=22769 ; can be replaced with @mustuse
+			@disable this(this);
+			debug ~this() { assert(used, "VirtualEvent accessed but not used (attempt to call VirtualEvent instead of Event?)"); }
+
 			alias add = opOpAssign!"~";
 
 			void opOpAssign(string op : "~")(Dg dg)
 			{
+				debug used = true;
 				assert(dg, "Attempting to register a null event handler");
 				mixin(`p.addRemove` ~ name ~ `Handler(dg, true);`);
 			}
 
 			void remove(Dg dg)
 			{
+				debug used = true;
 				assert(dg, "Attempting to unregister a null event handler");
 				mixin(`p.addRemove` ~ name ~ `Handler(dg, false);`);
 			}
