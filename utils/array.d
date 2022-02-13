@@ -346,6 +346,26 @@ size_t sliceIndex(T)(in T[] arr, in T[] slice)
 	return p - a;
 }
 
+/// Remove the first element which is equal to `value` from `arr`,
+/// mutating it in place.  If `value` is not in `arr`, assert.
+void removeElement(T, alias equal = `a == b`, SwapStrategy s = SwapStrategy.unstable)(ref T[] arr, auto ref const scope T value)
+{
+	foreach (i, ref el; arr)
+		if (binaryFun!equal(el, value))
+		{
+			arr = arr.remove!s(i);
+			return;
+		}
+	assert(false, "Element to remove not found in array");
+}
+
+unittest
+{
+	auto arr = [1, 2, 3];
+	arr.removeElement(2);
+	assert(arr == [1, 3]);
+}
+
 /// Like std.array.split, but returns null if val was empty.
 auto splitEmpty(T, S)(T value, S separator)
 {
