@@ -509,6 +509,9 @@ private struct JsonParser(C)
 			value = JSONFragment(s[start..p]);
 		}
 		else
+		static if (is(T U : U*))
+			value = readPointer!T();
+		else
 		static if (__traits(hasMember, T, "fromJSON"))
 		{
 			alias Q = Parameters!(T.fromJSON)[0];
@@ -519,9 +522,6 @@ private struct JsonParser(C)
 		else
 		static if (is(T==struct))
 			readObject!(T)(value);
-		else
-		static if (is(T U : U*))
-			value = readPointer!T();
 		else
 			static assert(0, "Can't decode " ~ T.stringof ~ " from JSON");
 	}
@@ -1148,6 +1148,20 @@ unittest
 	auto s = S("test");
 	assert(s.toJson == `"test"`);
 	assert(s.toJson.jsonParse!S == s);
+}
+
+unittest
+{
+	static struct S
+	{
+		string value;
+		static S fromJSON(string value) { return S(value); }
+		string toJSON() { return value; }
+	}
+	auto s = S("test");
+	auto p = &s;
+	assert(p.toJson == `"test"`);
+	assert(*p.toJson.jsonParse!(S*) == s);
 }
 
 /// `fromJSON` / `toJSON` can also accept/return a `JSONFragment`,
