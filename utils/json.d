@@ -517,7 +517,14 @@ private struct JsonParser(C)
 			alias Q = Parameters!(T.fromJSON)[0];
 			Q tempValue;
 			read!Q(tempValue);
-			value = T.fromJSON(tempValue);
+			static if (is(typeof(value = T.fromJSON(tempValue))))
+				value = T.fromJSON(tempValue);
+			else
+			{
+				import core.lifetime : move;
+				auto convertedValue = T.fromJSON(tempValue);
+				move(convertedValue, value);
+			}
 		}
 		else
 		static if (is(T==struct))
