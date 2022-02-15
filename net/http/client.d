@@ -51,6 +51,15 @@ protected:
 	HttpResponse currentResponse;
 	size_t expect;
 
+	enum State
+	{
+		disconnected,
+		readingHeaders,
+		readingData,
+		done,
+	}
+	State state;
+
 	void onConnect()
 	{
 		sendRequest(currentRequest);
@@ -145,8 +154,10 @@ protected:
 
 		if (inBuffer.bytes.length < expect)
 		{
+			state = State.readingData;
 			onData(inBuffer[]);
-			conn.handleReadData = &onContinuation;
+			conn.handleReadData.remove(&onNewResponse);
+			conn.handleReadData.add(&onContinuation);
 		}
 		else
 		{
@@ -194,10 +205,16 @@ protected:
 	{
 		auto response = currentResponse;
 
+		switch (state)
+		{
+			case State.readingHeaders: conn.handleReadData.remove(&onNewResponse); break;
+			case State.readingData: conn.handleReadData.remove(&onContinuation); break;
+			default: assert(false);
+		}
 		currentRequest = null;
 		currentResponse = null;
 		expect = -1;
-		conn.handleReadData = null;
+		state = State.done;
 
 		if (handleResponse)
 			handleResponse(response, reason);
@@ -241,8 +258,8 @@ public:
 		}
 
 		conn = c;
-		conn.handleConnect = &onConnect;
-		conn.handleDisconnect = &onDisconnect;
+		conn.handleConnect ~= &onConnect;
+		conn.handleDisconnect ~= &onDisconnect;
 	}
 
 	/// Send a HTTP request.
@@ -251,7 +268,8 @@ public:
 		//debug writefln("New HTTP request: %s", request.url);
 		currentRequest = request;
 		currentResponse = null;
-		conn.handleReadData = &onNewResponse;
+		state = State.readingHeaders;
+		conn.handleReadData ~= &onNewResponse;
 		expect = 0;
 
 		if (conn.state != ConnectionState.disconnected)
