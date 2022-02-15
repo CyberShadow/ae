@@ -73,8 +73,16 @@ public:
 		}
 	}
 
-	/// Call `add` or `remove`.  Interface for `VirtualEvent`.
-	void addRemove(Dg dg, bool add) { if (add) this.add(dg); else this.remove(dg); }
+	/// Interface for `VirtualEvent`.
+	void modify(Dg dg, EventModification kind)
+	{
+		final switch (kind)
+		{
+			case EventModification.add: this.add(dg); return;
+			case EventModification.remove: this.remove(dg); return;
+			case EventModification.set: this.clear(); if (dg) this.add(dg); return;
+		}
+	}
 
 	void clear()
 	{
@@ -157,11 +165,19 @@ unittest
 	assert(e.length == 0);
 }
 
+/// For the `modify` interface for virtual events.
+enum EventModification
+{
+	add,
+	remove,
+	set, // for the deprecated opAssign operation
+}
+
 // ****************************************************************************
 
 /// Mixes in a member which provides an interface similar to Event,
 /// but dispatches actual [un]registration to the methods named
-/// addRemove{name}Handler in the current aggregate.
+/// modify{name}Handler in the current aggregate.
 /// Following convention, the mixed-in member is named handle{name}.
 mixin template VirtualEvent(string name)
 {
@@ -173,7 +189,7 @@ mixin template VirtualEvent(string name)
 			auto self = this;
 
 		import std.traits : ParameterTypeTuple;
-		mixin(`alias Dg = ParameterTypeTuple!(addRemove` ~ name ~ `Handler)[0];`);
+		mixin(`alias Dg = ParameterTypeTuple!(modify` ~ name ~ `Handler)[0];`);
 
 		static struct VEvent
 		{
@@ -189,18 +205,23 @@ mixin template VirtualEvent(string name)
 			{
 				debug used = true;
 				assert(dg, "Attempting to register a null event handler");
-				mixin(`p.addRemove` ~ name ~ `Handler(dg, true);`);
+				mixin(`p.modify` ~ name ~ `Handler(dg, EventModification.add);`);
 			}
 
 			void remove(Dg dg)
 			{
 				debug used = true;
 				assert(dg, "Attempting to unregister a null event handler");
-				mixin(`p.addRemove` ~ name ~ `Handler(dg, false);`);
+				mixin(`p.modify` ~ name ~ `Handler(dg, EventModification.remove);`);
 			}
 
 			// Allow chaining VirtualEvents
-			void addRemove(Dg dg, bool add) { if (add) this.add(dg); else this.remove(dg); }
+			void modify(Dg dg, EventModification kind)
+			{
+				debug used = true;
+				assert(dg, "Attempting to modify a null event handler");
+				mixin(`p.modify` ~ name ~ `Handler(dg, kind);`);
+			}
 
 			deprecated alias opAssign = add;
 		}
@@ -213,12 +234,11 @@ mixin template VirtualEvent(string name)
 	/// Compatibility setter shim
 	deprecated final @property void _virtualEventImpl(typeof({
 		import std.traits : ParameterTypeTuple;
-		mixin(`alias Dg = ParameterTypeTuple!(addRemove` ~ name ~ `Handler)[0];`);
+		mixin(`alias Dg = ParameterTypeTuple!(modify` ~ name ~ `Handler)[0];`);
 		return Dg.init;
 	}()) dg)
 	{
-		assert(dg, "Unsetting handler via VirtualEvent opAssign not supported, use .remove");
-		mixin(`addRemove` ~ name ~ `Handler(dg, true);`);
+		mixin(`modify` ~ name ~ `Handler(dg, EventModification.set);`);
 	}
 
 	mixin(`alias handle` ~ name ~ ` = _virtualEventImpl;`);
@@ -228,7 +248,7 @@ unittest
 {
 	interface I
 	{
-		protected void addRemoveFooHandler(void delegate(), bool);
+		protected void modifyFooHandler(void delegate(), EventModification);
 		mixin VirtualEvent!(q{Foo});
 	}
 }
