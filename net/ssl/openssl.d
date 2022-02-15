@@ -122,6 +122,7 @@ static if (isOpenSSL11)
 	extern(C) BIGNUM *BN_get_rfc3526_prime_8192(BIGNUM *bn) nothrow;
 	alias get_rfc3526_prime_8192 = BN_get_rfc3526_prime_8192;
 	extern(C) int SSL_in_init(const SSL *s) nothrow;
+	extern(C) int SSL_CTX_set_ciphersuites(SSL_CTX* ctx, const(char)* str);
 }
 else
 {
@@ -189,9 +190,31 @@ class OpenSSLContext : SSLContext
 		SSL_CTX_set_default_verify_paths(sslCtx);
 	} ///
 
+	/// OpenSSL uses different APIs to specify the cipher list for
+	/// TLSv1.2 and below and to specify the ciphersuites for TLSv1.3.
+	/// When calling `setCipherList`, use this value to delimit them:
+	/// values before `cipherListTLS13Delimiter` will be specified via
+	/// SSL_CTX_set_cipher_list (for TLSv1.2 and older), and those
+	/// after `cipherListTLS13Delimiter` will be specified via
+	/// `SSL_CTX_set_ciphersuites` (for TLSv1.3).
+	static immutable cipherListTLS13Delimiter = "\0ae-net-ssl-openssl-cipher-list-tls-1.3-delimiter";
+
 	override void setCipherList(string[] ciphers)
 	{
-		SSL_CTX_set_cipher_list(sslCtx, ciphers.join(":").toStringz()).sslEnforce();
+		assert(ciphers.length, "Empty cipher list");
+		import std.algorithm.searching : findSplit;
+		auto parts = ciphers.findSplit((&cipherListTLS13Delimiter)[0..1]);
+		auto oldCiphers = parts[0];
+		auto newCiphers = parts[2];
+		if (oldCiphers.length)
+			SSL_CTX_set_cipher_list(sslCtx, oldCiphers.join(":").toStringz()).sslEnforce();
+		if (newCiphers.length)
+		{
+			static if (isOpenSSL11)
+				SSL_CTX_set_ciphersuites(sslCtx, newCiphers.join(":").toStringz()).sslEnforce();
+			else
+				assert(false, "Not built against OpenSSL version with TLSv1.3 support.");
+		}
 	} /// `SSLContext` method implementation.
 
 	override void enableDH(int bits)
