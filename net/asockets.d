@@ -18,6 +18,7 @@ module ae.net.asockets;
 
 import ae.sys.timing;
 import ae.utils.array : toArray;
+import ae.utils.event;
 import ae.utils.math;
 public import ae.sys.data;
 
@@ -241,7 +242,7 @@ else // Use select
 		/// Debug AA to check for dangling socket references.
 		debug GenericSocket[socket_t] socketHandles;
 
-		void delegate()[] nextTickHandlers, idleHandlers;
+		Event!(void delegate()) nextTickHandlers, idleHandlers;
 
 	public:
 		/// Register a socket with the manager.
@@ -302,13 +303,12 @@ else // Use select
 			writeset = new SocketSet(setSize);
 			while (true)
 			{
-				if (nextTickHandlers.length)
+				if (nextTickHandlers)
 				{
 					auto thisTickHandlers = nextTickHandlers;
-					nextTickHandlers = null;
+					nextTickHandlers.clear();
 
-					foreach (handler; thisTickHandlers)
-						handler();
+					thisTickHandlers();
 
 					continue;
 				}
@@ -375,7 +375,7 @@ else // Use select
 					mainTimer.isWaiting() ? "with" : "no",
 					idleHandlers.length,
 				);
-				if (!haveActive && !mainTimer.isWaiting() && !nextTickHandlers.length)
+				if (!haveActive && !mainTimer.isWaiting() && !nextTickHandlers)
 				{
 					debug (ASOCKETS) stderr.writeln("No more sockets or timer events, exiting loop.");
 					break;
@@ -384,7 +384,7 @@ else // Use select
 				debug (ASOCKETS) stderr.flush();
 
 				int events;
-				if (idleHandlers.length)
+				if (idleHandlers)
 				{
 					if (sockcount==0)
 						events = 0;
@@ -424,10 +424,10 @@ else // Use select
 					handleEvent(readset, writeset);
 				}
 				else
-				if (idleHandlers.length)
+				if (idleHandlers)
 				{
-					import ae.utils.array : shift;
-					auto handler = idleHandlers.shift();
+					auto handler = idleHandlers.front;
+					idleHandlers.popFront();
 
 					// Rotate the idle handler queue before running it,
 					// in case the handler unregisters itself.
@@ -503,7 +503,7 @@ else // Use select
 	/// and would otherwise sleep.
 	void addIdleHandler(ref SocketManager socketManager, void delegate() handler)
 	{
-		foreach (i, idleHandler; socketManager.idleHandlers)
+		foreach (idleHandler; socketManager.idleHandlers)
 			assert(handler !is idleHandler);
 
 		socketManager.idleHandlers ~= handler;
@@ -512,11 +512,10 @@ else // Use select
 	/// Unregister a function previously registered with `addIdleHandler`.
 	void removeIdleHandler(alias pred=(a, b) => a is b, Args...)(ref SocketManager socketManager, Args args)
 	{
-		foreach (i, idleHandler; socketManager.idleHandlers)
+		foreach (idleHandler; socketManager.idleHandlers)
 			if (pred(idleHandler, args))
 			{
-				import std.algorithm : remove;
-				socketManager.idleHandlers = socketManager.idleHandlers.remove(i);
+				socketManager.idleHandlers.remove(idleHandler);
 				return;
 			}
 		assert(false, "No such idle handler");
@@ -742,19 +741,23 @@ interface IConnection
 	/// Callback setter for when a connection has been established
 	/// (if applicable).
 	alias ConnectHandler = void delegate();
-	@property void handleConnect(ConnectHandler value); /// ditto
+	protected void modifyConnectHandler(ConnectHandler, EventModification);
+	mixin VirtualEvent!`Connect`; /// ditto
 
 	/// Callback setter for when new data is read.
 	alias ReadDataHandler = void delegate(Data data);
-	@property void handleReadData(ReadDataHandler value); /// ditto
+	protected void modifyReadDataHandler(ReadDataHandler, EventModification);
+	mixin VirtualEvent!`ReadData`; /// ditto
 
 	/// Callback setter for when a connection was closed.
 	alias DisconnectHandler = void delegate(string reason, DisconnectType type);
-	@property void handleDisconnect(DisconnectHandler value); /// ditto
+	protected void modifyDisconnectHandler(DisconnectHandler, EventModification);
+	mixin VirtualEvent!`Disconnect`; /// ditto
 
 	/// Callback setter for when all queued data has been sent.
 	alias BufferFlushedHandler = void delegate();
-	@property void handleBufferFlushed(BufferFlushedHandler value); /// ditto
+	protected void modifyBufferFlushedHandler(BufferFlushedHandler, EventModification);
+	mixin VirtualEvent!`BufferFlushed`; /// ditto
 }
 
 // ***************************************************************************
@@ -807,7 +810,7 @@ protected:
 		else
 			notifyWrite = writePending;
 
-		notifyRead = state == ConnectionState.connected && readDataHandler;
+		notifyRead = state == ConnectionState.connected && readDataHandlers;
 		debug(ASOCKETS) stderr.writefln("[%s] updateFlags: %s %s", conn ? conn.handle : -1, notifyRead, notifyWrite);
 	}
 
@@ -845,7 +848,7 @@ protected:
 				debug (ASOCKETS) stderr.writefln("\t\t%s: Discarding received data because we are disconnecting", this);
 			}
 			else
-			if (!readDataHandler)
+			if (!readDataHandlers)
 			{
 				debug (ASOCKETS) stderr.writefln("\t\t%s: Discarding received data because there is no data handler", this);
 			}
@@ -868,7 +871,7 @@ protected:
 					// Copy to unmanaged memory
 					data = Data(inBuffer[0 .. received], true);
 				}
-				readDataHandler(data);
+				readDataHandlers(data);
 			}
 		}
 	}
@@ -907,8 +910,7 @@ public:
 				debug (ASOCKETS) stderr.writefln("[%s] Queueing disconnect: %s", remoteAddressStr, reason);
 				state = ConnectionState.disconnecting;
 				//setIdleTimeout(30.seconds);
-				if (disconnectHandler)
-					disconnectHandler(reason, type);
+				disconnectHandlers(reason, type);
 				updateFlags();
 				return;
 			}
@@ -927,8 +929,7 @@ public:
 				state = ConnectionState.disconnected;
 		}
 
-		if (disconnectHandler)
-			disconnectHandler(reason, type);
+		disconnectHandlers(reason, type);
 		updateFlags();
 	}
 
@@ -1026,22 +1027,22 @@ public:
 	}
 
 // public:
-	private ConnectHandler connectHandler;
 	/// Callback for when a connection has been established.
-	@property final void handleConnect(ConnectHandler value) { connectHandler = value; updateFlags(); }
+	protected Event!ConnectHandler connectHandlers;
+	protected final override void modifyConnectHandler(ConnectHandler dg, EventModification kind) { connectHandlers.modify(dg, kind); updateFlags(); } /// ditto
 
-	private ReadDataHandler readDataHandler;
 	/// Callback for incoming data.
 	/// Data will not be received unless this handler is set.
-	@property final void handleReadData(ReadDataHandler value) { readDataHandler = value; updateFlags(); }
+	protected Event!ReadDataHandler readDataHandlers;
+	protected final override void modifyReadDataHandler(ReadDataHandler dg, EventModification kind) { readDataHandlers.modify(dg, kind); updateFlags(); } /// ditto
 
-	private DisconnectHandler disconnectHandler;
 	/// Callback for when a connection was closed.
-	@property final void handleDisconnect(DisconnectHandler value) { disconnectHandler = value; updateFlags(); }
+	protected Event!DisconnectHandler disconnectHandlers;
+	protected final override void modifyDisconnectHandler(DisconnectHandler dg, EventModification kind) { disconnectHandlers.modify(dg, kind); updateFlags(); } /// ditto
 
-	private BufferFlushedHandler bufferFlushedHandler;
 	/// Callback setter for when all queued data has been sent.
-	@property final void handleBufferFlushed(BufferFlushedHandler value) { bufferFlushedHandler = value; updateFlags(); }
+	protected Event!BufferFlushedHandler bufferFlushedHandlers;
+	protected final override void modifyBufferFlushedHandler(BufferFlushedHandler dg, EventModification kind) { bufferFlushedHandlers.modify(dg, kind); updateFlags(); } /// ditto
 }
 
 /// Implements a stream connection.
@@ -1080,8 +1081,7 @@ protected:
 				setKeepAlive();
 			catch (Exception e)
 				return disconnect(e.msg, DisconnectType.error);
-			if (connectHandler)
-				connectHandler();
+			connectHandlers();
 			return;
 		}
 		//debug writefln(remoteAddressStr, ": Writable - handler ", handleBufferFlushed?"OK":"not set", ", outBuffer.length=", outBuffer.length);
@@ -1134,8 +1134,7 @@ protected:
 				}
 
 		// outQueue is now empty
-		if (bufferFlushedHandler)
-			bufferFlushedHandler();
+		bufferFlushedHandlers();
 		if (state == ConnectionState.disconnecting)
 		{
 			debug (ASOCKETS) stderr.writefln("Closing @ %s (Delayed disconnect - buffer flushed)", cast(void*)this);
@@ -1190,10 +1189,10 @@ class Duplex : IConnection
 	{
 		this.reader = reader;
 		this.writer = writer;
-		reader.handleConnect = &onConnect;
-		writer.handleConnect = &onConnect;
-		reader.handleDisconnect = &onDisconnect;
-		writer.handleDisconnect = &onDisconnect;
+		reader.handleConnect ~= &onConnect;
+		writer.handleConnect ~= &onConnect;
+		reader.handleDisconnect ~= &onDisconnect;
+		writer.handleDisconnect ~= &onDisconnect;
 	} ///
 
 	@property ConnectionState state()
@@ -1227,36 +1226,33 @@ class Duplex : IConnection
 
 	protected void onConnect()
 	{
-		if (connectHandler && reader.state == ConnectionState.connected && writer.state == ConnectionState.connected)
-			connectHandler();
+		if (reader.state == ConnectionState.connected && writer.state == ConnectionState.connected)
+			connectHandlers();
 	}
 
 	protected void onDisconnect(string reason, DisconnectType type)
 	{
 		debug(ASOCKETS) stderr.writefln("Duplex.onDisconnect(%(%s%), %s), states are %s / %s", [reason], type, reader.state, writer.state);
-		if (disconnectHandler)
-		{
-			disconnectHandler(reason, type);
-			disconnectHandler = null; // don't call it twice for the other connection
-		}
+		disconnectHandlers(reason, type);
+		disconnectHandlers.clear(); // don't call it twice for the other connection
 		// It is our responsibility to disconnect the other connection
 		// Use DisconnectType.requested to ensure that any written data is flushed
 		disconnect("Other side of Duplex connection closed (" ~ reason ~ ")", DisconnectType.requested);
 	}
 
 	/// Callback for when a connection has been established.
-	@property void handleConnect(ConnectHandler value) { connectHandler = value; }
-	private ConnectHandler connectHandler;
+	private Event!ConnectHandler connectHandlers;
+	protected override void modifyConnectHandler(ConnectHandler dg, EventModification kind) { handleConnect.modify(dg, kind); } /// ditto
 
 	/// Callback setter for when new data is read.
-	@property void handleReadData(ReadDataHandler value) { reader.handleReadData = value; }
+	protected override void modifyReadDataHandler(ReadDataHandler dg, EventModification kind) { reader.handleReadData.modify(dg, kind); } /// ditto
 
 	/// Callback setter for when a connection was closed.
-	@property void handleDisconnect(DisconnectHandler value) { disconnectHandler = value; }
-	private DisconnectHandler disconnectHandler;
+	private Event!DisconnectHandler disconnectHandlers;
+	protected override void modifyDisconnectHandler(DisconnectHandler dg, EventModification kind) { handleDisconnect.modify(dg, kind); } /// ditto
 
 	/// Callback setter for when all queued data has been written.
-	@property void handleBufferFlushed(BufferFlushedHandler value) { writer.handleBufferFlushed = value; }
+	protected override void modifyBufferFlushedHandler(BufferFlushedHandler dg, EventModification kind) { writer.handleBufferFlushed.modify(dg, kind); } /// ditto
 }
 
 unittest { if (false) new Duplex(null, null); }
@@ -1421,14 +1417,14 @@ protected:
 			debug (ASOCKETS) stderr.writefln("Accepting connection from listener @ %s", cast(void*)this);
 			Socket acceptSocket = conn.accept();
 			acceptSocket.blocking = false;
-			if (handleAccept)
+			if (acceptHandlers)
 			{
 				auto connection = createConnection(acceptSocket);
 				debug (ASOCKETS) stderr.writefln("\tAccepted connection %s from %s", connection, connection.remoteAddressStr);
 				connection.setKeepAlive();
 				//assert(connection.connected);
 				//connection.connected = true;
-				acceptHandler(connection);
+				acceptHandlers(connection);
 			}
 			else
 				acceptSocket.close();
@@ -1467,7 +1463,7 @@ protected:
 	final void updateFlags()
 	{
 		foreach (listener; listeners)
-			listener.notifyRead = handleAccept !is null;
+			listener.notifyRead = !!acceptHandlers;
 	}
 
 public:
@@ -1538,8 +1534,7 @@ public:
 			listener.closeListener();
 		listeners = null;
 		listening = false;
-		if (handleClose)
-			handleClose();
+		handleClose();
 	}
 
 	/// Create a SocketServer using the handle passed on standard input,
@@ -1562,14 +1557,14 @@ public:
 	}
 
 	/// Callback for when the socket was closed.
-	void delegate() handleClose;
+	Event!(void delegate()) handleClose;
 
-	private void delegate(SocketConnection incoming) acceptHandler;
 	/// Callback for an incoming connection.
 	/// Connections will not be accepted unless this handler is set.
-	@property final void delegate(SocketConnection incoming) handleAccept() { return acceptHandler; }
-	/// ditto
-	@property final void handleAccept(void delegate(SocketConnection incoming) value) { acceptHandler = value; updateFlags(); }
+	alias AcceptHandler = void delegate(SocketConnection incoming);
+	private Event!AcceptHandler acceptHandlers; /// ditto
+	protected final void modifyAcceptHandler(AcceptHandler dg, EventModification kind) { acceptHandlers.modify(dg, kind); updateFlags(); } /// ditto
+	mixin VirtualEvent!`Accept`; /// ditto
 }
 
 /// An asynchronous TCP connection server.
@@ -1633,7 +1628,9 @@ public:
 	static TcpServer fromStdin() { return cast(TcpServer) cast(void*) SocketServer.fromStdin; }
 
 	/// Delegate to be called when a connection is accepted.
-	@property final void handleAccept(void delegate(TcpConnection incoming) value) { super.handleAccept((SocketConnection c) => value(cast(TcpConnection)c)); }
+	alias AcceptHandler = void delegate(TcpConnection incoming);
+	final void modifyAcceptHandler(AcceptHandler dg, EventModification kind) { super.modifyAcceptHandler(cast(typeof(super).AcceptHandler)dg, kind); } /// ditto
+	mixin VirtualEvent!`Accept`; /// ditto
 }
 
 // ***************************************************************************
@@ -1692,8 +1689,7 @@ protected:
 			}
 
 		// outQueue is now empty
-		if (bufferFlushedHandler)
-			bufferFlushedHandler();
+		bufferFlushedHandlers();
 		if (state == ConnectionState.disconnecting)
 		{
 			debug (ASOCKETS) stderr.writefln("Closing @ %s (Delayed disconnect - buffer flushed)", cast(void*)this);
@@ -1722,8 +1718,7 @@ public:
 	final void initialize(AddressFamily family, SocketType type = SocketType.DGRAM, ProtocolType protocol = ProtocolType.UDP)
 	{
 		initializeImpl(family, type, protocol);
-		if (connectHandler)
-			connectHandler();
+		connectHandlers();
 	}
 
 	private final void initializeImpl(AddressFamily family, SocketType type, ProtocolType protocol)
@@ -1788,8 +1783,7 @@ public:
 		auto address = conn.localAddress();
 		auto port = to!ushort(address.toPortString());
 
-		if (connectHandler)
-			connectHandler();
+		connectHandlers();
 
 		return port;
 	}
@@ -1817,7 +1811,7 @@ unittest
 		return data;
 	}()[]);
 
-	server.handleReadData = (Data data)
+	server.handleReadData ~= (Data data)
 	{
 		assert(data.contents == packets[0]);
 		packets = packets[1..$];
@@ -1843,9 +1837,9 @@ class ConnectionAdapter : IConnection
 	this(IConnection next)
 	{
 		this.next = next;
-		next.handleConnect = &onConnect;
-		next.handleDisconnect = &onDisconnect;
-		next.handleBufferFlushed = &onBufferFlushed;
+		next.handleConnect ~= &onConnect;
+		next.handleDisconnect ~= &onDisconnect;
+		next.handleBufferFlushed ~= &onBufferFlushed;
 	} ///
 
 	@property ConnectionState state() { return next.state; } ///
@@ -1866,48 +1860,48 @@ class ConnectionAdapter : IConnection
 
 	protected void onConnect()
 	{
-		if (connectHandler)
-			connectHandler();
+		connectHandlers();
 	}
 
 	protected void onReadData(Data data)
 	{
 		// onReadData should be fired only if readDataHandler is set
-		assert(readDataHandler, "onReadData caled with null readDataHandler");
-		readDataHandler(data);
+		assert(readDataHandlers, "onReadData caled with null handler");
+		readDataHandlers(data);
 	}
 
 	protected void onDisconnect(string reason, DisconnectType type)
 	{
-		if (disconnectHandler)
-			disconnectHandler(reason, type);
+		disconnectHandlers(reason, type);
 	}
 
 	protected void onBufferFlushed()
 	{
-		if (bufferFlushedHandler)
-			bufferFlushedHandler();
+		bufferFlushedHandlers();
 	}
 
 	/// Callback for when a connection has been established.
-	@property void handleConnect(ConnectHandler value) { connectHandler = value; }
-	protected ConnectHandler connectHandler;
+	private Event!ConnectHandler connectHandlers;
+	protected override void modifyConnectHandler(ConnectHandler dg, EventModification kind) { connectHandlers.modify(dg, kind); } /// ditto
 
 	/// Callback setter for when new data is read.
-	@property void handleReadData(ReadDataHandler value)
+	private Event!ReadDataHandler readDataHandlers; // do not add/remove directly
+	protected override void modifyReadDataHandler(ReadDataHandler dg, EventModification kind)
 	{
-		readDataHandler = value;
-		next.handleReadData = value ? &onReadData : null ;
-	}
-	protected ReadDataHandler readDataHandler;
+		bool wasEmpty = !readDataHandlers;
+		readDataHandlers.modify(dg, kind);
+		bool isEmpty = !readDataHandlers;
+		if (wasEmpty != isEmpty)
+			next.handleReadData.modify(&onReadData, kind);
+	} /// ditto
 
 	/// Callback setter for when a connection was closed.
-	@property void handleDisconnect(DisconnectHandler value) { disconnectHandler = value; }
-	protected DisconnectHandler disconnectHandler;
+	private Event!DisconnectHandler disconnectHandlers;
+	protected override void modifyDisconnectHandler(DisconnectHandler dg, EventModification kind) { disconnectHandlers.modify(dg, kind); } /// ditto
 
 	/// Callback setter for when all queued data has been written.
-	@property void handleBufferFlushed(BufferFlushedHandler value) { bufferFlushedHandler = value; }
-	protected BufferFlushedHandler bufferFlushedHandler;
+	private Event!BufferFlushedHandler bufferFlushedHandlers;
+	protected override void modifyBufferFlushedHandler(BufferFlushedHandler dg, EventModification kind) { bufferFlushedHandlers.modify(dg, kind); } /// ditto
 }
 
 // ***************************************************************************
@@ -2037,8 +2031,7 @@ class TimeoutAdapter : ConnectionAdapter
 	void markNonIdle()
 	{
 		debug (ASOCKETS) stderr.writefln("TimeoutAdapter.markNonIdle @ %s", cast(void*)this);
-		if (handleNonIdle)
-			handleNonIdle();
+		handleNonIdle();
 		if (idleTask && idleTask.isWaiting())
 			idleTask.restart();
 	}
@@ -2063,11 +2056,11 @@ class TimeoutAdapter : ConnectionAdapter
 
 	/// Callback for when a connection has stopped responding.
 	/// If unset, the connection will be disconnected.
-	void delegate() handleIdleTimeout;
+	Event!(void delegate()) handleIdleTimeout;
 
 	/// Callback for when a connection is marked as non-idle
 	/// (when data is received).
-	void delegate() handleNonIdle;
+	Event!(void delegate()) handleNonIdle;
 
 protected:
 	override void onConnect()
