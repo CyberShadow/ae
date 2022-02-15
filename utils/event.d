@@ -120,6 +120,11 @@ public:
 
 	deprecated @property Dg _get() { return this.dg; } /// ditto
 	deprecated alias _get this; /// ditto
+
+	/// Range primitives.  Note: `popFront` mutates the current value.
+	@property bool empty() const { return dg is null; }
+	@property Dg front() { return dg; } /// ditto
+	void popFront() { assert(dg); if (next) this = *next; else dg = null; } /// ditto
 }
 
 unittest
