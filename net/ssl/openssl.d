@@ -109,8 +109,8 @@ private
 
 	static if (isOpenSSL11)
 	{
-		alias SSLv23_client_method = TLSv1_2_client_method;
-		alias SSLv23_server_method = TLSv1_2_server_method;
+		alias SSLv23_client_method = TLS_client_method;
+		alias SSLv23_server_method = TLS_server_method;
 		void SSL_load_error_strings() {}
 		struct OPENSSL_INIT_SETTINGS;
 		extern(C) void OPENSSL_init_ssl(uint64_t opts, const OPENSSL_INIT_SETTINGS *settings) nothrow;
