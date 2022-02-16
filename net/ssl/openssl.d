@@ -100,36 +100,44 @@ mixin template SSLUseLib()
 // Patch up incomplete Deimos bindings.
 
 private
-static if (isOpenSSL11)
 {
-	alias SSLv23_client_method = TLSv1_2_client_method;
-	alias SSLv23_server_method = TLSv1_2_server_method;
-	void SSL_load_error_strings() {}
-	struct OPENSSL_INIT_SETTINGS;
-	extern(C) void OPENSSL_init_ssl(uint64_t opts, const OPENSSL_INIT_SETTINGS *settings) nothrow;
-	void SSL_library_init() { OPENSSL_init_ssl(0, null); }
-	void OpenSSL_add_all_algorithms() { SSL_library_init(); }
-	extern(C) BIGNUM *BN_get_rfc3526_prime_1536(BIGNUM *bn) nothrow;
-	alias get_rfc3526_prime_1536 = BN_get_rfc3526_prime_1536;
-	extern(C) BIGNUM *BN_get_rfc3526_prime_2048(BIGNUM *bn) nothrow;
-	alias get_rfc3526_prime_2048 = BN_get_rfc3526_prime_2048;
-	extern(C) BIGNUM *BN_get_rfc3526_prime_3072(BIGNUM *bn) nothrow;
-	alias get_rfc3526_prime_3072 = BN_get_rfc3526_prime_3072;
-	extern(C) BIGNUM *BN_get_rfc3526_prime_4096(BIGNUM *bn) nothrow;
-	alias get_rfc3526_prime_4096 = BN_get_rfc3526_prime_4096;
-	extern(C) BIGNUM *BN_get_rfc3526_prime_6144(BIGNUM *bn) nothrow;
-	alias get_rfc3526_prime_6144 = BN_get_rfc3526_prime_6144;
-	extern(C) BIGNUM *BN_get_rfc3526_prime_8192(BIGNUM *bn) nothrow;
-	alias get_rfc3526_prime_8192 = BN_get_rfc3526_prime_8192;
-	extern(C) int SSL_in_init(const SSL *s) nothrow;
-	extern(C) int SSL_CTX_set_ciphersuites(SSL_CTX* ctx, const(char)* str);
-}
-else
-{
-	extern(C) void X509_VERIFY_PARAM_set_hostflags(X509_VERIFY_PARAM *param, uint flags) nothrow;
-	extern(C) X509_VERIFY_PARAM *SSL_get0_param(SSL *ssl) nothrow;
-	enum X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS = 0x4;
-	extern(C) int X509_VERIFY_PARAM_set1_host(X509_VERIFY_PARAM *param, const char *name, size_t namelen) nothrow;
+	enum TLS1_3_VERSION = 0x0304;
+	enum SSL_CTRL_SET_MIN_PROTO_VERSION          = 123;
+	enum SSL_CTRL_SET_MAX_PROTO_VERSION          = 124;
+	long SSL_CTX_set_min_proto_version(SSL_CTX* ctx, int version_) { return SSL_CTX_ctrl(ctx, SSL_CTRL_SET_MIN_PROTO_VERSION, version_, null); }
+	long SSL_CTX_set_max_proto_version(SSL_CTX* ctx, int version_) { return SSL_CTX_ctrl(ctx, SSL_CTRL_SET_MAX_PROTO_VERSION, version_, null); }
+
+	static if (isOpenSSL11)
+	{
+		alias SSLv23_client_method = TLSv1_2_client_method;
+		alias SSLv23_server_method = TLSv1_2_server_method;
+		void SSL_load_error_strings() {}
+		struct OPENSSL_INIT_SETTINGS;
+		extern(C) void OPENSSL_init_ssl(uint64_t opts, const OPENSSL_INIT_SETTINGS *settings) nothrow;
+		void SSL_library_init() { OPENSSL_init_ssl(0, null); }
+		void OpenSSL_add_all_algorithms() { SSL_library_init(); }
+		extern(C) BIGNUM *BN_get_rfc3526_prime_1536(BIGNUM *bn) nothrow;
+		alias get_rfc3526_prime_1536 = BN_get_rfc3526_prime_1536;
+		extern(C) BIGNUM *BN_get_rfc3526_prime_2048(BIGNUM *bn) nothrow;
+		alias get_rfc3526_prime_2048 = BN_get_rfc3526_prime_2048;
+		extern(C) BIGNUM *BN_get_rfc3526_prime_3072(BIGNUM *bn) nothrow;
+		alias get_rfc3526_prime_3072 = BN_get_rfc3526_prime_3072;
+		extern(C) BIGNUM *BN_get_rfc3526_prime_4096(BIGNUM *bn) nothrow;
+		alias get_rfc3526_prime_4096 = BN_get_rfc3526_prime_4096;
+		extern(C) BIGNUM *BN_get_rfc3526_prime_6144(BIGNUM *bn) nothrow;
+		alias get_rfc3526_prime_6144 = BN_get_rfc3526_prime_6144;
+		extern(C) BIGNUM *BN_get_rfc3526_prime_8192(BIGNUM *bn) nothrow;
+		alias get_rfc3526_prime_8192 = BN_get_rfc3526_prime_8192;
+		extern(C) int SSL_in_init(const SSL *s) nothrow;
+		extern(C) int SSL_CTX_set_ciphersuites(SSL_CTX* ctx, const(char)* str);
+	}
+	else
+	{
+		extern(C) void X509_VERIFY_PARAM_set_hostflags(X509_VERIFY_PARAM *param, uint flags) nothrow;
+		extern(C) X509_VERIFY_PARAM *SSL_get0_param(SSL *ssl) nothrow;
+		enum X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS = 0x4;
+		extern(C) int X509_VERIFY_PARAM_set1_host(X509_VERIFY_PARAM *param, const char *name, size_t namelen) nothrow;
+	}
 }
 
 // ***************************************************************************
@@ -294,6 +302,25 @@ class OpenSSLContext : SSLContext
 	override void setFlags(int flags)
 	{
 		SSL_CTX_set_options(sslCtx, flags).sslEnforce();
+	} /// ditto
+
+	private static immutable int[enumLength!SSLVersion] sslVersions = [
+		0,
+		SSL3_VERSION,
+		TLS1_VERSION,
+		TLS1_1_VERSION,
+		TLS1_2_VERSION,
+		TLS1_3_VERSION,
+	];
+
+	override void setMinimumVersion(SSLVersion v)
+	{
+		SSL_CTX_set_min_proto_version(sslCtx, sslVersions[v]).sslEnforce();
+	} /// ditto
+
+	override void setMaximumVersion(SSLVersion v)
+	{
+		SSL_CTX_set_max_proto_version(sslCtx, sslVersions[v]).sslEnforce();
 	} /// ditto
 }
 

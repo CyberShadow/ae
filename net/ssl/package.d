@@ -40,6 +40,16 @@ class NoSSLProvider : SSLProvider
 	} ///
 }
 
+enum SSLVersion
+{
+	unspecified,
+	ssl3,
+	tls1,
+	tls11,
+	tls12,
+	tls13,
+}
+
 /// Abstract interface for an SSL context.
 abstract class SSLContext
 {
@@ -67,6 +77,8 @@ abstract class SSLContext
 	abstract void setPeerVerify(Verify verify);                   /// Configure peer certificate verification.
 	abstract void setPeerRootCertificate(string path);            /// Require that peer certificates are signed by the specified root certificate.
 	abstract void setFlags(int);                                  /// Configure provider-specific flags.
+	abstract void setMinimumVersion(SSLVersion);                  /// Set the minimum protocol version.
+	abstract void setMaximumVersion(SSLVersion);                  /// Set the maximum protocol version.
 }
 
 /// Base class for a connection adapter with TLS encryption.
