@@ -203,7 +203,7 @@ struct Color(FieldTuple...)
 
 	/// ditto
 	typeof(this) opBinary(string op, T)(T o)
-		if (op != "~")
+		if (op != "~" && op != "in")
 	{
 		auto r = this;
 		mixin("r" ~ op ~ "=o;");
