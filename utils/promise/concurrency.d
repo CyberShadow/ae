@@ -13,11 +13,56 @@
 
 module ae.utils.promise.concurrency;
 
+import core.thread;
+
 import std.traits;
+import std.typecons : No;
 
 import ae.net.sync;
 import ae.utils.aa : updateVoid;
+import ae.utils.meta;
 import ae.utils.promise;
+
+/// Evaluate `value` in a new thread.
+/// The promise is resolved in the current (calling) thread.
+Promise!(T, E) threadAsync(T, E = Exception)(lazy T value)
+{
+	auto p = new Promise!T;
+	auto mainThread = new ThreadAnchor(No.daemon);
+	Thread t;
+	t = new Thread({
+		try
+		{
+			auto result = value.voidStruct;
+			mainThread.runAsync({
+				t.join();
+				p.fulfill(result.tupleof);
+			});
+		}
+		catch (Exception e)
+			mainThread.runAsync({
+				t.join();
+				p.reject(e);
+			});
+		mainThread.close();
+	});
+	t.start();
+	return p;
+}
+
+unittest
+{
+	import ae.net.asockets : socketManager;
+
+	int ok;
+
+	Thread.sleep(1.msecs).threadAsync.then(() { ok++; });
+	"foo".threadAsync.dmd21804workaround.then((s) { ok += s == "foo"; });
+	(){throw new Exception("yolo");}().threadAsync.then((){}, (e) { ok += e.msg == "yolo"; });
+
+	socketManager.loop();
+	assert(ok == 3, [cast(char)('0'+ok)]);
+}
 
 /// Given a function `fun` which returns a promise,
 /// globally memoize it (across all threads),
