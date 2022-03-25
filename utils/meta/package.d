@@ -247,10 +247,15 @@ unittest
 
 // ************************************************************************
 
+// Use strong typing to provably disambiguate BoxedVoid from any other type.
+private struct BoxedVoidElement {}
+
 /// What to use instead of void for boxVoid/unboxVoid.
-/// Use void[0] instead of an empty struct as this one has a .sizeof
+/// Use a zero-length array instead of an empty struct as this one has a .sizeof
 /// of 0, unlike the struct.
-alias BoxedVoid = void[0];
+alias BoxedVoid = BoxedVoidElement[0];
+
+static assert(BoxedVoid.sizeof == 0);
 
 /// Resolves to `BoxedVoid` if `T` is `void`, or to `T` otherwise.
 template BoxVoid(T)
