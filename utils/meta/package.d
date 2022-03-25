@@ -294,8 +294,37 @@ auto unboxVoid(T)(T value)
 		return value;
 }
 
+/// As boxVoid/unboxVoid, but returns a struct with zero or one members.
+/// .tupleof can then be used to paste the tuple in e.g. an argument list.
+auto voidStruct(T)(T value)
+if (!is(T == void))
+{
+	static struct Result
+	{
+		static if (!is(T == BoxedVoid))
+			T value;
+	}
+
+	static if (is(T == BoxedVoid))
+		return Result();
+	else
+		return Result(value);
+}
+
+/// ditto
+auto voidStruct(T)(lazy T value)
+if (is(T == void))
+{
+	value; // evaluate
+
+	static struct Result {}
+	return Result();
+}
+
 unittest
 {
+	import std.typetuple : AliasSeq;
+
 	struct S { void* p; }
 
 	auto process(T)(T delegate() dg)
@@ -309,6 +338,11 @@ unittest
 
 	void gun() { }
 	static assert(is(typeof(process(&gun)) == void));
+
+	gun(gun().boxVoid.voidStruct.tupleof);
+	gun(gun().voidStruct.tupleof);
+	static assert(is(typeof(fun().boxVoid.voidStruct.tupleof) == AliasSeq!S));
+	static assert(is(typeof(fun().voidStruct.tupleof) == AliasSeq!S));
 }
 
 // ************************************************************************
