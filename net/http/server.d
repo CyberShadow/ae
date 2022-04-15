@@ -56,6 +56,7 @@ public:
 	void delegate(HttpRequest request) handleRequest; /// Callback to handle a fully received request.
 
 protected:
+	string protocol;
 	DataVec inBuffer;
 	sizediff_t expect;
 	size_t responseSize;
@@ -112,6 +113,7 @@ protected:
 			}
 
 			currentRequest = new HttpRequest;
+			currentRequest.protocol = protocol;
 			currentRequest.parseRequestLine(reqLine);
 			currentRequest.headers = headers;
 
@@ -533,8 +535,6 @@ final class HttpServerConnection : BaseHttpServerConnection
 	}
 
 protected:
-	string protocol;
-
 	this(HttpServer server, TcpConnection tcp, IConnection c, string protocol = "http")
 	{
 		this.server = server;
