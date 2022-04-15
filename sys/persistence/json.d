@@ -13,6 +13,7 @@
 
 module ae.sys.persistence.json;
 
+import ae.sys.file : atomicWrite;
 import ae.sys.persistence.core;
 
 // ****************************************************************************
@@ -30,7 +31,7 @@ template JsonFileCache(T, FlushPolicy flushPolicy = FlushPolicy.none)
 
 	static void putJson(T)(string fileName, in T t)
 	{
-		std.file.write(fileName, t.toJson());
+		atomicWrite(fileName, t.toJson());
 	}
 
 	alias JsonFileCache = FileCache!(getJson!T, putJson!T, flushPolicy);
