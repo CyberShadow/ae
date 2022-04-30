@@ -16,7 +16,6 @@ module ae.utils.promise.range;
 import std.range.primitives;
 
 import ae.net.asockets : socketManager;
-import ae.sys.timing;
 import ae.utils.promise;
 
 /// Given a range of promises, resolve them one after another,
@@ -64,6 +63,9 @@ if (isInputRange!R)
 unittest
 {
 	import std.algorithm.iteration : map;
+	import ae.sys.timing : setTimeout;
+	import core.time : seconds;
+
 	size_t sum;
 	[1, 2, 3]
 		.map!((n) {
