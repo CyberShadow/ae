@@ -355,11 +355,12 @@ public:
 }
 
 /// The default timer
-Timer mainTimer;
-
-static this()
+@property Timer mainTimer()
 {
-	mainTimer = new Timer();
+	static Timer instance;
+	if (!instance)
+		instance = new Timer();
+	return instance;
 }
 
 // ********************************************************************************************************************
