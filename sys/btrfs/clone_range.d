@@ -14,6 +14,10 @@
 module ae.sys.btrfs.clone_range;
 
 version(linux):
+version (CRuntime_Bionic) {}
+else version (CRuntime_Musl) {}
+else
+{
 
 import core.stdc.errno;
 import core.sys.posix.sys.ioctl;
@@ -69,4 +73,6 @@ unittest
 	f2.close();
 	f1.close();
 	assert(std.file.read("test2.bin") == data);
+}
+
 }

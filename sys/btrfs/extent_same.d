@@ -14,6 +14,10 @@
 module ae.sys.btrfs.extent_same;
 
 version(linux):
+version (CRuntime_Bionic) {}
+else version (CRuntime_Musl) {}
+else
+{
 
 import core.stdc.errno;
 import core.sys.posix.sys.ioctl;
@@ -143,4 +147,6 @@ unittest
 		Extent(File("test1.bin", "r+b"), 0),
 		Extent(File("test2.bin", "r+b"), 0),
 	], blockSize));
+}
+
 }
