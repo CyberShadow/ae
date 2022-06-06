@@ -1026,6 +1026,7 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 	/// Internal state.
 	/*private*/ public
 	{
+		// Iteration state for resolved values
 		struct Var
 		{
 			A name; ///
@@ -1034,8 +1035,30 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		}
 		Var[] stack;
 		size_t stackPos;
-		V[A] singularValues, resolvedValues; // Faster than workingSet.all(name)[0]
-		private HashSet!A dirtyValues; // Accumulate MapSet.set calls
+
+		// Optimization.
+		// On start, populated with lists of variable names with a single value.
+		// Faster than workingSet.all(name)[0].
+		// The values represent those at the beginning of an iteration;
+		// does not change across iterations.
+		V[A] singularValues;
+
+		// Optimization.
+		// Remember which variable have been resolved, and their values.
+		// Faster than checking stack / workingSet.all(name)[0].
+		// If a variable is here, it has a concrete value either
+		// because we are iterating over it (it's in the stack), or
+		// due to a `put` call.
+		// Note that it's not possible to un-resolve a variable
+		// (because it's already in the iteration stack).
+		V[A] resolvedValues;
+
+		// Optimization.
+		// Accumulate MapSet.set calls, and flush then in bulk.
+		// The values to flush are stored in resolvedValues.
+		private HashSet!A dirtyValues;
+
+		// The version of the set for the current iteration.
 		private Set workingSet;
 	}
 
