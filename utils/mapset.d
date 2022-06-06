@@ -1017,10 +1017,10 @@ unittest
 /// Allows executing a deterministic algorithm over all states in a given MapSet.
 /// If a variable is not queried by the algorithm, states for all
 /// variations of that variable are processed in one iteration.
-struct MapSetVisitor(A, V)
+struct MapSetVisitor(A, V, V nullValue = V.init)
 {
 	/// Underlying `MapSet`.
-	alias Set = MapSet!(A, V);
+	alias Set = MapSet!(A, V, nullValue);
 	Set set; /// ditto
 
 	/// Internal state.
