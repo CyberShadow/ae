@@ -1200,6 +1200,37 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		workingSet = workingSet.remove(name);
 	}
 
+	/// Algorithm interface - copy a value target another name,
+	/// without resolving it (unless it's already resolved).  A
+	/// resolved variable may not be overwrittten by an unresolved
+	/// one.
+	void copy(A source, A target)
+	{
+		if (source == target)
+			return;
+
+		if (auto pvalue = source in resolvedValues)
+		{
+			put(target, *pvalue);
+			return;
+		}
+		else
+			assert(target !in resolvedValues, "Source is unresolved but target is already resolved");
+
+		assert(workingSet !is Set.emptySet, "Not iterating");
+
+		destroy(target);
+
+		workingSet = workingSet.bringToFront(source);
+		auto newChildren = workingSet.root.children.dup;
+		foreach (ref pair; newChildren)
+		{
+			auto set = Set(new immutable Set.Node(source, [Set.Pair(pair.value, pair.set)])).deduplicate;
+			pair = Set.Pair(pair.value, set);
+		}
+		workingSet = Set(new immutable Set.Node(target, cast(immutable) newChildren)).deduplicate;
+	}
+
 	/// Apply a function over every possible value of the given
 	/// variable, without resolving it (unless it's already resolved).
 	void transform(A name, scope void delegate(ref V value) fun)
