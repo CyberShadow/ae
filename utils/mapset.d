@@ -1179,6 +1179,8 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 	void put(A name, V value)
 	{
 		assert(workingSet !is Set.emptySet, "Not iterating");
+
+		// A small optimization:
 		if (name !in resolvedValues)
 			if (auto pvalue = name in singularValues)
 				if (*pvalue == value)
