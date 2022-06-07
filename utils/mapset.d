@@ -1121,6 +1121,15 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		dirtyValues.clear();
 	}
 
+	private void flush(A name)
+	{
+		if (dirtyValues.remove(name))
+		{
+			workingSet = workingSet.remove(name);
+			workingSet = workingSet.addDim(name, resolvedValues[name]);
+		}
+	}
+
 	/// Peek at the subset the algorithm is currently working with.
 	@property Set currentSubset()
 	{
@@ -1279,6 +1288,55 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		workingSet = Set(new immutable Set.Node(name, cast(immutable) newChildren)).deduplicate;
 	}
 
+	/// Perform a transformation with multiple inputs and outputs.
+	/// Inputs and outputs must not overlap.
+	/// Output variables must not have been resolved yet.
+	/// Can be used to perform binary operations, copy-transforms, and more.
+	void multiTransform(scope A[] inputs, scope A[] outputs, scope void delegate(scope V[] inputValues, scope V[] outputValues) fun)
+	{
+		assert(inputs.length > 0 && outputs.length > 0, "");
+		foreach (output; outputs)
+		{
+			assert(!inputs.canFind(output), "Inputs and outputs overlap");
+			assert(output !in resolvedValues, "Output is already resolved");
+		}
+
+		foreach (input; inputs)
+			flush(input);
+		foreach (output; outputs)
+			destroy(output);
+		foreach_reverse (input; inputs)
+			workingSet = workingSet.bringToFront(input);
+
+		Set resultSet = Set.emptySet;
+		auto inputValues = new V[inputs.length];
+		auto outputValues = new V[outputs.length];
+
+		void visit(Set set, size_t depth)
+		{
+			if (depth == inputs.length)
+			{
+				fun(inputValues, outputValues);
+				foreach_reverse (i, input; inputs)
+					set = set.addDim(input, inputValues[i]);
+				foreach_reverse (i, output; outputs)
+					set = set.addDim(output, outputValues[i]);
+				resultSet = resultSet.merge(set);
+			}
+			else
+			{
+				assert(set.root.dim == inputs[depth]);
+				foreach (ref pair; set.root.children)
+				{
+					inputValues[depth] = pair.value;
+					visit(pair.set, depth + 1);
+				}
+			}
+		}
+		visit(workingSet, 0);
+		workingSet = resultSet;
+	}
+
 	/// Inject a variable and values to iterate over.
 	/// The variable must not have been resolved yet.
 	void inject(A name, V[] values)
@@ -1341,4 +1399,31 @@ unittest
 		v.transform("x", (ref int v) { v *= 2; });
 		v.put("y", v.get("x"));
 	}
+}
+
+// Test that singularValues does not interfere with flushing
+unittest
+{
+	alias M = MapSet!(string, int);
+	M m = M.unitSet.cartesianProduct("x", [1]);
+	auto v = MapSetVisitor!(string, int)(m);
+	assert("x" in v.singularValues);
+	v.next();
+	v.put("x", 2);
+	v.currentSubset;
+	assert(v.get("x") == 2);
+}
+
+// multiTransform
+unittest
+{
+	alias M = MapSet!(string, int);
+	M m = M.unitSet.cartesianProduct("x", [1, 2, 3, 4, 5]);
+	auto v = MapSetVisitor!(string, int)(m);
+	v.next();
+	v.copy("x", "y");
+	v.transform("y", (ref int v) { v = 6 - v; });
+	v.multiTransform(["x", "y"], ["z"], (int[] inputs, int[] outputs) { outputs[0] = inputs[0] + inputs[1]; });
+	assert(v.currentSubset.all("z") == [6]);
+	assert(!v.next());
 }
