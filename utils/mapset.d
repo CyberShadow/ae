@@ -1038,23 +1038,18 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 
 		struct VarState
 		{
-			// Variable holds this one value if `haveValue` is true.
-			V value;
-
 			// Optimization.
 			// For variables which have been resolved, or have been
-			// set to some specific value, remember that value here
-			// (in the `value` field).
+			// set to some specific value, remember that value here.
 			// Faster than checking stack / workingSet.all(name)[0].
-			// If this is set, it has a concrete value either because
-			// we are iterating over it (it's in the stack), or due to
-			// a `put` call.
-			bool haveValue;
+			// If this varState member exists, it has a concrete value
+			// either because we are iterating over it (it's in the
+			// stack), or due to a `put` call.
+			V value;
 
 			// Optimization.
 			// Accumulate MapSet.set calls, and flush then in bulk.
 			// The value to flush is stored in the `value` field.
-			// If `dirty` is true, `haveValue` must be true.
 			bool dirty;
 		}
 		VarState[A] varState, initialVarState;
@@ -1068,7 +1063,7 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		this.set = set;
 		foreach (dim, values; set.getDimsAndValues())
 			if (values.length == 1)
-				initialVarState[dim] = VarState(values.byKey.front, true);
+				initialVarState[dim] = VarState(values.byKey.front);
 	} ///
 
 	/// Resets iteration to the beginning.
@@ -1153,8 +1148,7 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 	{
 		assert(workingSet !is Set.emptySet, "Not iterating");
 		if (auto pstate = name in varState)
-			if (pstate.haveValue)
-				return (&pstate.value)[0 .. 1];
+			return (&pstate.value)[0 .. 1];
 
 		return workingSet.all(name);
 	}
@@ -1163,34 +1157,39 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 	V get(A name)
 	{
 		assert(workingSet !is Set.emptySet, "Not iterating");
-		auto pstate = &varState.require(name);
-		if (pstate.haveValue)
-			return pstate.value;
+		V value;
+		varState.updateVoid(name,
+			// Create
+			{
+				VarState state;
+				if (stackPos == stack.length)
+				{
+					// Expand new variable
+					auto values = workingSet.all(name);
+					value = values[0];
+					state.value = value;
+					stack ~= Var(name, values, 0);
+					stackPos++;
+					if (values.length > 1)
+						workingSet = workingSet.get(name, value);
+					return state;
+				}
 
-		if (stackPos == stack.length)
-		{
-			// Expand new variable
-			auto values = workingSet.all(name);
-			auto value = values[0];
-			// auto pstate = varState
-			pstate.value = value;
-			pstate.haveValue = true;
-			stack ~= Var(name, values, 0);
-			stackPos++;
-			if (values.length > 1)
-				workingSet = workingSet.get(name, value);
-			return value;
-		}
-
-		// Iterate over known variable
-		auto var = &stack[stackPos];
-		assert(var.name == name, "Mismatching get order");
-		auto value = var.values[var.pos];
-		workingSet = workingSet.get(var.name, value);
-		assert(workingSet !is Set.emptySet, "Empty set after restoring");
-		pstate.value = value;
-		pstate.haveValue = true;
-		stackPos++;
+				// Iterate over known variable
+				auto var = &stack[stackPos];
+				assert(var.name == name, "Mismatching get order");
+				value = var.values[var.pos];
+				workingSet = workingSet.get(var.name, value);
+				assert(workingSet !is Set.emptySet, "Empty set after restoring");
+				state.value = value;
+				stackPos++;
+				return state;
+			},
+			// Update
+			(ref VarState state)
+			{
+				value = state.value;
+			});
 		return value;
 	}
 
@@ -1199,13 +1198,14 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 	{
 		assert(workingSet !is Set.emptySet, "Not iterating");
 
-		auto pstate = &varState.require(name);
-
-		if (pstate.haveValue && pstate.value == value)
+		auto pstate = name in varState;
+		if (pstate && pstate.value == value)
 			return; // All OK
+		if (!pstate)
+			pstate = &varState.require(name);
 
 		pstate.value = value;
-		pstate.haveValue = pstate.dirty = true;
+		pstate.dirty = true;
 
 		// Flush null values ASAP, to avoid non-null values
 		// accumulating in the set and increasing the set size.
@@ -1229,11 +1229,10 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 			return;
 
 		if (auto pSourceState = source in varState)
-			if (pSourceState.haveValue)
-			{
-				put(target, pSourceState.value);
-				return;
-			}
+		{
+			put(target, pSourceState.value);
+			return;
+		}
 
 		assert(workingSet !is Set.emptySet, "Not iterating");
 
@@ -1255,12 +1254,11 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 	{
 		assert(workingSet !is Set.emptySet, "Not iterating");
 		if (auto pState = name in varState)
-			if (pState.haveValue)
-			{
-				pState.dirty = true;
-				fun(pState.value);
-				return;
-			}
+		{
+			pState.dirty = true;
+			fun(pState.value);
+			return;
+		}
 
 		workingSet = workingSet.bringToFront(name);
 		Set[V] newChildren;
@@ -1286,12 +1284,11 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 	{
 		assert(workingSet !is Set.emptySet, "Not iterating");
 		if (auto pState = name in varState)
-			if (pState.haveValue)
-			{
-				pState.dirty = true;
-				fun(pState.value);
-				return;
-			}
+		{
+			pState.dirty = true;
+			fun(pState.value);
+			return;
+		}
 
 		workingSet = workingSet.bringToFront(name);
 		auto newChildren = workingSet.root.children.dup;
@@ -1416,7 +1413,7 @@ unittest
 	alias M = MapSet!(string, int);
 	M m = M.unitSet.cartesianProduct("x", [1]);
 	auto v = MapSetVisitor!(string, int)(m);
-	assert(v.initialVarState["x"].haveValue);
+	assert(v.initialVarState["x"].value == 1);
 	v.next();
 	v.put("x", 2);
 	v.currentSubset;
