@@ -1066,6 +1066,19 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 				initialVarState[dim] = VarState(values.byKey.front);
 	} ///
 
+	@disable this(this);
+
+	MapSetVisitor dup()
+	{
+		MapSetVisitor r;
+		r.set = set;
+		r.stack = stack.dup;
+		r.stackPos = stackPos;
+		r.varState = varState.dup;
+		r.workingSet = workingSet;
+		return r;
+	}
+
 	/// Resets iteration to the beginning.
 	/// Equivalent to but faster than constructing a new MapSetVisitor
 	/// instance (`visitor = MapSetVisitor(visitor.set)`).
