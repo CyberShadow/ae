@@ -782,6 +782,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 		rootEntry.context = &context;
 
 		auto endPos = appendString(context.pathBuf, 0, dirPath);
+		appendString(context.pathBuf, endPos, "\0");
 		rootEntry.data.pathTailPos = endPos - (endPos > 0 && context.pathBuf[endPos - 1].isDirSeparator() ? 1 : 0);
 		assert(rootEntry.data.pathTailPos > 0);
 
