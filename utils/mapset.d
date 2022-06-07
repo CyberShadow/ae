@@ -1036,27 +1036,28 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		Var[] stack;
 		size_t stackPos;
 
-		// Optimization.
-		// On start, populated with lists of variable names with a single value.
-		// Faster than workingSet.all(name)[0].
-		// The values represent those at the beginning of an iteration;
-		// does not change across iterations.
-		V[A] singularValues;
+		struct VarState
+		{
+			// Variable holds this one value if `haveValue` is true.
+			V value;
 
-		// Optimization.
-		// Remember which variable have been resolved, and their values.
-		// Faster than checking stack / workingSet.all(name)[0].
-		// If a variable is here, it has a concrete value either
-		// because we are iterating over it (it's in the stack), or
-		// due to a `put` call.
-		// Note that it's not possible to un-resolve a variable
-		// (because it's already in the iteration stack).
-		V[A] resolvedValues;
+			// Optimization.
+			// For variables which have been resolved, or have been
+			// set to some specific value, remember that value here
+			// (in the `value` field).
+			// Faster than checking stack / workingSet.all(name)[0].
+			// If this is set, it has a concrete value either because
+			// we are iterating over it (it's in the stack), or due to
+			// a `put` call.
+			bool haveValue;
 
-		// Optimization.
-		// Accumulate MapSet.set calls, and flush then in bulk.
-		// The values to flush are stored in resolvedValues.
-		private HashSet!A dirtyValues;
+			// Optimization.
+			// Accumulate MapSet.set calls, and flush then in bulk.
+			// The value to flush is stored in the `value` field.
+			// If `dirty` is true, `haveValue` must be true.
+			bool dirty;
+		}
+		VarState[A] varState, initialVarState;
 
 		// The version of the set for the current iteration.
 		private Set workingSet;
@@ -1067,7 +1068,7 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		this.set = set;
 		foreach (dim, values; set.getDimsAndValues())
 			if (values.length == 1)
-				singularValues[dim] = values.byKey.front;
+				initialVarState[dim] = VarState(values.byKey.front, true);
 	} ///
 
 	/// Resets iteration to the beginning.
@@ -1105,29 +1106,37 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 			}
 
 		workingSet = set;
-		resolvedValues = null;
-		dirtyValues.clear();
+		varState = initialVarState.dup;
 		stackPos = 0;
 		return true;
 	}
 
 	private void flush()
 	{
+		auto dirtyValues = varState.byKeyValue
+			.filter!(pair => pair.value.dirty)
+			.map!(pair => pair.key)
+			.toSet;
 		if (dirtyValues.empty)
 			return;
 		workingSet = workingSet.remove((A name) => name in dirtyValues);
-		foreach (name; dirtyValues)
-			workingSet = workingSet.addDim(name, resolvedValues[name]);
-		dirtyValues.clear();
+		foreach (name, ref state; varState)
+			if (state.dirty)
+			{
+				workingSet = workingSet.addDim(name, state.value);
+				state.dirty = false;
+			}
 	}
 
 	private void flush(A name)
 	{
-		if (dirtyValues.remove(name))
-		{
-			workingSet = workingSet.remove(name);
-			workingSet = workingSet.addDim(name, resolvedValues[name]);
-		}
+		if (auto pstate = name in varState)
+			if (pstate.dirty)
+			{
+				pstate.dirty = false;
+				workingSet = workingSet.remove(name);
+				workingSet = workingSet.addDim(name, pstate.value);
+			}
 	}
 
 	/// Peek at the subset the algorithm is currently working with.
@@ -1143,10 +1152,9 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 	/*private*/ const(V)[] getAll(A name)
 	{
 		assert(workingSet !is Set.emptySet, "Not iterating");
-		if (auto pvalue = name in resolvedValues)
-			return pvalue[0 .. 1];
-		if (auto pvalue = name in singularValues)
-			return pvalue[0 .. 1];
+		if (auto pstate = name in varState)
+			if (pstate.haveValue)
+				return (&pstate.value)[0 .. 1];
 
 		return workingSet.all(name);
 	}
@@ -1155,17 +1163,18 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 	V get(A name)
 	{
 		assert(workingSet !is Set.emptySet, "Not iterating");
-		if (auto pvalue = name in resolvedValues)
-			return *pvalue;
-		if (auto pvalue = name in singularValues)
-			return *pvalue;
+		auto pstate = &varState.require(name);
+		if (pstate.haveValue)
+			return pstate.value;
 
 		if (stackPos == stack.length)
 		{
 			// Expand new variable
 			auto values = workingSet.all(name);
 			auto value = values[0];
-			resolvedValues[name] = value;
+			// auto pstate = varState
+			pstate.value = value;
+			pstate.haveValue = true;
 			stack ~= Var(name, values, 0);
 			stackPos++;
 			if (values.length > 1)
@@ -1179,7 +1188,8 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		auto value = var.values[var.pos];
 		workingSet = workingSet.get(var.name, value);
 		assert(workingSet !is Set.emptySet, "Empty set after restoring");
-		resolvedValues[var.name] = value;
+		pstate.value = value;
+		pstate.haveValue = true;
 		stackPos++;
 		return value;
 	}
@@ -1189,42 +1199,41 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 	{
 		assert(workingSet !is Set.emptySet, "Not iterating");
 
-		// A small optimization:
-		if (name !in resolvedValues)
-			if (auto pvalue = name in singularValues)
-				if (*pvalue == value)
-					return;
+		auto pstate = &varState.require(name);
 
-		resolvedValues[name] = value;
-		dirtyValues.add(name);
+		if (pstate.haveValue && pstate.value == value)
+			return; // All OK
+
+		pstate.value = value;
+		pstate.haveValue = pstate.dirty = true;
+
+		// Flush null values ASAP, to avoid non-null values
+		// accumulating in the set and increasing the set size.
+		if (value == nullValue)
+			flush(name);
 	}
 
 	/// Prepare an unresolved variable for overwriting (with more than
 	/// one value).
 	private void destroy(A name)
 	{
-		assert(name !in resolvedValues, "Already resolved");
-		singularValues.remove(name); // Discard optimization
-		assert(name !in dirtyValues); // can't be dirty if not resolved
+		varState.remove(name);
 		workingSet = workingSet.remove(name);
 	}
 
 	/// Algorithm interface - copy a value target another name,
-	/// without resolving it (unless it's already resolved).  A
-	/// resolved variable may not be overwrittten by an unresolved
-	/// one.
+	/// without resolving it (unless it's already resolved).
 	void copy(A source, A target)
 	{
 		if (source == target)
 			return;
 
-		if (auto pvalue = source in resolvedValues)
-		{
-			put(target, *pvalue);
-			return;
-		}
-		else
-			assert(target !in resolvedValues, "Source is unresolved but target is already resolved");
+		if (auto pSourceState = source in varState)
+			if (pSourceState.haveValue)
+			{
+				put(target, pSourceState.value);
+				return;
+			}
 
 		assert(workingSet !is Set.emptySet, "Not iterating");
 
@@ -1245,11 +1254,13 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 	void transform(A name, scope void delegate(ref V value) fun)
 	{
 		assert(workingSet !is Set.emptySet, "Not iterating");
-		if (auto pvalue = name in resolvedValues)
-		{
-			dirtyValues.add(name);
-			return fun(*pvalue);
-		}
+		if (auto pState = name in varState)
+			if (pState.haveValue)
+			{
+				pState.dirty = true;
+				fun(pState.value);
+				return;
+			}
 
 		workingSet = workingSet.bringToFront(name);
 		Set[V] newChildren;
@@ -1274,11 +1285,13 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 	void injectiveTransform(A name, scope void delegate(ref V value) fun)
 	{
 		assert(workingSet !is Set.emptySet, "Not iterating");
-		if (auto pvalue = name in resolvedValues)
-		{
-			dirtyValues.add(name);
-			return fun(*pvalue);
-		}
+		if (auto pState = name in varState)
+			if (pState.haveValue)
+			{
+				pState.dirty = true;
+				fun(pState.value);
+				return;
+			}
 
 		workingSet = workingSet.bringToFront(name);
 		auto newChildren = workingSet.root.children.dup;
@@ -1290,16 +1303,12 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 
 	/// Perform a transformation with multiple inputs and outputs.
 	/// Inputs and outputs must not overlap.
-	/// Output variables must not have been resolved yet.
 	/// Can be used to perform binary operations, copy-transforms, and more.
 	void multiTransform(scope A[] inputs, scope A[] outputs, scope void delegate(scope V[] inputValues, scope V[] outputValues) fun)
 	{
 		assert(inputs.length > 0 && outputs.length > 0, "");
 		foreach (output; outputs)
-		{
 			assert(!inputs.canFind(output), "Inputs and outputs overlap");
-			assert(output !in resolvedValues, "Output is already resolved");
-		}
 
 		foreach (input; inputs)
 			flush(input);
@@ -1401,17 +1410,34 @@ unittest
 	}
 }
 
-// Test that singularValues does not interfere with flushing
+// Test that initialVarState does not interfere with flushing
 unittest
 {
 	alias M = MapSet!(string, int);
 	M m = M.unitSet.cartesianProduct("x", [1]);
 	auto v = MapSetVisitor!(string, int)(m);
-	assert("x" in v.singularValues);
+	assert(v.initialVarState["x"].haveValue);
 	v.next();
 	v.put("x", 2);
 	v.currentSubset;
 	assert(v.get("x") == 2);
+}
+
+// Test resolving the same variable several times
+unittest
+{
+	alias M = MapSet!(string, int);
+	M m = M.unitSet.cartesianProduct("x", [10, 20, 30]);
+	auto v = MapSetVisitor!(string, int)(m);
+	int[] result;
+	while (v.next())
+	{
+		auto a = v.get("x"); // First resolve
+		v.inject("x", [1, 2, 3]);
+		auto b = v.get("x"); // Second resolve
+		result ~= a + b;
+	}
+	assert(result == [11, 12, 13, 21, 22, 23, 31, 32, 33]);
 }
 
 // multiTransform
