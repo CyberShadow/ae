@@ -1129,6 +1129,19 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		return workingSet;
 	}
 
+	/// Get all possible values for this variable at this point.
+	/// Should be used mainly for debugging.
+	/*private*/ const(V)[] getAll(A name)
+	{
+		assert(workingSet !is Set.emptySet, "Not iterating");
+		if (auto pvalue = name in resolvedValues)
+			return pvalue[0 .. 1];
+		if (auto pvalue = name in singularValues)
+			return pvalue[0 .. 1];
+
+		return workingSet.all(name);
+	}
+
 	/// Algorithm interface - get a value by name
 	V get(A name)
 	{
