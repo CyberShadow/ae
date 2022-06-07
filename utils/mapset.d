@@ -1175,6 +1175,16 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		dirtyValues.add(name);
 	}
 
+	/// Prepare an unresolved variable for overwriting (with more than
+	/// one value).
+	private void destroy(A name)
+	{
+		assert(name !in resolvedValues, "Already resolved");
+		singularValues.remove(name); // Discard optimization
+		assert(name !in dirtyValues); // can't be dirty if not resolved
+		workingSet = workingSet.remove(name);
+	}
+
 	/// Apply a function over every possible value of the given
 	/// variable, without resolving it (unless it's already resolved).
 	void transform(A name, scope void delegate(ref V value) fun)
@@ -1227,9 +1237,8 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 	/// The variable must not have been resolved yet.
 	void inject(A name, V[] values)
 	{
-		assert(name !in resolvedValues, "Already resolved");
 		assert(values.length > 0, "Injecting zero values would result in an empty set");
-		singularValues.remove(name);
+		destroy(name);
 		workingSet = workingSet.cartesianProduct(name, values);
 	}
 }
