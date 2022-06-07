@@ -1036,6 +1036,8 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		Var[] stack;
 		size_t stackPos;
 
+		private enum Maybe { no, maybe, yes }
+
 		struct VarState
 		{
 			// Variable holds this one value if `haveValue` is true.
@@ -1056,6 +1058,10 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 			// The value to flush is stored in the `value` field.
 			// If `dirty` is true, `haveValue` must be true.
 			bool dirty;
+
+			// Optimization.
+			// Remember whether this variable is in the set or not.
+			Maybe inSet = Maybe.maybe;
 		}
 		VarState[A] varState, initialVarState;
 
@@ -1126,18 +1132,17 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 
 	private void flush()
 	{
-		auto dirtyValues = varState.byKeyValue
-			.filter!(pair => pair.value.dirty)
+		auto toRemove = varState.byKeyValue
+			.filter!(pair => pair.value.dirty && pair.value.inSet >= Maybe.maybe)
 			.map!(pair => pair.key)
 			.toSet;
-		if (dirtyValues.empty)
-			return;
-		workingSet = workingSet.remove((A name) => name in dirtyValues);
+		workingSet = workingSet.remove((A name) => name in toRemove);
 		foreach (name, ref state; varState)
 			if (state.dirty)
 			{
 				workingSet = workingSet.addDim(name, state.value);
 				state.dirty = false;
+				state.inSet = state.value == nullValue ? Maybe.no : Maybe.yes; // addDim is a no-op with nullValue
 			}
 	}
 
@@ -1147,8 +1152,10 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 			if (pstate.dirty)
 			{
 				pstate.dirty = false;
-				workingSet = workingSet.remove(name);
+				if (pstate.inSet >= Maybe.maybe)
+					workingSet = workingSet.remove(name);
 				workingSet = workingSet.addDim(name, pstate.value);
+				pstate.inSet = pstate.value == nullValue ? Maybe.no : Maybe.yes; // addDim is a no-op with nullValue
 			}
 	}
 
@@ -1191,7 +1198,10 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 			stack ~= Var(name, values, 0);
 			stackPos++;
 			if (values.length > 1)
+			{
 				workingSet = workingSet.get(name, value);
+				pstate.inSet = Maybe.maybe;
+			}
 			return value;
 		}
 
@@ -1200,6 +1210,7 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		assert(var.name == name, "Mismatching get order");
 		auto value = var.values[var.pos];
 		workingSet = workingSet.get(var.name, value);
+		pstate.inSet = Maybe.maybe;
 		assert(workingSet !is Set.emptySet, "Empty set after restoring");
 		pstate.value = value;
 		pstate.haveValue = true;
@@ -1230,8 +1241,13 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 	/// one value).
 	private void destroy(A name)
 	{
-		varState.remove(name);
-		workingSet = workingSet.remove(name);
+		auto pstate = &varState.require(name);
+		pstate.haveValue = pstate.dirty = false;
+		if (pstate.inSet >= Maybe.maybe)
+		{
+			workingSet = workingSet.remove(name);
+			pstate.inSet = Maybe.no;
+		}
 	}
 
 	/// Algorithm interface - copy a value target another name,
@@ -1241,12 +1257,13 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		if (source == target)
 			return;
 
-		if (auto pSourceState = source in varState)
-			if (pSourceState.haveValue)
-			{
-				put(target, pSourceState.value);
-				return;
-			}
+		auto pSourceState = &varState.require(source);
+		auto pTargetState = &varState.require(target);
+		if (pSourceState.haveValue)
+		{
+			put(target, pSourceState.value);
+			return;
+		}
 
 		assert(workingSet !is Set.emptySet, "Not iterating");
 
@@ -1260,6 +1277,8 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 			pair = Set.Pair(pair.value, set);
 		}
 		workingSet = Set(new immutable Set.Node(target, cast(immutable) newChildren)).deduplicate;
+		pSourceState.inSet = Maybe.yes;
+		pTargetState.inSet = Maybe.yes;
 	}
 
 	/// Apply a function over every possible value of the given
@@ -1267,13 +1286,13 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 	void transform(A name, scope void delegate(ref V value) fun)
 	{
 		assert(workingSet !is Set.emptySet, "Not iterating");
-		if (auto pState = name in varState)
-			if (pState.haveValue)
-			{
-				pState.dirty = true;
-				fun(pState.value);
-				return;
-			}
+		auto pState = &varState.require(name);
+		if (pState.haveValue)
+		{
+			pState.dirty = true;
+			fun(pState.value);
+			return;
+		}
 
 		workingSet = workingSet.bringToFront(name);
 		Set[V] newChildren;
@@ -1289,6 +1308,7 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 				});
 		}
 		workingSet = Set(new immutable Set.Node(name, cast(immutable) newChildren)).deduplicate;
+		pState.inSet = Maybe.yes;
 	}
 
 	/// Apply a function over every possible value of the given
@@ -1298,13 +1318,13 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 	void injectiveTransform(A name, scope void delegate(ref V value) fun)
 	{
 		assert(workingSet !is Set.emptySet, "Not iterating");
-		if (auto pState = name in varState)
-			if (pState.haveValue)
-			{
-				pState.dirty = true;
-				fun(pState.value);
-				return;
-			}
+		auto pState = &varState.require(name);
+		if (pState.haveValue)
+		{
+			pState.dirty = true;
+			fun(pState.value);
+			return;
+		}
 
 		workingSet = workingSet.bringToFront(name);
 		auto newChildren = workingSet.root.children.dup;
@@ -1312,6 +1332,7 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 			fun(child.value);
 		newChildren.sort();
 		workingSet = Set(new immutable Set.Node(name, cast(immutable) newChildren)).deduplicate;
+		pState.inSet = Maybe.yes;
 	}
 
 	/// Perform a transformation with multiple inputs and outputs.
@@ -1357,6 +1378,10 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		}
 		visit(workingSet, 0);
 		workingSet = resultSet;
+		foreach (input; inputs)
+			varState.require(input).inSet = Maybe.yes;
+		foreach (output; outputs)
+			varState.require(output).inSet = Maybe.yes;
 	}
 
 	/// Inject a variable and values to iterate over.
@@ -1366,6 +1391,7 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		assert(values.length > 0, "Injecting zero values would result in an empty set");
 		destroy(name);
 		workingSet = workingSet.cartesianProduct(name, values);
+		varState.require(name).inSet = Maybe.yes;
 	}
 }
 
