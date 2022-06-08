@@ -451,6 +451,39 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		return this; // No mutation necessary
 	}
 
+	/// Like `lazyMap`, but allow `fn` to return `emptySet`.
+	/*private*/ MapSet lazyDeletingMap(scope MapSet delegate(MapSet) fn) const
+	{
+		// Defer allocation until the need to mutate
+		foreach (i, ref pair; root.children) // Read-only scan
+		{
+			auto newSet = fn(pair.set);
+			if (newSet !is pair.set)
+			{
+				auto newChildren = new Pair[root.children.length];
+				// Known to not need mutation
+				newChildren[0 .. i] = root.children[0 .. i];
+				// Reuse already calculated result
+				auto j = i;
+				if (newSet != emptySet)
+					newChildren[j++] = Pair(pair.value, newSet);
+				// Continue scan with mutation
+				foreach (ref pair2; root.children[i + 1 .. $])
+				{
+					newSet = fn(pair2.set);
+					if (newSet != emptySet)
+						newChildren[j++] = Pair(pair2.value, newSet);
+				}
+				newChildren = newChildren[0 .. j];
+				if (newChildren.length)
+					return MapSet(new immutable Node(root.dim, cast(immutable) newChildren)).deduplicate;
+				else
+					return emptySet;
+			}
+		}
+		return this; // No mutation necessary
+	}
+
 	/// "Unset" a given dimension, removing it from the matrix.
 	/// The result is the union of all sub-matrices for all values of `dim`.
 	MapSet remove(DimName dim) const
