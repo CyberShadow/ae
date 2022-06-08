@@ -1252,7 +1252,7 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 
 	/// Algorithm interface - copy a value target another name,
 	/// without resolving it (unless it's already resolved).
-	void copy(A source, A target)
+	void copy(bool reorder = false)(A source, A target)
 	{
 		if (source == target)
 			return;
@@ -1267,18 +1267,30 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 
 		assert(workingSet !is Set.emptySet, "Not iterating");
 
-		destroy(target);
-
-		workingSet = workingSet.bringToFront(source);
-		auto newChildren = workingSet.root.children.dup;
-		foreach (ref pair; newChildren)
+		static if (reorder)
 		{
-			auto set = Set(new immutable Set.Node(source, [Set.Pair(pair.value, pair.set)])).deduplicate;
-			pair = Set.Pair(pair.value, set);
+			destroy(target);
+
+			workingSet = workingSet.bringToFront(source);
+			auto newChildren = workingSet.root.children.dup;
+			foreach (ref pair; newChildren)
+			{
+				auto set = Set(new immutable Set.Node(source, [Set.Pair(pair.value, pair.set)])).deduplicate;
+				pair = Set.Pair(pair.value, set);
+			}
+			workingSet = Set(new immutable Set.Node(target, cast(immutable) newChildren)).deduplicate;
+			pSourceState.inSet = Maybe.yes;
+			pTargetState.inSet = Maybe.yes;
 		}
-		workingSet = Set(new immutable Set.Node(target, cast(immutable) newChildren)).deduplicate;
-		pSourceState.inSet = Maybe.yes;
-		pTargetState.inSet = Maybe.yes;
+		else
+		{
+			targetTransform!true(source, target,
+				(ref const V inputValue, out V outputValue)
+				{
+					outputValue = inputValue;
+				}
+			);
+		}
 	}
 
 	/// Apply a function over every possible value of the given
