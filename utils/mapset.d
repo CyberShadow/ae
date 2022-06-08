@@ -1123,7 +1123,7 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 
 			// Optimization.
 			// Remember whether this variable is in the set or not.
-			Maybe inSet = Maybe.maybe;
+			Maybe inSet = Maybe.no;
 		}
 		VarState[A] varState, initialVarState;
 
@@ -1135,8 +1135,15 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 	{
 		this.set = set;
 		foreach (dim, values; set.getDimsAndValues())
+		{
+			auto pstate = &initialVarState.require(dim);
+			pstate.inSet = Maybe.yes;
 			if (values.length == 1)
-				initialVarState[dim] = VarState(values.byKey.front, true);
+			{
+				pstate.value = values.byKey.front;
+				pstate.haveValue = true;
+			}
+		}
 	} ///
 
 	@disable this(this);
