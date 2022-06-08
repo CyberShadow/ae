@@ -1335,6 +1335,63 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		pState.inSet = Maybe.yes;
 	}
 
+	/// Perform a transformation with one input and one output.
+	/// Does not reorder the MapSet.
+	void targetTransform(bool injective = false)(A input, A output, scope void delegate(ref const V inputValue, out V outputValue) fun)
+	{
+		assert(input != output, "Input is the same as output - use transform instead");
+
+		flush(input);
+		destroy(output);
+
+		bool sawInput;
+		Set visit(Set set)
+		{
+			if (set == Set.unitSet)
+			{
+				V inputValue = nullValue;
+				V outputValue;
+				fun(inputValue, outputValue);
+				return set.addDim(output, outputValue);
+			}
+			if (set.root.dim == input)
+			{
+				sawInput = true;
+				static if (injective)
+				{
+					auto outputChildren = new Set.Pair[set.root.children.length];
+					foreach (i, ref outputPair; outputChildren)
+					{
+						auto inputPair = &set.root.children[i];
+						fun(inputPair.value, outputPair.value);
+						outputPair.set = Set(new immutable Set.Node(input, inputPair[0..1])).deduplicate;
+					}
+					outputChildren.sort();
+					return Set(new immutable Set.Node(output, cast(immutable) outputChildren)).deduplicate;
+				}
+				else
+				{
+					auto inputChildren = set.root.children;
+					set = Set.emptySet;
+					foreach (i, ref inputPair; inputChildren)
+					{
+						V outputValue;
+						fun(inputPair.value, outputValue);
+						auto inputSet = Set(new immutable Set.Node(input, (&inputPair)[0..1])).deduplicate;
+						auto outputSet = inputSet.addDim(output, outputValue);
+						set = set.merge(outputSet);
+					}
+					return set;
+				}
+			}
+			else
+				return set.lazyMap(&visit);
+		}
+		workingSet = visit(workingSet);
+		varState.require(input).inSet = sawInput ? Maybe.yes : Maybe.no;
+		varState.require(output).inSet = Maybe.yes;
+	}
+
 	/// Perform a transformation with multiple inputs and outputs.
 	/// Inputs and outputs must not overlap.
 	/// Can be used to perform binary operations, copy-transforms, and more.
@@ -1477,6 +1534,20 @@ unittest
 		result ~= a + b;
 	}
 	assert(result == [11, 12, 13, 21, 22, 23, 31, 32, 33]);
+}
+
+// targetTransform
+unittest
+{
+	import std.algorithm.sorting : sort;
+
+	alias M = MapSet!(string, int);
+	M m = M.unitSet.cartesianProduct("x", [1, 2, 3, 4, 5]);
+	auto v = MapSetVisitor!(string, int)(m);
+	v.next();
+	v.targetTransform("x", "y", (ref const int input, out int output) { output = input + 1; });
+	assert(v.currentSubset.all("y").dup.sort.release == [2, 3, 4, 5, 6]);
+	assert(!v.next());
 }
 
 // multiTransform
