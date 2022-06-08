@@ -653,6 +653,17 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 		return MapSet(new immutable Node(dim, cast(immutable) children)).deduplicate;
 	}
 
+	/// Assumes that `dim` does not occur in `this` set.
+	private MapSet uncheckedCartesianProduct(DimName dim, DimValue[] values) const
+	{
+		if (this is emptySet) return emptySet;
+		if (values.length == 0) return emptySet;
+		this.assertDeduplicated();
+		auto children = values.map!(value => Pair(value, this)).array;
+		children.sort();
+		return MapSet(new immutable Node(dim, cast(immutable) children)).deduplicate;
+	}
+
 	/// Return a set which represents the Cartesian product between
 	/// this and the given set.
 	/// Duplicate dimensions are first removed from `this` set.
