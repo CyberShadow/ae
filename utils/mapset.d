@@ -1103,17 +1103,18 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		struct VarState
 		{
 			// Variable holds this one value if `haveValue` is true.
-			V value;
+			V value = nullValue;
 
 			// Optimization.
 			// For variables which have been resolved, or have been
 			// set to some specific value, remember that value here
 			// (in the `value` field).
-			// Faster than checking stack / workingSet.all(name)[0].
-			// If this is set, it has a concrete value either because
-			// we are iterating over it (it's in the stack), or due to
-			// a `put` call.
-			bool haveValue;
+			// Faster than checking workingSet.all(name)[0].
+			// If this is set, it has a concrete value because
+			// - we are iterating over it (it's in the stack)
+			// - due to a `put` call
+			// - it was never in the set (so it's implicitly at nullValue).
+			bool haveValue = true;
 
 			// Optimization.
 			// Accumulate MapSet.set calls, and flush then in bulk.
@@ -1139,10 +1140,9 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 			auto pstate = &initialVarState.require(dim);
 			pstate.inSet = Maybe.yes;
 			if (values.length == 1)
-			{
 				pstate.value = values.byKey.front;
-				pstate.haveValue = true;
-			}
+			else
+				pstate.haveValue = false;
 		}
 	} ///
 
