@@ -1357,47 +1357,50 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		destroy(output);
 
 		bool sawInput;
+		Set[Set] cache;
 		Set visit(Set set)
 		{
-			if (set == Set.unitSet)
-			{
-				V inputValue = nullValue;
-				V outputValue;
-				fun(inputValue, outputValue);
-				return set.addDim(output, outputValue);
-			}
-			if (set.root.dim == input)
-			{
-				sawInput = true;
-				static if (injective)
+			return cache.require(set, {
+				if (set == Set.unitSet)
 				{
-					auto outputChildren = new Set.Pair[set.root.children.length];
-					foreach (i, ref outputPair; outputChildren)
+					V inputValue = nullValue;
+					V outputValue;
+					fun(inputValue, outputValue);
+					return set.addDim(output, outputValue);
+				}
+				if (set.root.dim == input)
+				{
+					sawInput = true;
+					static if (injective)
 					{
-						auto inputPair = &set.root.children[i];
-						fun(inputPair.value, outputPair.value);
-						outputPair.set = Set(new immutable Set.Node(input, inputPair[0..1])).deduplicate;
+						auto outputChildren = new Set.Pair[set.root.children.length];
+						foreach (i, ref outputPair; outputChildren)
+						{
+							auto inputPair = &set.root.children[i];
+							fun(inputPair.value, outputPair.value);
+							outputPair.set = Set(new immutable Set.Node(input, inputPair[0..1])).deduplicate;
+						}
+						outputChildren.sort();
+						return Set(new immutable Set.Node(output, cast(immutable) outputChildren)).deduplicate;
 					}
-					outputChildren.sort();
-					return Set(new immutable Set.Node(output, cast(immutable) outputChildren)).deduplicate;
+					else
+					{
+						auto inputChildren = set.root.children;
+						set = Set.emptySet;
+						foreach (i, ref inputPair; inputChildren)
+						{
+							V outputValue;
+							fun(inputPair.value, outputValue);
+							auto inputSet = Set(new immutable Set.Node(input, (&inputPair)[0..1])).deduplicate;
+							auto outputSet = inputSet.addDim(output, outputValue);
+							set = set.merge(outputSet);
+						}
+						return set;
+					}
 				}
 				else
-				{
-					auto inputChildren = set.root.children;
-					set = Set.emptySet;
-					foreach (i, ref inputPair; inputChildren)
-					{
-						V outputValue;
-						fun(inputPair.value, outputValue);
-						auto inputSet = Set(new immutable Set.Node(input, (&inputPair)[0..1])).deduplicate;
-						auto outputSet = inputSet.addDim(output, outputValue);
-						set = set.merge(outputSet);
-					}
-					return set;
-				}
-			}
-			else
-				return set.lazyMap(&visit);
+					return set.lazyMap(&visit);
+			}());
 		}
 		workingSet = visit(workingSet);
 		varState.require(input).inSet = sawInput ? Maybe.yes : Maybe.no;
