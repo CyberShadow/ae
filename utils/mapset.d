@@ -1457,6 +1457,17 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		flush(input);
 		destroy(output);
 
+		auto pInputState = &varState.require(input);
+		auto pOutputState = &varState.require(output);
+
+		if (pInputState.haveValue)
+		{
+			V outputValue;
+			fun(pInputState.value, outputValue);
+			put(output, outputValue);
+			return;
+		}
+
 		bool sawInput, addedOutput;
 		Set[Set] cache;
 		Set visit(Set set)
