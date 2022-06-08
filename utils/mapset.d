@@ -569,10 +569,39 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	{
 		if (this is emptySet) return emptySet;
 		this.assertDeduplicated();
-		foreach (ref pair; bringToFront(dim).root.children)
-			if (pair.value == value)
-				return MapSet(new immutable Node(dim, [Pair(value, pair.set)])).deduplicate;
-		return emptySet;
+		enum reorder = false;
+		static if (reorder)
+		{
+			foreach (ref pair; bringToFront(dim).root.children)
+				if (pair.value == value)
+					return MapSet(new immutable Node(dim, [Pair(value, pair.set)])).deduplicate;
+			return emptySet;
+		}
+		else
+		{
+			MapSet[MapSet] cache;
+			MapSet visit(MapSet set)
+			{
+				return cache.require(set, {
+					if (set == unitSet)
+					{
+						if (value == nullValue)
+							return set;
+						else
+							return emptySet;
+					}
+					if (set.root.dim == dim)
+					{
+						foreach (ref pair; set.root.children)
+							if (pair.value == value)
+								return MapSet(new immutable Node(dim, [Pair(value, pair.set)])).deduplicate;
+						return emptySet;
+					}
+					return set.lazyDeletingMap(&visit);
+				}());
+			}
+			return visit(this);
+		}
 	}
 
 	/// Return all unique values occurring for a given dimension.
