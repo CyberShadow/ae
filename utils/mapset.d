@@ -1125,6 +1125,24 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 			// Optimization.
 			// Remember whether this variable is in the set or not.
 			Maybe inSet = Maybe.no;
+
+			void setInSet(bool inSet)
+			{
+				if (inSet)
+					this.inSet = Maybe.yes;
+				else
+				{
+					this.inSet = Maybe.no;
+					assert(!this.dirty, "TODO");
+					if (this.haveValue)
+						assert(this.value == nullValue);
+					else
+					{
+						this.haveValue = true;
+						this.value = nullValue;
+					}
+				}
+			}
 		}
 		VarState[A] varState, initialVarState;
 
@@ -1211,7 +1229,7 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 			{
 				workingSet = workingSet.addDim(name, state.value);
 				state.dirty = false;
-				state.inSet = state.value == nullValue ? Maybe.no : Maybe.yes; // addDim is a no-op with nullValue
+				state.setInSet(state.value != nullValue); // addDim is a no-op with nullValue
 			}
 	}
 
@@ -1234,7 +1252,7 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 						workingSet = workingSet.remove(name);
 				}
 				workingSet = workingSet.addDim(name, pstate.value);
-				pstate.inSet = pstate.value == nullValue ? Maybe.no : Maybe.yes; // addDim is a no-op with nullValue
+				pstate.setInSet(pstate.value != nullValue); // addDim is a no-op with nullValue
 			}
 	}
 
@@ -1491,8 +1509,8 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 			}());
 		}
 		workingSet = visit(workingSet);
-		varState.require(input).inSet = sawInput ? Maybe.yes : Maybe.no;
-		varState.require(output).inSet = addedOutput ? Maybe.yes : Maybe.no;
+		pInputState.setInSet(sawInput);
+		pOutputState.setInSet(addedOutput);
 	}
 
 	/// Perform a transformation with multiple inputs and outputs.
@@ -1549,9 +1567,9 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		visit(workingSet, 0);
 		workingSet = resultSet;
 		foreach (i, input; inputs)
-			varState.require(input).inSet = addedInput[i] ? Maybe.yes : Maybe.no;
+			varState.require(input).setInSet(addedInput[i]);
 		foreach (i, output; outputs)
-			varState.require(output).inSet = addedOutput[i] ? Maybe.yes : Maybe.no;
+			varState.require(output).setInSet(addedOutput[i]);
 	}
 
 	/// Inject a variable and values to iterate over.
