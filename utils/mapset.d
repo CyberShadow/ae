@@ -1600,7 +1600,7 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 	{
 		assert(values.length > 0, "Injecting zero values would result in an empty set");
 		destroy(name);
-		workingSet = workingSet.cartesianProduct(name, values);
+		workingSet = workingSet.uncheckedCartesianProduct(name, values);
 		varState.require(name).inSet = Maybe.yes;
 	}
 }
