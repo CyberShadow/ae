@@ -1362,6 +1362,18 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		}
 	}
 
+	/// A smarter `workingSet = workingSet.bringToFront(name)`, which
+	/// checks if `name` is in the set first.
+	private void bringToFront(A name)
+	{
+		auto pState = &varState.require(name);
+		if (pState.inSet == Maybe.no)
+			workingSet = Set(new immutable Set.Node(name, [Set.Pair(nullValue, workingSet)])).deduplicate;
+		else
+			workingSet = workingSet.bringToFront(name);
+		pState.inSet = Maybe.yes;
+	}
+
 	/// Algorithm interface - copy a value target another name,
 	/// without resolving it (unless it's already resolved).
 	void copy(bool reorder = false)(A source, A target)
@@ -1383,7 +1395,7 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		{
 			destroy(target);
 
-			workingSet = workingSet.bringToFront(source);
+			bringToFront(source);
 			auto newChildren = workingSet.root.children.dup;
 			foreach (ref pair; newChildren)
 			{
@@ -1418,7 +1430,7 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 			return;
 		}
 
-		workingSet = workingSet.bringToFront(name);
+		bringToFront(name);
 		Set[V] newChildren;
 		foreach (ref child; workingSet.root.children)
 		{
@@ -1450,7 +1462,7 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 			return;
 		}
 
-		workingSet = workingSet.bringToFront(name);
+		bringToFront(name);
 		auto newChildren = workingSet.root.children.dup;
 		foreach (ref child; newChildren)
 			fun(child.value);
@@ -1549,7 +1561,7 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		foreach (output; outputs)
 			destroy(output);
 		foreach_reverse (input; inputs)
-			workingSet = workingSet.bringToFront(input);
+			bringToFront(input);
 
 		Set resultSet = Set.emptySet;
 		auto inputValues = new V[inputs.length];
