@@ -1222,7 +1222,17 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 			{
 				pstate.dirty = false;
 				if (pstate.inSet >= Maybe.maybe)
-					workingSet = workingSet.remove(name);
+				{
+					if (pstate.inSet == Maybe.yes)
+					{
+						auto oldSet = workingSet;
+						auto newSet = workingSet.remove(name);
+						assert(oldSet != newSet, "Actually wasn't in the set");
+						workingSet = newSet;
+					}
+					else
+						workingSet = workingSet.remove(name);
+				}
 				workingSet = workingSet.addDim(name, pstate.value);
 				pstate.inSet = pstate.value == nullValue ? Maybe.no : Maybe.yes; // addDim is a no-op with nullValue
 			}
@@ -1256,6 +1266,14 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		if (pstate.haveValue)
 			return pstate.value;
 
+		// We are going to narrow the workingSet - update inSet appropriately
+		foreach (varName, ref state; varState)
+			if (varName == name)
+				state.inSet = Maybe.maybe;
+			else
+			if (state.inSet == Maybe.yes)
+				state.inSet = Maybe.maybe;
+
 		if (stackPos == stack.length)
 		{
 			// Expand new variable
@@ -1267,10 +1285,7 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 			stack ~= Var(name, values, 0);
 			stackPos++;
 			if (values.length > 1)
-			{
 				workingSet = workingSet.get(name, value);
-				pstate.inSet = Maybe.maybe;
-			}
 			return value;
 		}
 
@@ -1279,7 +1294,6 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		assert(var.name == name, "Mismatching get order");
 		auto value = var.values[var.pos];
 		workingSet = workingSet.get(var.name, value);
-		pstate.inSet = Maybe.maybe;
 		assert(workingSet !is Set.emptySet, "Empty set after restoring");
 		pstate.value = value;
 		pstate.haveValue = true;
@@ -1425,7 +1439,7 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		flush(input);
 		destroy(output);
 
-		bool sawInput;
+		bool sawInput, addedOutput;
 		Set[Set] cache;
 		Set visit(Set set)
 		{
@@ -1435,6 +1449,8 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 					V inputValue = nullValue;
 					V outputValue;
 					fun(inputValue, outputValue);
+					if (outputValue != nullValue)
+						addedOutput = true;
 					return set.addDim(output, outputValue);
 				}
 				if (set.root.dim == input)
@@ -1450,6 +1466,7 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 							outputPair.set = Set(new immutable Set.Node(input, inputPair[0..1])).deduplicate;
 						}
 						outputChildren.sort();
+						addedOutput = true;
 						return Set(new immutable Set.Node(output, cast(immutable) outputChildren)).deduplicate;
 					}
 					else
@@ -1463,6 +1480,8 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 							auto inputSet = Set(new immutable Set.Node(input, (&inputPair)[0..1])).deduplicate;
 							auto outputSet = inputSet.addDim(output, outputValue);
 							set = set.merge(outputSet);
+							if (outputValue != nullValue)
+								addedOutput = true;
 						}
 						return set;
 					}
@@ -1473,7 +1492,7 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		}
 		workingSet = visit(workingSet);
 		varState.require(input).inSet = sawInput ? Maybe.yes : Maybe.no;
-		varState.require(output).inSet = Maybe.yes;
+		varState.require(output).inSet = addedOutput ? Maybe.yes : Maybe.no;
 	}
 
 	/// Perform a transformation with multiple inputs and outputs.
@@ -1495,6 +1514,8 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		Set resultSet = Set.emptySet;
 		auto inputValues = new V[inputs.length];
 		auto outputValues = new V[outputs.length];
+		auto addedInput = new bool[inputs.length];
+		auto addedOutput = new bool[outputs.length];
 
 		void visit(Set set, size_t depth)
 		{
@@ -1502,9 +1523,17 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 			{
 				fun(inputValues, outputValues);
 				foreach_reverse (i, input; inputs)
+				{
 					set = set.addDim(input, inputValues[i]);
+					if (inputValues[i] != nullValue)
+						addedInput[i] = true;
+				}
 				foreach_reverse (i, output; outputs)
+				{
 					set = set.addDim(output, outputValues[i]);
+					if (outputValues[i] != nullValue)
+						addedOutput[i] = true;
+				}
 				resultSet = resultSet.merge(set);
 			}
 			else
@@ -1519,10 +1548,10 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 		}
 		visit(workingSet, 0);
 		workingSet = resultSet;
-		foreach (input; inputs)
-			varState.require(input).inSet = Maybe.yes;
-		foreach (output; outputs)
-			varState.require(output).inSet = Maybe.yes;
+		foreach (i, input; inputs)
+			varState.require(input).inSet = addedInput[i] ? Maybe.yes : Maybe.no;
+		foreach (i, output; outputs)
+			varState.require(output).inSet = addedOutput[i] ? Maybe.yes : Maybe.no;
 	}
 
 	/// Inject a variable and values to iterate over.
