@@ -1728,11 +1728,12 @@ version (linux)
 
 	/// Get MountInfo with longest mount point matching path.
 	/// Returns MountInfo.init if none match.
-	MountInfo getPathMountInfo(string path)
+	MountInfo getPathMountInfo(R)(R mounts, string path)
+	if (isInputRange!R && is(ElementType!R : MountInfo))
 	{
 		path = realPath(path);
 		size_t bestLength; MountInfo bestInfo;
-		foreach (ref info; getMounts())
+		foreach (ref info; mounts)
 		{
 			if (path.pathStartsWith(info.file))
 			{
@@ -1744,6 +1745,11 @@ version (linux)
 			}
 		}
 		return bestInfo;
+	}
+
+	MountInfo getPathMountInfo(string path)
+	{
+		return getMounts().getPathMountInfo(path);
 	}
 
 	/// Get the name of the filesystem that the given path is mounted under.
