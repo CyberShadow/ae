@@ -1789,7 +1789,7 @@ version (linux)
 		void[] opIndex(string key)
 		{
 			auto cKey = key.toStringz();
-			size_t size = 0;
+			sizediff_t size = 0;
 			void[] buf;
 			do
 			{
@@ -1833,7 +1833,7 @@ version (linux)
 		/// Return a list of all extended attribute names.
 		string[] keys()
 		{
-			size_t size = 0;
+			sizediff_t size = 0;
 			char[] buf;
 			do
 			{
@@ -1891,6 +1891,7 @@ version (linux)
 		auto attrs = xAttrs(fn);
 		enum key = "user.foo";
 		assert(key !in attrs);
+		assertThrown!ErrnoException(attrs[key]);
 		assert(attrs.keys == []);
 
 		attrs[key] = "bar";
