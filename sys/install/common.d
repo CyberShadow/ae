@@ -210,7 +210,10 @@ protected:
 			foreach (chunk; File(target, "rb").byChunk(0x10000))
 				sha.put(chunk[]);
 			auto hash = sha.finish();
-			enforce(hash.toHexString!(LetterCase.lower) == digest, "Could not verify integrity of " ~ target);
+			enforce(hash[].toHexString!(LetterCase.lower) == digest,
+				"Could not verify integrity of " ~ target ~ ".\n" ~
+				"Expected: " ~ digest ~ "\n" ~
+				"Got     : " ~ hash.toHexString!(LetterCase.lower));
 		}
 		else
 			log("WARNING: Not verifying integrity of " ~ url ~ ".");
