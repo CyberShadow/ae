@@ -333,7 +333,9 @@ class DManager : ICacheHost
 		protected override Git getRepo()
 		{
 			getMetaRepo().git; // ensure meta-repository is cloned
-			return Git(dir);
+			auto git = Git(dir);
+			git.commandPrefix ~= ["-c", `url.https://.insteadOf=git://`];
+			return git;
 		}
 
 		protected override void needHead(string hash)
