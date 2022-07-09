@@ -2577,7 +2577,7 @@ EOS";
 	}
 
 	version (Windows)
-	protected auto getVSInstaller()
+	auto getVSInstaller()
 	{
 		needInstaller();
 		return vs2013community;
