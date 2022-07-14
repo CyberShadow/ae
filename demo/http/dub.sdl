@@ -3,3 +3,4 @@ mainSourceFile "httpserve.d"
 targetType "executable"
 
 dependency "ae" version="*" path="../../"
+dependency "ae:openssl" version="*" path="../../"

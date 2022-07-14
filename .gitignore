@@ -13,7 +13,6 @@
 
 # dub
 .dub
-dub.selections.json
 /ae-test-library
 /ae-*-test-lib*
 
