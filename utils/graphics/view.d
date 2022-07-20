@@ -713,7 +713,7 @@ template colorMap(alias fun)
 		if (isView!V)
 	{
 		alias OLDCOLOR = ViewColor!V;
-		alias NEWCOLOR = typeof(fun(OLDCOLOR.init));
+		alias NEWCOLOR = typeof({ OLDCOLOR c = void; return fun(c);}());
 
 		struct Map
 		{
@@ -722,7 +722,7 @@ template colorMap(alias fun)
 			@property xy_t w() { return src.w; }
 			@property xy_t h() { return src.h; }
 
-			/*auto ref*/ NEWCOLOR opIndex(xy_t x, xy_t y)
+			auto ref NEWCOLOR opIndex(xy_t x, xy_t y)
 			{
 				return fun(src[x, y]);
 			}
@@ -775,6 +775,19 @@ unittest
 
 	auto i = onePixel(L8(1));
 	assert(i.invert[0, 0].l == 254);
+}
+
+unittest
+{
+	// Mutable colorMap with just getFun
+	import ae.utils.graphics.image : Image;
+	import ae.utils.graphics.color : RGB;
+	Image!RGB i;
+	i.size(1, 1);
+	i[0, 0] = RGB(1, 2, 3);
+	auto m = i.colorMap!(ref (ref RGB c) => c.g);
+	m[0, 0]++;
+	assert(i[0, 0] == RGB(1, 3, 3));
 }
 
 // ***************************************************************************
