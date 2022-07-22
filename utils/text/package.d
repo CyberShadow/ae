@@ -499,7 +499,7 @@ string verbatimWrap(
 		if (col > columns && start > lineStart)
 		{
 			result ~= "\n" ~ indent;
-			col = indentWidth;
+			col = indentWidth + (pos - start);
 
 			// Consume whitespace at line break
 			size_t numWhite;
