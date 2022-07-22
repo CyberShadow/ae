@@ -129,8 +129,8 @@ private:
 		static if (is(T U : U[]) && !hasIndirections!U) // void[]
 			static if (is(T V : V[N], size_t N))
 			{
-				assert(v.length == N, "Static array length mismatch");
-				return cast(T) v[0..N];
+				assert(v.length == N * V.sizeof, "Static array length mismatch");
+				return cast(T) v[0 .. N * V.sizeof];
 			}
 			else
 				return cast(T) v;
@@ -259,5 +259,14 @@ unittest
 	{
 		KeyValueStore!(string, ubyte[20]) kv;
 		ubyte[20] s = kv[""];
+	}
+}
+
+unittest
+{
+	if (false)
+	{
+		KeyValueStore!(string, float[20]) kv;
+		float[20] s = kv[""];
 	}
 }
