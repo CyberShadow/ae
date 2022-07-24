@@ -41,6 +41,7 @@ enum WrapFormat
 	flowedDelSp, /// format=flowed; delsp=yes
 	heuristics,  /// Guess
 	input,       /// As emitted by Rfc850Message.replyTemplate
+	markdown,    /// Hard linebreak is 2 or more spaces
 }
 
 /// Parses a message body holding text in the
@@ -99,6 +100,26 @@ Paragraph[] unwrapText(string text, WrapFormat wrapFormat)
 				{
 					if (wrapFormat == WrapFormat.flowedDelSp)
 						paragraphs[$-1].text = paragraphs[$-1].text[0..$-1];
+					paragraphs[$-1].text ~= line;
+				}
+				else
+					paragraphs ~= Paragraph(quotePrefix, line);
+			}
+			break;
+		case WrapFormat.markdown:
+			foreach (line; lines)
+			{
+				string quotePrefix = stripQuotePrefix(line);
+
+				if (paragraphs.length>0
+				 && paragraphs[$-1].quotePrefix==quotePrefix
+				 && !paragraphs[$-1].text.endsWith("  ")
+				 && line.length
+				 && line != "-- "
+				 && paragraphs[$-1].text != "-- ")
+				{
+					if (!paragraphs[$-1].text.endsWith(" "))
+						paragraphs[$-1].text ~= " ";
 					paragraphs[$-1].text ~= line;
 				}
 				else
