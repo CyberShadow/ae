@@ -785,7 +785,9 @@ unittest
 	Image!RGB i;
 	i.size(1, 1);
 	i[0, 0] = RGB(1, 2, 3);
-	auto m = i.colorMap!(ref (ref RGB c) => c.g);
+	//auto m = i.colorMap!(ref (ref RGB c) => c.g);
+	static ref ubyte dg(ref RGB c) { return c.g; }
+	auto m = i.colorMap!dg;
 	m[0, 0]++;
 	assert(i[0, 0] == RGB(1, 3, 3));
 }
