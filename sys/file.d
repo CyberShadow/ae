@@ -1029,13 +1029,7 @@ deprecated SysTime getMTime(string name)
 /// otherwise create it as an empty file.
 void touch(in char[] target)
 {
-	if (exists(target))
-	{
-		auto now = Clock.currTime();
-		setTimes(target, now, now);
-	}
-	else
-		std.file.write(target, "");
+	File(target, "ab");
 }
 
 /// Returns true if the target file doesn't exist,
