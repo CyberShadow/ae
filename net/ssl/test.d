@@ -73,10 +73,10 @@ void testSSL(SSLProvider ssl)
 	// testServer(     "incomplete-chain.badssl.com").assertNotThrown; // TODO?
 
 	testServer(               "sha256.badssl.com").assertNotThrown;
-	testServer(               "sha384.badssl.com").assertNotThrown;
-	testServer(               "sha512.badssl.com").assertNotThrown;
+	// testServer(               "sha384.badssl.com").assertNotThrown; // Currently expired
+	// testServer(               "sha512.badssl.com").assertNotThrown; // Currently expired
 
-	testServer(            "1000-sans.badssl.com").assertNotThrown;
+	// testServer(            "1000-sans.badssl.com").assertNotThrown; // Currently expired
 	testServer(           "10000-sans.badssl.com").assertThrown;
 
 	testServer(               "ecc256.badssl.com").assertNotThrown;
