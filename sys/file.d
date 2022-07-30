@@ -1025,6 +1025,16 @@ deprecated SysTime getMTime(string name)
 	return timeLastModified(name);
 }
 
+/// Return true if we can open this path for reading as a file.
+bool isReadableFile(string path)
+{
+	try
+		File(path, "rb");
+	catch (Exception e)
+		return false;
+	return true;
+}
+
 /// If target exists, update its modification time;
 /// otherwise create it as an empty file.
 void touch(in char[] target)
@@ -1104,6 +1114,14 @@ void ensureDirExists(string path)
 void ensurePathExists(string fn)
 {
 	fn.dirName.ensureDirExists();
+}
+
+/// Combines `ensurePathExists` and `touch`.
+void ensureFileExists(string fn)
+{
+	fn.ensurePathExists();
+	if (!fn.exists)
+		fn.touch();
 }
 
 static import core.stdc.errno;
@@ -1644,6 +1662,16 @@ unittest
 
 version (Posix)
 {
+	/// Resolve the target of the symlink, returning a valid path
+	/// (i.e. relative to `path`'s base, not the symlink's directory).
+	string linkTarget(string path)
+	{
+		auto target = readLink(path);
+		// Note: we don't use buildNormalizedPath because "a/b/.."
+		// may not be the same as "a" on POSIX.
+		return path.dirName.buildPath(target);
+	}
+
 	/// Wrapper around the C `realpath` function.
 	string realPath(string path)
 	{
