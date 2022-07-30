@@ -54,9 +54,6 @@ excludedSourceFiles "sys/benchmark.d"
 excludedSourceFiles "sys/vfs_curl.d"
 excludedSourceFiles "utils/meta/misc.d"
 
-# Triggers on import
-excludedSourceFiles "sys/benchmak.d"
-
 # Requires non-standard compiler features
 excludedSourceFiles "utils/alloc.d"
 excludedSourceFiles "utils/container/hashtable.d"
