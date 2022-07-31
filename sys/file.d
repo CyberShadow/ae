@@ -137,19 +137,21 @@ version (Posix)
 		int dirfd(DIR *dirp) pure nothrow @nogc;
 		int openat(int fd, const char *path, int oflag, ...) nothrow @nogc;
 
-		version (Darwin)
+		version (OSX)
 		{
-			pragma(mangle, "fstatat$INODE64")
-			int fstatat(int fd, const char *path, stat_t *buf, int flag) nothrow @nogc;
-
-			pragma(mangle, "fdopendir$INODE64")
-			DIR *fdopendir(int fd) nothrow @nogc;
+			version (AArch64)
+				enum INODE64Suffix = "";
+			else
+				enum INODE64Suffix = "$INODE64";
 		}
 		else
-		{
-			int fstatat(int fd, const(char)* path, stat_t* buf, int flag) nothrow @nogc;
-			DIR *fdopendir(int fd) nothrow @nogc;
-		}
+			enum INODE64Suffix = "";
+
+		pragma(mangle, "fstatat" ~ INODE64Suffix)
+		int fstatat(int fd, const char *path, stat_t *buf, int flag) nothrow @nogc;
+
+		pragma(mangle, "fdopendir" ~ INODE64Suffix)
+		DIR *fdopendir(int fd) nothrow @nogc;
 	}
 	version (linux)
 	{
