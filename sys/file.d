@@ -1674,6 +1674,24 @@ version (Posix)
 		return path.dirName.buildPath(target);
 	}
 
+	/// Ensure that `realPath(path)` exists, creating a file or
+	/// directory (according to `isFile`) as necessary, as well as any
+	/// missing directory components or symlink targets (recursively
+	/// if necessary).
+	void createLinkTargets(string path, bool isFile)
+	{
+		if (path == "/" || path == ".")
+			return;
+		createLinkTargets(path.dirName, false);
+		if (path.exists && path.isSymlink)
+			createLinkTargets(path.linkTarget, isFile);
+		else
+		if (isFile)
+			path.ensureFileExists();
+		else
+			path.ensureDirExists();
+	}
+
 	/// Wrapper around the C `realpath` function.
 	string realPath(string path)
 	{
