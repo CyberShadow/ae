@@ -211,6 +211,7 @@ static:
 	}
 }
 
+static if (__VERSION__ >= 2_096)
 unittest
 {
 	enum N = 3;
