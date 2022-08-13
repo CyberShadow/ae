@@ -65,7 +65,7 @@ struct BinomialCoefficientTable(T, T maxN, T maxK)
 		{
 			result.table[n][0] = 1;
 			foreach (k; 1 .. maxK + 1)
-				result.table[n][k] = result.table[n-1][k-1] + result.table[n-1][k];
+				result.table[n][k] = cast(T)(result.table[n-1][k-1] + result.table[n-1][k]);
 		}
 		return result;
 	}
@@ -144,12 +144,19 @@ static:
 		return packed;
 	}
 
-	U[N] unpack(P packed)
+	U[N] unpack(P packed) @nogc
 	{
+		import std.algorithm.iteration : map;
+		import std.range : iota, retro, assumeSorted, SearchPolicy;
+
+		import ae.utils.meta : I;
+
 		static if (lexicographic)
 			packed = packedCard-1 - packed;
 
-		void unpackOne(Index i, ref U r)
+		// We make i a compile-time parameter here to avoid
+		// allocating a closure for std.algorithm.map
+		void unpackOne(Index i)(ref U r) @nogc
 		{
 			static if (lexicographic)
 				enum lastValue = 0;
@@ -167,29 +174,38 @@ static:
 				return false;
 			}
 
-			// TODO optimize: rolling product or binary search?
-			// TODO optimize: don't check below N-i
 			static if (lexicographic)
 			{
-				foreach_reverse (U value; 0 .. unpackedCard)
-					if (checkValue(value, cast(U)(value - 1)))
-						break;
+				r = unpackedCard
+					.iota
+					.map!(value => summand(value, i))
+					.retro
+					.assumeSorted
+					.lowerBound!(SearchPolicy.binarySearch)(packed + 1)
+					.length
+					.I!(l => cast(U)(unpackedCard - l));
+				packed -= summand(r, i);
 			}
 			else
 			{
-				foreach         (U value; 0 .. unpackedCard)
-					if (checkValue(value, cast(U)(value + 1)))
-						break;
+				r = unpackedCard
+					.iota
+					.map!(value => summand(value, i))
+					.assumeSorted
+					.lowerBound!(SearchPolicy.binarySearch)(packed + 1)
+					.length
+					.I!(l => cast(U)(l - 1));
+				packed -= summand(r, i);
 			}
 		}
 
 		U[N] values;
 		static if (lexicographic)
-			foreach         (Index i, ref r; values)
-				unpackOne(i, r);
+			static foreach         (Index i; 0 .. N)
+				unpackOne!i(values[i]);
 		else
-			foreach_reverse (Index i, ref r; values)
-				unpackOne(i, r);
+			static foreach_reverse (Index i; 0 .. N)
+				unpackOne!i(values[i]);
 
 		return values;
 	}
