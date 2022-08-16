@@ -1021,17 +1021,43 @@ private auto fpToBuf(Q)(Q val) @safe nothrow @nogc
 				assert(false, "Initial conversion fails");
 		}
 
+		auto suffixPos = s.length;
+		foreach (i, c; s)
+			if (c == 'e' || c == 'E')
+			{
+				suffixPos = i;
+				break;
+			}
+		auto suffix = s[suffixPos .. $];
+		s = s[0 .. suffixPos];
+
+		StaticBuf!(char, 64) testBuf;
+		void render(char[] prefix)
+		{
+			testBuf.pos = 0;
+			testBuf.put(prefix);
+			testBuf.put(suffix);
+		}
+		F tryPrefix(char[] prefix)
+		{
+			render(prefix);
+			return forceType(parse(testBuf.data));
+		}
+
 		foreach_reverse (i; 1..s.length)
 			if (s[i]>='0' && s[i]<='8')
 			{
 				s[i]++;
-				if (forceType(parse(s[0..i+1]))==v)
+				if (tryPrefix(s[0..i+1])==v)
 					s = s[0..i+1];
 				else
 					s[i]--;
 			}
-		while (s.length>2 && s[$-1]!='.' && forceType(parse(s[0..$-1]))==v)
+		while (s.length>2 && s[$-1]!='.' && tryPrefix(s[0..$-1])==v)
 			s = s[0..$-1];
+
+		render(s);
+		return testBuf;
 	}
 	buf.pos = s.length;
 	return buf;
@@ -1084,6 +1110,12 @@ unittest
 	alias floatToString = fpToString!float;
 	alias realToString = fpToString!real;
 	alias crealToString = fpToString!(const(real));
+}
+
+unittest
+{
+	assert(2.3841857910156251e-07.doubleToString == "2.384185791015625e-07");
+	assert(1.3e-07.doubleToString == "1.3e-07");
 }
 
 /// Like `fpToString`, but writes the result to a sink.
