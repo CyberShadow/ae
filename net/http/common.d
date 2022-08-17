@@ -19,6 +19,7 @@ import core.time;
 
 import std.algorithm;
 import std.array;
+import std.base64;
 import std.string;
 import std.conv;
 import std.ascii;
@@ -28,6 +29,7 @@ import std.typecons : tuple;
 
 import ae.net.ietf.headers;
 import ae.sys.data;
+import ae.sys.dataset;
 import ae.utils.array : amap, afilter, auniq, asort;
 import ae.utils.text;
 import ae.utils.time;
@@ -101,22 +103,34 @@ public:
 
 			value = value[protocol.length+3..$];
 			auto pathstart = value.indexOf('/');
+			string _host;
 			if (pathstart == -1)
 			{
-				host = value;
+				_host = value;
 				_resource = "/";
 			}
 			else
 			{
-				host = value[0..pathstart];
+				_host = value[0..pathstart];
 				_resource = value[pathstart..$];
 			}
-			auto portstart = host().indexOf(':');
+
+			auto authEnd = _host.indexOf('@');
+			if (authEnd != -1)
+			{
+				// Assume HTTP Basic auth
+				import ae.utils.array : bytes;
+				headers["Authorization"] = "Basic " ~ Base64.encode(_host[0 .. authEnd].bytes).assumeUnique;
+				_host = _host[authEnd + 1 .. $];
+			}
+
+			auto portstart = _host.indexOf(':');
 			if (portstart != -1)
 			{
-				port = to!ushort(host[portstart+1..$]);
-				host = host[0..portstart];
+				port = to!ushort(_host[portstart+1..$]);
+				_host = _host[0..portstart];
 			}
+			host = _host;
 		}
 	}
 
