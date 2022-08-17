@@ -63,6 +63,11 @@ protected:
 		else
 			connector.connect(request.host, request.port);
 		assert(conn.state == ConnectionState.connecting);
+
+		// We must install a data read handler to indicate that we want to receive readable events.
+		// Though, this isn't going to be actually called.
+		// TODO: this should probably be fixed in OpenSSLAdapter instead.
+		conn.handleReadData = (Data _/*data*/) { assert(false); };
 	}
 
 	/// Called when the underlying connection (TCP, TLS...) is established.

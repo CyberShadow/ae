@@ -402,6 +402,7 @@ class OpenSSLAdapter : SSLAdapter
 
 	override void onConnect()
 	{
+		debug(OPENSSL) stderr.writefln("OpenSSL: * Transport is connected");
 		initialize();
 	} /// `SSLAdapter` method implementation.
 
@@ -444,7 +445,8 @@ class OpenSSLAdapter : SSLAdapter
 				}
 			}
 			enforce(r.data.length == 0, "SSL did not consume all read data");
-			super.onReadData(clearText);
+			if (clearText.length)
+				super.onReadData(clearText);
 		}
 		catch (CaughtException e)
 		{
@@ -487,6 +489,8 @@ class OpenSSLAdapter : SSLAdapter
 
 	override @property ConnectionState state()
 	{
+		if (next.state == ConnectionState.connecting)
+			return next.state;
 		return connectionState;
 	} /// ditto
 
