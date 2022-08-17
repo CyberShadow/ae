@@ -61,21 +61,21 @@ struct BinomialCoefficientTable(T, T maxN, T maxK)
 	{
 		typeof(this) result;
 		result.table[0][0] = 1;
-		foreach (n; 1 .. maxN + 1)
+		foreach (size_t n; 1 .. maxN + 1)
 		{
 			result.table[n][0] = 1;
-			foreach (k; 1 .. maxK + 1)
+			foreach (size_t k; 1 .. maxK + 1)
 				result.table[n][k] = cast(T)(result.table[n-1][k-1] + result.table[n-1][k]);
 		}
 		return result;
 	}
 
-	T binomialCoefficient(T n, T k) const
+	T binomialCoefficient(size_t n, size_t k) const
 	{
 		return table[n][k];
 	}
 
-	T multisetCoefficient(T n, T k) const
+	T multisetCoefficient(size_t n, size_t k) const
 	{
 		return binomialCoefficient(n + k - 1, k);
 	}
