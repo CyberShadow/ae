@@ -16,7 +16,8 @@
 
 module ae.net.http.client;
 
-import std.algorithm.mutation : move;
+import std.algorithm.mutation : move, swap;
+import std.exception : enforce;
 import std.string;
 import std.conv;
 import std.datetime;
@@ -28,15 +29,16 @@ import ae.net.ietf.headers;
 import ae.net.ietf.headerparse;
 import ae.net.ietf.url;
 import ae.net.ssl;
-import ae.utils.array : toArray;
+import ae.utils.array : toArray, shift;
 import ae.utils.exception : CaughtException;
 import ae.sys.data;
+
+debug(HTTP_CLIENT) debug = HTTP;
 debug(HTTP) import std.stdio : stderr;
 
 public import ae.net.http.common;
 
-/// Implements a HTTP client.
-/// Generally used to send one HTTP request.
+/// Implements a HTTP client connection to a single server.
 class HttpClient
 {
 protected:
@@ -44,33 +46,68 @@ protected:
 	TimeoutAdapter timer; // Timeout adapter.
 	IConnection conn;     // Top-level abstract connection. Reused for new connections.
 
-	DataVec inBuffer;
+	HttpRequest[] requestQueue; // Requests that have been enqueued to send after the connection is established.
 
-	HttpRequest currentRequest;
+	HttpResponse currentResponse; // Response to the currently-processed request.
+	ulong sentRequests, receivedResponses; // Used to know when we're still waiting for something.
 
-	HttpResponse currentResponse;
-	size_t expect;
+	DataVec headerBuffer; // Received but un-parsed headers
+	size_t expect;    // How much data do we expect to receive in the current request (size_t.max if until disconnect)
 
+	/// Connect to a request's destination.
+	void connect(HttpRequest request)
+	{
+		assert(conn.state == ConnectionState.disconnected);
+		if (request.proxy !is null)
+			connector.connect(request.proxyHost, request.proxyPort);
+		else
+			connector.connect(request.host, request.port);
+		assert(conn.state == ConnectionState.connecting);
+	}
+
+	/// Called when the underlying connection (TCP, TLS...) is established.
 	void onConnect()
 	{
-		sendRequest(currentRequest);
+		onIdle();
 	}
 
-	void sendRequest(HttpRequest request)
+	/// Called when we're ready to send a request.
+	void onIdle()
 	{
-		if ("User-Agent" !in request.headers && agent)
-			request.headers["User-Agent"] = agent;
-		if ("Accept-Encoding" !in request.headers)
-			request.headers["Accept-Encoding"] = "gzip, deflate, identity;q=0.5, *;q=0";
-		if (request.data)
-			request.headers["Content-Length"] = to!string(request.data.bytes.length);
-		if ("Connection" !in request.headers)
-			request.headers["Connection"] = keepAlive ? "keep-alive" : "close";
+		assert(isIdle);
 
-		sendRawRequest(request);
+		if (pipelining)
+		{
+			assert(keepAlive, "keepAlive is required for pipelining");
+			// Pipeline all queued requests
+			while (requestQueue.length)
+				sendRequest(requestQueue.shift);
+		}
+		else
+		{
+			// One request at a time
+			if (requestQueue.length)
+				sendRequest(requestQueue.shift);
+		}
+
+		expectResponse();
 	}
 
-	void sendRawRequest(HttpRequest request)
+	/// Returns true when we are connected but not waiting for anything.
+	/// Requests can always be sent immediately when this is true.
+	bool isIdle()
+	{
+		if (conn.state == ConnectionState.connected && sentRequests == receivedResponses)
+		{
+			assert(!currentResponse);
+			return true;
+		}
+		return false;
+	}
+
+	/// Encode and send a request (headers and body) to the connection.
+	/// Has no other side effects other than incrementing `sentRequests`.
+	void sendRequest(HttpRequest request)
 	{
 		string reqMessage = request.method ~ " ";
 		if (request.proxy !is null) {
@@ -96,28 +133,48 @@ protected:
 
 		conn.send(Data(reqMessage));
 		conn.send(request.data[]);
+		sentRequests++;
 	}
 
+	/// Called to set up the client to be ready to receive a response.
+	void expectResponse()
+	{
+		//assert(conn.handleReadData is null);
+		if (receivedResponses < sentRequests)
+		{
+			conn.handleReadData = &onNewResponse;
+			expect = 0;
+		}
+	}
+
+	/// Received data handler used while we are receiving headers.
 	void onNewResponse(Data data)
+	{
+		if (timer)
+			timer.markNonIdle();
+
+		onHeaderData(data.toArray);
+	}
+
+	/// Called when we've received some data from the response headers.
+	void onHeaderData(scope Data[] data)
 	{
 		try
 		{
-			inBuffer ~= data;
-			if (timer)
-				timer.markNonIdle();
+			headerBuffer ~= data;
 
 			string statusLine;
 			Headers headers;
 
-			debug(HTTP) auto oldData = inBuffer.dup;
+			debug(HTTP) auto oldData = headerBuffer.dup;
 
-			if (!parseHeaders(inBuffer, statusLine, headers))
+			if (!parseHeaders(headerBuffer, statusLine, headers))
 				return;
 
 			debug(HTTP)
 			{
 				stderr.writefln("Got response:");
-				auto reqMessage = cast(string)oldData.bytes[0..oldData.bytes.length-inBuffer.bytes.length].joinToHeap();
+				auto reqMessage = cast(string)oldData.bytes[0..oldData.bytes.length-headerBuffer.bytes.length].joinToHeap();
 				foreach (line; reqMessage.split("\r\n"))
 					stderr.writeln("< ", line);
 			}
@@ -137,79 +194,125 @@ protected:
 		}
 	}
 
+	/// Called when we've read all headers (currentResponse.headers is populated).
 	void onHeadersReceived()
 	{
 		expect = size_t.max;
+		// TODO: HEAD responses have Content-Length but no data!
+		// We need to save a copy of the request (or at least the method) for that...
 		if ("Content-Length" in currentResponse.headers)
-			expect = to!size_t(strip(currentResponse.headers["Content-Length"]));
+			expect = currentResponse.headers["Content-Length"].strip().to!size_t();
 
-		if (inBuffer.bytes.length < expect)
-		{
-			onData(inBuffer[]);
-			conn.handleReadData = &onContinuation;
-		}
-		else
-		{
-			onData(inBuffer.bytes[0 .. expect][]); // TODO: pipelining
-			onDone();
-		}
+		conn.handleReadData = &onContinuation;
 
-		inBuffer.destroy();
+		// Any remaining data in headerBuffer is now part of the response body
+		// (and maybe even the headers of the next pipelined response).
+		auto rest = move(headerBuffer);
+		onData(rest[]);
 	}
 
-	void onData(scope Data[] data)
-	{
-		currentResponse.data ~= data;
-	}
-
+	/// Received data handler used while we are receiving the response body.
 	void onContinuation(Data data)
 	{
-		onData(data.toArray);
 		if (timer)
 			timer.markNonIdle();
+		onData(data.toArray);
+	}
 
-		// HACK (if onData override called disconnect).
-		// TODO: rewrite this entire pile of garbage
-		if (!currentResponse)
-			return;
+	/// Called when we've received some data from the response body.
+	void onData(scope Data[] data)
+	{
+		assert(!headerBuffer.length);
+
+		currentResponse.data ~= data;
 
 		auto received = currentResponse.data.bytes.length;
-		if (expect!=size_t.max && received >= expect)
+		if (expect != size_t.max && received >= expect)
 		{
-			inBuffer = currentResponse.data.bytes[expect..received];
-			currentResponse.data = currentResponse.data.bytes[0..expect];
-			onDone();
+			// Any data past expect is part of the next response
+			auto rest = currentResponse.data.bytes[expect .. received];
+			currentResponse.data = currentResponse.data.bytes[0 .. expect];
+			onDone(rest[], null, false);
 		}
 	}
 
-	void onDone()
+	/// Called when we've read the entirety of the response.
+	/// Any left-over data is in `rest`.
+	/// `disconnectReason` is `null` if there was no disconnect.
+	void onDone(scope Data[] rest, string disconnectReason, bool error)
 	{
-		if (keepAlive)
-			processResponse();
+		auto response = finalizeResponse();
+		if (error)
+			response = null; // Discard partial response
+
+		if (disconnectReason)
+		{
+			assert(rest is null);
+		}
 		else
-			conn.disconnect("All data read");
+		{
+			if (keepAlive)
+			{
+				if (isIdle())
+					onIdle();
+				else
+					expectResponse();
+			}
+			else
+			{
+				enforce(rest.bytes.length == 0, "Left-over data after non-keepalive response");
+				conn.disconnect("All data read");
+			}
+		}
+
+		// This is done as the (almost) last step, so that we don't
+		// have to worry about the user response handler changing our
+		// state while we are in the middle of a function.
+		submitResponse(response, disconnectReason);
+
+		// We still have to handle any left-over data as the last
+		// step, because otherwise recursion will cause us to call the
+		// handleResponse functions in the wrong order.
+		if (rest.bytes.length)
+			onHeaderData(rest);
 	}
 
-	void processResponse(string reason = "All data read")
+	/// Wrap up and return the current response,
+	/// and clean up the client for another request.
+	HttpResponse finalizeResponse()
 	{
 		auto response = currentResponse;
-
-		currentRequest = null;
 		currentResponse = null;
 		expect = -1;
+
+		if (!response || response.status != HttpStatusCode.Continue)
+			receivedResponses++;
+
 		conn.handleReadData = null;
 
+		return response;
+	}
+
+	/// Submit a received response.
+	void submitResponse(HttpResponse response, string reason)
+	{
+		if (!reason)
+			reason = "All data read";
 		if (handleResponse)
 			handleResponse(response, reason);
 	}
 
+	/// Disconnect handler
 	void onDisconnect(string reason, DisconnectType type)
 	{
-		if (type == DisconnectType.error)
-			currentResponse = null;
+		// If we were expecting any more responses, we're not getting them.
+		while (receivedResponses < sentRequests)
+			onDone(null, reason, type == DisconnectType.error);
 
-		if (currentRequest)
-			processResponse(reason);
+		// If there are more requests queued (keepAlive == false),
+		// reconnect and keep going.
+		if (requestQueue.length)
+			connect(requestQueue[0]);
 	}
 
 	IConnection adaptConnection(IConnection conn)
@@ -222,6 +325,8 @@ public:
 	string agent = "ae.net.http.client (+https://github.com/CyberShadow/ae)";
 	/// Keep connection alive after one request.
 	bool keepAlive = false;
+	/// Send requests without waiting for a response. Requires keepAlive.
+	bool pipelining = false;
 
 	/// Constructor.
 	this(Duration timeout = 30.seconds, Connector connector = new TcpConnector)
@@ -245,27 +350,82 @@ public:
 		conn.handleDisconnect = &onDisconnect;
 	}
 
-	/// Send a HTTP request.
-	void request(HttpRequest request)
+	/// Fix up a response to set up required headers, etc.
+	/// Done automatically by `request`, unless called with `normalize == false`.
+	void normalizeRequest(HttpRequest request)
 	{
-		//debug writefln("New HTTP request: %s", request.url);
-		currentRequest = request;
-		currentResponse = null;
-		conn.handleReadData = &onNewResponse;
-		expect = 0;
+		if ("User-Agent" !in request.headers && agent)
+			request.headers["User-Agent"] = agent;
+		if ("Accept-Encoding" !in request.headers)
+			request.headers["Accept-Encoding"] = "gzip, deflate, identity;q=0.5, *;q=0";
+		if (request.data)
+			request.headers["Content-Length"] = to!string(request.data.bytes.length);
+		if ("Connection" !in request.headers)
+			request.headers["Connection"] = keepAlive ? "keep-alive" : "close";
+	}
 
-		if (conn.state != ConnectionState.disconnected)
+	/// Send a HTTP request.
+	void request(HttpRequest request, bool normalize = true)
+	{
+		if (normalize)
+			normalizeRequest(request);
+
+		if (conn.state == ConnectionState.disconnected)
+			connect(request);
+		assert(conn.state <= ConnectionState.connected, "Attempting a HTTP request on a %s connection".format(conn.state));
+
+		requestQueue ~= request;
+
+		// |---------+------------+------------+---------------------------------------------------------------|
+		// | enqueue | keep-alive | pipelining | outcome                                                       |
+		// |---------+------------+------------+---------------------------------------------------------------|
+		// | no      | no         | no         | one request and one connection at a time                      |
+		// | no      | no         | yes        | error, need keep-alive for pipelining                         |
+		// | no      | yes        | no         | keep connection alive so that we can send more requests later |
+		// | no      | yes        | yes        | keep-alive + pipelining                                       |
+		// | yes     | no         | no         | disconnect and connect again, once per queued request         |
+		// | yes     | no         | yes        | error, need keep-alive for pipelining                         |
+		// | yes     | yes        | no         | when one response is processed, send the next queued request  |
+		// | yes     | yes        | yes        | send all requests at once after connecting                    |
+		// |---------+------------+------------+---------------------------------------------------------------|
+
+		// |------------+------------+-----------------------------------------------------------------|
+		// | keep-alive | pipelining | wat do in request()                                             |
+		// |------------+------------+-----------------------------------------------------------------|
+		// | no         | no         | assert(!connected), connect, enqueue                            |
+		// | no         | yes        | assert                                                          |
+		// | yes        | no         | enqueue or send now if connected; enqueue and connect otherwise |
+		// | yes        | yes        | send now if connected; enqueue and connect otherwise            |
+		// |------------+------------+-----------------------------------------------------------------|
+
+		if (!keepAlive)
 		{
-			assert(conn.state == ConnectionState.connected, "Attempting a HTTP request on a %s connection".format(conn.state));
-			assert(keepAlive, "Attempting a second HTTP request on a connected non-keepalive connection");
-			sendRequest(request);
+			if (!pipelining)
+			{}
+			else
+				assert(false, "keepAlive is required for pipelining");
 		}
 		else
 		{
-			if (request.proxy !is null)
-				connector.connect(request.proxyHost, request.proxyPort);
+			if (!pipelining)
+			{
+				// Can we send it now?
+				if (isIdle())
+					onIdle();
+			}
 			else
-				connector.connect(request.host, request.port);
+			{
+				// Can we send it now?
+				if (conn.state == ConnectionState.connected)
+				{
+					bool wasIdle = isIdle();
+					assert(requestQueue.length == 1);
+					while (requestQueue.length)
+						sendRequest(requestQueue.shift);
+					if (wasIdle)
+						expectResponse();
+				}
+			}
 		}
 	}
 
@@ -273,7 +433,7 @@ public:
 	/// (whether due to an in-flight request or due to keep-alive).
 	bool connected()
 	{
-		if (currentRequest !is null)
+		if (receivedResponses < sentRequests)
 			return true;
 		if (keepAlive && conn.state == ConnectionState.connected)
 			return true;
@@ -310,11 +470,11 @@ class HttpsClient : HttpClient
 		return adapter;
 	}
 
-	protected override void request(HttpRequest request)
+	protected override void connect(HttpRequest request)
 	{
-		super.request(request);
-		if (conn.state == ConnectionState.connecting)
-			adapter.setHostName(request.host);
+		super.connect(request);
+		assert(conn.state == ConnectionState.connecting);
+		adapter.setHostName(request.host);
 	}
 }
 
@@ -483,10 +643,16 @@ unittest
 	import ae.net.http.server : HttpServer, HttpServerConnection;
 	import ae.net.http.responseex : HttpResponseEx;
 
-	void test(bool keepAlive)
+	foreach (enqueue; [false, true])
+	foreach (keepAlive; [false, true])
+	foreach (pipelining; [false, true])
 	{
+		if (pipelining && !keepAlive)
+			continue;
+		debug (HTTP) stderr.writefln("===== Testing enqueue=%s keepAlive=%s pipelining=%s", enqueue, keepAlive, pipelining);
+
 		auto s = new HttpServer;
-		s.handleRequest = (HttpRequest request, HttpServerConnection conn) {
+		s.handleRequest = (HttpRequest _/*request*/, HttpServerConnection conn) {
 			auto response = new HttpResponseEx;
 			conn.sendResponse(response.serveText("Hello!"));
 		};
@@ -494,29 +660,29 @@ unittest
 
 		auto c = new HttpClient;
 		c.keepAlive = keepAlive;
+		c.pipelining = pipelining;
 		auto r = new HttpRequest("http://127.0.0.1:" ~ to!string(port));
 		int count;
 		c.handleResponse =
-			(HttpResponse response, string disconnectReason)
+			(HttpResponse response, string _/*disconnectReason*/)
 			{
 				assert(response, "HTTP server error");
 				assert(cast(string)response.getContent.toHeap == "Hello!");
 				if (++count == 5)
 				{
 					s.close();
-					if (c.connected)
+					if (keepAlive)
 						c.disconnect();
 				}
 				else
-					c.request(r);
+					if (!enqueue)
+						c.request(r);
 			};
-		c.request(r);
+		foreach (n; 0 .. enqueue ? 5 : 1)
+			c.request(r);
 
 		socketManager.loop();
 
 		assert(count == 5);
 	}
-
-	test(false);
-	test(true);
 }
