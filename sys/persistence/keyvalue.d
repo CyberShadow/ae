@@ -46,7 +46,7 @@ struct KeyValueStore(K, V)
 	}
 
 	/// Implements common D associative array operations.
-	V opIndex()(auto ref K k)
+	V opIndex()(auto ref const K k)
 	{
 		checkInitialized();
 		foreach (SqlType!V v; sqlGet.iterate(toSqlType(k)))
@@ -54,7 +54,7 @@ struct KeyValueStore(K, V)
 		throw new Exception("Value not in KeyValueStore");
 	}
 
-	V get()(auto ref K k, auto ref V defaultValue)
+	V get()(auto ref const K k, auto ref V defaultValue)
 	{
 		checkInitialized();
 		foreach (SqlType!V v; sqlGet.iterate(toSqlType(k)))
@@ -62,7 +62,7 @@ struct KeyValueStore(K, V)
 		return defaultValue;
 	} /// ditto
 
-	V getOrAdd()(auto ref K k, lazy V defaultValue)
+	V getOrAdd()(auto ref const K k, lazy V defaultValue)
 	{
 		checkInitialized();
 		foreach (SqlType!V v; sqlGet.iterate(toSqlType(k)))
@@ -72,7 +72,7 @@ struct KeyValueStore(K, V)
 		return v;
 	} /// ditto
 
-	bool opBinaryRight(string op)(auto ref K k)
+	bool opBinaryRight(string op)(auto ref const K k)
 	if (op == "in")
 	{
 		checkInitialized();
@@ -81,14 +81,14 @@ struct KeyValueStore(K, V)
 		assert(false);
 	} /// ditto
 
-	auto ref V opIndexAssign()(auto ref V v, auto ref K k)
+	auto ref V opIndexAssign()(auto ref const V v, auto ref const K k)
 	{
 		checkInitialized();
 		sqlSet.exec(toSqlType(k), toSqlType(v));
 		return v;
 	} /// ditto
 
-	void remove()(auto ref K k)
+	void remove()(auto ref const K k)
 	{
 		checkInitialized();
 		sqlDelete.exec(toSqlType(k));
@@ -268,5 +268,17 @@ unittest
 	{
 		KeyValueStore!(string, float[20]) kv;
 		float[20] s = kv[""];
+	}
+}
+
+unittest
+{
+	if (false)
+	{
+		struct K {}
+		KeyValueStore!(K, K) kv;
+		assert(K.init !in kv);
+		immutable K ik;
+		assert(ik !in kv);
 	}
 }
