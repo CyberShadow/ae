@@ -102,6 +102,15 @@ struct KeyValueStore(K, V)
 		assert(false);
 	} /// ditto
 
+	@property K[] keys()
+	{
+		checkInitialized();
+		K[] result;
+		foreach (SqlType!K key; sqlList.iterate())
+			result ~= fromSqlType!K(key);
+		return result;
+	}
+
 private:
 	static SqlType!T toSqlType(T)(auto ref T v)
 	{
@@ -172,7 +181,7 @@ private:
 
 	bool initialized;
 
-	SQLite.PreparedStatement sqlGet, sqlSet, sqlDelete, sqlExists, sqlLength;
+	SQLite.PreparedStatement sqlGet, sqlSet, sqlDelete, sqlExists, sqlLength, sqlList;
 
 	void checkInitialized()
 	{
@@ -186,6 +195,7 @@ private:
 			sqlDelete = db.prepare("DELETE FROM [" ~ tableName ~ "] WHERE [key]=?");
 			sqlExists = db.prepare("SELECT COUNT(*) FROM [" ~ tableName ~ "] WHERE [key]=? LIMIT 1");
 			sqlLength = db.prepare("SELECT COUNT(*) FROM [" ~ tableName ~ "]");
+			sqlList = db.prepare("SELECT [key] FROM [" ~ tableName ~ "]");
 			initialized = true;
 		}
 	}
@@ -223,6 +233,7 @@ unittest
 	assert(store.length == 0);
 	assert("key" !in store);
 	assert(store.get("key", null) is null);
+	assert(store.keys.length == 0);
 
 	store["key"] = "value";
 
@@ -230,12 +241,14 @@ unittest
 	assert("key" in store);
 	assert(store["key"] == "value");
 	assert(store.get("key", null) == "value");
+	assert(store.keys == ["key"]);
 
 	store["key"] = "value2";
 
 	assert(store.length == 1);
 	assert("key" in store);
 	assert(store.get("key", null) == "value2");
+	assert(store.keys == ["key"]);
 
 	store["key2"] = "value3";
 
@@ -244,6 +257,7 @@ unittest
 	assert("key2" in store);
 	assert(store.get("key", null) == "value2");
 	assert(store.get("key2", null) == "value3");
+	assert(store.keys == ["key", "key2"]);
 
 	store.remove("key");
 
@@ -251,6 +265,7 @@ unittest
 	assert("key" !in store);
 	assert("key2" in store);
 	assert(store.get("key", null) is null);
+	assert(store.keys == ["key2"]);
 }
 
 unittest
