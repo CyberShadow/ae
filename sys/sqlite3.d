@@ -204,7 +204,7 @@ final class SQLite
 				{
 					scope(failure) stmt.reset();
 					static if (U.length == 1 && is(U[0] V : V[]) &&
-						!is(U[0] : string) && !is(V == void) && !is(V == ubyte))
+						!is(U[0] : string) && !is(Unqual!V == void) && !is(V == ubyte))
 					{
 						U[0] result;
 						result.length = stmt.columnCount();
@@ -250,7 +250,7 @@ final class SQLite
 			static if (is(T == string))
 				return (cast(char*)sqlite3_column_blob(stmt, idx))[0..sqlite3_column_bytes(stmt, idx)].idup;
 			else
-			static if (is(T V : V[]) && (is(V == void) || is(V == ubyte)))
+			static if (is(T V : V[]) && (is(Unqual!V == void) || is(V == ubyte)))
 			{
 				auto arr = (cast(V*)sqlite3_column_blob(stmt, idx))[0..sqlite3_column_bytes(stmt, idx)];
 				static if (isStaticArray!T)

@@ -81,7 +81,7 @@ struct KeyValueStore(K, V)
 		assert(false);
 	} /// ditto
 
-	auto ref V opIndexAssign()(auto ref const V v, auto ref const K k)
+	auto ref const(V) opIndexAssign()(auto ref const V v, auto ref const K k)
 	{
 		checkInitialized();
 		sqlSet.exec(toSqlType(k), toSqlType(v));
@@ -156,7 +156,7 @@ private:
 			alias SqlType = string;
 		else
 		static if (is(T U : U[]) && !hasIndirections!U)
-			alias SqlType = void[];
+			alias SqlType = const(void)[];
 		else
 			alias SqlType = string; // JSON-encoded
 	}
@@ -295,5 +295,15 @@ unittest
 		assert(K.init !in kv);
 		immutable K ik;
 		assert(ik !in kv);
+	}
+}
+
+unittest
+{
+	if (false)
+	{
+		KeyValueStore!(float[], float[]) kv;
+		assert(null !in kv);
+		kv[null] = null;
 	}
 }
