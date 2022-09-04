@@ -107,9 +107,21 @@ struct KeyValueStore(K, V)
 	{
 		checkInitialized();
 		K[] result;
-		foreach (SqlType!K key; sqlList.iterate())
+		foreach (SqlType!K key; sqlListKeys.iterate())
 			result ~= fromSqlType!K(key);
 		return result;
+	}
+
+	int opApply(int delegate(K key, V value) dg)
+	{
+		checkInitialized();
+		foreach (SqlType!K key, SqlType!V value; sqlListPairs.iterate())
+		{
+			auto res = dg(fromSqlType!K(key), fromSqlType!V(value));
+			if (res)
+				return res;
+		}
+		return 0;
 	}
 
 private:
@@ -182,7 +194,7 @@ private:
 
 	bool initialized;
 
-	SQLite.PreparedStatement sqlGet, sqlSet, sqlDelete, sqlExists, sqlLength, sqlList;
+	SQLite.PreparedStatement sqlGet, sqlSet, sqlDelete, sqlExists, sqlLength, sqlListKeys, sqlListPairs;
 
 	void checkInitialized()
 	{
@@ -196,7 +208,8 @@ private:
 			sqlDelete = db.prepare("DELETE FROM [" ~ tableName ~ "] WHERE [key]=?");
 			sqlExists = db.prepare("SELECT COUNT(*) FROM [" ~ tableName ~ "] WHERE [key]=? LIMIT 1");
 			sqlLength = db.prepare("SELECT COUNT(*) FROM [" ~ tableName ~ "]");
-			sqlList = db.prepare("SELECT [key] FROM [" ~ tableName ~ "]");
+			sqlListKeys = db.prepare("SELECT [key] FROM [" ~ tableName ~ "]");
+			sqlListPairs = db.prepare("SELECT [key], [value] FROM [" ~ tableName ~ "]");
 			initialized = true;
 		}
 	}
