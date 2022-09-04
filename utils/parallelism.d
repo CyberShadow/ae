@@ -16,7 +16,7 @@ module ae.utils.parallelism;
 import std.algorithm.mutation;
 import std.algorithm.sorting;
 import std.parallelism;
-import std.range : chunks;
+import std.range : chunks, iota;
 
 // https://gist.github.com/63e139a16b9b278fb5d449ace611e7b8
 
@@ -38,4 +38,25 @@ auto parallelSort(alias less = "a < b", R)(R r)
 unittest
 {
 	assert([3, 1, 2].parallelSort.release == [1, 2, 3]);
+}
+
+
+/// Parallel map.  Like TaskPool.amap, but uses functors for
+/// predicates instead of alias arguments, and as such does not have
+/// the multiple-context problem.
+/// https://forum.dlang.org/post/qnigarkuxxnqwdernhzv@forum.dlang.org
+auto parallelEagerMap(R, Pred)(R input, Pred pred, size_t workUnitSize = 0)
+{
+	if (workUnitSize == 0)
+		workUnitSize = taskPool.defaultWorkUnitSize(input.length);
+	alias RT = typeof(pred(input[0]));
+	auto result = new RT[input.length];
+	foreach (i; input.length.iota.parallel(workUnitSize))
+		result[i] = pred(input[i]);
+	return result;
+}
+
+unittest
+{
+	assert([1, 2, 3].parallelEagerMap((int n) => n + 1) == [2, 3, 4]);
 }
