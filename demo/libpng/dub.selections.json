@@ -1,0 +1,7 @@
+{
+	"fileVersion": 1,
+	"versions": {
+		"ae": {"path":"../../"},
+		"libpng": "1.6.17"
+	}
+}
