@@ -18,6 +18,7 @@ import std.traits;
 
 import ae.sys.persistence.core;
 import ae.sys.sqlite3;
+import ae.utils.array : nonNull;
 import ae.utils.json;
 
 // ****************************************************************************
@@ -119,10 +120,10 @@ private:
 			return v;
 		else
 		static if (is(T : const(char)[])) // string
-			return cast(S) v;
+			return cast(S) v.nonNull;
 		else
 		static if (is(T U : U[]) && !hasIndirections!U) // void[]
-			return v;
+			return v.nonNull;
 		else
 			return toJson(v);
 	}
@@ -227,7 +228,8 @@ unittest
 
 	string fn = tempDir ~ "/ae-sys-persistence-keyvalue-test.s3db";
 	if (fn.exists) fn.remove();
-	//scope(exit) if (fn.exists) fn.remove();
+	scope(success) fn.remove();
+
 	auto store = KeyValueStore!(string, string)(fn);
 
 	assert(store.length == 0);
@@ -300,10 +302,16 @@ unittest
 
 unittest
 {
-	if (false)
-	{
-		KeyValueStore!(float[], float[]) kv;
-		assert(null !in kv);
-		kv[null] = null;
-	}
+	import std.file;
+
+	string fn = tempDir ~ "/ae-sys-persistence-keyvalue-test.s3db";
+	if (fn.exists) fn.remove();
+	scope(success) fn.remove();
+
+	KeyValueStore!(float[], float[]) kv;
+	kv = typeof(kv)(fn);
+	assert(null !in kv);
+	kv[null] = null;
+	assert(null in kv);
+	assert(kv[null] == null);
 }
