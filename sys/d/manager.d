@@ -2155,6 +2155,7 @@ EOS";
 					std.file.write(cacheFileName(key), value);
 				}
 			};
+			github.offline = config.local.offline;
 		}
 		return github;
 	}
