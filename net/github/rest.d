@@ -35,6 +35,8 @@ struct GitHub
 
 	void delegate(string) log;
 
+	bool offline; /// Use cached objects without re-validating them
+
 	struct CacheEntry
 	{
 		string[string] headers;
@@ -72,6 +74,13 @@ struct GitHub
 		if (cacheEntryStr)
 		{
 			cacheEntry = cacheEntryStr.jsonParse!CacheEntry();
+
+			if (offline)
+			{
+				if (log) log(" > Cache hit (offline mode)");
+				return Result(cacheEntry.headers, cacheEntry.data);
+			}
+
 			auto cacheHeaders = Headers(cacheEntry.headers);
 
 			if (auto p = "ETag" in cacheHeaders)
