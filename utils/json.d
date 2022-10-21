@@ -566,6 +566,7 @@ private struct JsonParser(C)
 
 	void readNullable(T)(ref Nullable!T value)
 	{
+		skipWhitespace();
 		if (peek() == 'n')
 		{
 			readNull();
