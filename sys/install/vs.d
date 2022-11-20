@@ -72,7 +72,7 @@ class VisualStudioInstaller
 
 		static string msdl(int n)
 		{
-			return "http://go.microsoft.com/fwlink/?LinkId=%d&clcid=0x409"
+			return "https://go.microsoft.com/fwlink/?LinkId=%d&clcid=0x409"
 				.format(n)
 				.I!resolveRedirect()
 				.I!save();
@@ -197,11 +197,27 @@ class VisualStudioInstaller
 					auto path =
 						node
 						.attributes["FilePath"]
+						.replace(`\`, dirSeparator)
 						.prependPath("%s-payloads".format(subdirectory));
 
-					auto url = node.attributes["DownloadUrl"];
+					auto url = node.attributes["DownloadUrl"]
+						.I!resolveRedirect();
 					urlDigests[url] = node.attributes["Hash"].toLower();
-					files[path.extension.toLower()] ~= url.I!saveAs(path);
+
+					string downloaded;
+					try
+						downloaded = url.I!saveAs(path);
+					catch (Exception e)
+					{
+						log("Download failed (" ~ e.msg ~ "), trying mirror...");
+						auto mirrorUrl = mirrorPrefix ~ url.findSplit("://")[2];
+						urlDigests[mirrorUrl] = urlDigests[url];
+
+						url = mirrorUrl;
+						downloaded = url.I!saveAs(path);
+					}
+
+					files[path.extension.toLower()] ~= downloaded;
 				}
 
 			foreach (cab; files[".cab"])
@@ -270,6 +286,8 @@ class VisualStudioInstaller
 	int webInstaller; /// Microsoft download number for the web installer.
 	string edition; /// Edition variant (e.g. "Express").
 	string versionName; /// Numeric version (e.g. "12.0").
+
+	string mirrorPrefix = "https://cy.md/d/ae-sys-install-mirror/";
 
 	/// Returns the paths to the "bin" directory for the given model.
 	/// Model is x86 (null), amd64, or x86_amd64
