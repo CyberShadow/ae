@@ -190,7 +190,7 @@ struct GitHub
 		]);
 	}
 
-	string post(string url, Data jsonData)
+	Result post(string url, Data jsonData)
 	{
 		auto request = new HttpRequest;
 		request.resource = url;
@@ -201,8 +201,9 @@ struct GitHub
 		request.data = DataVec(jsonData);
 
 		auto response = net.httpRequest(request);
-		string result = cast(string)response.data.joinToHeap;
-		validate(result);
-		return result;
+		auto headers = response.headers.to!(string[string]);
+		string data = cast(string)response.data.joinToHeap;
+		validate(data);
+		return Result(headers, data);
 	}
 }
