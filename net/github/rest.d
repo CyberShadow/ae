@@ -13,8 +13,6 @@
 
 module ae.net.github.rest;
 
-package(ae):
-
 import std.algorithm.searching;
 import std.conv;
 import std.string;
@@ -29,37 +27,49 @@ import ae.sys.net;
 import ae.utils.json;
 import ae.utils.meta;
 
+/// GitHub REST API helper.
 struct GitHub
 {
+	/// Authentication token.
 	string token;
 
+	/// Log function.
 	void delegate(string) log;
 
-	bool offline; /// Use cached objects without re-validating them
+	/// Use cached objects without re-validating them
+	bool offline;
 
-	struct CacheEntry
+	private struct CacheEntry
 	{
 		string[string] headers;
 		string data;
 	}
+
+	/// Cache interface.
 	interface ICache
 	{
 		string get(string key);
 		void put(string key, string value);
 	}
+
+	/// The default cache implementation (stub).
 	static class NoCache : ICache
 	{
 		string get(string key) { return null; }
 		void put(string key, string value) {}
 	}
+
+	/// The cache implementation to use.
 	ICache cache = new NoCache;
 
+	/// Perform a request and return headers and data.
 	struct Result
 	{
 		string[string] headers;
 		string data;
 	}
 
+	/// ditto
 	Result query(string url)
 	{
 		auto request = new HttpRequest;
@@ -134,6 +144,7 @@ struct GitHub
 
 	static import std.json;
 
+	/// Perform a paged query, obtaining all pages.
 	std.json.JSONValue[] pagedQuery(string url)
 	{
 		import std.json : JSONValue, parseJSON;
@@ -190,6 +201,7 @@ struct GitHub
 		]);
 	}
 
+	/// Perform a POST request.
 	Result post(string url, Data jsonData)
 	{
 		auto request = new HttpRequest;
