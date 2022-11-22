@@ -20,7 +20,6 @@ The library is split into the following packages:
 
 Notable sub-packages:
 
- * `ae.sys.d` – Builds arbitrary versions of D. Shared by Digger, DAutoTest, and TrenD.
  * `ae.sys.net` – High-level synchronous API for accessing network resources (URLs). Includes implementations based on cURL, WinINet, and `ae.net`.
  * `ae.utils.graphics` – Contains a templated graphical context optimized for speed, and basic support for a few image formats.
  * `ae.utils.promise` – Implementation of Promises/A+, `async`/`await`, and related operations. Can be used on top of the `ae.net` asynchronous API.
@@ -43,8 +42,8 @@ What uses this library?
 =======================
 
 - [DFeed](https://github.com/CyberShadow/DFeed) (forum.dlang.org) - networking, SQLite
-- [Digger](https://github.com/CyberShadow/Digger) - `ae.sys.d`
-- [DAutoTest](https://github.com/CyberShadow/DAutoTest) - `ae.sys.d`, web server
+- [Digger](https://github.com/CyberShadow/Digger) - `ae.sys.install`
+- [DAutoTest](https://github.com/CyberShadow/DAutoTest) - web server
 - [btdu](https://github.com/CyberShadow/btdu) - utility functions, duration parsing
 - [monocre](https://github.com/CyberShadow/monocre) - image processing
 - Community WormNET services for Worms Armageddon ([web snooper](https://snoop.wormnet.net/), community server, [HostingBuddy](https://worms2d.info/HostingBuddy))
