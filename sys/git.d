@@ -650,7 +650,7 @@ struct Git
 				{
 					case octal!100644: // file
 					case octal!100755: // executable file
-						std.file.write(entryPath, reader.read(entry.hash).data);
+						std.file.write(entryPath, reader.read(entry.hash).parseBlob());
 						version (Posix)
 						{
 							// Make executable
