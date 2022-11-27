@@ -166,7 +166,7 @@ class Installer
 		atomic!installProxy(directory);
 	}
 
-	protected void installImpl(string target)
+	protected void installImpl(string /*target*/)
 	{
 		uninstallable();
 	}
@@ -204,7 +204,9 @@ protected:
 				return;
 			log("Verifying " ~ target.baseName() ~ "...");
 
-			import std.digest.sha, std.digest, std.stdio;
+			import std.digest.sha : SHA1;
+			import std.digest : toHexString, LetterCase;
+			import std.stdio : File;
 			SHA1 sha;
 			sha.start();
 			foreach (chunk; File(target, "rb").byChunk(0x10000))
