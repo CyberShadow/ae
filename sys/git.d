@@ -472,12 +472,19 @@ struct Git
 
 			auto headerLine = pipes.stdout.safeReadln().strip();
 			auto header = headerLine.split(" ");
-			enforce(header.length == 3, "Malformed header during cat-file: " ~ headerLine);
+			enforce(header.length >= 2, "Malformed header during cat-file: " ~ headerLine);
 			auto oid = OID(header[0]);
 
 			Object obj;
 			obj.oid = oid;
 			obj.type = header[1];
+			if (header.length == 2 && header[1] == "missing")
+			{
+				// return obj;
+				throw new Exception("Object is missing: " ~ headerLine);
+			}
+
+			enforce(header.length == 3, "Malformed header during cat-file: " ~ headerLine);
 			auto size = to!size_t(header[2]);
 			if (size)
 			{
