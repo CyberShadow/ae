@@ -29,23 +29,35 @@ import ae.sys.persistence;
 import ae.utils.meta;
 import ae.utils.path;
 
-/// Base class for an installer - a process to acquire and set up some
-/// third-party software or component to some temporary location, so
-/// that we can then invoke and use it.
-class Installer
+/// Manages a directory hosting downloads and locally installed
+/// software.
+final class Installer
 {
-	/// Where all software will be unpacked
-	/// (current directory, by default).
-	static string installationDirectory = null;
+	/// Where all software will be unpacked.
+	string installationDirectory;
+
+	this(string installationDirectory)
+	{
+		this.installationDirectory = installationDirectory;
+	}
 
 	/// Log sink
-	static void delegate(string) logger;
+	void delegate(string) logger;
 
-	static protected void log(string s)
+	private void log(string s)
 	{
 		if (logger) logger(s);
 	}
+}
 
+/// `Installer` instance used by the current thread.
+Installer installer;
+
+/// Base class for an installer package - a process to acquire and set
+/// up some third-party software or component to some temporary
+/// location, so that we can then invoke and use it.
+class Package
+{
 	/// Component name. Used for logging.
 	@property string name() { return this.classinfo.name.split(".")[$-1].chomp("Installer"); }
 
@@ -59,30 +71,53 @@ class Installer
 	/// As above, but expanded to full absolute directory paths.
 	@property final string[] binDirs() { return binPaths.map!(binPath => buildPath(directory, binPath)).array; }
 
-	deprecated("Please use ae.utils.path.pathDirs")
-	@property static string[] pathDirs() { return ae.utils.path.pathDirs; }
-
 	/// The full installation directory.
 	@property final string directory()
 	{
-		return buildPath(installationDirectory, subdirectory);
+		return buildPath(installer.installationDirectory, subdirectory);
 	}
 
-	/// The list of executable names required to be present.
-	/// Null if this component is never considered already
-	/// available on the system.
-	@property string[] requiredExecutables() { return null; }
-
-	deprecated("Please use ae.utils.path.haveExecutable")
-	/*protected*/ static bool haveExecutable(string name) { return ae.utils.path.haveExecutable(name); }
-
-	deprecated("Please use ae.utils.path.findExecutable")
-	static string findExecutable(string name, string[] dirs) { return ae.utils.path.findExecutable(name, dirs); }
+	// The list of executable names required to be present.
+	// Null if this component is never considered already
+	// available on the system.
+	deprecated @property string[] requiredExecutables() { return null; }
 
 	/// Get the full path to an executable.
+	/// If the package is not installed locally, the PATH variable
+	/// from the process environment is searched instead.
+	deprecated("Use getExecutable instead")
 	string exePath(string name)
 	{
 		return .findExecutable(name, installedLocally ? binDirs : .pathDirs);
+	}
+
+	/// Get the full path to an executable.
+	/// The returned value is suitable for passing to std.process.spawnProcess.
+	string getExecutable(string name)
+	{
+		assert(installedLocally, "This package is not yet installed, call requireInstalled first");
+		return .findExecutable(name, binDirs);
+	}
+
+	/// Get an environment suitable for executing programs in this package.
+	/// The returned value is suitable for passing to
+	/// `std.process.spawnProcess` (with Config.newEnv).
+	/// Hint: pass `std.process.environment.toAA()` to build onto the
+	/// current environment.
+	string[string] getEnvironment(string[string] baseEnvironment = null)
+	{
+		auto environment = baseEnvironment.dup;
+		assert(installedLocally, "This package is not yet installed, call requireInstalled first");
+		foreach_reverse (binPath; binPaths)
+		{
+			auto path = buildPath(directory, binPath).absolutePath();
+			// Override any system installations
+			if ("PATH" in environment)
+				environment["PATH"] = path ~ pathSeparator ~ environment["PATH"];
+			else
+				environment["PATH"] = path;
+		}
+		return environment;
 	}
 
 	/// Whether the component is installed locally.
@@ -95,6 +130,7 @@ class Installer
 	}
 
 	/// Whether the component is already present on the system.
+	deprecated("Check system availability explicitly at call site")
 	@property bool availableOnSystem()
 	{
 		if (requiredExecutables is null)
@@ -105,12 +141,14 @@ class Installer
 
 	/// Whether the component is installed, locally or
 	/// already present on the system.
+	deprecated("Check system availability explicitly at call site")
 	@property final bool available()
 	{
 		return installedLocally || availableOnSystem;
 	}
 
 	/// Install this component if necessary.
+	deprecated("Check system availability explicitly at call site")
 	final void require()
 	{
 		if (!available)
@@ -123,6 +161,7 @@ class Installer
 	}
 
 	/// Install this component locally, if it isn't already installed.
+	deprecated("Use requireInstalled instead")
 	final void requireLocal(bool shouldAddToPath = true)
 	{
 		if (!installedLocally)
@@ -132,10 +171,20 @@ class Installer
 			addToPath();
 	}
 
-	private bool addedToPath;
+	/// Install this component locally, if it isn't already installed.
+	/// Returns `this`, to allow chaining `getExecutable` or `getEnvironment`.
+	final This requireInstalled(this This)()
+	{
+		if (!installedLocally)
+			install();
+		return cast(This)this;
+	}
+
+	deprecated private bool addedToPath;
 
 	/// Change this process's PATH environment variable to include the
 	/// path to this component's executable directories.
+	deprecated("Use getEnvironment / getExecutable instead")
 	void addToPath()
 	{
 		if (addedToPath)
@@ -152,7 +201,7 @@ class Installer
 
 	private void install()
 	{
-		mkdirRecurse(installationDirectory);
+		mkdirRecurse(installer.installationDirectory);
 
 		log("Installing " ~ name ~ " to " ~ directory ~ "...");
 		atomicInstallImpl();
@@ -172,12 +221,18 @@ class Installer
 	}
 
 	// ----------------------------------------------------
+	// Implementation helpers
 
 final:
 protected:
+	static void log(string s)
+	{
+		installer.log(s);
+	}
+
 	static string saveLocation(string url)
 	{
-		return buildPath(installationDirectory, url.fileNameFromURL());
+		return buildPath(installer.installationDirectory, url.fileNameFromURL());
 	}
 
 	template cachedAction(alias fun, string fmt)
@@ -226,7 +281,7 @@ protected:
 
 	static auto saveAs(string url, string fn)
 	{
-		auto target = buildPath(installationDirectory, fn);
+		auto target = buildPath(installer.installationDirectory, fn);
 		ensurePathExists(target);
 		url.I!saveTo(target);
 		return target;
@@ -252,7 +307,7 @@ protected:
 		alias P = PersistentMemoized!(resolveRedirectImpl, FlushPolicy.atThreadExit);
 		static P* p;
 		if (!p)
-			p = new P(buildPath(installationDirectory, "redirects.json"));
+			p = new P(buildPath(installer.installationDirectory, "redirects.json"));
 		return (*p)(url);
 	}
 
@@ -269,7 +324,7 @@ protected:
 
 	void uninstallable()
 	{
-		throw new Exception("Please install " ~ name ~ " and make sure it is on your PATH.");
+		throw new Exception("Cannot install " ~ name ~ ".");
 	}
 }
 

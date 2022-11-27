@@ -26,13 +26,13 @@ import ae.utils.meta : singleton, I;
 public import ae.sys.install.common;
 
 /// Installs the git version control system.
-class GitInstaller : Installer
+class GitInstaller : Package
 {
 	/// URL to download and install.
 	string url = "https://github.com/git-for-windows/git/releases/download/v2.21.0.windows.1/PortableGit-2.21.0-32-bit.7z.exe";
 
 protected:
-	@property override string[] requiredExecutables() { return ["git"]; }
+	deprecated @property override string[] requiredExecutables() { return ["git"]; }
 	@property override string[] binPaths() { return ["cmd"]; }
 
 	override void installImpl(string target)

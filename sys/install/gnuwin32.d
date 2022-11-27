@@ -22,7 +22,7 @@ import ae.utils.meta : singleton, I;
 public import ae.sys.install.common;
 
 /// Installs a GnuWin32 component.
-final class GnuWin32Component : Installer
+final class GnuWin32Component : Package
 {
 	/// Template for component .zip files.
 	string urlTemplate = "http://gnuwin32.sourceforge.net/downlinks/%s-%s-zip.php";
@@ -33,6 +33,11 @@ final class GnuWin32Component : Installer
 	this(string componentName) { this.componentName = componentName; } ///
 
 protected:
+	// Implementation note: this class is a little different because
+	// we want to install all components into a single directory. This
+	// is why we override e.g. `installedLocally`, and
+	// `atomicInstallImpl` and not `installImpl`.
+
 	@property override string name() { return "%s (GnuWin32)".format(componentName); }
 	@property override string subdirectory() { return "gnuwin32"; }
 	@property override string[] binPaths() { return ["bin"]; }

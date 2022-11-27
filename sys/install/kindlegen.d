@@ -20,7 +20,7 @@ import ae.utils.meta : singleton, I;
 public import ae.sys.install.common;
 
 /// Installs KindleGen, a compiler for Kindle-compatible e-books.
-class KindleGenInstaller : Installer
+class KindleGenInstaller : Package
 {
 	/// Download URL.
 	version (Windows)
@@ -44,7 +44,7 @@ class KindleGenInstaller : Installer
 	} ///
 
 protected:
-	@property override string[] requiredExecutables() { return ["kindlegen"]; }
+	deprecated @property override string[] requiredExecutables() { return ["kindlegen"]; }
 
 	override void installImpl(string target)
 	{

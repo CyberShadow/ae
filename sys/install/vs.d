@@ -44,7 +44,7 @@ class VisualStudioInstaller
 	} ///
 
 	/// Installs a Visual Studio component.
-	class VisualStudioComponentInstaller : Installer
+	class VisualStudioComponentInstaller : Package
 	{
 		string packageName; ///
 
@@ -80,8 +80,8 @@ class VisualStudioInstaller
 
 		public static void _decompileMSITo(string msi, string target)
 		{
-			wixInstaller.require();
-			auto status = spawnProcess(["dark", msi, "-o", target]).wait();
+			auto dark = wixInstaller.requireInstalled().getExecutable("dark");
+			auto status = spawnProcess([dark, msi, "-o", target]).wait();
 			enforce(status == 0, "dark failed");
 		}
 		public static string _setExtensionWXS(string fn) { return fn.setExtension(".wxs"); }

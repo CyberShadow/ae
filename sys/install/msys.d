@@ -22,7 +22,7 @@ import ae.utils.meta : singleton, I;
 public import ae.sys.install.common;
 
 /// Installs an MSYS component.
-final class MSYSComponent : Installer
+final class MSYSComponent : Package
 {
 	this(string componentName, string testFile, string url) { this.componentName = componentName; this.testFile = testFile; this.url = url; } ///
 

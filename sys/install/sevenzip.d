@@ -19,7 +19,7 @@ public import ae.sys.install.common;
 
 /// Installs the 7-Zip archiving tool.
 /// Windows-only.
-class SevenZipInstaller : Installer
+class SevenZipInstaller : Package
 {
 	string url = "http://downloads.sourceforge.net/sevenzip/7za920.zip"; /// Download URL.
 
@@ -36,7 +36,7 @@ protected:
 	@property override string name() { return "7-Zip"; }
 	@property override string subdirectory() { return "7z"; }
 
-	@property override string[] requiredExecutables() { assert(false); }
+	deprecated @property override string[] requiredExecutables() { assert(false); }
 
 	import ae.utils.path : haveExecutable;
 
@@ -48,7 +48,7 @@ protected:
 			.I!unpackTo(target);
 	}
 
-	@property override bool availableOnSystem()
+	deprecated @property override bool availableOnSystem()
 	{
 		return haveExecutable("7z") || haveExecutable("7za");
 	}

@@ -13,8 +13,6 @@
 
 module ae.sys.install.dmc;
 
-version(Windows):
-
 import std.array;
 import std.exception;
 import std.file;
@@ -27,12 +25,12 @@ import ae.utils.meta : singleton, I;
 public import ae.sys.install.common;
 
 /// Installs old versions of DMC.
-class LegacyDMCInstaller : Installer
+class LegacyDMCInstaller : Package
 {
 	protected @property override string name() { return "DigitalMars C++" ~ (ver ? " v" ~ ver[0] ~ "." ~ ver[1..$] : null); }
 	protected @property override string subdirectory() { return "dm" ~ ver; }
 
-	protected @property override string[] requiredExecutables() { return ["dmc", "link"]; }
+	deprecated protected @property override string[] requiredExecutables() { return ["dmc", "link"]; }
 	protected @property override string[] binPaths() { return ["bin"]; }
 
 	string ver;    /// Version to install
@@ -58,6 +56,7 @@ class LegacyDMCInstaller : Installer
 
 	protected override void installImpl(string target)
 	{
+		windowsOnly();
 		auto dmcDir =
 			dmcURL
 			.I!save()

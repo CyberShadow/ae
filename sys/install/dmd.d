@@ -27,7 +27,7 @@ import ae.utils.meta : singleton, I;
 public import ae.sys.install.common;
 
 /// Installs a binary release of DMD
-class DMDInstaller : Installer
+class DMDInstaller : Package
 {
 	string dmdVersion; /// Version to install
 
@@ -79,7 +79,7 @@ protected:
 	@property override string name() { return "DigitalMars D compiler v" ~ dmdVersion; }
 	@property override string subdirectory() { return "dmd-" ~ dmdVersion; }
 
-	@property override string[] requiredExecutables() { return ["dmd"]; }
+	deprecated @property override string[] requiredExecutables() { return ["dmd"]; }
 	@property override string[] binPaths() { return ["dmd2/" ~ platformDir ~ "/bin" ~ modelString]; }
 
 	@property string url() { return "http://downloads.dlang.org/releases/%s.x/%s/dmd.%s.%s.zip".format(
