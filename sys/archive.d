@@ -74,9 +74,11 @@ void unzip(string zip, string target)
 /// installing it locally if necessary.
 void un7z(string archive, string target)
 {
-	sevenZip.require();
+	auto executable = sevenZip.exe;
+	if (!haveExecutable(executable))
+		executable = sevenZip.requireInstalled().getExecutable("7z");
 	target.mkdirRecurse();
-	auto pid = spawnProcess([sevenZip.exe, "x", "-o" ~ target, archive]);
+	auto pid = spawnProcess([executable, "x", "-o" ~ target, archive]);
 	enforce(pid.wait() == 0, "Extraction failed");
 }
 
