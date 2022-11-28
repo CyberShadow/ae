@@ -521,7 +521,7 @@ struct Git
 	alias ObjectReader = RefCounted!ObjectReaderImpl; /// ditto
 
 	/// ditto
-	ObjectReader createObjectReader()
+	ObjectReader createObjectReader() const
 	{
 		auto pipes = this.pipe(`cat-file`, `--batch`);
 		return ObjectReader(pipes);
@@ -582,7 +582,7 @@ struct Git
 	}
 	alias ObjectWriter = RefCounted!ObjectWriterImpl; /// ditto
 
-	ObjectWriter createObjectWriter(string type)
+	ObjectWriter createObjectWriter(string type) const
 	{
 		auto pipes = this.pipe(`hash-object`, `-t`, type, `-w`, `--stdin-paths`);
 		return ObjectWriter(pipes);
@@ -590,7 +590,7 @@ struct Git
 
 	struct ObjectMultiWriterImpl
 	{
-		private Git repo;
+		private const(Git) repo;
 
 		/// The ObjectWriter instances for each individual type.
 		ObjectWriter treeWriter, blobWriter, commitWriter;
@@ -619,7 +619,7 @@ struct Git
 	alias ObjectMultiWriter = RefCounted!ObjectMultiWriterImpl; /// ditto
 
 	/// ditto
-	ObjectMultiWriter createObjectWriter()
+	ObjectMultiWriter createObjectWriter() const
 	{
 		return ObjectMultiWriter(this);
 	}
@@ -639,13 +639,13 @@ struct Git
 	}
 
 	/// Extract a commit's tree to a given directory
-	void exportCommit(string commit, string path, ObjectReader reader, bool delegate(string) pathFilter = null)
+	void exportCommit(string commit, string path, ObjectReader reader, bool delegate(string) pathFilter = null) const
 	{
 		exportTree(reader.read(commit).parseCommit().tree, path, reader, pathFilter);
 	}
 
 	/// Extract a tree to a given directory
-	void exportTree(TreeID treeHash, string path, ObjectReader reader, bool delegate(string) pathFilter = null)
+	void exportTree(TreeID treeHash, string path, ObjectReader reader, bool delegate(string) pathFilter = null) const
 	{
 		void exportSubTree(OID treeHash, string[] subPath)
 		{
@@ -684,7 +684,7 @@ struct Git
 	}
 
 	/// Import a directory tree into the object store, and return the new tree object's hash.
-	TreeID importTree(string path, ObjectMultiWriter writer, bool delegate(string) pathFilter = null)
+	TreeID importTree(string path, ObjectMultiWriter writer, bool delegate(string) pathFilter = null) const
 	{
 		static // Error: variable ae.sys.git.Repository.importTree.writer has scoped destruction, cannot build closure
 		TreeID importSubTree(string path, string subPath, ref ObjectMultiWriter writer, bool delegate(string) pathFilter)
@@ -777,7 +777,7 @@ struct Git
 	alias RefWriter = RefCounted!RefWriterImpl; /// ditto
 
 	/// ditto
-	RefWriter createRefWriter()
+	RefWriter createRefWriter() const
 	{
 		auto pipes = this.pipe(`update-ref`, `-z`, `--stdin`);
 		return RefWriter(pipes);
