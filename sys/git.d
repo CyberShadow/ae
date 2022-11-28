@@ -31,6 +31,7 @@ import ae.sys.cmd;
 import ae.sys.file;
 import ae.utils.aa;
 import ae.utils.array;
+import ae.utils.exception : DeclareException;
 import ae.utils.meta;
 import ae.utils.text;
 
@@ -459,6 +460,8 @@ struct Git
 		}
 	}
 
+	mixin DeclareException!q{ObjectMissingException};
+
 	/// Spawn a cat-file process which can read git objects by demand.
 	struct ObjectReaderImpl
 	{
@@ -481,7 +484,7 @@ struct Git
 			if (header.length == 2 && header[1] == "missing")
 			{
 				// return obj;
-				throw new Exception("Object is missing: " ~ headerLine);
+				throw new ObjectMissingException("Object is missing: " ~ headerLine);
 			}
 
 			enforce(header.length == 3, "Malformed header during cat-file: " ~ headerLine);
