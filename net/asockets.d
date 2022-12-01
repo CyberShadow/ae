@@ -1803,7 +1803,7 @@ public:
 unittest
 {
 	auto server = new UdpConnection();
-	server.bind("localhost", 0);
+	server.bind("127.0.0.1", 0);
 
 	auto client = new UdpConnection();
 	client.initialize(server.localAddress.addressFamily);
