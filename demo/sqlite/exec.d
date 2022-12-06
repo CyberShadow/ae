@@ -13,11 +13,11 @@
 
 module ae.demo.sqlite.exec;
 
-import std.stdio;
 import std.algorithm;
 import std.array;
 import std.conv;
-import std.datetime;
+import std.datetime.stopwatch;
+import std.stdio;
 
 import ae.sys.sqlite3;
 import ae.sys.console;
@@ -45,7 +45,7 @@ void main(string[] args)
 			sw.start();
 		}
 		sw.stop();
-		stderr.writeln("Query executed in ", dur!"hnsecs"(sw.peek().hnsecs).toString().replace("μ", "u"));
+		stderr.writeln("Query executed in ", sw.peek().toString().replace("μ", "u"));
 
 		if (rows.length == 0)
 			return;
