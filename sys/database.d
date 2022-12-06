@@ -46,11 +46,11 @@ struct Database
 	{
 		debug(DATABASE) stderr.writeln(sql);
 		static SQLite.PreparedStatement statement = null;
-		static Database statementDatabase; // Ensure the statement belongs to the current database
-		if (statementDatabase !is this)
+		static Database* statementDatabase; // Ensure the statement belongs to the current database
+		if (statementDatabase !is &this)
 		{
 			statement = db.prepare(sql).enforce("Statement compilation failed: " ~ sql);
-			statementDatabase = this;
+			statementDatabase = &this;
 		}
 		return statement;
 	}
