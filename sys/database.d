@@ -15,6 +15,7 @@ module ae.sys.database;
 
 import std.conv;
 import std.exception;
+import std.typecons;
 
 import ae.sys.sqlite3;
 public import ae.sys.sqlite3 : SQLiteException;
@@ -69,20 +70,26 @@ struct Database
 		return cache[sql.ptr] = statement;
 	}
 
-	private SQLite instance;
+	private struct SQLiteContainer
+	{
+		typeof(scoped!SQLite(null)) ptr;
+	}
+	private RefCounted!(SQLiteContainer, RefCountedAutoInitialize.no) instance;
 
 	/// Return a handle to the database, creating it first if necessary.
 	@property SQLite db()
 	{
-		if (instance)
-			return instance;
+		if (instance !is typeof(instance).init)
+			return instance.ptr;
 
-		instance = new SQLite(dbFileName);
-		scope(failure) instance = null;
+		instance = refCounted(SQLiteContainer(scoped!SQLite(dbFileName)));
+		scope(failure) instance = typeof(instance).init;
+
+		auto db = &instance.ptr;
 
 		// Protect against locked database due to queries from command
 		// line or cron
-		instance.exec("PRAGMA busy_timeout = 100;");
+		db.exec("PRAGMA busy_timeout = 100;");
 
 		if (schema !is null)
 		{
@@ -93,16 +100,16 @@ struct Database
 				while (userVersion < schema.length)
 				{
 					auto upgradeInstruction = schema[userVersion];
-					instance.exec("BEGIN TRANSACTION;");
-					instance.exec(upgradeInstruction);
+					db.exec("BEGIN TRANSACTION;");
+					db.exec(upgradeInstruction);
 					userVersion++;
-					instance.exec("PRAGMA user_version = " ~ text(userVersion));
-					instance.exec("COMMIT TRANSACTION;");
+					db.exec("PRAGMA user_version = " ~ text(userVersion));
+					db.exec("COMMIT TRANSACTION;");
 				}
 			}
 		}
 
-		return instance;
+		return *db;
 	}
 }
 
