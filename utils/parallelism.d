@@ -14,6 +14,7 @@
 module ae.utils.parallelism;
 
 import std.algorithm.mutation;
+import std.algorithm.searching;
 import std.algorithm.sorting;
 import std.parallelism;
 import std.range : chunks, iota;
@@ -59,4 +60,34 @@ auto parallelEagerMap(R, Pred)(R input, Pred pred, size_t workUnitSize = 0)
 unittest
 {
 	assert([1, 2, 3].parallelEagerMap((int n) => n + 1) == [2, 3, 4]);
+}
+
+
+/// Compare two arrays for equality, in parallel.
+bool parallelEqual(T)(T[] a, T[] b)
+{
+	if (a.length != b.length)
+		return false;
+
+	static bool[] chunkEqualBuf;
+	if (!chunkEqualBuf)
+		chunkEqualBuf = new bool[totalCPUs];
+	auto chunkEqual = chunkEqualBuf;
+	foreach (threadIndex; totalCPUs.iota.parallel(1))
+	{
+		auto start = a.length * (threadIndex    ) / totalCPUs;
+		auto end   = a.length * (threadIndex + 1) / totalCPUs;
+		chunkEqual[threadIndex] = a[start .. end] == b[start .. end];
+	}
+	return chunkEqual.all!(a => a)();
+}
+
+unittest
+{
+	import std.array : array;
+	auto a = 1024.iota.array;
+	auto b = a.dup;
+	assert(parallelEqual(a, b));
+	b[500] = 0;
+	assert(!parallelEqual(a, b));
 }
