@@ -1868,6 +1868,9 @@ EOS";
 				// documentation.
 				getComponent("dmd").needBuild(target == Target.test);
 
+				// Need the installer repository to at least be a Git repository
+				getComponent("installer").needSource(false);
+
 				needKindleGen(env);
 
 				foreach (dep; dependencies)
@@ -2075,6 +2078,25 @@ EOS";
 		}
 	}
 
+	/// Stub for the installer repository, which is needed by the dlang.org makefiles.
+	final class DInstaller : Component
+	{
+		protected @property override string submoduleName() { return "installer"; }
+		protected @property override string[] sourceDependencies() { return []; }
+		protected @property override string[] dependencies() { return []; }
+		protected @property override string configString() { return null; }
+
+		protected override void performBuild()
+		{
+			assert(false, "Not implemented");
+		}
+
+		protected override void performStage()
+		{
+			assert(false, "Not implemented");
+		}
+	}
+
 	private int tempError;
 
 	private Component[string] components;
@@ -2118,6 +2140,9 @@ EOS";
 					break;
 				case "dub":
 					c = new Dub();
+					break;
+				case "installer":
+					c = new DInstaller();
 					break;
 				default:
 					throw new Exception("Unknown component: " ~ name);
