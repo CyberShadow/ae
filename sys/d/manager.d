@@ -1393,6 +1393,19 @@ EOS";
 
 		protected override void performBuild()
 		{
+			version (Posix)
+			{{
+				auto fn = sourceDir.buildPath("posix.mak");
+				if (fn.exists)
+				{
+					fn.write(fn.readText
+						// Fix use of bash shell syntax on systems with non-bash /bin/sh
+						.replace("$(DMD_DIR)/{druntime/import,generated}", "$(DMD_DIR)/druntime/import $(DMD_DIR)/generated")
+					);
+					submodule.saveFileState(fn.relativePath(sourceDir));
+				}
+			}}
+
 			foreach (model; config.build.components.common.models)
 			{
 				auto env = baseEnvironment;
