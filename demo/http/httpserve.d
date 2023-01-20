@@ -13,6 +13,7 @@
 
 module ae.demo.http.httpserve;
 
+import std.algorithm.searching;
 import std.base64;
 import std.conv;
 import std.datetime;
@@ -37,6 +38,7 @@ void httpserve(
 	ushort port = 0, string host = null,
 	string sslCert = null, string sslKey = null,
 	string userName = null, string password = null,
+	bool stripQueryParameters = false,
 )
 {
 	HttpServer server;
@@ -63,9 +65,13 @@ void httpserve(
 
 			response.status = HttpStatusCode.OK;
 
+			auto path = request.resource[1..$];
+			if (stripQueryParameters)
+				path = path.findSplit("?")[0];
+
 			try
 				response.serveFile(
-					decodeUrlParameter(request.resource[1..$]),
+					decodeUrlParameter(path),
 					"",
 					true,
 					formatAddress("http", conn.localAddress, request.host, request.port) ~ "/");
