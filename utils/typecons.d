@@ -15,6 +15,25 @@ module ae.utils.typecons;
 
 import std.typecons;
 
+/// If `value` is not null, return its contents.
+/// If `value` is null, set it to `defaultValue` and return it.
+/// Similar to `object.require` for associative arrays, and
+/// Rust's `Option::get_or_insert`.
+ref T require(T)(ref Nullable!T value, lazy T defaultValue)
+{
+	if (value.isNull)
+		value = defaultValue;
+	return value.get();
+}
+
+///
+unittest
+{
+	Nullable!int i;
+	assert(i.require(3) == 3);
+	assert(i.require(4) == 3);
+}
+
 /// Apply a function over a Nullable's contents,
 /// if it is not null, and return that as a new Nullable.
 /// If the argument is null, return a null Nullable.
