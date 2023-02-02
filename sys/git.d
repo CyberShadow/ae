@@ -639,12 +639,12 @@ struct Git
 	}
 
 	/// Extract a commit's tree to a given directory
-	void exportCommit(CommitID commit, string path, ObjectReader reader, bool delegate(string) pathFilter = null)
+	void exportCommit(CommitID commit, string path, ObjectReader reader, bool delegate(string) pathFilter = null) const
 	{
 		exportTree(reader.read(commit).parseCommit().tree, path, reader, pathFilter);
 	}
 
-	void exportCommit(string commit, string path, ObjectReader reader, bool delegate(string) pathFilter = null)
+	void exportCommit(string commit, string path, ObjectReader reader, bool delegate(string) pathFilter = null) const
 	{
 		exportTree(reader.read(commit).parseCommit().tree, path, reader, pathFilter);
 	} ///ditto
