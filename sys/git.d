@@ -266,6 +266,13 @@ struct Git
 			return buf[].idup;
 		}
 
+		/// ditto
+		void toString(scope void delegate(const(char)[]) sink) const
+		{
+			char[40] buf = sha1.toLowerHex();
+			sink(buf[]);
+		}
+
 		unittest
 		{
 			OID oid;
@@ -285,6 +292,7 @@ struct Git
 		this(OID oid) { this.oid = oid; } /// Construct from a generic identifier.
 		this(in char[] hash) { oid = OID(hash); } /// Construct from an ASCII string.
 		string toString() pure const { return oid.toString(); } /// Convert to the ASCII representation.
+		void toString(scope void delegate(const(char)[]) sink) const { return oid.toString(sink); } /// ditto
 
 		// Disable implicit conversion directly between different kinds of OIDs.
 		static if (!is(typeof(this) == CommitID)) @disable this(CommitID);
