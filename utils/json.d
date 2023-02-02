@@ -218,6 +218,9 @@ struct CustomJsonSerializer(Writer)
 	/// Put a serializable value.
 	void put(T)(auto ref T v)
 	{
+		static if (__traits(hasMember, T, "toJSON"))
+			put(v.toJSON());
+		else
 		static if (is(T X == Nullable!X))
 			if (v.isNull)
 				writer.putValue(null);
@@ -288,9 +291,6 @@ struct CustomJsonSerializer(Writer)
 		else
 		static if (is(T==JSONFragment))
 			writer.output.put(v.json);
-		else
-		static if (__traits(hasMember, T, "toJSON"))
-			put(v.toJSON());
 		else
 		static if (is(T==struct))
 		{
