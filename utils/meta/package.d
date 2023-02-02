@@ -984,6 +984,8 @@ template SignedBitsType(uint bits)
 	return fields;
 }
 
+// ************************************************************************
+
 /// Returns the class's initializer instance.
 /// Returns null if all class fields are zero.
 /// Can be used to get the value of class fields' initial values.
@@ -999,6 +1001,8 @@ unittest
 	class C { int n = 42; }
 	assert(classInit!C.n == 42);
 }
+
+// ************************************************************************
 
 /// Create a functor value type (bound struct) from an alias.
 template functor(alias fun)
