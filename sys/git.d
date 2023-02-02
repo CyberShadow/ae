@@ -279,6 +279,12 @@ struct Git
 			oid.sha1 = [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67];
 			assert(oid.toString() == "0123456789abcdef0123456789abcdef01234567");
 		}
+
+		// Store as hex strings in JSON.
+		// TODO: this conversion should be done at the serialization site, not here.
+		import ae.utils.json : JSONFragment, jsonParse, toJson;
+		static typeof(this) fromJSON(JSONFragment value) { return typeof(this)(value.json.jsonParse!string); }
+		JSONFragment toJSON() const { return typeof(return)(toString().toJson); }
 	}
 
 	private mixin template TypedObjectID(string type_)
@@ -298,11 +304,27 @@ struct Git
 		static if (!is(typeof(this) == CommitID)) @disable this(CommitID);
 		static if (!is(typeof(this) == TreeID)) @disable this(TreeID);
 		static if (!is(typeof(this) == BlobID)) @disable this(BlobID);
+
+		// Store as hex strings in JSON.
+		// TODO: this conversion should be done at the serialization site, not here.
+		import ae.utils.json : JSONFragment, jsonParse, toJson;
+		static typeof(this) fromJSON(JSONFragment value) { return typeof(this)(value.json.jsonParse!string); }
+		JSONFragment toJSON() const { return typeof(return)(toString().toJson); }
 	}
 	/// Strong typed OIDs to distinguish which kind of object they identify.
 	struct CommitID { mixin TypedObjectID!"commit"; }
 	struct TreeID   { mixin TypedObjectID!"tree"  ; } /// ditto
 	struct BlobID   { mixin TypedObjectID!"blob"  ; } /// ditto
+
+	unittest
+	{
+		import ae.utils.json : toJson, jsonParse;
+		assert(toJson(OID.init) == `"0000000000000000000000000000000000000000"`);
+		assert(toJson(CommitID.init) == `"0000000000000000000000000000000000000000"`);
+
+		assert(`"0000000000000000000000000000000000000000"`.jsonParse!OID == OID.init);
+		assert(`"0000000000000000000000000000000000000000"`.jsonParse!CommitID == CommitID.init);
+	}
 
 	/// The parsed representation of a raw Git object.
 	struct Object
