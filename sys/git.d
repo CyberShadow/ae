@@ -131,7 +131,7 @@ struct Git
 		string toString() const { return name ~ " <" ~ email ~ "> " ~ date; }
 	}
 
-	/// A convenience function which loads the entire Git history into a graph.
+	/// Git history, as returned by `getHistory` and `getPartialHistory`.
 	struct History
 	{
 		/// An entry corresponding to a Git commit in this `History` object.
@@ -161,8 +161,16 @@ struct Git
 		CommitID[string] refs; /// A map of full Git refs (e.g. "refs/heads/master") to their commit IDs.
 	}
 
-	/// ditto
-	History getHistory(string[] extraArgs = null) const
+	/// Run `git log` and parse output to construct Git history
+	/// (starting with all refs) as a graph.
+	History getHistory(scope string[] extraArgs...) const
+	{
+		return getPartialHistory(`--all` ~ extraArgs);
+	}
+
+	/// Run `git log` and parse output to construct Git history
+	/// (starting with specified refs) as a graph.
+	History getPartialHistory(scope string[] extraArgs...) const
 	{
 		History history;
 
@@ -175,7 +183,7 @@ struct Git
 		History.Commit* commit;
 		string currentBlock;
 
-		foreach (line; query([`log`, `--all`, `--pretty=raw`] ~ extraArgs).split('\n'))
+		foreach (line; query([`log`, `--pretty=raw`] ~ extraArgs).split('\n'))
 		{
 			if (!line.length)
 			{
@@ -234,8 +242,8 @@ struct Git
 		foreach (line; query([`show-ref`, `--dereference`]).splitLines())
 		{
 			auto h = CommitID(line[0..40]);
-			enforce(h in history.commits, "Ref commit not in log: " ~ line);
-			history.refs[line[41..$]] = h;
+			if (h in history.commits)
+				history.refs[line[41..$]] = h;
 		}
 
 		return history;
