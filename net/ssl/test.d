@@ -86,7 +86,7 @@ void testSSL(SSLProvider ssl)
 	testServer(              "rsa4096.badssl.com").assertNotThrown;
 	testServer(              "rsa8192.badssl.com").assertNotThrown;
 
-	testServer(  "extended-validation.badssl.com").assertNotThrown;
+	// testServer(  "extended-validation.badssl.com").assertNotThrown; // Currently expired - https://github.com/chromium/badssl.com/issues/516
 
 	testServer(                  "cbc.badssl.com").assertNotThrown;
 	testServer(              "rc4-md5.badssl.com").assertThrown;
