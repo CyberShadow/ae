@@ -45,6 +45,7 @@ T await(T, E)(Promise!(T, E) p)
 	E fiberError;
 
 	auto f = Fiber.getThis();
+	assert(f, "await called while not in a fiber");
 	p.then((Promise!T.ValueTuple value) {
 		fiberValue = value;
 		f.call();
