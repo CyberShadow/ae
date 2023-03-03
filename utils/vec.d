@@ -129,7 +129,7 @@ struct Vec(T)
 		return data.length;
 	} /// ditto
 
-	T opCast(T)() if (is(T == bool))
+	T opCast(T)() const if (is(T == bool))
 	{
 		return !!data;
 	} /// ditto
