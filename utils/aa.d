@@ -618,15 +618,20 @@ public:
 
 	/// Retrieve last value associated with key, or `defaultValue` if none.
 	static if (haveIndexing)
-	auto ref inout(IV) get()(auto ref IK k, auto ref inout(IV) defaultValue) inout
 	{
 		static if (haveValues)
-		{
-			auto p = k in lookup;
-			return p ? lookupToReturnValue((*p)[$-1]) : defaultValue;
-		}
+			auto ref IV get(KK)(auto ref KK k, auto ref inout(IV) defaultValue) inout
+			if (is(typeof(k in lookup)))
+			{
+				auto p = k in lookup;
+				return p ? lookupToReturnValue((*p)[$-1]) : defaultValue;
+			}
 		else
-			return k < items.length ? items[k].returnValue : defaultValue;
+			auto ref IV get(KK)(auto ref KK k, auto ref inout(IV) defaultValue) inout
+			if (is(typeof(items[k])))
+			{
+				return k < items.length ? items[k].returnValue : defaultValue;
+			}
 	}
 
 	// *** Query (ranges) ***
@@ -1425,6 +1430,13 @@ unittest
 	OrderedMap!(string, int) m;
 	m = m.byKeyValue.orderedMap;
 	m = m.byPair.orderedMap;
+}
+
+unittest
+{
+	OrderedMap!(string, int) m;
+	const(char)[] s;
+	m.get(s, 0);
 }
 
 // ***************************************************************************
