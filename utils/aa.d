@@ -1609,20 +1609,24 @@ auto staticAA(alias aa)()
 {
 	alias K = typeof(aa.keys[0]);
 	alias V = typeof(aa.values[0]);
+	ref auto value(alias v)() // Work around "... is already defined in another scope in ..."
+	{
+		static immutable iv = v;
+		return iv;
+	}
 	struct StaticMap
 	{
 		static immutable K[] keys = aa.keys;
 		static immutable V[] values = aa.values;
 
-		inout(V) opIndex(K key) inout
+		ref immutable(V) opIndex(K key) const
 		{
 			final switch (key)
 			{
 				static foreach (i, aaKey; aa.keys)
 				{
 					case aaKey:
-						static immutable v = aa.values[i];
-						return v;
+						return value!(aa.values[i]);
 				}
 			}
 		}
@@ -1641,12 +1645,11 @@ auto staticAA(alias aa)()
 			}
 		}
 
-		int opApply(scope int delegate(K, V) dg) const
+		int opApply(scope int delegate(ref immutable K, ref immutable V) dg) const
 		{
 			static foreach (i, aaKey; aa.keys)
 			{{
-				static immutable v = aa.values[i];
-				int ret = dg(aaKey, v);
+				int ret = dg(value!aaKey, value!(aa.values[i]));
 				if (ret)
 					return ret;
 			}}
