@@ -523,6 +523,43 @@ unittest
 
 import std.functional;
 
+/// Remove first matching element in an array, mutating the array.
+/// Returns true if the array has been modified.
+/// Cf. `K[V].remove(K)`
+bool removeFirst(T, alias eq = binaryFun!"a == b", SwapStrategy swapStrategy = SwapStrategy.stable)(ref T[] arr, T elem)
+{
+	foreach (i, ref e; arr)
+		if (eq(e, elem))
+		{
+			arr = arr.remove!swapStrategy(i);
+			return true;
+		}
+	return false;
+}
+
+unittest
+{
+	int[] arr = [1, 2, 3, 2];
+	arr.removeFirst(2);
+	assert(arr == [1, 3, 2]);
+}
+
+/// Remove all matching elements in an array, mutating the array.
+/// Returns the number of removed elements.
+size_t removeAll(T, alias eq = binaryFun!"a == b", SwapStrategy swapStrategy = SwapStrategy.stable)(ref T[] arr, T elem)
+{
+	auto oldLength = arr.length;
+	arr = arr.remove!((ref e) => eq(e, elem));
+	return oldLength - arr.length;
+}
+
+unittest
+{
+	int[] arr = [1, 2, 3, 2];
+	arr.removeAll(2);
+	assert(arr == [1, 3]);
+}
+
 /// Sorts `arr` in-place using counting sort.
 /// The difference between the lowest and highest element of `arr` shouldn't be too big.
 T[] countSort(alias value = "a", T)(T[] arr)
