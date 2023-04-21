@@ -1587,3 +1587,78 @@ unittest
 	int[][int] a;
 	m = a;
 }
+
+// ***************************************************************************
+
+/// Given an AA literal, construct an AA-like object which can be built
+/// at compile-time and queried at run-time.
+/// The AA literal is unrolled into code.
+auto staticAA(alias aa)()
+{
+	alias K = typeof(aa.keys[0]);
+	alias V = typeof(aa.values[0]);
+	struct StaticMap
+	{
+		static immutable K[] keys = aa.keys;
+		static immutable V[] values = aa.values;
+
+		inout(V) opIndex(K key) inout
+		{
+			final switch (key)
+			{
+				static foreach (i, aaKey; aa.keys)
+				{
+					case aaKey:
+						static immutable v = aa.values[i];
+						return v;
+				}
+			}
+		}
+
+		bool opBinaryRight(string op : "in")(K key) inout
+		{
+			switch (key)
+			{
+				static foreach (aaKey; aa.keys)
+				{
+					case aaKey:
+						return true;
+				}
+				default:
+					return false;
+			}
+		}
+
+		int opApply(scope int delegate(K, V) dg) const
+		{
+			static foreach (i, aaKey; aa.keys)
+			{{
+				static immutable v = aa.values[i];
+				int ret = dg(aaKey, v);
+				if (ret)
+					return ret;
+			}}
+			return 0;
+		}
+	}
+	return StaticMap();
+}
+
+unittest
+{
+	static immutable aa = staticAA!([
+		"foo" : 1,
+		"bar" : 2,
+	]);
+
+	assert(aa["foo"] == 1);
+
+	assert("foo" in aa);
+	assert("baz" !in aa);
+
+	assert(aa.keys == ["foo", "bar"]);
+	assert(aa.values == [1, 2]);
+
+	foreach (key, value; aa)
+		assert((key == "foo" && value == 1) || (key == "bar" && value == 2));
+}
