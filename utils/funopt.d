@@ -199,7 +199,7 @@ void defaultUsageFun(string usage)
 /// Parse the given arguments according to FUN's parameters, and call FUN.
 /// Throws GetOptException on errors.
 auto funopt(alias FUN, FunOptConfig config = FunOptConfig.init, alias usageFun = defaultUsageFun)(string[] args)
-if (isFunction!FUN)
+if (isCallable!FUN)
 {
 	alias Params = staticMap!(Unqual, ParameterTypeTuple!FUN);
 	Params values;
@@ -216,9 +216,15 @@ if (isFunction!FUN)
 		}
 	}
 
+	// Can't pass options with empty names to getopt, filter them out.
+	static immutable string[] namesArr = [names];
+	static immutable bool[] optionUseGetOpt = Params.length.iota.map!(n => namesArr[n].length > 0).array;
+
 	enum structFields =
 		config.getoptConfig.length.iota.map!(n => "std.getopt.config config%d = std.getopt.config.%s;\n".format(n, config.getoptConfig[n])).join() ~
-		Params.length.iota.map!(n => "string selector%d; OptionValueType!(Params[%d])* value%d;\n".format(n, n, n)).join();
+		Params.length.iota
+			.filter!(n => optionUseGetOpt[n])
+			.map!(n => "string selector%d; OptionValueType!(Params[%d])* value%d;\n".format(n, n, n)).join();
 
 	static struct GetOptArgs { mixin(structFields); }
 	GetOptArgs getOptArgs;
@@ -235,11 +241,12 @@ if (isFunction!FUN)
 	}
 
 	foreach (i, ref value; values)
-	{
-		enum selector = optionSelector!i();
-		mixin("getOptArgs.selector%d = selector;".format(i));
-		mixin("getOptArgs.value%d = optionValue(values[%d]);".format(i, i));
-	}
+		static if (optionUseGetOpt[i])
+		{
+			enum selector = optionSelector!i();
+			mixin("getOptArgs.selector%d = selector;".format(i));
+			mixin("getOptArgs.value%d = optionValue(values[%d]);".format(i, i));
+		}
 
 	auto origArgs = args;
 	bool help;
@@ -345,15 +352,21 @@ unittest
 		assert(input is null);
 	}
 	funopt!f5(["program"]);
+
+	funopt!({})(["program"]);
+
+	funopt!((int) {})(["program", "5"]);
+
+	funopt!((int n) { assert(n); })(["program", "5"]);
 }
 
 // ***************************************************************************
 
 private string canonicalizeCommandLineArgument(string s) { return s.replace("-", ""); }
 private string canonicalizeIdentifier(string s) { return s.chomp("_").toLower(); }
-private string identifierToCommandLineKeyword(string s) { return s.chomp("_").splitByCamelCase.join("-").toLower(); }
-private string identifierToCommandLineParam  (string s) { return s.chomp("_").splitByCamelCase.join("-").toUpper(); }
-private string identifierToPlainText         (string s) { return s.chomp("_").splitByCamelCase.join(" ").toLower(); }
+private string identifierToCommandLineKeyword(string s) { return s.length ? s.chomp("_").splitByCamelCase.join("-").toLower() : "parameter"; }
+private string identifierToCommandLineParam  (string s) { return s.length ? s.chomp("_").splitByCamelCase.join("-").toUpper() : "PARAMETER"; }
+private string identifierToPlainText         (string s) { return s.length ? s.chomp("_").splitByCamelCase.join(" ").toLower() : "parameter"; }
 private string[] identifierToCommandLineKeywords(string s) { auto words = s.chomp("_").splitByCamelCase(); return [words.join().toLower()] ~ (words.length > 1 ? [words.join("-").toLower()] : []); } /// for getopt
 
 private string getProgramName(string program)
