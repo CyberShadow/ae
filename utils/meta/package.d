@@ -347,6 +347,49 @@ unittest
 
 // ************************************************************************
 
+/// `std.traits.ParameterIdentifierTuple` patched to support anonymous functions.
+// https://issues.dlang.org/show_bug.cgi?id=13780
+// https://github.com/dlang/phobos/pull/3620
+template ParameterNames(func...)
+    if (func.length == 1 && isCallable!func)
+{
+    static if (is(FunctionTypeOf!func PT == __parameters))
+    {
+        template Get(size_t i)
+        {
+            // Unnamed parameters yield CT error.
+            static if (is(typeof(__traits(identifier, PT[i..i+1]))x))
+            {
+                enum Get = __traits(identifier, PT[i..i+1]);
+            }
+            else
+            {
+                enum Get = "";
+            }
+        }
+    }
+    else
+    {
+        static assert(0, func[0].stringof ~ "is not a function");
+
+        // Define dummy entities to avoid pointless errors
+        template Get(size_t i) { enum Get = ""; }
+        alias PT = AliasSeq!();
+    }
+
+	import std.typetuple : AliasSeq;
+
+    template Impl(size_t i = 0)
+    {
+        static if (i == PT.length)
+            alias Impl = AliasSeq!();
+        else
+            alias Impl = AliasSeq!(Get!i, Impl!(i+1));
+    }
+
+    alias ParameterNames = Impl!();
+}
+
 /// Apply `.stringof` over `Args` and
 /// return the result as a `string[]`.
 static // https://issues.dlang.org/show_bug.cgi?id=7805
@@ -369,7 +412,7 @@ static size_t findParameter(alias fun, string names)()
 	import std.array : split;
 
 	foreach (name; names.split("/"))
-		foreach (i, param; ParameterIdentifierTuple!fun)
+		foreach (i, param; ParameterNames!fun)
 			if (param == name)
 				return i;
 	assert(false, "Function " ~ __traits(identifier, fun) ~ " doesn't have a parameter called " ~ names);
@@ -464,8 +507,8 @@ if (args.length == 1 || args.length == 2)
 
 			code ~= `ParameterTypeTuple!(args[0])[` ~ n ~ `] `;
 
-			static if (ParameterIdentifierTuple!fun[i].length)
-				code ~= ParameterIdentifierTuple!fun[i];
+			static if (ParameterNames!fun[i].length)
+				code ~= ParameterNames!fun[i];
 			else
 				code ~= "_param_" ~ toDec(i);
 
