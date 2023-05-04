@@ -51,7 +51,7 @@ auto formatted(string fmt, T...)(auto ref T values)
 	{
 		T values;
 
-		void toString(void delegate(const(char)[]) sink) const
+		void toString(scope void delegate(const(char)[]) sink) const
 		{
 			sink.formattedWrite!fmt(values);
 		}
