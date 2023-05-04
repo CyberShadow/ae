@@ -28,7 +28,7 @@ auto pred(alias fun, State...)(State state)
 	{
 		State state;
 
-		auto opCall(Args...)(auto ref Args args)
+		auto opCall(this This, Args...)(auto ref Args args)
 		{
 			return fun(state, args);
 		}
