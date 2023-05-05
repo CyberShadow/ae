@@ -41,7 +41,10 @@ auto fctr(alias fun, State...)(State state)
 
 		auto opCall(this This, Args...)(auto ref Args args)
 		{
-			return fun(state, args);
+			static if (args.length)
+				return fun(state, forward!args);
+			else
+				return fun(state);
 		}
 	}
 
