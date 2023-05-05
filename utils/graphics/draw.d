@@ -817,7 +817,7 @@ void subpixelDownscale()()
 	Image!BASE scratch;
 	scratch.size(hr.w*3, hr.h);
 
-	foreach (xy_t cx, char c; ValueTuple!('r', 'g', 'b'))
+	foreach (xy_t cx, char c; valueTuple!('r', 'g', 'b'))
 	{
 		auto w = i.window(cx*HRX, 0, cx*HRX+hr.w*3, hr.h);
 		scratch.transformDraw!(`COLOR(c.`~c~`)`)(0, 0, w);

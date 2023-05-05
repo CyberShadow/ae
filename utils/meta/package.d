@@ -29,30 +29,31 @@ import std.traits;
  * Same as TypeTuple, but meant to be used with values.
  *
  * Example:
- *   foreach (char channel; ValueTuple!('r', 'g', 'b'))
+ *   foreach (char channel; valueTuple!('r', 'g', 'b'))
  *   {
  *     // the loop is unrolled at compile-time
  *     // "channel" is a compile-time value, and can be used in string mixins
  *   }
  */
-template ValueTuple(T...)
+template valueTuple(T...)
 {
-	alias T ValueTuple;
+	alias T valueTuple;
 }
+deprecated alias ValueTuple = valueTuple;
 
 template _RangeTupleImpl(size_t N, R...)
 {
 	static if (N==R.length)
 		alias R _RangeTupleImpl;
 	else
-		alias _RangeTupleImpl!(N, ValueTuple!(R, R.length)) _RangeTupleImpl;
+		alias _RangeTupleImpl!(N, valueTuple!(R, R.length)) _RangeTupleImpl;
 }
 
 /// Generate a tuple containing integers from 0 to N-1.
 /// Useful for static loop unrolling. (staticIota)
 template RangeTuple(size_t N)
 {
-	alias _RangeTupleImpl!(N, ValueTuple!()) RangeTuple;
+	alias _RangeTupleImpl!(N, valueTuple!()) RangeTuple;
 }
 
 /// Expand an array to a tuple.
@@ -61,7 +62,7 @@ template ArrayToTuple(alias arr, Elements...)
 {
 	///
 	static if (arr.length)
-		alias ArrayToTuple = ArrayToTuple!(arr[1..$], ValueTuple!(Elements, arr[0]));
+		alias ArrayToTuple = ArrayToTuple!(arr[1..$], valueTuple!(Elements, arr[0]));
 	else
 		alias ArrayToTuple = Elements;
 }
@@ -177,9 +178,9 @@ template isValueOfTypeInTuple(X, T...)
 
 unittest
 {
-	static assert( isValueOfTypeInTuple!(int, ValueTuple!("a", 42)));
-	static assert(!isValueOfTypeInTuple!(int, ValueTuple!("a", 42.42)));
-	static assert(!isValueOfTypeInTuple!(int, ValueTuple!()));
+	static assert( isValueOfTypeInTuple!(int, valueTuple!("a", 42)));
+	static assert(!isValueOfTypeInTuple!(int, valueTuple!("a", 42.42)));
+	static assert(!isValueOfTypeInTuple!(int, valueTuple!()));
 
 	static assert(!isValueOfTypeInTuple!(int, "a", int, Object));
 	static assert( isValueOfTypeInTuple!(int, "a", int, Object, 42));
@@ -200,7 +201,7 @@ template findValueOfTypeInTuple(X, T...)
 
 unittest
 {
-	static assert(findValueOfTypeInTuple!(int, ValueTuple!("a", 42))==42);
+	static assert(findValueOfTypeInTuple!(int, valueTuple!("a", 42))==42);
 	static assert(findValueOfTypeInTuple!(int, "a", int, Object, 42)==42);
 }
 
