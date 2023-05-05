@@ -23,7 +23,9 @@ import std.traits : isCallable;
 /// Check if `f` is a functor, and can participate in functor composition.
 // Work around https://issues.dlang.org/show_bug.cgi?id=20246
 // (We assume opCall is always a function or function template.)
-enum isFunctor(alias f) = isCallable!f || __traits(hasMember, f, "opCall");
+enum isFunctor(f...) = f.length == 1 && (
+	isCallable!f || __traits(hasMember, f, "opCall")
+);
 
 unittest
 {
