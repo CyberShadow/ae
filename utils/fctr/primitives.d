@@ -29,7 +29,8 @@ auto fctr(alias fun, State...)(State state)
 	{
 		State state;
 
-		private this(State state) { this.state = state; }
+		static if (state.length)
+			private this(State state) { this.state = state; }
 
 		auto opCall(this This, Args...)(auto ref Args args)
 		{
@@ -37,14 +38,17 @@ auto fctr(alias fun, State...)(State state)
 		}
 	}
 
-	return Pred(state);
+	static if (state.length)
+		return Pred(state);
+	else
+		return Pred.init;
 }
 
 ///
 @nogc unittest
 {
-	// auto getFive = fctr!(() => 5)();
-	// assert(getFive() == 5);
+	auto getFive = fctr!(() => 5)();
+	assert(getFive() == 5);
 
 	auto getValue = fctr!(n => n)(5);
 	assert(getValue() == 5);

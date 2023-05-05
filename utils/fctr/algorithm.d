@@ -50,8 +50,8 @@ private:
 	// Simple map. Delegates are functors too!
 	assert(5.iota.pmap((int n) => n + 1).equal(only(1, 2, 3, 4, 5)));
 
-	// // Now with an explicit functor object (no indirect call):
-	// assert(5.iota.map(fctr!((int n) => n + 1)).equal(only(1, 2, 3, 4, 5)));
+	// Now with an explicit functor object (no indirect call):
+	assert(5.iota.pmap(fctr!((int n) => n + 1)).equal(only(1, 2, 3, 4, 5)));
 
 	// With state (in @nogc !!!)
 	int addend = 1;
