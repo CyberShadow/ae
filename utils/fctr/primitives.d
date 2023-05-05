@@ -36,7 +36,10 @@ auto fctr(alias fun, State...)(State state)
 			private this(State state)
 			{
 				static foreach (i; 0 .. state.length)
-					moveEmplace(state[i], this.state[i]);
+					static if (is(typeof(move(state[i]))))
+						this.state[i] = move(state[i]);
+					else
+						this.state[i] = state[i];
 			}
 
 		auto opCall(this This, Args...)(auto ref Args args)
@@ -79,6 +82,13 @@ auto fctr(alias fun, State...)(State state)
 
 	auto f = fctr!((ref a, ref b) => a.i + b.i)(NC(2), NC(3));
 	assert(f() == 5);
+}
+
+@nogc unittest
+{
+	immutable int i = 2;
+	auto f = fctr!((a, b) => a + b)(i);
+	assert(f(3) == 5);
 }
 
 /// Constructs a nullary functor which simply returns a value specified at compile-time.
