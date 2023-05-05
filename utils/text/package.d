@@ -44,6 +44,14 @@ string formatAs(T)(auto ref T obj, string fmt)
 	return format(fmt, obj);
 }
 
+///
+unittest
+{
+	assert(5.formatAs("%03d") == "005");
+}
+
+// ************************************************************************
+
 /// Lazily formatted object
 auto formatted(string fmt, T...)(auto ref T values)
 {
