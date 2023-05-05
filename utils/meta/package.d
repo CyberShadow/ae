@@ -24,6 +24,7 @@ import ae.utils.meta.caps;
 // ************************************************************************
 
 import std.traits;
+import std.typecons : tuple;
 
 /**
  * Same as TypeTuple, but meant to be used with values.
@@ -98,6 +99,20 @@ unittest
 	int[3] arr = [1, 2, 3];
 	void test(int a, int b, int c) {}
 	test(expand!arr);
+}
+
+/// Maps values with a predicate, returning a `std.typecons` tuple.
+auto tupleMap(alias pred, Values...)(auto ref Values values)
+{
+	static if (values.length == 0)
+		return tuple();
+	else
+		return tuple(pred(values[0]), tupleMap!pred(values[1 .. $]).expand);
+}
+
+unittest
+{
+	assert(tuple(2, 3.0).expand.tupleMap!(n => n + 1) == tuple(3, 4.0));
 }
 
 /// Return something to foreach over optimally.
