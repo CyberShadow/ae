@@ -59,24 +59,25 @@ deprecated alias RangeTuple = rangeTuple;
 
 /// Expand an array to a tuple.
 /// The array value must be known during compilation.
-template ArrayToTuple(alias arr, Elements...)
+template arrayToTuple(alias arr, Elements...)
 {
 	///
 	static if (arr.length)
-		alias ArrayToTuple = ArrayToTuple!(arr[1..$], valueTuple!(Elements, arr[0]));
+		alias arrayToTuple = arrayToTuple!(arr[1..$], valueTuple!(Elements, arr[0]));
 	else
-		alias ArrayToTuple = Elements;
+		alias arrayToTuple = Elements;
 }
+deprecated alias ArrayToTuple = arrayToTuple;
 
 unittest
 {
-	alias X = ArrayToTuple!"abc";
+	alias X = arrayToTuple!"abc";
 	static assert(X[0] == 'a' && X[2] == 'c');
 	static assert([X] == "abc");
 }
 
 /// Expand a static array to a tuple.
-/// Unlike `ArrayToTuple`, the array may be a runtime variable.
+/// Unlike `arrayToTuple`, the array may be a runtime variable.
 template expand(alias arr, size_t offset = 0)
 	if (isStaticArray!(typeof(arr)))
 {
@@ -106,8 +107,8 @@ unittest
 template CTIterate(alias A)
 {
 	///
-	static if (is(typeof(ArrayToTuple!A)))
-		enum CTIterate = ArrayToTuple!A;
+	static if (is(typeof(arrayToTuple!A)))
+		enum CTIterate = arrayToTuple!A;
 	else
 		alias CTIterate = A;
 }

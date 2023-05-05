@@ -47,13 +47,13 @@ void pngtobmp(bool strict, bool alpha, bool padding, bool gray, bool rgb, string
 		if (alpha)
 		{
 			enforce(!padding, "Can't use --alpha with --padding");
-			cv3!(Color!(ubyte, ArrayToTuple!(colorChannels ~ "a")))();
+			cv3!(Color!(ubyte, arrayToTuple!(colorChannels ~ "a")))();
 		}
 		else
 		if (padding)
-			cv3!(Color!(ubyte, ArrayToTuple!(colorChannels ~ "x")))();
+			cv3!(Color!(ubyte, arrayToTuple!(colorChannels ~ "x")))();
 		else
-			cv3!(Color!(ubyte, ArrayToTuple!colorChannels))();
+			cv3!(Color!(ubyte, arrayToTuple!colorChannels))();
 	}
 
 	if (gray)

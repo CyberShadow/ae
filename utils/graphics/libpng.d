@@ -423,8 +423,8 @@ unittest
 		else
 			static assert(false);
 
-		import ae.utils.meta : ArrayToTuple;
-		alias COLOR = Color!(ChannelType, ArrayToTuple!fields);
+		import ae.utils.meta : arrayToTuple;
+		alias COLOR = Color!(ChannelType, arrayToTuple!fields);
 
 		enum Bkgd { none, black, white }
 
