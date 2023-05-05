@@ -35,6 +35,7 @@ private alias indexOf = std.string.indexOf;
 
 public import ae.utils.array : contains;
 public import ae.utils.text.ascii : ascii, DecimalSize, toDec, toDecFixed, asciiToLower, asciiToUpper;
+public import ae.utils.text.fctr : formatted;
 
 // ************************************************************************
 
@@ -48,34 +49,6 @@ string formatAs(T)(auto ref T obj, string fmt)
 unittest
 {
 	assert(5.formatAs("%03d") == "005");
-}
-
-// ************************************************************************
-
-/// Lazily formatted object
-auto formatted(string fmt, T...)(auto ref T values)
-{
-	static struct Formatted
-	{
-		T values;
-
-		void toString(scope void delegate(const(char)[]) sink) const
-		{
-			sink.formattedWrite!fmt(values);
-		}
-
-		void toString(W)(ref W writer) const
-		if (isOutputRange!(W, char))
-		{
-			writer.formattedWrite!fmt(values);
-		}
-	}
-	return Formatted(values);
-}
-
-unittest
-{
-	assert(format!"%s%s%s"("<", formatted!"%x"(64), ">") == "<40>");
 }
 
 // ************************************************************************
