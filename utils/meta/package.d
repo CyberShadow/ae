@@ -1044,6 +1044,7 @@ unittest
 }
 
 /// Create a functor value type (bound struct) from an alias.
+deprecated("Use ae.utils.fctr")
 template functor(alias fun)
 {
 	struct Functor
