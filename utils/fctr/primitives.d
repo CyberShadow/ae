@@ -2,10 +2,11 @@
  * Functor primitives.
  *
  * Functors are objects which are callable. Unlike function pointers
- * or delegates, functors may embed state, and don't need a context
+ * or delegates, functors may embed state, and don't require a context
  * pointer.
  *
- * Function pointers and delegates are functors.
+ * Function pointers and delegates are functors; their state contains
+ * a pointer to the implementation and context.
  *
  * https://forum.dlang.org/post/qnigarkuxxnqwdernhzv@forum.dlang.org
  *
@@ -23,8 +24,8 @@ module ae.utils.fctr.primitives;
 
 import core.lifetime;
 
-/// Constructs a functor with statically-defined behavior (using the a
-/// static lambda), with optional state.
+/// Constructs a functor with statically-defined behavior (using an
+/// alias), with optional state.
 auto fctr(alias fun, State...)(State state)
 {
 	struct Pred
@@ -63,14 +64,14 @@ auto fctr(alias fun, State...)(State state)
 	assert(addValue(5) == 7);
 }
 
-unittest
+@nogc unittest
 {
 	struct NC
 	{
 		@disable this();
 		@disable this(this);
 		int i;
-		this(int i) { this.i = i; }
+		this(int i) @nogc { this.i = i; }
 	}
 
 	auto f = fctr!((ref a, ref b) => a.i + b.i)(NC(2), NC(3));
