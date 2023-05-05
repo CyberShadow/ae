@@ -1,8 +1,5 @@
 /**
- * Experimental!
- *
- * std.algorithm alternative which accepts predicates as functors
- * https://forum.dlang.org/post/qnigarkuxxnqwdernhzv@forum.dlang.org
+ * Renamed to ae.utils.fctr
  *
  * License:
  *   This Source Code Form is subject to the terms of
@@ -14,98 +11,9 @@
  *   Vladimir Panteleev <ae@cy.md>
  */
 
-module ae.utils.pred.algorithm;
+deprecated module ae.utils.pred.algorithm;
 
-import std.range.primitives : isInputRange;
-import std.traits : Unqual;
+public import ae.utils.fctr.primitives;
+public import ae.utils.fctr.algorithm;
 
-import std.range; // array range primitives
-
-/// Functor predicate constructor from static lambda
-auto pred(alias fun, State...)(State state)
-{
-	struct Pred
-	{
-		State state;
-
-		private this(State state) { this.state = state; }
-
-		auto opCall(this This, Args...)(auto ref Args args)
-		{
-			return fun(state, args);
-		}
-	}
-	return Pred(state);
-}
-
-/// `map` variant with functor predicate
-auto pmap(Range, P)(Range r, P pred)
-if (isInputRange!(Unqual!Range))
-{
-	return PMapResult!(Range, P)(r, pred);
-}
-
-private struct PMapResult(R, P)
-{
-	bool empty() { return r.empty; }
-	auto front() { return pred(r.front); }
-	static if (__traits(hasMember, R, "back"))
-		auto back() { return pred(r.back); }
-	void popFront() { r.popFront; }
-
-private:
-	R r;
-	P pred;
-}
-
-///
-@nogc unittest
-{
-	import std.algorithm.comparison : equal;
-	import std.range : iota, only;
-	import std.typecons : tuple;
-
-	// Simple map
-	assert(5.iota.pmap((int n) => n + 1).equal(only(1, 2, 3, 4, 5)));
-
-	// With state (in @nogc !!!)
-	int addend = 1;
-	assert(5.iota.pmap(pred!((addend, n) => n + addend)(addend)).equal(only(1, 2, 3, 4, 5)));
-
-	// Aggregate state with tuples
-	auto p = pred!((state, n) => (n + state.addend) * state.factor)(
-		tuple!("addend", "factor")(1, 2)
-	);
-	assert(5.iota.pmap(p).equal(only(2, 4, 6, 8, 10)));
-}
-
-/// `filter` variant with functor predicate
-auto pfilter(Range, P)(Range r, P pred)
-if (isInputRange!(Unqual!Range))
-{
-	return PFilterResult!(Range, P)(r, pred);
-}
-
-private struct PFilterResult(R, P)
-{
-	bool empty() { return r.empty; }
-	auto front() { return pred(r.front); }
-	void popFront() { r.popFront(); advance(); }
-
-	this(R r, P pred)
-	{
-		this.r = r;
-		this.pred = pred;
-		advance();
-	}
-
-private:
-	R r;
-	P pred;
-
-	void advance()
-	{
-		while (!r.empty && !pred(r.front))
-			r.popFront();
-	}
-}
+deprecated alias pred = fctr;
