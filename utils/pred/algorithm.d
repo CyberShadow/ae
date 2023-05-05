@@ -17,3 +17,5 @@ public import ae.utils.fctr.primitives;
 public import ae.utils.fctr.algorithm;
 
 deprecated alias pred = fctr;
+deprecated alias pmap = map;
+deprecated alias pfilter = filter;

@@ -21,7 +21,7 @@ import std.range; // array range primitives
 import ae.utils.fctr.primitives;
 
 /// `std.algorithm.map` variant which accepts a functor predicate.
-auto pmap(Range, P)(Range r, P pred)
+auto map(Range, P)(Range r, P pred)
 if (isInputRange!(Unqual!Range))
 {
 	return PMapResult!(Range, P)(r, pred);
@@ -48,28 +48,28 @@ private:
 	import std.typecons : tuple;
 
 	// Simple map. Delegates are functors too!
-	assert(5.iota.pmap((int n) => n + 1).equal(only(1, 2, 3, 4, 5)));
+	assert(5.iota.map((int n) => n + 1).equal(only(1, 2, 3, 4, 5)));
 
 	// Now with an explicit functor object (no indirect call):
-	assert(5.iota.pmap(fctr!((int n) => n + 1)).equal(only(1, 2, 3, 4, 5)));
+	assert(5.iota.map(fctr!((int n) => n + 1)).equal(only(1, 2, 3, 4, 5)));
 
 	// With state (in @nogc !!!)
 	int addend = 1;
-	assert(5.iota.pmap(fctr!((addend, n) => n + addend)(addend)).equal(only(1, 2, 3, 4, 5)));
+	assert(5.iota.map(fctr!((addend, n) => n + addend)(addend)).equal(only(1, 2, 3, 4, 5)));
 
 	// Aggregate state with tuples:
 	auto p = fctr!((state, n) => (n + state.addend) * state.factor)(
 		tuple!("addend", "factor")(1, 2)
 	);
-	assert(5.iota.pmap(p).equal(only(2, 4, 6, 8, 10)));
+	assert(5.iota.map(p).equal(only(2, 4, 6, 8, 10)));
 
 	// ... or just pass multiple parameters:
 	auto q = fctr!((addend, factor, n) => (n + addend) * factor)(1, 2);
-	assert(5.iota.pmap(q).equal(only(2, 4, 6, 8, 10)));
+	assert(5.iota.map(q).equal(only(2, 4, 6, 8, 10)));
 }
 
 /// `std.algorithm.filter` variant which accepts a functor predicate.
-auto pfilter(Range, P)(Range r, P pred)
+auto filter(Range, P)(Range r, P pred)
 if (isInputRange!(Unqual!Range))
 {
 	return PFilterResult!(Range, P)(r, pred);

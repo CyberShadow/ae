@@ -330,5 +330,5 @@ unittest
 
 // ************************************************************************
 
-static import ae.utils.pred.algorithm;
-deprecated alias pmap = ae.utils.pred.algorithm.pmap;
+static import ae.utils.fctr.algorithm;
+deprecated alias pmap = ae.utils.fctr.algorithm.map;
