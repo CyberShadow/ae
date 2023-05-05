@@ -13,6 +13,9 @@
 
 module ae.utils.text;
 
+import core.stdc.stdio : snprintf, sscanf;
+import core.stdc.string;
+
 import std.algorithm;
 import std.ascii;
 import std.exception;
@@ -23,18 +26,15 @@ import std.string;
 import std.traits;
 import std.typetuple;
 
-import core.stdc.stdio : snprintf, sscanf;
-import core.stdc.string;
-
 import ae.utils.array;
-import ae.utils.meta;
+import ae.utils.meta : rangeTuple;
 import ae.utils.text.parsefp;
 import ae.utils.textout;
 
 private alias indexOf = std.string.indexOf;
 
-public import ae.utils.text.ascii : ascii, DecimalSize, toDec, toDecFixed, asciiToLower, asciiToUpper;
 public import ae.utils.array : contains;
+public import ae.utils.text.ascii : ascii, DecimalSize, toDec, toDecFixed, asciiToLower, asciiToUpper;
 
 // ************************************************************************
 
