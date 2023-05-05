@@ -28,14 +28,14 @@ auto pred(alias fun, State...)(State state)
 	{
 		State state;
 
+		private this(State state) { this.state = state; }
+
 		auto opCall(this This, Args...)(auto ref Args args)
 		{
 			return fun(state, args);
 		}
 	}
-	Pred pred;
-	pred.state = state;
-	return pred;
+	return Pred(state);
 }
 
 /// `map` variant with functor predicate
