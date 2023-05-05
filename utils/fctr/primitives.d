@@ -77,3 +77,18 @@ auto fctr(alias fun, State...)(State state)
 	auto f = fctr!((ref a, ref b) => a.i + b.i)(NC(2), NC(3));
 	assert(f() == 5);
 }
+
+/// Constructs a nullary functor which simply returns a value specified at compile-time.
+/// Like `() => value`, but without the indirect call.
+auto valFctr(alias value)() { return .fctr!(() => value)(); }
+
+/// Constructs a nullary functor which simply returns a value specified at run-time.
+/// Like `() => value`, but without the closure and indirect call.
+auto valFctr(Value)(Value value) { return fctr!(v => v)(value); }
+
+///
+@nogc unittest
+{
+	assert(valFctr(5)() == 5);
+	assert(valFctr!5()() == 5);
+}
