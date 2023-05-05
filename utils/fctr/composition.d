@@ -47,11 +47,15 @@ if (isFunctor!Cond && isFunctor!T && isFunctor!F)
 	return fctr!fun(cond, t, f);
 }
 
+auto select(T, F)(bool cond, T t, F f) @nogc
+if (isFunctor!T && isFunctor!F)
+{ return select(cond.valFctr, t, f); } /// ditto
+
 ///
 unittest
 {
-	assert(select(true .valFctr, 5.valFctr, 7.valFctr)() == 5);
-	assert(select(false.valFctr, 5.valFctr, 7.valFctr)() == 7);
+	assert(select(true , 5.valFctr, 7.valFctr)() == 5);
+	assert(select(false, 5.valFctr, 7.valFctr)() == 7);
 }
 
 /// The chain operation using functors.
