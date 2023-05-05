@@ -21,6 +21,8 @@
 
 module ae.utils.fctr.primitives;
 
+import core.lifetime;
+
 /// Constructs a functor with statically-defined behavior (using the a
 /// static lambda), with optional state.
 auto fctr(alias fun, State...)(State state)
@@ -30,7 +32,7 @@ auto fctr(alias fun, State...)(State state)
 		State state;
 
 		static if (state.length)
-			private this(State state) { this.state = state; }
+			private this(State state) { moveEmplace(state, this.state); }
 
 		auto opCall(this This, Args...)(auto ref Args args)
 		{
@@ -39,7 +41,7 @@ auto fctr(alias fun, State...)(State state)
 	}
 
 	static if (state.length)
-		return Pred(state);
+		return Pred(move(state));
 	else
 		return Pred.init;
 }
@@ -55,4 +57,18 @@ auto fctr(alias fun, State...)(State state)
 
 	auto addValue = fctr!((n, i) => n + i)(2);
 	assert(addValue(5) == 7);
+}
+
+unittest
+{
+	struct NC
+	{
+		@disable this();
+		@disable this(this);
+		int i;
+		this(int i) { this.i = i; }
+	}
+
+	auto f = fctr!((ref nc) => nc.i)(NC(5));
+	assert(f() == 5);
 }
