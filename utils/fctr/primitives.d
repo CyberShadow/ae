@@ -32,7 +32,11 @@ auto fctr(alias fun, State...)(State state)
 		State state;
 
 		static if (state.length)
-			private this(State state) { moveEmplace(state, this.state); }
+			private this(State state)
+			{
+				static foreach (i; 0 .. state.length)
+					moveEmplace(state[i], this.state[i]);
+			}
 
 		auto opCall(this This, Args...)(auto ref Args args)
 		{
@@ -41,7 +45,7 @@ auto fctr(alias fun, State...)(State state)
 	}
 
 	static if (state.length)
-		return Pred(move(state));
+		return Pred(forward!state);
 	else
 		return Pred.init;
 }
@@ -69,6 +73,6 @@ unittest
 		this(int i) { this.i = i; }
 	}
 
-	auto f = fctr!((ref nc) => nc.i)(NC(5));
+	auto f = fctr!((ref a, ref b) => a.i + b.i)(NC(2), NC(3));
 	assert(f() == 5);
 }
