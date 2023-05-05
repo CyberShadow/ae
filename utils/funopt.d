@@ -24,7 +24,7 @@ import std.string;
 import std.traits;
 import std.typetuple;
 
-import ae.utils.meta : structFields, hasAttribute, getAttribute, RangeTuple, I, ParameterNames;
+import ae.utils.meta : structFields, hasAttribute, getAttribute, rangeTuple, I, ParameterNames;
 import ae.utils.array : split1;
 import ae.utils.text;
 
@@ -185,7 +185,7 @@ private template optionNames(alias FUN)
 	alias Params = ParameterTypeTuple!FUN;
 	alias parameterNames = ParameterNames!FUN;
 	enum optionNameAt(int i) = optionName!(Params[i], parameterNames[i]);
-	alias optionNames = staticMap!(optionNameAt, RangeTuple!(parameterNames.length));
+	alias optionNames = staticMap!(optionNameAt, rangeTuple!(parameterNames.length));
 }
 
 /// Default help text print function.

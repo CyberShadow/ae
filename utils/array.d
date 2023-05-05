@@ -876,7 +876,7 @@ auto list(Args...)(auto ref Args args)
 			assert(t.length == args.length,
 				"Assigning %d elements to list with %d elements"
 				.format(t.length, args.length));
-			foreach (i; RangeTuple!(Args.length))
+			foreach (i; rangeTuple!(Args.length))
 				static if (!is(Args[i] == typeof(null)))
 					args[i] = t[i];
 		}

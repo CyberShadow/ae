@@ -41,20 +41,21 @@ template valueTuple(T...)
 }
 deprecated alias ValueTuple = valueTuple;
 
-template _RangeTupleImpl(size_t N, R...)
+template _rangeTupleImpl(size_t N, R...)
 {
 	static if (N==R.length)
-		alias R _RangeTupleImpl;
+		alias R _rangeTupleImpl;
 	else
-		alias _RangeTupleImpl!(N, valueTuple!(R, R.length)) _RangeTupleImpl;
+		alias _rangeTupleImpl!(N, valueTuple!(R, R.length)) _rangeTupleImpl;
 }
 
 /// Generate a tuple containing integers from 0 to N-1.
 /// Useful for static loop unrolling. (staticIota)
-template RangeTuple(size_t N)
+template rangeTuple(size_t N)
 {
-	alias _RangeTupleImpl!(N, valueTuple!()) RangeTuple;
+	alias _rangeTupleImpl!(N, valueTuple!()) rangeTuple;
 }
+deprecated alias RangeTuple = rangeTuple;
 
 /// Expand an array to a tuple.
 /// The array value must be known during compilation.
@@ -464,7 +465,7 @@ template structFun(S)
 		import std.range : iota;
 
 		enum identifierAt(int n) = __traits(identifier, S.tupleof[n]);
-		enum names = [staticMap!(identifierAt, RangeTuple!(S.tupleof.length))];
+		enum names = [staticMap!(identifierAt, rangeTuple!(S.tupleof.length))];
 
 		return
 			"S structFun(\n" ~
@@ -502,7 +503,7 @@ if (args.length == 1 || args.length == 2)
 		import ae.utils.text.ascii : toDec;
 
 		string code;
-		foreach (i; RangeTuple!(ParameterTypeTuple!fun.length))
+		foreach (i; rangeTuple!(ParameterTypeTuple!fun.length))
 		{
 			enum n = toDec(i);
 
@@ -572,7 +573,7 @@ unittest
 /// Inspired by http://clhs.lisp.se/Body/s_progn.htm
 Args[$-1] progn(Args...)(lazy Args args)
 {
-	foreach (n; RangeTuple!(Args[1..$].length))
+	foreach (n; rangeTuple!(Args[1..$].length))
 		cast(void)args[n];
 	return args[$-1];
 }
@@ -601,7 +602,7 @@ unittest
 Args[0] prog1(Args...)(lazy Args args)
 {
 	auto result = args[0];
-	foreach (n; RangeTuple!(Args.length-1))
+	foreach (n; rangeTuple!(Args.length-1))
 		cast(void)args[1+n];
 	return result;
 }
@@ -621,7 +622,7 @@ enum bool haveCommonType(T...) = is(CommonType!T) && !is(CommonType!T == void);
 CommonType!Args or(Args...)(lazy Args args)
 if (haveCommonType!Args)
 {
-	foreach (n; RangeTuple!(Args.length-1))
+	foreach (n; rangeTuple!(Args.length-1))
 	{
 		auto r = args[n];
 		if (r)
@@ -642,7 +643,7 @@ unittest
 CommonType!Args and(Args...)(lazy Args args)
 if (haveCommonType!Args)
 {
-	foreach (n; RangeTuple!(Args.length-1))
+	foreach (n; rangeTuple!(Args.length-1))
 	{
 		auto r = args[n];
 		if (!r)

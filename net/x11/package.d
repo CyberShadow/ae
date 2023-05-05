@@ -175,14 +175,14 @@ private class X11SubProtocol
 				!ignoreFields.contains(name);
 		}
 		alias FieldIdxType(size_t index) = typeof(Req.tupleof[index]);
-		enum pertinentFieldIndices = Filter!(isPertinentFieldIdx, RangeTuple!(Req.tupleof.length));
+		enum pertinentFieldIndices = Filter!(isPertinentFieldIdx, rangeTuple!(Req.tupleof.length));
 
 		Data simpleEncoder(
 			staticMap!(FieldIdxType, pertinentFieldIndices) args,
 		) {
 			Req req;
 
-			foreach (i; RangeTuple!(args.length))
+			foreach (i; rangeTuple!(args.length))
 			{
 				enum structIndex = pertinentFieldIndices[i];
 				req.tupleof[structIndex] = args[i];
@@ -209,14 +209,14 @@ private class X11SubProtocol
 				import ae.utils.text.ascii : toDec;
 
 				string code;
-				foreach (i; RangeTuple!(Res.tupleof.length))
+				foreach (i; rangeTuple!(Res.tupleof.length))
 					static if (isPertinentFieldIdx!i)
 						code ~= `typeof(Res.tupleof)[` ~ toDec(i) ~ `] ` ~ __traits(identifier, Res.tupleof[i]) ~ ";";
 				return code;
 			}());
 		}
 		alias FieldIdxType(size_t index) = typeof(Res.tupleof[index]);
-		enum pertinentFieldIndices = Filter!(isPertinentFieldIdx, RangeTuple!(Res.tupleof.length));
+		enum pertinentFieldIndices = Filter!(isPertinentFieldIdx, rangeTuple!(Res.tupleof.length));
 
 		DecodedResult simpleDecoder(
 			Data data,
@@ -226,7 +226,7 @@ private class X11SubProtocol
 			auto res = cast(Res*)data.contents.ptr;
 
 			DecodedResult result;
-			foreach (i; RangeTuple!(pertinentFieldIndices.length))
+			foreach (i; rangeTuple!(pertinentFieldIndices.length))
 			{
 				result.tupleof[i] = res.tupleof[pertinentFieldIndices[i]];
 				debug(X11) stderr.writeln("[X11] << ", __traits(identifier, result.tupleof[i]), ": ", result.tupleof[i]);
@@ -1440,7 +1440,7 @@ if (args.length % 2 == 0)
 string populateRequestFromLocals(T)()
 {
 	string code = T.stringof ~ " req;\n";
-	foreach (i; RangeTuple!(T.tupleof.length))
+	foreach (i; rangeTuple!(T.tupleof.length))
 	{
 		enum name = __traits(identifier, T.tupleof[i]);
 		enum isPertinentField =

@@ -260,7 +260,7 @@ struct CustomJsonSerializer(Writer)
 			else
 			{
 				writer.beginArray();
-				foreach (n; RangeTuple!N)
+				foreach (n; rangeTuple!N)
 				{
 					static if (n)
 						writer.putComma();

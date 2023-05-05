@@ -895,7 +895,7 @@ alias toLowerHex = toHex!lowerHexDigits; /// ditto
 void toHex(T : ulong, size_t U = T.sizeof*2)(T n, ref char[U] buf)
 {
 	Unqual!T x = n;
-	foreach (i; Reverse!(RangeTuple!(T.sizeof*2)))
+	foreach (i; Reverse!(rangeTuple!(T.sizeof*2)))
 	{
 		buf[i] = hexDigits[x & 0xF];
 		x >>= 4;

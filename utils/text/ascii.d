@@ -164,12 +164,12 @@ void toDecFixed(N : ulong, size_t U)(N n, ref char[U] buf)
 	if (!isSigned!N)
 {
 	import std.meta : Reverse;
-	import ae.utils.meta : RangeTuple;
+	import ae.utils.meta : rangeTuple;
 
 	enum limit = 10^^U;
 	assert(n < limit, "Number too large");
 
-	foreach (i; Reverse!(RangeTuple!U))
+	foreach (i; Reverse!(rangeTuple!U))
 	{
 		buf[i] = cast(char)('0' + (n % 10));
 		n /= 10;

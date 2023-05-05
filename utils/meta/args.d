@@ -148,9 +148,9 @@ private sizediff_t argIndex(names...)(string name)
 
 private sizediff_t fieldIndex(S)(string name)
 {
-	import ae.utils.meta : RangeTuple;
+	import ae.utils.meta : rangeTuple;
 
-	foreach (i; RangeTuple!(S.tupleof.length))
+	foreach (i; rangeTuple!(S.tupleof.length))
 		if (__traits(identifier, S.tupleof[i]) == name)
 			return i;
 	return -1;
