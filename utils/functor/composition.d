@@ -11,9 +11,9 @@
  *   Vladimir Panteleev <ae@cy.md>
  */
 
-module ae.utils.fctr.composition;
+module ae.utils.functor.composition;
 
-import ae.utils.fctr.primitives;
+import ae.utils.functor.primitives;
 
 import core.lifetime;
 
@@ -32,7 +32,7 @@ unittest
 	static assert(isFunctor!(typeof(() => 5)));
 	int i;
 	static assert(isFunctor!(typeof(() => i)));
-	auto getFive = fctr!(() => 5)();
+	auto getFive = functor!(() => 5)();
 	static assert(isFunctor!getFive);
 }
 
@@ -46,7 +46,7 @@ if (isFunctor!Cond && isFunctor!T && isFunctor!F)
 			? t(forward!args)
 			: f(forward!args);
 	}
-	return fctr!fun(cond, t, f);
+	return functor!fun(cond, t, f);
 }
 
 auto select(T, F)(bool cond, T t, F f) @nogc
@@ -63,22 +63,22 @@ unittest
 /// The chain operation using functors.
 /// Calls all functors in sequence, returns `void`.
 /// (Not to be confused with function composition.)
-auto seq(Fctrs...)(Fctrs fctrs) @nogc
+auto seq(Fctrs...)(Fctrs functors) @nogc
 if (allSatisfy!(isFunctor, Fctrs))
 {
-	static void fun(Args...)(ref Fctrs fctrs, auto ref Args args)
+	static void fun(Args...)(ref Fctrs functors, auto ref Args args)
 	{
-		/*static*/ foreach (ref fctr; fctrs)
-			fctr(args);
+		/*static*/ foreach (ref functor; functors)
+			functor(args);
 	}
-	return fctr!fun(fctrs);
+	return functor!fun(functors);
 }
 
 ///
 unittest
 {
-	auto addFive = fctr!(p => *p += 5)();
-	auto addThree = fctr!(p => *p += 3)();
+	auto addFive = functor!(p => *p += 5)();
+	auto addThree = functor!(p => *p += 3)();
 	auto addEight = seq(addFive, addThree);
 	int i;
 	addEight(&i);

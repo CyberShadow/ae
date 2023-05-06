@@ -1,5 +1,5 @@
 /**
- * Renamed to ae.utils.fctr
+ * Renamed to ae.utils.functor
  *
  * License:
  *   This Source Code Form is subject to the terms of
@@ -13,9 +13,9 @@
 
 deprecated module ae.utils.pred.algorithm;
 
-public import ae.utils.fctr.primitives;
-public import ae.utils.fctr.algorithm;
+public import ae.utils.functor.primitives;
+public import ae.utils.functor.algorithm;
 
-deprecated alias pred = fctr;
+deprecated alias pred = functor;
 deprecated alias pmap = map;
 deprecated alias pfilter = filter;

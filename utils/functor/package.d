@@ -11,8 +11,8 @@
  *   Vladimir Panteleev <ae@cy.md>
  */
 
-module ae.utils.fctr;
+module ae.utils.functor;
 
-public import ae.utils.fctr.algorithm;
-public import ae.utils.fctr.composition;
-public import ae.utils.fctr.primitives;
+public import ae.utils.functor.algorithm;
+public import ae.utils.functor.composition;
+public import ae.utils.functor.primitives;

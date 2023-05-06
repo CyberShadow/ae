@@ -11,15 +11,15 @@
  *   Vladimir Panteleev <ae@cy.md>
  */
 
-module ae.utils.text.fctr;
+module ae.utils.text.functor;
 
 import core.lifetime : forward;
 
 import std.format : formattedWrite, formatValue, FormatSpec;
 import std.range.primitives : isOutputRange;
 
-import ae.utils.fctr.composition : isFunctor, select, seq;
-import ae.utils.fctr.primitives : fctr;
+import ae.utils.functor.composition : isFunctor, select, seq;
+import ae.utils.functor.primitives : functor;
 import ae.utils.meta : tupleMap, I;
 
 /// "Formatting functor".
@@ -48,7 +48,7 @@ auto fmtFctr(string fmt = null, T...)(auto ref T values)
 				foreach (ref value; values)
 					w.formatValue(value, fmt);
 			};
-	return fctr!fun(forward!values);
+	return functor!fun(forward!values);
 }
 
 ///
@@ -170,7 +170,7 @@ template str(alias fun, T...)
 	auto str()(auto ref T values)
 	{
 		return values
-			.fctr!fun()
+			.functor!fun()
 			.I!(.str);
 	}
 }
@@ -217,8 +217,8 @@ if (isFunctor!T && isFunctor!F)
 	}
 	return select(
 		cond,
-		fctr!fun(t),
-		fctr!fun(f),
+		functor!fun(t),
+		functor!fun(f),
 	).str;
 }
 

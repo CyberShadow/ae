@@ -20,13 +20,13 @@
  *   Vladimir Panteleev <ae@cy.md>
  */
 
-module ae.utils.fctr.primitives;
+module ae.utils.functor.primitives;
 
 import core.lifetime;
 
 /// Constructs a functor with statically-defined behavior (using an
 /// alias), with optional state.
-auto fctr(alias fun, State...)(State state)
+auto functor(alias fun, State...)(State state)
 {
 	struct Pred
 	{
@@ -60,13 +60,13 @@ auto fctr(alias fun, State...)(State state)
 ///
 @nogc unittest
 {
-	auto getFive = fctr!(() => 5)();
+	auto getFive = functor!(() => 5)();
 	assert(getFive() == 5);
 
-	auto getValue = fctr!(n => n)(5);
+	auto getValue = functor!(n => n)(5);
 	assert(getValue() == 5);
 
-	auto addValue = fctr!((n, i) => n + i)(2);
+	auto addValue = functor!((n, i) => n + i)(2);
 	assert(addValue(5) == 7);
 }
 
@@ -80,24 +80,24 @@ auto fctr(alias fun, State...)(State state)
 		this(int i) @nogc { this.i = i; }
 	}
 
-	auto f = fctr!((ref a, ref b) => a.i + b.i)(NC(2), NC(3));
+	auto f = functor!((ref a, ref b) => a.i + b.i)(NC(2), NC(3));
 	assert(f() == 5);
 }
 
 @nogc unittest
 {
 	immutable int i = 2;
-	auto f = fctr!((a, b) => a + b)(i);
+	auto f = functor!((a, b) => a + b)(i);
 	assert(f(3) == 5);
 }
 
 /// Constructs a nullary functor which simply returns a value specified at compile-time.
 /// Like `() => value`, but without the indirect call.
-auto valFctr(alias value)() { return .fctr!(() => value)(); }
+auto valFctr(alias value)() { return .functor!(() => value)(); }
 
 /// Constructs a nullary functor which simply returns a value specified at run-time.
 /// Like `() => value`, but without the closure and indirect call.
-auto valFctr(Value)(Value value) { return fctr!(v => v)(value); }
+auto valFctr(Value)(Value value) { return functor!(v => v)(value); }
 
 ///
 @nogc unittest

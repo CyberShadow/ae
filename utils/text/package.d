@@ -35,7 +35,7 @@ private alias indexOf = std.string.indexOf;
 
 public import ae.utils.array : contains;
 public import ae.utils.text.ascii : ascii, DecimalSize, toDec, toDecFixed, asciiToLower, asciiToUpper;
-public import ae.utils.text.fctr : formatted;
+public import ae.utils.text.functor : formatted;
 
 // ************************************************************************
 
