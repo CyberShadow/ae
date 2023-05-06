@@ -190,7 +190,7 @@ class CachedCurlNetwork : Network
 	}
 
 	/// ditto
-	Response cachedReq(string url, HTTP.Method method, in void[] data = null)
+	Response cachedReq(string url, HTTP.Method method, const(void)[] data = null)
 	{
 		auto req = Request(url, method, data);
 		return cachedReq(req);
@@ -228,7 +228,7 @@ class CachedCurlNetwork : Network
 				[$-1]);
 	} ///
 
-	override void[] post(string url, in void[] data)
+	override void[] post(string url, const(void)[] data)
 	{
 		return cachedReq(url, HTTP.Method.post, data).responseData;
 	} ///

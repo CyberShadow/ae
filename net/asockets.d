@@ -781,7 +781,7 @@ public:
 	override @property ConnectionState state() { return _state; }
 
 protected:
-	abstract sizediff_t doSend(in void[] buffer);
+	abstract sizediff_t doSend(const(void)[] buffer);
 	abstract sizediff_t doReceive(void[] buffer);
 
 	/// The send buffers.
@@ -1169,7 +1169,7 @@ class FileConnection : StreamConnection
 protected:
 	import core.sys.posix.unistd : read, write;
 
-	override sizediff_t doSend(in void[] buffer)
+	override sizediff_t doSend(const(void)[] buffer)
 	{
 		return write(socket.handle, buffer.ptr, buffer.length);
 	}
@@ -1274,7 +1274,7 @@ protected:
 		super(conn);
 	}
 
-	override sizediff_t doSend(in void[] buffer)
+	override sizediff_t doSend(const(void)[] buffer)
 	{
 		return conn.send(buffer);
 	}
@@ -1701,7 +1701,7 @@ protected:
 		}
 	}
 
-	override sizediff_t doSend(in void[] buffer)
+	override sizediff_t doSend(const(void)[] buffer)
 	{
 		assert(false); // never called (called only from overridden methods)
 	}

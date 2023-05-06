@@ -1859,7 +1859,7 @@ version (linux)
 		}
 
 		/// Write an extended attribute.
-		void opIndexAssign(in void[] value, string key)
+		void opIndexAssign(const(void)[] value, string key)
 		{
 			auto ret = setFun(obj, key.toStringz(), value.ptr, value.length, 0);
 			errnoEnforce(ret == 0, __traits(identifier, setFun));
@@ -2044,7 +2044,7 @@ static if (is(typeof({ import std.stdio : toFile; })))
 }
 else
 {
-	void toFile(in void[] data, in char[] name)
+	void toFile(const(void)[] data, in char[] name)
 	{
 		std.file.write(name, data);
 	}
@@ -2052,7 +2052,7 @@ else
 
 /// Same as toFile, but accepts void[] and does not conflict with the
 /// std.stdio function.
-void writeTo(in void[] data, in char[] target)
+void writeTo(const(void)[] data, in char[] target)
 {
 	std.file.write(target, data);
 }
@@ -2403,14 +2403,14 @@ ascii readAscii()(string fileName)
 version(Posix) static import ae.sys.signals;
 
 /// Start a thread which writes data to f asynchronously.
-Thread writeFileAsync(File f, in void[] data)
+Thread writeFileAsync(File f, const(void)[] data)
 {
 	static class Writer : Thread
 	{
 		File target;
 		const void[] data;
 
-		this(ref File f, in void[] data)
+		this(ref File f, const(void)[] data)
 		{
 			this.target = f;
 			this.data = data;
@@ -2475,7 +2475,7 @@ ubyte[] delegate() readFileAsync(File f)
 /// before this function returns.
 /// Consider using as atomic!syncWrite.
 /// See also: syncUpdate
-void syncWrite()(string target, in void[] data)
+void syncWrite()(string target, const(void)[] data)
 {
 	auto f = File(target, "wb");
 	f.rawWrite(data);
@@ -2495,7 +2495,7 @@ void syncWrite()(string target, in void[] data)
 /// Atomically save data to a file (if the file doesn't exist,
 /// or its contents differs). The update operation as a whole
 /// is not atomic, only the write is.
-void syncUpdate()(string fn, in void[] data)
+void syncUpdate()(string fn, const(void)[] data)
 {
 	if (!fn.exists || fn.read() != data)
 		atomic!(syncWrite!())(fn, data);
@@ -2726,7 +2726,7 @@ deprecated alias obtainUsing = cached;
 /// atomic!syncUpdate instead.
 alias atomicWrite = atomic!_writeProxy;
 deprecated alias safeWrite = atomicWrite;
-/*private*/ void _writeProxy(string target, in void[] data)
+/*private*/ void _writeProxy(string target, const(void)[] data)
 {
 	std.file.write(target, data);
 }

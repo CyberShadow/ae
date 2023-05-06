@@ -40,7 +40,7 @@ class Network
 
 	/// Post data to the specified URL.
 	// TODO: Content-Type?
-	void[] post(string url, in void[] data)
+	void[] post(string url, const(void)[] data)
 	{
 		notImplemented();
 		assert(false);

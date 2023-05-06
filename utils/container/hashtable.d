@@ -101,7 +101,7 @@ struct HashTable(K, V, uint SIZE, alias ALLOCATOR, alias HASHFUNC="k")
 			return &newItem.v;
 		}
 
-		void set(in K k, ref V v) { *getOrAdd(k) = v; }
+		void set(ref const K k, ref V v) { *getOrAdd(k) = v; }
 
 		int opApply(int delegate(ref K, ref V) dg)
 		{
@@ -122,14 +122,14 @@ struct HashTable(K, V, uint SIZE, alias ALLOCATOR, alias HASHFUNC="k")
 			return result;
 		}
 
-		ref V opIndex(in K k)
+		ref V opIndex(ref const K k)
 		{
 			auto pv = get(k);
 			enforce(pv, "Key not in HashTable");
 			return *pv;
 		}
 
-		void opIndexAssign(ref V v, in K k) { set(k, v); }
+		void opIndexAssign(ref V v, ref const K k) { set(k, v); }
 
 		size_t getLength()
 		{

@@ -417,7 +417,7 @@ bool readVLInt(ref Data data, ref uint value)
 }
 
 /// Write a FastCGI-encoded name-value pair.
-void putNameValue(W)(ref W writer, in char[] name, in char[] value)
+void putNameValue(W)(ref W writer, const(char)[] name, const(char)[] value)
 {
 	writer.putVLInt(name.length);
 	writer.putVLInt(value.length);

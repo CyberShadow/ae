@@ -50,7 +50,7 @@ class AENetwork : Network
 		return getData(url).toHeap;
 	} ///
 
-	override void[] post(string url, in void[] data)
+	override void[] post(string url, const(void)[] data)
 	{
 		Data result;
 		bool got;

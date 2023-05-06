@@ -50,7 +50,7 @@ uint[256] crc32Table = [
 ];
 
 /// ditto
-uint fastCRC(in void[] data, uint start = cast(uint)-1)
+uint fastCRC(const(void)[] data, uint start = cast(uint)-1)
 {
 	uint crc = start;
 	foreach (val; cast(ubyte[])data)
@@ -147,7 +147,7 @@ private:
 }
 
 /// ditto
-uint murmurHash2(in void[] data, uint seed=0)
+uint murmurHash2(const(void)[] data, uint seed=0)
 {
 	enum { m = 0x5bd1e995, r = 24 }
 	uint len = cast(uint)data.length;
@@ -193,7 +193,7 @@ deprecated import ae.utils.digest_murmurhash3;
 
 deprecated ("Use std.digest.murmurhash")
 {
-	uint murmurHash3_32(in void[] data, uint seed=0)
+	uint murmurHash3_32(const(void)[] data, uint seed=0)
 	{
 		uint result;
 		MurmurHash3_x86_32(data.ptr, cast(uint)data.length, seed, &result);
@@ -202,14 +202,14 @@ deprecated ("Use std.digest.murmurhash")
 
 	alias uint[4] MH3Digest128;
 
-	MH3Digest128 murmurHash3_x86_128(in void[] data, uint seed=0)
+	MH3Digest128 murmurHash3_x86_128(const(void)[] data, uint seed=0)
 	{
 		MH3Digest128 result;
 		MurmurHash3_x86_128(data.ptr, cast(uint)data.length, seed, &result);
 		return result;
 	}
 
-	MH3Digest128 murmurHash3_x64_128(in void[] data, uint seed=0)
+	MH3Digest128 murmurHash3_x64_128(const(void)[] data, uint seed=0)
 	{
 		MH3Digest128 result;
 		MurmurHash3_x64_128(data.ptr, cast(uint)data.length, seed, &result);

@@ -146,7 +146,7 @@ final class SQLite
 			sqlite3_bind_null(stmt, idx);
 		} /// ditto
 
-		void bind(int idx, in void[] v)
+		void bind(int idx, const(void)[] v)
 		{
 			sqlite3_bind_blob(stmt, idx, v.ptr, to!int(v.length), SQLITE_TRANSIENT);
 		} /// ditto

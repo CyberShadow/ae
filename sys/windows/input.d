@@ -20,7 +20,7 @@ mixin(importWin32!q{windef});
 mixin(importWin32!q{winuser});
 
 /// Send WM_COPYDATA to the specified window.
-void sendCopyData(HWND hWnd, DWORD n, in void[] buf)
+void sendCopyData(HWND hWnd, DWORD n, const(void)[] buf)
 {
 	COPYDATASTRUCT cds;
 	cds.dwData = n;

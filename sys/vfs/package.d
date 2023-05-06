@@ -102,7 +102,7 @@ void ensurePathExists(string fn)
 }
 
 /// ditto
-void safeWrite(string fn, in void[] data)
+void safeWrite(string fn, const(void)[] data)
 {
 	auto tmp = fn ~ ".ae-tmp";
 	write(tmp, data);

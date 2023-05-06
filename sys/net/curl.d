@@ -39,7 +39,7 @@ class CurlNetwork : Network
 		return get!(AutoProtocol, ubyte)(url);
 	} ///
 
-	override void[] post(string url, in void[] data)
+	override void[] post(string url, const(void)[] data)
 	{
 		return .post!ubyte(url, data);
 	} ///

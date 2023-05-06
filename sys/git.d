@@ -399,7 +399,7 @@ struct Git
 		{
 			auto s = "tree %s\n%-(parent %s\n%|%)author %s\ncommitter %s\n\n%-(%s\n%)".format(
 					commit.tree.toString(),
-					commit.parents.map!((in ref CommitID oid) => oid.toString()),
+					commit.parents.map!((ref const CommitID oid) => oid.toString()),
 					commit.author,
 					commit.committer,
 					commit.message,
@@ -558,7 +558,7 @@ struct Git
 			return OID(pipes.stdout.safeReadln().strip());
 		}
 
-		deprecated OID write(in void[] data) { return write(cast(const(ubyte)[]) data); }
+		deprecated OID write(const(void)[] data) { return write(cast(const(ubyte)[]) data); }
 
 		~this()
 		{

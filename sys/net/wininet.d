@@ -93,7 +93,7 @@ protected:
 		return HNet(hReq);
 	}
 
-	final static void sendRequest(ref HNet hReq, string headers = null, in void[] optionalData = null)
+	final static void sendRequest(ref HNet hReq, string headers = null, const(void)[] optionalData = null)
 	{
 		HttpSendRequestA(hReq, headers.ptr, headers.length.to!DWORD, cast(void*)optionalData.ptr, optionalData.length.to!DWORD)
 			.wenforce("HttpSendRequest");
@@ -210,7 +210,7 @@ public:
 		return result.data;
 	} ///
 
-	override void[] post(string url, in void[] data)
+	override void[] post(string url, const(void)[] data)
 	{
 		auto request = new HttpRequest(url);
 

@@ -162,7 +162,7 @@ if (!hasIndirections!T)
 // ************************************************************************
 
 /// Wrapper for the `iconv` program.
-ubyte[] iconv(in void[] data, string inputEncoding, string outputEncoding)
+ubyte[] iconv(const(void)[] data, string inputEncoding, string outputEncoding)
 {
 	auto args = ["timeout", "30", "iconv", "-f", inputEncoding, "-t", outputEncoding];
 	auto result = data.pipe(args);
@@ -170,7 +170,7 @@ ubyte[] iconv(in void[] data, string inputEncoding, string outputEncoding)
 }
 
 /// ditto
-string iconv(in void[] data, string inputEncoding)
+string iconv(const(void)[] data, string inputEncoding)
 {
 	import std.utf;
 	auto result = cast(string)iconv(data, inputEncoding, "UTF-8");
@@ -185,7 +185,7 @@ unittest
 }
 
 /// Wrapper for the `sha1sum` program.
-string sha1sum(in void[] data)
+string sha1sum(const(void)[] data)
 {
 	auto output = cast(string)data.pipe(["sha1sum", "-b", "-"]);
 	return output[0..40];

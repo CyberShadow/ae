@@ -603,7 +603,7 @@ private:
 
 				// Optional parameters whose presence
 				// is indicated by a bit mask
-				in ref WindowAttributes windowAttributes,
+				ref const WindowAttributes windowAttributes,
 			) {
 				CARD32 mask;
 				auto values = windowAttributes._serialize(mask);
@@ -621,7 +621,7 @@ private:
 
 				// Optional parameters whose presence
 				// is indicated by a bit mask
-				in ref WindowAttributes windowAttributes,
+				ref const WindowAttributes windowAttributes,
 			) {
 				CARD32 valueMask;
 				auto values = windowAttributes._serialize(valueMask);
@@ -693,7 +693,7 @@ private:
 
 				// Optional parameters whose presence
 				// is indicated by a bit mask
-				in ref WindowConfiguration windowConfiguration,
+				ref const WindowConfiguration windowConfiguration,
 			) {
 				CARD16 mask;
 				auto values = windowConfiguration._serialize(mask);
@@ -1021,7 +1021,7 @@ private:
 
 				// Optional parameters whose presence
 				// is indicated by a bit mask
-				in ref GCAttributes gcAttributes,
+				ref const GCAttributes gcAttributes,
 			) {
 				CARD32 mask;
 				auto values = gcAttributes._serialize(mask);
