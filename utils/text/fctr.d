@@ -20,7 +20,7 @@ import std.range.primitives : isOutputRange;
 
 import ae.utils.fctr.composition : isFunctor, select, seq;
 import ae.utils.fctr.primitives : fctr;
-import ae.utils.meta : tupleMap;
+import ae.utils.meta : tupleMap, I;
 
 /// "Formatting functor".
 /// Given zero or more values, returns a functor which retains a copy of these values;
@@ -160,6 +160,41 @@ unittest
 	assert(formatted!"%03d"(5).text == "005");
 	assert(format!"%s%s%s"("<", formatted!"%x"(64), ">") == "<40>");
 	assert(format!"<%03d>"(formatted(5)) == "<005>");
+}
+
+/// Constructs a functor type from a function alias, and wraps it into
+/// a stringifiable object.  Can be used to create stringifiable
+/// widgets which need a sink for more complex behavior.
+template str(alias fun, T...)
+{
+	auto str()(auto ref T values)
+	{
+		return values
+			.fctr!fun()
+			.I!(.str);
+	}
+}
+
+///
+unittest
+{
+	alias humanSize = str!(
+		(size, sink)
+		{
+			import std.format : formattedWrite;
+			if (!size)
+				// You would otherwise need to wrap everything in fmtIf:
+				return sink("0");
+			static immutable prefixChars = " KMGTPEZY";
+			size_t power = 0;
+			while (size > 1000 && power + 1 < prefixChars.length)
+				size /= 1024, power++;
+			sink.formattedWrite!"%s %sB"(size, prefixChars[power]);
+		}, real);
+
+	import std.conv : text;
+	assert(humanSize(0).text == "0");
+	assert(humanSize(8192).text == "8 KB");
 }
 
 /// Returns an object which, depending on a condition, is stringified
