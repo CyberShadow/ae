@@ -2654,7 +2654,7 @@ enum targetParameterNames = "target/to/name/dst";
 /// of the parameter containing the target file/directory.
 auto atomic(alias impl, string targetName = targetParameterNames)(staticMap!(Unqual, ParameterTypeTuple!impl) args)
 {
-	enum targetIndex = findParameter([ParameterIdentifierTuple!impl], targetName, __traits(identifier, impl));
+	enum targetIndex = findParameter([ParameterNames!impl], targetName, __traits(identifier, impl));
 	return atomic!(impl, targetIndex)(args);
 }
 
@@ -2700,7 +2700,7 @@ unittest
 /// if the target already exists. Implies atomic.
 auto cached(alias impl, string targetName = targetParameterNames)(ParameterTypeTuple!impl args)
 {
-	enum targetIndex = findParameter([ParameterIdentifierTuple!impl], targetName, __traits(identifier, impl));
+	enum targetIndex = findParameter([ParameterNames!impl], targetName, __traits(identifier, impl));
 	auto target = args[targetIndex];
 	if (!target.exists)
 		atomic!(impl, targetIndex)(args);
