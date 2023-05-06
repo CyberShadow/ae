@@ -32,6 +32,10 @@ auto functor(alias fun, State...)(State state)
 	{
 		State state;
 
+		// With https://issues.dlang.org/show_bug.cgi?id=9608, we
+		// might be able to introspect `fun` and generate accessors
+		// for `state` based on `fun`'s parameter names.
+
 		static if (state.length)
 			private this(State state)
 			{
