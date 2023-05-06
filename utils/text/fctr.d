@@ -76,6 +76,40 @@ unittest
 auto str(F)(F functor)
 if (isFunctor!F)
 {
+	// std.format uses speculative compilation to detect compatibility.
+	// As such, any error in the function will just cause the
+	// object to be silently stringified as "Stringifiable(Pred(...))".
+	// To avoid that, try an explicit instantiation here to
+	// get detailed information about any errors in the function.
+	debug if (false)
+	{
+		// Because std.format accepts any one of several signatures,
+		// try all valid combinations to first check that at least one
+		// is accepted.
+		FormatSpec!char fc;
+		FormatSpec!wchar fw;
+		FormatSpec!dchar fd;
+		struct DummyWriter(Char) { void put(Char c) {} }
+		DummyWriter!char wc;
+		DummyWriter!wchar ww;
+		DummyWriter!dchar wd;
+		void dummySink(const(char)[]) {}
+		static if(
+			!is(typeof(functor(wc, fc))) &&
+			!is(typeof(functor(ww, fw))) &&
+			!is(typeof(functor(wd, fd))) &&
+			!is(typeof(functor(wc))) &&
+			!is(typeof(functor(ww))) &&
+			!is(typeof(functor(wd))) &&
+			!is(typeof(functor(&dummySink))))
+		{
+			// None were valid; try non-speculatively with the simplest one:
+			pragma(msg, "Functor ", F.stringof, " does not successfully instantiate with any toString signatures.");
+			pragma(msg, "Attempting to non-speculatively instantiate with delegate sink:");
+			functor(&dummySink);
+		}
+	}
+
 	static struct Stringifiable
 	{
 		F functor;
@@ -140,6 +174,8 @@ if (isFunctor!T && isFunctor!F)
 	// When the new functor is called, evaluate the value-returning functor,
 	// put the value into a formatting functor, and immediately call it with the sink.
 
+	// Must be explicitly static due to
+	// https://issues.dlang.org/show_bug.cgi?id=23896 :
 	static void fun(X, Sink...)(X x, auto ref Sink sink)
 	{
 		x().fmtFctr!fmt()(forward!sink);
