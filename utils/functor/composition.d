@@ -15,8 +15,7 @@ module ae.utils.functor.composition;
 
 import ae.utils.functor.primitives;
 
-import core.lifetime;
-
+import std.functional : forward;
 import std.meta : allSatisfy;
 import std.traits : isCallable;
 

@@ -13,9 +13,8 @@
 
 module ae.utils.text.functor;
 
-import core.lifetime : forward;
-
 import std.format : formattedWrite, formatValue, FormatSpec;
+import std.functional : forward;
 import std.range.primitives : isOutputRange;
 
 import ae.utils.functor.composition : isFunctor, select, seq;

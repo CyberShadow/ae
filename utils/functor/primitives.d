@@ -22,7 +22,8 @@
 
 module ae.utils.functor.primitives;
 
-import core.lifetime;
+import std.algorithm.mutation : move;
+import std.functional : forward;
 
 /// Constructs a functor with statically-defined behavior (using an
 /// alias), with optional state.
