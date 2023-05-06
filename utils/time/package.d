@@ -41,13 +41,13 @@ alias StdTime = typeof(SysTime.init.stdTime); // long
 alias stdDur = hnsecs;
 
 /// Like `SysTime.stdTime`.
-@property StdTime stdTime(Duration d)
+@property StdTime stdTime(Duration d) pure @safe nothrow @nogc
 {
 	return d.total!"hnsecs"();
 }
 
 /// `true` when the duration `d` is zero.
-@property bool empty(Duration d)
+@property bool empty(Duration d) pure @safe nothrow @nogc
 {
 	return !d.stdTime;
 }
