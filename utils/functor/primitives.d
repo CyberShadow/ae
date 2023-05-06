@@ -28,7 +28,7 @@ import core.lifetime;
 /// alias), with optional state.
 auto functor(alias fun, State...)(State state)
 {
-	struct Pred
+	struct Functor
 	{
 		State state;
 
@@ -56,9 +56,9 @@ auto functor(alias fun, State...)(State state)
 	}
 
 	static if (state.length)
-		return Pred(forward!state);
+		return Functor(forward!state);
 	else
-		return Pred.init;
+		return Functor.init;
 }
 
 ///
@@ -104,15 +104,15 @@ auto functor(alias fun, State...)(State state)
 
 /// Constructs a nullary functor which simply returns a value specified at compile-time.
 /// Like `() => value`, but without the indirect call.
-auto valFctr(alias value)() { return .functor!(() => value)(); }
+auto valueFunctor(alias value)() { return .functor!(() => value)(); }
 
 /// Constructs a nullary functor which simply returns a value specified at run-time.
 /// Like `() => value`, but without the closure and indirect call.
-auto valFctr(Value)(Value value) { return functor!(v => v)(value); }
+auto valueFunctor(Value)(Value value) { return functor!(v => v)(value); }
 
 ///
 @nogc unittest
 {
-	assert(valFctr(5)() == 5);
-	assert(valFctr!5()() == 5);
+	assert(valueFunctor(5)() == 5);
+	assert(valueFunctor!5()() == 5);
 }

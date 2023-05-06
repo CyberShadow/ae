@@ -51,22 +51,22 @@ if (isFunctor!Cond && isFunctor!T && isFunctor!F)
 
 auto select(T, F)(bool cond, T t, F f) @nogc
 if (isFunctor!T && isFunctor!F)
-{ return select(cond.valFctr, t, f); } /// ditto
+{ return select(cond.valueFunctor, t, f); } /// ditto
 
 ///
 unittest
 {
-	assert(select(true , 5.valFctr, 7.valFctr)() == 5);
-	assert(select(false, 5.valFctr, 7.valFctr)() == 7);
+	assert(select(true , 5.valueFunctor, 7.valueFunctor)() == 5);
+	assert(select(false, 5.valueFunctor, 7.valueFunctor)() == 7);
 }
 
 /// The chain operation using functors.
 /// Calls all functors in sequence, returns `void`.
 /// (Not to be confused with function composition.)
-auto seq(Fctrs...)(Fctrs functors) @nogc
-if (allSatisfy!(isFunctor, Fctrs))
+auto seq(Functors...)(Functors functors) @nogc
+if (allSatisfy!(isFunctor, Functors))
 {
-	static void fun(Args...)(ref Fctrs functors, auto ref Args args)
+	static void fun(Args...)(ref Functors functors, auto ref Args args)
 	{
 		/*static*/ foreach (ref functor; functors)
 			functor(args);

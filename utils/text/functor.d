@@ -22,7 +22,6 @@ import ae.utils.functor.composition : isFunctor, select, seq;
 import ae.utils.functor.primitives : functor;
 import ae.utils.meta : tupleMap, I;
 
-/// "Formatting functor".
 /// Given zero or more values, returns a functor which retains a copy of these values;
 /// the functor can later be called with a sink, which will make it write the values out.
 /// The returned functor's signature varies depending on whether a
@@ -33,7 +32,7 @@ import ae.utils.meta : tupleMap, I;
 /// For details, see accepted `toString` signatures in the
 /// "Structs, Unions, Classes, and Interfaces" section of
 /// https://dlang.org/phobos/std_format_write.html.
-auto fmtFctr(string fmt = null, T...)(auto ref T values)
+auto formattingFunctor(string fmt = null, T...)(auto ref T values)
 {
 	static if (fmt)
 		alias fun =
@@ -59,7 +58,7 @@ unittest
 
 	auto a = appender!string;
 	auto spec = "%03d".singleSpec;
-	fmtFctr(5)(a, spec);
+	formattingFunctor(5)(a, spec);
 	assert(a.data == "005");
 }
 
@@ -68,17 +67,17 @@ unittest
 {
 	import std.array : appender;
 	auto a = appender!string;
-	fmtFctr!"%03d"(5)(a); // or `&a.put!(const(char)[])`
+	formattingFunctor!"%03d"(5)(a); // or `&a.put!(const(char)[])`
 	assert(a.data == "005");
 }
 
 /// Constructs a stringifiable object from a functor.
-auto str(F)(F functor)
+auto stringifiable(F)(F functor)
 if (isFunctor!F)
 {
 	// std.format uses speculative compilation to detect compatibility.
 	// As such, any error in the function will just cause the
-	// object to be silently stringified as "Stringifiable(Pred(...))".
+	// object to be silently stringified as "Stringifiable(Functor(...))".
 	// To avoid that, try an explicit instantiation here to
 	// get detailed information about any errors in the function.
 	debug if (false)
@@ -138,17 +137,17 @@ unittest
 {
 	import std.conv : text;
 	auto f = (void delegate(const(char)[]) sink) => sink("Hello");
-	assert(str(f).text == "Hello", str(f).text);
+	assert(stringifiable(f).text == "Hello", stringifiable(f).text);
 }
 
 /// Constructs a stringifiable object from a value
 /// (i.e., a lazily formatted object).
-/// Combines `fmtFctr` and `str`.
+/// Combines `formattingFunctor` and `stringifiable`.
 auto formatted(string fmt = null, T...)(auto ref T values)
 {
 	return values
-		.fmtFctr!fmt()
-		.str;
+		.formattingFunctor!fmt()
+		.stringifiable;
 }
 
 ///
@@ -165,20 +164,20 @@ unittest
 /// Constructs a functor type from a function alias, and wraps it into
 /// a stringifiable object.  Can be used to create stringifiable
 /// widgets which need a sink for more complex behavior.
-template str(alias fun, T...)
+template stringifiable(alias fun, T...)
 {
-	auto str()(auto ref T values)
+	auto stringifiable()(auto ref T values)
 	{
 		return values
 			.functor!fun()
-			.I!(.str);
+			.I!(.stringifiable);
 	}
 }
 
 ///
 unittest
 {
-	alias humanSize = str!(
+	alias humanSize = stringifiable!(
 		(size, sink)
 		{
 			import std.format : formattedWrite;
@@ -201,7 +200,7 @@ unittest
 /// as one of two objects.
 /// The two branches should themselves be passed as nullary functors,
 /// to enable lazy evaluation.
-/// Combines `fmtFctr`, `str`, and `select`.
+/// Combines `formattingFunctor`, `stringifiable`, and `select`.
 auto fmtIf(string fmt = null, Cond, T, F)(Cond cond, T t, F f) @nogc
 if (isFunctor!T && isFunctor!F)
 {
@@ -213,13 +212,13 @@ if (isFunctor!T && isFunctor!F)
 	// https://issues.dlang.org/show_bug.cgi?id=23896 :
 	static void fun(X, Sink...)(X x, auto ref Sink sink)
 	{
-		x().fmtFctr!fmt()(forward!sink);
+		x().formattingFunctor!fmt()(forward!sink);
 	}
 	return select(
 		cond,
 		functor!fun(t),
 		functor!fun(f),
-	).str;
+	).stringifiable;
 }
 
 ///
@@ -237,14 +236,14 @@ unittest
 
 /// Returns an object which is stringified as all of the given objects
 /// in sequence.  In essence, a lazy `std.conv.text`.
-/// Combines `fmtFctr`, `str`, and `seq`.
+/// Combines `formattingFunctor`, `stringifiable`, and `seq`.
 auto fmtSeq(string fmt = "%s", Values...)(Values values) @nogc
 {
 	return
 		values
-		.tupleMap!((ref value) => fmtFctr!fmt(value)).expand
+		.tupleMap!((ref value) => formattingFunctor!fmt(value)).expand
 		.seq
-		.str;
+		.stringifiable;
 }
 
 unittest
