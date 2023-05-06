@@ -66,8 +66,15 @@ auto functor(alias fun, State...)(State state)
 	auto getValue = functor!(n => n)(5);
 	assert(getValue() == 5);
 
+	// Functor construction is a bit like currying, though mutation of
+	// curried arguments (here, state) is explicitly allowed.
+
 	auto addValue = functor!((n, i) => n + i)(2);
 	assert(addValue(5) == 7);
+
+	auto accumulator = functor!((ref n, i) => n += i)(0);
+	accumulator(2); accumulator(5);
+	assert(accumulator.state[0] == 7);
 }
 
 @nogc unittest
