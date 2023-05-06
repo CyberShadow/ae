@@ -81,19 +81,17 @@ if (isFunctor!F)
 		F functor;
 
 		void toString(this This, Writer, Char)(ref Writer writer, const ref FormatSpec!Char fmt)
-		if (isOutputRange!(Writer, Char) && is(typeof(functor(writer, fmt))))
+		if (isOutputRange!(Writer, Char))
 		{
 			functor(writer, fmt);
 		}
 
 		void toString(this This, Writer)(ref Writer writer)
-		if (is(typeof(functor(writer))))
 		{
 			functor(writer);
 		}
 
 		void toString(this This)(scope void delegate(const(char)[]) sink)
-		if (is(typeof(functor(sink))))
 		{
 			functor(sink);
 		}
