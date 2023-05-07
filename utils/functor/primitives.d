@@ -22,8 +22,15 @@
 
 module ae.utils.functor.primitives;
 
-import std.algorithm.mutation : move;
 import std.functional : forward;
+
+// Avoid https://issues.dlang.org/show_bug.cgi?id=23901, which for
+// some reason manifests only with the `std.algorithm.mutation`
+// versions of `move` in recent D versions.
+static if (is(typeof({ import core.lifetime : move; })))
+	import core.lifetime : move;
+else
+	import std.algorithm.mutation : move;
 
 /// Constructs a functor with statically-defined behavior (using an
 /// alias), with optional state.
