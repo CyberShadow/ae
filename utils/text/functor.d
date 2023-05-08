@@ -31,7 +31,10 @@ import ae.utils.meta : tupleMap, I;
 /// For details, see accepted `toString` signatures in the
 /// "Structs, Unions, Classes, and Interfaces" section of
 /// https://dlang.org/phobos/std_format_write.html.
-template formattingFunctor(string fmt = null, T...)
+template formattingFunctor(
+	string fmt = null,
+	int line = __LINE__, // https://issues.dlang.org/show_bug.cgi?id=23904
+	T...)
 {
 	static if (fmt)
 		alias fun =
