@@ -31,7 +31,7 @@ import ae.utils.meta : tupleMap, I;
 /// For details, see accepted `toString` signatures in the
 /// "Structs, Unions, Classes, and Interfaces" section of
 /// https://dlang.org/phobos/std_format_write.html.
-auto formattingFunctor(string fmt = null, T...)(auto ref T values)
+template formattingFunctor(string fmt = null, T...)
 {
 	static if (fmt)
 		alias fun =
@@ -46,7 +46,11 @@ auto formattingFunctor(string fmt = null, T...)(auto ref T values)
 				foreach (ref value; values)
 					w.formatValue(value, fmt);
 			};
-	return functor!fun(forward!values);
+
+	auto formattingFunctor(auto ref T values)
+	{
+		return functor!fun(forward!values);
+	}
 }
 
 ///

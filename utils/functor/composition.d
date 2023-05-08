@@ -36,7 +36,7 @@ unittest
 }
 
 /// The ternary operation using functors.
-auto select(Cond, T, F)(Cond cond, T t, F f) @nogc
+template select(Cond, T, F)
 if (isFunctor!Cond && isFunctor!T && isFunctor!F)
 {
 	static auto fun(Args...)(Cond cond, T t, F f, auto ref Args args)
@@ -45,7 +45,11 @@ if (isFunctor!Cond && isFunctor!T && isFunctor!F)
 			? t(forward!args)
 			: f(forward!args);
 	}
-	return functor!fun(cond, t, f);
+
+	auto select(Cond cond, T t, F f) @nogc
+	{
+		return functor!fun(cond, t, f);
+	}
 }
 
 auto select(T, F)(bool cond, T t, F f) @nogc
@@ -62,7 +66,7 @@ unittest
 /// The chain operation using functors.
 /// Calls all functors in sequence, returns `void`.
 /// (Not to be confused with function composition.)
-auto seq(Functors...)(Functors functors) @nogc
+template seq(Functors...)
 if (allSatisfy!(isFunctor, Functors))
 {
 	static void fun(Args...)(ref Functors functors, auto ref Args args)
@@ -70,7 +74,11 @@ if (allSatisfy!(isFunctor, Functors))
 		/*static*/ foreach (ref functor; functors)
 			functor(args);
 	}
-	return functor!fun(functors);
+
+	auto seq(Functors functors) @nogc
+	{
+		return functor!fun(functors);
+	}
 }
 
 ///

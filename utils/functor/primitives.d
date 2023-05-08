@@ -34,7 +34,7 @@ else
 
 /// Constructs a functor with statically-defined behavior (using an
 /// alias), with optional state.
-auto functor(alias fun, State...)(State state)
+template functor(alias fun, State...)
 {
 	struct Functor
 	{
@@ -63,10 +63,13 @@ auto functor(alias fun, State...)(State state)
 		}
 	}
 
-	static if (state.length)
-		return Functor(forward!state);
-	else
-		return Functor.init;
+	auto functor(State state)
+	{
+		static if (state.length)
+			return Functor(forward!state);
+		else
+			return Functor.init;
+	}
 }
 
 ///
