@@ -16,6 +16,7 @@
 
 module ae.net.http.client;
 
+import std.algorithm.comparison : among;
 import std.algorithm.mutation : move, swap;
 import std.exception : enforce;
 import std.string;
@@ -50,6 +51,7 @@ protected:
 
 	HttpResponse currentResponse; // Response to the currently-processed request.
 	ulong sentRequests, receivedResponses; // Used to know when we're still waiting for something.
+										   // sentRequests is incremented when requestQueue is shifted.
 
 	DataVec headerBuffer; // Received but un-parsed headers
 	size_t expect;    // How much data do we expect to receive in the current request (size_t.max if until disconnect)
@@ -58,16 +60,25 @@ protected:
 	void connect(HttpRequest request)
 	{
 		assert(conn.state == ConnectionState.disconnected);
-		if (request.proxy !is null)
-			connector.connect(request.proxyHost, request.proxyPort);
-		else
-			connector.connect(request.host, request.port);
-		assert(conn.state == ConnectionState.connecting);
 
 		// We must install a data read handler to indicate that we want to receive readable events.
 		// Though, this isn't going to be actually called.
 		// TODO: this should probably be fixed in OpenSSLAdapter instead.
 		conn.handleReadData = (Data _/*data*/) { assert(false); };
+
+		if (request.proxy !is null)
+			connector.connect(request.proxyHost, request.proxyPort);
+		else
+			connector.connect(request.host, request.port);
+		assert(conn.state.among(ConnectionState.connecting, ConnectionState.disconnected));
+	}
+
+	/// Pop off a request from the queue and return it, while incrementing `sentRequests`.
+	final HttpRequest getNextRequest()
+	{
+		assert(requestQueue.length);
+		sentRequests++;
+		return requestQueue.shift();
 	}
 
 	/// Called when the underlying connection (TCP, TLS...) is established.
@@ -86,13 +97,13 @@ protected:
 			assert(keepAlive, "keepAlive is required for pipelining");
 			// Pipeline all queued requests
 			while (requestQueue.length)
-				sendRequest(requestQueue.shift);
+				sendRequest(getNextRequest());
 		}
 		else
 		{
 			// One request at a time
 			if (requestQueue.length)
-				sendRequest(requestQueue.shift);
+				sendRequest(getNextRequest());
 		}
 
 		expectResponse();
@@ -111,7 +122,7 @@ protected:
 	}
 
 	/// Encode and send a request (headers and body) to the connection.
-	/// Has no other side effects other than incrementing `sentRequests`.
+	/// Has no other side effects.
 	void sendRequest(HttpRequest request)
 	{
 		string reqMessage = request.method ~ " ";
@@ -138,7 +149,6 @@ protected:
 
 		conn.send(Data(reqMessage));
 		conn.send(request.data[]);
-		sentRequests++;
 	}
 
 	/// Called to set up the client to be ready to receive a response.
@@ -310,6 +320,12 @@ protected:
 	/// Disconnect handler
 	void onDisconnect(string reason, DisconnectType type)
 	{
+		// If an error occurred, drain the entire queue, otherwise we
+		// will retry indefinitely.  Retrying is not our responsibility.
+		if (type == DisconnectType.error)
+			while (requestQueue.length)
+				cast(void) getNextRequest();
+
 		// If we were expecting any more responses, we're not getting them.
 		while (receivedResponses < sentRequests)
 			onDone(null, reason, type == DisconnectType.error);
@@ -375,11 +391,14 @@ public:
 		if (normalize)
 			normalizeRequest(request);
 
-		if (conn.state == ConnectionState.disconnected)
-			connect(request);
-		assert(conn.state <= ConnectionState.connected, "Attempting a HTTP request on a %s connection".format(conn.state));
-
 		requestQueue ~= request;
+
+		assert(conn.state <= ConnectionState.connected, "Attempting a HTTP request on a %s connection".format(conn.state));
+		if (conn.state == ConnectionState.disconnected)
+		{
+			connect(request);
+			return; // onConnect will do the rest
+		}
 
 		// |---------+------------+------------+---------------------------------------------------------------|
 		// | enqueue | keep-alive | pipelining | outcome                                                       |
@@ -426,7 +445,7 @@ public:
 					bool wasIdle = isIdle();
 					assert(requestQueue.length == 1);
 					while (requestQueue.length)
-						sendRequest(requestQueue.shift);
+						sendRequest(getNextRequest());
 					if (wasIdle)
 						expectResponse();
 				}
