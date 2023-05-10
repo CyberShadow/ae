@@ -317,6 +317,16 @@ T[] slice(T)(T[] arr, size_t p0, size_t p1)
 	return arr[p0..p1];
 }
 
+/// Given an array and a reference to an element,
+/// return whether the array slices over the element reference.
+bool slicesOver(T)(const(T)[] arr, ref const T element)
+{
+	auto start = arr.ptr;
+	auto end = start + arr.length;
+	auto p = &element;
+	return start <= p && p < end;
+}
+
 /// Given an array and a reference to an element inside it, returns its index.
 /// The reverse operation of indexing an array.
 size_t elementIndex(T)(const(T)[] arr, ref const T element)
