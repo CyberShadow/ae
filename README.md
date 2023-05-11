@@ -3,7 +3,7 @@
 About this library
 ==================
 
-*ae* (***a**lmost **e**verything*) is an auxiliary general-purpose D library which contains code shared across my projects.
+*ae* (***a**lmost **e**verything*) is an auxiliary general-purpose D library.  Its design goals are composability and simplicity.
 
 Among many things, it implements an asynchronous event loop, and several network protocols, such as HTTP / IRC / TLS.
 
@@ -22,6 +22,7 @@ Notable sub-packages:
 
  * `ae.sys.d` – Builds arbitrary versions of D. Shared by Digger, DAutoTest, and TrenD.
  * `ae.sys.net` – High-level synchronous API for accessing network resources (URLs). Includes implementations based on cURL, WinINet, and `ae.net`.
+ * `ae.utils.functor` – Functor primitives and functions, allowing `@nogc` range manipulation and text formatting.
  * `ae.utils.graphics` – Contains a templated graphical context optimized for speed, and basic support for a few image formats.
  * `ae.utils.promise` – Implementation of Promises/A+, `async`/`await`, and related operations. Can be used on top of the `ae.net` asynchronous API.
  * `ae.utils.time` – Supplements `core.time` and `std.datetime` with extras such as PHP-like parsing / formatting and floating-point duration operations.
@@ -30,7 +31,7 @@ General concepts:
 
 - **Data**: Many modules that handle raw data (from the network / disk) do so using the `Data` structure, defined in `ae.sys.data`.
   See the module documentation for a description of the type; the quick version is that it is a type equivalent to `void[]`, with a few benefits.
-  Some modules use an array of `Data`, to minimize copying / reallocations when handling byte streams with unknown length.
+  Some modules use `DataVec`, a `Data` vector with deterministic lifetime, to minimize copying / reallocations when handling byte streams with unknown length.
 
 - **Networking**: *ae* uses asynchronous event-based networking.
   A `select`-based event loop dispatches events to connection objects, which then propagate them to higher-level code as necessary.
@@ -45,7 +46,7 @@ What uses this library?
 - [DFeed](https://github.com/CyberShadow/DFeed) (forum.dlang.org) - networking, SQLite
 - [Digger](https://github.com/CyberShadow/Digger) - `ae.sys.d`
 - [DAutoTest](https://github.com/CyberShadow/DAutoTest) - `ae.sys.d`, web server
-- [btdu](https://github.com/CyberShadow/btdu) - utility functions, duration parsing
+- [btdu](https://github.com/CyberShadow/btdu) - utility functions, duration parsing, functors
 - [monocre](https://github.com/CyberShadow/monocre) - image processing
 - Community WormNET services for Worms Armageddon ([web snooper](https://snoop.wormnet.net/), community server, [HostingBuddy](https://worms2d.info/HostingBuddy))
 - Most of [my D projects](https://github.com/CyberShadow?language=d&tab=repositories&type=source)
@@ -54,14 +55,13 @@ What uses this library?
 Documentation
 =============
 
-The best way to get started with this library is to:
+You may peruse the documentation generated from DDoc on [ae.dpldocs.info](https://ae.dpldocs.info/).
+
+Other ways to get started with this library is to:
 
 - Play with the demo programs (in the `demo` directory)
 - Look at open-source projects using this library (see above)
 - Use your editor's "go to definition" feature to navigate the implementation.
-
-You may also peruse the documentation generated from DDoc on [ae.dpldocs.info](https://ae.dpldocs.info/),
-though please note that documenting and adding examples to all public symbols is a work in progress.
 
 Using this library
 ==================
@@ -92,7 +92,7 @@ The bleeding-edge version can be found in the `next` branch (which may be regula
 License
 =======
 
-*Most* of this library is licensed under the [Mozilla Public License, v. 2.0](http://mozilla.org/MPL/2.0/).
+Except where stated otherwise, this library is licensed under the [Mozilla Public License, v. 2.0](http://mozilla.org/MPL/2.0/).
 (Approximate summary: you only need to publish the source code of the files from this library that you edited.)
 
 Modules under licenses other than MPL are:
