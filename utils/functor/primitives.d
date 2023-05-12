@@ -76,7 +76,7 @@ template functor(alias fun, State...)
 }
 
 ///
-@nogc unittest
+@safe pure @nogc nothrow unittest
 {
 	auto getFive = functor!(() => 5)();
 	assert(getFive() == 5);
@@ -96,7 +96,7 @@ template functor(alias fun, State...)
 }
 
 ///
-unittest
+@safe pure nothrow unittest
 {
 	// Regular D closures are still supported. Not @nogc!
 
@@ -109,7 +109,7 @@ unittest
 	assert(addMul(5) == 17);
 }
 
-@nogc unittest
+@safe pure @nogc nothrow unittest
 {
 	struct NC
 	{
@@ -123,7 +123,7 @@ unittest
 	assert(f() == 5);
 }
 
-@nogc unittest
+@safe pure @nogc nothrow unittest
 {
 	immutable int i = 2;
 	auto f = functor!((a, b) => a + b)(i);
@@ -139,7 +139,7 @@ auto valueFunctor(alias value)() { return .functor!(() => value)(); }
 auto valueFunctor(Value)(Value value) { return functor!(v => v)(value); }
 
 ///
-@nogc unittest
+@safe pure @nogc nothrow unittest
 {
 	assert(valueFunctor(5)() == 5);
 	assert(valueFunctor!5()() == 5);
