@@ -68,7 +68,10 @@ template functor(alias fun, State...)
 		static if (state.length)
 			return Functor(forward!state);
 		else
-			return Functor.init;
+		{
+			Functor functor;
+			return functor;
+		}
 	}
 }
 
@@ -90,6 +93,20 @@ template functor(alias fun, State...)
 	auto accumulator = functor!((ref n, i) => n += i)(0);
 	accumulator(2); accumulator(5);
 	assert(accumulator.state[0] == 7);
+}
+
+///
+unittest
+{
+	// Regular D closures are still supported. Not @nogc!
+
+	auto n = 2;
+	auto addValue = functor!(i => i + n)();
+	assert(addValue(5) == 7);
+
+	auto m = 3;
+	auto addMul = functor!(i => addValue(i * m))();
+	assert(addMul(5) == 17);
 }
 
 @nogc unittest
