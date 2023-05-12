@@ -54,7 +54,7 @@ template functor(alias fun, State...)
 						this.state[i] = state[i];
 			}
 
-		auto opCall(this This, Args...)(auto ref Args args)
+		auto ref opCall(this This, Args...)(auto ref Args args)
 		{
 			static if (args.length)
 				return fun(state, forward!args);
@@ -121,6 +121,8 @@ template functor(alias fun, State...)
 
 	auto f = functor!((ref a, ref b) => a.i + b.i)(NC(2), NC(3));
 	assert(f() == 5);
+
+	assert(functor!(ref (ref a) => a)(NC(1))().i == 1);
 }
 
 @safe pure @nogc nothrow unittest
