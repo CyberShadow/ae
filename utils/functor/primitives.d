@@ -122,7 +122,9 @@ template functor(alias fun, State...)
 	auto f = functor!((ref a, ref b) => a.i + b.i)(NC(2), NC(3));
 	assert(f() == 5);
 
-	assert(functor!(ref (ref a) => a)(NC(1))().i == 1);
+	static if (__VERSION__ >= 2086) mixin(q{
+		assert(functor!(ref (ref a) => a)(NC(1))().i == 1);
+	});
 }
 
 @safe pure @nogc nothrow unittest
