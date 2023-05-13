@@ -18,6 +18,8 @@ import std.range;
 import std.traits;
 import std.typecons;
 
+import ae.utils.meta : progn;
+
 // ***************************************************************************
 
 /// Polyfill for object.require
@@ -149,18 +151,6 @@ bool addNew(K, V)(ref V[K] aa, auto ref K key, auto ref V value)
 {
 	bool added = void;
 	updateVoid(aa, key,
-		delegate V   (       ) { added = true ; return value; },
-		delegate void(ref V v) { added = false;               },
-	);
-	return added;
-}
-
-/// ditto
-bool addNew(K, V, bool ordered, bool multi)(ref HashCollection!(K, V, ordered, multi) aa, auto ref K key, auto ref V value)
-if (!is(V == void)) // Not a set
-{
-	bool added = void;
-	aa.update(key,
 		delegate V   (       ) { added = true ; return value; },
 		delegate void(ref V v) { added = false;               },
 	);
@@ -958,6 +948,7 @@ public:
 		add,     /// Always add value
 		replace, /// Replace all previous values
 		require, /// Only add value if it did not exist before
+		addNew,  /// Only add value if it did not exist before; call getValue in that case
 	}
 
 	private ref ReturnType!void addImpl(AddMode mode, AK, GV)(ref AK key, scope GV getValue)
@@ -985,7 +976,7 @@ public:
 					delegate void(ref LookupValue existingIndex)
 					{
 						addedIndex = existingIndex[0];
-						static if (mode != AddMode.require)
+						static if (mode != AddMode.require && mode != AddMode.addNew)
 						{
 							static if (multi)
 							{
@@ -1003,7 +994,7 @@ public:
 		{
 			static if (haveValues)
 			{
-				static if (mode == AddMode.require)
+				static if (mode == AddMode.require || mode == AddMode.addNew)
 					return (lookup.require(key, [getValue()]))[0];
 				else
 				static if (multi && mode == AddMode.add)
@@ -1018,13 +1009,21 @@ public:
 					static if (mode == AddMode.require)
 						lookup.require(key, 1);
 					else
+					static if (mode == AddMode.addNew)
+						lookup.require(key, progn(getValue(), 1));
+					else
 					static if (mode == AddMode.add)
 						lookup[key]++;
 					else
 						lookup[key] = 1;
 				}
 				else
-					lookup[key] = LookupValue.init;
+				{
+					static if (mode == AddMode.addNew)
+						lookup.require(key, progn(getValue(), LookupValue.init));
+					else
+						lookup[key] = LookupValue.init;
+				}
 				// This branch returns void, as there is no reasonable
 				// ref to an AA key that we can return here.
 			}
@@ -1110,6 +1109,30 @@ public:
 						else
 							value = update(value);
 				});
+		}
+	}
+
+	static if (haveValues)
+	{
+		bool addNew()(auto ref K key, lazy V value = V.init)
+		{
+			bool added = false;
+			// update(key,
+			// 	delegate V   (       ) { added = true ; return value; },
+			// 	delegate void(ref V v) { added = false;               },
+			// );
+			addImpl!(AddMode.addNew)(key, { added = true; return value; });
+			return added;
+		}
+	}
+	else
+	{
+		bool addNew()(auto ref K key)
+		{
+			bool added = false;
+			ValueVarType value; // void[0]
+			addImpl!(AddMode.addNew)(key, { added = true; return value; });
+			return added;
 		}
 	}
 
@@ -1271,6 +1294,12 @@ unittest
 	assert(m.length == 3);
 	assert("a" in m);
 	assert("d" !in m);
+
+	assert( m.addNew("x", 1));
+	assert(!m.addNew("x", 2));
+	assert(m["x"] == 1);
+	assert( m.remove("x"));
+	assert(!m.remove("x"));
 
 	{
 		auto r = m.byKeyValue;
@@ -1467,6 +1496,12 @@ unittest
 	assert(t.length==1);
 	t.remove(1);
 	assert(t.length==0);
+
+	assert( t.addNew(5));
+	assert(!t.addNew(5));
+	assert(5 in t);
+	assert( t.remove(5));
+	assert(!t.remove(5));
 }
 
 unittest
