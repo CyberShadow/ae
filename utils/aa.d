@@ -610,14 +610,14 @@ public:
 	static if (haveIndexing)
 	{
 		static if (haveValues)
-			auto ref IV get(KK)(auto ref KK k, auto ref inout(IV) defaultValue) inout
+			auto ref IV get(this This, KK)(auto ref KK k, auto ref IV defaultValue)
 			if (is(typeof(k in lookup)))
 			{
 				auto p = k in lookup;
 				return p ? lookupToReturnValue((*p)[$-1]) : defaultValue;
 			}
 		else
-			auto ref IV get(KK)(auto ref KK k, auto ref inout(IV) defaultValue) inout
+			auto ref IV get(this This, KK)(auto ref KK k, auto ref IV defaultValue)
 			if (is(typeof(items[k])))
 			{
 				return k < items.length ? items[k].returnValue : defaultValue;
@@ -1429,6 +1429,13 @@ unittest
 {
 	struct S { @disable this(); }
 	const OrderedMap!(string, S) m;
+}
+
+unittest
+{
+	class C {}
+	OrderedMap!(string, C) m;
+	m.get(null, new C);
 }
 
 /// Like assocArray
