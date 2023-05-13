@@ -239,6 +239,8 @@ unittest
 	static assert(is(AllMembers!A == AliasSeq!(A.B, A.C)));
 }
 
+// ************************************************************************
+
 /// One past the biggest element of the enum T.
 /// Example: string[enumLength!E] arr;
 template enumLength(T)
@@ -261,6 +263,61 @@ unittest
 	import std.algorithm.comparison : equal;
 	enum E { a, b, c }
 	static assert(equal(enumIota!E, [E.a, E.b, E.c]));
+}
+
+struct Has(E, bool byRef)
+{
+private:
+	static if (byRef)
+	{
+		E* p;
+		@property ref e() { return *p; }
+	}
+	else
+		E e;
+
+public:
+	@property bool opDispatch(string name)()
+	if (__traits(hasMember, E, name))
+	{
+		static foreach (i, member; EnumMembers!E)
+			static if (__traits(identifier, EnumMembers!E[i]) == name)
+				return (e & member) == member;
+	}
+
+	@property bool opDispatch(string name)(bool value)
+	if (byRef && __traits(hasMember, E, name))
+	{
+		static foreach (i, member; EnumMembers!E)
+			static if (__traits(identifier, EnumMembers!E[i]) == name)
+			{
+				if (value)
+					e |= member;
+				else
+					e &= ~member;
+				return value;
+			}
+	}
+}
+
+/// Convenience facility for manipulating bitfield enums.
+auto has(E)(ref E e) if (is(E == enum)) { return Has!(E, true)(&e); }
+auto has(E)(    E e) if (is(E == enum)) { return Has!(E, false)(e); } /// ditto
+
+///
+unittest
+{
+	enum E
+	{
+		init = 0,
+		foo = 1 << 0,
+		bar = 1 << 1,
+	}
+	assert(E.foo.has.foo);
+	E e;
+	assert(!e.has.foo);
+	e.has.foo = true;
+	assert(e.has.foo);
 }
 
 // ************************************************************************
