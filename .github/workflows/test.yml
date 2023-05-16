@@ -39,5 +39,102 @@ jobs:
       - if: ${{ matrix.dc == 'dmd-2.100.0' }}
         run: dub test --arch=${{ matrix.arch }} :windows
 
-      - if: ${{ matrix.os == 'ubuntu-20.04' && matrix.dc == 'dmd-2.100.0' }}
-        run: ./makejson.sh
+  compilation-test:
+    strategy:
+      matrix:
+        os: [ ubuntu-20.04 ]
+        dc: [ dmd-2.100.0 ]
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install D compiler
+        uses: dlang-community/setup-dlang@1ccbc70a0eff7f264857b53c562aa45fd7f1e479
+        with:
+          compiler: ${{ matrix.dc }}
+
+      - run: ./makejson.sh
+
+      - shell: bash
+        run: |
+          #!/bin/bash
+          set -eEuo pipefail
+
+          bad_flags=(
+              # Built-in
+              -version=AArch64
+              -version=all
+              -version=BigEndian
+              -version=CRuntime_Bionic
+              -version=CRuntime_DigitalMars
+              -version=CRuntime_Microsoft
+              -version=Darwin
+              -version=DigitalMars
+              -version=D_LP64
+              -version=FreeBSD
+              -version=GNU
+              -version=iOS
+              -version=LDC
+              -version=linux
+              -version=LittleEndian
+              -version=NetBSD
+              -version=none
+              -version=OpenBSD
+              -version=OSX
+              -version=Posix
+              -version=TVOS
+              -version=unittest
+              -version=WatchOS
+              -version=Win64
+              -version=Windows
+              -version=X86
+              -version=X86_64
+
+              # Require special dependencies
+              -version=LIBEV
+          )
+
+          mapfile -t files < <(git ls-files)
+          mapfile -t all_flags < <(
+              printf -- '%s\n' '-debug'
+              cat "${files[@]}" |
+                  sed -n 's/.*\b\(debug\|version\) *( *\([^()~" ]*\) *).*/-\1=\2/p' |
+                  sort -u |
+                  grep -vFf <(printf -- '%s\n' "${bad_flags[@]}")
+          )
+
+          find . -maxdepth 1 \( -name '*.ok' -o -name '*.out' \) -delete
+
+          function check_all() {
+              check 'no flags'
+
+              for flag in "${all_flags[@]}" ; do
+                  check "$flag" "$flag"
+              done
+
+              check 'all flags' "${all_flags[@]}"
+          }
+
+          function check() {
+              local name=$1
+              local flags=("${@:2}")
+
+              (
+                  dmd -color=on -i -o- -I.. "${flags[@]}" all.d > ./"$name".out 2>&1
+                  touch ./"$name".ok
+                  printf -- '%s OK\n' "$name"
+              ) &
+          }
+          check_all
+          wait
+
+          function check() {
+              local name=$1
+
+              if [[ ! -f ./"$name".ok ]] ; then
+                  printf -- '%s failed! Output:\n' "$name"
+                  cat ./"$name".out
+                  exit 1
+              fi
+          }
+          check_all
