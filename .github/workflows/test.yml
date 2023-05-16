@@ -105,6 +105,7 @@ jobs:
 
           find . -maxdepth 1 \( -name '*.ok' -o -name '*.out' \) -delete
 
+          # Runs `check` for each tested flag combination.
           function check_all() {
               check 'no flags'
 
@@ -119,14 +120,12 @@ jobs:
               local name=$1
               local flags=("${@:2}")
 
-              (
-                  dmd -color=on -i -o- -I.. "${flags[@]}" all.d > ./"$name".out 2>&1
-                  touch ./"$name".ok
-                  printf -- '%s OK\n' "$name"
-              ) &
+              printf -- '%s > ./%q.out 2>&1 && touch ./%q.ok && echo "%s OK" >&2\n' \
+                     "$(printf -- '%q ' \
+                          dmd -color=on -i -o- -I.. "${flags[@]}" all.d)" \
+                     "$name" "$name" "$name"
           }
-          check_all
-          wait
+          check_all | ( xargs -n 1 -d '\n' -P "$(nproc)" sh -c || true )
 
           function check() {
               local name=$1
