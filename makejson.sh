@@ -13,8 +13,12 @@ files=$(echo "$files" | grep '\.d$')
 files=$(echo "$files" | grep -vxF 'utils/graphics/sdlimage.d') # Needs SDLv1
 files=$(echo "$files" | grep -vxF 'utils/graphics/libpng.d') # Needs libpng
 files=$(echo "$files" | grep -vxF 'ui/app/windows/main.d') # Windows-only
-files=$(echo "$files" | grep -vxF 'utils/meta/proxy.d') # Needs __traits(child)
 files=$(echo "$files" | grep -v  '^utils/serialization/') # Needs __traits(child)
+files=$(echo "$files" | grep -vxF 'net/ssl/openssl.d') # Needs OpenSSL
+files=$(echo "$files" | grep -vxF 'net/x11/package.d') # Needs X11
+files=$(echo "$files" | grep -vxF 'sys/net/system.d') # Needs OpenSSL
+files=$(echo "$files" | grep -v '^.*/sdl2') # Needs SDLv2
+files=$(echo "$files" | grep -v '^sys/windows/pe/') # Needs win32
 
 files=$(echo "$files" | grep -vxF 'utils/alloc.d') # Needs alias template parameter binding
 files=$(echo "$files" | grep -vxF 'utils/container/list.d') # Needs ae.utils.alloc
