@@ -352,12 +352,18 @@ public:
 		assert(!isWaiting());
 	}
 
+	/// Reschedule the task to run at some other time.
+	void restart(MonoTime when)
+	{
+		assert(isWaiting(), "This TimerTask is not active");
+		owner.restart(this, when);
+		assert(isWaiting());
+	}
+
 	/// Reschedule the task to run with the same delay from now.
 	deprecated void restart()
 	{
-		assert(isWaiting(), "This TimerTask is not active");
-		owner.restart(this, MonoTime.currTime() + delay);
-		assert(isWaiting());
+		restart(MonoTime.currTime() + delay);
 	}
 
 	/// The duration that this task is scheduled to run after.
