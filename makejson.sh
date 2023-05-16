@@ -51,4 +51,7 @@ dmd -o- -dw -Xfae.json $files
 #      -e '!' \
 # )
 
-echo "$files" | sed 's#^\(.*\)\.d$#import ae/\1;#g' | grep -v "package;" | sed s#/#.#g > all.d 
+(
+	echo "deprecated module ae.all;"
+	echo "$files" | sed 's#^\(.*\)\.d$#import ae/\1;#g' | grep -v "package;" | sed s#/#.#g
+) > all.d
