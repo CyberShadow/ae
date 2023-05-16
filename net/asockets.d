@@ -60,7 +60,7 @@ else
 /// Flags that determine socket wake-up events.
 int eventCounter;
 
-version(LIBEV)
+version (LIBEV)
 {
 	// Watchers are a GenericSocket field (as declared in SocketMixin).
 	// Use one watcher per read and write event.
@@ -83,6 +83,8 @@ version(LIBEV)
 			assert(socket, "libev event fired on stopped watcher");
 			debug (ASOCKETS) writefln("ioCallback(%s, 0x%X)", socket, revents);
 
+			socketManager.now = MonoTime.currTime();
+
 			if (revents & EV_READ)
 				socket.onReadable();
 			else
@@ -103,7 +105,9 @@ version(LIBEV)
 		{
 			eventCounter++;
 			debug (ASOCKETS) writefln("Timer callback called.");
-			mainTimer.prod();
+
+			socketManager.now = MonoTime.currTime();
+			mainTimer.prod(socketManager.now);
 
 			socketManager.updateTimer(true);
 			debug (ASOCKETS) writefln("Timer callback exiting.");
@@ -122,12 +126,12 @@ version(LIBEV)
 				}
 				else
 				{
-					auto remaining = mainTimer.getRemainingTime();
+					auto remaining = mainTimer.getRemainingTime(socketManager.now);
 					while (remaining <= Duration.zero)
 					{
 						debug (ASOCKETS) writefln("remaining=%s, prodding timer.", remaining);
-						mainTimer.prod();
-						remaining = mainTimer.getRemainingTime();
+						mainTimer.prod(socketManager.now);
+						remaining = mainTimer.getRemainingTime(socketManager.now);
 					}
 					ev_tstamp tstamp = remaining.total!"hnsecs" * 1.0 / convert!("seconds", "hnsecs")(1);
 					debug (ASOCKETS) writefln("remaining=%s, ev_tstamp=%s", remaining, tstamp);
@@ -147,6 +151,8 @@ version(LIBEV)
 		}
 
 	public:
+		MonoTime now;
+
 		/// Register a socket with the manager.
 		void register(GenericSocket socket)
 		{
@@ -244,6 +250,8 @@ else // Use select
 		void delegate()[] nextTickHandlers, idleHandlers;
 
 	public:
+		MonoTime now;
+
 		/// Register a socket with the manager.
 		void register(GenericSocket conn)
 		{
@@ -394,9 +402,10 @@ else // Use select
 				else
 				if (USE_SLEEP && sockcount==0)
 				{
-					version(Windows)
+					version (Windows)
 					{
-						auto duration = mainTimer.getRemainingTime().total!"msecs"();
+						now = MonoTime.currTime();
+						auto duration = mainTimer.getRemainingTime(now).total!"msecs"();
 						debug (ASOCKETS) writeln("Wait duration: ", duration, " msecs");
 						if (duration <= 0)
 							duration = 1; // Avoid busywait
@@ -411,11 +420,20 @@ else // Use select
 				}
 				else
 				if (mainTimer.isWaiting())
-					events = Socket.select(readset, writeset, null, mainTimer.getRemainingTime());
+				{
+					// Refresh time before sleeping, to ensure that a
+					// slow event handler does not skew everything else
+					now = MonoTime.currTime();
+
+					events = Socket.select(readset, writeset, null, mainTimer.getRemainingTime(now));
+				}
 				else
 					events = Socket.select(readset, writeset, null);
 
 				debug (ASOCKETS) stderr.writefln("%d events fired.", events);
+
+				// Update time after sleeping
+				now = MonoTime.currTime();
 
 				if (events > 0)
 				{
@@ -437,7 +455,7 @@ else // Use select
 				}
 
 				// Timers may invalidate our select results, so fire them after processing the latter
-				mainTimer.prod();
+				mainTimer.prod(now);
 
 				eventCounter++;
 			}
@@ -533,6 +551,18 @@ else // Use select
 
 /// The default socket manager.
 SocketManager socketManager;
+
+/// The current monotonic time.
+/// Updated by the event loop whenever it is awoken.
+@property MonoTime now()
+{
+	if (socketManager.now == MonoTime.init)
+	{
+		// Event loop not yet started.
+		socketManager.now = MonoTime.currTime();
+	}
+	return socketManager.now;
+}
 
 // ***************************************************************************
 
