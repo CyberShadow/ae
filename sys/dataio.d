@@ -94,7 +94,7 @@ private:
 public:
 	this(string fileName)
 	{
-		debug(SwappedData) { if (log is null) log = new FileAndConsoleLogger("SwappedData"); log(fileName ~ " - Creating"); }
+		debug(SwappedData) { if (log is null) log = fileAndConsoleLogger("SwappedData"); log(fileName ~ " - Creating"); }
 		this.fileName = fileName;
 		cFileName = fileName.toStringz();
 		if (exists(fileName))
