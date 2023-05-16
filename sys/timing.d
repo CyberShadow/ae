@@ -180,26 +180,25 @@ private:
 		count--;
 	}
 
-	/// Same as, and slightly more optimal than `remove` + `add`.
-	/// Assumes that the task is rescheduled with its original duration,
-	/// i.e. newTime >= task.when.
+	/// Same as, and slightly more optimal than `remove` + `add` when `newTime` >= `task.state.when`.
 	void restart(TimerTask task, MonoTime newTime)
 	{
-		TimerTask tmp;
-
 		assert(task.owner !is null, "This TimerTask is not active");
 		assert(task.owner is this, "This TimerTask is not owned by this Timer");
 		debug (TIMER_VERBOSE) stderr.writefln("Restarting task %s which fires at %s.", cast(void*)task, task.state.when);
 
-		assert(newTime >= task.state.when);
 
-		// Store current position, as the new position must be after it
-		tmp = task.state.next !is null ? task.state.next : task.state.prev;
+		TimerTask oldPosition;
+		if (newTime >= task.state.when)
+		{
+			// Store current position, as the new position must be after it.
+			oldPosition = task.state.next !is null ? task.state.next : task.state.prev;
+		}
 
 		remove(task);
 		assert(task.owner is null);
 
-		add(task, tmp, newTime);
+		add(task, oldPosition, newTime);
 		assert(task.owner is this);
 	}
 
