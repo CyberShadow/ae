@@ -75,43 +75,51 @@ private:
 	TimerTask tail;
 	size_t count;
 
-	void add(TimerTask task, TimerTask start)
+	/// State to store in `TimerTask` instances.
+	/// It is private to `Timer`.
+	struct TimerTaskState
 	{
-		debug(TIMER_VERBOSE) stderr.writefln("Adding task %s which waits for %s.", cast(void*)task, task.delay);
-		debug(TIMER_TRACK) task.additionStackTrace = getStackTrace();
+		TimerTask prev;
+		TimerTask next;
 
-		auto now = MonoTime.currTime();
+		MonoTime when;
+	}
+
+	void add(TimerTask task, TimerTask start, MonoTime when)
+	{
+		debug(TIMER_VERBOSE) stderr.writefln("Adding task %s which fires at %s.", cast(void*)task, task.state.when);
+		debug(TIMER_TRACK) task.additionStackTrace = getStackTrace();
 
 		if (start !is null)
 			assert(start.owner is this);
 
 		task.owner = this;
-		task.prev = null;
-		task.next = null;
-		task.when = now + task.delay;
+		task.state.prev = null;
+		task.state.next = null;
+		task.state.when = when;
 
 		TimerTask tmp = start is null ? head : start;
 
 		while (tmp !is null)
 		{
-			if (task.when < tmp.when)
+			if (task.state.when < tmp.state.when)
 			{
-				task.next = tmp;
-				task.prev = tmp.prev;
-				if (tmp.prev)
-					tmp.prev.next = task;
-				tmp.prev = task;
+				task.state.next = tmp;
+				task.state.prev = tmp.state.prev;
+				if (tmp.state.prev)
+					tmp.state.prev.state.next = task;
+				tmp.state.prev = task;
 				break;
 			}
-			tmp = tmp.next;
+			tmp = tmp.state.next;
 		}
 
 		if (tmp is null)
 		{
 			if (head !is null)
 			{
-				tail.next = task;
-				task.prev = tail;
+				tail.state.next = task;
+				task.state.prev = tail;
 				tail = task;
 			}
 			else
@@ -124,23 +132,23 @@ private:
 		if (tmp is head)
 			head = task;
 
-		assert(head is null || head.prev is null);
-		assert(tail is null || tail.next is null);
+		assert(head is null || head.state.prev is null);
+		assert(tail is null || tail.state.next is null);
 		count++;
 	}
 
 	/// Unschedule a task.
 	void remove(TimerTask task)
 	{
-		debug (TIMER_VERBOSE) stderr.writefln("Removing task %s which waits for %s.", cast(void*)task, task.delay);
+		debug (TIMER_VERBOSE) stderr.writefln("Removing task %s which fires at %s.", cast(void*)task, task.state.when);
 		assert(task.owner is this);
 		if (task is head)
 		{
-			if (head.next)
+			if (head.state.next)
 			{
-				head = head.next;
-				head.prev = null;
-				debug (TIMER_VERBOSE) stderr.writefln("Removed current task, next task is waiting for %s (next at %s).", head.delay, head.when);
+				head = head.state.next;
+				head.state.prev = null;
+				debug (TIMER_VERBOSE) stderr.writefln("Removed current task, next task fires at %s.", head.state.when);
 			}
 			else
 			{
@@ -152,41 +160,46 @@ private:
 		else
 		if (task is tail)
 		{
-			tail = task.prev;
+			tail = task.state.prev;
 			if (tail)
-				tail.next = null;
+				tail.state.next = null;
 		}
 		else
 		{
-			TimerTask tmp = task.prev;
-			if (task.prev)
-				task.prev.next = task.next;
-			if (task.next)
+			TimerTask tmp = task.state.prev;
+			if (task.state.prev)
+				task.state.prev.state.next = task.state.next;
+			if (task.state.next)
 			{
-				task.next.prev = task.prev;
-				task.next = tmp;
+				task.state.next.state.prev = task.state.prev;
+				task.state.next = tmp;
 			}
 		}
 		task.owner = null;
-		task.next = task.prev = null;
+		task.state.next = task.state.prev = null;
 		count--;
 	}
 
-	void restart(TimerTask task)
+	/// Same as, and slightly more optimal than `remove` + `add`.
+	/// Assumes that the task is rescheduled with its original duration,
+	/// i.e. newTime >= task.when.
+	void restart(TimerTask task, MonoTime newTime)
 	{
 		TimerTask tmp;
 
 		assert(task.owner !is null, "This TimerTask is not active");
 		assert(task.owner is this, "This TimerTask is not owned by this Timer");
-		debug (TIMER_VERBOSE) stderr.writefln("Restarting task %s which waits for %s.", cast(void*)task, task.delay);
+		debug (TIMER_VERBOSE) stderr.writefln("Restarting task %s which fires at %s.", cast(void*)task, task.state.when);
+
+		assert(newTime >= task.state.when);
 
 		// Store current position, as the new position must be after it
-		tmp = task.next !is null ? task.next : task.prev;
+		tmp = task.state.next !is null ? task.state.next : task.state.prev;
 
 		remove(task);
 		assert(task.owner is null);
 
-		add(task, tmp);
+		add(task, tmp, newTime);
 		assert(task.owner is this);
 	}
 
@@ -206,28 +219,34 @@ public:
 
 		if (head !is null)
 		{
-			while (head !is null && head.when <= now)
+			while (head !is null && head.state.when <= now)
 			{
 				TimerTask task = head;
 				remove(head);
-				debug (TIMER) stderr.writefln("%s: Firing task %s that waited for %s of %s.", now, cast(void*)task, task.delay + (now - task.when), task.delay);
+				debug (TIMER) stderr.writefln("%s: Firing task %s that wanted to fire at %s.", now, cast(void*)task, task.state.when);
 				if (task.handleTask)
 					task.handleTask(this, task);
 				ran = true;
 			}
 
-			debug (TIMER_VERBOSE) if (head !is null) stderr.writefln("Current task is waiting for %s, %s remaining.", head.delay, head.when - now);
+			debug (TIMER_VERBOSE) if (head !is null) stderr.writefln("Current task wants to fire at %s, %s remaining.", head.state.when, head.state.when - now);
 		}
 
 		return ran;
 	}
 
-	/// Add a new task to the timer.
-	void add(TimerTask task)
+	// Add a new task to the timer, based on its `delay`.
+	deprecated void add(TimerTask task)
 	{
-		debug (TIMER_VERBOSE) stderr.writefln("Adding task %s which waits for %s.", cast(void*)task, task.delay);
+		add(task, MonoTime.currTime() + task.delay);
+	}
+
+	// Add a new task to the timer.
+	void add(TimerTask task, MonoTime when)
+	{
+		debug (TIMER_VERBOSE) stderr.writefln("Adding task %s which fires at %s.", cast(void*)task, task.state.when);
 		assert(task.owner is null, "This TimerTask is already active");
-		add(task, null);
+		add(task, null, when);
 		assert(task.owner is this);
 		assert(head !is null);
 	}
@@ -241,7 +260,7 @@ public:
 	/// Return the MonoTime of the next scheduled task, or MonoTime.max if no tasks are scheduled.
 	MonoTime getNextEvent()
 	{
-		return disabled || head is null ? MonoTime.max : head.when;
+		return disabled || head is null ? MonoTime.max : head.state.when;
 	}
 
 	/// Return the time until the first scheduled task, or Duration.max if no tasks are scheduled.
@@ -252,12 +271,12 @@ public:
 
 		auto now = MonoTime.currTime();
 
-		debug(TIMER) stderr.writefln("First task is %s, due to fire in %s", cast(void*)head, head.when - now);
+		debug(TIMER) stderr.writefln("First task is %s, due to fire in %s", cast(void*)head, head.state.when - now);
 		debug(TIMER_TRACK) stderr.writefln("\tCreated:\n\t\t%-(%s\n\t\t%)\n\tAdded:\n\t\t%-(%s\n\t\t%)",
 			head.creationStackTrace, head.additionStackTrace);
 
-		if (now < head.when) // "when" is in the future
-			return head.when - now;
+		if (now < head.state.when) // "when" is in the future
+			return head.state.when - now;
 		else
 			return Duration.zero;
 	}
@@ -272,14 +291,14 @@ public:
 		else
 		{
 			TimerTask t = cast(TimerTask)head;
-			assert(t.prev is null);
+			assert(t.state.prev is null);
 			int n=1;
-			while (t.next)
+			while (t.state.next)
 			{
 				assert(t.owner is this);
-				auto next = t.next;
-				assert(t is next.prev);
-				assert(t.when <= next.when);
+				auto next = t.state.next;
+				assert(t is next.state.prev);
+				assert(t.state.when <= next.state.when);
 				t = next;
 				n++;
 			}
@@ -295,21 +314,23 @@ final class TimerTask
 {
 private:
 	Timer owner;
-	TimerTask prev;
-	TimerTask next;
-
-	MonoTime when;
-	Duration _delay;
+	Timer.TimerTaskState state;
+	deprecated Duration _delay;
 
 	debug(TIMER_TRACK) string[] creationStackTrace, additionStackTrace;
 
 public:
-	this(Duration delay, Handler handler = null)
+	this(Handler handler = null)
+	{
+		handleTask = handler;
+		debug(TIMER_TRACK) creationStackTrace = getStackTrace();
+	} ///
+
+	deprecated this(Duration delay, Handler handler = null)
 	{
 		assert(delay >= Duration.zero, "Creating TimerTask with a negative Duration");
 		_delay = delay;
-		handleTask = handler;
-		debug(TIMER_TRACK) creationStackTrace = getStackTrace();
+		this(handler);
 	} ///
 
 	/// Return whether the task is scheduled to run on a Timer.
@@ -327,22 +348,22 @@ public:
 	}
 
 	/// Reschedule the task to run with the same delay from now.
-	void restart()
+	deprecated void restart()
 	{
 		assert(isWaiting(), "This TimerTask is not active");
-		owner.restart(this);
+		owner.restart(this, MonoTime.currTime() + delay);
 		assert(isWaiting());
 	}
 
 	/// The duration that this task is scheduled to run after.
 	/// Changing the delay is only allowed for inactive tasks.
-	@property Duration delay()
+	deprecated @property Duration delay()
 	{
 		return _delay;
 	}
 
 	/// ditto
-	@property void delay(Duration delay)
+	deprecated @property void delay(Duration delay)
 	{
 		assert(delay >= Duration.zero, "Setting TimerTask delay to a negative Duration");
 		assert(owner is null, "Changing duration of an active TimerTask");
