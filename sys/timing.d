@@ -209,11 +209,9 @@ public:
 
 	/// Run scheduled tasks.
 	/// Returns true if any tasks ran.
-	bool prod()
+	bool prod(MonoTime now)
 	{
 		if (disabled) return false;
-
-		auto now = MonoTime.currTime();
 
 		bool ran;
 
@@ -233,6 +231,11 @@ public:
 		}
 
 		return ran;
+	}
+
+	deprecated bool prod()
+	{
+		return prod(MonoTime.currTime());
 	}
 
 	// Add a new task to the timer, based on its `delay`.
@@ -264,12 +267,10 @@ public:
 	}
 
 	/// Return the time until the first scheduled task, or Duration.max if no tasks are scheduled.
-	Duration getRemainingTime()
+	Duration getRemainingTime(MonoTime now)
 	{
 		if (disabled || head is null)
 			return Duration.max;
-
-		auto now = MonoTime.currTime();
 
 		debug(TIMER) stderr.writefln("First task is %s, due to fire in %s", cast(void*)head, head.state.when - now);
 		debug(TIMER_TRACK) stderr.writefln("\tCreated:\n\t\t%-(%s\n\t\t%)\n\tAdded:\n\t\t%-(%s\n\t\t%)",
@@ -279,6 +280,11 @@ public:
 			return head.state.when - now;
 		else
 			return Duration.zero;
+	}
+
+	deprecated Duration getRemainingTime()
+	{
+		return getRemainingTime(MonoTime.currTime());
 	}
 
 	debug invariant()
