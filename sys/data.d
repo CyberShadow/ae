@@ -787,7 +787,7 @@ version(Windows)
 	extern(Windows) VOID GetSystemInfo(LPSYSTEM_INFO);
 }
 
-debug(DATA_REFCOUNT) import ae.utils.exception, ae.sys.memory, std.stdio;
+debug(DATA_REFCOUNT) import ae.utils.exception, ae.sys.memory, core.stdc.stdio;
 
 debug(DATA_REFCOUNT) void debugLog(Args...)(const char* s, Args args) @nogc
 {
@@ -804,7 +804,7 @@ debug(DATA_REFCOUNT) void debugStackTrace()
 {
 	try
 		foreach (line; getStackTrace())
-			writeln("\t", line);
+			fprintf(stderr, "\t%.*s\n", cast(int)line.length, line.ptr);
 	catch (Throwable e)
-		writeln("\t(stacktrace error: ", e.msg, ")");
+		fprintf(stderr, "\t(stacktrace error: %.*s)", cast(int)e.msg.length, e.msg.ptr);
 }
