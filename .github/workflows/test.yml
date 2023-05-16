@@ -38,3 +38,6 @@ jobs:
 
       - if: ${{ matrix.dc == 'dmd-2.100.0' }}
         run: dub test --arch=${{ matrix.arch }} :windows
+
+      - if: ${{ matrix.os == 'ubuntu-20.04' && matrix.dc == 'dmd-2.100.0' }}
+        run: ./makejson.sh
