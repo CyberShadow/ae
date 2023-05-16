@@ -18,6 +18,9 @@ import std.conv;
 import std.exception;
 import std.string;
 
+debug (verparse) import std.stdio : stderr;
+debug (verparse) import ae.utils.text : hexDump;
+
 /// Parses PE VersionInfo resources.
 struct VersionInfoParser
 {
