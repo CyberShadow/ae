@@ -355,16 +355,21 @@ public:
 /// Convenience function to schedule and return a `TimerTask` that runs `handler` after `delay` once.
 TimerTask setTimeout(Args...)(void delegate(Args) handler, Duration delay, Args args)
 {
-	auto task = new TimerTask(delay, (Timer timer, TimerTask task) { handler(args); });
-	mainTimer.add(task);
+	auto task = new TimerTask((Timer /*timer*/, TimerTask task) {
+		handler(args);
+	});
+	mainTimer.add(task, MonoTime.currTime() + delay);
 	return task;
 }
 
 /// Convenience function to schedule and return a `TimerTask` that runs `handler` after `delay` repeatedly.
 TimerTask setInterval(Args...)(void delegate(Args) handler, Duration delay, Args args)
 {
-	auto task = new TimerTask(delay, (Timer timer, TimerTask task) { mainTimer.add(task); handler(args); });
-	mainTimer.add(task);
+	auto task = new TimerTask((Timer /*timer*/, TimerTask task) {
+		mainTimer.add(task, MonoTime.currTime() + delay);
+		handler(args);
+	});
+	mainTimer.add(task, MonoTime.currTime() + delay);
 	return task;
 }
 
