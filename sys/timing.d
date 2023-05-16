@@ -397,13 +397,12 @@ version(unittest) static import ae.utils.array;
 
 unittest
 {
-	import ae.utils.array;
-	import core.thread;
+	import core.thread : Thread;
 
 	MonoTime[string] lastNag;
-	assert( lastNag.getOrAdd("cheese").throttle(10.msecs));
-	assert(!lastNag.getOrAdd("cheese").throttle(10.msecs));
+	assert( lastNag.require("cheese").throttle(10.msecs));
+	assert(!lastNag.require("cheese").throttle(10.msecs));
 	Thread.sleep(20.msecs);
-	assert( lastNag.getOrAdd("cheese").throttle(10.msecs));
-	assert(!lastNag.getOrAdd("cheese").throttle(10.msecs));
+	assert( lastNag.require("cheese").throttle(10.msecs));
+	assert(!lastNag.require("cheese").throttle(10.msecs));
 }
