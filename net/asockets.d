@@ -57,7 +57,6 @@ version(Windows)
 else
 	private enum USE_SLEEP = false;
 
-/// Flags that determine socket wake-up events.
 int eventCounter;
 
 version (LIBEV)
@@ -219,6 +218,8 @@ version (LIBEV)
 				ev_io_stop(ev_default_loop(0), &ev);
 			}
 		}
+
+		// Flags that determine socket wake-up events.
 
 		/// Interested in read notifications (onReadable)?
 		@property final void notifyRead (bool value) { setWatcherState(evRead , value, EV_READ ); }
@@ -542,6 +543,8 @@ else // Use select
 
 	private mixin template SocketMixin()
 	{
+		// Flags that determine socket wake-up events.
+
 		/// Interested in read notifications (onReadable)?
 		bool notifyRead;
 		/// Interested in write notifications (onWritable)?
