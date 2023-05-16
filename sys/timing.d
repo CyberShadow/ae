@@ -40,7 +40,7 @@ private:
 		MonoTime when;
 	}
 
-	void add(TimerTask task, TimerTask start, MonoTime when)
+	void add(TimerTask task, TimerTask start, MonoTime when) pure
 	{
 		debug(TIMER_VERBOSE) stderr.writefln("Adding task %s which fires at %s.", cast(void*)task, task.state.when);
 		debug(TIMER_TRACK) task.additionStackTrace = getStackTrace();
@@ -93,7 +93,7 @@ private:
 	}
 
 	/// Unschedule a task.
-	void remove(TimerTask task)
+	void remove(TimerTask task) pure
 	{
 		debug (TIMER_VERBOSE) stderr.writefln("Removing task %s which fires at %s.", cast(void*)task, task.state.when);
 		assert(task.owner is this);
@@ -136,7 +136,7 @@ private:
 	}
 
 	/// Same as, and slightly more optimal than `remove` + `add` when `newTime` >= `task.state.when`.
-	void restart(TimerTask task, MonoTime newTime)
+	void restart(TimerTask task, MonoTime newTime) pure
 	{
 		assert(task.owner !is null, "This TimerTask is not active");
 		assert(task.owner is this, "This TimerTask is not owned by this Timer");
@@ -199,7 +199,7 @@ public:
 	}
 
 	// Add a new task to the timer.
-	void add(TimerTask task, MonoTime when)
+	void add(TimerTask task, MonoTime when) pure
 	{
 		debug (TIMER_VERBOSE) stderr.writefln("Adding task %s which fires at %s.", cast(void*)task, task.state.when);
 		assert(task.owner is null, "This TimerTask is already active");
@@ -209,19 +209,19 @@ public:
 	}
 
 	/// Return true if there are pending tasks scheduled.
-	bool isWaiting()
+	bool isWaiting() pure
 	{
 		return !disabled && head !is null;
 	}
 
 	/// Return the MonoTime of the next scheduled task, or MonoTime.max if no tasks are scheduled.
-	MonoTime getNextEvent()
+	MonoTime getNextEvent() pure
 	{
 		return disabled || head is null ? MonoTime.max : head.state.when;
 	}
 
 	/// Return the time until the first scheduled task, or Duration.max if no tasks are scheduled.
-	Duration getRemainingTime(MonoTime now)
+	Duration getRemainingTime(MonoTime now) pure
 	{
 		if (disabled || head is null)
 			return Duration.max;
@@ -280,7 +280,7 @@ private:
 	debug(TIMER_TRACK) string[] creationStackTrace, additionStackTrace;
 
 public:
-	this(Handler handler = null)
+	this(Handler handler = null) pure
 	{
 		handleTask = handler;
 		debug(TIMER_TRACK) creationStackTrace = getStackTrace();
@@ -294,13 +294,13 @@ public:
 	} ///
 
 	/// Return whether the task is scheduled to run on a Timer.
-	bool isWaiting()
+	bool isWaiting() pure
 	{
 		return owner !is null;
 	}
 
 	/// Remove this task from the scheduler.
-	void cancel()
+	void cancel() pure
 	{
 		assert(isWaiting(), "This TimerTask is not active");
 		owner.remove(this);
@@ -308,7 +308,7 @@ public:
 	}
 
 	/// Reschedule the task to run at some other time.
-	void restart(MonoTime when)
+	void restart(MonoTime when) pure
 	{
 		assert(isWaiting(), "This TimerTask is not active");
 		owner.restart(this, when);
