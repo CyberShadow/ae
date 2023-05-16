@@ -2041,25 +2041,22 @@ class TimeoutAdapter : ConnectionAdapter
 	} ///
 
 	/// Set the `Duration` indicating the period of inactivity after which to take action.
-	final void setIdleTimeout(Duration duration)
+	final void setIdleTimeout(Duration timeout)
 	{
 		debug (ASOCKETS) stderr.writefln("TimeoutAdapter.setIdleTimeout @ %s", cast(void*)this);
-		assert(duration > Duration.zero);
+		assert(timeout > Duration.zero);
+		this.timeout = timeout;
 
 		// Configure idleTask
 		if (idleTask is null)
 		{
-			idleTask = new TimerTask(duration);
+			idleTask = new TimerTask();
 			idleTask.handleTask = &onTask_Idle;
 		}
-		else
-		{
-			if (idleTask.isWaiting())
-				idleTask.cancel();
-			idleTask.delay = duration;
-		}
+		else if (idleTask.isWaiting())
+			idleTask.cancel();
 
-		mainTimer.add(idleTask);
+		mainTimer.add(idleTask, now + timeout);
 	}
 
 	/// Manually mark this connection as non-idle, restarting the idle timer.
@@ -2070,7 +2067,7 @@ class TimeoutAdapter : ConnectionAdapter
 		if (handleNonIdle)
 			handleNonIdle();
 		if (idleTask && idleTask.isWaiting())
-			idleTask.restart();
+			idleTask.restart(now + timeout);
 	}
 
 	/// Stop the idle timer.
@@ -2088,7 +2085,7 @@ class TimeoutAdapter : ConnectionAdapter
 		debug (ASOCKETS) stderr.writefln("TimeoutAdapter.resumeIdleTimeout @ %s", cast(void*)this);
 		assert(idleTask !is null);
 		assert(!idleTask.isWaiting());
-		mainTimer.add(idleTask);
+		mainTimer.add(idleTask, now + timeout);
 	}
 
 	/// Callback for when a connection has stopped responding.
@@ -2124,6 +2121,7 @@ protected:
 
 private:
 	TimerTask idleTask; // non-null if an idle timeout has been set
+	Duration timeout;
 
 	final void onTask_Idle(Timer /*timer*/, TimerTask /*task*/)
 	{
