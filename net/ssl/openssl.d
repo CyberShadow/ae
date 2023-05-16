@@ -62,6 +62,7 @@ import ae.utils.meta : enumLength;
 import ae.utils.text;
 
 debug(OPENSSL) import std.stdio : stderr;
+debug(OPENSSL_DATA) import std.stdio : stderr;
 
 // ***************************************************************************
 
