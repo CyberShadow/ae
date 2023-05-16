@@ -18,6 +18,7 @@ public import core.time;
 
 import std.exception;
 
+debug(TIMER_VERBOSE) debug = TIMER;
 debug(TIMER) import std.stdio : stderr;
 debug(TIMER_TRACK) import std.stdio : stderr;
 debug(TIMER_TRACK) import ae.utils.exception;
