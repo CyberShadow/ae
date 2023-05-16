@@ -74,15 +74,17 @@ version (LIBEV)
 	private:
 		size_t count;
 
+		void delegate()[] nextTickHandlers;
+
 		extern(C)
 		static void ioCallback(ev_loop_t* l, ev_io* w, int revents)
 		{
-			eventCounter++;
 			auto socket = cast(GenericSocket)w.data;
 			assert(socket, "libev event fired on stopped watcher");
 			debug (ASOCKETS) writefln("ioCallback(%s, 0x%X)", socket, revents);
 
-			socketManager.now = MonoTime.currTime();
+			// TODO? Need to get proper SocketManager instance to call updateTimer on
+			socketManager.preEvent();
 
 			if (revents & EV_READ)
 				socket.onReadable();
@@ -92,8 +94,7 @@ version (LIBEV)
 			else
 				assert(false, "Unknown event fired from libev");
 
-			// TODO? Need to get proper SocketManager instance to call updateTimer on
-			socketManager.updateTimer(false);
+			socketManager.postEvent(false);
 		}
 
 		ev_timer evTimer;
@@ -102,14 +103,35 @@ version (LIBEV)
 		extern(C)
 		static void timerCallback(ev_loop_t* l, ev_timer* w, int /*revents*/)
 		{
-			eventCounter++;
 			debug (ASOCKETS) writefln("Timer callback called.");
 
-			socketManager.now = MonoTime.currTime();
+			socketManager.preEvent(); // This also updates socketManager.now
 			mainTimer.prod(socketManager.now);
 
-			socketManager.updateTimer(true);
+			socketManager.postEvent(true);
 			debug (ASOCKETS) writefln("Timer callback exiting.");
+		}
+
+		/// Called upon waking up, before calling any users' event handlers.
+		void preEvent()
+		{
+			eventCounter++;
+			socketManager.now = MonoTime.currTime();
+		}
+
+		/// Called before going back to sleep, after calling any users' event handlers.
+		void postEvent(bool wokeDueToTimeout)
+		{
+			while (nextTickHandlers.length)
+			{
+				auto thisTickHandlers = nextTickHandlers;
+				nextTickHandlers = null;
+
+				foreach (handler; thisTickHandlers)
+					handler();
+			}
+
+			socketManager.updateTimer(wokeDueToTimeout);
 		}
 
 		void updateTimer(bool force)
@@ -509,14 +531,6 @@ else // Use select
 		}
 	}
 
-	/// Schedule a function to run on the next event loop iteration.
-	/// Can be used to queue logic to run once all current execution frames exit.
-	/// Similar to e.g. process.nextTick in Node.
-	void onNextTick(ref SocketManager socketManager, void delegate() dg) pure @safe nothrow
-	{
-		socketManager.nextTickHandlers ~= dg;
-	}
-
 	// Use UFCS to allow removeIdleHandler to have a predicate with context
 	/// Register a function to be called when the event loop is idle,
 	/// and would otherwise sleep.
@@ -554,6 +568,14 @@ else // Use select
 
 /// The default socket manager.
 SocketManager socketManager;
+
+/// Schedule a function to run on the next event loop iteration.
+/// Can be used to queue logic to run once all current execution frames exit.
+/// Similar to e.g. process.nextTick in Node.
+void onNextTick(ref SocketManager socketManager, void delegate() dg) pure @safe nothrow
+{
+	socketManager.nextTickHandlers ~= dg;
+}
 
 /// The current monotonic time.
 /// Updated by the event loop whenever it is awoken.
