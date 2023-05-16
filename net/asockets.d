@@ -30,9 +30,9 @@ import std.string : format;
 public import std.socket : Address, AddressInfo, Socket;
 
 version (Windows)
-    private import c_socks = core.sys.windows.winsock2;
+	private import c_socks = core.sys.windows.winsock2;
 else version (Posix)
-    private import c_socks = core.sys.posix.sys.socket;
+	private import c_socks = core.sys.posix.sys.socket;
 
 debug(ASOCKETS) import std.stdio : stderr;
 debug(PRINTDATA) import std.stdio : stderr;
