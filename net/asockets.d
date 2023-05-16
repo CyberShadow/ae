@@ -81,7 +81,7 @@ version (LIBEV)
 		{
 			auto socket = cast(GenericSocket)w.data;
 			assert(socket, "libev event fired on stopped watcher");
-			debug (ASOCKETS) writefln("ioCallback(%s, 0x%X)", socket, revents);
+			debug (ASOCKETS) stderr.writefln("ioCallback(%s, 0x%X)", socket, revents);
 
 			// TODO? Need to get proper SocketManager instance to call updateTimer on
 			socketManager.preEvent();
@@ -103,13 +103,13 @@ version (LIBEV)
 		extern(C)
 		static void timerCallback(ev_loop_t* l, ev_timer* w, int /*revents*/)
 		{
-			debug (ASOCKETS) writefln("Timer callback called.");
+			debug (ASOCKETS) stderr.writefln("Timer callback called.");
 
 			socketManager.preEvent(); // This also updates socketManager.now
 			mainTimer.prod(socketManager.now);
 
 			socketManager.postEvent(true);
-			debug (ASOCKETS) writefln("Timer callback exiting.");
+			debug (ASOCKETS) stderr.writefln("Timer callback exiting.");
 		}
 
 		/// Called upon waking up, before calling any users' event handlers.
@@ -139,7 +139,7 @@ version (LIBEV)
 			auto nextEvent = mainTimer.getNextEvent();
 			if (force || lastNextEvent != nextEvent)
 			{
-				debug (ASOCKETS) writefln("Rescheduling timer. Was at %s, now at %s", lastNextEvent, nextEvent);
+				debug (ASOCKETS) stderr.writefln("Rescheduling timer. Was at %s, now at %s", lastNextEvent, nextEvent);
 				if (nextEvent == MonoTime.max) // Stopping
 				{
 					if (lastNextEvent != MonoTime.max)
@@ -150,12 +150,12 @@ version (LIBEV)
 					auto remaining = mainTimer.getRemainingTime(socketManager.now);
 					while (remaining <= Duration.zero)
 					{
-						debug (ASOCKETS) writefln("remaining=%s, prodding timer.", remaining);
+						debug (ASOCKETS) stderr.writefln("remaining=%s, prodding timer.", remaining);
 						mainTimer.prod(socketManager.now);
 						remaining = mainTimer.getRemainingTime(socketManager.now);
 					}
 					ev_tstamp tstamp = remaining.total!"hnsecs" * 1.0 / convert!("seconds", "hnsecs")(1);
-					debug (ASOCKETS) writefln("remaining=%s, ev_tstamp=%s", remaining, tstamp);
+					debug (ASOCKETS) stderr.writefln("remaining=%s, ev_tstamp=%s", remaining, tstamp);
 					if (lastNextEvent == MonoTime.max) // Starting
 					{
 						ev_timer_init(&evTimer, &timerCallback, 0., tstamp);
@@ -177,7 +177,7 @@ version (LIBEV)
 		/// Register a socket with the manager.
 		void register(GenericSocket socket)
 		{
-			debug (ASOCKETS) writefln("Registering %s", socket);
+			debug (ASOCKETS) stderr.writefln("Registering %s", socket);
 			debug assert(socket.evRead.data is null && socket.evWrite.data is null, "Re-registering a started socket");
 			auto fd = socket.conn.handle;
 			assert(fd, "Must have fd before socket registration");
@@ -189,7 +189,7 @@ version (LIBEV)
 		/// Unregister a socket with the manager.
 		void unregister(GenericSocket socket)
 		{
-			debug (ASOCKETS) writefln("Unregistering %s", socket);
+			debug (ASOCKETS) stderr.writefln("Unregistering %s", socket);
 			socket.notifyRead  = false;
 			socket.notifyWrite = false;
 			count--;
@@ -208,7 +208,7 @@ version (LIBEV)
 			enforce(evLoop, "libev initialization failure");
 
 			updateTimer(true);
-			debug (ASOCKETS) writeln("ev_run");
+			debug (ASOCKETS) stderr.writeln("ev_run");
 			ev_run(ev_default_loop(0), 0);
 		}
 	}
@@ -217,7 +217,7 @@ version (LIBEV)
 	{
 		private ev_io evRead, evWrite;
 
-		private void setWatcherState(ref ev_io ev, bool newValue, int /*event*/)
+		private final void setWatcherState(ref ev_io ev, bool newValue, int /*event*/)
 		{
 			if (!conn)
 			{
@@ -241,12 +241,16 @@ version (LIBEV)
 			}
 		}
 
+		private final bool getWatcherState(ref ev_io ev) { return !!ev.data; }
+
 		// Flags that determine socket wake-up events.
 
 		/// Interested in read notifications (onReadable)?
 		@property final void notifyRead (bool value) { setWatcherState(evRead , value, EV_READ ); }
+		@property final bool notifyRead () { return getWatcherState(evRead); } /// ditto
 		/// Interested in write notifications (onWritable)?
 		@property final void notifyWrite(bool value) { setWatcherState(evWrite, value, EV_WRITE); }
+		@property final bool notifyWrite() { return getWatcherState(evWrite); } /// ditto
 
 		debug ~this() @nogc
 		{
