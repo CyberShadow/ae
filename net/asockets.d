@@ -1697,12 +1697,17 @@ public:
 
 // ***************************************************************************
 
-/// An asynchronous UDP stream.
-/// UDP does not have connections, so this class encapsulates a socket
-/// with a fixed destination (sendto) address, and optionally bound to
-/// a local address.
+/// Base class for connection-less socket protocols, i.e. those for
+/// which we must use sendto instead of connect/send.
+/// These generally correspond to stateless / datagram-based
+/// protocols, like UDP.
+/// This module's class hierarchy is mostly oriented towards
+/// stateful, stream-based protocols; to represent connectionless
+/// protocols, this class encapsulates a socket with a fixed
+/// destination (sendto) address, and optionally bound to a local
+/// address.
 /// Currently received packets' address is not exposed.
-class UdpConnection : Connection
+class ConnectionlessSocketConnection : Connection
 {
 protected:
 	this(Socket conn)
@@ -1774,11 +1779,11 @@ public:
 	/// Default constructor
 	this()
 	{
-		debug (ASOCKETS) stderr.writefln("New UdpConnection @ %s", cast(void*)this);
+		debug (ASOCKETS) stderr.writefln("New ConnectionlessSocketConnection @ %s", cast(void*)this);
 	}
 
 	/// Initialize with the given `AddressFamily`, without binding to an address.
-	final void initialize(AddressFamily family, SocketType type = SocketType.DGRAM, ProtocolType protocol = ProtocolType.UDP)
+	final void initialize(AddressFamily family, SocketType type, ProtocolType protocol)
 	{
 		initializeImpl(family, type, protocol);
 		if (connectHandler)
@@ -1795,6 +1800,52 @@ public:
 		socketManager.register(this);
 		state = ConnectionState.connected;
 		updateFlags();
+	}
+
+	/// Bind to a local address in order to receive packets sent there.
+	final ushort bind(AddressInfo addressInfo)
+	{
+		initialize(addressInfo.family, addressInfo.type, addressInfo.protocol);
+		conn.bind(addressInfo.address);
+
+		auto address = conn.localAddress();
+		auto port = to!ushort(address.toPortString());
+
+		if (connectHandler)
+			connectHandler();
+
+		return port;
+	}
+
+// public:
+	/// Where to send packets to.
+	Address remoteAddress;
+}
+
+/// An asynchronous UDP stream.
+/// UDP does not have connections, so this class encapsulates a socket
+/// with a fixed destination (sendto) address, and optionally bound to
+/// a local address.
+/// Currently received packets' address is not exposed.
+class UdpConnection : ConnectionlessSocketConnection
+{
+protected:
+	this(Socket conn)
+	{
+		super(conn);
+	}
+
+public:
+	/// Default constructor
+	this()
+	{
+		debug (ASOCKETS) stderr.writefln("New UdpConnection @ %s", cast(void*)this);
+	}
+
+	/// Initialize with the given `AddressFamily`, without binding to an address.
+	final void initialize(AddressFamily family, SocketType type = SocketType.DGRAM)
+	{
+		super.initialize(family, type, ProtocolType.UDP);
 	}
 
 	/// Bind to a local address in order to receive packets sent there.
@@ -1835,27 +1886,8 @@ public:
 		}
 
 		state = ConnectionState.disconnected;
-		return bind(addressInfo);
+		return super.bind(addressInfo);
 	}
-
-	/// ditto
-	final ushort bind(AddressInfo addressInfo)
-	{
-		initialize(addressInfo.family, addressInfo.type, addressInfo.protocol);
-		conn.bind(addressInfo.address);
-
-		auto address = conn.localAddress();
-		auto port = to!ushort(address.toPortString());
-
-		if (connectHandler)
-			connectHandler();
-
-		return port;
-	}
-
-// public:
-	/// Where to send packets to.
-	Address remoteAddress;
 }
 
 ///
