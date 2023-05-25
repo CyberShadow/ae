@@ -510,20 +510,24 @@ class Connector
 }
 
 // ditto
-class TcpConnector : Connector
+class SocketConnector(SocketType) : Connector
 {
-	protected TcpConnection conn;
+	protected SocketType conn;
 
 	this()
 	{
-		conn = new TcpConnection();
+		conn = new SocketType();
 	}
 
 	override IConnection getConnection()
 	{
 		return conn;
 	}
+}
 
+// ditto
+class TcpConnector : SocketConnector!TcpConnection
+{
 	override void connect(string host, ushort port)
 	{
 		conn.connect(host, port);
@@ -532,7 +536,7 @@ class TcpConnector : Connector
 
 // ditto
 version(Posix)
-class UnixConnector : TcpConnector
+class UnixConnector : SocketConnector!SocketConnection
 {
 	string path;
 
