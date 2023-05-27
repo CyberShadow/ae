@@ -57,6 +57,8 @@ public:
 	}
 }
 
+// TODO: Separate this from an URL type
+
 /// HTTP request class
 class HttpRequest : HttpMessage
 {

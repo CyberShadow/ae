@@ -39,6 +39,17 @@ public import ae.net.http.common;
 
 debug(HTTP) import std.stdio : stderr;
 
+// TODO:
+// - Decouple protocol from network operations.
+//   This should work on IConnection everywhere.
+// - Unify HTTP client and server connections.
+//   Aside the first line, these are pretty much the same protocols.
+// - We have more than one axis of parameters:
+//   transport socket type, whether TLS is enabled, possibly more.
+//   We have only one axis of polymorphism (class inheritance),
+//   so combinations such as UNIX TLS HTTP server are difficult to represent.
+//   Refactor to fix this.
+
 /// The base class for an incoming connection to a HTTP server,
 /// unassuming of transport.
 class BaseHttpServerConnection
