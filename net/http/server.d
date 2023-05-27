@@ -458,9 +458,9 @@ protected:
 			handleClose();
 	}
 
-	IConnection createConnection(TcpConnection tcp)
+	IConnection adaptConnection(IConnection transport)
 	{
-		return tcp;
+		return transport;
 	}
 
 	@property string protocol() { return "http"; }
@@ -468,7 +468,7 @@ protected:
 	void onAccept(TcpConnection incoming)
 	{
 		try
-			new HttpServerConnection(this, incoming, createConnection(incoming), protocol);
+			new HttpServerConnection(this, incoming, adaptConnection(incoming), protocol);
 		catch (Exception e)
 		{
 			if (log)
@@ -503,16 +503,16 @@ class HttpsServer : HttpServer
 protected:
 	override @property string protocol() { return "https"; }
 
-	override IConnection createConnection(TcpConnection tcp)
+	override IConnection adaptConnection(IConnection transport)
 	{
-		return ssl.createAdapter(ctx, tcp);
+		return ssl.createAdapter(ctx, transport);
 	}
 }
 
-/// Standard TCP-based HTTP server connection.
+/// Standard socket-based HTTP server connection.
 final class HttpServerConnection : BaseHttpServerConnection
 {
-	TcpConnection tcp; /// The TCP transport.
+	SocketConnection socket; /// The socket transport.
 	HttpServer server; /// `HttpServer` owning this connection.
 	/// Cached local and remote addresses.
 	Address localAddress, remoteAddress;
@@ -535,17 +535,17 @@ final class HttpServerConnection : BaseHttpServerConnection
 	}
 
 protected:
-	this(HttpServer server, TcpConnection tcp, IConnection c, string protocol = "http")
+	this(HttpServer server, SocketConnection socket, IConnection c, string protocol = "http")
 	{
 		this.server = server;
-		this.tcp = tcp;
+		this.socket = socket;
 		this.log = server.log;
 		this.protocol = protocol;
 		this.banner = server.banner;
 		this.timeout = server.timeout;
 		this.handleRequest = (HttpRequest r) => server.handleRequest(r, this);
-		this.localAddress = tcp.localAddress;
-		this.remoteAddress = tcp.remoteAddress;
+		this.localAddress = socket.localAddress;
+		this.remoteAddress = socket.remoteAddress;
 
 		super(c);
 
