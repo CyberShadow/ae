@@ -49,6 +49,7 @@ debug(HTTP) import std.stdio : stderr;
 //   We have only one axis of polymorphism (class inheritance),
 //   so combinations such as UNIX TLS HTTP server are difficult to represent.
 //   Refactor to fix this.
+// - HTTP bodies have stream semantics, and should be represented as such.
 
 /// The base class for an incoming connection to a HTTP server,
 /// unassuming of transport.
@@ -256,19 +257,9 @@ protected:
 		return true;
 	}
 
-public:
-	/// Send the given HTTP response.
-	final void sendResponse(HttpResponse response)
+	/// Send the given HTTP response, and do nothing else.
+	final void writeResponse(HttpResponse response)
 	{
-		requestProcessing = false;
-		if (!response)
-		{
-			debug (HTTP) debugLog("sendResponse(null) - generating dummy response");
-			response = new HttpResponse();
-			response.status = HttpStatusCode.InternalServerError;
-			response.statusMessage = HttpResponse.getStatusMessage(HttpStatusCode.InternalServerError);
-			response.data = DataVec(Data("Internal Server Error"));
-		}
 		assert(response.status != 0);
 
 		if (currentRequest)
@@ -288,11 +279,60 @@ public:
 
 		responseSize = response ? response.data.bytes.length : 0;
 		debug (HTTP) debugLog("Sent response (%d bytes data)", responseSize);
+	}
+
+public:
+	/// Send the given HTTP response.
+	final void sendResponse(HttpResponse response)
+	{
+		requestProcessing = false;
+		if (!response)
+		{
+			debug (HTTP) debugLog("sendResponse(null) - generating dummy response");
+			response = new HttpResponse();
+			response.status = HttpStatusCode.InternalServerError;
+			response.statusMessage = HttpResponse.getStatusMessage(HttpStatusCode.InternalServerError);
+			response.data = DataVec(Data("Internal Server Error"));
+		}
+		writeResponse(response);
 
 		closeResponse();
 
 		logRequest(currentRequest, response);
 	}
+
+	/// Switch protocols.
+	/// If `response` is given, send that first.
+	/// Then, release the connection and return it.
+	final Upgrade upgrade(HttpResponse response = null)
+	{
+		requestProcessing = false;
+		if (response)
+			writeResponse(response);
+
+		conn.handleReadData = null;
+		conn.handleDisconnect = null;
+
+		Upgrade upgrade;
+		upgrade.conn = conn;
+		upgrade.initialData = move(inBuffer);
+
+		this.conn = null;
+		assert(!timeoutActive);
+
+		logRequest(currentRequest, response);
+		return upgrade;
+	}
+
+	struct Upgrade
+	{
+		IConnection conn; /// The connection.
+
+		/// Any data that came after the request.
+		/// It is almost surely part of the protocol being upgraded to,
+		/// so it should be parsed as such.
+		DataVec initialData;
+	} /// ditto
 
 	/// Send these headers only.
 	/// Low-level alternative to `sendResponse`.
