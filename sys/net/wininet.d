@@ -155,12 +155,7 @@ protected:
 		}
 	}
 
-	final static void doDownload(HNet hUrl, void delegate(ubyte[]) sink)
-	{
-		doDownload(hUrl, cast(void delegate(const ubyte[])) sink);
-	}
-
-	final static void doDownload(HNet hUrl, void delegate(const ubyte[]) sink)
+	final static void doDownload(HNet hUrl, scope void delegate(scope const(ubyte)[]) sink)
 	{
 		// Get total file size
 		DWORD bytesTotal = 0;
@@ -192,7 +187,7 @@ protected:
 public:
 	override void downloadFile(string url, string target)
 	{
-		import std.stdio;
+		import std.stdio : File;
 		auto f = File(target, "wb");
 		auto hNet = open();
 		auto hReq = hNet.I!openUrl(url);
@@ -206,7 +201,7 @@ public:
 		auto hNet = open();
 		auto hReq = hNet.I!openUrl(url);
 		hReq.I!checkOK();
-		hReq.I!doDownload(&result.put!(ubyte[]));
+		hReq.I!doDownload(&result.put!(const(ubyte)[]));
 		return result.data;
 	} ///
 
@@ -221,7 +216,7 @@ public:
 		hReq.I!checkOK();
 
 		auto result = appender!(ubyte[]);
-		hReq.I!doDownload(&result.put!(ubyte[]));
+		hReq.I!doDownload(&result.put!(const(ubyte)[]));
 		return result.data;
 	} ///
 
@@ -279,7 +274,7 @@ public:
 				response.headers.add(parts[0].strip, parts[2].strip);
 			}
 
-		hReq.I!doDownload((ubyte[] bytes) { response.data ~= Data(bytes, true); });
+		hReq.I!doDownload((scope const(ubyte)[] bytes) { response.data ~= Data(bytes, true); });
 		return response;
 	} ///
 }
