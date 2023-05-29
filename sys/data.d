@@ -49,7 +49,7 @@ import std.traits;
 import core.memory;
 import core.exception;
 debug import std.string;
-public import ae.sys.dataset;
+deprecated public import ae.sys.dataset : copyTo, joinData, joinToHeap, DataVec, shift, bytes, DataSetBytes;
 import ae.utils.math;
 
 debug(DATA) import core.stdc.stdio;
