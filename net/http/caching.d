@@ -19,6 +19,7 @@ import std.datetime;
 import ae.net.http.common;
 import ae.net.http.responseex;
 import ae.sys.data;
+import ae.sys.dataset : DataVec, bytes;
 import ae.utils.mime;
 import ae.utils.time.common;
 import ae.utils.time.parse;

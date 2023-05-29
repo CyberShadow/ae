@@ -17,6 +17,7 @@ module ae.sys.net.ae;
 import ae.net.asockets;
 import ae.net.http.client;
 import ae.net.ietf.url;
+import ae.sys.dataset : DataVec;
 import ae.sys.net;
 
 static import std.file;

@@ -19,6 +19,7 @@ import std.array;
 
 import ae.net.ietf.headers;
 import ae.sys.data;
+import ae.sys.dataset : DataVec, joinToHeap;
 import ae.utils.text;
 
 /**

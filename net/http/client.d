@@ -30,6 +30,7 @@ import ae.net.ietf.headers;
 import ae.net.ietf.headerparse;
 import ae.net.ietf.url;
 import ae.net.ssl;
+import ae.sys.dataset : DataVec, bytes;
 import ae.utils.array : toArray, shift;
 import ae.utils.exception : CaughtException;
 import ae.sys.data;

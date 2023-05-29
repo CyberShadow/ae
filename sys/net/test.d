@@ -18,7 +18,8 @@ import std.file;
 import std.process : environment;
 
 import ae.net.http.common;
-import ae.sys.data;
+import ae.sys.data : Data;
+import ae.sys.dataset : DataVec, joinToHeap;
 
 static import ae.sys.net.ae;
 static import ae.sys.net.curl;

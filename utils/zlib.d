@@ -19,6 +19,7 @@ import std.conv;
 import std.exception;
 
 import ae.sys.data;
+import ae.sys.dataset : DataVec, joinData;
 import ae.utils.array;
 
 /// Thrown on zlib errors.

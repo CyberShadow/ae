@@ -23,6 +23,7 @@ import std.range.primitives : ElementType;
 debug import std.stdio, std.file;
 
 import ae.sys.data;
+import ae.sys.dataset : DataVec, bytes, joinData, copyTo, joinToHeap;
 import ae.utils.array;
 import ae.utils.bitmanip;
 

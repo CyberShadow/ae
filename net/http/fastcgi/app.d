@@ -36,6 +36,7 @@ import ae.net.http.common;
 import ae.net.http.cgi.common;
 import ae.net.http.cgi.script;
 import ae.net.http.fastcgi.common;
+import ae.sys.dataset : DataVec;
 import ae.sys.log;
 import ae.utils.array;
 
