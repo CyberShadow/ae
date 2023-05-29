@@ -7,16 +7,16 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-20.04, windows-2022, macos-12 ]
-        dc: [ dmd-2.100.0 ]
+        dc: [ dmd-2.104.0 ]
         arch: [ x86_64 ]
         include:
         # also test an older DMD verrsion
         - os: ubuntu-20.04
-          dc: dmd-2.082.1
+          dc: dmd-2.096.0
           arch: x86_64
         # also test 32-bit (but only on Windows)
         - os: windows-2022
-          dc: dmd-2.100.0
+          dc: dmd-2.104.0
           arch: x86_mscoff # not x86 to avoid OPTLINK deadlock bugs
 
     runs-on: ${{ matrix.os }}
@@ -34,10 +34,10 @@ jobs:
       - if: ${{ matrix.os == 'ubuntu-20.04' }}
         run: dub test --arch=${{ matrix.arch }} :sqlite
 
-      - if: ${{ matrix.os == 'ubuntu-20.04' && matrix.dc == 'dmd-2.100.0' }} # old Dub versions can't fetch packages
+      - if: ${{ matrix.os == 'ubuntu-20.04' && matrix.dc == 'dmd-2.104.0' }} # old Dub versions can't fetch packages
         run: dub test --arch=${{ matrix.arch }} :libpng
 
-      - if: ${{ matrix.dc == 'dmd-2.100.0' }}
+      - if: ${{ matrix.dc == 'dmd-2.104.0' }}
         run: dub test --arch=${{ matrix.arch }} :windows
 
   compilation-test:
@@ -45,7 +45,7 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-20.04 ]
-        dc: [ dmd-2.100.0 ]
+        dc: [ dmd-2.104.0 ]
 
     runs-on: ${{ matrix.os }}
     steps:
