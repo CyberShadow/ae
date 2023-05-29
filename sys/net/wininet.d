@@ -155,7 +155,7 @@ protected:
 		}
 	}
 
-	final static void doDownload(HNet hUrl, scope void delegate(scope const(ubyte)[]) sink)
+	final static void doDownload(HNet hUrl, scope void delegate(in ubyte[]) sink)
 	{
 		// Get total file size
 		DWORD bytesTotal = 0;
