@@ -29,6 +29,7 @@ import ae.net.ietf.headerparse;
 import ae.net.ietf.headers;
 import ae.net.ssl;
 import ae.sys.data;
+import ae.sys.dataset : bytes, shift, DataVec, joinToHeap;
 import ae.sys.log;
 import ae.utils.container.listnode;
 import ae.utils.exception;

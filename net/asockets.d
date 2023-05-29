@@ -16,6 +16,7 @@
 
 module ae.net.asockets;
 
+import ae.sys.dataset : DataVec;
 import ae.sys.timing;
 import ae.utils.array : toArray;
 import ae.utils.math;

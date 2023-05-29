@@ -23,7 +23,8 @@ import std.string;
 
 import ae.net.http.common;
 import ae.net.ietf.url;
-import ae.sys.data;
+import ae.sys.data : Data;
+import ae.sys.dataset : DataVec, bytes;
 import ae.sys.net;
 
 /// Implementation of `Network` using libcurl.

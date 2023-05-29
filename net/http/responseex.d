@@ -28,6 +28,7 @@ import ae.net.ietf.headers;
 import ae.sys.data;
 import ae.sys.dataio;
 import ae.sys.datamm;
+import ae.sys.dataset : DataVec;
 import ae.utils.array;
 import ae.utils.json;
 import ae.utils.xml;

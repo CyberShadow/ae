@@ -20,7 +20,8 @@ import std.exception : enforce;
 
 import ae.net.http.common : HttpRequest;
 import ae.net.ietf.headers : Headers;
-import ae.sys.data : Data, DataVec;
+import ae.sys.data : Data;
+import ae.sys.dataset : DataVec;
 import ae.utils.meta : getAttribute;
 
 /// Holds parsed CGI meta-variables.
