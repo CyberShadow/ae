@@ -274,7 +274,7 @@ public:
 				response.headers.add(parts[0].strip, parts[2].strip);
 			}
 
-		hReq.I!doDownload((scope const(ubyte)[] bytes) { response.data ~= Data(bytes, true); });
+		hReq.I!doDownload((scope const(ubyte)[] bytes) { response.data ~= Data(bytes); });
 		return response;
 	} ///
 }

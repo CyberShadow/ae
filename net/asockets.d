@@ -921,12 +921,12 @@ protected:
 				if (received < UNMANAGED_THRESHOLD)
 				{
 					// Copy to the managed heap
-					data = Data(inBuffer[0 .. received].dup);
+					data = Data.wrapGC(inBuffer[0 .. received].dup);
 				}
 				else
 				{
 					// Copy to unmanaged memory
-					data = Data(inBuffer[0 .. received], true);
+					data = Data(inBuffer[0 .. received]);
 				}
 				readDataHandler(data);
 			}
