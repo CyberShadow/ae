@@ -6,7 +6,7 @@ jobs:
     timeout-minutes: 5
     strategy:
       matrix:
-        os: [ ubuntu-20.04, windows-2019, macos-12 ]
+        os: [ ubuntu-20.04, windows-2022, macos-12 ]
         dc: [ dmd-2.100.0 ]
         arch: [ x86_64 ]
         include:
@@ -15,7 +15,7 @@ jobs:
           dc: dmd-2.082.1
           arch: x86_64
         # also test 32-bit (but only on Windows)
-        - os: windows-2019
+        - os: windows-2022
           dc: dmd-2.100.0
           arch: x86_mscoff # not x86 to avoid OPTLINK deadlock bugs
 
