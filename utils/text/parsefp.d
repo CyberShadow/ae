@@ -568,10 +568,10 @@ if (is(Target == string) &&
     ///
 @safe unittest
 {
-    import std.math : approxEqual;
+    import std.math : isClose;
     auto str = "123.456";
 
-    assert(parse!double(str).approxEqual(123.456));
+    assert(parse!double(str).isClose(123.456));
 }
 
 @safe unittest
