@@ -885,6 +885,12 @@ unittest
 		assert(e.entryIsDir);
 	}, Yes.includeRoot);
 
+	// Test Yes.includeRoot with the empty string
+	"".listDir!((e) {
+		assert(e.fullName == ".", e.fullName ~ ` != .`);
+		assert(e.entryIsDir);
+	}, Yes.includeRoot);
+
 	entries = null;
 	tmpDir.listDir!((e) {
 		assert(equal(e.fullNameFS, e.fullName));
