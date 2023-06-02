@@ -928,6 +928,21 @@ deprecated public import ae.sys.dataset : copyTo, joinData, joinToHeap, DataVec,
 
 deprecated alias DataWrapper = Memory;
 
+// Temporary forward-compatibility shims.
+// Will be deprecated when Data is switched to using ubyte.
+ref inout(T) fromBytes(T, E)(inout(E)[] bytes)
+if (!hasIndirections!T && is(Unqual!E == void))
+{
+	assert(bytes.length == T.sizeof, "Data length mismatch for " ~ T.stringof);
+	return *cast(inout(T)*)bytes.ptr;
+}
+
+inout(T) fromBytes(T, E)(inout(E)[] bytes)
+if (is(T U : U[]) && !hasIndirections!U && is(Unqual!E == void))
+{
+	return cast(inout(T))bytes;
+}
+
 // ************************************************************************
 
 package:
