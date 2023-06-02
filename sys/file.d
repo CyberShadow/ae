@@ -454,6 +454,12 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 				return deIsType(DT_LNK, S_IFLNK);
 			}
 
+			/// Returns true if this is a file (but not if it's a symlink pointing to one).
+			@property bool entryIsFile()
+			{
+				return deIsType(DT_REG, S_IFREG);
+			}
+
 			/// Returns true if this is a directory.
 			/// You probably want to use this one to decide whether to recurse.
 			@property bool entryIsDir()
@@ -569,6 +575,12 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 			@property bool isSymlink() const pure nothrow
 			{
 				return (findData.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+			}
+
+			/// Returns true if this is a file (but not if it's a reparse point pointing to one).
+			@property bool entryIsFile() const pure nothrow
+			{
+				return isFile && !isSymlink;
 			}
 
 			/// Returns true if this is a directory.
