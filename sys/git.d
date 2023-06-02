@@ -684,15 +684,15 @@ struct Git
 				.filter!(de => !pathFilter || pathFilter(de.relativePath(path)))
 				.map!(de =>
 					de.isDir
-					? GitObject.TreeEntry(
+					? Object.TreeEntry(
 						octal!40000,
 						de.baseName,
 						importSubTree(path, buildPath(subPath, de.baseName), writer, pathFilter)
 					)
-					: GitObject.TreeEntry(
+					: Object.TreeEntry(
 						isVersion!`Posix` && (de.attributes & octal!111) ? octal!100755 : octal!100644,
 						de.baseName,
-						writer.write(GitObject(Hash.init, "blob", cast(immutable(ubyte)[])read(de.name)))
+						writer.write(Git.Object(OID.init, "blob", cast(immutable(ubyte)[])read(de.name)))
 					)
 				)
 				.array
