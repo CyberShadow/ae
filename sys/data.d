@@ -410,7 +410,7 @@ public:
 	// --- Contents access
 
 	/// Get temporary access to the data referenced by this Data instance.
-	void enter(scope void delegate(scope inout(T)[]) fn) inout
+	void enter(scope void delegate(scope T[]) fn)
 	{
 		// We must make a copy of ourselves to ensure that, should
 		// `fn` overwrite the `this` instance, the passed contents
@@ -654,6 +654,11 @@ unittest
 			{
 				TData!T d;
 				cast(void) d;
+			}
+			// enter type
+			{
+				TData!T d;
+				d.enter((scope contents) { T[] _ = contents; });
 			}
 			// Construction from typeof(null)
 			{
