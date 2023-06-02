@@ -841,9 +841,9 @@ public:
 	override @property ConnectionState state() { return _state; }
 
 protected:
-	abstract sizediff_t doSend(const(void)[] buffer);
+	abstract sizediff_t doSend(scope const(void)[] buffer);
 	enum sizediff_t doReceiveEOF = -1;
-	abstract sizediff_t doReceive(void[] buffer);
+	abstract sizediff_t doReceive(scope void[] buffer);
 
 	/// The send buffers.
 	DataVec[MAX_PRIORITY+1] outQueue;
@@ -1230,12 +1230,12 @@ class FileConnection : StreamConnection
 protected:
 	import core.sys.posix.unistd : read, write;
 
-	override sizediff_t doSend(const(void)[] buffer)
+	override sizediff_t doSend(scope const(void)[] buffer)
 	{
 		return write(socket.handle, buffer.ptr, buffer.length);
 	}
 
-	override sizediff_t doReceive(void[] buffer)
+	override sizediff_t doReceive(scope void[] buffer)
 	{
 		auto bytesRead = read(socket.handle, buffer.ptr, buffer.length);
 		if (bytesRead == 0)
@@ -1340,12 +1340,12 @@ protected:
 		this.datagram = datagram;
 	}
 
-	override sizediff_t doSend(const(void)[] buffer)
+	override sizediff_t doSend(scope const(void)[] buffer)
 	{
 		return conn.send(buffer);
 	}
 
-	override sizediff_t doReceive(void[] buffer)
+	override sizediff_t doReceive(scope void[] buffer)
 	{
 		auto bytesReceived = conn.receive(buffer);
 		if (bytesReceived == 0 && !datagram)
@@ -1782,12 +1782,12 @@ protected:
 		}
 	}
 
-	override sizediff_t doSend(const(void)[] buffer)
+	override sizediff_t doSend(scope const(void)[] buffer)
 	{
 		assert(false); // never called (called only from overridden methods)
 	}
 
-	override sizediff_t doReceive(void[] buffer)
+	override sizediff_t doReceive(scope void[] buffer)
 	{
 		return conn.receive(buffer);
 	}
