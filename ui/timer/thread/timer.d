@@ -52,10 +52,13 @@ private:
 
 			synchronized(sysTimer)
 			{
+                auto now = MonoTime.currTime();
 				prodding = true;
-				sysTimer.prod();
+				sysTimer.prod(now);
 				prodding = false;
-				remainingTime = sysTimer.getRemainingTime();
+
+                now = MonoTime.currTime();
+				remainingTime = sysTimer.getRemainingTime(now);
 			}
 
 			if (remainingTime == Duration.max)
@@ -70,20 +73,26 @@ private:
 		AppCallback fn;
 		bool recurring;
 		TimerTask task;
+        uint ms;
 
 		this(AppCallback fn, uint ms, bool recurring)
 		{
+			auto now = MonoTime.currTime();
 			this.fn = fn;
+            this.ms = ms;
 			this.recurring = recurring;
-			this.task = new TimerTask(ms.msecs, &taskCallback);
-			synchronized(sysTimer)
-				sysTimer.add(task);
+			this.task = new TimerTask(&taskCallback);
+            synchronized(sysTimer)
+				sysTimer.add(task, now + ms.msecs);
 		}
 
 		void taskCallback(SysTimer timer, TimerTask task)
 		{
 			if (recurring)
-				timer.add(task);
+            {
+                auto now = MonoTime.currTime();
+				timer.add(task, now + ms.msecs);
+            }
 			fn.call();
 		}
 
