@@ -425,7 +425,9 @@ public:
 		return data.dup;
 	}
 
-	deprecated alias toHeap = toGC;
+	// deprecated alias toHeap = toGC;
+	// https://issues.dlang.org/show_bug.cgi?id=23954
+	deprecated T[] toHeap() const { return toGC(); }
 
 	/**
 	   Get the referenced data. Unsafe!
@@ -447,7 +449,9 @@ public:
 	*/
 	@property inout(T)[] unsafeContents() inout @system { return this.data; }
 
-	deprecated alias contents = unsafeContents;
+	// deprecated alias contents = unsafeContents;
+	// https://issues.dlang.org/show_bug.cgi?id=23954
+	deprecated @property inout(T)[] contents() inout @system { return this.data; }
 
 	deprecated @property Unqual!T[] mcontents() @system
 	{
