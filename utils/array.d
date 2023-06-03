@@ -122,7 +122,7 @@ unittest
 }
 
 /// Returns an empty, but non-null slice of T.
-auto emptySlice(T)() pure
+auto emptySlice(T)() pure @trusted
 {
 	static if (false) // LDC optimizes this out
 	{
@@ -329,7 +329,7 @@ bool slicesOver(T)(const(T)[] arr, ref const T element)
 
 /// Given an array and a reference to an element inside it, returns its index.
 /// The reverse operation of indexing an array.
-size_t elementIndex(T)(const(T)[] arr, ref const T element)
+size_t elementIndex(T)(const(T)[] arr, ref const T element) @trusted
 {
 	auto start = arr.ptr;
 	auto end = start + arr.length;
@@ -338,7 +338,7 @@ size_t elementIndex(T)(const(T)[] arr, ref const T element)
 	return p - start;
 }
 
-unittest
+@safe unittest
 {
 	auto arr = [1, 2, 3];
 	assert(arr.elementIndex(arr[1]) == 1);
@@ -347,7 +347,7 @@ unittest
 /// Given an array and its slice, returns the
 /// start index of the slice inside the array.
 /// The reverse operation of slicing an array.
-size_t sliceIndex(T)(in T[] arr, in T[] slice)
+size_t sliceIndex(T)(in T[] arr, in T[] slice) @trusted
 {
 	auto a = arr.ptr;
 	auto b = a + arr.length;
