@@ -864,12 +864,23 @@ protected:
 		debug(ASOCKETS) stderr.writefln("[%s] updateFlags: %s %s", conn ? conn.handle : -1, notifyRead, notifyWrite);
 	}
 
+	// We reuse the same buffer across read calls.
+	// It is allocated on the first read, and also
+	// if the user code decides to keep a reference to it.
+	static Data inBuffer;
+
 	/// Called when a socket is readable.
 	override void onReadable()
 	{
 		// TODO: use FIONREAD when Phobos gets ioctl support (issue 6649)
-		static ubyte[0x10000] inBuffer = void;
-		auto received = doReceive(inBuffer);
+		if (!inBuffer)
+			inBuffer = Data(0x10000);
+		else
+			inBuffer = inBuffer.ensureUnique();
+		sizediff_t received;
+		inBuffer.enter((scope contents) {
+			received = doReceive(contents);
+		});
 
 		if (received == doReceiveEOF)
 			return disconnect("Connection closed", DisconnectType.graceful);
@@ -889,7 +900,7 @@ protected:
 			debug (PRINTDATA)
 			{
 				stderr.writefln("== %s <- %s ==", localAddressStr, remoteAddressStr);
-				stderr.write(hexDump(inBuffer[0 .. received]));
+				stderr.write(hexDump(inBuffer.unsafeContents[0 .. received]));
 				stderr.flush();
 			}
 
@@ -904,13 +915,7 @@ protected:
 			}
 			else
 			{
-				// Currently, unlike the D1 version of this module,
-				// we will always reallocate read network data.
-				// This disfavours code which doesn't need to store
-				// read data after processing it, but otherwise
-				// makes things simpler and safer all around.
-
-				auto data = Data(inBuffer[0 .. received]);
+				auto data = inBuffer[0 .. received];
 				readDataHandler(data);
 			}
 		}
