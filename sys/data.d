@@ -56,20 +56,6 @@ else
 static if (useGC)
 	import core.memory : GC;
 
-// TODO:
-// - [X] review terminology
-// - [X] templatize (and forbid using types with pointers)
-// - [X] support const/immutable
-// - [X] support void
-// - [X] deprecate unsafe APIs
-// - [X] @safe compatibility
-// - [X] @nogc compatibility?
-// - [X] use heap (malloc/Windows heap API) for small objects
-// - [X]   remove UNMANAGED_THRESHOLD in ae.net.asockets
-// - [X] allow expanding over existing memory when we are the only reference
-// - [X] make ae.net.asockets only reallocate when needed
-// - [ ] make capacity work with GC spans
-
 /**
  * A reference to a reference-counted block of memory.
  * Represents a slice of data, which may be backed by managed memory,
