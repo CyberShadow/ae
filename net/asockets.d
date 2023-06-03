@@ -825,14 +825,6 @@ interface IConnection
 class Connection : GenericSocket, IConnection
 {
 private:
-	/// Blocks of data larger than this value are passed as unmanaged memory
-	/// (in Data objects). Blocks smaller than this value will be reallocated
-	/// on the managed heap. The disadvantage of placing large objects on the
-	/// managed heap is false pointers; the disadvantage of using Data for
-	/// small objects is wasted slack space due to the page size alignment
-	/// requirement.
-	enum UNMANAGED_THRESHOLD = 256;
-
 	ConnectionState _state;
 	final @property ConnectionState state(ConnectionState value) { return _state = value; }
 
@@ -917,17 +909,7 @@ protected:
 				// read data after processing it, but otherwise
 				// makes things simpler and safer all around.
 
-				Data data = {
-					version (ae_data_nogc) {} else
-						if (received < UNMANAGED_THRESHOLD)
-						{
-							// Copy to the managed heap
-							return Data.wrapGC(inBuffer[0 .. received].dup);
-						}
-
-					// Copy to unmanaged memory
-					return Data(inBuffer[0 .. received]);
-				}();
+				auto data = Data(inBuffer[0 .. received]);
 				readDataHandler(data);
 			}
 		}
