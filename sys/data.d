@@ -328,6 +328,12 @@ public:
 		assert(this.length == size);
 	}
 
+	/// Allow assigning null to clear.
+	void opAssign(typeof(null))
+	{
+		clear();
+	}
+
 	/// Create a new instance which slices some range of managed (GC-owned) memory.
 	/// Does not copy the data.
 	static if (useGC)
