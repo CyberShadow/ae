@@ -982,7 +982,7 @@ unittest
 }
 
 // pure/@safe/nothrow/@nogc compilation test
-/*pure*/ @safe nothrow /*@nogc*/ unittest
+pure @safe nothrow /*@nogc*/ unittest
 {
 	TData!ubyte d;
 	d.enter((scope contents) { ubyte[] _ = contents; });
@@ -1164,7 +1164,14 @@ final class OSMemory : Memory
 	static /*thread-local*/ size_t allocatedThreshold;
 
 	/// Create a new instance with given capacity.
-	this(size_t size, size_t capacity) /*pure*/ @trusted nothrow
+	this(size_t size, size_t capacity)
+	pure // In the same way that the D garbage collector is "pure", even though it has global state.
+	@trusted nothrow
+	{
+		(cast(void delegate(size_t size, size_t capacity) pure @trusted nothrow)&thisImpl)(size, capacity);
+	}
+
+	private final void thisImpl(size_t size, size_t capacity) @trusted nothrow
 	{
 		data = cast(ubyte*)malloc(/*ref*/ capacity);
 		if (data is null)
