@@ -918,17 +918,17 @@ protected:
 				// read data after processing it, but otherwise
 				// makes things simpler and safer all around.
 
-				Data data;
-				if (received < UNMANAGED_THRESHOLD)
-				{
-					// Copy to the managed heap
-					data = Data.wrapGC(inBuffer[0 .. received].dup);
-				}
-				else
-				{
+				Data data = {
+					version (ae_data_nogc) {} else
+						if (received < UNMANAGED_THRESHOLD)
+						{
+							// Copy to the managed heap
+							return Data.wrapGC(inBuffer[0 .. received].dup);
+						}
+
 					// Copy to unmanaged memory
-					data = Data(inBuffer[0 .. received]);
-				}
+					return Data(inBuffer[0 .. received]);
+				}();
 				readDataHandler(data);
 			}
 		}
