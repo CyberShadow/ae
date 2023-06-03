@@ -45,7 +45,7 @@ import core.exception : OutOfMemoryError, onOutOfMemoryError;
 import std.algorithm.mutation : move;
 import std.traits : hasIndirections, Unqual;
 
-import ae.utils.array : emptySlice;
+import ae.utils.array : emptySlice, sliceIndex;
 
 debug(DATA) import core.stdc.stdio;
 
@@ -87,7 +87,7 @@ private:
 
 	// --- Typed Memory construction helpers
 
-	static T[] allocateMemory(U)(out Memory memory, size_t initialSize, size_t capacity, scope void delegate(Unqual!U[] contents) fill)
+	static T[] allocateMemory(U)(out Memory memory, size_t initialSize, size_t capacity, scope void delegate(Unqual!U[] contents) pure @safe nothrow @nogc fill)
 	{
 		memory = unmanagedNew!OSMemory(initialSize * T.sizeof, capacity * T.sizeof);
 		fill(cast(Unqual!U[])memory.contents);
@@ -98,7 +98,8 @@ private:
 	{
 		assert(initialData.length * U.sizeof % T.sizeof == 0, "Unaligned allocation size");
 		auto initialSize = initialData.length * U.sizeof / T.sizeof;
-		return allocateMemory!U(memory, initialSize, initialSize, (contents) { contents[] = initialData[]; });
+		// @trusted to allow copying void[] to void[]
+		return allocateMemory!U(memory, initialSize, initialSize, (contents) @trusted { contents[] = initialData[]; });
 	}
 
 	static T[] allocateMemory(out Memory memory, size_t initialSize, size_t capacity)
@@ -111,10 +112,11 @@ private:
 
 	// --- Concatenation / appending helpers
 
-	void reallocate(size_t size, size_t capacity, scope void delegate(Unqual!T[] contents) fill)
+	void reallocate(size_t size, size_t capacity, scope void delegate(Unqual!T[] contents) pure @safe nothrow @nogc fill)
 	{
 		Memory newMemory;
-		auto newData = allocateMemory!T(newMemory, size, capacity, (contents) {
+		// @trusted to allow copying void[] to void[]
+		auto newData = allocateMemory!T(newMemory, size, capacity, (contents) @trusted {
 			contents[0 .. this.data.length] = this.data;
 			fill(contents[this.data.length .. $]);
 		});
@@ -125,7 +127,8 @@ private:
 		this.data = newData;
 	}
 
-	void expand(size_t newSize, size_t newCapacity, scope void delegate(Unqual!T[] contents) fill)
+	void expand(size_t newSize, size_t newCapacity, scope void delegate(Unqual!T[] contents) pure @safe nothrow @nogc fill)
+	@trusted // Allow slicing data.ptr
 	in
 	{
 		assert(length < newSize);
@@ -141,7 +144,7 @@ private:
 		{
 			import ae.utils.array : bytes;
 			auto dataBytes = this.data.bytes;
-			auto pos = dataBytes.ptr - memory.contents.ptr; // start position in memory data in bytes
+			auto pos = memory.contents.sliceIndex(dataBytes); // start position in memory data in bytes
 			memory.setSize(pos + newSize * T.sizeof);
 			auto oldSize = data.length;
 			data = data.ptr[0..newSize];
@@ -161,7 +164,8 @@ private:
 	{
 		auto newSize = left.length + right.length;
 		Memory newMemory;
-		allocateMemory!T(newMemory, newSize, newSize, (contents) {
+		// @trusted to allow copying void[] to void[]
+		allocateMemory!T(newMemory, newSize, newSize, (contents) @trusted {
 			contents[0 .. left.length] = left[];
 			contents[left.length .. $] = right[];
 		});
@@ -198,7 +202,8 @@ private:
 		if (right.length == 0)
 			return this;
 		size_t newLength = length + right.length;
-		expand(newLength, getPreallocSize(newLength), (contents) {
+		// @trusted to allow copying void[] to void[]
+		expand(newLength, getPreallocSize(newLength), (contents) @trusted {
 			contents[] = right[];
 		});
 		return this;
@@ -529,8 +534,8 @@ public:
 		// TODO: the above is only true if we are not the only reference; if we are, we can always expand.
 		import ae.utils.array : bytes;
 		auto dataBytes = this.data.bytes;
-		auto pos = dataBytes.ptr - memory.contents.ptr; // start position in memory data in bytes
-		auto end = pos + dataBytes.length;              // end   position in memory data in bytes
+		auto pos = memory.contents.sliceIndex(dataBytes); // start position in memory data in bytes
+		auto end = pos + dataBytes.length;                // end   position in memory data in bytes
 		assert(end <= memory.size);
 		if (end == memory.size && end < memory.capacity)
 			return (memory.capacity - pos) / T.sizeof; // integer division truncating towards zero
@@ -769,7 +774,7 @@ unittest
 
 			// Try a bunch of operations with different kinds of instances
 			static T[5] arr = void;
-			auto generators = [
+			TData!T delegate()[] generators = [
 				delegate () => TData!T(),
 				delegate () => TData!T(null),
 				delegate () => TData!T(T[].init),
@@ -976,6 +981,40 @@ unittest
 	}
 }
 
+// pure/@safe/nothrow/@nogc compilation test
+/*pure*/ @safe nothrow /*@nogc*/ unittest
+{
+	TData!ubyte d;
+	d.enter((scope contents) { ubyte[] _ = contents; });
+	d = TData!ubyte(null);
+	assert(d.length == 0);
+
+	ubyte[] arr1 = null;
+	d = TData!ubyte(arr1);
+
+	ubyte[0] arr2;
+	d = TData!ubyte(arr2[]);
+
+	ubyte[5] arr3 = void;
+	d = TData!ubyte(arr3[]);
+
+	d.enter((contents) {
+		d = typeof(d)(null);
+		(cast(ubyte[])contents)[] = 42;
+	});
+
+	d.length = d.length + 1;
+	d.length = d.capacity;
+
+	d = d ~ d;
+	d ~= d;
+	d.enter((contents) {
+		d = d ~ contents;
+		d = contents ~ d;
+		d ~= contents;
+	});
+}
+
 // /// The most common use case of manipulating unmanaged memory is
 // /// working with raw bytes, whether they're received from the network,
 // /// read from a file, or elsewhere.
@@ -1012,10 +1051,10 @@ package:
 abstract class Memory
 {
 	sizediff_t referenceCount = 0; /// Reference count.
-	abstract @property inout(ubyte)[] contents() inout; /// The owned memory
-	abstract @property size_t size() const;  /// Length of `contents`.
-	abstract void setSize(size_t newSize); /// Resize `contents` up to `capacity`.
-	abstract @property size_t capacity() const; /// Maximum possible size.
+	abstract @property inout(ubyte)[] contents() inout pure @safe nothrow @nogc; /// The owned memory
+	abstract @property size_t size() const pure @safe nothrow @nogc;  /// Length of `contents`.
+	abstract void setSize(size_t newSize) pure @safe nothrow @nogc; /// Resize `contents` up to `capacity`.
+	abstract @property size_t capacity() const pure @safe nothrow @nogc; /// Maximum possible size.
 
 	debug ~this() nothrow @nogc
 	{
@@ -1037,7 +1076,7 @@ static /*thread-local*/ uint   allocCount;
 void setGCThreshold(size_t value) { OSMemory.collectThreshold = value; }
 
 /// Allocate and construct a new class in `malloc`'d memory.
-C unmanagedNew(C, Args...)(auto ref Args args)
+C unmanagedNew(C, Args...)(auto ref Args args) @trusted
 if (is(C == class))
 {
 	import std.conv : emplace;
@@ -1051,31 +1090,40 @@ if (is(C == class))
 void unmanagedDelete(C)(C c) nothrow @nogc
 if (is(C == class))
 {
-	// Add @nogc to object.destroy by cast.
-	// Object.~this is not @nogc, but allocating in a destructor crashes the GC anyway,
-	// so all class destructors are already effectively @nogc.
-	void callDestroy(C c) nothrow { c.destroy(); }
-	(cast(void delegate(C) nothrow @nogc) &callDestroy)(c);
+	// Add attributes to object.destroy by cast:
+	// - Add @nogc.
+	//   Object.~this is not @nogc, but allocating in a destructor crashes the GC anyway,
+	//   so all class destructors are already effectively @nogc.
+	// - Add pure as well.
+	//   Memory implementations may have impure destructors,
+	//   such as closing file descriptors for memory-mapped files.
+	//   However, implementations SHOULD be pure as far as the program's state is concerned.
+	static void callDestroy(C c) nothrow { c.destroy(); }
+	(cast(void function(C) pure nothrow @nogc) &callDestroy)(c);
 
 	unmanagedFree(cast(void*)c);
 }
 
-void* unmanagedAlloc(size_t sz)
+void* unmanagedAlloc(size_t sz) pure nothrow @nogc
 {
 	import core.stdc.stdlib : malloc;
 
-	auto p = malloc(sz);
+	// Cast to add `pure` to malloc.
+	// Allocating with `new` is pure, and so should be malloc.
+	alias PureMalloc = extern (C) void* function(size_t) pure nothrow @nogc @system;
+	auto p = (cast(PureMalloc) &malloc)(sz);
 
 	debug(DATA_REFCOUNT) debugLog("? -> %p: Allocating via malloc (%d bytes)", p, cast(uint)sz);
 
 	if (!p)
-		throw new OutOfMemoryError();
+		//throw new OutOfMemoryError();
+		onOutOfMemoryError(); // @nogc
 
 	//GC.addRange(p, sz);
 	return p;
 }
 
-void unmanagedFree(void* p) @nogc nothrow
+void unmanagedFree(void* p) pure nothrow @nogc
 {
 	import core.stdc.stdlib : free;
 
@@ -1084,7 +1132,11 @@ void unmanagedFree(void* p) @nogc nothrow
 		debug(DATA_REFCOUNT) debugLog("? -> %p: Deleting via free", p);
 
 		//GC.removeRange(p);
-		free(p);
+
+		// Cast to add `pure` to free.
+		// Same rationale as for malloc.
+		alias PureFree = extern (C) void function(void* ptr) pure nothrow @nogc @system;
+		(cast(PureFree) &free)(p);
 	}
 }
 
@@ -1112,7 +1164,7 @@ final class OSMemory : Memory
 	static /*thread-local*/ size_t allocatedThreshold;
 
 	/// Create a new instance with given capacity.
-	this(size_t size, size_t capacity)
+	this(size_t size, size_t capacity) /*pure*/ @trusted nothrow
 	{
 		data = cast(ubyte*)malloc(/*ref*/ capacity);
 		if (data is null)
@@ -1162,21 +1214,21 @@ final class OSMemory : Memory
 	}
 
 	@property override
-	size_t size() const { return _size; }
+	size_t size() const pure @safe nothrow @nogc { return _size; }
 
 	@property override
-	size_t capacity() const @nogc { return _capacity; }
+	size_t capacity() const pure @safe nothrow @nogc { return _capacity; }
 
-	override void setSize(size_t newSize)
+	override void setSize(size_t newSize) pure @safe nothrow @nogc
 	{
 		assert(newSize <= capacity);
 		_size = newSize;
 	}
 
 	@property override
-	inout(ubyte)[] contents() inout
+	inout(ubyte)[] contents() inout pure @trusted nothrow @nogc
 	{
-		return data[0..size];
+		return data[0 .. _size];
 	}
 
 	static immutable size_t pageSize;
@@ -1197,7 +1249,7 @@ final class OSMemory : Memory
 		}
 	}
 
-	static void* malloc(ref size_t size)
+	static void* malloc(ref size_t size) /*pure*/ nothrow
 	{
 		if (is(typeof(pageSize)))
 			size = ((size-1) | (pageSize-1))+1;
