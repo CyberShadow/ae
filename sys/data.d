@@ -621,6 +621,7 @@ public:
 
 	/// Range primitive.
 	@property bool empty() const { return length == 0; }
+	static if (!is(Unqual!T == void))
 	T front() { return data[0]; } ///
 	void popFront() { data = data[1 .. $]; } ///
 
