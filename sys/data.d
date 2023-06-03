@@ -1364,6 +1364,25 @@ private struct OSAllocator
 /// Wrapper for data in RAM, allocated from the OS.
 alias OSMemory = DynamicMemory!OSAllocator;
 
+private struct CAllocator
+{
+	static void* allocate(ref size_t size) /*pure*/ nothrow @nogc
+	{
+		import core.stdc.stdlib : malloc;
+		return malloc(size);
+	}
+
+	static void deallocate(void* p, size_t size) @nogc
+	{
+		import core.stdc.stdlib : free;
+		free(p);
+	}
+}
+
+/// Wrapper for data in RAM, allocated from the C standard library.
+/// Used for small objects.
+alias CMemory = DynamicMemory!CAllocator;
+
 // ************************************************************************
 
 debug(DATA_REFCOUNT) import ae.utils.exception, ae.sys.memory, core.stdc.stdio;
