@@ -64,7 +64,7 @@ static if (useGC)
 // - [X] deprecate unsafe APIs
 // - [X] @safe compatibility
 // - [X] @nogc compatibility?
-// - [ ] use heap (malloc/Windows heap API) for small objects
+// - [X] use heap (malloc/Windows heap API) for small objects
 // - [ ]   remove UNMANAGED_THRESHOLD in ae.net.asockets
 // - [ ] allow expanding over existing memory when we are the only reference
 // - [ ] make ae.net.asockets only reallocate when needed
@@ -96,7 +96,10 @@ private:
 
 	static T[] allocateMemory(U)(out Memory memory, size_t initialSize, size_t capacity, scope void delegate(Unqual!U[] contents) pure @safe nothrow @nogc fill)
 	{
-		memory = unmanagedNew!OSMemory(initialSize * T.sizeof, capacity * T.sizeof);
+		if (capacity * T.sizeof < OSAllocator.pageSize)
+			memory = unmanagedNew!CMemory(initialSize * T.sizeof, capacity * T.sizeof);
+		else
+			memory = unmanagedNew!OSMemory(initialSize * T.sizeof, capacity * T.sizeof);
 		fill(cast(Unqual!U[])memory.contents);
 		return cast(T[])memory.contents;
 	}
