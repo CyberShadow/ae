@@ -39,7 +39,6 @@
 
 module ae.sys.data;
 
-import core.memory : GC;
 import core.exception : OutOfMemoryError, onOutOfMemoryError;
 
 import std.algorithm.mutation : move;
@@ -49,14 +48,22 @@ import ae.utils.array : emptySlice, sliceIndex;
 
 debug(DATA) import core.stdc.stdio;
 
+version (ae_data_nogc)
+	private enum useGC = false;
+else
+	private enum useGC = true;
+
+static if (useGC)
+	import core.memory : GC;
+
 // TODO:
 // - [X] review terminology
 // - [X] templatize (and forbid using types with pointers)
 // - [X] support const/immutable
 // - [X] support void
 // - [X] deprecate unsafe APIs
-// - [ ] @safe compatibility
-// - [ ] @nogc compatibility?
+// - [X] @safe compatibility
+// - [X] @nogc compatibility?
 // - [ ] use heap (malloc/Windows heap API) for small objects
 // - [ ]   remove UNMANAGED_THRESHOLD in ae.net.asockets
 // - [ ] allow expanding over existing memory when we are the only reference
@@ -228,11 +235,18 @@ private:
 	do
 	{
 		if (!length)
+		{
 			this = TData(data);
-		else
-		if (!memory)
-			this = TData.wrapGC(data);
-		else
+			return;
+		}
+
+		static if (useGC)
+			if (!memory)
+			{
+				this = TData.wrapGC(data);
+				return;
+			}
+
 		if (memory.referenceCount > 1)
 			this = TData(data);
 	}
@@ -313,6 +327,7 @@ public:
 
 	/// Create a new instance which slices some range of managed (GC-owned) memory.
 	/// Does not copy the data.
+	static if (useGC)
 	static TData wrapGC(T[] data)
 	{
 		assert(data.length == 0 || GC.addrOf(data.ptr) !is null, "wrapGC data must be GC-owned");
@@ -690,6 +705,7 @@ public:
 unittest
 {
 	import core.exception : AssertError;
+	import core.memory : GC;
 	import std.exception : assertThrown;
 
 	alias AliasSeq(TList...) = TList;
@@ -760,17 +776,19 @@ unittest
 				assert(GC.addrOf(d.unsafeContents.ptr) is null);
 			}
 			// wrapGC from GC slice
-			{
+			static if (useGC)
+			{{
 				T[] arr = new T[5];
 				auto d = TData!T.wrapGC(arr);
 				assert(d.length == 5);
 				assert(d.unsafeContents.ptr is arr.ptr);
-			}
+			}}
 			// wrapGC from non-GC slice
-			{
+			static if (useGC)
+			{{
 				static T[5] arr = void;
 				assertThrown!AssertError(TData!T.wrapGC(arr[]));
-			}
+			}}
 
 			// Try a bunch of operations with different kinds of instances
 			static T[5] arr = void;
@@ -782,9 +800,12 @@ unittest
 				delegate () => TData!T(arr[0 .. 0]),
 				delegate () => TData!T(arr[].dup),
 				delegate () => TData!T(arr[].dup[0 .. 0]),
-				delegate () => TData!T.wrapGC(arr[].dup),
-				delegate () => TData!T.wrapGC(arr[].dup[0 .. 0]),
 			];
+			static if (useGC)
+				generators ~= [
+					delegate () => TData!T.wrapGC(arr[].dup),
+					delegate () => TData!T.wrapGC(arr[].dup[0 .. 0]),
+				];
 			static if (is(B == void))
 				foreach (B2; AliasSeq!(ubyte, uint, char, void))
 					foreach (T2; AliasSeq!(B2, const(B2), immutable(B2)))
@@ -797,9 +818,12 @@ unittest
 								delegate () => TData!T(arr2[0 .. 0]),
 								delegate () => TData!T(arr2[].dup),
 								delegate () => TData!T(arr2[].dup[0 .. 0]),
-								delegate () => TData!T.wrapGC(arr2[].dup),
-							//	delegate () => TData!T.wrapGC(arr2[].dup[0 .. 0]), // TODO: why not?
 							];
+							static if (useGC)
+								generators ~= [
+									delegate () => TData!T.wrapGC(arr2[].dup),
+								//	delegate () => TData!T.wrapGC(arr2[].dup[0 .. 0]), // TODO: why not?
+								];
 						}
 			foreach (generator; generators)
 			{
@@ -936,9 +960,10 @@ unittest
 					// Construction
 					testData(TData!T(s));
 					// wrapGC
-					static if (is(typeof(*s.ptr) == T))
-						if (GC.addrOf(s.ptr))
-							testData(TData!T.wrapGC(s));
+					static if (useGC)
+						static if (is(typeof(*s.ptr) == T))
+							if (GC.addrOf(s.ptr))
+								testData(TData!T.wrapGC(s));
 					// Appending
 					{
 						TData!T d;
@@ -973,8 +998,9 @@ unittest
 				{
 					U[] u;
 					TData!T(u);
-					static if (is(typeof({ T[] t = u; })))
-						cast(void) TData!T.wrapGC(u);
+					static if (useGC)
+						static if (is(typeof({ T[] t = u; })))
+							cast(void) TData!T.wrapGC(u);
 				}
 			}
 		}
@@ -982,7 +1008,7 @@ unittest
 }
 
 // pure/@safe/nothrow/@nogc compilation test
-pure @safe nothrow /*@nogc*/ unittest
+pure @safe nothrow @nogc unittest
 {
 	TData!ubyte d;
 	d.enter((scope contents) { ubyte[] _ = contents; });
@@ -1164,24 +1190,43 @@ final class OSMemory : Memory
 	static /*thread-local*/ size_t allocatedThreshold;
 
 	/// Create a new instance with given capacity.
-	this(size_t size, size_t capacity)
-	pure // In the same way that the D garbage collector is "pure", even though it has global state.
-	@trusted nothrow
+	this(size_t size, size_t capacity) pure @trusted nothrow @nogc
 	{
-		(cast(void delegate(size_t size, size_t capacity) pure @trusted nothrow)&thisImpl)(size, capacity);
+		// Add attributes to the implementation by cast:
+		// - Add pure.
+		//   - The implementation is "pure" in the same way that the D
+		//     garbage collector is "pure", even though it has global state.
+		// - Add @nogc.
+		//   - There are a few common use cases for the @nogc attribute:
+		//     1. The entire program does not use the GC (and probably does not even link to one).
+		//     2. The program does use the GC, but some sections should not
+		//        (e.g. they perform only performance-sensitive computations
+		//        and accidental GC allocations should be caught and avoided).
+		//     3. The code is a library which wants to be usable by either GC or @nogc programs.
+		//   - The second case is the most common in my personal experience,
+		//     so by default we assume that a GC is present but still offer a @nogc interface.
+		//   - We do this to offer better memory usage and reclaim memory faster
+		//     when Data instances are on the D GC heap, but are unreferenced.
+		//   - To actually use this module without the D GC, compile with -version=ae_data_nogc.
+		//   - (Ideally, we would offer both a @nogc and non-@nogc interface,
+		//     and let the caller's @nogc-ness select which one is used,
+		//     in the same way that the compiler can choose between a @nogc and non-@nogc overload,
+		//     however this is not currently feasible to implement.)
+		(cast(void delegate(size_t size, size_t capacity) pure @trusted nothrow @nogc)&thisImpl)(size, capacity);
 	}
 
 	private final void thisImpl(size_t size, size_t capacity) @trusted nothrow
 	{
 		data = cast(ubyte*)malloc(/*ref*/ capacity);
-		if (data is null)
-		{
-			debug(DATA) fprintf(stderr, "Garbage collect triggered by failed Data allocation of %llu bytes... ", cast(ulong)capacity);
-			GC.collect();
-			debug(DATA) fprintf(stderr, "Done\n");
-			data = cast(ubyte*)malloc(/*ref*/ capacity);
-			allocatedThreshold = 0;
-		}
+		static if (useGC)
+			if (data is null)
+			{
+				debug(DATA) fprintf(stderr, "Garbage collect triggered by failed Data allocation of %llu bytes... ", cast(ulong)capacity);
+				GC.collect();
+				debug(DATA) fprintf(stderr, "Done\n");
+				data = cast(ubyte*)malloc(/*ref*/ capacity);
+				allocatedThreshold = 0;
+			}
 		if (data is null)
 			onOutOfMemoryError();
 
@@ -1196,13 +1241,14 @@ final class OSMemory : Memory
 
 		// also collect
 		allocatedThreshold += capacity;
-		if (allocatedThreshold > collectThreshold)
-		{
-			debug(DATA) fprintf(stderr, "Garbage collect triggered by total allocated Data exceeding threshold... ");
-			GC.collect();
-			debug(DATA) fprintf(stderr, "Done\n");
-			allocatedThreshold = 0;
-		}
+		static if (useGC)
+			if (allocatedThreshold > collectThreshold)
+			{
+				debug(DATA) fprintf(stderr, "Garbage collect triggered by total allocated Data exceeding threshold... ");
+				GC.collect();
+				debug(DATA) fprintf(stderr, "Done\n");
+				allocatedThreshold = 0;
+			}
 	}
 
 	/// Destructor - destroys the wrapped data.
@@ -1256,7 +1302,7 @@ final class OSMemory : Memory
 		}
 	}
 
-	static void* malloc(ref size_t size) /*pure*/ nothrow
+	static void* malloc(ref size_t size) /*pure*/ nothrow @nogc
 	{
 		if (is(typeof(pageSize)))
 			size = ((size-1) | (pageSize-1))+1;
