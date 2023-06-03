@@ -337,15 +337,15 @@ public:
 
 	// --- Lifetime - destruction
 
-	~this() pure
+	~this() pure @trusted nothrow @nogc
 	{
 		//clear();
 		// https://issues.dlang.org/show_bug.cgi?id=13809
-		(cast(void delegate() pure)&clear)();
+		(cast(void delegate() pure nothrow @nogc)&clear)();
 	}
 
 	/// Unreference contents, freeing it if this was the last reference.
-	void clear()
+	void clear() nothrow @nogc
 	{
 		if (memory)
 		{
@@ -409,15 +409,57 @@ public:
 
 	// --- Contents access
 
-	/// Get temporary access to the data referenced by this Data instance.
-	void enter(scope void delegate(scope T[]) fn)
-	{
+	private enum enterImpl = q{
 		// We must make a copy of ourselves to ensure that, should
 		// `fn` overwrite the `this` instance, the passed contents
 		// slice remains valid.
 		auto self = this;
-		fn(self.data);
-	}
+		scope data = self.data; // Add `scope` attribute
+		return fn(data);
+	};
+
+	/// Get temporary access to the data referenced by this Data instance.
+	// This non-templated overload set exists to allow
+	// lambda functions (anonymous function templates).
+	void enter(scope void delegate(scope T[])                          fn)                          { mixin(enterImpl); }
+	void enter(scope void delegate(scope T[]) @safe                    fn) @safe                    { mixin(enterImpl); } /// ditto
+	void enter(scope void delegate(scope T[])       pure               fn)       pure               { mixin(enterImpl); } /// ditto
+	void enter(scope void delegate(scope T[]) @safe pure               fn) @safe pure               { mixin(enterImpl); } /// ditto
+	void enter(scope void delegate(scope T[])            nothrow       fn)            nothrow       { mixin(enterImpl); } /// ditto
+	void enter(scope void delegate(scope T[]) @safe      nothrow       fn) @safe      nothrow       { mixin(enterImpl); } /// ditto
+	void enter(scope void delegate(scope T[])       pure nothrow       fn)       pure nothrow       { mixin(enterImpl); } /// ditto
+	void enter(scope void delegate(scope T[]) @safe pure nothrow       fn) @safe pure nothrow       { mixin(enterImpl); } /// ditto
+	void enter(scope void delegate(scope T[])                    @nogc fn)                    @nogc { mixin(enterImpl); } /// ditto
+	void enter(scope void delegate(scope T[]) @safe              @nogc fn) @safe              @nogc { mixin(enterImpl); } /// ditto
+	void enter(scope void delegate(scope T[])       pure         @nogc fn)       pure         @nogc { mixin(enterImpl); } /// ditto
+	void enter(scope void delegate(scope T[]) @safe pure         @nogc fn) @safe pure         @nogc { mixin(enterImpl); } /// ditto
+	void enter(scope void delegate(scope T[])            nothrow @nogc fn)            nothrow @nogc { mixin(enterImpl); } /// ditto
+	void enter(scope void delegate(scope T[]) @safe      nothrow @nogc fn) @safe      nothrow @nogc { mixin(enterImpl); } /// ditto
+	void enter(scope void delegate(scope T[])       pure nothrow @nogc fn)       pure nothrow @nogc { mixin(enterImpl); } /// ditto
+	void enter(scope void delegate(scope T[]) @safe pure nothrow @nogc fn) @safe pure nothrow @nogc { mixin(enterImpl); } /// ditto
+
+	// https://issues.dlang.org/show_bug.cgi?id=23956
+	// void enter(scope void delegate(scope const(T)[])                          fn) const                          { mixin(enterImpl); }
+	// void enter(scope void delegate(scope const(T)[]) @safe                    fn) const @safe                    { mixin(enterImpl); }
+	// void enter(scope void delegate(scope const(T)[])       pure               fn) const       pure               { mixin(enterImpl); }
+	// void enter(scope void delegate(scope const(T)[]) @safe pure               fn) const @safe pure               { mixin(enterImpl); }
+	// void enter(scope void delegate(scope const(T)[])            nothrow       fn) const            nothrow       { mixin(enterImpl); }
+	// void enter(scope void delegate(scope const(T)[]) @safe      nothrow       fn) const @safe      nothrow       { mixin(enterImpl); }
+	// void enter(scope void delegate(scope const(T)[])       pure nothrow       fn) const       pure nothrow       { mixin(enterImpl); }
+	// void enter(scope void delegate(scope const(T)[]) @safe pure nothrow       fn) const @safe pure nothrow       { mixin(enterImpl); }
+	// void enter(scope void delegate(scope const(T)[])                    @nogc fn) const                    @nogc { mixin(enterImpl); }
+	// void enter(scope void delegate(scope const(T)[]) @safe              @nogc fn) const @safe              @nogc { mixin(enterImpl); }
+	// void enter(scope void delegate(scope const(T)[])       pure         @nogc fn) const       pure         @nogc { mixin(enterImpl); }
+	// void enter(scope void delegate(scope const(T)[]) @safe pure         @nogc fn) const @safe pure         @nogc { mixin(enterImpl); }
+	// void enter(scope void delegate(scope const(T)[])            nothrow @nogc fn) const            nothrow @nogc { mixin(enterImpl); }
+	// void enter(scope void delegate(scope const(T)[]) @safe      nothrow @nogc fn) const @safe      nothrow @nogc { mixin(enterImpl); }
+	// void enter(scope void delegate(scope const(T)[])       pure nothrow @nogc fn) const       pure nothrow @nogc { mixin(enterImpl); }
+	// void enter(scope void delegate(scope const(T)[]) @safe pure nothrow @nogc fn) const @safe pure nothrow @nogc { mixin(enterImpl); }
+
+	// For everything else, there is a template overload.
+	// Note: Dg is a IFTI-inferred parameter due to
+	// https://issues.dlang.org/show_bug.cgi?id=23955
+	auto enter(this This, Dg)(scope Dg fn) { mixin(enterImpl); }
 
 	/// Put a copy of the data on D's managed heap, and return it.
 	T[] toGC() const
@@ -656,11 +698,24 @@ unittest
 				TData!T d;
 				cast(void) d;
 			}
-			// enter type
+			// .enter type
 			{
 				TData!T d;
 				d.enter((scope contents) { T[] _ = contents; });
 			}
+			// .enter with functors
+			{
+				import ae.utils.functor.primitives : functor;
+				TData!T d;
+				d.enter(functor!((contents) {
+					assert(contents == d.unsafeContents);
+				}));
+			}
+			// // .enter with const
+			// {
+			// 	const TData!T d;
+			// 	d.enter((scope contents) { const T[] _ = contents; });
+			// }
 			// Construction from typeof(null)
 			{
 				auto d = TData!T(null);
@@ -756,10 +811,10 @@ unittest
 					});
 					assert(entered == 1);
 				}
-				// Lifetime with enter
+				// Lifetime with .enter
 				{
 					auto d = generator();
-					d.enter((scope contents) {
+					d.enter((contents) {
 						d = typeof(d)(null);
 						(cast(ubyte[])contents)[] = 42;
 					});
@@ -962,7 +1017,7 @@ abstract class Memory
 	abstract void setSize(size_t newSize); /// Resize `contents` up to `capacity`.
 	abstract @property size_t capacity() const; /// Maximum possible size.
 
-	debug ~this() @nogc
+	debug ~this() nothrow @nogc
 	{
 		debug(DATA_REFCOUNT) debugLog("%.*s.~this, referenceCount==%d", this.classinfo.name.length, this.classinfo.name.ptr, referenceCount);
 		assert(referenceCount == 0, "Deleting Memory with non-zero reference count");
@@ -993,10 +1048,15 @@ if (is(C == class))
 }
 
 /// Delete a class instance created with `unmanagedNew`.
-void unmanagedDelete(C)(C c)
+void unmanagedDelete(C)(C c) nothrow @nogc
 if (is(C == class))
 {
-	c.destroy();
+	// Add @nogc to object.destroy by cast.
+	// Object.~this is not @nogc, but allocating in a destructor crashes the GC anyway,
+	// so all class destructors are already effectively @nogc.
+	void callDestroy(C c) nothrow { c.destroy(); }
+	(cast(void delegate(C) nothrow @nogc) &callDestroy)(c);
+
 	unmanagedFree(cast(void*)c);
 }
 
@@ -1015,7 +1075,7 @@ void* unmanagedAlloc(size_t sz)
 	return p;
 }
 
-void unmanagedFree(void* p) @nogc
+void unmanagedFree(void* p) @nogc nothrow
 {
 	import core.stdc.stdlib : free;
 
