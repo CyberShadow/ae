@@ -1099,7 +1099,8 @@ static /*thread-local*/ uint   dataCount;
 static /*thread-local*/ uint   allocCount;
 
 /// Set threshold of allocated memory to trigger a garbage collection.
-void setGCThreshold(size_t value) { OSMemory.collectThreshold = value; }
+static if (useGC)
+void setGCThreshold(size_t value) { collectThreshold = value; }
 
 /// Allocate and construct a new class in `malloc`'d memory.
 C unmanagedNew(C, Args...)(auto ref Args args) @trusted
@@ -1174,8 +1175,17 @@ else
 	import core.sys.posix.sys.mman;
 }
 
-/// Wrapper for data in RAM, allocated from the OS.
-final class OSMemory : Memory
+static if (useGC)
+{
+	/// Threshold of allocated memory to trigger a collect.
+	__gshared size_t collectThreshold = 8*1024*1024; // 8MB
+	/// Counter towards the threshold.
+	/*thread-local*/ size_t allocatedThreshold;
+}
+
+/// Some form of dynamically-allocated memory.
+/// Implementation is provided by the Allocator parameter.
+/*private*/ class DynamicMemory(Allocator) : Memory
 {
 	/// Pointer to actual data.
 	ubyte* data;
@@ -1184,10 +1194,11 @@ final class OSMemory : Memory
 	/// Allocated capacity.
 	size_t _capacity;
 
-	/// Threshold of allocated memory to trigger a collect.
-	__gshared size_t collectThreshold = 8*1024*1024; // 8MB
-	/// Counter towards the threshold.
-	static /*thread-local*/ size_t allocatedThreshold;
+	static if (useGC)
+	{
+		deprecated alias collectThreshold = .collectThreshold;
+		deprecated alias allocatedThreshold = .allocatedThreshold;
+	}
 
 	/// Create a new instance with given capacity.
 	this(size_t size, size_t capacity) pure @trusted nothrow @nogc
@@ -1217,15 +1228,15 @@ final class OSMemory : Memory
 
 	private final void thisImpl(size_t size, size_t capacity) @trusted nothrow
 	{
-		data = cast(ubyte*)malloc(/*ref*/ capacity);
+		data = cast(ubyte*)Allocator.allocate(/*ref*/ capacity);
 		static if (useGC)
 			if (data is null)
 			{
 				debug(DATA) fprintf(stderr, "Garbage collect triggered by failed Data allocation of %llu bytes... ", cast(ulong)capacity);
 				GC.collect();
 				debug(DATA) fprintf(stderr, "Done\n");
-				data = cast(ubyte*)malloc(/*ref*/ capacity);
-				allocatedThreshold = 0;
+				data = cast(ubyte*)Allocator.allocate(/*ref*/ capacity);
+				.allocatedThreshold = 0;
 			}
 		if (data is null)
 			onOutOfMemoryError();
@@ -1239,28 +1250,33 @@ final class OSMemory : Memory
 		this._size = size;
 		this._capacity = capacity;
 
-		// also collect
-		allocatedThreshold += capacity;
 		static if (useGC)
-			if (allocatedThreshold > collectThreshold)
+		{
+			// also collect
+			.allocatedThreshold += capacity;
+			if (.allocatedThreshold > .collectThreshold)
 			{
 				debug(DATA) fprintf(stderr, "Garbage collect triggered by total allocated Data exceeding threshold... ");
 				GC.collect();
 				debug(DATA) fprintf(stderr, "Done\n");
-				allocatedThreshold = 0;
+				.allocatedThreshold = 0;
 			}
+		}
 	}
 
 	/// Destructor - destroys the wrapped data.
 	~this() @nogc
 	{
-		free(data, capacity);
+		Allocator.deallocate(data, capacity);
 		data = null;
 		// If Memory is created and manually deleted, there is no need to cause frequent collections
-		if (allocatedThreshold > capacity)
-			allocatedThreshold -= capacity;
-		else
-			allocatedThreshold = 0;
+		static if (useGC)
+		{
+			if (.allocatedThreshold > capacity)
+				.allocatedThreshold -= capacity;
+			else
+				.allocatedThreshold = 0;
+		}
 
 		dataMemory -= capacity;
 		dataCount --;
@@ -1283,7 +1299,13 @@ final class OSMemory : Memory
 	{
 		return data[0 .. _size];
 	}
+}
 
+// TODO: Maybe use std.experimental.allocator, one day.
+// One blocker is that it needs to stop pretending the page size is 4096 everywhere.
+
+private struct OSAllocator
+{
 	static immutable size_t pageSize;
 
 	shared static this()
@@ -1302,7 +1324,7 @@ final class OSMemory : Memory
 		}
 	}
 
-	static void* malloc(ref size_t size) /*pure*/ nothrow @nogc
+	static void* allocate(ref size_t size) /*pure*/ nothrow @nogc
 	{
 		if (is(typeof(pageSize)))
 			size = ((size-1) | (pageSize-1))+1;
@@ -1323,7 +1345,7 @@ final class OSMemory : Memory
 			return core.stdc.malloc(size);
 	}
 
-	static void free(void* p, size_t size) @nogc
+	static void deallocate(void* p, size_t size) @nogc
 	{
 		debug
 		{
@@ -1338,6 +1360,9 @@ final class OSMemory : Memory
 			core.stdc.free(size);
 	}
 }
+
+/// Wrapper for data in RAM, allocated from the OS.
+alias OSMemory = DynamicMemory!OSAllocator;
 
 // ************************************************************************
 
