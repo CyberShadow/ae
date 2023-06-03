@@ -65,7 +65,7 @@ static if (useGC)
 // - [X] @safe compatibility
 // - [X] @nogc compatibility?
 // - [X] use heap (malloc/Windows heap API) for small objects
-// - [ ]   remove UNMANAGED_THRESHOLD in ae.net.asockets
+// - [X]   remove UNMANAGED_THRESHOLD in ae.net.asockets
 // - [ ] allow expanding over existing memory when we are the only reference
 // - [ ] make ae.net.asockets only reallocate when needed
 // - [ ] make capacity work with GC spans
