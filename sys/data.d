@@ -66,7 +66,7 @@ static if (useGC)
 // - [X] @nogc compatibility?
 // - [X] use heap (malloc/Windows heap API) for small objects
 // - [X]   remove UNMANAGED_THRESHOLD in ae.net.asockets
-// - [ ] allow expanding over existing memory when we are the only reference
+// - [X] allow expanding over existing memory when we are the only reference
 // - [ ] make ae.net.asockets only reallocate when needed
 // - [ ] make capacity work with GC spans
 
@@ -554,14 +554,14 @@ public:
 	{
 		if (memory is null)
 			return length;
-		// We can only safely expand if the memory slice is at the end of the used unmanaged memory block.
-		// TODO: the above is only true if we are not the only reference; if we are, we can always expand.
+		// We can only safely expand if the memory slice is at the end of the used unmanaged memory block,
+		// or, if we are the only reference.
 		import ae.utils.array : bytes;
 		auto dataBytes = this.data.bytes;
 		auto pos = memory.contents.sliceIndex(dataBytes); // start position in memory data in bytes
 		auto end = pos + dataBytes.length;                // end   position in memory data in bytes
 		assert(end <= memory.size);
-		if (end == memory.size && end < memory.capacity)
+		if ((end == memory.size || memory.referenceCount == 1) && end < memory.capacity)
 			return (memory.capacity - pos) / T.sizeof; // integer division truncating towards zero
 		else
 			return length;
@@ -798,6 +798,16 @@ unittest
 				static T[5] arr = void;
 				assertThrown!AssertError(TData!T.wrapGC(arr[]));
 			}}
+			// .capacity
+			{
+				T[] arr = new T[5];
+				auto d = TData!T(arr);
+				assert(d.capacity >= 5);
+				auto d2 = d[0 .. 3];
+				assert(d2.capacity == 3);
+				d = null;
+				assert(d2.capacity >= 5); // Sole reference; safe to expand over old data
+			}
 
 			// Try a bunch of operations with different kinds of instances
 			static T[5] arr = void;
