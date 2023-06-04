@@ -26,7 +26,7 @@ import ae.utils.text : ascii;
 ///   data  = text to convert
 ///   cp    = the name of the source character encoding
 ///   force = do not throw on errors; instead, do a best-effort translation
-string toUtf8(in ascii data, string cp, bool force = false)
+string toUtf8(in return ascii data, string cp, bool force = false)
 {
 	cp = toLower(cp).replace("-", "");
 
@@ -136,5 +136,5 @@ unittest
 		assert(chars.length == 128);
 }
 
-deprecated string toUtf8(in ubyte[] data, string cp, bool force) { return toUtf8(cast(ascii)data, cp, force); }
+deprecated string toUtf8(in return ubyte[] data, string cp, bool force) { return toUtf8(cast(ascii)data, cp, force); }
 deprecated bool hasHighAsciiChars(in ubyte[] data) { return hasHighAsciiChars(cast(ascii)data); }
