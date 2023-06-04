@@ -19,14 +19,17 @@ import core.thread;
 import std.array;
 import std.conv;
 import std.file;
+import std.meta : allSatisfy;
 import std.path;
 import std.range.primitives;
 import std.stdio : File;
 import std.string;
+import std.traits : Unqual;
 import std.typecons;
 import std.utf;
 
 import ae.sys.cmd : getCurrentThreadID;
+import ae.utils.math : TypeForBits, bitsFor;
 import ae.utils.path;
 
 public import std.typecons : No, Yes;
@@ -194,13 +197,17 @@ version (Windows) static import ae.sys.windows.misc;
 template listDir(alias handler, Flag!q{includeRoot} includeRoot = No.includeRoot)
 {
 private: // (This is an eponymous template, so this is to aid documentation generators.)
+
+	// Data shared for the entire iteration (all Entry instances).
 	/*non-static*/ struct Context
 	{
 		// Tether to handler alias context
 		void callHandler(Entry* e) { handler(e); }
 
+		// Set when .stop() is called on an entry.
 		bool timeToStop = false;
 
+		// Reusable buffer used for the full path.
 		FSChar[] pathBuf;
 	}
 
@@ -234,14 +241,16 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 		// Cleared (memset to 0) for every directory entry.
 		struct Data
 		{
-			const(FSChar)[] baseNameFS;
-			string baseName;
-			string fullName;
-			size_t pathTailPos;
+			const(FSChar)[] baseNameFS; // Cached base name in FSChars.
+			string baseName; // Cached base name in D chars.
+			string fullName; // Cached full name in D chars.
+
+			// Position within context.pathBuf of where the full name for this Entry ends.
+			Nullable!size_t pathTailPos;
 
 			version (Posix)
 			{
-				StatResult[enumLength!StatTarget] statResult;
+				StatResult[enumLength!StatTarget] statResult; // Cached `stat` results.
 			}
 		}
 		Data data;
@@ -260,7 +269,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 				int flags = O_RDONLY;
 				static if (is(typeof(O_DIRECTORY)))
 					flags |= O_DIRECTORY;
-				auto fd = openat(dirFD, this.name, flags);
+				auto fd = openat(dirFD, *name ? name : ".", flags);
 				errnoEnforce(fd >= 0,
 					"Failed to open %s as subdirectory of directory %s"
 					.format(this.baseNameFS, this.parent.fullName));
@@ -278,8 +287,8 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 			{
 				needFullPath();
 				appendString(context.pathBuf,
-					data.pathTailPos, "\\*.*\0"w);
-				scan(&this);
+					data.pathTailPos.get(), "\\*.*\0"w);
+				scan(&this, false);
 			}
 		}
 
@@ -291,10 +300,18 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 		/// Returns a pointer to the base file name, as a
 		/// null-terminated string, in the operating system's
 		/// character type.  Fastest.
-		const(FSChar)* baseNameFSPtr() pure nothrow @nogc
+		const(FSChar)* baseNameFSPtr() nothrow @nogc
 		{
 			version (Posix) return name;
-			version (Windows) return findData.cFileName.ptr;
+			version (Windows)
+			{
+				// We don't use findData.cFileName because of the special case for "." and "..".
+				needFullPath();
+				auto startPos = parent ? parent.data.pathTailPos.get() : 0;
+				if (startPos)
+					startPos++;
+				return context.pathBuf.ptr + startPos;
+			}
 		}
 
 		// Bounded variant of std.string.fromStringz for static arrays.
@@ -309,12 +326,20 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 
 		/// Returns the base file name, as a D character array, in the
 		/// operating system's character type.  Fast.
-		const(FSChar)[] baseNameFS() pure nothrow @nogc
+		const(FSChar)[] baseNameFS() nothrow @nogc
 		{
 			if (!data.baseNameFS)
 			{
 				version (Posix) data.baseNameFS = .fromStringz(name);
-				version (Windows) data.baseNameFS = fromStringz(findData.cFileName);
+				version (Windows)
+				{
+					// We don't use findData.cFileName because of the special case for "." and "..".
+					needFullPath();
+					auto startPos = parent ? parent.data.pathTailPos.get() : 0;
+					if (startPos)
+						startPos++;
+					data.baseNameFS = context.pathBuf[startPos .. this.data.pathTailPos.get()];
+				}
 			}
 			return data.baseNameFS;
 		}
@@ -329,24 +354,28 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 
 		private void needFullPath() nothrow @nogc
 		{
-			if (!data.pathTailPos)
+			if (data.pathTailPos.isNull)
 			{
 				version (Posix)
 					parent.needFullPath();
 				version (Windows)
 				{
 					// directory separator was added during recursion
-					auto startPos = parent.data.pathTailPos + 1;
+					auto startPos = parent.data.pathTailPos.get();
+					if (startPos)
+						startPos++;
+					auto baseNamePtr = findData.cFileName.ptr;
 				}
 				version (Posix)
 				{
 					immutable FSChar[] separator = "/";
 					auto startPos = appendString(context.pathBuf,
-						parent.data.pathTailPos, separator);
+						parent.data.pathTailPos.get(), separator);
+					auto baseNamePtr = this.baseNameFSPtr;
 				}
 				data.pathTailPos = appendString(context.pathBuf,
 					startPos,
-					baseNameFSPtr.nullTerminated
+					baseNamePtr.nullTerminated
 				);
 			}
 		}
@@ -356,7 +385,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 		const(FSChar)[] fullNameFS() nothrow @nogc // fast
 		{
 			needFullPath();
-			return context.pathBuf[0 .. data.pathTailPos];
+			return context.pathBuf[0 .. data.pathTailPos.get()];
 		}
 
 		/// Returns the full file name as a D string.  Allocates.
@@ -406,7 +435,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 					else
 					{
 						int flags = target == StatTarget.dirEntry ? AT_SYMLINK_NOFOLLOW : 0;
-						auto res = fstatat(dirFD, name, &statBuf[target], flags);
+						auto res = fstatat(dirFD, *name ? name : ".", &statBuf[target], flags);
 						if (res)
 						{
 							auto error = errno;
@@ -734,34 +763,53 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 		enum FIND_FIRST_EX_LARGE_FETCH = 2;
 		enum FindExInfoBasic = cast(FINDEX_INFO_LEVELS)1;
 
-		static void scan(Entry* parentEntry)
+		static void scan(Entry* parentEntry, bool isRoot)
 		{
 			Entry entry = void;
 			entry.parent = parentEntry;
 			entry.context = parentEntry.context;
 
+			auto name = entry.context.pathBuf.ptr;
 			HANDLE hFind = FindFirstFileExW(
-				entry.context.pathBuf.ptr,
+				*name ? name : ".",
 				FindExInfoBasic,
 				&entry.findData,
 				FINDEX_SEARCH_OPS.FindExSearchNameMatch,
 				null,
-				FIND_FIRST_EX_LARGE_FETCH, // https://blogs.msdn.microsoft.com/oldnewthing/20131024-00/?p=2843
+				FIND_FIRST_EX_LARGE_FETCH, // https://devblogs.microsoft.com/oldnewthing/20131024-00/?p=2843
 			);
 			if (hFind == INVALID_HANDLE_VALUE)
 				throw new WindowsException(GetLastError(),
-					text("FindFirstFileW: ", parentEntry.fullNameFS));
+					text("FindFirstFileW: ", name.fromStringz));
 			scope(exit) FindClose(hFind);
 			do
 			{
-				// Skip "." and ".."
-				auto fn = entry.findData.cFileName.ptr;
-				if (fn[0] == '.' && (
-						fn[1] == 0 ||
-						(fn[1] == '.' && fn[2] == 0)))
-					continue;
+				if (!isRoot)
+				{
+					// Skip "." and ".."
+					auto fn = entry.findData.cFileName.ptr;
+					if (fn[0] == '.' && (
+							fn[1] == 0 ||
+							(fn[1] == '.' && fn[2] == 0)))
+						continue;
+				}
 
 				entry.data = Entry.Data.init;
+				if (isRoot)
+				{
+					// Windows puts the base name of the entry in findData.cFileName,
+					// even when we are addressing it by a different way, such as "." or "..".
+					// However, this breaks the invariant that `iterationPath.buildPath(entryName)` is the iterated item;
+					// therefore, it is not useful to us because we will want to do path construction,
+					// and we want to be consistent across all platforms.
+
+					// The call from listDir below will ensure that the parentEntry's
+					// pathTailPos will point to the base name of the full path;
+					// we then just need to set our end to the end of the string passed to FindFirstFileExW,
+					// thus allowing us to return fake but correct baseName / fullName values.
+					entry.data.pathTailPos = name.fromStringz.length;
+				}
+
 				entry.context.callHandler(&entry);
 				if (entry.context.timeToStop)
 					break;
@@ -776,11 +824,6 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 	public void listDir(Path)(Path dirPath)
 	if (isPath!Path)
 	{
-		import std.internal.cstring;
-
-		if (dirPath.empty)
-			return listDir(".");
-
 		Context context;
 
 		FSChar[initialPathBufLength] pathBufStore = void;
@@ -798,7 +841,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 		auto endPos = appendString(context.pathBuf, 0, dirPath);
 		appendString(context.pathBuf, endPos, "\0");
 		rootEntry.data.pathTailPos = endPos - (endPos > 0 && context.pathBuf[endPos - 1].isDirSeparator() ? 1 : 0);
-		assert(rootEntry.data.pathTailPos > 0);
+		assert(!rootEntry.data.pathTailPos.isNull);
 
 		static if (includeRoot)
 		{
@@ -811,24 +854,24 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 
 				rootEntry.dirFD = AT_FDCWD;
 				rootEntry.ent = null;
-				auto name = tempCString(dirPath);
-				rootEntry.name = name;
+				auto name = InlineStr(dirPath, '\0');
+				rootEntry.name = name[].ptr;
 
 				context.callHandler(&rootEntry);
 			}
 			else
 			version (Windows)
 			{
-				while (rootEntry.data.pathTailPos && !context.pathBuf[rootEntry.data.pathTailPos].isDirSeparator())
-					rootEntry.data.pathTailPos--;
-				scan(&rootEntry);
+				while (rootEntry.data.pathTailPos.get() && !context.pathBuf[rootEntry.data.pathTailPos.get()].isDirSeparator())
+					rootEntry.data.pathTailPos.get()--;
+				scan(&rootEntry, true);
 			}
 		}
 		else
 		{
 			version (Posix)
 			{
-				auto dir = opendir(tempCString(dirPath));
+				auto dir = opendir(InlineStr(dirPath, '\0')[].ptr);
 				checkDir(dir, dirPath);
 
 				scan(dir, dirfd(dir), &rootEntry);
@@ -839,7 +882,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 				const WCHAR[] tailString = endPos == 0 || context.pathBuf[endPos - 1].isDirSeparator() ? "*.*\0"w : "\\*.*\0"w;
 				appendString(context.pathBuf, endPos, tailString);
 
-				scan(&rootEntry);
+				scan(&rootEntry, false);
 			}
 		}
 	}
@@ -851,6 +894,73 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 		errnoEnforce(dir, "Failed to open directory " ~ dirPath);
 	}
 }
+
+// Helper for listDir
+private union InlineArr(T, size_t inlineSize)
+{
+private:
+	static assert(inlineSize * T.sizeof > T[].sizeof);
+	alias InlineSize = TypeForBits!(bitsFor(inlineSize));
+	static assert(inlineSize <= InlineSize.max);
+
+	T[] str;
+	struct
+	{
+		T[inlineSize] inlineBuf;
+		InlineSize inlineLength;
+	}
+
+public:
+	private enum bool isConstituent(C) = is(typeof(str[0] = C.init)) || is(typeof(str[] = C.init[]));
+
+	/// Construct from any combination of values or slices of values.
+	this(Args...)(auto ref scope Args args)
+	if (allSatisfy!(isConstituent, Args))
+	{
+		size_t length;
+		foreach (ref arg; args)
+			static if (is(typeof(arg) : T))
+				length++;
+			else
+				length += arg.length;
+
+		T[] data;
+		if (length > inlineSize)
+			data = this.str = new T[inlineSize];
+		else
+		{
+			inlineLength = cast(InlineSize)length;
+			data = inlineBuf[0 .. length];
+		}
+
+		size_t p = 0;
+		foreach (ref arg; args)
+			static if (is(typeof(arg) : T))
+				data[p++] = arg;
+			else
+			{
+				data[p .. p + arg.length] = arg[];
+				p += arg.length;
+			}
+	}
+
+	inout(T)[] opSlice() inout
+	{
+		if (inlineLength)
+			return inlineBuf[0 .. inlineLength];
+		else
+			return str;
+	}
+
+	bool opCast(T : bool)() const { return this !is typeof(this).init; }
+
+	bool opEquals(ref const InlineArr other) const
+	{
+		return this[] == other[];
+	}
+}
+
+private alias InlineStr = InlineArr!(char, 255); // ditto
 
 unittest
 {
@@ -899,7 +1009,8 @@ unittest
 
 	// Test Yes.includeRoot with the empty string
 	"".listDir!((e) {
-		assert(e.fullName == ".", e.fullName ~ ` != .`);
+		assert(e.baseName == "", e.baseName ~ ` != ""`);
+		assert(e.fullName == "", e.fullName ~ ` != ""`);
 		assert(e.entryIsDir);
 	}, Yes.includeRoot);
 
