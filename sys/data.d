@@ -707,6 +707,7 @@ unittest
 	import core.exception : AssertError;
 	import core.memory : GC;
 	import std.exception : assertThrown;
+	import ae.utils.array : emptySlice;
 
 	alias AliasSeq(TList...) = TList;
 	foreach (B; AliasSeq!(ubyte, uint, char, void))
@@ -752,8 +753,7 @@ unittest
 			}
 			// Construction from non-null empty
 			{
-				T[0] arr;
-				auto d = TData!T(arr[]);
+				auto d = TData!T(emptySlice!T());
 				assert(d.length == 0);
 				assert(d.unsafeContents.ptr !is null);
 			}
