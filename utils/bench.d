@@ -12,7 +12,9 @@
  */
 
 deprecated module ae.utils.bench;
-deprecated:
+
+// https://issues.dlang.org/show_bug.cgi?id=23965
+// deprecated:
 
 import std.datetime;
 import ae.sys.timing;
