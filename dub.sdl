@@ -90,14 +90,9 @@ subPackage {
 	systemDependencies "OpenSSL"
 	dependency "ae" version="*" path="."
 
-	# The OpenSSL version is specified here unconstrained,
-        # and not within the configuration blocks constrained to the
-        # particular OpenSSL version, because Dub does not support
-        # conditionally selecting dependency versions:
-        # https://github.com/dlang/dub/issues/2023
-	# The desired OpenSSL bindings version must thus be specified
-	# upstream, in the project using ae.
-        dependency "openssl" version=">=1.0.0"
+	# See the "Compatibility" section of the Deimos-OpenSSL
+        # project for information on how to select a version.
+        dependency "openssl" version=">=3.0.0"
         importPaths "net" # Silence Dub warning
 
 	sourceFiles \
