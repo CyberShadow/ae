@@ -33,15 +33,26 @@ bad_flags=(
 
 	# Require special dependencies
 	-version=LIBEV
+
+	# "no longer has any effect"
+	-preview=dip25
+	# Currently very buggy, segfaults a lot
+	-preview=dip1021
+	# Seems unfinished, see https://forum.dlang.org/post/t05jts$2j48$1@digitalmars.com
+	-preview=nosharedaccess
+	# Includes the above
+	-preview=all
 )
 
 mapfile -t files < <(git ls-files)
 mapfile -t all_flags < <(
-	printf -- '%s\n' '-debug'
-	cat "${files[@]}" |
-		sed -n 's/.*\b\(debug\|version\) *( *\([^()~" ]*\) *).*/-\1=\2/p' |
-		sort -u |
-		grep -vFf <(printf -- '%s\n' "${bad_flags[@]}")
+	{
+		printf -- '%s\n' '-debug'
+		dmd -preview=h | awk '/^  (=[^ ]*) .*/ {print "-preview" $1}'
+		cat "${files[@]}" |
+			sed -n 's/.*\b\(debug\|version\) *( *\([^()~" ]*\) *).*/-\1=\2/p' |
+			sort -u
+	} | grep -vFf <(printf -- '%s\n' "${bad_flags[@]}")
 )
 
 find . -maxdepth 1 \( -name '*.ok' -o -name '*.out' \) -delete
@@ -63,10 +74,10 @@ function check() {
 
 	printf -- '%s > ./%q.out 2>&1 && touch ./%q.ok && echo "%s OK" >&2\n' \
 		   "$(printf -- '%q ' \
-				dmd -color=on -i -o- -I.. "${flags[@]}" all.d)" \
+				dmd -color=on -i -o- -I.. -de "${flags[@]}" all.d)" \
 		   "$name" "$name" "$name"
 }
-check_all | ( xargs -n 1 -d '\n' -P "$(nproc)" sh -c || true )
+check_all | ( xargs -n 1 -d '\n' -P 4 sh -c || true )
 
 function check() {
 	local name=$1
