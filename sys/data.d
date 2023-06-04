@@ -226,19 +226,9 @@ private:
 	}
 	do
 	{
-		if (!length)
-		{
+		if (!memory) // null, empty, or GC-owned data
 			this = TData(data);
-			return;
-		}
-
-		static if (useGC)
-			if (!memory)
-			{
-				this = TData.wrapGC(data);
-				return;
-			}
-
+		else
 		if (memory.referenceCount > 1)
 			this = TData(data);
 	}
