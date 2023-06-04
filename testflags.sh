@@ -1,6 +1,13 @@
 #!/bin/bash
 set -eEuo pipefail
 
+# Runs in CI.
+# Test compilation with some flag combinations:
+# - All version and debug names, extracted from the source code.
+#   Guard against bit rot by ensuring things like debug code continue to compile.
+# - Preview compiler features.
+#   Detect problems early.
+
 bad_flags=(
 	# Built-in
 	-version=AArch64
