@@ -285,6 +285,15 @@ public:
 	{
 	}
 
+	deprecated this(U)(U[] data)
+	if (is(T == ubyte) &&
+		!is(typeof({ U[] u; T[] t = u.dup; })) &&
+		is(typeof({ U[] u; void[] t = u.dup; })))
+	{
+		const(void)[] v = data;
+		this(cast(const(ubyte)[])v);
+	}
+
 	/// Create a new instance with given size/capacity. Capacity defaults to size.
 	this(size_t size, size_t capacity = 0)
 	in
@@ -605,6 +614,12 @@ public:
 		{
 			return concat((&value)[0..1]);
 		} ///
+
+		static if (is(T == ubyte))
+		deprecated TData opBinary(const(void)[] data)
+		{
+			return concat(cast(Appendable)data);
+		}
 	}
 
 	/// Create a new `Data` containing the concatenation of `data` and `this`.
@@ -621,6 +636,12 @@ public:
 		{
 			return prepend((&value)[0..1]);
 		} ///
+
+		static if (is(T == ubyte))
+		deprecated TData opBinaryRight(const(void)[] data)
+		{
+			return prepend(cast(Appendable)data);
+		}
 	}
 
 	/// Append data to this `Data`.
@@ -642,6 +663,12 @@ public:
 		{
 			return append((&value)[0..1]);
 		} ///
+
+		static if (is(T == ubyte))
+		deprecated TData opOpAssign(const(void)[] data)
+		{
+			return append(cast(Appendable)data);
+		}
 	}
 
 	/// Access an individual item.
@@ -703,6 +730,13 @@ public:
 						return i;
 			return -1;
 		}
+	}
+
+	package(ae) // ditto
+	static if (is(T == ubyte))
+	deprecated sizediff_t indexOf(const(void)[] needle) const
+	{
+		return indexOf(cast(const(ubyte)[])needle);
 	}
 
 	// --- Range operations
@@ -1084,33 +1118,16 @@ unittest
 	});
 }
 
-// /// The most common use case of manipulating unmanaged memory is
-// /// working with raw bytes, whether they're received from the network,
-// /// read from a file, or elsewhere.
-// alias Data = TData!ubyte;
-
-alias Data = TData!void;
+/// The most common use case of manipulating unmanaged memory is
+/// working with raw bytes, whether they're received from the network,
+/// read from a file, or elsewhere.
+alias Data = TData!ubyte;
 
 // ************************************************************************
 
 deprecated public import ae.sys.dataset : copyTo, joinData, joinToHeap, DataVec, shift, bytes, DataSetBytes;
 
 deprecated alias DataWrapper = Memory;
-
-// Temporary forward-compatibility shims.
-// Will be deprecated when Data is switched to using ubyte.
-ref inout(T) as(T, E)(inout(E)[] bytes)
-if (!hasIndirections!T && is(Unqual!E == void))
-{
-	assert(bytes.length == T.sizeof, "Data length mismatch for " ~ T.stringof);
-	return *cast(inout(T)*)bytes.ptr;
-}
-
-inout(T) as(T, E)(inout(E)[] bytes)
-if (is(T U : U[]) && !hasIndirections!U && is(Unqual!E == void))
-{
-	return cast(inout(T))bytes;
-}
 
 package(ae) // TODO: is this a good API?
 T as(T)(Data data)

@@ -31,7 +31,7 @@ import ae.net.ietf.headerparse;
 import ae.net.ietf.url;
 import ae.net.ssl;
 import ae.sys.dataset : DataVec, bytes, joinToHeap;
-import ae.utils.array : asSlice, shift;
+import ae.utils.array : as, asSlice, shift;
 import ae.utils.exception : CaughtException;
 import ae.sys.data;
 

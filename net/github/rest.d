@@ -27,6 +27,7 @@ import ae.sys.data;
 import ae.sys.dataset : DataVec, joinToHeap;
 import ae.sys.log;
 import ae.sys.net;
+import ae.utils.array : as;
 import ae.utils.json;
 import ae.utils.meta;
 
