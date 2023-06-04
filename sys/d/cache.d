@@ -45,14 +45,12 @@ interface ICacheHost
 abstract class DCache
 {
 	string cacheDir; /// Directory which will hold the cached builds.
-	ICacheHost cacheHost; /// Callback interface.
-
-	alias cacheHost this;
+	ICacheHost host; /// Callback interface.
 
 	this(string cacheDir, ICacheHost cacheHost)
 	{
 		this.cacheDir = cacheDir;
-		this.cacheHost = cacheHost;
+		this.host = cacheHost;
 	} ///
 
 	/// Get name of this cache engine.
@@ -95,7 +93,7 @@ abstract class DCache
 	final void cp(string src, string dst, bool silent = false)
 	{
 		if (!silent)
-			log("Copy: " ~ src ~ " -> " ~ dst);
+			host.log("Copy: " ~ src ~ " -> " ~ dst);
 
 		ensurePathExists(dst);
 		if (src.isDir)
@@ -185,15 +183,13 @@ class TempCache : DirCacheBase
 	} ///
 
 protected:
-	alias cacheHost this; // https://issues.dlang.org/show_bug.cgi?id=5973
-
 	override @property string name() const { return "none"; }
 
 	override void finalize()
 	{
 		if (cacheDir.exists)
 		{
-			log("Clearing temporary cache");
+			host.log("Clearing temporary cache");
 			rmdirRecurse(cacheDir);
 		}
 	}
@@ -209,7 +205,6 @@ protected:
 class DirCache : DirCacheBase
 {
 	mixin GenerateConstructorProxies;
-	alias cacheHost this; // https://issues.dlang.org/show_bug.cgi?id=5973
 
 protected:
 	override @property string name() const { return "directory"; }
@@ -241,7 +236,7 @@ protected:
 					}
 					catch (FileException e)
 					{
-						log(" -- Hard link failed: " ~ e.msg);
+						host.log(" -- Hard link failed: " ~ e.msg);
 						pathA.copy(pathB);
 					}
 				}
@@ -299,23 +294,23 @@ protected:
 				componentNames[parts[0..$-2].join("-")] = true;
 		}
 
-		log("Optimizing cache..."); dedupedFiles = 0;
-		foreach (order; getKeyOrder(null))
+		host.log("Optimizing cache..."); dedupedFiles = 0;
+		foreach (order; host.getKeyOrder(null))
 			optimizeCacheImpl(order);
-		log("Deduplicated %d files.".format(dedupedFiles));
+		host.log("Deduplicated %d files.".format(dedupedFiles));
 	}
 
 	/// Optimize specific revision.
 	override void optimizeKey(string key)
 	{
-		log("Optimizing cache entry..."); dedupedFiles = 0;
-		auto orders = getKeyOrder(key);
+		host.log("Optimizing cache entry..."); dedupedFiles = 0;
+		auto orders = host.getKeyOrder(key);
 		foreach (order; orders) // Should be only one
 		{
 			optimizeCacheImpl(order, false, key);
 			optimizeCacheImpl(order, true , key);
 		}
-		log("Deduplicated %d files.".format(dedupedFiles));
+		host.log("Deduplicated %d files.".format(dedupedFiles));
 	}
 
 	override void verify() {}

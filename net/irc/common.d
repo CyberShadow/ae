@@ -99,7 +99,6 @@ private:
 
 public:
 	IConnection conn; /// Underlying transport.
-	alias conn this;
 
 	this(IConnection c, size_t maxLineLength = 512)
 	{
@@ -133,6 +132,12 @@ public:
 
 	/// Data handler.
 	void delegate(string line) handleReadLine;
+
+	/// Forwards to the underlying transport.
+	@property void handleConnect(IConnection.ConnectHandler value) { conn.handleConnect = value; }
+	@property void handleDisconnect(IConnection.DisconnectHandler value) { conn.handleDisconnect = value; } /// ditto
+	void disconnect(string reason = IConnection.defaultDisconnectReason, DisconnectType type = DisconnectType.requested) { conn.disconnect(reason, type); } /// ditto
+	@property ConnectionState state() { return conn.state; } /// ditto
 
 private:
 	void onNonIdle()
