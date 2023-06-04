@@ -173,7 +173,7 @@ version (Posix)
 	}
 }
 
-import ae.utils.range : nullTerminated;
+import ae.utils.range : nullTerminatedPtrRange;
 
 // https://issues.dlang.org/show_bug.cgi?id=7016
 version (Windows) static import ae.sys.windows.misc;
@@ -375,7 +375,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 				}
 				data.pathTailPos = appendString(context.pathBuf,
 					startPos,
-					baseNamePtr.nullTerminated
+					baseNamePtr.nullTerminatedPtrRange
 				);
 			}
 		}
