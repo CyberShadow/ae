@@ -43,18 +43,18 @@ debug(X11) import std.stdio : stderr;
 /// Redefine these in terms of the protocol we implement here.
 public
 {
-    alias CARD32    Window;
-    alias CARD32    Drawable;
-    alias CARD32    Font;
-    alias CARD32    Pixmap;
-    alias CARD32    Cursor;
-    alias CARD32    Colormap;
-    alias CARD32    GContext;
-    alias CARD32    Atom;
-    alias CARD32    VisualID;
-    alias CARD32    Time;
-    alias CARD8     KeyCode;
-    alias CARD32    KeySym;
+	alias CARD32    Window;
+	alias CARD32    Drawable;
+	alias CARD32    Font;
+	alias CARD32    Pixmap;
+	alias CARD32    Cursor;
+	alias CARD32    Colormap;
+	alias CARD32    GContext;
+	alias CARD32    Atom;
+	alias CARD32    VisualID;
+	alias CARD32    Time;
+	alias CARD8     KeyCode;
+	alias CARD32    KeySym;
 }
 
 /// Used for CreateWindow and ChangeWindowAttributes.
@@ -129,9 +129,9 @@ struct GCAttributes
 /// `xReq` equivalent for requests with no arguments.
 extern(C) struct xEmptyReq
 {
-    CARD8 reqType; /// As in `xReq`.
-    CARD8 pad;     /// ditto
-    CARD16 length; /// ditto
+	CARD8 reqType; /// As in `xReq`.
+	CARD8 pad;     /// ditto
+	CARD16 length; /// ditto
 }
 
 /// Base class for definitions shared by the core X11 protocol and
