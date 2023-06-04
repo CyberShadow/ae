@@ -80,7 +80,8 @@ private:
 
 	// --- Typed Memory construction helpers
 
-	static T[] allocateMemory(U)(out Memory memory, size_t initialSize, size_t capacity, scope void delegate(Unqual!U[] contents) pure @safe nothrow @nogc fill)
+	// No pure due to https://issues.dlang.org/show_bug.cgi?id=23959
+	static T[] allocateMemory(U)(out Memory memory, size_t initialSize, size_t capacity, scope void delegate(Unqual!U[] contents) /*pure*/ @safe nothrow @nogc fill)
 	{
 		if (capacity * T.sizeof < OSAllocator.pageSize)
 			memory = unmanagedNew!CMemory(initialSize * T.sizeof, capacity * T.sizeof);
@@ -108,7 +109,8 @@ private:
 
 	// --- Concatenation / appending helpers
 
-	void reallocate(size_t size, size_t capacity, scope void delegate(Unqual!T[] contents) pure @safe nothrow @nogc fill)
+	// No pure due to https://issues.dlang.org/show_bug.cgi?id=23959
+	void reallocate(size_t size, size_t capacity, scope void delegate(Unqual!T[] contents) /*pure*/ @safe nothrow @nogc fill)
 	{
 		Memory newMemory;
 		// @trusted to allow copying void[] to void[]
@@ -123,7 +125,8 @@ private:
 		this.data = newData;
 	}
 
-	void expand(size_t newSize, size_t newCapacity, scope void delegate(Unqual!T[] contents) pure @safe nothrow @nogc fill)
+	// No pure due to https://issues.dlang.org/show_bug.cgi?id=23959
+	void expand(size_t newSize, size_t newCapacity, scope void delegate(Unqual!T[] contents) /*pure*/ @safe nothrow @nogc fill)
 	@trusted // Allow slicing data.ptr
 	in
 	{
@@ -352,11 +355,12 @@ public:
 
 	// --- Lifetime - destruction
 
-	~this() pure @trusted nothrow @nogc
+	// No pure due to https://issues.dlang.org/show_bug.cgi?id=23959
+	~this() /*pure*/ @trusted nothrow @nogc
 	{
-		//clear();
+		clear();
 		// https://issues.dlang.org/show_bug.cgi?id=13809
-		(cast(void delegate() pure nothrow @nogc)&clear)();
+		// (cast(void delegate() pure nothrow @nogc)&clear)();
 	}
 
 	/// Unreference contents, freeing it if this was the last reference.
@@ -438,20 +442,21 @@ public:
 	// lambda functions (anonymous function templates).
 	void enter(scope void delegate(scope T[])                          fn)                          { mixin(enterImpl); }
 	void enter(scope void delegate(scope T[]) @safe                    fn) @safe                    { mixin(enterImpl); } /// ditto
-	void enter(scope void delegate(scope T[])       pure               fn)       pure               { mixin(enterImpl); } /// ditto
-	void enter(scope void delegate(scope T[]) @safe pure               fn) @safe pure               { mixin(enterImpl); } /// ditto
+	// No pure due to https://issues.dlang.org/show_bug.cgi?id=23959
+	// void enter(scope void delegate(scope T[])       pure               fn)       pure               { mixin(enterImpl); } /// ditto
+	// void enter(scope void delegate(scope T[]) @safe pure               fn) @safe pure               { mixin(enterImpl); } /// ditto
 	void enter(scope void delegate(scope T[])            nothrow       fn)            nothrow       { mixin(enterImpl); } /// ditto
 	void enter(scope void delegate(scope T[]) @safe      nothrow       fn) @safe      nothrow       { mixin(enterImpl); } /// ditto
-	void enter(scope void delegate(scope T[])       pure nothrow       fn)       pure nothrow       { mixin(enterImpl); } /// ditto
-	void enter(scope void delegate(scope T[]) @safe pure nothrow       fn) @safe pure nothrow       { mixin(enterImpl); } /// ditto
+	// void enter(scope void delegate(scope T[])       pure nothrow       fn)       pure nothrow       { mixin(enterImpl); } /// ditto
+	// void enter(scope void delegate(scope T[]) @safe pure nothrow       fn) @safe pure nothrow       { mixin(enterImpl); } /// ditto
 	void enter(scope void delegate(scope T[])                    @nogc fn)                    @nogc { mixin(enterImpl); } /// ditto
 	void enter(scope void delegate(scope T[]) @safe              @nogc fn) @safe              @nogc { mixin(enterImpl); } /// ditto
-	void enter(scope void delegate(scope T[])       pure         @nogc fn)       pure         @nogc { mixin(enterImpl); } /// ditto
-	void enter(scope void delegate(scope T[]) @safe pure         @nogc fn) @safe pure         @nogc { mixin(enterImpl); } /// ditto
+	// void enter(scope void delegate(scope T[])       pure         @nogc fn)       pure         @nogc { mixin(enterImpl); } /// ditto
+	// void enter(scope void delegate(scope T[]) @safe pure         @nogc fn) @safe pure         @nogc { mixin(enterImpl); } /// ditto
 	void enter(scope void delegate(scope T[])            nothrow @nogc fn)            nothrow @nogc { mixin(enterImpl); } /// ditto
 	void enter(scope void delegate(scope T[]) @safe      nothrow @nogc fn) @safe      nothrow @nogc { mixin(enterImpl); } /// ditto
-	void enter(scope void delegate(scope T[])       pure nothrow @nogc fn)       pure nothrow @nogc { mixin(enterImpl); } /// ditto
-	void enter(scope void delegate(scope T[]) @safe pure nothrow @nogc fn) @safe pure nothrow @nogc { mixin(enterImpl); } /// ditto
+	// void enter(scope void delegate(scope T[])       pure nothrow @nogc fn)       pure nothrow @nogc { mixin(enterImpl); } /// ditto
+	// void enter(scope void delegate(scope T[]) @safe pure nothrow @nogc fn) @safe pure nothrow @nogc { mixin(enterImpl); } /// ditto
 
 	// https://issues.dlang.org/show_bug.cgi?id=23956
 	// void enter(scope void delegate(scope const(T)[])                          fn) const                          { mixin(enterImpl); }
@@ -1013,7 +1018,8 @@ unittest
 }
 
 // pure/@safe/nothrow/@nogc compilation test
-pure @safe nothrow @nogc unittest
+// No pure due to https://issues.dlang.org/show_bug.cgi?id=23959
+/*pure*/ @safe nothrow @nogc unittest
 {
 	TData!ubyte d;
 	d.enter((scope contents) { ubyte[] _ = contents; });
@@ -1131,7 +1137,8 @@ if (is(C == class))
 	//   such as closing file descriptors for memory-mapped files.
 	//   However, implementations SHOULD be pure as far as the program's state is concerned.
 	static void callDestroy(C c) nothrow { c.destroy(); }
-	(cast(void function(C) pure nothrow @nogc) &callDestroy)(c);
+	// No pure due to: https://issues.dlang.org/show_bug.cgi?id=23959
+	(cast(void function(C) /*pure*/ nothrow @nogc) &callDestroy)(c);
 
 	unmanagedFree(cast(void*)c);
 }
