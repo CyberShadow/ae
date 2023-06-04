@@ -30,7 +30,7 @@ import ae.net.ietf.headers;
 import ae.net.ietf.headerparse;
 import ae.net.ietf.url;
 import ae.net.ssl;
-import ae.sys.dataset : DataVec, bytes;
+import ae.sys.dataset : DataVec, bytes, joinToHeap;
 import ae.utils.array : toArray, shift;
 import ae.utils.exception : CaughtException;
 import ae.sys.data;
@@ -621,7 +621,7 @@ void httpGet(string url, void delegate(string) resultHandler, void delegate(stri
 	httpGet(url,
 		(Data data)
 		{
-			auto result = (cast(char[])data.contents).idup;
+			auto result = data.toGC().fromBytes!string();
 			std.utf.validate(result);
 			resultHandler(result);
 		},
@@ -646,7 +646,7 @@ void httpPost(string url, DataVec postData, string contentType, void delegate(st
 	httpPost(url, move(postData), contentType,
 		(Data data)
 		{
-			auto result = (cast(char[])data.contents).idup;
+			auto result = data.toGC().fromBytes!string();
 			std.utf.validate(result);
 			resultHandler(result);
 		},
@@ -696,7 +696,7 @@ unittest
 			(HttpResponse response, string _/*disconnectReason*/)
 			{
 				assert(response, "HTTP server error");
-				assert(cast(string)response.getContent.toHeap == "Hello!");
+				assert(response.getContent().toGC() == "Hello!");
 				if (++count == 5)
 				{
 					s.close();

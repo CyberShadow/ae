@@ -141,7 +141,7 @@ private:
 
 	void onReadData(Data data)
 	{
-		auto line = cast(string)data.toHeap();
+		string line = data.asDataOf!char.toGC();
 		log("> " ~ line);
 		try
 			handleLine(line);

@@ -223,14 +223,17 @@ private class X11SubProtocol
 		) {
 			enforce(Res.sizeof < sz_xGenericReply || data.length == Res.sizeof,
 				"Unexpected reply size");
-			auto res = cast(Res*)data.contents.ptr;
 
 			DecodedResult result;
-			foreach (i; rangeTuple!(pertinentFieldIndices.length))
-			{
-				result.tupleof[i] = res.tupleof[pertinentFieldIndices[i]];
-				debug(X11) stderr.writeln("[X11] << ", __traits(identifier, result.tupleof[i]), ": ", result.tupleof[i]);
-			}
+			data.enter((scope contents) {
+				auto res = cast(Res*)contents.ptr;
+
+				foreach (i; rangeTuple!(pertinentFieldIndices.length))
+				{
+					result.tupleof[i] = res.tupleof[pertinentFieldIndices[i]];
+					debug(X11) stderr.writeln("[X11] << ", __traits(identifier, result.tupleof[i]), ": ", result.tupleof[i]);
+				}
+			});
 
 			return result;
 		}
@@ -733,7 +736,7 @@ private:
 				return Result(
 					header.root,
 					header.parent,
-					children.toHeap(),
+					children.toGC(),
 				);
 			}
 		),
@@ -765,7 +768,7 @@ private:
 				auto name = reader.read!char(header.nameLength).enforce("Unexpected reply size");
 				enforce(reader.data.length < 4, "Unexpected reply size");
 
-				return name.toHeap();
+				return name.toGC();
 			}
 		),
 
@@ -818,7 +821,7 @@ private:
 					header.format,
 					header.propertyType,
 					header.bytesAfter,
-					value.toHeap(),
+					value.toGC(),
 				);
 			}
 		),
@@ -833,7 +836,7 @@ private:
 				auto atoms = reader.read!Atom(header.nProperties).enforce("Unexpected reply size");
 				enforce(reader.data.length < 4, "Unexpected reply size");
 
-				return atoms.toHeap();
+				return atoms.toGC();
 			}
 		),
 
@@ -1342,9 +1345,11 @@ private:
 	{
 		assert(requestData.length >= sz_xReq);
 		assert(requestData.length % 4 == 0);
-		auto pReq = cast(xReq*)requestData.contents.ptr;
-		pReq.reqType = reqType;
-		pReq.length = (requestData.length / 4).to!ushort;
+		requestData.enter((scope contents) {
+			auto pReq = cast(xReq*)contents.ptr;
+			pReq.reqType = reqType;
+			pReq.length = (requestData.length / 4).to!ushort;
+		});
 
 		enforce(replyHandlers[sequenceNumber] is null,
 			"Sequence number overflow"); // We haven't yet received a reply from the previous cycle
@@ -1458,6 +1463,8 @@ string populateRequestFromLocals(T)()
 
 // ************************************************************************
 
+// TODO: these are unsafe; migrate to something on top of the safe Data API
+
 /// Typed wrapper for Data.
 /// Because Data is reference counted, this type allows encapsulating
 /// a safe but typed reference to a Data slice.
@@ -1474,7 +1481,7 @@ if (!hasIndirections!T)
 	@property T* ptr()
 	{
 		assert(data && data.length == T.sizeof);
-		return cast(T*)data.contents.ptr;
+		return cast(T*)data.unsafeContents.ptr;
 	}
 
 	ref T opUnary(string op : "*")()
@@ -1491,7 +1498,7 @@ if (!hasIndirections!T)
 	@property T[] arr()
 	{
 		assert(data && data.length % T.sizeof == 0);
-		return cast(T[])data.contents;
+		return cast(T[])data.unsafeContents;
 	}
 
 	T opCast(T : bool)() const
@@ -1499,10 +1506,10 @@ if (!hasIndirections!T)
 		return !!data;
 	}
 
-	@property T[] toHeap()
+	@property T[] toGC()
 	{
 		assert(data && data.length % T.sizeof == 0);
-		return cast(T[])data.toHeap;
+		return cast(T[])data.toGC();
 	}
 }
 

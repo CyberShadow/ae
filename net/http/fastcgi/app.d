@@ -90,15 +90,15 @@ class FastCGIConnection
 			if (buffer.length < FCGI_RecordHeader.sizeof)
 				return;
 
-			auto pheader = cast(FCGI_RecordHeader*)buffer.contents.ptr;
-			auto totalLength = FCGI_RecordHeader.sizeof + pheader.contentLength + pheader.paddingLength;
+			auto header = buffer[0 .. FCGI_RecordHeader.sizeof].asDataOf!FCGI_RecordHeader.front;
+			auto totalLength = FCGI_RecordHeader.sizeof + header.contentLength + header.paddingLength;
 			if (buffer.length < totalLength)
 				return;
 
-			auto contentData = buffer[FCGI_RecordHeader.sizeof .. FCGI_RecordHeader.sizeof + pheader.contentLength];
+			auto contentData = buffer[FCGI_RecordHeader.sizeof .. FCGI_RecordHeader.sizeof + header.contentLength];
 
 			try
-				onRecord(*pheader, contentData);
+				onRecord(header, contentData);
 			catch (Exception e)
 			{
 				if (log) log("Error handling record: " ~ e.toString());
@@ -284,13 +284,11 @@ class FastCGIProtoConnection : FastCGIConnection
 				if (contentData.length)
 				{
 					request.paramBuf ~= contentData;
-					char[] name, value;
 					auto buf = request.paramBuf;
-					while (buf.readNameValue(name, value))
-					{
+					while (buf.readNameValue((scope name, scope value) {
 						request.param(name, value);
 						request.paramBuf = buf;
-					}
+					})) {}
 				}
 				else
 				{
@@ -326,14 +324,13 @@ class FastCGIProtoConnection : FastCGIConnection
 				FastAppender!ubyte result;
 				while (contentData.length)
 				{
-					char[] name, dummyValue;
-					contentData.readNameValue(name, dummyValue)
-						.enforce("Incomplete FCGI_GET_VALUES");
-					enforce(dummyValue.length == 0,
-						"Present value in FCGI_GET_VALUES");
-					auto value = getValue(name);
-					if (value)
-						result.putNameValue(name, value);
+					contentData.readNameValue((scope name, scope dummyValue) {
+						enforce(dummyValue.length == 0,
+							"Present value in FCGI_GET_VALUES");
+						auto value = getValue(name);
+						if (value)
+							result.putNameValue(name, value);
+					}).enforce("Incomplete FCGI_GET_VALUES");
 				}
 				sendRecord(
 					FCGI_RecordType.getValuesResult,
@@ -372,17 +369,17 @@ class FastCGIProtoConnection : FastCGIConnection
 	}
 }
 
-private T* asStruct(T)(Data data)
+private T asStruct(T)(Data data)
 {
 	enforce(data.length == T.sizeof,
 		format!"Expected data for %s (%d bytes), but got %d bytes"(
 			T.stringof, T.sizeof, data.length,
 		));
-	return cast(T*)data.contents.ptr;
+	return data.asDataOf!T.front;
 }
 
 /// Parse a FastCGI-encoded name-value pair.
-bool readNameValue(ref Data data, ref char[] name, ref char[] value)
+bool readNameValue(ref Data data, scope void delegate(scope const(char)[] name, scope const(char)[] value) fn)
 {
 	uint nameLen, valueLen;
 	if (!data.readVLInt(nameLen))
@@ -392,8 +389,11 @@ bool readNameValue(ref Data data, ref char[] name, ref char[] value)
 	auto totalLen = nameLen + valueLen;
 	if (data.length < totalLen)
 		return false;
-	name  = cast(char[])data.contents[0 .. nameLen];
-	value = cast(char[])data.contents[nameLen .. totalLen];
+	data.asDataOf!char.enter((contents) {
+		scope name  = contents[0 .. nameLen];
+		scope value = contents[nameLen .. totalLen];
+		fn(name, value);
+	});
 	data = data[totalLen .. $];
 	return true;
 }
@@ -401,7 +401,7 @@ bool readNameValue(ref Data data, ref char[] name, ref char[] value)
 /// Parse a FastCGI-encoded variable-length integer.
 bool readVLInt(ref Data data, ref uint value)
 {
-	auto bytes = cast(ubyte[])data.contents;
+	auto bytes = data.asDataOf!ubyte;
 	if (!bytes.length)
 		return false;
 	if ((bytes[0] & 0x80) == 0)

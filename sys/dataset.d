@@ -26,8 +26,10 @@ if (is(ElementType!R == Data))
 	size_t pos = 0;
 	foreach (ref d; data)
 	{
-		buffer[pos .. pos + d.length] = d.contents[];
-		pos += d.length;
+		d.enter((scope contents) {
+			buffer[pos .. pos + contents.length] = contents[];
+			pos += contents.length;
+		});
 	}
 	assert(pos == buffer.length);
 	return buffer;
@@ -47,13 +49,15 @@ if (is(ElementType!R == Data))
 	foreach (ref d; data)
 		size += d.length;
 	Data result = Data(size);
-	data.copyTo(result.mcontents);
+	result.enter((scope void[] contents) {
+		data.copyTo(contents);
+	});
 	return result;
 }
 
 unittest
 {
-	assert(cast(int[])([Data([1]), Data([2])].joinData().contents) == [1, 2]);
+	assert(cast(int[])([Data([1]), Data([2])].joinData().unsafeContents) == [1, 2]);
 }
 
 /// Join an array of Data to a memory block on the managed heap.
@@ -106,7 +110,7 @@ struct DataSetBytes
 			offset -= data[index].length;
 			index++;
 		}
-		return (cast(ubyte[])data[index].contents)[offset];
+		return data[index].asDataOf!ubyte[offset];
 	} ///
 
 	DataVec opSlice()

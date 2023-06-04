@@ -143,7 +143,7 @@ private:
 
 	void onReadData(Data data)
 	{
-		string line = (cast(string)data.toHeap()).chomp("\r");
+		string line = data.asDataOf!char.toGC().chomp("\r");
 		debug(IRC) stderr.writeln("< ", line);
 
 		if (handleReadLine)

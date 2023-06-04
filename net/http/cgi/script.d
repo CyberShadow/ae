@@ -58,8 +58,10 @@ CGIRequest readCGIRequest(
 		if (contentLength)
 		{
 			auto data = Data(contentLength);
-			input.readExactly(cast(ubyte[])data.contents)
-				.enforce("EOF while reading content data");
+			data.asDataOf!ubyte.enter((scope contents) {
+				input.readExactly(contents)
+					.enforce("EOF while reading content data");
+			});
 			request.data = DataVec(data);
 		}
 	}
@@ -108,7 +110,9 @@ void writeCGIResponse(HttpResponse r)
 	writeCGIHeaders(r, writer);
 
 	foreach (datum; r.data)
-		stdout.rawWrite(datum.contents);
+		datum.enter((scope contents) {
+			stdout.rawWrite(contents);
+		});
 }
 
 /// Write a HTTP response in CGI NPH format.
@@ -118,5 +122,7 @@ void writeNPHResponse(HttpResponse r)
 	writeNPHHeaders(r, writer);
 
 	foreach (datum; r.data)
-		stdout.rawWrite(datum.contents);
+		datum.enter((scope contents) {
+			stdout.rawWrite(contents);
+		});
 }

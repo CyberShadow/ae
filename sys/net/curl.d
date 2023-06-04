@@ -115,7 +115,9 @@ class CurlNetwork : Network
 						size_t p = 0;
 						foreach (ref datum; dataToSend)
 						{
-							buf[p .. p + datum.length] = datum.contents;
+							datum.enter((contents) {
+								buf[p .. p + datum.length] = contents;
+							});
 							p += datum.length;
 						}
 					}

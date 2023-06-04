@@ -417,7 +417,7 @@ class OpenSSLAdapter : SSLAdapter
 		}
 
 		assert(r.data.length == 0, "Would clobber data");
-		r.set(data.contents);
+		data.enter((contents) { r.set(contents); });
 
 		try
 		{
@@ -472,7 +472,10 @@ class OpenSSLAdapter : SSLAdapter
 			debug(OPENSSL_DATA) stderr.writefln("OpenSSL: > Got %d outgoing bytes from program", datum.length);
 
 			debug(OPENSSL_DATA) auto oldLength = w.data.length;
-			auto result = SSL_write(sslHandle, datum.ptr, datum.length.to!int);
+			int result;
+			datum.enter((contents) {
+				result = SSL_write(sslHandle, contents.ptr, contents.length.to!int);
+			});
 			debug(OPENSSL_DATA) stderr.writefln("OpenSSL:   SSL_write ate %d bytes and spat out %d bytes", datum.length, w.data.length - oldLength);
 			if (result > 0)
 			{
@@ -658,7 +661,7 @@ struct MemoryBIO
 		bio_ = BIO_new_mem_buf(cast(void*)data.ptr, data.length.to!int);
 	} ///
 
-	void set(const(void)[] data)
+	void set(scope const(void)[] data)
 	{
 		BUF_MEM *bptr = BUF_MEM_new();
 		if (data.length)

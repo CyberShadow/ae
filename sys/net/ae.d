@@ -43,12 +43,14 @@ class AENetwork : Network
 	override void downloadFile(string url, string target)
 	{
 		Data data = getData(url);
-		std.file.write(target, data.contents);
+		data.enter((contents) {
+			std.file.write(target, contents);
+		});
 	} ///
 
 	override void[] getFile(string url)
 	{
-		return getData(url).toHeap;
+		return getData(url).toGC();
 	} ///
 
 	override void[] post(string url, const(void)[] data)
@@ -63,7 +65,7 @@ class AENetwork : Network
 
 		socketManager.loop();
 		assert(got);
-		return result.toHeap;
+		return result.toGC();
 	} ///
 
 	override bool urlOK(string url)

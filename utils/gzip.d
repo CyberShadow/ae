@@ -46,7 +46,9 @@ if (is(ElementType!R : const(Data)))
 {
 	CRC32 crc;
 	foreach (ref d; data)
-		crc.put(cast(ubyte[])d.contents);
+		d.asDataOf!ubyte.enter((scope contents) {
+			crc.put(contents);
+		});
 	auto result = crc.finish();
 	return *cast(uint*)result.ptr;
 }
@@ -126,8 +128,8 @@ unittest
 {
 	void testRoundtrip(ubyte[] src)
 	{
-		ubyte[] def = cast(ubyte[])  compress(Data(src)).toHeap;
-		ubyte[] res = cast(ubyte[])uncompress(Data(def)).toHeap;
+		ubyte[] def =   compress(Data(src)).asDataOf!ubyte.toGC();
+		ubyte[] res = uncompress(Data(def)).asDataOf!ubyte.toGC();
 		assert(res == src);
 
 		DataVec srcData;
@@ -146,7 +148,7 @@ the quick brown fox jumps over the lazy dog\r
 
 	void testUncompress(ubyte[] src, ubyte[] dst)
 	{
-		assert(cast(ubyte[])uncompress(Data(src)).toHeap == dst);
+		assert(cast(ubyte[])uncompress(Data(src)).toGC() == dst);
 	}
 
 	testUncompress([

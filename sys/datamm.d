@@ -27,9 +27,9 @@ alias MmMode = MmFile.Mode; /// Convenience alias.
 
 // ************************************************************************
 
-/// `DataWrapper` implementation encapsulating a memory-mapped file.
+/// `Memory` implementation encapsulating a memory-mapped file.
 /// When the last reference is released, the file is unmapped.
-class MappedDataWrapper : DataWrapper
+class MappedMemory : Memory
 {
 	typeof(scoped!MmFile(null)) mmFile; /// The `MmFile` object.
 	ubyte[] mappedData; /// View of the mapped file data.
@@ -45,26 +45,26 @@ class MappedDataWrapper : DataWrapper
 			: mmFile.Scoped_payload[]
 		);
 
-		debug(DATA_REFCOUNT) writefln("? -> %s [%s..%s]: Created MappedDataWrapper", cast(void*)this, contents.ptr, contents.ptr + contents.length);
+		debug(DATA_REFCOUNT) writefln("? -> %s [%s..%s]: Created MappedMemory", cast(void*)this, contents.ptr, contents.ptr + contents.length);
 	} ///
 
 	debug(DATA_REFCOUNT)
 	~this() @nogc
 	{
-		printf("? -> %p: Deleted MappedDataWrapper\n", cast(void*)this);
+		printf("? -> %p: Deleted MappedMemory\n", cast(void*)this);
 	}
 
 	override @property inout(ubyte)[] contents() inout { return mappedData; } ///
 	override @property size_t size() const { return mappedData.length; } ///
-	override void setSize(size_t newSize) { assert(false, "Can't resize MappedDataWrapper"); } ///
+	override void setSize(size_t newSize) { assert(false, "Can't resize MappedMemory"); } ///
 	override @property size_t capacity() const { return mappedData.length; } ///
 }
 
 /// Returns a `Data` viewing a mapped file.
 Data mapFile(string name, MmMode mode, size_t from = 0, size_t to = 0)
 {
-	auto wrapper = unmanagedNew!MappedDataWrapper(name, mode, from, to);
-	return Data(wrapper);
+	auto memory = unmanagedNew!MappedMemory(name, mode, from, to);
+	return Data(memory);
 }
 
 private T retryInterrupted(T)(scope T delegate() dg)

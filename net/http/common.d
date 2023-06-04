@@ -304,7 +304,10 @@ public:
 				return decodeUrlParameters(cast(string)data.joinToHeap());
 			case "multipart/form-data":
 				return decodeMultipart(data.joinData, contentType.properties.get("boundary", null))
-					.map!(part => tuple(part.headers.get("Content-Disposition", null).decodeTokenHeader.properties.get("name", null), cast(string)part.data.toHeap()))
+					.map!(part => tuple(
+						part.headers.get("Content-Disposition", null).decodeTokenHeader.properties.get("name", null),
+						part.data.asDataOf!char.toGC().assumeUnique,
+					))
 					.UrlParameters;
 			case "":
 				throw new Exception("No Content-Type");
@@ -721,7 +724,7 @@ Data encodeMultipart(MultipartPart[] parts, string boundary)
 		foreach (name, value; part.headers)
 			data ~= name ~ ": " ~ value ~ "\r\n";
 		data ~= "\r\n";
-		assert((cast(string)part.data.contents).indexOf(boundary) < 0);
+		assert(part.data.asDataOf!char.indexOf(boundary) < 0);
 		data ~= part.data;
 		data ~= "\r\n";
 	}
@@ -732,28 +735,29 @@ Data encodeMultipart(MultipartPart[] parts, string boundary)
 /// Decode a multipart body using the given boundary.
 MultipartPart[] decodeMultipart(Data data, string boundary)
 {
-	auto s = cast(char[])data.contents;
-	auto term = "\r\n--" ~ boundary ~ "--\r\n";
-	enforce(s.endsWith(term), "Bad multipart terminator");
-	s = s[0..$-term.length];
-	auto delim = "--" ~ boundary ~ "\r\n";
-	enforce(s.skipOver(delim), "Bad multipart start");
-	delim = "\r\n" ~ delim;
-	auto parts = s.split(delim);
 	MultipartPart[] result;
-	foreach (part; parts)
-	{
-		auto segs = part.findSplit("\r\n\r\n");
-		enforce(segs[1], "Can't find headers in multipart part");
-		MultipartPart p;
-		foreach (line; segs[0].split("\r\n"))
+	data.asDataOf!char.enter((scope s) {
+		auto term = "\r\n--" ~ boundary ~ "--\r\n";
+		enforce(s.endsWith(term), "Bad multipart terminator");
+		s = s[0..$-term.length];
+		auto delim = "--" ~ boundary ~ "\r\n";
+		enforce(s.skipOver(delim), "Bad multipart start");
+		delim = "\r\n" ~ delim;
+		auto parts = s.split(delim);
+		foreach (part; parts)
 		{
-			auto hparts = line.findSplit(":");
-			p.headers[hparts[0].strip.idup] = hparts[2].strip.idup;
+			auto segs = part.findSplit("\r\n\r\n");
+			enforce(segs[1], "Can't find headers in multipart part");
+			MultipartPart p;
+			foreach (line; segs[0].split("\r\n"))
+			{
+				auto hparts = line.findSplit(":");
+				p.headers[hparts[0].strip.idup] = hparts[2].strip.idup;
+			}
+			p.data = Data(segs[2]);
+			result ~= p;
 		}
-		p.data = Data(segs[2]);
-		result ~= p;
-	}
+	});
 	return result;
 }
 
@@ -769,7 +773,7 @@ unittest
 	foreach (p; 0..parts.length)
 	{
 		assert(parts[p].headers == parts2[p].headers);
-		assert(parts[p].data.contents == parts2[p].data.contents);
+		assert(parts[p].data.unsafeContents == parts2[p].data.unsafeContents);
 	}
 }
 

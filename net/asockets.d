@@ -1001,7 +1001,7 @@ public:
 			stderr.writefln("== %s -> %s ==", localAddressStr, remoteAddressStr);
 			foreach (datum; data)
 				if (datum.length)
-					stderr.write(hexDump(datum.contents));
+					stderr.write(hexDump(datum.unsafeContents));
 				else
 					stderr.writeln("(empty Data)");
 			stderr.flush();
@@ -1142,7 +1142,9 @@ protected:
 					ptrdiff_t sent = 0;
 					if (!queue.front.empty)
 					{
-						sent = doSend(queue.front.contents);
+						queue.front.enter((scope contents) {
+							sent = doSend(contents);
+						});
 						debug (ASOCKETS) stderr.writefln("\t\t%s: sent %d/%d bytes", this, sent, queue.front.length);
 					}
 					else
@@ -1717,7 +1719,10 @@ protected:
 		foreach (priority, ref queue; outQueue)
 			while (queue.length)
 			{
-				auto sent = conn.sendTo(queue.front.contents, remoteAddress);
+				ptrdiff_t sent;
+				queue.front.enter((scope contents) {
+					sent = conn.sendTo(contents, remoteAddress);
+				});
 
 				if (sent == Socket.ERROR)
 				{
@@ -1898,7 +1903,7 @@ unittest
 
 	server.handleReadData = (Data data)
 	{
-		assert(data.contents == packets[0]);
+		assert(data.unsafeContents == packets[0]);
 		packets = packets[1..$];
 		if (!packets.length)
 		{
@@ -2023,40 +2028,33 @@ protected:
 	final override void onReadData(Data data)
 	{
 		import std.string : indexOf;
-		auto oldBufferLength = inBuffer.length;
-		if (oldBufferLength)
+		auto startIndex = inBuffer.length;
+		if (inBuffer.length)
 			inBuffer ~= data;
 		else
 			inBuffer = data;
 
-		if (delimiter.length == 1)
-		{
-			import core.stdc.string : memchr;
-
-			char c = delimiter[0];
-			auto p = memchr(inBuffer.ptr + oldBufferLength, c, data.length);
-			while (p)
-			{
-				sizediff_t index = p - inBuffer.ptr;
-				if (!processLine(index))
-					break;
-
-				p = memchr(inBuffer.ptr, c, inBuffer.length);
-			}
-		}
+		assert(delimiter.length >= 1);
+		if (startIndex >= delimiter.length)
+			startIndex -= delimiter.length - 1;
 		else
+			startIndex = 0;
+
+		auto index = inBuffer[startIndex .. $].indexOf(delimiter);
+		while (index >= 0)
 		{
-			sizediff_t index;
-			// TODO: we can start the search at oldBufferLength-delimiter.length+1
-			while ((index = indexOf(cast(string)inBuffer.contents, delimiter)) >= 0
-				&& processLine(index))
-			{}
+			if (!processLine(startIndex + index))
+				break;
+
+			startIndex = 0;
+			index = inBuffer.indexOf(delimiter);
 		}
 
 		if (maxLength && inBuffer.length > maxLength)
 			disconnect("Line too long", DisconnectType.error);
 	}
 
+	// `index` is the index of the delimiter's first character.
 	final bool processLine(size_t index)
 	{
 		if (maxLength && index > maxLength)
