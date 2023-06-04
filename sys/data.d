@@ -25,7 +25,7 @@
  *   remain.
  *
  * - Unlike D arrays, `Data` objects know their reference count,
- *   enabling things like copy-on-write.
+ *   enabling things like copy-on-write or safely casting away constness.
  *
  * License:
  *   This Source Code Form is subject to the terms of
@@ -42,9 +42,10 @@ module ae.sys.data;
 import core.exception : OutOfMemoryError, onOutOfMemoryError;
 
 import std.algorithm.mutation : move;
-import std.traits : hasIndirections, Unqual;
+import std.traits : hasIndirections, Unqual, isSomeChar;
 
-import ae.utils.array : emptySlice, sliceIndex;
+// https://issues.dlang.org/show_bug.cgi?id=23961
+//import ae.utils.array : emptySlice, sliceIndex, bytes, fromBytes;
 
 debug(DATA) import core.stdc.stdio;
 
@@ -69,6 +70,9 @@ struct TData(T)
 if (!hasIndirections!T)
 {
 private:
+	// https://issues.dlang.org/show_bug.cgi?id=23961
+	import ae.utils.array : emptySlice, sliceIndex, bytes, fromBytes;
+
 	/// Wrapped data
 	T[] data;
 
@@ -399,10 +403,26 @@ public:
 		return move(this);
 	}
 
+	/// Soft (memory-safe) cast:
 	/// Cast contents to another type, and returns an instance with that contents.
-	/// The current instance is cleared.
-	/// The current instance must be the only one holding a reference to the data
-	/// (call `ensureUnique` first).  No copying is done.
+	/// Constness is preserved. No copying is done.
+	auto asDataOf(U)()
+	if (is(typeof(this.data.bytes().fromBytes!(U[])()) == U[]))
+	{
+		TData!U result;
+		result.data = this.data.bytes().fromBytes!(U[])();
+		result.memory = this.memory;
+		if (result.memory)
+			result.memory.referenceCount++;
+		return result;
+	}
+
+	/// Hard (normally memory-unsafe) cast:
+	/// Cast contents to another type, and returns an instance with that contents.
+	/// The current instance is cleared. U may have an incompatible constness.
+	/// To enforce memory safety, the current instance must be the only one
+	/// holding a reference to the data (call `ensureUnique` first).
+	/// No copying is done.
 	TData!U castTo(U)()
 	if (!hasIndirections!U)
 	{
@@ -669,6 +689,24 @@ public:
 		}
 	}
 
+	package(ae) // TODO: is this a good API?
+	sizediff_t indexOf(const(T)[] needle) const
+	{
+		static if (is(typeof(imported!q{ae.utils.array}.indexOf(this.data, needle))))
+			return imported!q{ae.utils.array}.indexOf(this.data, needle);
+		else
+		static if (is(typeof(imported!q{std.string}.indexOf(this.data, needle))))
+			return imported!q{std.string}.indexOf(this.data, needle);
+		else
+		{
+			if (this.data.length >= needle.length)
+				foreach (i; 0 .. this.data.length - needle.length + 1)
+					if (this.data[i .. i + needle.length] == needle)
+						return i;
+			return -1;
+		}
+	}
+
 	// --- Range operations
 
 	/// Range primitive.
@@ -728,6 +766,12 @@ unittest
 			// 	const TData!T d;
 			// 	d.enter((scope contents) { const T[] _ = contents; });
 			// }
+			// .enter with return value
+			{
+				TData!T d;
+				auto l = d.enter((T[] contents) => contents.length);
+				assert(l == d.length);
+			}
 			// Construction from typeof(null)
 			{
 				auto d = TData!T(null);
@@ -1068,6 +1112,22 @@ inout(T) fromBytes(T, E)(inout(E)[] bytes)
 if (is(T U : U[]) && !hasIndirections!U && is(Unqual!E == void))
 {
 	return cast(inout(T))bytes;
+}
+
+package(ae) // TODO: is this a good API?
+T as(T)(Data data)
+{
+	assert(data.length == T.sizeof, "Incorrect data size");
+	return data.asDataOf!T.front;
+}
+
+package(ae) // TODO: is this a good API?
+T pop(T)(ref Data data)
+{
+	assert(data.length >= T.sizeof, "Insufficient bytes in data");
+	auto result = data[0 .. T.sizeof].asDataOf!T.front;
+	data = data[T.sizeof .. $];
+	return result;
 }
 
 // ************************************************************************
