@@ -107,14 +107,17 @@ struct ZlibProcess(bool COMPRESSING)
 	}
 
 	/// Process one chunk of data.
-	void processChunk(const Data chunk)
+	void processChunk(ref const Data chunk)
 	{
 		if (!chunk.length)
 			return;
 
 		assert(zs.avail_in == 0);
-		zs.next_in  = cast(ubyte*) chunk.ptr;
-		zs.avail_in = to!uint(chunk.length);
+		// zlib will consume all data, so unsafeContents is OK to use here
+		scope(success) assert(zs.avail_in == 0);
+		// cast+unsafeContents because const(Data) is not copyable, can't use asDataOf, does this even make sense?
+		zs.next_in  = cast(ubyte*) chunk.unsafeContents.ptr;
+		zs.avail_in = to!uint(chunk.unsafeContents.length);
 
 		do
 		{
@@ -198,9 +201,9 @@ private:
 
 	void saveChunk()
 	{
-		if (zs.next_out && zs.next_out != currentChunk.ptr)
+		if (zs.next_out && zs.next_out != currentChunk.unsafeContents.ptr)
 		{
-			outputChunks ~= currentChunk[0..zs.next_out-cast(ubyte*)currentChunk.ptr];
+			outputChunks ~= currentChunk[0..zs.next_out-cast(ubyte*)currentChunk.unsafeContents.ptr];
 			currentChunk = Data();
 		}
 		zs.next_out = null;
@@ -211,7 +214,7 @@ private:
 		saveChunk();
 		currentChunk = Data(sz);
 		currentChunk.length = currentChunk.capacity;
-		zs.next_out  = cast(ubyte*)currentChunk.mptr;
+		zs.next_out  = cast(ubyte*)currentChunk.unsafeContents.ptr;
 		zs.avail_out = to!uint(currentChunk.length);
 	}
 }
@@ -232,8 +235,8 @@ unittest
 {
 	void testRoundtrip(ubyte[] src)
 	{
-		ubyte[] def = cast(ubyte[])  compress(Data(src)).toHeap;
-		ubyte[] res = cast(ubyte[])uncompress(Data(def)).toHeap;
+		ubyte[] def =   compress(Data(src)).asDataOf!ubyte.toGC;
+		ubyte[] res = uncompress(Data(def)).asDataOf!ubyte.toGC;
 		assert(res == src);
 	}
 

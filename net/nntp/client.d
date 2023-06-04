@@ -126,7 +126,7 @@ private:
 	{
 		try
 		{
-			auto line = cast(string)data.toHeap();
+			string line = data.asDataOf!char.toGC();
 			log("> " ~ line);
 
 			bool replyDone;

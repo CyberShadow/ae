@@ -100,9 +100,7 @@ private:
 	static T readInt(T)(ref Data data)
 	{
 		enforce!PgSqlException(data.length >= T.sizeof, "Not enough data in packet");
-		T result = bigEndianToNative!T(cast(ubyte[T.sizeof])data.contents[0..T.sizeof]);
-		data = data[T.sizeof..$];
-		return result;
+		return data.pop!(ubyte[T.sizeof]).bigEndianToNative!T();
 	}
 
 	static char readChar(ref Data data)
@@ -112,11 +110,13 @@ private:
 
 	static char[] readString(ref Data data)
 	{
-		char[] s = cast(char[])data.contents;
-		auto p = s.indexOf('\0');
-		enforce!PgSqlException(p >= 0, "Unterminated string in packet");
-		char[] result = s[0..p];
-		data = data[p+1..$];
+		char[] result;
+		data.asDataOf!char.enter((scope s) {
+			auto p = s.indexOf('\0');
+			enforce!PgSqlException(p >= 0, "Unterminated string in packet");
+			result = s[0..p].dup;
+			data = data[p+1..$];
+		});
 		return result;
 	}
 

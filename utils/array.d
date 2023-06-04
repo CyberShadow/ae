@@ -28,6 +28,10 @@ import ae.utils.meta;
 public import ae.utils.aa;
 public import ae.utils.appender;
 
+// TODO: Update names:
+// - use "as" / "asXXX" for functions which do not copy
+// - use "to" / "toXXX" for functions which copy or construct a new return value
+
 /// Slice a variable.
 T[] toArray(T)(ref T v)
 {

@@ -112,31 +112,31 @@ private:
 	void onReadData(Data data)
 	{
 		while (data.length)
-		{
-			enforce(data.length >= inotify_event.sizeof, "Insufficient bytes for inotify_event");
-			auto pheader = cast(inotify_event*)data.contents.ptr;
-			auto end = inotify_event.sizeof + pheader.len;
-			enforce(data.length >= end, "Insufficient bytes for inotify name");
-			auto name = cast(char[])data.contents[inotify_event.sizeof .. end];
+			data.enter((scope contents) {
+				enforce(data.length >= inotify_event.sizeof, "Insufficient bytes for inotify_event");
+				auto pheader = cast(inotify_event*)contents.ptr; // inotify_event is non-copyable
+				auto end = inotify_event.sizeof + pheader.len;
+				enforce(data.length >= end, "Insufficient bytes for inotify name");
+				auto name = cast(char[])contents[inotify_event.sizeof .. end];
 
-			auto p = name.indexOf('\0');
-			if (p >= 0)
-				name = name[0..p];
+				auto p = name.indexOf('\0');
+				if (p >= 0)
+					name = name[0..p];
 
-			if (pheader.wd == -1)
-			{
-				// Overflow - notify all watch descriptors
-				foreach (wd, handler; handlers)
-					handler(name, cast(Mask)pheader.mask, pheader.cookie);
-			}
-			else
-			{
-				auto phandler = pheader.wd in handlers;
-				enforce(phandler, "Unregistered inotify watch descriptor");
-				(*phandler)(name, cast(Mask)pheader.mask, pheader.cookie);
-			}
-			data = data[end..$];
-		}
+				if (pheader.wd == -1)
+				{
+					// Overflow - notify all watch descriptors
+					foreach (wd, handler; handlers)
+						handler(name, cast(Mask)pheader.mask, pheader.cookie);
+				}
+				else
+				{
+					auto phandler = pheader.wd in handlers;
+					enforce(phandler, "Unregistered inotify watch descriptor");
+					(*phandler)(name, cast(Mask)pheader.mask, pheader.cookie);
+				}
+				data = data[end..$];
+			});
 	}
 }
 

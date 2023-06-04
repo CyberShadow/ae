@@ -104,9 +104,10 @@ final class ShutdownConnection : TcpConnection
 
 	void onReadData(Data data)
 	{
-		auto dataBytes = cast(char[])data.contents;
-		auto reason = dataBytes.length == 1 && dataBytes[0] == 0 ? null : dataBytes;
-		shutdown(reason);
+		data.asDataOf!char.enter((scope dataBytes) {
+			auto reason = dataBytes.length == 1 && dataBytes[0] == 0 ? null : dataBytes;
+			shutdown(reason);
+		});
 	}
 }
 

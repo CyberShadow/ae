@@ -45,14 +45,14 @@ version (SSL_test)
 			};
 			s.handleReadData = (Data data)
 			{
-				debug(SSL) { stderr.write(cast(string)data.contents); stderr.flush(); }
+				debug(SSL) { stderr.write(cast(string)data.unsafeContents); stderr.flush(); }
 				allData ~= data;
 			};
 			s.handleDisconnect = (string reason, DisconnectType type)
 			{
 				debug(SSL) { stderr.writeln(reason); }
 				enforce(type == DisconnectType.graceful, "Unexpected disconnection: " ~ reason);
-				enforce((cast(string)allData.contents).startsWith("HTTP/1.1 200 OK\r\n"), "Unexpected response");
+				enforce((cast(string)allData.unsafeContents).startsWith("HTTP/1.1 200 OK\r\n"), "Unexpected response");
 			};
 			s.setHostName(host);
 			c.connect(host, port);

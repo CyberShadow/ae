@@ -180,7 +180,7 @@ protected:
 
 	final void onContinuation(Data data)
 	{
-		debug (HTTP) debugLog("Receiving continuation of request: \n%s---", cast(string)data.contents);
+		debug (HTTP) debugLog("Receiving continuation of request: \n%s---", cast(string)data.unsafeContents);
 		inBuffer ~= data;
 
 		if (!requestProcessing && inBuffer.bytes.length >= expect)

@@ -51,35 +51,36 @@ final class SCGIConnection
 		while (true)
 			try
 			{
-				auto bufferStr = cast(char[])buffer.contents;
-				auto colonIdx = bufferStr.indexOf(':');
-				if (colonIdx < 0)
-					return;
+				buffer.asDataOf!char.enter((scope bufferStr) {
+					auto colonIdx = bufferStr.indexOf(':');
+					if (colonIdx < 0)
+						return;
 
-				auto headerLenStr = bufferStr[0 .. colonIdx];
-				auto headerLen = headerLenStr.to!size_t;
-				auto headerEnd = headerLenStr.length + 1 /*:*/ + headerLen + 1 /*,*/;
-				if (buffer.length < headerEnd)
-					return;
-				enforce(bufferStr[headerEnd - 1] == ',', "Expected ','");
+					auto headerLenStr = bufferStr[0 .. colonIdx];
+					auto headerLen = headerLenStr.to!size_t;
+					auto headerEnd = headerLenStr.length + 1 /*:*/ + headerLen + 1 /*,*/;
+					if (buffer.length < headerEnd)
+						return;
+					enforce(bufferStr[headerEnd - 1] == ',', "Expected ','");
 
-				auto headersStr = bufferStr[headerLenStr.length + 1 .. headerEnd - 1];
-				enum CONTENT_LENGTH = "CONTENT_LENGTH";
-				enforce(headersStr.startsWith(CONTENT_LENGTH ~ "\0"), "Expected first header to be " ~ CONTENT_LENGTH);
-				auto contentLength = headersStr[CONTENT_LENGTH.length + 1 .. $].findSplit("\0")[0].to!size_t;
-				if (buffer.length < headerEnd + contentLength)
-					return;
+					auto headersStr = bufferStr[headerLenStr.length + 1 .. headerEnd - 1];
+					enum CONTENT_LENGTH = "CONTENT_LENGTH";
+					enforce(headersStr.startsWith(CONTENT_LENGTH ~ "\0"), "Expected first header to be " ~ CONTENT_LENGTH);
+					auto contentLength = headersStr[CONTENT_LENGTH.length + 1 .. $].findSplit("\0")[0].to!size_t;
+					if (buffer.length < headerEnd + contentLength)
+						return;
 
-				// We now know we have all the data in the request
+					// We now know we have all the data in the request
 
-				auto headers = parseHeaders(headersStr.idup);
-				enforce(headers.get("SCGI", null) == "1", "Unknown SCGI version");
-				CGIRequest request;
-				request.vars = CGIVars.fromAA(headers);
-				request.headers = CGIRequest.decodeHeaders(headers, request.vars.serverProtocol ? request.vars.serverProtocol : "HTTP");
-				request.data = DataVec(buffer[headerEnd .. headerEnd + contentLength]);
-				buffer = buffer[headerEnd + contentLength .. $];
-				handleRequest(request);
+					auto headers = parseHeaders(headersStr.idup);
+					enforce(headers.get("SCGI", null) == "1", "Unknown SCGI version");
+					CGIRequest request;
+					request.vars = CGIVars.fromAA(headers);
+					request.headers = CGIRequest.decodeHeaders(headers, request.vars.serverProtocol ? request.vars.serverProtocol : "HTTP");
+					request.data = DataVec(buffer[headerEnd .. headerEnd + contentLength]);
+					buffer = buffer[headerEnd + contentLength .. $];
+					handleRequest(request);
+				});
 			}
 			catch (Exception e)
 			{

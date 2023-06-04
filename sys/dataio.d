@@ -13,6 +13,7 @@
 
 module ae.sys.dataio;
 
+import std.conv : to;
 import std.exception : enforce;
 
 import ae.sys.data;
@@ -47,9 +48,10 @@ Data readFileData(std.stdio.File f)
 	if (size == ulong.max)
 	{
 		Data buf = Data(1024*1024);
-		while (!f.eof())
-			result ~= f.rawRead(cast(ubyte[])buf.mcontents);
-		buf.deleteContents();
+		buf.asDataOf!ubyte.enter((contents) {
+			while (!f.eof())
+				result ~= f.rawRead(contents);
+		});
 	}
 	else
 	{
@@ -58,8 +60,12 @@ Data readFileData(std.stdio.File f)
 		if (!remaining)
 			return Data();
 		enforce(remaining <= ulong(size_t.max), "File does not fit in memory");
-		result = Data(cast(size_t)remaining);
-		result.length = f.rawRead(cast(ubyte[])result.mcontents).length;
+		result = Data(remaining.to!size_t);
+		size_t bytesRead;
+		result.asDataOf!ubyte.enter((contents) {
+			bytesRead = f.rawRead(contents).length;
+		});
+		result.length = bytesRead;
 	}
 	return result;
 }
@@ -107,7 +113,9 @@ public:
 		if (!_data.empty && _data.length >= MIN_SIZE)
 		{
 			debug(SwappedData) log(fileName ~ " - Unloading");
-			write(fileName, _data.contents);
+			_data.enter((contents) {
+				write(fileName, contents);
+			});
 			_data.clear();
 		}
 	}

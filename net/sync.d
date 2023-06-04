@@ -93,17 +93,18 @@ private:
 
 		void onReadData(Data data)
 		{
-			auto indices = cast(size_t[])data.contents;
-			foreach (index; indices)
-			{
-				auto command = queue[index];
-				queue[index] = Command.init;
-				command.dg();
-				if (command.semaphore)
-					command.semaphore.notify();
-			}
-			auto remaining = numPending.atomicOp!"-="(indices.length);
-			this.daemonRead = daemon && remaining == 0;
+			data.asDataOf!size_t.enter((scope indices) {
+				foreach (index; indices)
+				{
+					auto command = queue[index];
+					queue[index] = Command.init;
+					command.dg();
+					if (command.semaphore)
+						command.semaphore.notify();
+				}
+				auto remaining = numPending.atomicOp!"-="(indices.length);
+				this.daemonRead = daemon && remaining == 0;
+			});
 		}
 	}
 

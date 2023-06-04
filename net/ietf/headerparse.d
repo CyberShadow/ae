@@ -54,6 +54,8 @@ Headers parseHeaders(string headerData)
 
 private:
 
+sizediff_t indexOf_(T)(auto ref TData!T data, const(T)[] needle) { return data.enter((scope T[] contents) { return contents.indexOf(needle); }); }
+
 bool parseHeadersImpl(bool FIRST_LINE)(ref DataVec data, out string firstLine, out Headers headers)
 {
 	if (!data.length)
@@ -65,12 +67,12 @@ bool parseHeadersImpl(bool FIRST_LINE)(ref DataVec data, out string firstLine, o
 	size_t startFrom = 0;
 	string delim;
 searchAgain:
-	auto data0 = cast(const(char)[])data[0].contents;
+	auto data0 = data[0].asDataOf!char;
 	sizediff_t headersEnd;
-	delim = DELIM1; headersEnd = data0[startFrom..$].indexOf(delim);
+	delim = DELIM1; headersEnd = data0[startFrom..$].indexOf_(delim);
 	if (headersEnd < 0)
 	{
-		delim = DELIM2; headersEnd = data0[startFrom..$].indexOf(delim);
+		delim = DELIM2; headersEnd = data0[startFrom..$].indexOf_(delim);
 	}
 	if (headersEnd < 0)
 	{
@@ -87,7 +89,7 @@ searchAgain:
 	}
 	headersEnd += startFrom;
 
-	auto headerData = data0[0..headersEnd].idup; // copy Data slice to heap
+	string headerData = data0[0..headersEnd].toGC; // copy Data slice to heap
 	data[0] = data[0][headersEnd + delim.length .. data[0].length];
 
 	headers = parseHeadersImpl!FIRST_LINE(headerData, firstLine);
