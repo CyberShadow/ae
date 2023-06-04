@@ -94,7 +94,7 @@ unittest
 // ************************************************************************
 
 /// Presents a null-terminated pointer (C-like string) as a range.
-struct NullTerminated(E)
+struct NullTerminatedPtrRange(E)
 {
 	E* ptr; /// Current head.
 	bool empty() { return !*ptr; } ///
@@ -102,9 +102,9 @@ struct NullTerminated(E)
 	void popFront() { ptr++; } ///
 	auto save() { return this; } ///
 }
-auto nullTerminated(E)(E* ptr)
+auto nullTerminatedPtrRange(E)(E* ptr)
 {
-	return NullTerminated!E(ptr);
+	return NullTerminatedPtrRange!E(ptr);
 } /// ditto
 
 ///
@@ -112,14 +112,18 @@ unittest
 {
 	void test(S)(S s)
 	{
-		import std.utf, std.algorithm.comparison;
-		assert(equal(s.byCodeUnit, s.ptr.nullTerminated));
+		import std.utf : byCodeUnit;
+		import std.algorithm.comparison : equal;
+		assert(equal(s.byCodeUnit, s.ptr.nullTerminatedPtrRange));
 	}
 	// String literals are null-terminated
 	test("foo");
 	test("foo"w);
 	test("foo"d);
 }
+
+deprecated alias NullTerminated = NullTerminatedPtrRange;
+deprecated alias nullTerminated = nullTerminatedPtrRange;
 
 // ************************************************************************
 
