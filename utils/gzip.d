@@ -84,7 +84,7 @@ DataVec compress(scope Data[] data, ZlibOptions options = ZlibOptions.init)
 	return deflate2gzip(zlib.compress(data, options)[], crc32(data), data.bytes.length);
 }
 
-Data compress(Data input) { return compress(input.toArray).joinData(); } /// ditto
+Data compress(Data input) { return compress(input.asSlice).joinData(); } /// ditto
 
 /// Strip the Gzip header from `data`.
 DataVec gzipToRawDeflate(scope Data[] data)
@@ -116,13 +116,13 @@ DataVec uncompress(scope Data[] data)
 	DataVec uncompressed = zlib.uncompress(gzipToRawDeflate(data)[], options);
 
 	LittleEndian!uint size;
-	bytes[$-4 .. $].copyTo(size.toArray);
+	bytes[$-4 .. $].copyTo(size.asSlice);
 	enforce(cast(uint)uncompressed.bytes.length == size, "Decompressed data length mismatch");
 
 	return uncompressed;
 }
 
-Data uncompress(Data input) { return uncompress(input.toArray).joinData(); } /// ditto
+Data uncompress(Data input) { return uncompress(input.asSlice).joinData(); } /// ditto
 
 unittest
 {

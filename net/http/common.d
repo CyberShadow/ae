@@ -141,8 +141,8 @@ public:
 			if (authEnd != -1)
 			{
 				// Assume HTTP Basic auth
-				import ae.utils.array : bytes;
-				headers["Authorization"] = "Basic " ~ Base64.encode(_host[0 .. authEnd].bytes).assumeUnique;
+				import ae.utils.array : asBytes;
+				headers["Authorization"] = "Basic " ~ Base64.encode(_host[0 .. authEnd].asBytes).assumeUnique;
 				_host = _host[authEnd + 1 .. $];
 			}
 

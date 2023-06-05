@@ -249,7 +249,7 @@ private:
 
 	void sendPacket(char type, const(void)[] data)
 	{
-		conn.send(Data(type.toArray));
+		conn.send(Data(type.asSlice));
 		conn.send(Data(nativeToBigEndian(cast(uint)(data.length + uint.sizeof))[]));
 		conn.send(Data(data));
 	}

@@ -198,7 +198,7 @@ class FastCGIProtoConnection : FastCGIConnection
 			FCGI_EndRequestBody data;
 			data.appStatus = appStatus;
 			data.protocolStatus = status;
-			sendRecord(FCGI_RecordType.endRequest, id, Data(data.bytes));
+			sendRecord(FCGI_RecordType.endRequest, id, Data(data.asBytes));
 			killRequest(id);
 			if (!keepConn)
 				connection.disconnect("End of request without FCGI_KEEP_CONN");
@@ -239,7 +239,7 @@ class FastCGIProtoConnection : FastCGIConnection
 	/// Write a raw FastCGI packet.
 	final void sendRecord(ref FCGI_RecordHeader header, Data contentData)
 	{
-		connection.send(Data(header.bytes));
+		connection.send(Data(header.asBytes));
 		connection.send(contentData);
 	}
 
@@ -346,7 +346,7 @@ class FastCGIProtoConnection : FastCGIConnection
 				sendRecord(
 					FCGI_RecordType.unknownType,
 					FCGI_NULL_REQUEST_ID,
-					Data(data.bytes),
+					Data(data.asBytes),
 				);
 				break;
 			}

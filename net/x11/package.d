@@ -506,7 +506,7 @@ final class X11Client : X11SubProtocol
 				import ae.sys.file : readExactly;
 
 				BigEndian!ushort[1] result;
-				if (!f.readExactly(result.bytes[]))
+				if (!f.readExactly(result.asBytes[]))
 					throw atStart ? new EndOfFile : new Exception("Unexpected end of file");
 				atStart = false;
 				return result[0];
@@ -524,9 +524,9 @@ final class X11Client : X11SubProtocol
 			try
 			{
 				front.family = readShort();
-				front.address = readBytes().fromBytes!string;
-				front.number = readBytes().fromBytes!string;
-				front.name = readBytes().fromBytes!string;
+				front.address = readBytes().as!string;
+				front.number = readBytes().as!string;
+				front.name = readBytes().as!string;
 				front.data = readBytes();
 			}
 			catch (EndOfFile)
@@ -616,7 +616,7 @@ private:
 				CARD32 mask;
 				auto values = windowAttributes._serialize(mask);
 				mixin(populateRequestFromLocals!xCreateWindowReq);
-				return Data(req.bytes) ~ Data(values.bytes);
+				return Data(req.asBytes) ~ Data(values.asBytes);
 			},
 			void,
 		),
@@ -634,7 +634,7 @@ private:
 				CARD32 valueMask;
 				auto values = windowAttributes._serialize(valueMask);
 				mixin(populateRequestFromLocals!xChangeWindowAttributesReq);
-				return Data(req.bytes) ~ Data(values.bytes);
+				return Data(req.asBytes) ~ Data(values.asBytes);
 			},
 			void,
 		),
@@ -706,7 +706,7 @@ private:
 				CARD16 mask;
 				auto values = windowConfiguration._serialize(mask);
 				mixin(populateRequestFromLocals!xConfigureWindowReq);
-				return Data(req.bytes) ~ Data(values.bytes);
+				return Data(req.asBytes) ~ Data(values.asBytes);
 			},
 			void,
 		),
@@ -758,7 +758,7 @@ private:
 			) {
 				auto nbytes = name.length.to!CARD16;
 				mixin(populateRequestFromLocals!xInternAtomReq);
-				return pad4(Data(req.bytes) ~ Data(name.bytes));
+				return pad4(Data(req.asBytes) ~ Data(name.asBytes));
 			},
 			simpleDecoder!xInternAtomReply,
 		),
@@ -793,7 +793,7 @@ private:
 			) {
 				auto nUnits = (data.length * 8 / format).to!CARD32;
 				mixin(populateRequestFromLocals!xChangePropertyReq);
-				return pad4(Data(req.bytes) ~ Data(data.bytes));
+				return pad4(Data(req.asBytes) ~ Data(data.asBytes));
 			},
 			void,
 		),
@@ -871,9 +871,9 @@ private:
 				CARD32 eventMask,
 				xEvent event,
 			) {
-				auto eventdata = cast(byte[event.sizeof])event.bytes[0 .. event.sizeof];
+				auto eventdata = cast(byte[event.sizeof])event.asBytes[0 .. event.sizeof];
 				mixin(populateRequestFromLocals!xSendEventReq);
-				return Data(req.bytes);
+				return Data(req.asBytes);
 			},
 			void,
 		),
@@ -1034,7 +1034,7 @@ private:
 				CARD32 mask;
 				auto values = gcAttributes._serialize(mask);
 				mixin(populateRequestFromLocals!xCreateGCReq);
-				return Data(req.bytes) ~ Data(values.bytes);
+				return Data(req.asBytes) ~ Data(values.asBytes);
 			},
 			void,
 		),
@@ -1056,7 +1056,7 @@ private:
 			) {
 				auto nChars = string.length.to!ubyte;
 				mixin(populateRequestFromLocals!xImageText8Req);
-				return pad4(Data(req.bytes) ~ Data(string.bytes));
+				return pad4(Data(req.asBytes) ~ Data(string.asBytes));
 			},
 			void,
 		),
@@ -1075,7 +1075,7 @@ private:
 
 			) {
 				mixin(populateRequestFromLocals!xPolyFillRectangleReq);
-				return Data(req.bytes) ~ Data(rectangles.bytes);
+				return Data(req.asBytes) ~ Data(rectangles.asBytes);
 			},
 			void,
 		),
@@ -1091,7 +1091,7 @@ private:
 			) {
 				auto nbytes = name.length.to!ubyte;
 				mixin(populateRequestFromLocals!xQueryExtensionReq);
-				return pad4(Data(req.bytes) ~ Data(name.bytes));
+				return pad4(Data(req.asBytes) ~ Data(name.asBytes));
 			},
 			simpleDecoder!xQueryExtensionReply,
 		),
@@ -1169,7 +1169,7 @@ private:
 		prefix.nbytesAuthProto6 = authorizationProtocolName.length.to!CARD16;
 		prefix.nbytesAuthString = authorizationProtocolData.length.to!CARD16;
 
-		conn.send(Data(prefix.bytes));
+		conn.send(Data(prefix.asBytes));
 		conn.send(pad4(Data(authorizationProtocolName)));
 		conn.send(pad4(Data(authorizationProtocolData)));
 	}

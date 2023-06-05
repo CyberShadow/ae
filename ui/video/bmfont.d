@@ -57,7 +57,7 @@ protected:
 		foreach (g; 0..font.maxGlyph)
 		{
 			dchar c = g;
-			dest.drawText(0, g * font.height, c.toArray, font, color);
+			dest.drawText(0, g * font.height, c.asSlice, font, color);
 		}
 	}
 }

@@ -31,7 +31,7 @@ import ae.net.ietf.headerparse;
 import ae.net.ietf.url;
 import ae.net.ssl;
 import ae.sys.dataset : DataVec, bytes, joinToHeap;
-import ae.utils.array : toArray, shift;
+import ae.utils.array : asSlice, shift;
 import ae.utils.exception : CaughtException;
 import ae.sys.data;
 
@@ -169,7 +169,7 @@ protected:
 		if (timer)
 			timer.markNonIdle();
 
-		onHeaderData(data.toArray);
+		onHeaderData(data.asSlice);
 	}
 
 	/// Called when we've received some data from the response headers.
@@ -232,7 +232,7 @@ protected:
 	{
 		if (timer)
 			timer.markNonIdle();
-		onData(data.toArray);
+		onData(data.asSlice);
 	}
 
 	/// Called when we've received some data from the response body.
@@ -630,7 +630,7 @@ void httpGet(string url, void delegate(string) resultHandler, void delegate(stri
 	httpGet(url,
 		(Data data)
 		{
-			auto result = data.toGC().fromBytes!string();
+			auto result = data.toGC().as!string;
 			std.utf.validate(result);
 			resultHandler(result);
 		},
@@ -655,7 +655,7 @@ void httpPost(string url, DataVec postData, string contentType, void delegate(st
 	httpPost(url, move(postData), contentType,
 		(Data data)
 		{
-			auto result = data.toGC().fromBytes!string();
+			auto result = data.toGC().as!string;
 			std.utf.validate(result);
 			resultHandler(result);
 		},

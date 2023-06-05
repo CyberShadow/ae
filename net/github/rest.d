@@ -109,7 +109,7 @@ struct GitHub
 				));
 				scope(failure) if (log) log(response.headers.text);
 				auto headers = response.headers.to!(string[string]);
-				auto data = response.getContent().toGC().fromBytes!string;
+				auto data = response.getContent().toGC().as!string;
 				cacheEntry.headers = headers;
 				cacheEntry.data = data;
 				cache.put(cacheKey, toJson(cacheEntry));

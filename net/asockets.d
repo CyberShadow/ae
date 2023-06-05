@@ -18,7 +18,7 @@ module ae.net.asockets;
 
 import ae.sys.dataset : DataVec;
 import ae.sys.timing;
-import ae.utils.array : toArray;
+import ae.utils.array : asSlice;
 import ae.utils.math;
 public import ae.sys.data;
 
@@ -793,7 +793,7 @@ interface IConnection
 	/// ditto
 	final void send(Data datum, int priority = DEFAULT_PRIORITY)
 	{
-		this.send(datum.toArray, priority);
+		this.send(datum.asSlice, priority);
 	}
 
 	/// Terminate the connection.
