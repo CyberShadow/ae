@@ -28,17 +28,17 @@ import ae.utils.meta;
 public import ae.utils.aa;
 public import ae.utils.appender;
 
-// TODO: Update names:
-// - use "as" / "asXXX" for functions which do not copy
-// - use "to" / "toXXX" for functions which copy or construct a new return value
-
 /// Slice a variable.
-T[] toArray(T)(ref T v)
+@property T[] asSlice(T)(ref T v)
 {
 	return (&v)[0..1];
 }
 
-/// std.array.staticArray shim
+// deprecated alias toArray = asSlice;
+// https://issues.dlang.org/show_bug.cgi?id=23968
+deprecated T[] toArray(T)(ref T v) { return v.asSlice; }
+
+/// std.array.staticArray polyfill
 static if (__traits(hasMember, std.array, "staticArray"))
 	public import std.array : staticArray;
 else
@@ -65,37 +65,42 @@ unittest
 }
 
 /// Return the value represented as an array of bytes.
-@property inout(ubyte)[] bytes(T)(ref inout(T) value)
+@property inout(ubyte)[] asBytes(T)(ref inout(T) value)
 	if (!hasIndirections!T)
 {
-	return value.toArray().bytes;
+	return value.asSlice.asBytes;
 }
 
 /// ditto
-@property inout(ubyte)[] bytes(T)(inout(T) value)
+@property inout(ubyte)[] asBytes(T)(inout(T) value)
 	if (is(T U : U[]) && !hasIndirections!U)
 {
 	return cast(inout(ubyte)[])value;
 }
 
+// deprecated alias bytes = asBytes;
+// https://issues.dlang.org/show_bug.cgi?id=23968
+deprecated @property inout(ubyte)[] bytes(T)(ref inout(T) value) if (!hasIndirections!T) { return value.asBytes; }
+deprecated @property inout(ubyte)[] bytes(T)(inout(T) value) if (is(T U : U[]) && !hasIndirections!U) { return value.asBytes; }
+
 unittest
 {
 	ubyte b = 5;
-	assert(b.bytes == [5]);
+	assert(b.asBytes == [5]);
 
 	struct S { ubyte b = 5; }
 	S s;
-	assert(s.bytes == [5]);
+	assert(s.asBytes == [5]);
 
 	ubyte[1] sa = [5];
-	assert(sa.bytes == [5]);
+	assert(sa.asBytes == [5]);
 
 	void[] va = sa[];
-	assert(va.bytes == [5]);
+	assert(va.asBytes == [5]);
 }
 
-/// Reverse of bytes()
-ref inout(T) fromBytes(T)(inout(ubyte)[] bytes)
+/// Reverse of .asBytes
+ref inout(T) as(T)(inout(ubyte)[] bytes)
 	if (!hasIndirections!T)
 {
 	assert(bytes.length == T.sizeof, "Data length mismatch for %s".format(T.stringof));
@@ -103,26 +108,31 @@ ref inout(T) fromBytes(T)(inout(ubyte)[] bytes)
 }
 
 /// ditto
-inout(T) fromBytes(T)(inout(ubyte)[] bytes)
+inout(T) as(T)(inout(ubyte)[] bytes)
 	if (is(T U : U[]) && !hasIndirections!U)
 {
 	return cast(inout(T))bytes;
 }
 
+// deprecated alias fromBytes = as;
+// https://issues.dlang.org/show_bug.cgi?id=23968
+deprecated ref inout(T) fromBytes(T)(inout(ubyte)[] bytes) if (!hasIndirections!T) { return bytes.as!T; }
+deprecated inout(T) fromBytes(T)(inout(ubyte)[] bytes) if (is(T U : U[]) && !hasIndirections!U) { return bytes.as!T; }
+
 unittest
 {
-	{       ubyte b = 5; assert(b.bytes.fromBytes!ubyte == 5); }
-	{ const ubyte b = 5; assert(b.bytes.fromBytes!ubyte == 5); }
+	{       ubyte b = 5; assert(b.asBytes.as!ubyte == 5); }
+	{ const ubyte b = 5; assert(b.asBytes.as!ubyte == 5); }
 	struct S { ubyte b; }
-	{       ubyte b = 5; assert(b.bytes.fromBytes!S == S(5)); }
+	{       ubyte b = 5; assert(b.asBytes.as!S == S(5)); }
 }
 
 unittest
 {
 	struct S { ubyte a, b; }
 	ubyte[] arr = [1, 2];
-	assert(arr.fromBytes!S == S(1, 2));
-	assert(arr.fromBytes!(S[]) == [S(1, 2)]);
+	assert(arr.as!S == S(1, 2));
+	assert(arr.as!(S[]) == [S(1, 2)]);
 }
 
 /// Returns an empty, but non-null slice of T.
