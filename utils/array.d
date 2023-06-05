@@ -124,7 +124,7 @@ unittest
 /// Returns an empty, but non-null slice of T.
 auto emptySlice(T)() pure @trusted
 {
-	static if (false) // LDC optimizes this out
+	static if (false)  // https://github.com/ldc-developers/ldc/issues/831
 	{
 		T[0] arr;
 		auto p = arr.ptr;
