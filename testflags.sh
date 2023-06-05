@@ -84,7 +84,11 @@ function check() {
 				dmd -color=on -i -o- -I.. -de "${flags[@]}" all.d)" \
 		   "$name" "$name" "$name"
 }
-check_all | ( xargs -n 1 -d '\n' -P 4 sh -c || true )
+nproc=$(nproc)
+limit_ram=$(awk '/MemFree/ { printf "%d\n", $2/(2*1024*1024) }' /proc/meminfo)
+if (( nproc > limit_ram )) ; then nproc=$limit_ram ; fi
+if (( nproc < 1 )) ; then nproc=1 ; fi
+check_all | ( xargs -n 1 -d '\n' -P "$nproc" sh -c || true )
 
 function check() {
 	local name=$1
