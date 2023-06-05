@@ -71,7 +71,7 @@ if (!hasIndirections!T)
 {
 private:
 	// https://issues.dlang.org/show_bug.cgi?id=23961
-	import ae.utils.array : emptySlice, sliceIndex, bytes, fromBytes;
+	import ae.utils.array : emptySlice, sliceIndex, as, asBytes;
 
 	/// Wrapped data
 	T[] data;
@@ -145,8 +145,7 @@ private:
 	{
 		if (newCapacity <= capacity)
 		{
-			import ae.utils.array : bytes;
-			auto dataBytes = this.data.bytes;
+			auto dataBytes = this.data.asBytes;
 			auto pos = memory.contents.sliceIndex(dataBytes); // start position in memory data in bytes
 			memory.setSize(pos + newSize * T.sizeof);
 			auto oldSize = data.length;
@@ -407,10 +406,10 @@ public:
 	/// Cast contents to another type, and returns an instance with that contents.
 	/// Constness is preserved. No copying is done.
 	auto asDataOf(U)()
-	if (is(typeof(this.data.bytes().fromBytes!(U[])()) == U[]))
+	if (is(typeof(this.data.asBytes.as!(U[])) == U[]))
 	{
 		TData!U result;
-		result.data = this.data.bytes().fromBytes!(U[])();
+		result.data = this.data.asBytes.as!(U[]);
 		result.memory = this.memory;
 		if (result.memory)
 			result.memory.referenceCount++;
@@ -557,8 +556,7 @@ public:
 			return length;
 		// We can only safely expand if the memory slice is at the end of the used unmanaged memory block,
 		// or, if we are the only reference.
-		import ae.utils.array : bytes;
-		auto dataBytes = this.data.bytes;
+		auto dataBytes = this.data.asBytes;
 		auto pos = memory.contents.sliceIndex(dataBytes); // start position in memory data in bytes
 		auto end = pos + dataBytes.length;                // end   position in memory data in bytes
 		assert(end <= memory.size);
@@ -1101,14 +1099,14 @@ deprecated alias DataWrapper = Memory;
 
 // Temporary forward-compatibility shims.
 // Will be deprecated when Data is switched to using ubyte.
-ref inout(T) fromBytes(T, E)(inout(E)[] bytes)
+ref inout(T) as(T, E)(inout(E)[] bytes)
 if (!hasIndirections!T && is(Unqual!E == void))
 {
 	assert(bytes.length == T.sizeof, "Data length mismatch for " ~ T.stringof);
 	return *cast(inout(T)*)bytes.ptr;
 }
 
-inout(T) fromBytes(T, E)(inout(E)[] bytes)
+inout(T) as(T, E)(inout(E)[] bytes)
 if (is(T U : U[]) && !hasIndirections!U && is(Unqual!E == void))
 {
 	return cast(inout(T))bytes;

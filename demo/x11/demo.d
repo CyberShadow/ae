@@ -91,7 +91,7 @@ void main()
 					wid,
 					atoms["WM_PROTOCOLS"], atoms["ATOM"],
 					32,
-					[atoms["WM_DELETE_WINDOW"]].bytes,
+					[atoms["WM_DELETE_WINDOW"]].asBytes,
 				);
 			});
 	};
@@ -117,7 +117,7 @@ void main()
 	x11.handleClientMessage = (event) {
 		if (event.type == atoms["WM_PROTOCOLS"])
 		{
-			auto messageAtoms = event.bytes.fromBytes!(Atom[])();
+			auto messageAtoms = event.asBytes.as!(Atom[]);
 			if (messageAtoms[0] == atoms["WM_DELETE_WINDOW"])
 			{
 				// As the X11 connection is the only object in the

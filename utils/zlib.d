@@ -157,7 +157,7 @@ struct ZlibProcess(bool COMPRESSING)
 	/// Process input and return output as a single contiguous `Data`.
 	static Data process(Data input, ZlibOptions options = ZlibOptions.init)
 	{
-		return process(input.toArray, options).joinData();
+		return process(input.asSlice, options).joinData();
 	}
 
 	~this()
