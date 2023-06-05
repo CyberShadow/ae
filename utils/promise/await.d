@@ -21,6 +21,7 @@ import ae.utils.promise;
 /// Evaluates `task` in a new fiber, and returns a promise which is
 /// fulfilled when `task` exits.  `task` may use `await` to block on
 /// other promises.
+// TODO: is using lazy OK for this? https://issues.dlang.org/show_bug.cgi?id=23923
 Promise!(T, E) async(T, E = Exception)(lazy T task)
 {
 	auto p = new Promise!T;
