@@ -17,6 +17,7 @@ import std.exception;
 
 import ae.net.asockets;
 import ae.net.ssl;
+import ae.utils.array : asBytes;
 
 package(ae):
 
@@ -41,7 +42,7 @@ version (SSL_test)
 			s.handleConnect =
 			{
 				debug(SSL) stderr.writeln("Connected!");
-				s.send(Data("GET / HTTP/1.0\r\nHost: " ~ host ~ "\r\n\r\n"));
+				s.send(Data(("GET / HTTP/1.0\r\nHost: " ~ host ~ "\r\n\r\n").asBytes));
 			};
 			s.handleReadData = (Data data)
 			{

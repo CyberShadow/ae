@@ -188,7 +188,7 @@ private class X11SubProtocol
 				req.tupleof[structIndex] = args[i];
 			}
 
-			return Data((&req)[0 .. 1]);
+			return Data(req.asBytes);
 		}
 	}
 
@@ -1165,7 +1165,7 @@ private:
 		prefix.nbytesAuthString = authorizationProtocolData.length.to!CARD16;
 
 		conn.send(Data(prefix.asBytes));
-		conn.send(pad4(Data(authorizationProtocolName)));
+		conn.send(pad4(Data(authorizationProtocolName.asBytes)));
 		conn.send(pad4(Data(authorizationProtocolData)));
 	}
 

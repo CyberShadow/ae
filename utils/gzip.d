@@ -55,7 +55,7 @@ if (is(ElementType!R : const(Data)))
 
 unittest
 {
-	assert(crc32([Data("ab"), Data("c")]) == 0x352441C2);
+	assert(crc32([Data("ab".asBytes), Data("c".asBytes)]) == 0x352441C2);
 }
 
 /// Add a Gzip header to deflated data.
@@ -69,12 +69,12 @@ DataVec deflate2gzip(scope Data[] compressed, uint dataCrc, size_t dataLength)
 	header[3..8] = 0;  // TODO: set MTIME
 	header[8] = 4;
 	header[9] = 3;     // TODO: set OS
-	uint[2] footer = [dataCrc, std.conv.to!uint(dataLength)];
+	uint[2] footer = [dataCrc, std.conv.to!uint(dataLength)]; // TODO: endianness
 
 	return DataVec(
 		Data(header),
 		compressed.bytes[2 .. $ - 4],
-		Data(footer),
+		Data(footer.asBytes),
 	);
 }
 

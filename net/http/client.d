@@ -31,7 +31,7 @@ import ae.net.ietf.headerparse;
 import ae.net.ietf.url;
 import ae.net.ssl;
 import ae.sys.dataset : DataVec, bytes, joinToHeap;
-import ae.utils.array : as, asSlice, shift;
+import ae.utils.array : as, asBytes, asSlice, shift;
 import ae.utils.exception : CaughtException;
 import ae.sys.data;
 
@@ -148,7 +148,7 @@ protected:
 				stderr.writefln("} (%d bytes data follow)", request.data.bytes.length);
 		}
 
-		conn.send(Data(reqMessage));
+		conn.send(Data(reqMessage.asBytes));
 		conn.send(request.data[]);
 	}
 
@@ -656,7 +656,7 @@ void httpPost(string url, DataVec postData, string contentType, void delegate(st
 /// ditto
 void httpPost(string url, UrlParameters vars, void delegate(string) resultHandler, void delegate(string) errorHandler)
 {
-	return httpPost(url, DataVec(Data(encodeUrlParameters(vars))), "application/x-www-form-urlencoded", resultHandler, errorHandler);
+	return httpPost(url, DataVec(Data(encodeUrlParameters(vars).asBytes)), "application/x-www-form-urlencoded", resultHandler, errorHandler);
 }
 
 // https://issues.dlang.org/show_bug.cgi?id=7016

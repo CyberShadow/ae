@@ -17,6 +17,7 @@
 module ae.net.irc.clientreplay;
 
 import ae.net.asockets;
+import ae.utils.array : asBytes;
 
 /// `IConnection` implementation which replays an `IrcClient` log file.
 class IrcClientLogSource : IConnection
@@ -63,7 +64,7 @@ class IrcClientLogSource : IConnection
 				continue;
 			line = line.findSplit("] ")[2];
 			if (line[0] == '<')
-				recv(Data(line[2..$]));
+				recv(Data(line[2..$].asBytes));
 		}
 	}
 }

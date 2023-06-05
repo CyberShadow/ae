@@ -247,9 +247,9 @@ private:
 		conn.send(Data(buf.data));
 	}
 
-	void sendPacket(char type, const(void)[] data)
+	void sendPacket(char type, const(ubyte)[] data)
 	{
-		conn.send(Data(type.asSlice));
+		conn.send(Data(type.asBytes));
 		conn.send(Data(nativeToBigEndian(cast(uint)(data.length + uint.sizeof))[]));
 		conn.send(Data(data));
 	}

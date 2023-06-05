@@ -656,7 +656,7 @@ struct MemoryBIO
 {
 	@disable this(this);
 
-	this(const(void)[] data)
+	this(const(ubyte)[] data)
 	{
 		bio_ = BIO_new_mem_buf(cast(void*)data.ptr, data.length.to!int);
 	} ///
@@ -684,11 +684,11 @@ struct MemoryBIO
 		return bio_;
 	} ///
 
-	const(void)[] data()
+	const(ubyte)[] data()
 	{
 		BUF_MEM *bptr;
 		BIO_get_mem_ptr(bio, &bptr);
-		return bptr.data[0..bptr.length];
+		return (cast(ubyte*)bptr.data)[0..bptr.length];
 	} ///
 
 private:
