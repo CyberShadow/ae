@@ -58,7 +58,7 @@ class AENetwork : Network
 		Data result;
 		bool got;
 
-		httpPost(url, DataVec(Data(data)), null,
+		httpPost(url, DataVec(Data(cast(const(ubyte)[])data)), null,
 			(Data data) { result = data; got = true; },
 			(string error) { throw new Exception(error); }
 		);

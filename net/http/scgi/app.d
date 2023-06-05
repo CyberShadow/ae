@@ -111,7 +111,7 @@ final class SCGIConnection
 			writeNPHHeaders(r, headers);
 		else
 			writeCGIHeaders(r, headers);
-		connection.send(Data(headers.get));
+		connection.send(Data(headers.get().asBytes));
 		connection.send(r.data[]);
 		connection.disconnect("Response sent");
 	}

@@ -18,7 +18,7 @@ module ae.net.asockets;
 
 import ae.sys.dataset : DataVec;
 import ae.sys.timing;
-import ae.utils.array : asSlice;
+import ae.utils.array : asSlice, asBytes;
 import ae.utils.math;
 public import ae.sys.data;
 
@@ -1913,7 +1913,7 @@ unittest
 	client.send({
 		DataVec data;
 		foreach (packet; packets)
-			data ~= Data(packet);
+			data ~= Data(packet.asBytes);
 		return data;
 	}()[]);
 
@@ -2033,7 +2033,7 @@ class LineBufferedAdapter : ConnectionAdapter
 		//super.send(Data(line ~ delimiter));
 		// https://issues.dlang.org/show_bug.cgi?id=13985
 		ConnectionAdapter ca = this;
-		ca.send(Data(line ~ delimiter));
+		ca.send(Data(line.asBytes ~ delimiter.asBytes));
 	}
 
 protected:
@@ -2056,14 +2056,14 @@ protected:
 		else
 			startIndex = 0;
 
-		auto index = inBuffer[startIndex .. $].indexOf(delimiter);
+		auto index = inBuffer[startIndex .. $].indexOf(delimiter.asBytes);
 		while (index >= 0)
 		{
 			if (!processLine(startIndex + index))
 				break;
 
 			startIndex = 0;
-			index = inBuffer.indexOf(delimiter);
+			index = inBuffer.indexOf(delimiter.asBytes);
 		}
 
 		if (maxLength && inBuffer.length > maxLength)

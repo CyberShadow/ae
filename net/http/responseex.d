@@ -50,7 +50,7 @@ public:
 	/// Utility function to serve HTML.
 	HttpResponseEx serveData(string data, string contentType = "text/html; charset=utf-8")
 	{
-		return serveData(Data(data), contentType);
+		return serveData(Data(data.asBytes), contentType);
 	}
 
 	/// Utility function to serve arbitrary data.
@@ -86,7 +86,7 @@ public:
 	/// Utility function to serve plain text.
 	HttpResponseEx serveText(string data)
 	{
-		return serveData(Data(data), "text/plain; charset=utf-8");
+		return serveData(Data(data.asBytes), "text/plain; charset=utf-8");
 	}
 
 	private static bool checkPath(string path)
@@ -232,7 +232,7 @@ public:
 		string[string] dictionary = pageTokens.dup;
 		dictionary["title"] = encodeEntities(title);
 		dictionary["content"] = contentHTML;
-		data = DataVec(Data(parseTemplate(pageTemplate, dictionary)));
+		data = DataVec(Data(parseTemplate(pageTemplate, dictionary).asBytes));
 		headers["Content-Type"] = "text/html; charset=utf-8";
 	}
 

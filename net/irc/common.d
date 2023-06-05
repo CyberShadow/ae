@@ -25,6 +25,7 @@ import std.string;
 import std.utf;
 
 import ae.net.asockets;
+import ae.utils.array : asBytes;
 
 debug(IRC) import std.stdio : stderr;
 
@@ -121,7 +122,7 @@ public:
 		debug(IRC) stderr.writeln("> ", line);
 		// Send with \r\n, but support receiving with \n
 		import ae.sys.data;
-		conn.send(Data(line ~ "\r\n"));
+		conn.send(Data(line.asBytes ~ "\r\n".asBytes));
 	}
 
 	/// Inactivity handler (for sending a `PING` request).

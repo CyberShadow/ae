@@ -31,6 +31,8 @@ class Network
 		notImplemented();
 	}
 
+	// TODO: use ubyte[] instead of void[]
+
 	/// Get resource located at the indicated URL.
 	void[] getFile(string url)
 	{

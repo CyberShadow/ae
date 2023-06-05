@@ -30,7 +30,7 @@ import std.typecons : tuple;
 import ae.net.ietf.headers;
 import ae.sys.data;
 import ae.sys.dataset;
-import ae.utils.array : amap, afilter, auniq, asort;
+import ae.utils.array : amap, afilter, auniq, asort, asBytes;
 import ae.utils.text;
 import ae.utils.time;
 
@@ -637,7 +637,7 @@ public:
 				{
 					//writeError(HttpStatusCode.RequestedRangeNotSatisfiable);
 					setStatus(HttpStatusCode.RequestedRangeNotSatisfiable);
-					data = DataVec(Data(statusMessage));
+					data = DataVec(Data(statusMessage.asBytes));
 					return;
 				}
 				else
@@ -749,7 +749,7 @@ struct MultipartPart
 /// Encode a multipart body with the given parts and boundary.
 Data encodeMultipart(MultipartPart[] parts, string boundary)
 {
-	Data data;
+	TData!char data;
 	foreach (ref part; parts)
 	{
 		data ~= "--" ~ boundary ~ "\r\n";
@@ -757,11 +757,11 @@ Data encodeMultipart(MultipartPart[] parts, string boundary)
 			data ~= name ~ ": " ~ value ~ "\r\n";
 		data ~= "\r\n";
 		assert(part.data.asDataOf!char.indexOf(boundary) < 0);
-		data ~= part.data;
+		data ~= part.data.asDataOf!char;
 		data ~= "\r\n";
 	}
 	data ~= "--" ~ boundary ~ "--\r\n";
-	return data;
+	return data.asDataOf!ubyte;
 }
 
 /// Decode a multipart body using the given boundary.
@@ -786,7 +786,7 @@ MultipartPart[] decodeMultipart(Data data, string boundary)
 				auto hparts = line.findSplit(":");
 				p.headers[hparts[0].strip.idup] = hparts[2].strip.idup;
 			}
-			p.data = Data(segs[2]);
+			p.data = Data(segs[2].asBytes);
 			result ~= p;
 		}
 	});
@@ -797,7 +797,7 @@ unittest
 {
 	auto parts = [
 		MultipartPart(Headers(["Foo" : "bar"]), Data.init),
-		MultipartPart(Headers(["Baz" : "quux", "Frob" : "xyzzy"]), Data("Content goes here\xFF")),
+		MultipartPart(Headers(["Baz" : "quux", "Frob" : "xyzzy"]), Data("Content goes here\xFF".asBytes)),
 	];
 	auto boundary = "abcde";
 	auto parts2 = parts.encodeMultipart(boundary).decodeMultipart(boundary);

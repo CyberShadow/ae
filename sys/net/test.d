@@ -20,6 +20,7 @@ import std.process : environment;
 import ae.net.http.common;
 import ae.sys.data : Data;
 import ae.sys.dataset : DataVec, joinToHeap;
+import ae.utils.array : asBytes;
 
 static import ae.sys.net.ae;
 static import ae.sys.net.curl;
@@ -83,7 +84,7 @@ void test(string moduleName, string className)()
 		auto request = new HttpRequest(testBaseURL ~ "testUrl5");
 		request.method = "PUT";
 		request.headers.add("Test-Request-Header", "foo");
-		request.data = DataVec(Data("bar"));
+		request.data = DataVec(Data("bar".asBytes));
 		auto response = net.httpRequest(request);
 		assert(response.status == HttpStatusCode.Accepted);
 		assert(response.statusMessage == "Custom Message");

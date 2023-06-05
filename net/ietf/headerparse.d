@@ -20,6 +20,7 @@ import std.array;
 import ae.net.ietf.headers;
 import ae.sys.data;
 import ae.sys.dataset : DataVec, joinToHeap;
+import ae.utils.array : asBytes;
 import ae.utils.text;
 
 /**
@@ -122,7 +123,7 @@ unittest
 {
 	void test(string message)
 	{
-		auto data = DataVec(Data(message));
+		auto data = DataVec(Data(message.asBytes));
 		Headers headers;
 		assert(parseHeaders(data, headers));
 		assert(headers["From"] == "John Smith <john@smith.net>");

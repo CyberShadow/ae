@@ -31,6 +31,7 @@ import ae.net.ssl;
 import ae.sys.data;
 import ae.sys.dataset : bytes, shift, DataVec, joinToHeap;
 import ae.sys.log;
+import ae.utils.array;
 import ae.utils.container.listnode;
 import ae.utils.exception;
 import ae.utils.text;
@@ -166,7 +167,7 @@ protected:
 				response.status = HttpStatusCode.InternalServerError;
 				response.statusMessage = HttpResponse.getStatusMessage(HttpStatusCode.InternalServerError);
 				response.headers["Content-Type"] = "text/plain";
-				response.data = DataVec(Data(e.toString()));
+				response.data = DataVec(Data(e.toString().asBytes));
 			}
 			sendResponse(response);
 		}
@@ -293,7 +294,7 @@ public:
 			response = new HttpResponse();
 			response.status = HttpStatusCode.InternalServerError;
 			response.statusMessage = HttpResponse.getStatusMessage(HttpStatusCode.InternalServerError);
-			response.data = DataVec(Data("Internal Server Error"));
+			response.data = DataVec(Data("Internal Server Error".asBytes));
 		}
 		writeResponse(response);
 
@@ -370,7 +371,7 @@ public:
 		debug (HTTP) debugLog("Response headers:\n> %s", respMessage.get().chomp().replace("\r\n", "\n> "));
 
 		respMessage.put("\r\n");
-		conn.send(Data(respMessage.get()));
+		conn.send(Data(respMessage.get().asBytes));
 	}
 
 	/// ditto
@@ -688,7 +689,7 @@ unittest
 	port = s.listen(0, "127.0.0.1");
 	TcpConnection c = new TcpConnection;
 	c.handleConnect = {
-		c.send(Data(
+		c.send(Data((
 "GET /?a=123456 HTTP/1.1
 Content-length: 8
 Content-type: application/x-www-form-urlencoded
@@ -702,7 +703,7 @@ Content-length: potato
 Content-length: 9
 Content-type: application/x-www-form-urlencoded
 
-b=7654321"));
+b=7654321").asBytes));
 		c.disconnect();
 	};
 	c.connect("127.0.0.1", port);
@@ -723,13 +724,13 @@ b=7654321"));
 	port = s.listen(0, "127.0.0.1");
 	c = new TcpConnection;
 	c.handleConnect = {
-		c.send(Data("\n\n\n\n\n"));
+		c.send(Data("\n\n\n\n\n".asBytes));
 		c.disconnect();
 
 		// Now send a valid request to end the loop
 		c = new TcpConnection;
 		c.handleConnect = {
-			c.send(Data("GET / HTTP/1.0\n\n"));
+			c.send(Data("GET / HTTP/1.0\n\n".asBytes));
 			c.disconnect();
 		};
 		c.connect("127.0.0.1", port);

@@ -17,6 +17,7 @@ import std.algorithm.mutation : move;
 import std.range.primitives : ElementType;
 
 import ae.sys.data;
+import ae.utils.array : asBytes;
 import ae.utils.vec;
 
 /// Copy a `Data` array's contents to a specified buffer.
@@ -57,7 +58,7 @@ if (is(ElementType!R == Data))
 
 unittest
 {
-	assert(cast(int[])([Data([1]), Data([2])].joinData().unsafeContents) == [1, 2]);
+	assert(cast(int[])([Data([1].asBytes), Data([2].asBytes)].joinData().unsafeContents) == [1, 2]);
 }
 
 /// Join an array of Data to a memory block on the managed heap.
@@ -75,7 +76,7 @@ if (is(ElementType!R == Data))
 
 unittest
 {
-	assert(cast(int[])([Data([1]), Data([2])].joinToHeap()) == [1, 2]);
+	assert(cast(int[])([Data([1].asBytes), Data([2].asBytes)].joinToHeap()) == [1, 2]);
 }
 
 
@@ -167,7 +168,7 @@ unittest
 	string s;
 
 	ds = DataVec(
-		Data("aaaaa"),
+		Data("aaaaa".asBytes),
 	);
 	s = cast(string)(ds.joinToHeap);
 	assert(s == "aaaaa");
@@ -177,9 +178,9 @@ unittest
 	assert(s == "aaa");
 
 	ds = DataVec(
-		Data("aaaaa"),
-		Data("bbbbb"),
-		Data("ccccc"),
+		Data("aaaaa".asBytes),
+		Data("bbbbb".asBytes),
+		Data("ccccc".asBytes),
 	);
 	auto dsb = ds.bytes;
 	assert(dsb.length == 15);

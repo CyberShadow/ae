@@ -477,7 +477,7 @@ class FastCGIResponderConnection : FastCGIProtoConnection
 				this.outer.handleRequest(request, &sendResponse);
 			catch (Exception e)
 			{
-				stderr(Data(e.toString()));
+				stderr(Data(e.toString().asBytes));
 				stderrEnd();
 				end(0, FCGI_ProtocolStatus.requestComplete);
 			}
@@ -490,7 +490,7 @@ class FastCGIResponderConnection : FastCGIProtoConnection
 				writeNPHHeaders(r, headers);
 			else
 				writeCGIHeaders(r, headers);
-			stdout(Data(headers.get));
+			stdout(Data(headers.get().asBytes));
 
 			foreach (datum; r.data)
 				stdout(datum);
