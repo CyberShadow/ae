@@ -55,8 +55,8 @@ class Connection
 
 	void onOuterData(Data data)
 	{
-		if (logData) log(format("Outer connection from %s sent %d bytes:\n%s", outer.remoteAddress(), data.length, hexDump(data.contents)));
-		if (record) recordLog(format("%d < %d %s", Clock.currStdTime(), index, hexEscape(data.contents)));
+		if (logData) log(format("Outer connection from %s sent %d bytes:\n%s", outer.remoteAddress(), data.length, hexDump(data.unsafeContents)));
+		if (record) recordLog(format("%d < %d %s", Clock.currStdTime(), index, hexEscape(data.unsafeContents)));
 		inner.send(data);
 	}
 
@@ -70,8 +70,8 @@ class Connection
 
 	void onInnerData(Data data)
 	{
-		if (logData) log(format("Inner connection to %s sent %d bytes:\n%s", inner.remoteAddress(), data.length, hexDump(data.contents)));
-		if (record) recordLog(format("%d > %d %s", Clock.currStdTime(), index, hexEscape(data.contents)));
+		if (logData) log(format("Inner connection to %s sent %d bytes:\n%s", inner.remoteAddress(), data.length, hexDump(data.unsafeContents)));
+		if (record) recordLog(format("%d > %d %s", Clock.currStdTime(), index, hexEscape(data.unsafeContents)));
 		outer.send(data);
 	}
 

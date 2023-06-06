@@ -94,8 +94,7 @@ final class MyApplication : Application
 
 		foreach (ref pixel; parallel(pixels))
 			pixel.rotate(sinx, cosx, siny, cosy);
-		auto newPixels = countSort!`a.z`(pixels);
-		delete pixels; pixels = newPixels; // avoid memory leak
+		countSort!`a.z`(pixels);
 
 		canvas.clear(BGRX.init);
 		foreach (ref pixel; pixels)

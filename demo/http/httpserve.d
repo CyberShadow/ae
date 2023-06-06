@@ -80,7 +80,7 @@ void httpserve(
 			conn.sendResponse(response);
 		};
 	server.listen(port, host);
-	addShutdownHandler({ server.close(); });
+	addShutdownHandler((reason) { server.close(); });
 
 	socketManager.loop();
 }

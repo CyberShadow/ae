@@ -102,7 +102,7 @@ final class MyApplication : Application
 			case Mode.audio:
 			{
 				auto str = "Press a key when you hear the tick sound";
-				font.drawText(s, (BAND_WIDTH - str.length.to!int * font.font.maxWidth)/2, BAND_TOP+BAND_HEIGHT, str);
+				font.drawText(s, (BAND_WIDTH - str.length.to!int * font8x8.maxWidth)/2, BAND_TOP+BAND_HEIGHT, str);
 				enum sampleInterval = BAND_HNSECS_PER_PIXEL * BAND_INTERVAL;
 				if (t / sampleInterval != lastTick / sampleInterval)
 					shell.audio.mixer.playSound(tick);
@@ -128,7 +128,7 @@ final class MyApplication : Application
 			{
 				auto y = HISTORY_TOP + HISTORY_HEIGHT * (device*3 + sampleType*2 + 1);
 				if (sampleType == SampleType.duration) y -= HISTORY_HEIGHT/2;
-				y -= font.font.height / 2;
+				y -= font8x8.height / 2;
 				font.drawText(s, 2, y.to!int, "%8s %-9s".format(device, sampleType));
 			}
 
