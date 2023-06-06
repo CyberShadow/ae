@@ -571,32 +571,62 @@ unittest
 }
 
 /// Sorts `arr` in-place using counting sort.
-/// The difference between the lowest and highest element of `arr` shouldn't be too big.
-T[] countSort(alias value = "a", T)(T[] arr)
+/// The difference between the lowest and highest
+/// return value of `orderPred(arr[i])` shouldn't be too big.
+void countSort(alias orderPred = "a", T)(T[] arr, ref T[] valuesBuf, ref size_t[] countsBuf)
 {
-	alias unaryFun!value getValue;
-	alias typeof(getValue(arr[0])) V;
-	if (arr.length == 0) return arr;
-	V min = getValue(arr[0]), max = getValue(arr[0]);
-	foreach (el; arr[1..$])
+	alias getIndex = unaryFun!orderPred;
+	alias Index = typeof(getIndex(arr[0]));
+	if (arr.length == 0)
+		return;
+	Index min = getIndex(arr[0]);
+	Index max = min;
+	foreach (ref el; arr[1..$])
 	{
-		auto v = getValue(el);
-		if (min > v)
-			min = v;
-		if (max < v)
-			max = v;
+		Index i = getIndex(el);
+		if (min > i)
+			min = i;
+		if (max < i)
+			max = i;
 	}
-	auto n = max-min+1;
-	auto counts = new size_t[n];
+
+	auto n = max - min + 1;
+	if (valuesBuf.length < n)
+		valuesBuf.length = n;
+	auto values = valuesBuf[0 .. n];
+	if (countsBuf.length < n)
+		countsBuf.length = n;
+	auto counts = countsBuf[0 .. n];
+
 	foreach (el; arr)
-		counts[getValue(el)-min]++;
-	auto indices = new size_t[n];
-	foreach (i; 1..n)
-		indices[i] = indices[i-1] + counts[i-1];
-	T[] result = new T[arr.length];
-	foreach (el; arr)
-		result[indices[getValue(el)-min]++] = el;
-	return result;
+	{
+		auto i = getIndex(el) - min;
+		values[i] = el;
+		counts[i]++;
+	}
+
+	size_t p = 0;
+	foreach (i; 0 .. n)
+	{
+		auto count = counts[i];
+		arr[p .. p + count] = values[i];
+		p += count;
+	}
+	assert(p == arr.length);
+}
+
+void countSort(alias orderPred = "a", T)(T[] arr)
+{
+	static size_t[] countsBuf;
+	static T[] valuesBuf;
+	countSort!orderPred(arr, valuesBuf, countsBuf);
+} /// ditto
+
+unittest
+{
+	auto arr = [3, 2, 5, 2, 1];
+	arr.countSort();
+	assert(arr == [1, 2, 2, 3, 5]);
 }
 
 // ***************************************************************************
