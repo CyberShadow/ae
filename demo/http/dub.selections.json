@@ -2,6 +2,6 @@
 	"fileVersion": 1,
 	"versions": {
 		"ae": {"path":"../../"},
-		"openssl": "2.0.3+1.1.0h"
+		"openssl": "3.3.0"
 	}
 }

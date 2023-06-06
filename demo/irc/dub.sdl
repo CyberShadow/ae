@@ -1,0 +1,5 @@
+name "ae-demo-irc"
+mainSourceFile "irctest.d"
+targetType "executable"
+
+dependency "ae" version="*" path="../../"

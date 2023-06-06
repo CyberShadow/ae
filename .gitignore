@@ -34,11 +34,13 @@
 /demo/x11/demo
 
 # demos - dub binaries
+/demo/binview/ae-demo-binview
 /demo/canvas/ae-demo-canvas
 /demo/colorcube/ae-demo-colorcube
 /demo/drawsprite/ae-demo-drawsprite
 /demo/http/ae-demo-http
 /demo/inputtiming/ae-demo-inputtiming
+/demo/irc/ae-demo-irc
 /demo/libpng/ae-demo-pngtobmp
 /demo/pewpew/ae-demo-pewpew
 /demo/portforward/ae-demo-portforward
