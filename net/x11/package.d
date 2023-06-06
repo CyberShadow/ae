@@ -450,21 +450,26 @@ final class X11Client : X11SubProtocol
 
 		auto hostParts = display.findSplit(":");
 		auto host = hostParts[0];
-		if (!host.length)
-			return;
-		if (host == "localhost")
+		if (!host.length || host == "localhost")
 			host = Socket.hostName;
 
 		auto number = hostParts[2];
 		number = number.findSplit(".")[0];
 
-		foreach (ref record; XAuthorityReader(File(getHomeDir.buildPath(".Xauthority"), "rb")))
-			if (record.address == host && record.number == number)
-			{
-				authorizationProtocolName = record.name;
-				authorizationProtocolData = record.data;
-				return;
-			}
+		try
+		{
+			foreach (ref record; XAuthorityReader(File(getHomeDir.buildPath(".Xauthority"), "rb")))
+				if (record.address == host && record.number == number)
+				{
+					authorizationProtocolName = record.name;
+					authorizationProtocolData = record.data;
+					return;
+				}
+		}
+		catch (Exception e)
+		{
+			// Absent or corrupted .Xauthority file, ignore
+		}
 	}
 
 	/// Xauthority parsing.
