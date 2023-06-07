@@ -359,41 +359,44 @@ private T parseTimeImpl(alias fmt, T, bool checked, C)(C[] t, immutable TimeZone
 	}
 }
 
-// Compile-time format string parsing
-private T parseTimeLike(string fmt, T, C)(C[] str, immutable TimeZone tz/* = null*/)
+/*private*/ template parseTimeLike(T)
 {
-	// Omit length checks if we know the input string is long enough
-	enum maxLength = timeFormatSize(fmt);
-	if (str.length < maxLength)
-		return parseTimeImpl!(fmt, T, true )(str, tz);
-	else
-		return parseTimeImpl!(fmt, T, false)(str, tz);
+	// Compile-time format string parsing
+	/*private*/ T parseTimeLike(string fmt, C)(C[] str, immutable TimeZone tz = null)
+	{
+		// Omit length checks if we know the input string is long enough
+		enum maxLength = timeFormatSize(fmt);
+		if (str.length < maxLength)
+			return parseTimeImpl!(fmt, T, true )(str, tz);
+		else
+			return parseTimeImpl!(fmt, T, false)(str, tz);
+	}
+
+	// Run-time format string parsing
+	// Deprecated because the argument order is confusing for UFCS;
+	// use the parseTimeLikeUsing aliases instead.
+	/*private*/ deprecated T parseTimeLike(C)(in char[] fmt, C[] str, immutable TimeZone tz = null)
+	{
+		return parseTimeImpl!(fmt, T, true)(str, tz);
+	}
 }
 
-// Run-time format string parsing
-private T parseTimeLike(T, C)(in char[] fmt, C[] str, immutable TimeZone tz/* = null*/)
+/*private*/ template parseTimeLikeUsing(T)
 {
-	return parseTimeImpl!(fmt, T, true)(str, tz);
+	// Run-time format string parsing
+	/*private*/ T parseTimeLikeUsing(C)(C[] str, in char[] fmt, immutable TimeZone tz = null)
+	{
+		return parseTimeImpl!(fmt, T, true)(str, tz);
+	}
 }
 
 /// Parse the given string into a SysTime, using the format spec fmt.
 /// This version generates specialized code for the given fmt.
-SysTime parseTime(string fmt, C)(C[] str, immutable TimeZone tz = null)
-{
-	return parseTimeLike!(fmt, SysTime, C)(str, tz);
-}
+alias parseTime = parseTimeLike!SysTime;
 
 /// Parse the given string into a SysTime, using the format spec fmt.
 /// This version parses fmt at runtime.
-SysTime parseTimeUsing(C)(C[] str, in char[] fmt, immutable TimeZone tz = null)
-{
-	return parseTimeLike!(SysTime, C)(fmt, str, tz);
-}
-
-deprecated SysTime parseTime(C)(const(char)[] fmt, C[] t)
-{
-	return t.parseTimeUsing(fmt);
-}
+alias parseTimeUsing = parseTimeLikeUsing!SysTime;
 
 version(unittest) import ae.utils.time.format;
 
@@ -460,19 +463,13 @@ SysTime parseLogTimestamp(string s)
 /// This version generates specialized code for the given fmt.
 /// Fields which are not representable in a DateTime, such as timezone
 /// or milliseconds, are parsed but silently discarded.
-DateTime parseDateTime(string fmt, C)(C[] str, immutable TimeZone tz = null)
-{
-	return parseTimeLike!(fmt, DateTime, C)(str, tz);
-}
+alias parseDateTime = parseTimeLike!DateTime;
 
 /// Parse the given string into a DateTime, using the format spec fmt.
 /// This version parses fmt at runtime.
 /// Fields which are not representable in a DateTime, such as timezone
 /// or milliseconds, are parsed but silently discarded.
-DateTime parseDateTimeUsing(C)(C[] str, in char[] fmt)
-{
-	return parseTimeLike!(DateTime, C)(fmt, str);
-}
+alias parseDateTimeUsing = parseTimeLikeUsing!DateTime;
 
 unittest
 {
@@ -485,19 +482,13 @@ unittest
 /// This version generates specialized code for the given fmt.
 /// Fields which are not representable in a Date, such as timezone
 /// or time of day, are parsed but silently discarded.
-Date parseDate(string fmt, C)(C[] str, immutable TimeZone tz = null)
-{
-	return parseTimeLike!(fmt, Date, C)(str, tz);
-}
+alias parseDate = parseTimeLike!Date;
 
 /// Parse the given string into a Date, using the format spec fmt.
 /// This version parses fmt at runtime.
 /// Fields which are not representable in a Date, such as timezone
 /// or time of day, are parsed but silently discarded.
-Date parseDateUsing(C)(C[] str, in char[] fmt)
-{
-	return parseTimeLike!(Date, C)(fmt, str);
-}
+alias parseDateUsing = parseTimeLikeUsing!Date;
 
 unittest
 {
@@ -510,19 +501,13 @@ unittest
 /// This version generates specialized code for the given fmt.
 /// Fields which are not representable in a TimeOfDay, such as
 /// year/month/day or timezone, are parsed but silently discarded.
-TimeOfDay parseTimeOfDay(string fmt, C)(C[] str, immutable TimeZone tz = null)
-{
-	return parseTimeLike!(fmt, TimeOfDay, C)(str, tz);
-}
+alias parseTimeOfDay = parseTimeLike!TimeOfDay;
 
 /// Parse the given string into a TimeOfDay, using the format spec fmt.
 /// This version parses fmt at runtime.
 /// Fields which are not representable in a TimeOfDay, such as
 /// year/month/day or timezone, are parsed but silently discarded.
-TimeOfDay parseTimeOfDayUsing(C)(C[] str, in char[] fmt)
-{
-	return parseTimeLike!(TimeOfDay, C)(fmt, str);
-}
+alias parseTimeOfDayUsing = parseTimeLikeUsing!TimeOfDay;
 
 unittest
 {
