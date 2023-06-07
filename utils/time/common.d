@@ -152,7 +152,7 @@ size_t timeFormatSize(string fmt)
 	import std.algorithm.iteration : map, reduce;
 	import std.algorithm.comparison : max;
 
-	static size_t maxLength(in string[] names) { return reduce!max(map!`a.length`(WeekdayShortNames)); }
+	static size_t maxLength(in string[] names) { return reduce!max(map!`a.length`(names)); }
 
 	size_t size = 0;
 	bool escaping = false;
