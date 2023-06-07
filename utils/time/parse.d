@@ -302,7 +302,7 @@ private void parseToken(alias c, alias context)()
 
 import ae.utils.meta;
 
-private SysTime parseTimeImpl(alias fmt, bool checked, C)(C[] t, immutable TimeZone defaultTZ = null)
+private T parseTimeImpl(alias fmt, T, bool checked, C)(C[] t, immutable TimeZone defaultTZ = null)
 {
 	ParseContext!(C, checked) context;
 	context.t = t;
@@ -318,43 +318,76 @@ private SysTime parseTimeImpl(alias fmt, bool checked, C)(C[] t, immutable TimeZ
 	with (context)
 	{
 		if (hour12)
-			hour = hour12%12 + (pm ? 12 : 0);
+			hour = hour12 % 12 + (pm ? 12 : 0);
 
-		// Compatibility with both <=2.066 and >=2.067
-		static if (__traits(hasMember, SysTime, "fracSecs"))
-			auto frac = dur!"nsecs"(nsecs);
+		static if (is(T == SysTime))
+		{
+			// Compatibility with both <=2.066 and >=2.067
+			static if (__traits(hasMember, SysTime, "fracSecs"))
+				auto frac = dur!"nsecs"(nsecs);
+			else
+				auto frac = FracSec.from!"hnsecs"(nsecs / 100);
+
+			SysTime result = SysTime(
+				DateTime(year, month, day, hour, minute, second),
+				frac,
+				tz);
+
+			if (dow >= 0 && !__ctfe)
+				enforce(result.dayOfWeek == dow, "Mismatching weekday");
+
+			return result;
+		}
 		else
-			auto frac = FracSec.from!"hnsecs"(nsecs / 100);
-
-		SysTime result = SysTime(
-			DateTime(year, month, day, hour, minute, second),
-			frac,
-			tz);
-
-		if (dow >= 0 && !__ctfe)
-			enforce(result.dayOfWeek == dow, "Mismatching weekday");
-
-		return result;
+		static if (is(T == Date))
+		{
+			enforce(defaultTZ is null, "Date has no concept of time zone");
+			return Date(year, month, day);
+		}
+		else
+		static if (is(T == TimeOfDay))
+		{
+			enforce(defaultTZ is null, "TimeOfDay has no concept of time zone");
+			return TimeOfDay(hour, minute, second);
+		}
+		else
+		static if (is(T == DateTime))
+		{
+			enforce(defaultTZ is null, "DateTime has no concept of time zone");
+			return DateTime(year, month, day, hour, minute, second);
+		}
 	}
+}
+
+// Compile-time format string parsing
+private T parseTimeLike(string fmt, T, C)(C[] str, immutable TimeZone tz/* = null*/)
+{
+	// Omit length checks if we know the input string is long enough
+	enum maxLength = timeFormatSize(fmt);
+	if (str.length < maxLength)
+		return parseTimeImpl!(fmt, T, true )(str, tz);
+	else
+		return parseTimeImpl!(fmt, T, false)(str, tz);
+}
+
+// Run-time format string parsing
+private T parseTimeLike(T, C)(in char[] fmt, C[] str, immutable TimeZone tz/* = null*/)
+{
+	return parseTimeImpl!(fmt, T, true)(str, tz);
 }
 
 /// Parse the given string into a SysTime, using the format spec fmt.
 /// This version generates specialized code for the given fmt.
-SysTime parseTime(string fmt, C)(C[] t, immutable TimeZone tz = null)
+SysTime parseTime(string fmt, C)(C[] str, immutable TimeZone tz = null)
 {
-	// Omit length checks if we know the input string is long enough
-	enum maxLength = timeFormatSize(fmt);
-	if (t.length < maxLength)
-		return parseTimeImpl!(fmt, true )(t, tz);
-	else
-		return parseTimeImpl!(fmt, false)(t, tz);
+	return parseTimeLike!(fmt, SysTime, C)(str, tz);
 }
 
 /// Parse the given string into a SysTime, using the format spec fmt.
 /// This version parses fmt at runtime.
-SysTime parseTimeUsing(C)(C[] t, in char[] fmt)
+SysTime parseTimeUsing(C)(C[] str, in char[] fmt, immutable TimeZone tz = null)
 {
-	return parseTimeImpl!(fmt, true)(t);
+	return parseTimeLike!(SysTime, C)(fmt, str, tz);
 }
 
 deprecated SysTime parseTime(C)(const(char)[] fmt, C[] t)
@@ -421,4 +454,79 @@ SysTime parseLogTimestamp(string s)
 		default:
 			throw new Exception("Unknown log timestamp format: " ~ s);
 	}
+}
+
+/// Parse the given string into a DateTime, using the format spec fmt.
+/// This version generates specialized code for the given fmt.
+/// Fields which are not representable in a DateTime, such as timezone
+/// or milliseconds, are parsed but silently discarded.
+DateTime parseDateTime(string fmt, C)(C[] str, immutable TimeZone tz = null)
+{
+	return parseTimeLike!(fmt, DateTime, C)(str, tz);
+}
+
+/// Parse the given string into a DateTime, using the format spec fmt.
+/// This version parses fmt at runtime.
+/// Fields which are not representable in a DateTime, such as timezone
+/// or milliseconds, are parsed but silently discarded.
+DateTime parseDateTimeUsing(C)(C[] str, in char[] fmt)
+{
+	return parseTimeLike!(DateTime, C)(fmt, str);
+}
+
+unittest
+{
+	const char[] s = "Tue, 21 Nov 2006 21:19:46 +0000";
+	auto d = s.parseDateTime!(TimeFormats.RFC2822);
+	assert(d.year == 2006 && d.second == 46);
+}
+
+/// Parse the given string into a Date, using the format spec fmt.
+/// This version generates specialized code for the given fmt.
+/// Fields which are not representable in a Date, such as timezone
+/// or time of day, are parsed but silently discarded.
+Date parseDate(string fmt, C)(C[] str, immutable TimeZone tz = null)
+{
+	return parseTimeLike!(fmt, Date, C)(str, tz);
+}
+
+/// Parse the given string into a Date, using the format spec fmt.
+/// This version parses fmt at runtime.
+/// Fields which are not representable in a Date, such as timezone
+/// or time of day, are parsed but silently discarded.
+Date parseDateUsing(C)(C[] str, in char[] fmt)
+{
+	return parseTimeLike!(Date, C)(fmt, str);
+}
+
+unittest
+{
+	const char[] s = "Tue, 21 Nov 2006 21:19:46 +0000";
+	auto d = s.parseDate!(TimeFormats.RFC2822);
+	assert(d.year == 2006 && d.month == Month.nov);
+}
+
+/// Parse the given string into a TimeOfDay, using the format spec fmt.
+/// This version generates specialized code for the given fmt.
+/// Fields which are not representable in a TimeOfDay, such as
+/// year/month/day or timezone, are parsed but silently discarded.
+TimeOfDay parseTimeOfDay(string fmt, C)(C[] str, immutable TimeZone tz = null)
+{
+	return parseTimeLike!(fmt, TimeOfDay, C)(str, tz);
+}
+
+/// Parse the given string into a TimeOfDay, using the format spec fmt.
+/// This version parses fmt at runtime.
+/// Fields which are not representable in a TimeOfDay, such as
+/// year/month/day or timezone, are parsed but silently discarded.
+TimeOfDay parseTimeOfDayUsing(C)(C[] str, in char[] fmt)
+{
+	return parseTimeLike!(TimeOfDay, C)(fmt, str);
+}
+
+unittest
+{
+	const char[] s = "Tue, 21 Nov 2006 21:19:46 +0000";
+	auto d = s.parseTimeOfDay!(TimeFormats.RFC2822);
+	assert(d.hour == 21 && d.second == 46);
 }
