@@ -607,12 +607,6 @@ protected:
 	Socket conn;
 
 // protected:
-	/// Retrieve the socket class this class wraps.
-	@property final Socket socket()
-	{
-		return conn;
-	}
-
 	void onReadable()
 	{
 	}
@@ -626,6 +620,12 @@ protected:
 	}
 
 public:
+	/// Retrieve the socket class this class wraps.
+	@property final Socket socket()
+	{
+		return conn;
+	}
+
 	/// allow getting the address of connections that are already disconnected
 	private Address[2] cachedAddress;
 
