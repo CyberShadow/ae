@@ -473,7 +473,7 @@ class OpenSSLAdapter : SSLAdapter
 
 			debug(OPENSSL_DATA) auto oldLength = w.data.length;
 			int result;
-			datum.enter((contents) {
+			datum.enter((scope contents) {
 				result = SSL_write(sslHandle, contents.ptr, contents.length.to!int);
 			});
 			debug(OPENSSL_DATA) stderr.writefln("OpenSSL:   SSL_write ate %d bytes and spat out %d bytes", datum.length, w.data.length - oldLength);
