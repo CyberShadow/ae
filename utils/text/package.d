@@ -825,55 +825,88 @@ unittest
 /// Conversion from bytes to hexadecimal strings.
 template toHex(alias digits = hexDigits)
 {
-	/// Dynamic array version.
-	char[] toHex(in ubyte[] data, char[] buf) pure
+	// Note: using template constraints instead of overloads due to
+	// https://issues.dlang.org/show_bug.cgi?id=21504
+
+	enum isHexifiable(T) =
+		is(T : ulong) || // number
+		is(T : const(ubyte)[]) || // dynamic array of bytes
+		is(T : const(ubyte)[n], size_t n); // static array of bytes
+
+	enum isBuffer(T) =
+		(is(T : C[], C) && isSomeChar!C) || // dynamic array of bytes
+		(is(T : C[n], n, C) && isSomeChar!C); // static array of bytes
+
+	auto toHex(T, B)(auto ref T value, ref B buf)
+	if (isHexifiable!T && isBuffer!B)
 	{
-		assert(buf.length == data.length*2);
-		foreach (i, b; data)
+		// Get result length
+		static if (is(T : ulong))
+			enum resultLength = T.sizeof * 2;
+		else
+		static if (is(T : const(ubyte)[n], size_t n))
+			enum resultLength = T.length * 2;
+		else
+			auto resultLength = value.length * 2;
+
+		enum fixedResultLength = !is(typeof(&resultLength));
+
+		// Ensure buffer size
 		{
-			buf[i*2  ] = digits[b>>4];
-			buf[i*2+1] = digits[b&15];
+			static if (is(T : C[], C))
+			{
+				if (buf.length < resultLength)
+					buf.length = resultLength;
+			}
+			else
+			{
+				static if (fixedResultLength)
+					static assert(resultLength <= buf.length, "Buffer size is insufficient");
+				else
+					assert(resultLength <= buf.length, "Buffer size is insufficient");
+			}
 		}
-		return buf;
+
+		static if (is(T : ulong))
+		{
+			Unqual!T x = value;
+			foreach (i; Reverse!(rangeTuple!(T.sizeof*2)))
+			{
+				buf[i] = hexDigits[x & 0xF];
+				x >>= 4;
+			}
+		}
+		else
+		{
+			foreach (i, b; value)
+			{
+				buf[i*2  ] = digits[b>>4];
+				buf[i*2+1] = digits[b&15];
+			}
+		}
+
+		alias C = typeof(buf[0]);
+
+		static if (fixedResultLength)
+			C[resultLength] result;
+		else
+			C[] result;
+		result = buf[0 .. resultLength];
+		return result;
 	}
 
-	/// Static array version.
-	char[n*2] toHex(size_t n)(in ubyte[n] data) pure
+	auto toHex(C = char, T)(auto ref T value)
+	if (isSomeChar!C && isHexifiable!T)
 	{
-		char[n*2] buf;
-		foreach (i, b; data)
-		{
-			buf[i*2  ] = digits[b>>4];
-			buf[i*2+1] = digits[b&15];
-		}
-		return buf;
-	}
-
-	/// Allocating version.
-	string toHex(in ubyte[] data) pure
-	{
-		auto buf = new char[data.length*2];
-		foreach (i, b; data)
-		{
-			buf[i*2  ] = digits[b>>4];
-			buf[i*2+1] = digits[b&15];
-		}
-		return buf;
+		static if (is(T : const(ubyte)[]))
+			C[] buf;
+		else
+			C[T.sizeof * 2] buf;
+		return toHex(value, buf);
 	}
 }
 
 alias toLowerHex = toHex!lowerHexDigits; /// ditto
-
-/// Conversion an integer type to a fixed-length hexadecimal string.
-void toHex(T : ulong, size_t U = T.sizeof*2)(T n, ref char[U] buf)
-{
-	Unqual!T x = n;
-	foreach (i; Reverse!(rangeTuple!(T.sizeof*2)))
-	{
-		buf[i] = hexDigits[x & 0xF];
-		x >>= 4;
-	}
-}
 
 unittest
 {
@@ -894,14 +927,6 @@ unittest
 	char[8] buf;
 	toHex(0x01234567, buf);
 	assert(buf == "01234567");
-}
-
-/// ditto
-char[T.sizeof*2] toHex(T : ulong)(T n)
-{
-	char[T.sizeof*2] buf;
-	toHex(n, buf);
-	return buf;
 }
 
 unittest
