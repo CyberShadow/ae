@@ -834,8 +834,8 @@ template toHex(alias digits = hexDigits)
 		is(T : const(ubyte)[n], size_t n); // static array of bytes
 
 	enum isBuffer(T) =
-		(is(T : C[], C) && isSomeChar!C) || // dynamic array of bytes
-		(is(T : C[n], n, C) && isSomeChar!C); // static array of bytes
+		(is(T : C[], C) && isSomeChar!C) || // dynamic array of chars
+		(is(T : C[n], n, C) && isSomeChar!C); // static array of chars
 
 	auto toHex(T, B)(auto ref T value, auto ref B buf)
 	if (isHexifiable!T && isBuffer!B)
