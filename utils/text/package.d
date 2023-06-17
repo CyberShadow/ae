@@ -837,7 +837,7 @@ template toHex(alias digits = hexDigits)
 		(is(T : C[], C) && isSomeChar!C) || // dynamic array of bytes
 		(is(T : C[n], n, C) && isSomeChar!C); // static array of bytes
 
-	auto toHex(T, B)(auto ref T value, ref B buf)
+	auto toHex(T, B)(auto ref T value, auto ref B buf)
 	if (isHexifiable!T && isBuffer!B)
 	{
 		// Get result length
@@ -853,14 +853,15 @@ template toHex(alias digits = hexDigits)
 
 		// Ensure buffer size
 		{
-			static if (is(T : C[], C))
+			enum fixedBufferLength = !is(T : C[], C);
+			static if (!fixedBufferLength && __traits(isRef, buf))
 			{
 				if (buf.length < resultLength)
 					buf.length = resultLength;
 			}
 			else
 			{
-				static if (fixedResultLength)
+				static if (fixedResultLength && fixedBufferLength)
 					static assert(resultLength <= buf.length, "Buffer size is insufficient");
 				else
 					assert(resultLength <= buf.length, "Buffer size is insufficient");
@@ -940,6 +941,16 @@ unittest
 	auto buf = bytes.toLowerHex();
 	static assert(buf.length == 4);
 	assert(buf == "1234");
+}
+
+unittest
+{
+	import core.exception : AssertError;
+
+	ubyte[] a = new ubyte[10];
+	char[] b = new char[10];
+	toHex(a[0..1], b[0..2]);
+	assertThrown!AssertError(toHex(a[0..1], b[0..1]));
 }
 
 /// How many significant decimal digits does a FP type have
