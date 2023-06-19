@@ -712,5 +712,41 @@ T sslEnforce(T)(T v, string message = null)
 
 // ***************************************************************************
 
+unittest
+{
+	auto p = new OpenSSLProvider;
+	auto sc = p.createContext(SSLContext.Kind.server);
+	// Use PSK to avoid needing a certificate
+	sc.setPreSharedKey("test", "hunter2".representation);
+	auto s = new TcpServer;
+	s.handleAccept = (TcpConnection c)
+	{
+		auto a = p.createAdapter(sc, c);
+		a.handleReadData = (Data d) {
+			import std.ascii : toUpper;
+			foreach (ref char c; cast(char[])d.mcontents)
+				c = toUpper(c);
+			a.send(d);
+		};
+		s.close(); // One connection
+	};
+	auto port = s.listen(0, "127.0.0.1");
+	auto cc = p.createContext(SSLContext.Kind.client);
+	cc.setPeerVerify(SSLContext.Verify.none);
+	cc.setPreSharedKey("test", "hunter2".representation);
+	auto c = new TcpConnection;
+	auto a = p.createAdapter(cc, c);
+	a.handleConnect = { a.send(Data("hello")); };
+	bool ok;
+	a.handleReadData = (Data d) {
+		assert(cast(string)d.contents == "HELLO");
+		ok = true;
+		a.disconnect();
+	};
+	c.connect("127.0.0.1", port);
+	socketManager.loop();
+	assert(ok);
+}
+
 version (unittest) import ae.net.ssl.test;
 unittest { testSSL(new OpenSSLProvider); }
