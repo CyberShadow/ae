@@ -498,7 +498,11 @@ class HttpsClient : HttpClient
 	protected override void connect(HttpRequest request)
 	{
 		super.connect(request);
-		assert(conn.state == ConnectionState.connecting);
+		if (conn.state != ConnectionState.connecting)
+		{
+			assert(conn.state == ConnectionState.disconnected);
+			return; // synchronous connection error
+		}
 		adapter.setHostName(request.host);
 	}
 }
