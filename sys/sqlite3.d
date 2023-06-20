@@ -20,6 +20,7 @@ import std.exception;
 import std.string : toStringz;
 import std.conv : to;
 import std.traits;
+import std.typecons : Nullable;
 
 /// `sqlite3*` wrapper.
 final class SQLite
@@ -151,6 +152,15 @@ final class SQLite
 			sqlite3_bind_blob(stmt, idx, v.ptr, to!int(v.length), SQLITE_TRANSIENT);
 		} /// ditto
 
+		void bind(T)(int idx, Nullable!T v)
+		if (is(typeof(bind(idx, v.get()))))
+		{
+			if (v.isNull)
+				sqlite3_bind_null(stmt, idx);
+			else
+				bind(v.get());
+		} /// ditto
+
 		/// Bind all arguments according to their type, in order.
 		void bindAll(T...)(T args)
 		{
@@ -247,6 +257,11 @@ final class SQLite
 		/// Returns the value of a column by its index, as the given D type.
 		T column(T)(int idx)
 		{
+			static if (is(T == Nullable!U, U))
+				return sqlite3_column_type(stmt, idx) == SQLITE_NULL
+					? T.init
+					: T(column!U(idx));
+			else
 			static if (is(T == string))
 				return (cast(char*)sqlite3_column_blob(stmt, idx))[0..sqlite3_column_bytes(stmt, idx)].idup;
 			else
@@ -286,6 +301,7 @@ final class SQLite
 				s.column!(ubyte[])(0);
 				s.column!(void[16])(0);
 				s.column!(ubyte[16])(0);
+				s.column!(Nullable!(ubyte[16]))(0);
 			}
 		}
 
