@@ -236,8 +236,10 @@ private:
 			this = TData(data);
 	}
 
-	debug(DATA) invariant
+	debug invariant
 	{
+		if (data.length == 0)
+			assert(memory is null, "Zero-length Data pinning Memory");
 		if (memory)
 			assert(memory.referenceCount > 0, "Data referencing Memory with bad reference count");
 	}
@@ -581,7 +583,12 @@ public:
 		if (newLength == length) // no change
 			return;
 		if (newLength < length)  // shorten
-			data = data[0..newLength];
+		{
+			if (!newLength)
+				this = TData(emptySlice!T);
+			else
+				data = data[0..newLength];
+		}
 		else                 // lengthen
 			expand(newLength, newLength, (contents) {
 				static if (!is(Unqual!T == void))
@@ -1002,6 +1009,22 @@ unittest
 						// test(generator().toGC, generator2());
 						test(generator(), generator2().toGC);
 					}
+				}
+				// Slicing to zero
+				{
+					auto l = generator().length;
+					foreach (n; [0, l/2, l])
+					{
+						auto d = generator();
+						d = d[n .. n];
+						assert(d == d);
+					}
+				}
+				// Shrinking to zero
+				{
+					auto d = generator();
+					d.length = 0;
+					assert(d == d);
 				}
 				// Reference count
 				{
