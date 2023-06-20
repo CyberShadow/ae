@@ -842,6 +842,7 @@ public:
 
 protected:
 	abstract sizediff_t doSend(const(void)[] buffer);
+	enum sizediff_t doReceiveEOF = -1;
 	abstract sizediff_t doReceive(void[] buffer);
 
 	/// The send buffers.
@@ -878,7 +879,7 @@ protected:
 		static ubyte[0x10000] inBuffer = void;
 		auto received = doReceive(inBuffer);
 
-		if (received == 0)
+		if (received == doReceiveEOF)
 			return disconnect("Connection closed", DisconnectType.graceful);
 
 		if (received == Socket.ERROR)
@@ -1236,7 +1237,10 @@ protected:
 
 	override sizediff_t doReceive(void[] buffer)
 	{
-		return read(socket.handle, buffer.ptr, buffer.length);
+		auto bytesRead = read(socket.handle, buffer.ptr, buffer.length);
+		if (bytesRead == 0)
+			return doReceiveEOF;
+		return bytesRead;
 	}
 }
 
@@ -1328,10 +1332,12 @@ class SocketConnection : StreamConnection
 {
 protected:
 	AddressInfo[] addressQueue;
+	bool datagram;
 
-	this(Socket conn)
+	this(Socket conn, bool datagram = false)
 	{
 		super(conn);
+		this.datagram = datagram;
 	}
 
 	override sizediff_t doSend(const(void)[] buffer)
@@ -1341,7 +1347,10 @@ protected:
 
 	override sizediff_t doReceive(void[] buffer)
 	{
-		return conn.receive(buffer);
+		auto bytesReceived = conn.receive(buffer);
+		if (bytesReceived == 0 && !datagram)
+			return doReceiveEOF;
+		return bytesReceived;
 	}
 
 	final void tryNextAddress()
@@ -1406,7 +1415,7 @@ class TcpConnection : SocketConnection
 protected:
 	this(Socket conn)
 	{
-		super(conn);
+		super(conn, false);
 	}
 
 public:
@@ -1516,13 +1525,14 @@ protected:
 
 	SocketConnection createConnection(Socket socket)
 	{
-		return new SocketConnection(socket);
+		return new SocketConnection(socket, datagram);
 	}
 
 	/// Whether the socket is listening.
 	bool listening;
 	/// Listener instances
 	Listener[] listeners;
+	bool datagram;
 
 	final void updateFlags()
 	{
@@ -1566,6 +1576,12 @@ public:
 
 	this()
 	{
+		this(false);
+	} ///
+
+	this(bool datagram)
+	{
+		this.datagram = datagram;
 	} ///
 
 	/// Creates a Server with the given sockets.
@@ -1900,7 +1916,7 @@ unittest
 	auto client = new UdpConnection();
 	client.initialize(server.localAddress.addressFamily);
 
-	string[] packets = ["Hello", "there"];
+	string[] packets = ["", "Hello", "there"];
 	client.remoteAddress = server.localAddress;
 	client.send({
 		DataVec data;
