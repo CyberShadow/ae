@@ -379,7 +379,12 @@ public:
 		if ("User-Agent" !in request.headers && agent)
 			request.headers["User-Agent"] = agent;
 		if ("Accept-Encoding" !in request.headers)
-			request.headers["Accept-Encoding"] = "gzip, deflate, identity;q=0.5, *;q=0";
+		{
+			static if (haveZlib)
+				request.headers["Accept-Encoding"] = "gzip, deflate, identity;q=0.5, *;q=0";
+			else
+				request.headers["Accept-Encoding"] = "identity;q=0.5, *;q=0";
+		}
 		if (request.data)
 			request.headers["Content-Length"] = to!string(request.data.bytes.length);
 		if ("Connection" !in request.headers)

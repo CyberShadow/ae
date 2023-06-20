@@ -47,6 +47,10 @@ excludedSourceFiles "sys/net/system.d"
 excludedSourceFiles "sys/net/wininet.d"
 excludedSourceFiles "sys/net/test.d"
 
+# In ae:zlib
+excludedSourceFiles "utils/gzip.d"
+excludedSourceFiles "utils/zlib.d"
+
 # Triggers on import
 excludedSourceFiles "sys/benchmark.d"
 
@@ -62,11 +66,24 @@ excludedSourceFiles "utils/container/package.d"
 excludedSourceFiles "utils/serialization/*.d"
 excludedSourceFiles "utils/xmldom.d"
 
-# libz (zlib) is a dependency on Phobos, and normally shouldn't be
-# explicitly specified as required, however in some setups (such as
-# LDC on Debian) it is not pulled in automatically for whatever
-# reason.
-libs "z" platform="posix"
+
+---------------------------
+
+subPackage {
+	name "zlib"
+	targetType "sourceLibrary"
+
+	# libz (zlib) is a dependency on Phobos, and normally shouldn't be
+	# explicitly specified as required, however in some setups (such as
+	# LDC on Debian) it is not pulled in automatically for whatever
+	# reason.
+	libs "z" platform="posix"
+
+	dependency "ae" version="*" path="."
+	sourceFiles \
+		"utils/gzip.d" \
+		"utils/zlib.d"
+}
 
 ---------------------------
 

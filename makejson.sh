@@ -10,6 +10,7 @@ packages=(
 	# These don't have any special *compile-time* dependencies.
 	# (We're not going to try to link the output.)
 	ae
+	ae:zlib
 	ae:sqlite
 )
 
@@ -22,7 +23,7 @@ done
 mapfile -t files < files.txt
 rm files.txt describe.json
 
-dmd -o- -dw -Xfae.json "${files[@]}"
+dmd -o- -dw -I.. -Xfae.json "${files[@]}"
 
 (
 	echo "deprecated module ae.all;"

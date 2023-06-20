@@ -33,8 +33,28 @@ import ae.sys.dataset;
 import ae.utils.array : amap, afilter, auniq, asort;
 import ae.utils.text;
 import ae.utils.time;
-import zlib = ae.utils.zlib;
-import gzip = ae.utils.gzip;
+
+version (ae_with_zlib) // Explicit override
+	enum haveZlib = true;
+else
+version (ae_without_zlib) // Explicit override
+	enum haveZlib = false;
+else
+version (Have_ae) // Building with Dub
+{
+	version (Have_ae_zlib) // Using ae:zlib
+		enum haveZlib = true;
+	else
+		enum haveZlib = false;
+}
+else // Not building with Dub
+	enum haveZlib = true; // Pull in zlib by default
+
+static if (haveZlib)
+{
+	import zlib = ae.utils.zlib;
+	import gzip = ae.utils.gzip;
+}
 
 /// Base HTTP message class
 private abstract class HttpMessage
@@ -512,21 +532,30 @@ public:
 	Data getContent()
 	{
 		if ("Content-Encoding" in headers && headers["Content-Encoding"]=="deflate")
-			return zlib.uncompress(data[]).joinData();
-		else
+		{
+			static if (haveZlib)
+				return zlib.uncompress(data[]).joinData();
+			else
+				throw new Exception("Built without zlib - can't decompress \"Content-Encoding: deflate\" content");
+		}
 		if ("Content-Encoding" in headers && headers["Content-Encoding"]=="gzip")
-			return gzip.uncompress(data[]).joinData();
-		else
-			return data.joinData();
-		assert(0);
+		{
+			static if (haveZlib)
+				return gzip.uncompress(data[]).joinData();
+			else
+				throw new Exception("Built without zlib - can't decompress \"Content-Encoding: gzip\" content");
+		}
+		return data.joinData();
 	}
 
+	static if (haveZlib)
 	protected void compressWithDeflate()
 	{
 		assert(compressionLevel >= 0);
 		data = zlib.compress(data[], zlib.ZlibOptions(compressionLevel));
 	}
 
+	static if (haveZlib)
 	protected void compressWithGzip()
 	{
 		assert(compressionLevel >= 0);
@@ -551,16 +580,19 @@ public:
 				foreach (method; supported)
 					switch (method)
 					{
-						case "deflate":
-							headers["Content-Encoding"] = method;
-							headers.add("Vary", "Accept-Encoding");
-							compressWithDeflate();
-							return;
-						case "gzip":
-							headers["Content-Encoding"] = method;
-							headers.add("Vary", "Accept-Encoding");
-							compressWithGzip();
-							return;
+						static if (haveZlib)
+						{
+							case "deflate":
+								headers["Content-Encoding"] = method;
+								headers.add("Vary", "Accept-Encoding");
+								compressWithDeflate();
+								return;
+							case "gzip":
+								headers["Content-Encoding"] = method;
+								headers.add("Vary", "Accept-Encoding");
+								compressWithGzip();
+								return;
+						}
 						case "*":
 							if("Content-Encoding" in headers)
 								headers.remove("Content-Encoding");

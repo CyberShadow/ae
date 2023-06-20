@@ -23,9 +23,12 @@ import ae.sys.dataset : DataVec, bytes;
 import ae.utils.mime;
 import ae.utils.time.common;
 import ae.utils.time.parse;
-import ae.utils.zlib;
-import ae.utils.gzip;
-private alias zlib = ae.utils.zlib;
+static if (haveZlib)
+{
+	import ae.utils.zlib;
+	import ae.utils.gzip;
+	private alias zlib = ae.utils.zlib;
+}
 
 /// Controls which caching headers are sent to clients.
 enum CachePolicy
@@ -82,7 +85,9 @@ protected: // interface with descendant classes
 	/// (overhead is negligible).
 	final void invalidate()
 	{
-		uncompressedDataCache = deflateDataCache = gzipDataCache = null;
+		uncompressedDataCache = null;
+		static if (haveZlib)
+			deflateDataCache = gzipDataCache = null;
 		lastModified = getLastModified();
 	}
 
@@ -92,7 +97,9 @@ protected: // interface with descendant classes
 	}
 
 private:
-	DataVec uncompressedDataCache, deflateDataCache, gzipDataCache;
+	DataVec uncompressedDataCache;
+	static if (haveZlib)
+		DataVec deflateDataCache, gzipDataCache;
 	SysTime lastModified;
 
 	@property final ref DataVec uncompressedData()
@@ -102,6 +109,7 @@ private:
 		return uncompressedDataCache;
 	}
 
+	static if (haveZlib)
 	@property final ref DataVec deflateData()
 	{
 		if (!deflateDataCache)
@@ -109,6 +117,7 @@ private:
 		return deflateDataCache;
 	}
 
+	static if (haveZlib)
 	@property final ref DataVec gzipData()
 	{
 		// deflate2gzip doesn't actually make a copy of the compressed data (thanks to DataVec).
@@ -124,12 +133,14 @@ private:
 	final class Response : HttpResponse
 	{
 	protected:
+		static if (haveZlib)
 		override void compressWithDeflate()
 		{
 			assert(data is uncompressedData);
 			data = deflateData.dup;
 		}
 
+		static if (haveZlib)
 		override void compressWithGzip()
 		{
 			assert(data is uncompressedData);
