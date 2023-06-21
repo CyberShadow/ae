@@ -337,6 +337,12 @@ public:
 		_delay = delay;
 	}
 
+	@property MonoTime when() pure const
+	{
+		assert(isWaiting(), "This TimerTask is not active");
+		return state.when;
+	}
+
 	/// Called when this timer task fires.
 	alias Handler = void delegate(Timer timer, TimerTask task);
 	Handler handleTask; /// ditto
