@@ -295,7 +295,7 @@ public:
 	} ///
 
 	/// Return whether the task is scheduled to run on a Timer.
-	bool isWaiting() pure
+	bool isWaiting() pure const
 	{
 		return owner !is null;
 	}
@@ -324,7 +324,7 @@ public:
 
 	/// The duration that this task is scheduled to run after.
 	/// Changing the delay is only allowed for inactive tasks.
-	deprecated @property Duration delay()
+	deprecated @property Duration delay() const
 	{
 		return _delay;
 	}
