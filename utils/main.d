@@ -25,6 +25,21 @@ module ae.utils.main;
  */
 mixin template main(alias realMain)
 {
+	version (unittest_only)
+	{
+		shared static this()
+		{
+			import core.runtime : Runtime, UnitTestResult;
+			Runtime.extendedModuleUnitTester = {
+				foreach (m; ModuleInfo)
+					if (m)
+						if (auto fp = m.unitTest)
+							fp();
+				return UnitTestResult();
+			};
+		}
+	}
+	else
 	int main(string[] args)
 	{
 		int run(string[] args)
