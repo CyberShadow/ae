@@ -335,6 +335,10 @@ protected:
 		// reconnect and keep going.
 		if (requestQueue.length)
 			connect(requestQueue[0]);
+
+		// Call the user disconnect handler, if one bas been set.
+		if (handleDisconnect)
+			handleDisconnect(reason, type);
 	}
 
 	IConnection adaptConnection(IConnection conn)
@@ -478,6 +482,11 @@ public:
 
 	/// User-supplied callback for handling the response.
 	void delegate(HttpResponse response, string disconnectReason) handleResponse;
+
+	/// Optional disconnect callback.
+	/// Generally using this only makes sense with a persistent
+	/// connection with keepAlive=true.
+	void delegate(string disconnectReason, DisconnectType type) handleDisconnect;
 }
 
 /// HTTPS client.
