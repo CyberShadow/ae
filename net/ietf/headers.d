@@ -46,13 +46,13 @@ struct Headers
 
 	/// If multiple headers with this name are present,
 	/// only the first one is returned.
-	ref inout(string) opIndex(string name) inout
+	ref inout(string) opIndex(string name) inout pure
 	{
 		return headers[CIAsciiString(name)][0].value;
 	}
 
 	/// Sets the given header to the given value, overwriting any previous values.
-	string opIndexAssign(string value, string name)
+	string opIndexAssign(string value, string name) pure
 	{
 		headers[CIAsciiString(name)] = [Header(name, value)];
 		return value;
@@ -71,7 +71,7 @@ struct Headers
 
 	/// Remove the given header.
 	/// Does nothing if the header was not present.
-	void remove(string name)
+	void remove(string name) pure
 	{
 		headers.remove(CIAsciiString(name));
 	}
@@ -109,7 +109,7 @@ struct Headers
 
 	/// Add a value for the given header.
 	/// Adds a new instance of the header if one already existed.
-	void add(string name, string value)
+	void add(string name, string value) pure
 	{
 		auto key = CIAsciiString(name);
 		if (key !in headers)
@@ -119,20 +119,21 @@ struct Headers
 	}
 
 	/// Retrieve the value of the given header if it is present, otherwise return `def`.
-	string get(string key, string def) const
+	string get(string key, string def) const pure nothrow @nogc
 	{
-		return getLazy(key, def);
+		auto pvalue = key in this;
+		return pvalue ? *pvalue : def;
 	}
 
 	/// Lazy version of `get`.
-	string getLazy(string key, lazy string def) const
+	string getLazy(string key, lazy string def) const pure /*nothrow*/ /*@nogc*/
 	{
 		auto pvalue = key in this;
 		return pvalue ? *pvalue : def;
 	}
 
 	/// Retrieve all values of the given header.
-	inout(string)[] getAll(string key) inout
+	inout(string)[] getAll(string key) inout pure
 	{
 		inout(string)[] result;
 		foreach (header; headers.get(CIAsciiString(key), null))
@@ -141,13 +142,13 @@ struct Headers
 	}
 
 	/// If the given header is not yet present, add it with the given value.
-	ref string require(string key, lazy string value)
+	ref string require(string key, lazy string value) pure
 	{
 		return headers.require(CIAsciiString(key), [Header(key, value)])[0].value;
 	}
 
 	/// True-ish if any headers have been set.
-	bool opCast(T)() const
+	bool opCast(T)() const pure nothrow @nogc
 		if (is(T == bool))
 	{
 		return !!headers;
@@ -185,7 +186,7 @@ struct Headers
 	}
 
 	/// Returns the number of headers and values (including duplicate headers).
-	@property size_t length() const
+	@property size_t length() const pure nothrow @nogc
 	{
 		return headers.length;
 	}
