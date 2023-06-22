@@ -100,14 +100,14 @@ public:
 	} ///
 
 	/// Resource part of URL (everything after the hostname)
-	@property string resource()
+	@property string resource() const pure nothrow @nogc
 	{
 		return _resource;
 	}
 
 	/// Set the resource part of the URL, or the entire URL.
 	/// Setting the resource to a full URL will fill in the Host header, as well.
-	@property void resource(string value)
+	@property void resource(string value) pure
 	{
 		_resource = value;
 
@@ -157,24 +157,25 @@ public:
 	}
 
 	/// The hostname, without the port number
-	@property string host()
+	@property string host() const pure nothrow @nogc
 	{
 		string _host = headers.get("Host", null);
-		auto colon = _host.lastIndexOf(":");
-		return colon<0 ? _host : _host[0..colon];
+		// auto colon = _host.lastIndexOf(':'); // https://issues.dlang.org/show_bug.cgi?id=24008
+		sizediff_t colon = -1; foreach_reverse (i, c; _host) if (c == ':') { colon = i; break; }
+		return colon < 0 ? _host : _host[0 .. colon];
 	}
 
 	/// Sets the hostname (and the `"Host"` header).
 	/// Must not include a port number.
 	/// Does not change the previously-set port number.
-	@property void host(string _host)
+	@property void host(string _host) pure
 	{
 		auto _port = this.port;
 		headers["Host"] = _port==protocolDefaultPort ? _host : _host ~ ":" ~ text(_port);
 	}
 
 	/// Retrieves the default port number for the currently set `protocol`.
-	@property ushort protocolDefaultPort()
+	@property ushort protocolDefaultPort() const pure
 	{
 		switch (protocol)
 		{
@@ -189,7 +190,7 @@ public:
 
 	/// Port number, from `"Host"` header.
 	/// Defaults to `protocolDefaultPort`.
-	@property ushort port()
+	@property ushort port() const pure
 	{
 		if ("Host" in headers)
 		{
@@ -204,7 +205,7 @@ public:
 	/// Sets the port number.
 	/// If it is equal to `protocolDefaultPort`, then it is not
 	/// included in the `"Host"` header.
-	@property void port(ushort _port)
+	@property void port(ushort _port) pure
 	{
 		if ("Host" in headers)
 		{
@@ -218,7 +219,7 @@ public:
 	}
 
 	/// Path part of request (until the `'?'`).
-	@property string path()
+	@property string path() const pure nothrow @nogc
 	{
 		auto p = resource.indexOf('?');
 		if (p >= 0)
@@ -228,7 +229,7 @@ public:
 	}
 
 	/// Query string part of request (atfer the `'?'`).
-	@property string queryString()
+	@property string queryString() const pure nothrow @nogc
 	{
 		auto p = resource.indexOf('?');
 		if (p >= 0)
@@ -238,7 +239,7 @@ public:
 	}
 
 	/// ditto
-	@property void queryString(string value)
+	@property void queryString(string value) pure
 	{
 		auto p = resource.indexOf('?');
 		if (p >= 0)
@@ -809,7 +810,7 @@ unittest
 	}
 }
 
-private bool asciiStartsWith(string s, string prefix)
+private bool asciiStartsWith(string s, string prefix) pure nothrow @nogc
 {
 	if (s.length < prefix.length)
 		return false;
