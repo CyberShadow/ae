@@ -2151,6 +2151,16 @@ class TimeoutAdapter : ConnectionAdapter
 		mainTimer.add(idleTask, now + timeout);
 	}
 
+	/// Returns the point in time when the idle handler is scheduled
+	/// to be called, or null if it is not scheduled.
+	/*Nullable!MonoTime*/auto when()()
+	{
+		import std.typecons : Nullable;
+		return idleTask.isWaiting()
+			? Nullable!MonoTime(idleTask.when)
+			: Nullable!MonoTime.init;
+ 	}
+
 	/// Callback for when a connection has stopped responding.
 	/// If unset, the connection will be disconnected.
 	void delegate() handleIdleTimeout;
