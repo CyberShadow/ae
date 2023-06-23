@@ -41,3 +41,19 @@ deprecated unittest
 	assert(Nullable!int( ).map!(n => n+1).isNull);
 	assert(Nullable!int(1).map!(n => n+1).get() == 2);
 }
+
+/// Flatten two levels of Nullable.
+// Cf. https://doc.rust-lang.org/std/option/enum.Option.html#method.flatten
+Nullable!T flatten(T)(Nullable!(Nullable!T) value)
+{
+	return value.isNull
+		? Nullable!T.init
+		: value.get();
+}
+
+///
+unittest
+{
+	auto i = 3.nullable.nullable;
+	assert(i.flatten.get == 3);
+}
