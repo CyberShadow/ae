@@ -34,20 +34,9 @@ unittest
 	assert(i.require(4) == 3);
 }
 
-/// Apply a function over a Nullable's contents,
-/// if it is not null, and return that as a new Nullable.
-/// If the argument is null, return a null Nullable.
-auto map(alias pred, T)(auto ref Nullable!T value)
-if (is(typeof(pred(value.get()))))
-{
-	if (value.isNull)
-		return Nullable!(typeof(pred(value.get())))();
-	else
-		return nullable(pred(value.get()));
-}
+deprecated alias map = std.typecons.apply;
 
-///
-unittest
+deprecated unittest
 {
 	assert(Nullable!int( ).map!(n => n+1).isNull);
 	assert(Nullable!int(1).map!(n => n+1).get() == 2);
