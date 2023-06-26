@@ -13,6 +13,7 @@
 
 module ae.utils.graphics.color;
 
+import std.meta : AliasSeq;
 import std.traits;
 
 import ae.utils.math;
@@ -415,19 +416,37 @@ template ChannelType(T)
 		alias ChannelType = T;
 }
 
+private template TransformSpec(alias Transformer, Spec...)
+{
+	static if (Spec.length == 0)
+		alias TransformSpec = Spec;
+	else
+	static if (is(typeof(Spec[0]) == string))
+		alias TransformSpec = AliasSeq!(Spec[0], TransformSpec!(Transformer, Spec[1 .. $]));
+	else
+		alias TransformSpec = AliasSeq!(Transformer!(Spec[0]), TransformSpec!(Transformer, Spec[1 .. $]));
+}
+
 /// Resolves to a Color instance with a different ChannelType.
-template ChangeChannelType(COLOR, T)
+template TransformChannelType(COLOR, alias Transformer)
 	if (isNumeric!COLOR)
 {
-	alias ChangeChannelType = T;
+	alias TransformChannelType = Transformer!COLOR;
+}
+
+/// ditto
+template TransformChannelType(COLOR, alias Transformer)
+	if (is(COLOR : Color!Spec, Spec...))
+{
+	static if (is(COLOR : Color!Spec, Spec...))
+		alias TransformChannelType = Color!(TransformSpec!(Transformer, Spec));
 }
 
 /// ditto
 template ChangeChannelType(COLOR, T)
-	if (is(COLOR : Color!Spec, Spec...))
 {
-	static assert(COLOR.homogeneous, "Can't change ChannelType of non-homogeneous Color");
-	alias ChangeChannelType = Color!(T, COLOR.Spec[1..$]);
+	alias Transformer(_) = T;
+	alias ChangeChannelType = TransformChannelType!(COLOR, Transformer);
 }
 
 static assert(is(ChangeChannelType!(RGB, ushort) == RGB16));
