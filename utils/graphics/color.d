@@ -57,7 +57,8 @@ struct Color(FieldTuple...)
 	static if (homogeneous)
 	{
 		alias ChannelType = typeof(Fields.init.tupleof[0]);
-		enum channelBits = valueBits!ChannelType;
+		static if (is(typeof(valueBits!ChannelType)))
+			enum channelBits = valueBits!ChannelType;
 	}
 
 	/// Return a Color instance with all fields set to "value".
@@ -260,6 +261,7 @@ struct Color(FieldTuple...)
 	}
 
 	/// Sum of all channels
+	static if (is(ExpandIntegerType!(ChannelType, ilog2(nextPowerOfTwo(channels)))))
 	ExpandIntegerType!(ChannelType, ilog2(nextPowerOfTwo(channels))) sum()
 	{
 		typeof(return) result;
