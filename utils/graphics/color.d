@@ -18,14 +18,18 @@ import std.traits;
 import ae.utils.math;
 import ae.utils.meta;
 
-/// Instantiates to a color type.
-/// FieldTuple is the color specifier, as parsed by
-/// the FieldList template from ae.utils.meta.
+/// Represents a tuple of samples, usually used to represent
+/// a single color in some color space.
+/// This helper type allows manipulating such tuples more easily,
+/// and has special behavior for common color representations
+/// (e.g. special treatment of the "a" field as an alpha channel,
+/// and construction from hex strings for R/G/B colors).
+/// `FieldTuple` is a field spec, as parsed by `ae.utils.meta.FieldList`.
 /// By convention, each field's name indicates its purpose:
-/// - x: padding
-/// - a: alpha
-/// - l: lightness (or grey, for monochrome images)
-/// - others (r, g, b, etc.): color information
+/// - `x`: padding
+/// - `a`: alpha
+/// - `l`: lightness (or grey, for monochrome images)
+/// - others (`r`, `g`, `b`, etc.): color information
 
 // TODO: figure out if we need alll these methods in the color type itself
 // - code such as gamma conversion needs to create color types
