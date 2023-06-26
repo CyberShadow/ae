@@ -245,7 +245,7 @@ struct Color(FieldTuple...)
 		return r;
 	}
 
-	/// Implements conversion to a similar color type.
+	deprecated("Use channelMap")
 	T opCast(T)() const
 	if (is(T==struct) && structFields!T == structFields!Fields)
 	{
@@ -402,7 +402,7 @@ unittest
 	Color!(real, "r", "g", "b") c;
 }
 
-unittest
+deprecated unittest
 {
 	const RGB c;
 	RGB x = cast(RGB)c;
@@ -481,7 +481,7 @@ unittest
 	alias RGBf = ChangeChannelType!(RGB, float);
 	auto rgb = RGB(1, 2, 3);
 	import std.conv : to;
-	auto rgbf = rgb.to!RGBf();
+	auto rgbf = rgb.channelMap!RGBf();
 	assert(rgbf.r == 1f);
 	assert(rgbf.g == 2f);
 	assert(rgbf.b == 3f);
