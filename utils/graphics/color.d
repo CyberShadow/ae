@@ -461,6 +461,51 @@ unittest
 	assert(rgbf.b == 3f);
 }
 
+/// Implements conversion to a similar color type.
+auto channelMap(T, alias expr = a => a, COLOR)(COLOR color)
+if (is(T == struct) && is(COLOR == struct))
+{
+	T result;
+	foreach (i, f; color.tupleof)
+	{
+		enum name = __traits(identifier, color.tupleof[i]);
+		static assert(__traits(hasMember, result, name),
+			"No matching field `" ~ name ~ "` in `" ~ T.stringof ~ "` when mapping from `" ~ COLOR.stringof ~ "`");
+		__traits(getMember, result, name) = expr(__traits(getMember, color, name));
+	}
+	foreach (i, f; result.tupleof)
+	{
+		enum name = __traits(identifier, result.tupleof[i]);
+		static assert(__traits(hasMember, color, name),
+			"No matching field `" ~ name ~ "` in `" ~ COLOR.stringof ~ "` when mapping to `" ~ T.stringof ~ "`");
+	}
+	return result;
+}
+
+/// ditto
+auto channelMap(alias expr, COLOR)(COLOR c)
+if (is(COLOR == struct) && !is(expr == struct))
+{
+	alias Transformer(C) = typeof({ C v = void; return expr(v); }());
+	alias T = TransformChannelType!(typeof(c), Transformer);
+	return c.channelMap!(T, expr);
+}
+
+///
+unittest
+{
+	// Effortlessly reordering channels with no modification.
+	assert(RGB(1, 2, 3).channelMap!BGR == BGR(3, 2, 1));
+
+	// Perform per-channel transformations.
+	assert(RGB(1, 2, 3).channelMap!(v => cast(ubyte)(v + 1)) == RGB(2, 3, 4));
+
+	// Perform per-channel transformations with a different resulting type, implicitly.
+	assert(RGB(1, 2, 3).channelMap!(v => cast(ushort)(v + 1)) == RGB16(2, 3, 4));
+
+	// Perform per-channel transformations with a different resulting type, explicitly.
+	assert(RGB(1, 2, 3).channelMap!(RGB16, v => cast(ubyte)(v + 1)) == RGB16(2, 3, 4));
+}
 
 // ***************************************************************************
 
