@@ -467,6 +467,11 @@ alias ExpandChannelType(COLOR, int BYTES) =
 	ChangeChannelType!(COLOR,
 		ExpandNumericType!(ChannelType!COLOR, BYTES * 8));
 
+/// Resolves to a Color instance with its ChannelType expanded by BYTES bytes and made signed.
+alias ExpandChannelTypeSigned(COLOR, int BYTES) =
+	ChangeChannelType!(COLOR,
+		Signed!(ExpandNumericType!(ChannelType!COLOR, BYTES * 8)));
+
 static assert(is(ExpandChannelType!(RGB, 1) == RGB16));
 
 unittest
