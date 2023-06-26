@@ -140,21 +140,21 @@ unittest
 /// Example: FieldList!(ubyte, "r", "g", "b", ushort, "a");
 mixin template FieldList(Fields...)
 {
-	mixin(_GenFieldList!(void, Fields));
-}
-
-template _GenFieldList(T, Fields...)
-{
-	///
-	static if (Fields.length == 0)
-		enum _GenFieldList = "";
-	else
+	template _GenFieldList(size_t ti, size_t i)
 	{
-		static if (is(typeof(Fields[0]) == string))
-			enum _GenFieldList = T.stringof ~ " " ~ Fields[0] ~ ";\n" ~ _GenFieldList!(T, Fields[1..$]);
+		///
+		static if (i == Fields.length)
+			enum _GenFieldList = "";
 		else
-			enum _GenFieldList = _GenFieldList!(Fields[0], Fields[1..$]);
+		{
+			static if (is(typeof(Fields[i]) == string))
+				enum _GenFieldList = "Fields[" ~ ti.stringof ~ "] " ~ Fields[i] ~ ";\n" ~ _GenFieldList!(ti, i + 1);
+			else
+				enum _GenFieldList = _GenFieldList!(i, i + 1);
+		}
 	}
+
+	mixin(_GenFieldList!(-1, 0));
 }
 
 unittest
