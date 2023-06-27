@@ -84,9 +84,12 @@ protected:
 	{
 		debug (HTTP) debugLog("New connection from %s", remoteAddressStr(null));
 
-		timer = new TimeoutAdapter(c);
-		timer.setIdleTimeout(timeout);
-		c = timer;
+		if (timeout != Duration.zero)
+		{
+			timer = new TimeoutAdapter(c);
+			timer.setIdleTimeout(timeout);
+			c = timer;
+		}
 
 		this.conn = c;
 		conn.handleReadData = &onNewRequest;
@@ -196,7 +199,8 @@ protected:
 		debug (HTTP) debugLog("processRequest (%d bytes)", data.bytes.length);
 		currentRequest.data = move(data);
 		timeoutActive = false;
-		timer.cancelIdleTimeout();
+		if (timer)
+			timer.cancelIdleTimeout();
 		if (handleRequest)
 		{
 			// Log unhandled exceptions, but don't mess up the stack trace
@@ -406,7 +410,8 @@ public:
 			{
 				// Give the client time to download large requests.
 				// Assume a minimal speed of 1kb/s.
-				timer.setIdleTimeout(timeout + (responseSize / 1024).seconds);
+				if (timer)
+					timer.setIdleTimeout(timeout + (responseSize / 1024).seconds);
 				timeoutActive = true;
 			}
 			if (inBuffer.bytes.length) // a second request has been pipelined
