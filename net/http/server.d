@@ -624,7 +624,7 @@ protected:
 /// e.g. read a request from standard input and write the response to
 /// standard output.
 version (Posix)
-final class FileHttpServerConnection : BaseHttpServerConnection
+class FileHttpServerConnection : BaseHttpServerConnection
 {
 	this(File input = stdin, File output = stdout, string protocol = "stdin")
 	{
