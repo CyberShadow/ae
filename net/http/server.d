@@ -63,6 +63,8 @@ public:
 
 	HttpRequest currentRequest; /// The current in-flight request.
 	bool persistent; /// Whether we will keep the connection open after the request is handled.
+	bool optimizeResponses = true; /// Whether we should compress responses according to the request headers.
+	bool satisfyRangeRequests = true; /// Whether we should follow "Range" request headers.
 
 	bool connected = true; /// Are we connected now?
 	Logger log; /// Optional HTTP log.
@@ -270,8 +272,10 @@ protected:
 
 		if (currentRequest)
 		{
-			response.optimizeData(currentRequest.headers);
-			response.sliceData(currentRequest.headers);
+			if (optimizeResponses)
+				response.optimizeData(currentRequest.headers);
+			if (satisfyRangeRequests)
+				response.sliceData(currentRequest.headers);
 		}
 
 		if ("Content-Length" !in response.headers)
