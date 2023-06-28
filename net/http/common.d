@@ -572,7 +572,7 @@ public:
 		if (compressionLevel < 0)
 			return;
 		auto acceptEncoding = requestHeaders.get("Accept-Encoding", null);
-		if (acceptEncoding && "Content-Encoding" !in headers)
+		if (acceptEncoding && "Content-Encoding" !in headers && "Content-Length" !in headers)
 		{
 			auto contentType = headers.get("Content-Type", null);
 			if (contentType.startsWith("text/")
