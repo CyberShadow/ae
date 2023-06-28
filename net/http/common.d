@@ -612,7 +612,10 @@ public:
 	/// Called by the server to apply range request.
 	final package void sliceData(ref const Headers requestHeaders)
 	{
-		if (status == HttpStatusCode.OK)
+		if (status == HttpStatusCode.OK &&
+			"Content-Range" !in headers &&
+			"Accept-Ranges" !in headers &&
+			"Content-Length" !in headers)
 		{
 			if ("If-Modified-Since" in requestHeaders &&
 				"Last-Modified" in headers &&
