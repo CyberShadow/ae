@@ -13,11 +13,13 @@
 
 module ae.utils.parallelism;
 
+import std.algorithm.comparison : min;
 import std.algorithm.mutation;
 import std.algorithm.searching;
 import std.algorithm.sorting;
 import std.parallelism;
 import std.range : chunks, iota;
+import std.range.primitives;
 
 // https://gist.github.com/63e139a16b9b278fb5d449ace611e7b8
 
@@ -90,4 +92,76 @@ unittest
 	assert(parallelEqual(a, b));
 	b[500] = 0;
 	assert(!parallelEqual(a, b));
+}
+
+
+/// Split a range into chunks, processing each chunk in parallel.
+/// Returns a dynamic array containing the result of calling `fun` on each chunk.
+/// `fun` is called at most once per CPU core.
+T[] parallelChunks(R, T)(R range, scope T delegate(R) fun)
+if (isRandomAccessRange!R)
+{
+	auto total = range.length;
+	size_t numChunks = min(total, totalCPUs);
+	auto result = new T[numChunks];
+	foreach (chunkIndex; numChunks.iota.parallel(1))
+		result[chunkIndex] = fun(range[
+			(chunkIndex + 0) * total / numChunks ..
+			(chunkIndex + 1) * total / numChunks
+		]);
+	return result;
+}
+
+/// ditto
+T[] parallelChunks(N, T)(N total, scope T delegate(N start, N end) fun)
+if (is(N : ulong))
+{
+	size_t numChunks = min(total, totalCPUs);
+	auto result = new T[numChunks];
+	foreach (chunkIndex; numChunks.iota.parallel(1))
+		result[chunkIndex] = fun(
+			cast(N)((chunkIndex + 0) * total / numChunks),
+			cast(N)((chunkIndex + 1) * total / numChunks),
+		);
+	return result;
+}
+
+/// ditto
+auto parallelChunks(alias fun, R)(R range)
+if (isRandomAccessRange!R)
+{
+	alias T = typeof(fun(range[0..0]));
+	auto total = range.length;
+	size_t numChunks = min(total, totalCPUs);
+	auto result = new T[numChunks];
+	foreach (chunkIndex; numChunks.iota.parallel(1))
+		result[chunkIndex] = fun(range[
+			(chunkIndex + 0) * total / numChunks ..
+			(chunkIndex + 1) * total / numChunks
+		]);
+	return result;
+}
+
+/// ditto
+auto parallelChunks(alias fun, N)(N total)
+if (is(N : ulong))
+{
+	alias T = typeof(fun(N.init, N.init));
+	size_t numChunks = min(total, totalCPUs);
+	auto result = new T[numChunks];
+	foreach (chunkIndex; numChunks.iota.parallel(1))
+		result[chunkIndex] = fun(
+			cast(N)((chunkIndex + 0) * total / numChunks),
+			cast(N)((chunkIndex + 1) * total / numChunks),
+		);
+	return result;
+}
+
+unittest
+{
+	import std.algorithm.iteration : sum;
+	assert([1, 2, 3].parallelChunks((int[] arr) => arr.sum).sum == 6);
+	assert(4.parallelChunks((int low, int high) => iota(low, high).sum).sum == 6);
+	assert([1, 2, 3].parallelChunks!(arr => arr.sum).sum == 6);
+	assert(4.parallelChunks!((low, high) => iota(low, high).sum).sum == 6);
 }
