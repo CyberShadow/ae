@@ -27,6 +27,14 @@ import ae.utils.promise;
 /// The promise is resolved in the current (calling) thread.
 // TODO: is using lazy OK for this? https://issues.dlang.org/show_bug.cgi?id=23923
 Promise!(T, E) threadAsync(T, E = Exception)(lazy T value)
+if (!is(T == return))
+{
+	return threadAsync({ return value; });
+}
+
+/// ditto
+Promise!(T, E) threadAsync(T, E = Exception)(T delegate() value)
+if (!is(T == return))
 {
 	auto p = new Promise!T;
 	auto mainThread = new ThreadAnchor(No.daemon);
@@ -34,7 +42,7 @@ Promise!(T, E) threadAsync(T, E = Exception)(lazy T value)
 	t = new Thread({
 		try
 		{
-			auto result = value.voidStruct;
+			auto result = value().voidStruct;
 			mainThread.runAsync({
 				t.join();
 				p.fulfill(result.tupleof);
@@ -49,6 +57,14 @@ Promise!(T, E) threadAsync(T, E = Exception)(lazy T value)
 	});
 	t.start();
 	return p;
+}
+
+/// ditto
+Promise!(T, E) threadAsync(T, E = Exception)(T function() value)
+if (!is(T == return))
+{
+	import std.functional : toDelegate;
+	return threadAsync(value.toDelegate);
 }
 
 unittest

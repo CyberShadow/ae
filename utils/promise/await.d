@@ -23,19 +23,35 @@ import ae.utils.promise;
 /// other promises.
 // TODO: is using lazy OK for this? https://issues.dlang.org/show_bug.cgi?id=23923
 Promise!(T, E) async(T, E = Exception)(lazy T task)
+if (!is(T == return))
+{
+	return async({ return task; });
+}
+
+/// ditto
+Promise!(T, E) async(T, E = Exception)(T delegate() task)
+if (!is(T == return))
 {
 	auto p = new Promise!T;
 	auto f = new Fiber({
 		try
 			static if (is(T == void))
-				task, p.fulfill();
+				task(), p.fulfill();
 			else
-				p.fulfill(task);
+				p.fulfill(task());
 		catch (E e)
 			p.reject(e);
 	}, 64 * 1024);
 	f.call();
 	return p;
+}
+
+/// ditto
+Promise!(T, E) async(T, E = Exception)(T function() task)
+if (!is(T == return))
+{
+	import std.functional : toDelegate;
+	return threadAsync(task.toDelegate);
 }
 
 /// Synchronously waits until the promise `p` is fulfilled.
