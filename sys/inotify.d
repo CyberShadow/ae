@@ -67,21 +67,25 @@ struct INotify
 	/// Add an inotify watch.  Returns the inotify watch descriptor.
 	WatchDescriptor add(string path, Mask mask, INotifyHandler handler)
 	{
+		assert(handler);
 		if (fd < 0)
 			start();
 		auto wd = inotify_add_watch(fd, path.toStringz(), mask);
 		errnoEnforce(wd >= 0, "inotify_add_watch");
 		handlers[wd] = handler;
+		activeHandlers++;
 		return WatchDescriptor(wd);
 	}
 
 	/// Remove an inotify watch using its descriptor.
 	void remove(WatchDescriptor wd)
 	{
+		assert(handlers.get(wd.wd, null) != null, "No such descriptor registered");
 		auto result = inotify_rm_watch(fd, wd.wd);
 		errnoEnforce(result >= 0, "inotify_rm_watch");
-		handlers.remove(wd.wd);
-		if (!handlers.length)
+		handlers[wd.wd] = null; // Keep tombstone to avoid race conditions
+		activeHandlers--;
+		if (!activeHandlers)
 			stop();
 	}
 
@@ -90,6 +94,7 @@ private:
 	FileConnection conn;
 
 	INotifyHandler[int] handlers;
+	size_t activeHandlers;
 
 	void start()
 	{
@@ -107,6 +112,7 @@ private:
 		assert(fd >= 0, "Not started");
 		conn.disconnect();
 		fd = -1;
+		handlers = null;
 	}
 
 	void onReadData(Data data)
@@ -127,13 +133,17 @@ private:
 				{
 					// Overflow - notify all watch descriptors
 					foreach (wd, handler; handlers)
-						handler(name, cast(Mask)pheader.mask, pheader.cookie);
+						if (handler)
+							handler(name, cast(Mask)pheader.mask, pheader.cookie);
 				}
 				else
 				{
 					auto phandler = pheader.wd in handlers;
 					enforce(phandler, "Unregistered inotify watch descriptor");
-					(*phandler)(name, cast(Mask)pheader.mask, pheader.cookie);
+					if (*phandler)
+						(*phandler)(name, cast(Mask)pheader.mask, pheader.cookie);
+					else
+						debug (ae_inotify) stderr.writeln("Dropping inotify event for removed handler");
 				}
 				data = data[end..$];
 			});
