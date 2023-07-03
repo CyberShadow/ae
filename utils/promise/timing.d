@@ -22,3 +22,13 @@ Promise!void sleep(Duration delay)
 	setTimeout(&p.fulfill, delay);
 	return p;
 }
+
+Promise!void sleepUntil(MonoTime when)
+{
+	auto p = new Promise!void;
+	auto task = new TimerTask((Timer /*timer*/, TimerTask /*task*/) {
+		p.fulfill();
+	});
+	mainTimer.add(task, when);
+	return p;
+}
