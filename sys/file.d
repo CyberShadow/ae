@@ -202,7 +202,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 	/*non-static*/ struct Context
 	{
 		// Tether to handler alias context
-		void callHandler(Entry* e) { handler(e); }
+		void callHandler(Args...)(Entry* e, auto ref Args args) { handler(e, args); }
 
 		// Set when .stop() is called on an entry.
 		bool timeToStop = false;
@@ -263,7 +263,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 		/// Request recursion on the current `entry`.
 		version (Posix)
 		{
-			void recurse()
+			void recurse(Args...)(auto ref Args args)
 			{
 				import core.sys.posix.fcntl;
 				int flags = O_RDONLY;
@@ -277,18 +277,18 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 				errnoEnforce(subdir,
 					"Failed to open subdirectory %s of directory %s as directory"
 					.format(this.baseNameFS, this.parent.fullName));
-				scan(subdir, fd, &this);
+				scan(subdir, fd, &this, args);
 			}
 		}
 		else
 		version (Windows)
 		{
-			void recurse()
+			void recurse(Args...)(auto ref Args args)
 			{
 				needFullPath();
 				appendString(context.pathBuf,
 					data.pathTailPos.get(), "\\*.*\0"w);
-				scan(&this, false);
+				scan(&this, false, args);
 			}
 		}
 
@@ -662,7 +662,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 		// The length of the buffer on the stack.
 		enum initialPathBufLength = 256;
 
-		private static void scan(DIR* dir, int dirFD, Entry* parentEntry)
+		private static void scan(Args...)(DIR* dir, int dirFD, Entry* parentEntry, auto ref Args args)
 		{
 			Entry entry = void;
 			entry.parent = parentEntry;
@@ -687,7 +687,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 				entry.ent = ent;
 				entry.name = ent.d_name.ptr;
 				entry.data = Entry.Data.init;
-				entry.context.callHandler(&entry);
+				entry.context.callHandler(&entry, args);
 				if (entry.context.timeToStop)
 					break;
 			}
@@ -763,7 +763,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 		enum FIND_FIRST_EX_LARGE_FETCH = 2;
 		enum FindExInfoBasic = cast(FINDEX_INFO_LEVELS)1;
 
-		static void scan(Entry* parentEntry, bool isRoot)
+		static void scan(Args...)(Entry* parentEntry, bool isRoot, auto ref Args args)
 		{
 			Entry entry = void;
 			entry.parent = parentEntry;
@@ -810,7 +810,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 					entry.data.pathTailPos = name.fromStringz.length;
 				}
 
-				entry.context.callHandler(&entry);
+				entry.context.callHandler(&entry, args);
 				if (entry.context.timeToStop)
 					break;
 			}
@@ -821,7 +821,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 		}
 	}
 
-	public void listDir(Path)(Path dirPath)
+	public void listDir(Path, Args...)(Path dirPath, auto ref Args args)
 	if (isPath!Path)
 	{
 		Context context;
@@ -857,14 +857,14 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 				auto name = InlineStr(dirPath, '\0');
 				rootEntry.name = name[].ptr;
 
-				context.callHandler(&rootEntry);
+				context.callHandler(&rootEntry, args);
 			}
 			else
 			version (Windows)
 			{
 				while (rootEntry.data.pathTailPos.get() && !context.pathBuf[rootEntry.data.pathTailPos.get()].isDirSeparator())
 					rootEntry.data.pathTailPos.get()--;
-				scan(&rootEntry, true);
+				scan(&rootEntry, true, args);
 			}
 		}
 		else
@@ -874,7 +874,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 				auto dir = opendir(InlineStr(dirPath, '\0')[].ptr);
 				checkDir(dir, dirPath);
 
-				scan(dir, dirfd(dir), &rootEntry);
+				scan(dir, dirfd(dir), &rootEntry, args);
 			}
 			else
 			version (Windows)
@@ -882,7 +882,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 				const WCHAR[] tailString = endPos == 0 || context.pathBuf[endPos - 1].isDirSeparator() ? "*.*\0"w : "\\*.*\0"w;
 				appendString(context.pathBuf, endPos, tailString);
 
-				scan(&rootEntry, false);
+				scan(&rootEntry, false, args);
 			}
 		}
 	}
@@ -1026,6 +1026,16 @@ unittest
 		entries.sort,
 		[".", "a", "b", "c", "c/1", "c/2"].map!(name => name.replace("/", dirSeparator)),
 	), text(entries));
+
+	// Additional arguments
+	size_t maxDepth;
+	listDir!((e, depth) {
+		if (depth > maxDepth)
+			maxDepth = depth;
+		if (e.entryIsDir)
+			e.recurse(depth + 1);
+	}, Yes.includeRoot)(tmpDir, 0);
+	assert(maxDepth == 2);
 
 	// Symlink test
 	(){
