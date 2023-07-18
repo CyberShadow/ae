@@ -245,7 +245,9 @@ struct Color(FieldTuple...)
 		return r;
 	}
 
-	deprecated("Use channelMap")
+	/// Perform a per-channel hard-cast.
+	/// Provides continuity with casting of D basic types.
+	/// If this is not needed, consider using `channelMap` instead.
 	T opCast(T)() const
 	if (is(T==struct) && structFields!T == structFields!Fields)
 	{
