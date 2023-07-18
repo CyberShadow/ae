@@ -20,6 +20,7 @@ import std.typecons;
 
 import ae.utils.appender;
 import ae.utils.exception;
+import ae.utils.functor.primitives : functor;
 import ae.utils.meta;
 import ae.utils.textout;
 
@@ -290,7 +291,10 @@ struct CustomJsonSerializer(Writer)
 			writer.output.put(v.json);
 		else
 		static if (__traits(hasMember, T, "toJSON"))
-			put(v.toJSON());
+			static if (is(typeof(v.toJSON())))
+				put(v.toJSON());
+			else
+				v.toJSON((&this).functor!((self, ref j) => self.put(j)));
 		else
 		static if (is(T==struct))
 		{
@@ -1164,7 +1168,7 @@ unittest
 	{
 		string value;
 		static S fromJSON(string value) { return S(value); }
-		string toJSON() { return value; }
+		void toJSON(F)(F f) { f(value); }
 	}
 	auto s = S("test");
 	auto p = &s;
