@@ -599,7 +599,7 @@ public:
 	/// Create a copy of the data
 	@property This dup(this This)()
 	{
-		return This(this.data, true);
+		return This(this.data);
 	}
 
 	/// Create a new `Data` containing the concatenation of `this` and `data`.
@@ -922,6 +922,7 @@ unittest
 						entered++;
 					});
 					assert(entered == 1);
+					assert(d.dup.unsafeContents == contents);
 				}
 				// Lifetime with .enter
 				{
