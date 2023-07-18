@@ -65,7 +65,7 @@ string lookupDroneBL(string ip)
 	}
 }
 
-/// Look up an IP address against DroneBL.
+/// Look up an IP address against the EFnet RBL.
 /// Returns: a string describing the reason this IP is listed,
 /// or `null` if the IP is not listed.
 string lookupEfnetRBL(string ip)
@@ -79,6 +79,32 @@ string lookupEfnetRBL(string ip)
 		case  4: return "TOR";
 		case  5: return "Drones / Flooding";
 		default: return "Unknown";
+	}
+}
+
+/// Look up an IP address against the sectoor.de Tor exit node DNSBL.
+/// Returns: a string describing the reason this IP is listed,
+/// or `null` if the IP is not listed.
+string lookupSectoorTorDNSBL(string ip)
+{
+	switch (lookupAgainst(ip, "exitnodes.tor.dnsbl.sectoor.de"))
+	{
+		case  0: return null;
+		case  1: return "Tor exit node";
+		default: return "Unknown";
+	}
+}
+
+/// Look up an IP address against the dan.me's Tor exit node DNSBL.
+/// Returns: a string describing the reason this IP is listed,
+/// or `null` if the IP is not listed.
+string lookupDanTorDNSBL(string ip)
+{
+	switch (lookupAgainst(ip, "torexit.dan.me.uk"))
+	{
+		case   0: return null;
+		case 100: return "Tor exit node";
+		default : return "Unknown";
 	}
 }
 
@@ -101,6 +127,12 @@ string[] blacklistCheck(string hostname)
 
 	result = lookupEfnetRBL(ip);
 	if (result) return [result, "EFnet RBL", "http://rbl.efnetrbl.org/?i="  ~ip];
+
+	result = lookupSectoorTorDNSBL(ip);
+	if (result) return [result, "Sectoor Tor exit node", "http://www.sectoor.de/tor.php"];
+
+	result = lookupDanTorDNSBL(ip);
+	if (result) return [result, "Dan Tor exit node", "https://www.dan.me.uk/dnsbl"];
 
 	return null;
 }
