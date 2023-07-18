@@ -488,6 +488,7 @@ unittest
 }
 
 /// Applies a transformation per-channel.
+/// `expr` may be in the form of `a => ...`, or `(a, ref b) { b = ...; }` (only if `T` is explicitly specified).
 template channelMap(T, alias expr = a => a)
 if (is(T == struct))
 {
@@ -500,7 +501,18 @@ if (is(T == struct))
 			enum name = __traits(identifier, color.tupleof[i]);
 			static assert(__traits(hasMember, result, name),
 				"No matching field `" ~ name ~ "` in `" ~ T.stringof ~ "` when mapping from `" ~ COLOR.stringof ~ "`");
-			__traits(getMember, result, name) = expr(__traits(getMember, color, name));
+
+			static if (is(typeof(__traits(getMember, result, name) = expr(__traits(getMember, color, name)))))
+				__traits(getMember, result, name) = expr(__traits(getMember, color, name));
+			else
+			static if (is(typeof(expr(__traits(getMember, color, name), __traits(getMember, result, name)))))
+				expr(__traits(getMember, color, name), __traits(getMember, result, name));
+			else
+			{
+				pragma(msg, "channelMap expression does not compile with either 1 or 2 arguments:");
+				expr(__traits(getMember, color, name), __traits(getMember, result, name));
+				__traits(getMember, result, name) = expr(__traits(getMember, color, name));
+			}
 		}
 		foreach (i, f; result.tupleof)
 		{
@@ -539,6 +551,9 @@ unittest
 
 	// Perform per-channel transformations with a different resulting type, explicitly.
 	assert(RGB(1, 2, 3).channelMap!(RGB16, v => cast(ubyte)(v + 1)) == RGB16(2, 3, 4));
+
+	// Ditto, with a ref parameter instead of return.
+	assert(RGB(1, 2, 3).channelMap!(RGB16, (a, ref b) { b = a; b++; }) == RGB16(2, 3, 4));
 
 	// Effortlessly convert an image
 	import ae.utils.graphics.image : Image, colorMap, copy;
