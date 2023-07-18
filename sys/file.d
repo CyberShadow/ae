@@ -369,8 +369,10 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 				version (Posix)
 				{
 					immutable FSChar[] separator = "/";
-					auto startPos = appendString(context.pathBuf,
-						parent.data.pathTailPos.get(), separator);
+					auto startPos = parent.data.pathTailPos.get()
+						? appendString(context.pathBuf,
+							parent.data.pathTailPos.get(), separator)
+						: 0;
 					auto baseNamePtr = this.baseNameFSPtr;
 				}
 				data.pathTailPos = appendString(context.pathBuf,
@@ -871,7 +873,7 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 		{
 			version (Posix)
 			{
-				auto dir = opendir(InlineStr(dirPath, '\0')[].ptr);
+				auto dir = dirPath.length ? opendir(InlineStr(dirPath, '\0')[].ptr) : opendir(".");
 				checkDir(dir, dirPath);
 
 				scan(dir, dirfd(dir), &rootEntry, args);
