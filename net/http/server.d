@@ -769,3 +769,52 @@ b=7654321").asBytes));
 	testFile("http-test.txt");
 +/
 }
+
+// Test form-data
+unittest
+{
+	bool ok;
+	auto s = new HttpServer;
+	s.handleRequest = (HttpRequest request, HttpServerConnection conn) {
+		auto post = request.decodePostData();
+		assert(post["a"] == "b");
+		assert(post["c"] == "d");
+		assert(post["e"] == "f");
+		ok = true;
+		conn.conn.disconnect();
+		s.close();
+	};
+	auto port = s.listen(0, "127.0.0.1");
+
+	TcpConnection c = new TcpConnection;
+	c.handleConnect = {
+		c.send(Data((q"EOF
+POST / HTTP/1.1
+Host: google.com
+User-Agent: curl/8.1.2
+Accept: */*
+Content-Length: 319
+Content-Type: multipart/form-data; boundary=------------------------f7d0ffeae587957a
+
+--------------------------f7d0ffeae587957a
+Content-Disposition: form-data; name="a"
+
+b
+--------------------------f7d0ffeae587957a
+Content-Disposition: form-data; name="c"
+
+d
+--------------------------f7d0ffeae587957a
+Content-Disposition: form-data; name="e"
+
+f
+--------------------------f7d0ffeae587957a--
+EOF".replace("\n", "\r\n")).asBytes));
+		c.disconnect();
+	};
+	c.connect("127.0.0.1", port);
+
+	socketManager.loop();
+
+	assert(ok);
+}
