@@ -785,6 +785,31 @@ nothrow unittest
 
 // ****************************************************************************
 
+Promise!(T, E) require(T, E)(ref Promise!(T, E) p, lazy Promise!(T, E) lp)
+{
+    if (!p)
+        p = lp;
+    return p;
+}
+
+unittest
+{
+    Promise!int p;
+    int work;
+    Promise!int getPromise()
+    {
+        return p.require({
+            work++;
+            return resolve(1);
+        }());
+    }
+    int done;
+    getPromise().then((n) { done += 1; });
+    getPromise().then((n) { done += 1; });
+	socketManager.loop();
+    assert(work == 1 && done == 2);
+}
+
 /// Ordered promise queue, supporting asynchronous enqueuing / fulfillment.
 struct PromiseQueue(T, E = Exception)
 {
