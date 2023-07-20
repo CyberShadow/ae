@@ -670,6 +670,7 @@ if (is(Target == string) &&
     static if (real.mant_dig == 53)
     {
         import core.stdc.stdlib, std.exception, std.math;
+        import std.conv : ConvException;
 
         //Should be parsed exactly: 53 bit mantissa
         string s = "0x1A_BCDE_F012_3456p10";
