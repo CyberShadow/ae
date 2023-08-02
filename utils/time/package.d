@@ -18,6 +18,7 @@ public import ae.utils.time.format;
 public import ae.utils.time.fpdur;
 public import ae.utils.time.parse;
 public import ae.utils.time.parsedur;
+public import ae.utils.time.types;
 
 unittest
 {
@@ -32,57 +33,10 @@ unittest
 
 // ***************************************************************************
 
-import std.datetime;
-
-/// `typeof(SysTime.stdTime)`, the numeric type used to store absolute time in D.
-alias StdTime = typeof(SysTime.init.stdTime); // long
-
-/// Convert from `StdTime` to `Duration`.
-alias stdDur = hnsecs;
-
-/// Like `SysTime.stdTime`.
-@property StdTime stdTime(Duration d) pure @safe nothrow @nogc
-{
-	return d.total!"hnsecs"();
-}
-
-/// `true` when the duration `d` is zero.
-@property bool empty(Duration d) pure @safe nothrow @nogc
-{
-	return !d.stdTime;
-}
-
-/// Workaround SysTime.fracSecs only being available in 2.067,
-/// and SysTime.fracSec becoming deprecated in the same version.
-static if (!is(typeof(SysTime.init.fracSecs)))
-@property Duration fracSecs(SysTime s)
-{
-	enum hnsecsPerSecond = convert!("seconds", "hnsecs")(1);
-	return hnsecs(s.stdTime % hnsecsPerSecond);
-}
-
-/// As above, for Duration.split and Duration.get
-static if (!is(typeof(Duration.init.split!())))
-@property auto split(units...)(Duration d)
-{
-	static struct Result
-	{
-		mixin("long " ~ [units].join(", ") ~ ";");
-	}
-
-	Result result;
-	foreach (unit; units)
-	{
-		static if (is(typeof(d.get!unit))) // unit == "msecs" || unit == "usecs" || unit == "hnsecs" || unit == "nsecs")
-			long value = d.get!unit();
-		else
-			long value = mixin("d.fracSec." ~ unit);
-		mixin("result." ~ unit ~ " = value;");
-	}
-	return result;
-}
-
-// ***************************************************************************
-
 // fpdur conflict test
-static assert(1.5.seconds == 1500.msecs);
+unittest
+{
+	import std.datetime;
+	import ae.utils.time.fpdur;
+	static assert(1.5.seconds == 1500.msecs);
+}
