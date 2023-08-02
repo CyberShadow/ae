@@ -24,6 +24,7 @@ import std.string : indexOf;
 import std.string : strip, startsWith;
 
 import ae.utils.time.common;
+import ae.utils.time.types : AbsTime;
 
 private struct ParseContext(Char, bool checked)
 {
@@ -339,6 +340,19 @@ private T parseTimeImpl(alias fmt, T, bool checked, C)(C[] t, immutable TimeZone
 			return result;
 		}
 		else
+		static if (is(T == AbsTime))
+		{
+			auto frac = dur!"nsecs"(nsecs);
+
+			auto dt = DateTime(year, month, day, hour, minute, second);
+			AbsTime result = AbsTime(dt, frac);
+
+			if (dow >= 0 && !__ctfe)
+				enforce(dt.dayOfWeek == dow, "Mismatching weekday");
+
+			return result;
+		}
+		else
 		static if (is(T == Date))
 		{
 			enforce(defaultTZ is null, "Date has no concept of time zone");
@@ -514,4 +528,23 @@ unittest
 	const char[] s = "Tue, 21 Nov 2006 21:19:46 +0000";
 	auto d = s.parseTimeOfDay!(TimeFormats.RFC2822);
 	assert(d.hour == 21 && d.second == 46);
+}
+
+/// Parse the given string into an AbsTime, using the format spec fmt.
+/// This version generates specialized code for the given fmt.
+/// Fields which are not representable in an AbsTime, such as timezone,
+/// are parsed but silently discarded.
+alias parseAbsTime = parseTimeLike!AbsTime;
+
+/// Parse the given string into an AbsTime, using the format spec fmt.
+/// This version parses fmt at runtime.
+/// Fields which are not representable in an AbsTime, such as timezone,
+/// are parsed but silently discarded.
+alias parseAbsTimeUsing = parseTimeLikeUsing!AbsTime;
+
+unittest
+{
+	const char[] s = "Tue, 21 Nov 2006 21:19:46 +0000";
+	auto d = s.parseAbsTime!(TimeFormats.RFC2822);
+	assert(d.sysTime.year == 2006 && d.sysTime.second == 46);
 }
