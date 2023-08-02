@@ -24,12 +24,17 @@ import ae.utils.text;
 import ae.utils.textout;
 import ae.utils.time.common;
 
-private struct FormatContext(Char)
+private struct FormatContext
 {
 	SysTime t;
 	DateTime dt;
 	bool escaping;
 }
+
+private FormatContext makeContext(SysTime t) { return FormatContext(t, cast(DateTime)t); }
+private FormatContext makeContext(DateTime t) { return FormatContext(SysTime(t), t); }
+private FormatContext makeContext(Date t) { return FormatContext(SysTime(t), DateTime(t)); }
+// TODO: TimeOfDay support
 
 private void putToken(alias c, alias context, alias sink)()
 {
@@ -235,9 +240,12 @@ private void putToken(alias c, alias context, alias sink)()
 	}
 }
 
-/// Format a SysTime using the format spec fmt.
+enum isFormattableTime(T) = is(typeof({ T t = void; return makeContext(t); }));
+
+/// Format a time value using the format spec fmt.
 /// This version generates specialized code for the given fmt.
-string formatTime(string fmt)(SysTime t)
+string formatTime(string fmt, Time)(Time t)
+if (isFormattableTime!Time)
 {
 	enum maxSize = timeFormatSize(fmt);
 	auto result = StringBuilder(maxSize);
@@ -246,15 +254,16 @@ string formatTime(string fmt)(SysTime t)
 }
 
 /// ditto
-void putTime(string fmt, S)(ref S sink, SysTime t)
-	if (isStringSink!S)
+void putTime(string fmt, S, Time)(ref S sink, Time t)
+if (isStringSink!S && isFormattableTime!Time)
 {
 	putTimeImpl!fmt(sink, t);
 }
 
-/// Format a SysTime using the format spec fmt.
+/// Format a time value using the format spec fmt.
 /// This version parses fmt at runtime.
-string formatTime(SysTime t, string fmt)
+string formatTime(Time)(Time t, string fmt)
+if (isFormattableTime!Time)
 {
 	auto result = StringBuilder(timeFormatSize(fmt));
 	putTime(result, t, fmt);
@@ -270,24 +279,23 @@ deprecated string formatTime(string fmt, SysTime t = Clock.currTime())
 }
 
 /// ditto
-void putTime(S)(ref S sink, SysTime t, string fmt)
-	if (isStringSink!S)
+void putTime(S, Time)(ref S sink, Time t, string fmt)
+if (isStringSink!S && isFormattableTime!Time)
 {
 	putTimeImpl!fmt(sink, t);
 }
 
 /// ditto
 deprecated void putTime(S)(ref S sink, string fmt, SysTime t = Clock.currTime())
-	if (isStringSink!S)
+if (isStringSink!S)
 {
 	putTimeImpl!fmt(sink, t);
 }
 
-private void putTimeImpl(alias fmt, S)(ref S sink, SysTime t)
+private void putTimeImpl(alias fmt, S, Time)(ref S sink, Time t)
+if (isFormattableTime!Time)
 {
-	FormatContext!(char) context;
-	context.t = t;
-	context.dt = cast(DateTime)t;
+	auto context = makeContext(t);
 	foreach (c; CTIterate!fmt)
 		putToken!(c, context, sink)();
 }
@@ -296,4 +304,6 @@ unittest
 {
 	assert(SysTime.fromUnixTime(0, UTC()).formatTime!(TimeFormats.STD_DATE) == "Thu Jan 01 00:00:00 GMT+0000 1970");
 	assert(SysTime(0, new immutable(SimpleTimeZone)(Duration.zero)).formatTime!"T" == "+00:00");
+
+	assert((cast(DateTime)SysTime.fromUnixTime(0, UTC())).formatTime!(TimeFormats.HTML5DATE) == "1970-01-01");
 }
