@@ -23,6 +23,7 @@ import ae.utils.meta;
 import ae.utils.text;
 import ae.utils.textout;
 import ae.utils.time.common;
+import ae.utils.time.types : AbsTime;
 
 private struct FormatContext
 {
@@ -34,6 +35,7 @@ private struct FormatContext
 private FormatContext makeContext(SysTime t) { return FormatContext(t, cast(DateTime)t); }
 private FormatContext makeContext(DateTime t) { return FormatContext(SysTime(t), t); }
 private FormatContext makeContext(Date t) { return FormatContext(SysTime(t), DateTime(t)); }
+private FormatContext makeContext(AbsTime t) { auto s = t.sysTime(UTC()); return FormatContext(s, cast(DateTime)s); }
 // TODO: TimeOfDay support
 
 private void putToken(alias c, alias context, alias sink)()
@@ -306,4 +308,6 @@ unittest
 	assert(SysTime(0, new immutable(SimpleTimeZone)(Duration.zero)).formatTime!"T" == "+00:00");
 
 	assert((cast(DateTime)SysTime.fromUnixTime(0, UTC())).formatTime!(TimeFormats.HTML5DATE) == "1970-01-01");
+
+	assert(AbsTime(1).formatTime!(TimeFormats.HTML5DATE) == "0001-01-01");
 }
