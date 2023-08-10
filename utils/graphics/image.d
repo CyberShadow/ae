@@ -581,7 +581,7 @@ unittest
 // ***************************************************************************
 
 /// Loads a raw COLOR[] into an image of the indicated size.
-auto fromPixels(C = InputColor, INPUT, TARGET)(INPUT[] input, uint w, uint h,
+auto fromPixels(C = InputColor, INPUT, TARGET)(INPUT[] input, xy_t w, xy_t h,
 		auto ref TARGET target)
 	if (isWritableView!TARGET
 	 && is(GetInputColor!(C, INPUT) == ViewColor!TARGET))
@@ -596,7 +596,7 @@ auto fromPixels(C = InputColor, INPUT, TARGET)(INPUT[] input, uint w, uint h,
 }
 
 /// ditto
-auto fromPixels(C = InputColor, INPUT)(INPUT[] input, uint w, uint h)
+auto fromPixels(C = InputColor, INPUT)(INPUT[] input, xy_t w, xy_t h)
 {
 	alias COLOR = GetInputColor!(C, INPUT);
 	Image!COLOR target;
