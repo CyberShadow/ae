@@ -78,6 +78,10 @@ struct Image(COLOR, StorageType = PlainStorageUnit!COLOR)
 	xy_t w, h;
 	StorageType[] pixels; /// Array of pixels, in row-major order.
 
+	/// Returns the visible part of `pixels` (i.e. covered by `w`x`h`).
+	/// The `pixels` array may actually be larger.
+	@property inout(StorageType)[] visiblePixels() inout { return pixels[0 .. rowSize * h]; }
+
 	/// Returns an array for the pixels at row y.
 	inout(StorageType)[] scanline(xy_t y) inout
 	{
