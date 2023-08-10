@@ -44,6 +44,21 @@ bool isNPH()
 	return Runtime.args[0].baseName.startsWith("nph-");
 }
 
+void prepareCGIFDs(File input = stdin, File output = stdout)
+{
+	version (Posix)
+	{
+		import std.socket : Socket, AddressFamily, socket_t;
+		import std.typecons : scoped;
+		import core.sys.posix.unistd : dup;
+
+		auto stdinSocket = scoped!Socket(cast(socket_t)input.fileno.dup, AddressFamily.UNSPEC);
+		stdinSocket.blocking = true;
+		auto stdoutSocket = scoped!Socket(cast(socket_t)output.fileno.dup, AddressFamily.UNSPEC);
+		stdoutSocket.blocking = true;
+	}
+}
+
 /// Load the CGI request from the environment / standard input.
 CGIRequest readCGIRequest(
 	string[string] env = environment.toAA(),

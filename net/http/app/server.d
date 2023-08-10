@@ -346,6 +346,7 @@ private:
 			{
 				case ServerConfig.Protocol.cgi:
 				{
+					prepareCGIFDs();
 					auto cgiRequest = readCGIRequest();
 					auto request = new CGIHttpRequest(cgiRequest);
 					bool responseWritten;
