@@ -22,6 +22,7 @@ import std.stdio;
 import std.string;
 import std.traits;
 
+import ae.sys.data : TData;
 import ae.sys.file;
 
 /// Returns a very unique name for a temporary file.
@@ -148,6 +149,25 @@ if (!hasIndirections!T)
 		auto writer = writeFileAsync(f, input);
 		scope(exit) writer.join();
 		output = cast(T[])readFile(pipes.stdout);
+		return pipes.pid.wait();
+	})(args);
+	return output;
+}
+
+TData!T pipe(T, Params...)(in TData!T input, string[] args, Params params)
+if (!hasIndirections!T)
+{
+	import ae.sys.dataio : readFileData;
+
+	auto parsed = ProcessParams(params);
+	TData!T output;
+	invoke!({
+		auto pipes = pipeProcess(args, Redirect.stdin | Redirect.stdout,
+			parsed.environment, parsed.config, parsed.workDir);
+		auto f = pipes.stdin;
+		auto writer = writeFileAsync(f, input.unsafeContents);
+		scope(exit) writer.join();
+		output = readFileData(pipes.stdout).asDataOf!T;
 		return pipes.pid.wait();
 	})(args);
 	return output;
