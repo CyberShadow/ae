@@ -1062,6 +1062,19 @@ private auto fpToBuf(Q)(Q val) @safe nothrow @nogc
 			return forceType(parse(testBuf.data));
 		}
 
+		// Work around https://github.com/ldc-developers/ldc/issues/4449
+		{
+			auto p = suffix.length;
+			while (p && s[p-1] == '0')
+			{
+				p--;
+				if (p == 0 || !isDigit(s[p-1]))
+					break;
+				if (tryPrefix(s[0 .. p]) == v)
+					s = s[0 .. p];
+			}
+		}
+
 		foreach_reverse (i; 1..s.length)
 			if (s[i]>='0' && s[i]<='8')
 			{
