@@ -1322,7 +1322,8 @@ private:
 				}
 			}
 		catch (CaughtException e)
-			conn.disconnect(e.msg, DisconnectType.error);
+			if (conn.state.disconnectable)
+				conn.disconnect(e.msg, DisconnectType.error);
 	}
 
 	void onReply(Data packet)
