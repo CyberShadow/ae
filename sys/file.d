@@ -1856,8 +1856,8 @@ version (linux)
 		string file; /// mount path
 		string vfstype; /// file system
 		string mntops; /// options
-		int freq; /// dump flag
-		int passno; /// fsck order
+		int freq; /// dump flag - always 0
+		int passno; /// fsck order - always 0
 	}
 
 	private string unescapeMountString(in char[] s)
@@ -1889,18 +1889,35 @@ version (linux)
 	}
 
 	/// Parse a line from /proc/self/mounts.
-	MountInfo parseMountInfo(in char[] line)
+	MountInfo parseMountInfo(const(char)[] line)
 	{
-		const(char)[][6] parts;
-		copy(line.splitter(" "), parts[]);
+		import std.ascii : isDigit;
+		import ae.utils.array : skipUntil;
+
+		// Trim off " 0 0" from the end
+		// https://github.com/torvalds/linux/blob/v6.3/fs/proc_namespace.c#L130
+		foreach (_; 0 .. 2)
+		{
+			while (line.length && isDigit(line[$-1]))
+				line = line[0 .. $-1];
+			if (line.length && line[$-1] == ' ')
+				line = line[0 .. $-1];
+		}
+
 		return MountInfo(
-			unescapeMountString(parts[0]),
-			unescapeMountString(parts[1]),
-			unescapeMountString(parts[2]),
-			unescapeMountString(parts[3]),
-			parts[4].to!int,
-			parts[5].to!int,
+			unescapeMountString(line.skipUntil(" ")),
+			unescapeMountString(line.skipUntil(" ")),
+			unescapeMountString(line.skipUntil(" ")),
+			line.idup,
+			0,
+			0,
 		);
+	}
+
+	unittest
+	{
+		auto mi = parseMountInfo(`drvfs /mnt/c 9p rw,dirsync,noatime,aname=drvfs;path=C:\;uid=1000;gid=1000;symlinkroot=/mnt/,mmap,access=client,msize=262144,trans=virtio 0 0`);
+		assert(mi == MountInfo("drvfs", "/mnt/c", "9p", `rw,dirsync,noatime,aname=drvfs;path=C:\;uid=1000;gid=1000;symlinkroot=/mnt/,mmap,access=client,msize=262144,trans=virtio`, 0, 0));
 	}
 
 	/// Returns an iterator of MountInfo structs.
