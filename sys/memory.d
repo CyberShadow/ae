@@ -70,15 +70,20 @@ unittest
 	assert(!ph.onStack());
 }
 
-/// Checks if we are inside a GC collection cycle.
-/// This is currently done in a dumb and expensive way, so use sparingly.
-bool inCollect() @nogc
+private void callExtend()
 {
 	// Call GC.extend with dummy data.
 	// It will normally exit silently if given a null pointer,
 	// but not before the reentrance check.
+	GC.extend(null, 0, 0, null);
+}
+
+/// Checks if we are inside a GC collection cycle.
+/// This is currently done in a dumb and expensive way, so use sparingly.
+bool inCollect() @nogc
+{
 	try
-		(cast(void function(void*, size_t, size_t, const TypeInfo) @nogc)&GC.extend)(null, 0, 0, null);
+		(cast(void function() @nogc)&callExtend)();
 	catch (InvalidMemoryOperationError)
 		return true;
 	return false;
