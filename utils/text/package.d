@@ -974,10 +974,48 @@ private template cWidthString(T)
 }
 /// C format string to exactly format a floating-point type `T`.
 enum fpCFormatString(T) = "%." ~ text(significantDigits!T) ~ cWidthString!T ~ "g";
+/// C format string to scan a floating-point type `T`.
+enum fpCScanString(T) = "%" ~ cWidthString!T ~ "f";
 
 private auto safeSprintf(size_t N, Args...)(ref char[N] buf, auto ref Args args) @trusted @nogc
 {
 	return snprintf(buf.ptr, N, args);
+}
+
+/// Parse a floating-point number using the C standard library.
+/// Note: might produce slightly different results than e.g. `to!double`.
+bool fpTryParse(F)(ref const(char)[] s, ref F f) @trusted @nogc nothrow
+{
+	char[64] buf = void;
+	if (s.length >= buf.length)
+		assert(false);
+	buf[0 .. s.length] = s;
+	buf[s.length] = 0;
+
+	static immutable fmt = fpCScanString!F ~ "%n\0";
+	int read;
+	if (!sscanf(buf.ptr, fmt.ptr, &f, &read))
+		return false;
+	s = s[read .. $];
+	return true;
+}
+
+/// ditto
+F fpParse(F)(const(char)[] s)
+{
+	F f;
+	fpTryParse(s, f).enforce("Failed to parse " ~ F.stringof);
+	enforce(s.length == 0, "Failed to completely parse " ~ F.stringof);
+	return f;
+}
+
+private F fpParseAssumeValid(F)(const(char)[] s) @nogc
+{
+	F f;
+	auto res = fpTryParse(s, f);
+	assert(res, "Failed to parse number we created");
+	assert(!s.length, "Failed to completely parse number we created");
+	return f;
 }
 
 private auto fpToBuf(Q)(Q val) @safe nothrow @nogc
@@ -1018,10 +1056,7 @@ private auto fpToBuf(Q)(Q val) @safe nothrow @nogc
 
 	F parse(char[] s)
 	{
-		F f;
-		auto res = tryParse(s, f);
-		assert(res, "Failed to parse number we created");
-		assert(!s.length, "Failed to completely parse number we created");
+		auto f = fpParseAssumeValid!F(s);
 		return f;
 	}
 
@@ -1060,19 +1095,6 @@ private auto fpToBuf(Q)(Q val) @safe nothrow @nogc
 		{
 			render(prefix);
 			return forceType(parse(testBuf.data));
-		}
-
-		// Work around https://github.com/ldc-developers/ldc/issues/4449
-		{
-			auto p = suffix.length;
-			while (p && s[p-1] == '0')
-			{
-				p--;
-				if (p == 0 || !isDigit(s[p-1]))
-					break;
-				if (tryPrefix(s[0 .. p]) == v)
-					s = s[0 .. p];
-			}
 		}
 
 		foreach_reverse (i; 1..s.length)
@@ -1127,7 +1149,8 @@ template fpToString(F)
 			if (s == "nan" || s == "-nan")
 				continue; // there are many NaNs...
 			U r;
-			r.d = to!F(s);
+			//r.d = to!F(s);
+			r.d = fpParse!F(s);
 			assert(r.bytes == u.bytes,
 				"fpToString mismatch:\nOutput:\t%s".format(r));
 		}
@@ -1187,7 +1210,7 @@ unittest
 {
 	StaticBuf!(char, 1024) buf;
 	buf.formattedWrite!"%s"(fpAsString(0.1));
-	assert(buf.data == "0.1");
+	assert(buf.data == "0.1", buf.data.idup);
 }
 
 /// Get shortest string representation of a numeric
