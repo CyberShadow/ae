@@ -984,24 +984,35 @@ private auto safeSprintf(size_t N, Args...)(ref char[N] buf, auto ref Args args)
 
 /// Parse a floating-point number using the C standard library.
 /// Note: might produce slightly different results than e.g. `to!double`.
-bool fpTryParse(F)(ref const(char)[] s, ref F f) @trusted @nogc nothrow
+bool fpTryParse(F, C)(ref const(C)[] s, ref F f) @trusted @nogc nothrow
+if (isFloatingPoint!F && isSomeChar!C)
 {
-	char[64] buf = void;
-	if (s.length >= buf.length)
-		assert(false);
-	buf[0 .. s.length] = s;
+	import core.stdc.stdlib : malloc, free;
+	char[64] sbuf = void;
+	auto buf = s.length >= sbuf.length ? cast(char*)malloc(s.length + 1) : sbuf.ptr;
+	if (!buf)
+		assert(false, "Memory allocation failed");
+	scope(exit) if (buf != sbuf.ptr) free(buf);
+
+	foreach (i, c; s)
+	{
+		if (c >= 0x100)
+			return false; // Non-ASCII
+		buf[i] = cast(char)c;
+	}
 	buf[s.length] = 0;
 
 	static immutable fmt = fpCScanString!F ~ "%n\0";
 	int read;
-	if (!sscanf(buf.ptr, fmt.ptr, &f, &read))
+	if (!sscanf(buf, fmt.ptr, &f, &read))
 		return false;
 	s = s[read .. $];
 	return true;
 }
 
 /// ditto
-F fpParse(F)(const(char)[] s)
+F fpParse(F, C)(const(C)[] s)
+if (isFloatingPoint!F && isSomeChar!C)
 {
 	F f;
 	fpTryParse(s, f).enforce("Failed to parse " ~ F.stringof);
