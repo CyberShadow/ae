@@ -731,8 +731,11 @@ private struct JsonParser(C)
 			}
 			n = s[start..p];
 		}
-		static if (is(T : real))
+		static if (is(T : long))
 			return to!T(n);
+		else
+		static if (is(T : real))
+			return fpParse!T(n);
 		else
 			static assert(0, "Don't know how to parse numerical type " ~ T.stringof);
 	}
