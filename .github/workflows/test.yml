@@ -32,6 +32,11 @@ jobs:
         with:
           compiler: ${{ matrix.dc }}
 
+      - name: Set up PATH on Windows/x86 for LDC libcurl.dll
+        if: ${{ matrix.os == 'windows-2022' && matrix.dc == 'ldc-1.32.2' && matrix.arch == 'x86_mscoff' }}
+        run: |
+          echo "C:\hostedtoolcache\windows\dc\ldc2-1.32.2\x64\ldc2-1.32.2-windows-multilib\lib32" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
       - run: dub test --arch=${{ matrix.arch }}
 
       - run: dub test --arch=${{ matrix.arch }} :sys-net-test
