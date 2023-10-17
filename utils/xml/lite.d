@@ -428,7 +428,8 @@ void parseInto(Config)(XmlDocument d, ref StringStream s)
 			auto n = new XmlNode;
 			parseInto!Config(n, s, null);
 			d.addChild(n);
-			skipWhitespace(s);
+			if (!Config.preserveWhitespace(null))
+				skipWhitespace(s);
 		}
 		catch (XmlParseException e)
 		{
@@ -466,13 +467,9 @@ void parseInto(Config)(XmlNode node, ref StringStream s, string parentTag = null
 	{
 		node.type = XmlNodeType.Text;
 		string text;
-		while (c!='<')
-		{
-			// TODO: check for EOF
-			text ~= c;
-			c = s.read();
-		}
-		s.position--; // rewind to '<'
+		text ~= c;
+		while (s.position < s.size && s.s[s.position] != '<')
+			text ~= s.read();
 		if (!preserveWhitespace)
 			while (text.length && isWhiteChar[text[$-1]])
 				text = text[0..$-1];
@@ -747,4 +744,18 @@ unittest
 	auto str = StringStream("<a><b> foo </b></a>");
 	parseInto!ParseConfig(node, str, null);
 	assert(node.children[0].children[0].tag == " foo ");
+}
+
+// Parsing naked tags while preserving whitespace
+unittest
+{
+	static struct ParseConfig
+	{
+	static:
+		NodeCloseMode nodeCloseMode(string tag) { return XmlParseConfig.nodeCloseMode(tag); }
+		bool preserveWhitespace(string tag) { return true; }
+		enum optionalParameterValues = XmlParseConfig.optionalParameterValues;
+	}
+	auto doc = parseDocument!ParseConfig("<foo/> <bar/>\n");
+	assert(doc.children.length == 4);
 }
