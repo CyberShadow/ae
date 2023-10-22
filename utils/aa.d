@@ -18,7 +18,7 @@ import std.range;
 import std.traits;
 import std.typecons;
 
-import ae.utils.meta : progn;
+import ae.utils.meta : progn, BoxVoid, BoxedVoid;
 
 // ***************************************************************************
 
@@ -286,7 +286,7 @@ unittest
 // Helpers for HashCollection
 private
 {
-	alias Void = void[0]; // Zero-sized type
+	alias Void = BoxedVoid;
 	static assert(Void.sizeof == 0);
 
 	// Abstraction layer for single/multi-value type holding one or many T.
@@ -341,11 +341,24 @@ private:
 	alias SM = SingleOrMultiValue!(multi, LookupItem);
 	alias LookupValue = SM.ValueType;
 
+	// Return type of assign operations, "in" operator, etc.
+	static if (haveValues)
+		alias ReturnType = V;
+	else
+		alias ReturnType = void;
+	enum haveReturnType = !is(ReturnType == void);
+
+	static if (ordered)
+		alias OrderIndex = size_t;
+	else
+		alias OrderIndex = void;
+
+	// DWIM: a[k] should mean key lookup for maps,
+	// otherwise index lookup for ordered sets.
 	static if (haveValues)
 	{
-		alias ReturnType(Fallback) = V;
 		alias OpIndexKeyType = K;
-		alias OpIndexValueType = V;
+		alias OpIndexValueType = V; // also the return type of opIndex
 	}
 	else
 	{
@@ -353,18 +366,15 @@ private:
 		{
 			alias OpIndexKeyType = size_t;
 			alias OpIndexValueType = K;
-			alias ReturnType(Fallback) = K;
 		}
 		else
 		{
 			alias OpIndexKeyType = void;
 			alias OpIndexValueType = void;
-			alias ReturnType(Fallback) = Fallback;
 		}
 	}
-	enum haveReturnType = !is(ReturnType!void == void);
-	enum haveIndexing = haveValues || ordered;
-
+	enum haveIndexing = !is(OpIndexKeyType == void);
+	static assert(haveIndexing == haveValues || ordered);
 	alias IK = OpIndexKeyType;
 	alias IV = OpIndexValueType;
 
@@ -374,13 +384,21 @@ private:
 	// on copy, so that we don't trample older copies' data.
 	enum bool needDupOnCopy = ordered;
 
-	static if (haveReturnType)
-	{
-		static if (ordered)
-			/*  */ ref inout(ReturnType!void) lookupToReturnValue(in        LookupItem  lookupItem) inout { return items[lookupItem].returnValue; }
-		else
-			static ref inout(ReturnType!void) lookupToReturnValue(ref inout(LookupItem) lookupItem)       { return       lookupItem             ; }
-	}
+	static if (ordered)
+		/*  */ ref inout(ReturnType) lookupToReturnValue(in        LookupItem  lookupItem) inout { return items[lookupItem].returnValue; }
+	else
+	static if (haveValues)
+		static ref inout(ReturnType) lookupToReturnValue(ref inout(LookupItem) lookupItem)       { return       lookupItem             ; }
+	else
+		static ref inout(ReturnType) lookupToReturnValue(ref inout(LookupItem) lookupItem)       {                                       }
+
+	static if (ordered)
+		/*  */ ref inout(IV) lookupToIndexValue(in        LookupItem  lookupItem) inout { return items[lookupItem].indexValue; }
+	else
+	static if (haveValues)
+		static ref inout(IV) lookupToIndexValue(ref inout(LookupItem) lookupItem)       { return       lookupItem            ; }
+	else
+		static ref inout(IV) lookupToIndexValue(ref inout(LookupItem) lookupItem)       {                                      }
 
 	// *** Data ***
 
@@ -395,9 +413,15 @@ private:
 			ValueVarType value;
 
 			static if (haveValues)
-				private alias returnValue = value;
+				alias /*ReturnType*/ returnValue = value;
 			else
-				private alias returnValue = key;
+				@property ReturnType returnValue() const {}
+
+			static if (haveValues)
+				alias /*OpIndexValueType*/ indexValue = value;
+			else
+			static if (ordered)
+				alias /*OpIndexValueType*/ indexValue = key;
 		}
 		Item[] items;
 
@@ -579,7 +603,7 @@ public:
 
 	/// Check if item with this key has been added.
 	/// When applicable, return a pointer to the last value added with this key.
-	Select!(haveReturnType, inout(ReturnType!void)*, bool) opBinaryRight(string op : "in", _K)(auto ref _K key) inout
+	Select!(haveReturnType, inout(ReturnType)*, bool) opBinaryRight(string op : "in", _K)(auto ref _K key) inout
 	if (is(typeof(key in lookup)))
 	{
 		enum missValue = select!haveReturnType(null, false);
@@ -589,7 +613,7 @@ public:
 			return missValue;
 
 		static if (haveReturnType)
-			return &lookupToReturnValue((*p)[$-1]);
+			return &lookupToIndexValue((*p)[$-1]);
 		else
 			return true;
 	}
@@ -601,9 +625,9 @@ public:
 	ref inout(IV) opIndex()(auto ref IK k) inout
 	{
 		static if (haveValues)
-			return lookupToReturnValue(lookup[k][$-1]);
+			return lookupToIndexValue(lookup[k][$-1]);
 		else
-			return items[k].returnValue;
+			return items[k].indexValue;
 	}
 
 	/// Retrieve last value associated with key, or `defaultValue` if none.
@@ -614,7 +638,7 @@ public:
 			if (is(typeof(k in lookup)))
 			{
 				auto p = k in lookup;
-				return p ? lookupToReturnValue((*p)[$-1]) : defaultValue;
+				return p ? lookupToIndexValue((*p)[$-1]) : defaultValue;
 			}
 		else
 			auto ref IV get(this This, KK)(auto ref KK k, auto ref IV defaultValue)
@@ -789,7 +813,7 @@ public:
 			foreach (ref item; items)
 			{
 				static if (single)
-					result = dg(item.returnValue);
+					result = dg(item.indexValue);
 				else
 					result = dg(item.key, item.value);
 				if (result)
@@ -951,7 +975,7 @@ public:
 		addNew,  /// Only add value if it did not exist before; call getValue in that case
 	}
 
-	private ref ReturnType!void addImpl(AddMode mode, AK, GV)(ref AK key, scope GV getValue)
+	private auto addImpl(AddMode mode, AK, GV)(ref AK key, scope GV getValue)
 	if (is(AK : K))
 	{
 		static if (ordered)
@@ -988,19 +1012,32 @@ public:
 					});
 			}
 
-			return items[addedIndex].returnValue;
+			auto self = &this;
+			static struct Result
+			{
+				size_t orderIndex;
+				typeof(self) context;
+				@property ref auto returnValue() { return context.items[orderIndex].returnValue; }
+			}
+			return Result(addedIndex, self);
 		}
 		else // ordered
 		{
 			static if (haveValues)
 			{
+				static struct Result
+				{
+					ReturnType* ptr;
+					@property ref ReturnType returnValue() { return *ptr; }
+				}
+
 				static if (mode == AddMode.require || mode == AddMode.addNew)
-					return (lookup.require(key, [getValue()]))[0];
+					return Result(&(lookup.require(key, [getValue()]))[0]);
 				else
 				static if (multi && mode == AddMode.add)
-					return (lookup[key] ~= getValue())[$-1];
+					return Result(&(lookup[key] ~= getValue())[$-1]);
 				else
-					return (lookup[key] = [getValue()])[0];
+					return Result(&(lookup[key] = [getValue()])[0]);
 			}
 			else
 			{
@@ -1026,6 +1063,8 @@ public:
 				}
 				// This branch returns void, as there is no reasonable
 				// ref to an AA key that we can return here.
+				static struct Result { @property void returnValue(){} }
+				return Result();
 			}
 		}
 	}
@@ -1034,19 +1073,19 @@ public:
 	{
 		static if (haveValues)
 		{
-			ref ReturnType!void _addSetFunc(AK, AV)(auto ref AK key, auto ref AV value)
+			ref ReturnType _addSetFunc(AK, AV)(auto ref AK key, auto ref AV value)
 			if (is(AK : K) && is(AV : V))
 			{
-				return addImpl!mode(key, () => value);
+				return addImpl!mode(key, () => value).returnValue;
 			}
 		}
 		else
 		{
-			ref ReturnType!void _addSetFunc(AK)(auto ref AK key)
+			ref ReturnType _addSetFunc(AK)(auto ref AK key)
 			if (is(AK : K))
 			{
 				ValueVarType value; // void[0]
-				return addImpl!mode(key, () => value);
+				return addImpl!mode(key, () => value).returnValue;
 			}
 		}
 	}
@@ -1063,7 +1102,13 @@ public:
 	static if (haveValues)
 	ref V require()(auto ref K key, lazy V value = V.init)
 	{
-		return addImpl!(AddMode.require)(key, () => value);
+		return addImpl!(AddMode.require)(key, () => value).returnValue;
+	}
+	else
+	static if (ordered)
+	size_t require()(auto ref K key)
+	{
+		return addImpl!(AddMode.require)(key, () => Void.init).orderIndex;
 	}
 
 	deprecated alias getOrAdd = require;
@@ -1602,6 +1647,14 @@ unittest
 
 	foreach (v; set)
 		assert(v == 2);
+
+	assert(set.length == 1);
+	auto index1 = set.require(1);
+	assert(set[index1] == 1);
+	assert(set.length == 2);
+	auto index2 = set.require(2);
+	assert(set[index2] == 2);
+	assert(set.length == 2);
 }
 
 /// Construct an ordered set from the range `r`.
