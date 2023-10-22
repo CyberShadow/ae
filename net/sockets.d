@@ -16,587 +16,41 @@
 
 module ae.net.sockets;
 
-import ae.sys.dataset : DataVec;
+// import ae.sys.dataset : DataVec;
+import ae.sys.event.common;
+import ae.sys.event.system;
 import ae.sys.timing;
-import ae.utils.array : asSlice, asBytes;
-import ae.utils.math;
-public import ae.sys.data;
+// import ae.utils.array : asSlice, asBytes;
+// import ae.utils.math;
+import ae.utils.stream;
+// public import ae.sys.data;
 
-import core.stdc.stdint : int32_t;
+// import core.stdc.stdint : int32_t;
 
-import std.exception;
-import std.parallelism : totalCPUs;
+// import std.exception;
+// import std.parallelism : totalCPUs;
 import std.socket;
-import std.string : format;
-public import std.socket : Address, AddressInfo, Socket;
+// import std.string : format;
+// public import std.socket : Address, AddressInfo, Socket;
 
-version (Windows)
-	private import c_socks = core.sys.windows.winsock2;
-else version (Posix)
-	private import c_socks = core.sys.posix.sys.socket;
+// version (Windows)
+// 	private import c_socks = core.sys.windows.winsock2;
+// else version (Posix)
+// 	private import c_socks = core.sys.posix.sys.socket;
 
-debug(ASOCKETS) import std.stdio : stderr;
-debug(PRINTDATA) import std.stdio : stderr;
-debug(PRINTDATA) import ae.utils.text : hexDump;
-private import std.conv : to;
+// debug(ASOCKETS) import std.stdio : stderr;
+// debug(PRINTDATA) import std.stdio : stderr;
+// debug(PRINTDATA) import ae.utils.text : hexDump;
+// private import std.conv : to;
 
 
-// https://issues.dlang.org/show_bug.cgi?id=7016
-static import ae.utils.array;
-
-version(LIBEV)
-{
-	import deimos.ev;
-	pragma(lib, "ev");
-}
-
-version(Windows)
-{
-	import core.sys.windows.windows : Sleep;
-	private enum USE_SLEEP = true; // avoid convoluted mix of static and runtime conditions
-}
-else
-	private enum USE_SLEEP = false;
-
-int eventCounter;
-
-version (LIBEV)
-{
-	// Watchers are a GenericSocket field (as declared in SocketMixin).
-	// Use one watcher per read and write event.
-	// Start/stop those as higher-level code declares interest in those events.
-	// Use the "data" ev_io field to store the parent GenericSocket address.
-	// Also use the "data" field as a flag to indicate whether the watcher is active
-	// (data is null when the watcher is stopped).
-
-	/// `libev`-based event loop implementation.
-	struct SocketManager
-	{
-	private:
-		size_t count;
-
-		void delegate()[] nextTickHandlers;
-
-		extern(C)
-		static void ioCallback(ev_loop_t* l, ev_io* w, int revents)
-		{
-			auto socket = cast(GenericSocket)w.data;
-			assert(socket, "libev event fired on stopped watcher");
-			debug (ASOCKETS) stderr.writefln("ioCallback(%s, 0x%X)", socket, revents);
-
-			// TODO? Need to get proper SocketManager instance to call updateTimer on
-			socketManager.preEvent();
-
-			if (revents & EV_READ)
-				socket.onReadable();
-			else
-			if (revents & EV_WRITE)
-				socket.onWritable();
-			else
-				assert(false, "Unknown event fired from libev");
-
-			socketManager.postEvent(false);
-		}
-
-		ev_timer evTimer;
-		MonoTime lastNextEvent = MonoTime.max;
-
-		extern(C)
-		static void timerCallback(ev_loop_t* l, ev_timer* w, int /*revents*/)
-		{
-			debug (ASOCKETS) stderr.writefln("Timer callback called.");
-
-			socketManager.preEvent(); // This also updates socketManager.now
-			mainTimer.prod(socketManager.now);
-
-			socketManager.postEvent(true);
-			debug (ASOCKETS) stderr.writefln("Timer callback exiting.");
-		}
-
-		/// Called upon waking up, before calling any users' event handlers.
-		void preEvent()
-		{
-			eventCounter++;
-			socketManager.now = MonoTime.currTime();
-		}
-
-		/// Called before going back to sleep, after calling any users' event handlers.
-		void postEvent(bool wokeDueToTimeout)
-		{
-			while (nextTickHandlers.length)
-			{
-				auto thisTickHandlers = nextTickHandlers;
-				nextTickHandlers = null;
-
-				foreach (handler; thisTickHandlers)
-					handler();
-			}
-
-			socketManager.updateTimer(wokeDueToTimeout);
-		}
-
-		void updateTimer(bool force)
-		{
-			auto nextEvent = mainTimer.getNextEvent();
-			if (force || lastNextEvent != nextEvent)
-			{
-				debug (ASOCKETS) stderr.writefln("Rescheduling timer. Was at %s, now at %s", lastNextEvent, nextEvent);
-				if (nextEvent == MonoTime.max) // Stopping
-				{
-					if (lastNextEvent != MonoTime.max)
-						ev_timer_stop(ev_default_loop(0), &evTimer);
-				}
-				else
-				{
-					auto remaining = mainTimer.getRemainingTime(socketManager.now);
-					while (remaining <= Duration.zero)
-					{
-						debug (ASOCKETS) stderr.writefln("remaining=%s, prodding timer.", remaining);
-						mainTimer.prod(socketManager.now);
-						remaining = mainTimer.getRemainingTime(socketManager.now);
-					}
-					ev_tstamp tstamp = remaining.total!"hnsecs" * 1.0 / convert!("seconds", "hnsecs")(1);
-					debug (ASOCKETS) stderr.writefln("remaining=%s, ev_tstamp=%s", remaining, tstamp);
-					if (lastNextEvent == MonoTime.max) // Starting
-					{
-						ev_timer_init(&evTimer, &timerCallback, 0., tstamp);
-						ev_timer_start(ev_default_loop(0), &evTimer);
-					}
-					else // Adjusting
-					{
-						evTimer.repeat = tstamp;
-						ev_timer_again(ev_default_loop(0), &evTimer);
-					}
-				}
-				lastNextEvent = nextEvent;
-			}
-		}
-
-	public:
-		MonoTime now;
-
-		/// Register a socket with the manager.
-		void register(GenericSocket socket)
-		{
-			debug (ASOCKETS) stderr.writefln("Registering %s", socket);
-			debug assert(socket.evRead.data is null && socket.evWrite.data is null, "Re-registering a started socket");
-			auto fd = socket.conn.handle;
-			assert(fd, "Must have fd before socket registration");
-			ev_io_init(&socket.evRead , &ioCallback, fd, EV_READ );
-			ev_io_init(&socket.evWrite, &ioCallback, fd, EV_WRITE);
-			count++;
-		}
-
-		/// Unregister a socket with the manager.
-		void unregister(GenericSocket socket)
-		{
-			debug (ASOCKETS) stderr.writefln("Unregistering %s", socket);
-			socket.notifyRead  = false;
-			socket.notifyWrite = false;
-			count--;
-		}
-
-		/// Returns the number of registered sockets.
-		size_t size()
-		{
-			return count;
-		}
-
-		/// Loop continuously until no sockets are left.
-		void loop()
-		{
-			auto evLoop = ev_default_loop(0);
-			enforce(evLoop, "libev initialization failure");
-
-			updateTimer(true);
-			debug (ASOCKETS) stderr.writeln("ev_run");
-			ev_run(ev_default_loop(0), 0);
-		}
-	}
-
-	private mixin template SocketMixin()
-	{
-		private ev_io evRead, evWrite;
-
-		private final void setWatcherState(ref ev_io ev, bool newValue, int /*event*/)
-		{
-			if (!conn)
-			{
-				// Can happen when setting delegates before connecting.
-				return;
-			}
-
-			if (newValue && !ev.data)
-			{
-				// Start
-				ev.data = cast(void*)this;
-				ev_io_start(ev_default_loop(0), &ev);
-			}
-			else
-			if (!newValue && ev.data)
-			{
-				// Stop
-				assert(ev.data is cast(void*)this);
-				ev.data = null;
-				ev_io_stop(ev_default_loop(0), &ev);
-			}
-		}
-
-		private final bool getWatcherState(ref ev_io ev) { return !!ev.data; }
-
-		// Flags that determine socket wake-up events.
-
-		/// Interested in read notifications (onReadable)?
-		@property final void notifyRead (bool value) { setWatcherState(evRead , value, EV_READ ); }
-		@property final bool notifyRead () { return getWatcherState(evRead); } /// ditto
-		/// Interested in write notifications (onWritable)?
-		@property final void notifyWrite(bool value) { setWatcherState(evWrite, value, EV_WRITE); }
-		@property final bool notifyWrite() { return getWatcherState(evWrite); } /// ditto
-
-		debug ~this() @nogc
-		{
-			// The LIBEV SocketManager holds no references to registered sockets.
-			// TODO: Add a doubly-linked list?
-			assert(evRead.data is null && evWrite.data is null, "Destroying a registered socket");
-		}
-	}
-}
-else // Use select
-{
-	/// `select`-based event loop implementation.
-	struct SocketManager
-	{
-	private:
-		enum FD_SETSIZE = 1024;
-
-		/// List of all sockets to poll.
-		GenericSocket[] sockets;
-
-		/// Debug AA to check for dangling socket references.
-		debug GenericSocket[socket_t] socketHandles;
-
-		void delegate()[] nextTickHandlers, idleHandlers;
-
-	public:
-		MonoTime now;
-
-		/// Register a socket with the manager.
-		void register(GenericSocket conn)
-		{
-			debug (ASOCKETS) stderr.writefln("Registering %s (%d total)", conn, sockets.length + 1);
-			assert(!conn.socket.blocking, "Trying to register a blocking socket");
-			sockets ~= conn;
-
-			debug
-			{
-				auto handle = conn.socket.handle;
-				assert(handle != socket_t.init, "Can't register a closed socket");
-				assert(handle !in socketHandles, "This socket handle is already registered");
-				socketHandles[handle] = conn;
-			}
-		}
-
-		/// Unregister a socket with the manager.
-		void unregister(GenericSocket conn)
-		{
-			debug (ASOCKETS) stderr.writefln("Unregistering %s (%d total)", conn, sockets.length - 1);
-
-			debug
-			{
-				auto handle = conn.socket.handle;
-				assert(handle != socket_t.init, "Can't unregister a closed socket");
-				auto pconn = handle in socketHandles;
-				assert(pconn, "This socket handle is not registered");
-				assert(*pconn is conn, "This socket handle is registered but belongs to another GenericSocket");
-				socketHandles.remove(handle);
-			}
-
-			foreach (size_t i, GenericSocket j; sockets)
-				if (j is conn)
-				{
-					sockets = sockets[0 .. i] ~ sockets[i + 1 .. sockets.length];
-					return;
-				}
-			assert(false, "Socket not registered");
-		}
-
-		/// Returns the number of registered sockets.
-		size_t size()
-		{
-			return sockets.length;
-		}
-
-		/// Loop continuously until no sockets are left.
-		void loop()
-		{
-			debug (ASOCKETS) stderr.writeln("Starting event loop.");
-
-			SocketSet readset, writeset;
-			size_t sockcount;
-			uint setSize = FD_SETSIZE; // Can't trust SocketSet.max due to Issue 14012
-			readset  = new SocketSet(setSize);
-			writeset = new SocketSet(setSize);
-			while (true)
-			{
-				if (nextTickHandlers.length)
-				{
-					auto thisTickHandlers = nextTickHandlers;
-					nextTickHandlers = null;
-
-					foreach (handler; thisTickHandlers)
-						handler();
-
-					continue;
-				}
-
-				uint minSize = 0;
-				version(Windows)
-					minSize = cast(uint)sockets.length;
-				else
-				{
-					foreach (s; sockets)
-						if (s.socket && s.socket.handle != socket_t.init && s.socket.handle > minSize)
-							minSize = s.socket.handle;
-				}
-				minSize++;
-
-				if (setSize < minSize)
-				{
-					debug (ASOCKETS) stderr.writefln("Resizing SocketSets: %d => %d", setSize, minSize*2);
-					setSize = minSize * 2;
-					readset  = new SocketSet(setSize);
-					writeset = new SocketSet(setSize);
-				}
-				else
-				{
-					readset.reset();
-					writeset.reset();
-				}
-
-				sockcount = 0;
-				bool haveActive;
-				debug (ASOCKETS) stderr.writeln("Populating sets");
-				foreach (GenericSocket conn; sockets)
-				{
-					if (!conn.socket)
-						continue;
-					sockcount++;
-
-					debug (ASOCKETS) stderr.writef("\t%s:", conn);
-					if (conn.notifyRead)
-					{
-						readset.add(conn.socket);
-						if (!conn.daemonRead)
-							haveActive = true;
-						debug (ASOCKETS) stderr.write(" READ", conn.daemonRead ? "[daemon]" : "");
-					}
-					if (conn.notifyWrite)
-					{
-						writeset.add(conn.socket);
-						if (!conn.daemonWrite)
-							haveActive = true;
-						debug (ASOCKETS) stderr.write(" WRITE", conn.daemonWrite ? "[daemon]" : "");
-					}
-					debug (ASOCKETS) stderr.writeln();
-				}
-				debug (ASOCKETS)
-				{
-					stderr.writefln("Sets populated as follows:");
-					printSets(readset, writeset);
-				}
-
-				debug (ASOCKETS) stderr.writefln("Waiting (%sactive with %d sockets, %s timer events, %d idle handlers)...",
-					haveActive ? "" : "not ",
-					sockcount,
-					mainTimer.isWaiting() ? "with" : "no",
-					idleHandlers.length,
-				);
-				if (!haveActive && !mainTimer.isWaiting() && !nextTickHandlers.length)
-				{
-					debug (ASOCKETS) stderr.writeln("No more sockets or timer events, exiting loop.");
-					break;
-				}
-
-				debug (ASOCKETS) stderr.flush();
-
-				int events;
-				if (idleHandlers.length)
-				{
-					if (sockcount==0)
-						events = 0;
-					else
-						events = Socket.select(readset, writeset, null, 0.seconds);
-				}
-				else
-				if (USE_SLEEP && sockcount==0)
-				{
-					version (Windows)
-					{
-						now = MonoTime.currTime();
-						auto duration = mainTimer.getRemainingTime(now).total!"msecs"();
-						debug (ASOCKETS) writeln("Wait duration: ", duration, " msecs");
-						if (duration <= 0)
-							duration = 1; // Avoid busywait
-						else
-						if (duration > int.max)
-							duration = int.max;
-						Sleep(cast(int)duration);
-						events = 0;
-					}
-					else
-						assert(0);
-				}
-				else
-				if (mainTimer.isWaiting())
-				{
-					// Refresh time before sleeping, to ensure that a
-					// slow event handler does not skew everything else
-					now = MonoTime.currTime();
-
-					events = Socket.select(readset, writeset, null, mainTimer.getRemainingTime(now));
-				}
-				else
-					events = Socket.select(readset, writeset, null);
-
-				debug (ASOCKETS) stderr.writefln("%d events fired.", events);
-
-				// Update time after sleeping
-				now = MonoTime.currTime();
-
-				if (events > 0)
-				{
-					// Handle just one event at a time, as the first
-					// handler might invalidate select()'s results.
-					handleEvent(readset, writeset);
-				}
-				else
-				if (idleHandlers.length)
-				{
-					import ae.utils.array : shift;
-					auto handler = idleHandlers.shift();
-
-					// Rotate the idle handler queue before running it,
-					// in case the handler unregisters itself.
-					idleHandlers ~= handler;
-
-					handler();
-				}
-
-				// Timers may invalidate our select results, so fire them after processing the latter
-				mainTimer.prod(now);
-
-				eventCounter++;
-			}
-		}
-
-		debug (ASOCKETS)
-		private void printSets(SocketSet readset, SocketSet writeset)
-		{
-			foreach (GenericSocket conn; sockets)
-			{
-				if (!conn.socket)
-					stderr.writefln("\t\t%s is unset", conn);
-				else
-				{
-					if (readset.isSet(conn.socket))
-						stderr.writefln("\t\t%s is readable", conn);
-					if (writeset.isSet(conn.socket))
-						stderr.writefln("\t\t%s is writable", conn);
-				}
-			}
-		}
-
-		private void handleEvent(SocketSet readset, SocketSet writeset)
-		{
-			debug (ASOCKETS)
-			{
-				stderr.writefln("\tSelect results:");
-				printSets(readset, writeset);
-			}
-
-			foreach (GenericSocket conn; sockets)
-			{
-				if (!conn.socket)
-					continue;
-
-				if (readset.isSet(conn.socket))
-				{
-					debug (ASOCKETS) stderr.writefln("\t%s - calling onReadable", conn);
-					return conn.onReadable();
-				}
-				else
-				if (writeset.isSet(conn.socket))
-				{
-					debug (ASOCKETS) stderr.writefln("\t%s - calling onWritable", conn);
-					return conn.onWritable();
-				}
-			}
-
-			assert(false, "select() reported events available, but no registered sockets are set");
-		}
-	}
-
-	// Use UFCS to allow removeIdleHandler to have a predicate with context
-	/// Register a function to be called when the event loop is idle,
-	/// and would otherwise sleep.
-	void addIdleHandler(ref SocketManager socketManager, void delegate() handler)
-	{
-		foreach (i, idleHandler; socketManager.idleHandlers)
-			assert(handler !is idleHandler);
-
-		socketManager.idleHandlers ~= handler;
-	}
-
-	/// Unregister a function previously registered with `addIdleHandler`.
-	void removeIdleHandler(alias pred=(a, b) => a is b, Args...)(ref SocketManager socketManager, Args args)
-	{
-		foreach (i, idleHandler; socketManager.idleHandlers)
-			if (pred(idleHandler, args))
-			{
-				import std.algorithm : remove;
-				socketManager.idleHandlers = socketManager.idleHandlers.remove(i);
-				return;
-			}
-		assert(false, "No such idle handler");
-	}
-
-	private mixin template SocketMixin()
-	{
-		// Flags that determine socket wake-up events.
-
-		/// Interested in read notifications (onReadable)?
-		bool notifyRead;
-		/// Interested in write notifications (onWritable)?
-		bool notifyWrite;
-	}
-}
-
-/// The default socket manager.
-SocketManager socketManager;
-
-/// Schedule a function to run on the next event loop iteration.
-/// Can be used to queue logic to run once all current execution frames exit.
-/// Similar to e.g. process.nextTick in Node.
-void onNextTick(ref SocketManager socketManager, void delegate() dg) pure @safe nothrow
-{
-	socketManager.nextTickHandlers ~= dg;
-}
-
-/// The current monotonic time.
-/// Updated by the event loop whenever it is awoken.
-@property MonoTime now()
-{
-	if (socketManager.now == MonoTime.init)
-	{
-		// Event loop not yet started.
-		socketManager.now = MonoTime.currTime();
-	}
-	return socketManager.now;
-}
+// // https://issues.dlang.org/show_bug.cgi?id=7016
+// static import ae.utils.array;
 
 // ***************************************************************************
 
 /// General methods for an asynchronous socket.
+/// Base class for both listen and connection sockets.
 abstract class GenericSocket
 {
 	/// Declares notifyRead and notifyWrite.
@@ -728,13 +182,39 @@ public:
 
 // ***************************************************************************
 
-/// Implementation of `IConnection` using a socket.
-/// Implements receiving data when readable and sending queued data
-/// when writable.
-class Connection : GenericSocket, IConnection
+/// `IStreamBase` implementation for a socket connection.
+class SocketStream : IStreamBase
+{
+	
+}
+
+/// `IReadStream` implementation for a socket connection.
+class SocketReadStream : IDataReadStream
 {
 private:
-	ConnectionState _state;
+	Connection conn;
+}
+
+/// `IWriteStream` implementation for a socket connection.
+class SocketWriteStream : IDataWriteStream
+{
+private:
+	Connection conn;
+}
+
+unittest
+{
+	if (false)
+		new SocketReadStream;
+}
+
+/// Wraps a `std.socket.Socket` instance, providing read and write streams.
+/// On POSIX, the `Socket` may represent any file descriptor, including files,
+/// sockets, or pipes.
+class Connection : GenericSocket
+{
+private:
+	StreamState _state;
 	final @property ConnectionState state(ConnectionState value) { return _state = value; }
 
 public:
@@ -757,7 +237,7 @@ protected:
 		this.conn = conn;
 		state = conn is null ? ConnectionState.disconnected : ConnectionState.connected;
 		if (conn)
-			socketManager.register(this);
+			eventLoop.register(this);
 		updateFlags();
 	}
 
@@ -891,7 +371,7 @@ public:
 	private final void close()
 	{
 		assert(conn, "Attempting to close an unregistered socket");
-		socketManager.unregister(this);
+		eventLoop.unregister(this);
 		conn.close();
 		conn = null;
 		outQueue[] = DataVec.init;
@@ -1002,6 +482,7 @@ public:
 
 /// Implements a stream connection.
 /// Queued `Data` is allowed to be fragmented.
+/// (Note: "Stream" here is as in `SOCK_STREAM` and not `ae.utils.stream`.)
 class StreamConnection : Connection
 {
 protected:
@@ -1222,6 +703,8 @@ unittest { if (false) new Duplex(null, null); }
 // ***************************************************************************
 
 /// An asynchronous socket-based connection.
+/// Used for file descriptors which use the
+/// `send`/`receive` POSIX / Berkeley socket APIs.
 class SocketConnection : StreamConnection
 {
 protected:
@@ -1253,7 +736,7 @@ protected:
 			conn = new Socket(addressInfo.family, addressInfo.type, addressInfo.protocol);
 			conn.blocking = false;
 
-			socketManager.register(this);
+			eventLoop.register(this);
 			updateFlags();
 			debug (ASOCKETS) stderr.writefln("Attempting connection to %s", addressInfo.address.toString());
 			conn.connect(addressInfo.address);
@@ -1267,7 +750,7 @@ protected:
 	{
 		if (state == ConnectionState.connecting && addressQueue.length)
 		{
-			socketManager.unregister(this);
+			eventLoop.unregister(this);
 			conn.close();
 			conn = null;
 
@@ -1370,7 +853,7 @@ protected:
 		{
 			debug (ASOCKETS) stderr.writefln("New Listener @ %s", cast(void*)this);
 			this.conn = conn;
-			socketManager.register(this);
+			eventLoop.register(this);
 		}
 
 		/// Called when a socket is readable.
@@ -1406,7 +889,7 @@ protected:
 		void closeListener()
 		{
 			assert(conn);
-			socketManager.unregister(this);
+			eventLoop.unregister(this);
 			conn.close();
 			conn = null;
 		}
@@ -1699,7 +1182,7 @@ public:
 
 		conn = new Socket(family, type, protocol);
 		conn.blocking = false;
-		socketManager.register(this);
+		eventLoop.register(this);
 		state = ConnectionState.connected;
 		updateFlags();
 	}
@@ -1820,7 +1303,7 @@ unittest
 			client.close();
 		}
 	};
-	socketManager.loop();
+	eventLoop.loop();
 	assert(!packets.length);
 }
 
@@ -2106,7 +1589,7 @@ unittest
 	{
 		bool fired;
 		setTimeout({fired = true;}, 10.msecs);
-		socketManager.loop();
+		eventLoop.loop();
 		assert(fired);
 	}
 

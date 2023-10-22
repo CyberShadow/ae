@@ -11,7 +11,7 @@
  *   Vladimir Panteleev <ae@cy.md>
  */
 
-module ae.sys.io.stream;
+module ae.utils.stream;
 
 import ae.sys.data : Data;
 import ae.utils.array : asSlice;
@@ -22,28 +22,28 @@ enum StreamState
 	/// The initial state, or the state after a close was fully processed.
 	closed,
 
-	/// A stream attempt is in progress.
+	/// An attempt to open (connect/handshake/etc.) the stream is in progress.
 	opening,
 
-	/// A stream is established.
+	/// The stream is open, and can be read/written to..
 	open,
 
-	/// Closing in progress. No data can be sent or received at this point.
+	/// Closing in progress. No data can be sent/received at this point.
 	/// We are waiting for queued data to be actually sent before closing.
 	closing,
 }
 
-/// Returns true if this is a connection state for which disconnecting is valid.
-/// Generally, applications should be aware of the life cycle of their sockets,
-/// so checking the state of a connection is unnecessary (and a code smell).
-/// However, unconditionally disconnecting some connected sockets can be useful
-/// when it needs to occur "out-of-bound" (not tied to the application normal life cycle),
-/// such as in response to a signal.
+/// Returns true if this is a stream state for which closing is valid.
+/// Generally, applications should be aware of the life cycle of their streams,
+/// so checking the state of a stream is unnecessary (and a code smell).
+/// However, unconditionally closing some open streams can be useful
+/// when it needs to occur "out-of-bound" (not tied to the application
+/// normal life cycle), such as in response to a signal.
 bool closable(StreamState state) { return state >= StreamState.opening && state <= StreamState.open; }
 
 /// Payload of a stream close event.
 /// Contains information about why a stream was closed.
-/// Can be used to decide e.g. when it makes sense to reconnect.
+/// Can be used to decide e.g. when it makes sense to reconnect or signal an error.
 struct CloseInfo
 {
 	/// What caused the stream to close.
@@ -81,8 +81,9 @@ struct CloseInfo
 
 interface IStreamBase
 {
-	/// Callback setter for when a stream has been opened (if applicable).
+	/// Callback property for when a stream has been opened (if applicable).
 	alias OpenHandler = void delegate();
+	// @property OpenHandler handleOpen(); /// ditto
 	@property void handleOpen(OpenHandler value); /// ditto
 
 	/// Get stream state.
@@ -91,7 +92,7 @@ interface IStreamBase
 	@property StreamState state();
 
 	/// This is the default value for the `close` `message` string parameter.
-	static immutable defaultCloseMessage = "Software closed the stream";
+	static immutable defaultCloseMessage = "Stream closed due to request of local software";
 	static immutable defaultCloseInfo = CloseInfo(CloseInfo.Source.local, defaultCloseMessage, null);
 
 	/// Logically close the stream.
@@ -99,12 +100,13 @@ interface IStreamBase
 	/// For write streams, if there is any queued data, the stream will be actually closed
 	/// after all pending data is flushed.
 	/// Params:
-	///  closeInfo = CloseInfo to pass/propagate to
+	///  closeInfo = `CloseInfo` to pass/propagate to
 	///              any registered stream close handlers.
 	void close(CloseInfo closeInfo = defaultCloseInfo);
 
-	/// Callback setter for when a stream was closed.
+	/// Callback property for when a stream was closed.
 	alias CloseHandler = void delegate(CloseInfo info);
+	// @property CloseHandler handleClose(); /// ditto
 	@property void handleClose(CloseHandler value); /// ditto
 }
 
@@ -120,24 +122,47 @@ interface IWriteStream(Datum) : IStreamBase
 		this.put(datum.asSlice);
 	}
 
-	/// Callback setter for when all queued data has been sent.
+	/// Callback property for when all queued data has been sent to the underlying API.
 	alias BufferFlushedHandler = void delegate();
+	// @property BufferFlushedHandler handleBufferFlushed(); /// ditto
 	@property void handleBufferFlushed(BufferFlushedHandler value); /// ditto
 }
 
 /// Common interface for readable streams and adapters.
 interface IReadStream(Datum) : IStreamBase
 {
-	/// Callback setter for when new data is read.
+	/// Callback property for when new data is read.
 	alias DataHandler = void delegate(Datum data);
+	// @property DataHandler handleData(); /// ditto
 	@property void handleData(DataHandler value); /// ditto
-
 }
 
-/// Common interface for streams and adapters.
-interface IStream(Datum) : IReadStream!Datum, IWriteStream!Datum
+alias IDataReadStream = IReadStream!Data;
+alias IDataWriteStream = IWriteStream!Data;
+
+/// A pair of read and write streams.
+interface IDuplex(Datum)
 {
-
+	@property IWriteStream!Datum writeStream();
+	@property IReadStream!Datum readStream();
 }
 
-alias IDataStream = IStream!Data;
+alias IDataDuplex = IDuplex!Data;
+
+void splice(Datum)(IReadStream!Datum readStream, IWriteStream!Datum writeStream)
+{
+	readStream.handleData = &writeStream.put;
+	// TODO: don't loop infinitely
+	readStream.handleClose = &writeStream.close;
+	writeStream.handleClose = &readStream.close;
+}
+
+unittest
+{
+	if (false)
+	{
+		IDataReadStream readStream;
+		IDataWriteStream writeStream;
+		splice(readStream, writeStream);
+	}
+}

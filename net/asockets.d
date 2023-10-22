@@ -14,7 +14,7 @@
  *   Simon Arlott
  */
 
-module ae.net.asockets;
+deprecated module ae.net.asockets;
 
 import ae.sys.dataset : DataVec;
 import ae.sys.timing;
