@@ -109,7 +109,7 @@ ref inout(T) as(T)(inout(ubyte)[] bytes)
 
 /// ditto
 inout(T) as(T)(inout(ubyte)[] bytes)
-	if (is(T U : U[]) && !hasIndirections!U)
+	if (is(T U == U[]) && !hasIndirections!U)
 {
 	return cast(inout(T))bytes;
 }
@@ -117,7 +117,7 @@ inout(T) as(T)(inout(ubyte)[] bytes)
 // deprecated alias fromBytes = as;
 // https://issues.dlang.org/show_bug.cgi?id=23968
 deprecated ref inout(T) fromBytes(T)(inout(ubyte)[] bytes) if (!hasIndirections!T) { return bytes.as!T; }
-deprecated inout(T) fromBytes(T)(inout(ubyte)[] bytes) if (is(T U : U[]) && !hasIndirections!U) { return bytes.as!T; }
+deprecated inout(T) fromBytes(T)(inout(ubyte)[] bytes) if (is(T U == U[]) && !hasIndirections!U) { return bytes.as!T; }
 
 unittest
 {
@@ -133,6 +133,7 @@ unittest
 	ubyte[] arr = [1, 2];
 	assert(arr.as!S == S(1, 2));
 	assert(arr.as!(S[]) == [S(1, 2)]);
+	assert(arr.as!(S[1]) == [S(1, 2)]);
 }
 
 /// Returns an empty, but non-null slice of T.
