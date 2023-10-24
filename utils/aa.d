@@ -729,14 +729,14 @@ public:
 	static if (ordered)
 	{
 		/// Returns index of key `k`.
-		sizediff_t indexOf()(auto ref const K k)
+		sizediff_t indexOf()(auto ref const K k) const
 		{
 			auto p = k in lookup;
 			return p ? (*p)[0] : -1;
 		}
 
 		/// Returns all indices of key `k`.
-		size_t[] indicesOf()(auto ref const K k)
+		inout(size_t)[] indicesOf()(auto ref const K k) inout
 		{
 			auto p = k in lookup;
 			return p ? (*p)[] : null;
@@ -1655,6 +1655,8 @@ unittest
 	auto index2 = set.require(2);
 	assert(set[index2] == 2);
 	assert(set.length == 2);
+
+	assert(set[set.indexOf(2)] == 2);
 }
 
 /// Construct an ordered set from the range `r`.
