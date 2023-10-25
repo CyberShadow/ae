@@ -1104,11 +1104,11 @@ public:
 	{
 		return addImpl!(AddMode.require)(key, () => value).returnValue;
 	}
-	else
+
 	static if (ordered)
-	size_t require()(auto ref K key)
+	size_t requireIndex()(auto ref K key, lazy ValueVarType value = ValueVarType.init)
 	{
-		return addImpl!(AddMode.require)(key, () => Void.init).orderIndex;
+		return addImpl!(AddMode.require)(key, () => value).orderIndex;
 	}
 
 	deprecated alias getOrAdd = require;
@@ -1649,10 +1649,10 @@ unittest
 		assert(v == 2);
 
 	assert(set.length == 1);
-	auto index1 = set.require(1);
+	auto index1 = set.requireIndex(1);
 	assert(set[index1] == 1);
 	assert(set.length == 2);
-	auto index2 = set.require(2);
+	auto index2 = set.requireIndex(2);
 	assert(set[index2] == 2);
 	assert(set.length == 2);
 
