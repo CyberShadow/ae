@@ -618,6 +618,25 @@ public:
 			return true;
 	}
 
+	// *** Query (by index) ***
+
+	/// Index access (for ordered collections).
+	/// For maps, returns the key.
+	static if (ordered)
+	ref inout(K) at()(size_t i) inout
+	{
+		return items[i].key;
+	}
+
+	/// ditto
+	static if (ordered)
+	auto ref inout(K) getAt()(size_t i, auto ref K defaultValue) inout
+	{
+		return i < items.length ? items[i].key : defaultValue;
+	}
+
+	// *** Query (by key/index - DWIM) ***
+
 	/// Index operator.
 	/// The key must exist. Indexing with a key which does not exist
 	/// is an error.
@@ -1663,6 +1682,10 @@ unittest
 		const size_t i = 0;
 		assert(set[i] == 2);
 	}
+
+	assert(set.at(set.indexOf(2)) == 2);
+	assert(set.getAt(set.indexOf(2), 99) == 2);
+	assert(set.getAt(99, 99) == 99);
 }
 
 /// Construct an ordered set from the range `r`.
