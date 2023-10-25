@@ -622,7 +622,7 @@ public:
 	/// The key must exist. Indexing with a key which does not exist
 	/// is an error.
 	static if (haveIndexing)
-	ref inout(IV) opIndex()(auto ref IK k) inout
+	ref inout(IV) opIndex()(auto ref const IK k) inout
 	{
 		static if (haveValues)
 			return lookupToIndexValue(lookup[k][$-1]);
@@ -1657,6 +1657,12 @@ unittest
 	assert(set.length == 2);
 
 	assert(set[set.indexOf(2)] == 2);
+
+	void f(ref const OrderedSet!int set)
+	{
+		const size_t i = 0;
+		assert(set[i] == 2);
+	}
 }
 
 /// Construct an ordered set from the range `r`.
