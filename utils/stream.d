@@ -16,31 +16,6 @@ module ae.utils.stream;
 import ae.sys.data : Data;
 import ae.utils.array : asSlice;
 
-/// Used to indicate the state of a stream throughout its lifecycle.
-enum StreamState
-{
-	/// The initial state, or the state after a close was fully processed.
-	closed,
-
-	/// An attempt to open (connect/handshake/etc.) the stream is in progress.
-	opening,
-
-	/// The stream is open, and can be read/written to..
-	open,
-
-	/// Closing in progress. No data can be sent/received at this point.
-	/// We are waiting for queued data to be actually sent before closing.
-	closing,
-}
-
-/// Returns true if this is a stream state for which closing is valid.
-/// Generally, applications should be aware of the life cycle of their streams,
-/// so checking the state of a stream is unnecessary (and a code smell).
-/// However, unconditionally closing some open streams can be useful
-/// when it needs to occur "out-of-bound" (not tied to the application
-/// normal life cycle), such as in response to a signal.
-bool closable(StreamState state) { return state >= StreamState.opening && state <= StreamState.open; }
-
 /// Payload of a stream close event.
 /// Contains information about why a stream was closed.
 /// Can be used to decide e.g. when it makes sense to reconnect or signal an error.
@@ -81,24 +56,17 @@ struct CloseInfo
 
 interface IStreamBase
 {
-	/// Callback property for when a stream has been opened (if applicable).
-	alias OpenHandler = void delegate();
-	// @property OpenHandler handleOpen(); /// ditto
-	@property void handleOpen(OpenHandler value); /// ditto
-
 	/// Get stream state.
 	/// Applications should generally not need to consult this, except
 	/// when processing an out-of-band event, like SIGINT.
-	@property StreamState state();
+	@property bool isOpen();
 
 	/// This is the default value for the `close` `message` string parameter.
-	static immutable defaultCloseMessage = "Stream closed due to request of local software";
+	static immutable defaultCloseMessage = "Stream closed by request of local software";
 	static immutable defaultCloseInfo = CloseInfo(CloseInfo.Source.local, defaultCloseMessage, null);
 
 	/// Logically close the stream.
 	/// Synchronously calls and propagates any registered close handlers.
-	/// For write streams, if there is any queued data, the stream will be actually closed
-	/// after all pending data is flushed.
 	/// Params:
 	///  closeInfo = `CloseInfo` to pass/propagate to
 	///              any registered stream close handlers.
@@ -121,11 +89,6 @@ interface IWriteStream(Datum) : IStreamBase
 	{
 		this.put(datum.asSlice);
 	}
-
-	/// Callback property for when all queued data has been sent to the underlying API.
-	alias BufferFlushedHandler = void delegate();
-	// @property BufferFlushedHandler handleBufferFlushed(); /// ditto
-	@property void handleBufferFlushed(BufferFlushedHandler value); /// ditto
 }
 
 /// Common interface for readable streams and adapters.
@@ -152,9 +115,8 @@ alias IDataDuplex = IDuplex!Data;
 void splice(Datum)(IReadStream!Datum readStream, IWriteStream!Datum writeStream)
 {
 	readStream.handleData = &writeStream.put;
-	// TODO: don't loop infinitely
-	readStream.handleClose = &writeStream.close;
-	writeStream.handleClose = &readStream.close;
+	readStream.handleClose = (closeInfo) { if (writeStream.isOpen) writeStream.close(closeInfo); };
+	writeStream.handleClose = (closeInfo) { if (readStream.isOpen) readStream.close(closeInfo); };
 }
 
 unittest
