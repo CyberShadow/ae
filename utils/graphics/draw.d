@@ -409,6 +409,8 @@ void fillPoly(V, COLOR)(auto ref V v, Coord[] coords, COLOR f)
 void thickLine(V, COLOR)(auto ref V v, xy_t x1, xy_t y1, xy_t x2, xy_t y2, xy_t r, COLOR c)
 	if (isWritableView!V && is(COLOR : ViewColor!V))
 {
+	import std.math : sqrt;
+
 	xy_t dx = x2-x1;
 	xy_t dy = y2-y1;
 	xy_t d  = cast(xy_t)sqrt(cast(float)(sqr(dx)+sqr(dy)));
@@ -417,7 +419,7 @@ void thickLine(V, COLOR)(auto ref V v, xy_t x1, xy_t y1, xy_t x2, xy_t y2, xy_t 
 	xy_t nx = dx*r/d;
 	xy_t ny = dy*r/d;
 
-	fillPoly([
+	v.fillPoly([
 		Coord(x1-ny, y1+nx),
 		Coord(x1+ny, y1-nx),
 		Coord(x2+ny, y2-nx),
