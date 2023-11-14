@@ -63,7 +63,7 @@ struct KeyValueStore(K, V)
 		return defaultValue;
 	} /// ditto
 
-	V getOrAdd()(auto ref const K k, lazy V defaultValue)
+	V require()(auto ref const K k, lazy V defaultValue)
 	{
 		checkInitialized();
 		foreach (SqlType!V v; sqlGet.iterate(toSqlType(k)))
@@ -72,6 +72,7 @@ struct KeyValueStore(K, V)
 		sqlSet.exec(toSqlType(k), toSqlType(v));
 		return v;
 	} /// ditto
+	deprecated alias getOrAdd = require;
 
 	bool opBinaryRight(string op)(auto ref const K k)
 	if (op == "in")
