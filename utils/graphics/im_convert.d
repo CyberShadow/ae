@@ -26,7 +26,7 @@ import ae.utils.graphics.color;
 import ae.utils.graphics.image;
 
 /// Invoke ImageMagick's `convert` program to parse the given data.
-auto parseViaIMConvert(COLOR)(const(void)[] data)
+auto parseViaIMConvert(COLOR)(const(void)[] data, string[] transformations = null)
 {
 	string[] convertFlags;
 	static if (is(COLOR : BGR))
@@ -43,15 +43,15 @@ auto parseViaIMConvert(COLOR)(const(void)[] data)
 		convertFlags ~= ["-alpha", "on"];
 	}
 	return data
-		.pipe(["convert".imageMagickBinary()] ~ convertFlags ~ ["-[0]", "bmp:-"])
+		.pipe(["convert".imageMagickBinary()] ~ convertFlags ~ ["-[0]"] ~ transformations ~ ["bmp:-"])
 		.viewBMP!COLOR();
 }
 
 /// ditto
-auto parseViaIMConvert(C = TargetColor, TARGET)(const(void)[] data, auto ref TARGET target)
+auto parseViaIMConvert(C = TargetColor, TARGET)(const(void)[] data, auto ref TARGET target, string[] transformations = null)
 	if (isWritableView!TARGET && isTargetColor!(C, TARGET))
 {
-	return data.parseViaIMConvert!(ViewColor!TARGET)().copy(target);
+	return data.parseViaIMConvert!(ViewColor!TARGET)(transformations).copy(target);
 }
 
 unittest
