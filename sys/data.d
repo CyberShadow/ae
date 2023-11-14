@@ -346,7 +346,7 @@ public:
 		this.data = cast(T[])memory.contents;
 	}
 
-	this(this)
+	this(this) @safe
 	{
 		if (memory)
 		{
