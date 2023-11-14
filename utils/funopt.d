@@ -280,9 +280,9 @@ if (isCallable!FUN)
 		alias T = Params[i];
 		static if (isParameter!T)
 		{
-			static if (is(OptionValueType!T : const(string)[]))
+			static if (isOptionArray!(OptionValueType!T))
 			{
-				values[i] = cast(OptionValueType!T)args;
+				values[i] = args.map!(arg => arg.to!(ElementType!(OptionValueType!T))).array;
 				args = null;
 			}
 			else
@@ -358,6 +358,8 @@ unittest
 	funopt!((int) {})(["program", "5"]);
 
 	funopt!((int n) { assert(n); })(["program", "5"]);
+
+	funopt!((int[] n) { assert(n == [12, 34]); })(["program", "12", "34"]);
 }
 
 // ***************************************************************************
