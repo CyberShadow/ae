@@ -16,8 +16,6 @@ module ae.utils.vec;
 import std.algorithm.mutation : swap, move;
 import std.meta : allSatisfy;
 
-package(ae):
-
 /*
   An array type with deterministic lifetime.
 
