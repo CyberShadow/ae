@@ -18,18 +18,20 @@ import core.thread : Fiber;
 
 import ae.utils.promise;
 
+enum defaultFiberSize = 64 * 1024;
+
 /// Evaluates `task` in a new fiber, and returns a promise which is
 /// fulfilled when `task` exits.  `task` may use `await` to block on
 /// other promises.
 // TODO: is using lazy OK for this? https://issues.dlang.org/show_bug.cgi?id=23923
-Promise!(T, E) async(T, E = Exception)(lazy T task)
+Promise!(T, E) async(T, E = Exception)(lazy T task, size_t size = defaultFiberSize)
 if (!is(T == return))
 {
-	return async({ return task; });
+	return async({ return task; }, size);
 }
 
 /// ditto
-Promise!(T, E) async(T, E = Exception)(T delegate() task)
+Promise!(T, E) async(T, E = Exception)(T delegate() task, size_t size = defaultFiberSize)
 if (!is(T == return))
 {
 	auto p = new Promise!T;
@@ -41,7 +43,7 @@ if (!is(T == return))
 				p.fulfill(task());
 		catch (E e)
 			p.reject(e);
-	}, 64 * 1024);
+	}, size);
 	f.call();
 	return p;
 }
