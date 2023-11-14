@@ -858,8 +858,21 @@ deprecated unittest
 // ***************************************************************************
 
 /// Equivalents of `array(xxx(...))`.
-auto amap(alias pred, T)(T[] arr) { return array(map!pred(arr)); }
-auto afilter(alias pred, T)(T[] arr) { return array(filter!pred(arr)); } /// ditto
+template amap(alias pred)
+{
+	auto amap(T)(T[] arr) { return array(map!pred(arr)); }
+
+	/// Like `amap` but with a static array.
+	auto amap(T, size_t n)(T[n] arr)
+	{
+		alias R = typeof(unaryFun!pred(arr[0]));
+		R[n] result;
+		foreach (i, ref r; result)
+			r = unaryFun!pred(arr[i]);
+		return result;
+	}
+}
+template afilter(alias pred) { auto afilter(T)(T[] arr) { return array(filter!pred(arr)); } } /// ditto
 auto auniq(T)(T[] arr) { return array(uniq(arr)); } /// ditto
 auto asort(alias pred, T)(T[] arr) { sort!pred(arr); return arr; } /// ditto
 
@@ -867,16 +880,7 @@ unittest
 {
 	assert([1, 2, 3].amap!`a*2`() == [2, 4, 6]);
 	assert([1, 2, 3].amap!(n => n*n)() == [1, 4, 9]);
-}
-
-/// Like `amap` but with a static array.
-auto amap(alias pred, T, size_t n)(T[n] arr)
-{
-	alias R = typeof(unaryFun!pred(arr[0]));
-	R[n] result;
-	foreach (i, ref r; result)
-		r = unaryFun!pred(arr[i]);
-	return result;
+	assert([1, 2, 3].staticArray.amap!(n => n*n)() == [1, 4, 9].staticArray);
 }
 
 // ***************************************************************************
