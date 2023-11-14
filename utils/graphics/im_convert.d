@@ -68,6 +68,26 @@ unittest
 
 // ----------------------------------------------------------------------------
 
+/// Invoke ImageMagick's `convert` program to serialize the given image.
+auto encodeViaIMConvert(SRC)(auto ref SRC src, string format, string[] transformations = null)
+{
+	string[] convertFlags;
+	return src
+		.toBMP
+		.pipe(["convert".imageMagickBinary()] ~ convertFlags ~ ["-[0]"] ~ transformations ~ [format ~ ":-"]);
+}
+
+unittest
+{
+	if (false)
+	{
+		Image!BGR i;
+		i.encodeViaIMConvert("bmp");
+	}
+}
+
+// ----------------------------------------------------------------------------
+
 private struct DecodeStreamImpl(COLOR)
 {
 	alias BMP = ReturnType!(viewBMP!(COLOR, ubyte[]));
