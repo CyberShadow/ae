@@ -19,6 +19,7 @@ import std.traits;
 import std.typecons;
 
 import ae.utils.appender;
+import ae.utils.array : isIdentical;
 import ae.utils.exception;
 import ae.utils.functor.primitives : functor;
 import ae.utils.meta;
@@ -305,7 +306,7 @@ struct CustomJsonSerializer(Writer)
 				static if (!doSkipSerialize!(T, v.tupleof[i].stringof[2..$]))
 				{
 					static if (hasAttribute!(JSONOptional, v.tupleof[i]))
-						if (v.tupleof[i] is T.init.tupleof[i])
+						if (isIdentical(v.tupleof[i], T.init.tupleof[i]))
 							continue;
 					if (!first)
 						writer.putComma();
@@ -1223,6 +1224,12 @@ unittest
 unittest
 {
 	static struct S { @JSONOptional float f; }
+	assert(S().toJson == `{}`, S().toJson);
+}
+
+unittest
+{
+	static struct S { @JSONOptional int[1] a; }
 	assert(S().toJson == `{}`, S().toJson);
 }
 
