@@ -305,7 +305,7 @@ struct CustomJsonSerializer(Writer)
 				static if (!doSkipSerialize!(T, v.tupleof[i].stringof[2..$]))
 				{
 					static if (hasAttribute!(JSONOptional, v.tupleof[i]))
-						if (v.tupleof[i] == T.init.tupleof[i])
+						if (v.tupleof[i] is T.init.tupleof[i])
 							continue;
 					if (!first)
 						writer.putComma();
@@ -1218,6 +1218,12 @@ unittest
 	static struct S { @JSONOptional bool a=true, b=false; }
 	assert(S().toJson == `{}`, S().toJson);
 	assert(S(false, true).toJson == `{"a":false,"b":true}`);
+}
+
+unittest
+{
+	static struct S { @JSONOptional float f; }
+	assert(S().toJson == `{}`, S().toJson);
 }
 
 // ************************************************************************
