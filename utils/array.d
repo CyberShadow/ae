@@ -200,6 +200,26 @@ unittest
 	assert(iarr.ptr);
 }
 
+// ************************************************************************
+
+/// A more generic alternative to the "is" operator,
+/// which doesn't have corner cases with static arrays / floats.
+bool isIdentical(T)(auto ref T a, auto ref T b)
+{
+	static if (hasIndirections!T)
+		return a is b;
+	else
+		return a.asStaticBytes == b.asStaticBytes;
+}
+
+unittest
+{
+	float nan;
+	assert(isIdentical(nan, nan));
+	float[4] nans;
+	assert(isIdentical(nans, nans));
+}
+
 /// C `memcmp` wrapper.
 int memcmp(in ubyte[] a, in ubyte[] b)
 {
