@@ -155,6 +155,30 @@ unittest
 	assert(arr.as!(S[1]) == [S(1, 2)]);
 }
 
+/// Return the value represented as a static array of bytes.
+@property ref inout(ubyte)[T.sizeof] asStaticBytes(T)(ref inout(T) value)
+	if (!hasIndirections!T)
+{
+	return *cast(inout(ubyte)[T.sizeof]*)&value;
+}
+
+/// ditto
+@property inout(ubyte)[T.sizeof] asStaticBytes(T)(inout(T) value)
+	if (!hasIndirections!T)
+{
+	return *cast(inout(ubyte)[T.sizeof]*)&value;
+}
+
+unittest
+{
+	ubyte[4] arr = 1.asStaticBytes;
+
+	int i;
+	void* a = i.asStaticBytes.ptr;
+	void* b = &i;
+	assert(a is b);
+}
+
 /// Returns an empty, but non-null slice of T.
 auto emptySlice(T)() pure @trusted
 {
