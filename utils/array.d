@@ -38,6 +38,25 @@ public import ae.utils.appender;
 // https://issues.dlang.org/show_bug.cgi?id=23968
 deprecated T[] toArray(T)(ref T v) { return v.asSlice; }
 
+/// Wrap `v` into a static array of length 1.
+@property T[1] asUnitStaticArray(T)(T v)
+{
+	return (&v)[0..1];
+}
+
+/// ditto
+@property ref T[1] asUnitStaticArray(T)(ref T v)
+{
+	return (&v)[0..1];
+}
+
+unittest
+{
+	int[1] arr = 1.asUnitStaticArray;
+	int i;
+	assert(i.asUnitStaticArray.ptr == &i);
+}
+
 /// std.array.staticArray polyfill
 static if (__traits(hasMember, std.array, "staticArray"))
 	public import std.array : staticArray;
