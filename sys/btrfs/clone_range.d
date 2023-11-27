@@ -1,5 +1,5 @@
 /**
- * BTRFS_IOC_FILE_CLONE_RANGE.
+ * BTRFS_IOC_CLONE_RANGE.
  *
  * License:
  *   This Source Code Form is subject to the terms of
@@ -25,7 +25,7 @@ import ae.sys.btrfs.common;
 
 private:
 
-enum BTRFS_IOC_FILE_CLONE_RANGE = _IOW!btrfs_ioctl_clone_range_args(BTRFS_IOCTL_MAGIC, 13);
+enum BTRFS_IOC_CLONE_RANGE = _IOW!btrfs_ioctl_clone_range_args(BTRFS_IOCTL_MAGIC, 13);
 
 struct btrfs_ioctl_clone_range_args
 {
@@ -36,7 +36,7 @@ struct btrfs_ioctl_clone_range_args
 
 public:
 
-/// Submit a `BTRFS_IOC_FILE_CLONE_RANGE` ioctl.
+/// Submit a `BTRFS_IOC_CLONE_RANGE` ioctl.
 void cloneRange(
 	ref const File srcFile, ulong srcOffset,
 	ref const File dstFile, ulong dstOffset,
@@ -49,8 +49,8 @@ void cloneRange(
 	args.src_length = length;
 	args.dest_offset = dstOffset;
 
-	int ret = ioctl(dstFile.fileno, BTRFS_IOC_FILE_CLONE_RANGE, &args);
-	errnoEnforce(ret >= 0, "ioctl(BTRFS_IOC_FILE_CLONE_RANGE)");
+	int ret = ioctl(dstFile.fileno, BTRFS_IOC_CLONE_RANGE, &args);
+	errnoEnforce(ret >= 0, "ioctl(BTRFS_IOC_CLONE_RANGE)");
 }
 
 unittest
