@@ -1550,6 +1550,27 @@ void copyRecurse(DirEntry src, string dst)
 }
 void copyRecurse(string src, string dst) { copyRecurse(DirEntry(src), dst); } /// ditto
 
+version (linux) static if (is(typeof(mixin(q{{import core.sys.linux.fs : RENAME_EXCHANGE, RENAME_NOREPLACE, RENAME_WHITEOUT;}}))))
+{
+	private extern(C) int renameat2(int olddirfd, const char *oldpath, int newdirfd, const char *newpath, uint flags);
+
+	/// Atomically exchange the given files.
+	void atomicExchange(string a, string b)
+	{
+		import core.sys.posix.fcntl : AT_FDCWD;
+		import core.sys.linux.fs : RENAME_EXCHANGE, RENAME_NOREPLACE, RENAME_WHITEOUT;
+		import std.exception : errnoEnforce;
+		import std.string : toStringz;
+		import ae.utils.math : eq;
+
+		renameat2(
+			AT_FDCWD, a.toStringz,
+			AT_FDCWD, b.toStringz,
+			RENAME_EXCHANGE
+		).eq(0).errnoEnforce("renameat2");
+	}
+}
+
 /// Return true if the given file would be hidden from directory listings.
 /// Returns true for files starting with `'.'`, and, on Windows, hidden files.
 bool isHidden()(string fn)
