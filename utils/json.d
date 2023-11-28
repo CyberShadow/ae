@@ -14,6 +14,7 @@
 module ae.utils.json;
 
 import std.exception;
+import std.math : isFinite;
 import std.string;
 import std.traits;
 import std.typecons;
@@ -95,7 +96,10 @@ struct JsonWriter(Output)
 			return .put(output, v);
 		else
 		static if (is(Unqual!T : real))
-			return output.putFP(v);
+			if (v.isFinite)
+				return output.putFP(v);
+			else
+				return putString(v.to!string);
 		else
 			static assert(0, "Don't know how to write " ~ T.stringof);
 	}
@@ -1025,6 +1029,19 @@ unittest
 unittest
 {
 	jsonParse!(int[2])(`[ 1 , 2 ]`);
+}
+
+// NaNs and infinities are serialized as strings.
+unittest
+{
+	void check(double f, string s)
+	{
+		assert(f.toJson() == s);
+		assert(s.jsonParse!double is f);
+	}
+	check(double.init, `"nan"`);
+	check(double.infinity, `"inf"`);
+	check(-double.infinity, `"-inf"`);
 }
 
 /// Parse the JSON in string `s` and deserialize it into `T`.
