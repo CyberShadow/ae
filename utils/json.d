@@ -220,6 +220,12 @@ struct CustomJsonSerializer(Writer)
 	/// Put a serializable value.
 	void put(T)(auto ref T v)
 	{
+		static if (__traits(hasMember, T, "toJSON"))
+			static if (is(typeof(v.toJSON())))
+				put(v.toJSON());
+			else
+				v.toJSON((&this).functor!((self, ref j) => self.put(j)));
+		else
 		static if (is(T X == Nullable!X))
 			if (v.isNull)
 				writer.putValue(null);
@@ -290,12 +296,6 @@ struct CustomJsonSerializer(Writer)
 		else
 		static if (is(T==JSONFragment))
 			writer.output.put(v.json);
-		else
-		static if (__traits(hasMember, T, "toJSON"))
-			static if (is(typeof(v.toJSON())))
-				put(v.toJSON());
-			else
-				v.toJSON((&this).functor!((self, ref j) => self.put(j)));
 		else
 		static if (is(T==struct))
 		{
@@ -397,6 +397,23 @@ unittest
 	assert(toJson(tuple()) == ``);
 	assert(toJson(tuple(42)) == `42`);
 	assert(toJson(tuple(42, "banana")) == `[42,"banana"]`);
+}
+
+unittest
+{
+	struct A
+	{
+	}
+
+	struct B
+	{
+		A[] a;
+		deprecated alias a this;
+		JSONFragment toJSON() const { return JSONFragment(`null`); }
+	}
+
+	B b;
+	b.toJson();
 }
 
 // ************************************************************************
