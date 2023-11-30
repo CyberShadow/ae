@@ -987,6 +987,15 @@ private auto safeSprintf(size_t N, Args...)(ref char[N] buf, auto ref Args args)
 bool fpTryParse(F, C)(ref const(C)[] s, ref F f) @trusted @nogc nothrow
 if (isFloatingPoint!F && isSomeChar!C)
 {
+	// Parity with glibc:
+	version (Windows)
+	{
+		// https://issues.dlang.org/show_bug.cgi?id=22302
+		if (s.representation.startsWith("nan".representation)) { s = s[3..$]; f = F.nan; return true; }
+		if (s.representation.startsWith("inf".representation)) { s = s[3..$]; f = F.infinity; return true; }
+		if (s.representation.startsWith("-inf".representation)) { s = s[4..$]; f = -F.infinity; return true; }
+	}
+
 	import core.stdc.stdlib : malloc, free;
 	char[64] sbuf = void;
 	auto buf = s.length >= sbuf.length ? cast(char*)malloc(s.length + 1) : sbuf.ptr;
