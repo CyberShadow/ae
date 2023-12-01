@@ -2931,6 +2931,12 @@ unittest
 	assert(fn.readText() == "test");
 }
 
+/// Like `symlink`, but replaces it atomically if it already exists.
+version (Windows)
+	void atomicSymlink()(in char[] original, in char[] link) { atomic!(symlink!(), "link"); }
+else
+	alias atomicSymlink = atomic!(symlink!(string, string), "link");
+
 // ****************************************************************************
 
 /// Composes a function which generates a file name
