@@ -54,9 +54,9 @@ auto op(string OP, T...)(T args)
 }
 
 /// Sums `args`.
-auto sum(T...)(T args) { return op!"+"(args); }
+auto sum(T...)(T args) if (is(typeof(args[0] + args[0]))) { return op!"+"(args); }
 /// Averages `args`.
-auto average(T...)(T args) { return sum(args) / args.length; }
+auto average(T...)(T args) if (is(typeof(args[0] + args[0]))) { return sum(args) / args.length; }
 
 /// Wraps a D binary operator into a function.
 template binary(string op)
