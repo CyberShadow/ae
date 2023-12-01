@@ -16,6 +16,7 @@
 module ae.utils.math.distribution;
 
 import std.algorithm.comparison;
+import std.algorithm.iteration;
 
 import ae.utils.array;
 import ae.utils.math;
@@ -403,4 +404,90 @@ unittest
 	assert(cmp!"<" (range(2., 3.), range(0., 1.)).p == 0.0);
 	assert(cmp!"<" (range(0., 1.), range(0., 2.)).p == 0.75);
 	assert(cmp!"<" (range(0., 2.), range(1., 3.)).p == 7./8);
+}
+
+// ****************************************************************************
+
+version (none)
+{
+	/// A quantized representation of a the probability distribution of
+	/// some continuous function returning a value between 0 and 1.
+	struct QuantizedDistribution(size_t numSegments, P = float, V = double)
+	{
+		enum V minValue = 0.0;
+		enum V maxValue = 1.0;
+
+		/// Represents the relative probability that the function will
+		/// return a value in the represented interval.
+		P[numSegments] buckets = 1.0;
+
+		/// The length of one segment (of the function's return value) represented by one bucket.
+		private enum V bucketSize = (maxValue - minValue) / numSegments;
+
+		private static size_t toBucketIndex(V value)
+		{
+			assert(value >= minValue && value <= maxValue);
+			auto bucketIndex = cast(size_t)((value - minValue) / (maxValue - minValue) * numSegments);
+			assert(bucketIndex <= numSegments);
+			if (bucketIndex == numSegments)
+				bucketIndex = numSegments - 1; // 1.0 goes into the last bucket, together with 0.999...
+			return bucketIndex;
+		}
+
+		private V bucketLowValue(size_t bucketIndex)
+		{
+			return minValue + ((maxValue - minValue) * bucketIndex / numSegments);
+		}
+		private V bucketHighValue(size_t bucketIndex)
+		{
+			return bucketLowValue(bucketIndex + 1);
+		}
+
+		/// Normalizes `buckets` so that they add up to 1.
+		typeof(this) normalize()
+		{
+			typeof(this) result = this;
+			P sum = result.buckets[].sum;
+			result.buckets[] /= sum;
+			return result;
+		}
+
+		/// Call `fun` a `numSamples` number of times, and return a distribution representing the result.
+		static typeof(this) sample(V delegate() fun, size_t numSamples)
+		{
+			typeof(this) result;
+			result.buckets[] = 0;
+			foreach (_; 0 .. numSamples)
+				result.buckets[toBucketIndex(fun())]++;
+			return result;
+		}
+
+		Probability gt(V value)
+		{
+			auto bucketIndex = toBucketIndex(value);
+			auto lowValue  = bucketLowValue (bucketIndex);
+			auto highValue = bucketHighValue(bucketIndex);
+			auto total = buckets[].sum;
+			return Probability((
+				buckets[0 .. bucketIndex].sum +
+				itpl(0, buckets[bucketIndex], value, lowValue, highValue)
+			) / total);
+		}
+	}
+
+	unittest
+	{
+		import std.random : Random, uniform, uniform01;
+		import std.math.operations : isClose;
+
+		auto rng = Random(0);
+		{
+			auto d = QuantizedDistribution!256.sample(() => uniform01!double(rng), 10_000);
+			assert(d.gt(0.25).p.between(0.24, 0.26));
+		}
+		{
+			auto d = QuantizedDistribution!256.sample(() => uniform(0, 4) == 0, 10_000);
+			assert(d.gt(0.5).p.between(0.74, 0.76));
+		}
+	}
 }
