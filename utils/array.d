@@ -21,6 +21,7 @@ import std.array;
 import std.exception;
 import std.format;
 import std.functional;
+import std.range.primitives;
 import std.traits;
 
 import ae.utils.meta;
@@ -923,7 +924,22 @@ deprecated unittest
 /// Equivalents of `array(xxx(...))`.
 template amap(alias pred)
 {
-	auto amap(T)(T[] arr) { return array(map!pred(arr)); }
+	auto amap(R)(R range)
+	if (isInputRange!R && hasLength!R)
+	{
+		import core.memory : GC;
+		import core.lifetime : emplace;
+		alias T = typeof(unaryFun!pred(range.front));
+		auto result = uninitializedArray!(Unqual!T[])(range.length);
+		foreach (i; 0 .. range.length)
+		{
+			auto value = cast()unaryFun!pred(range.front);
+			moveEmplace(value, result[i]);
+			range.popFront();
+		}
+		assert(range.empty);
+		return cast(T[])result;
+	}
 
 	/// Like `amap` but with a static array.
 	auto amap(T, size_t n)(T[n] arr)
@@ -944,6 +960,28 @@ unittest
 	assert([1, 2, 3].amap!`a*2`() == [2, 4, 6]);
 	assert([1, 2, 3].amap!(n => n*n)() == [1, 4, 9]);
 	assert([1, 2, 3].staticArray.amap!(n => n*n)() == [1, 4, 9].staticArray);
+}
+
+unittest
+{
+	struct NC
+	{
+		int i;
+		@disable this();
+		this(int i) { this.i = i; }
+		@disable this(this);
+	}
+
+	import std.range : iota;
+	assert(3.iota.amap!(i => NC(i))[1].i == 1);
+}
+
+unittest
+{
+	import std.range : iota;
+	immutable(int)[] arr;
+	arr = 3.iota.amap!(i => cast(immutable)i);
+	assert(arr[1] == 1);
 }
 
 // ***************************************************************************
