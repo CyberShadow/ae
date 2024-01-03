@@ -572,6 +572,56 @@ class UnixConnector : SocketConnector!SocketConnection
 	}
 }
 
+private void delegate(HttpResponse response, string disconnectReason) toResponseHandler(
+	void delegate(Data) resultHandler,
+	void delegate(string) errorHandler,
+	void delegate(HttpResponse) redirectHandler = null,
+)
+{
+	return (HttpResponse response, string disconnectReason)
+	{
+		if (!response)
+			if (errorHandler)
+				errorHandler(disconnectReason);
+			else
+				throw new Exception(disconnectReason);
+		else
+		if (redirectHandler && response.status >= 300 && response.status < 400 && "Location" in response.headers)
+			redirectHandler(response);
+		else
+			if (errorHandler)
+				try
+					resultHandler(response.getContent());
+				catch (Exception e)
+					errorHandler(e.msg);
+			else
+				resultHandler(response.getContent());
+	};
+}
+
+private void delegate(Data result) toDataResultHandler(void delegate(string result) resultHandler)
+{
+	return (Data data)
+	{
+		auto result = data.toGC().as!string;
+		std.utf.validate(result);
+		resultHandler(result);
+	};
+}
+
+private void delegate(HttpResponse response, string disconnectReason) toResponseHandler(
+	void delegate(string) resultHandler,
+	void delegate(string) errorHandler,
+	void delegate(HttpResponse) redirectHandler = null,
+)
+{
+	return toResponseHandler(
+		resultHandler.toDataResultHandler,
+		errorHandler,
+		redirectHandler,
+	);
+}
+
 /// Asynchronous HTTP request
 void httpRequest(HttpRequest request, void delegate(HttpResponse response, string disconnectReason) responseHandler)
 {
@@ -588,15 +638,10 @@ void httpRequest(HttpRequest request, void delegate(HttpResponse response, strin
 /// ditto
 void httpRequest(HttpRequest request, void delegate(Data) resultHandler, void delegate(string) errorHandler, int redirectCount = 0)
 {
-	void responseHandler(HttpResponse response, string disconnectReason)
-	{
-		if (!response)
-			if (errorHandler)
-				errorHandler(disconnectReason);
-			else
-				throw new Exception(disconnectReason);
-		else
-		if (response.status >= 300 && response.status < 400 && "Location" in response.headers)
+	httpRequest(request, toResponseHandler(
+		resultHandler,
+		errorHandler,
+		(HttpResponse response)
 		{
 			if (redirectCount == 15)
 				throw new Exception("HTTP redirect loop: " ~ request.url);
@@ -608,17 +653,16 @@ void httpRequest(HttpRequest request, void delegate(Data) resultHandler, void de
 			}
 			httpRequest(request, resultHandler, errorHandler, redirectCount+1);
 		}
-		else
-			if (errorHandler)
-				try
-					resultHandler(response.getContent());
-				catch (Exception e)
-					errorHandler(e.msg);
-			else
-				resultHandler(response.getContent());
-	}
+	));
+}
 
-	httpRequest(request, &responseHandler);
+/// ditto
+void httpRequest(HttpRequest request, void delegate(string) resultHandler, void delegate(string) errorHandler)
+{
+	httpRequest(request,
+		resultHandler.toDataResultHandler,
+		errorHandler,
+	);
 }
 
 /// ditto
@@ -636,18 +680,11 @@ void httpGet(string url, void delegate(Data) resultHandler, void delegate(string
 /// ditto
 void httpGet(string url, void delegate(string) resultHandler, void delegate(string) errorHandler)
 {
-	httpGet(url,
-		(Data data)
-		{
-			auto result = data.toGC().as!string;
-			std.utf.validate(result);
-			resultHandler(result);
-		},
-		errorHandler);
+	httpRequest(new HttpRequest(url), resultHandler, errorHandler);
 }
 
 /// ditto
-void httpPost(string url, DataVec postData, string contentType, void delegate(Data) resultHandler, void delegate(string) errorHandler)
+void httpPost(string url, DataVec postData, string contentType, void delegate(HttpResponse response, string disconnectReason) responseHandler)
 {
 	auto request = new HttpRequest;
 	request.resource = url;
@@ -655,20 +692,31 @@ void httpPost(string url, DataVec postData, string contentType, void delegate(Da
 	if (contentType)
 		request.headers["Content-Type"] = contentType;
 	request.data = move(postData);
-	httpRequest(request, resultHandler, errorHandler);
+	httpRequest(request, responseHandler);
+}
+
+/// ditto
+void httpPost(string url, DataVec postData, string contentType, void delegate(Data) resultHandler, void delegate(string) errorHandler)
+{
+	httpPost(url, move(postData), contentType, toResponseHandler(resultHandler, errorHandler));
 }
 
 /// ditto
 void httpPost(string url, DataVec postData, string contentType, void delegate(string) resultHandler, void delegate(string) errorHandler)
 {
-	httpPost(url, move(postData), contentType,
-		(Data data)
-		{
-			auto result = data.toGC().as!string;
-			std.utf.validate(result);
-			resultHandler(result);
-		},
-		errorHandler);
+	httpPost(url, move(postData), contentType, toResponseHandler(resultHandler, errorHandler));
+}
+
+/// ditto
+void httpPost(string url, UrlParameters vars, void delegate(HttpResponse response, string disconnectReason) responseHandler)
+{
+	return httpPost(url, DataVec(Data(encodeUrlParameters(vars).asBytes)), "application/x-www-form-urlencoded", responseHandler);
+}
+
+/// ditto
+void httpPost(string url, UrlParameters vars, void delegate(Data) resultHandler, void delegate(string) errorHandler)
+{
+	return httpPost(url, DataVec(Data(encodeUrlParameters(vars).asBytes)), "application/x-www-form-urlencoded", resultHandler, errorHandler);
 }
 
 /// ditto
