@@ -841,7 +841,7 @@ auto funoptDispatch(alias Actions, FunOptConfig config = FunOptConfig.init, alia
 {
 	string program = args[0];
 
-	auto fun(string action, string[] actionArguments = [])
+	auto funImpl(string action, string[] actionArguments = [])
 	{
 		action = action.canonicalizeCommandLineArgument();
 
@@ -862,6 +862,14 @@ auto funoptDispatch(alias Actions, FunOptConfig config = FunOptConfig.init, alia
 
 		throw new GetOptException("Unknown action: " ~ action);
 	}
+
+	static if (hasAttribute!(string, Actions))
+	{
+		@(getAttribute!(string, Actions))
+		auto fun(string action, string[] actionArguments = []) { return funImpl(action, actionArguments); }
+	}
+	else
+		auto fun(string action, string[] actionArguments = []) { return funImpl(action, actionArguments); }
 
 	static void myUsageFun(string usage) { usageFun(usage ~ funoptDispatchUsage!Actions()); }
 
@@ -901,6 +909,7 @@ string funoptDispatchUsage(alias Actions)()
 
 unittest
 {
+	@(`Test program.`)
 	struct Actions
 	{
 		@(`Perform action f1`)
@@ -920,23 +929,21 @@ This action is complicated because of reasons.`)
 	}
 
 	funoptDispatch!Actions(["program", "f1", "--verbose"]);
+	funoptDispatch!Actions(["program", "foo-bar", "new"]);
 
-	assert(funoptDispatchUsage!Actions() == "
+	static string usage;
+	static void usageFun(string _usage) { usage = _usage; }
+	funoptDispatch!(Actions, FunOptConfig.init, usageFun)(["unittest", "--help"]);
+	assert(usage == "Usage: unittest ACTION [ACTION-ARGUMENTS...]
+
+Test program.
+
 Actions:
   f1       Perform action f1
   f2       Perform complicated action f2
   foo-bar  An action sub-group
-");
+", usage);
 
-	funoptDispatch!Actions(["program", "foo-bar", "new"]);
-
-	assert(funoptDispatchUsage!(Actions.fooBar)() == "
-Actions:
-  new  Create a new foobar
-");
-
-	static string usage;
-	static void usageFun(string _usage) { usage = _usage; }
 	funoptDispatch!(Actions, FunOptConfig.init, usageFun)(["unittest", "f1", "--help"]);
 	assert(usage == "Usage: unittest f1 [--verbose]
 
@@ -949,5 +956,14 @@ Perform action f1
 Perform complicated action f2
 
 This action is complicated because of reasons.
+", usage);
+
+	funoptDispatch!(Actions, FunOptConfig.init, usageFun)(["unittest", "foo-bar", "--help"]);
+	assert(usage == "Usage: unittest foobar ACTION [ACTION-ARGUMENTS...]
+
+An action sub-group
+
+Actions:
+  new  Create a new foobar
 ", usage);
 }
