@@ -69,9 +69,14 @@ if (is(C == class))
 	} ///
 
 	T opCast(T)()
-	if (is(T == RCClass!U, U) && is(typeof({C c; U u = c;})))
+	if (is(T == RCClass!U, U) && is(typeof({C c; U u = cast(U)c;})))
 	{
+		static if (!is(T == RCClass!U, U)) // Destructure into U
+			assert(false);
 		T result;
+		// Check if dynamic cast is valid
+		if (!cast(U)this._rcClassGet())
+			return result;
 		result._rcClassStore = cast(typeof(result._rcClassStore))_rcClassStore;
 		if (_rcClassStore)
 			_rcClassStore.refCount++;
@@ -236,4 +241,15 @@ unittest
 	assert(c.calls == 0);
 	c();
 	assert(c.calls == 1);
+}
+
+/// Casting
+unittest
+{
+	static class A {}
+	static class B : A {}
+	static class C : A {}
+	RCClass!A a = rcClass!B();
+	assert( cast(RCClass!B)a);
+	assert(!cast(RCClass!C)a);
 }
