@@ -13,7 +13,9 @@
 
 module ae.utils.vec;
 
-import std.algorithm.mutation : swap, move;
+import core.lifetime : move, moveEmplace, copyEmplace;
+
+import std.array;
 import std.meta : allSatisfy;
 
 /*
@@ -27,8 +29,6 @@ import std.meta : allSatisfy;
     - Use `std.typecons.RefCounted` for reference counting
   - If destroyed, will destroy (clobber) its contents
   - O(1) indexing
-  - Does not work with `.init`-less types
-    (wrap in `Nullable` to avoid this)
 
   Differences from `std.containers.array.Array`:
   - Memory-safe
@@ -40,13 +40,15 @@ import std.meta : allSatisfy;
     so `Vec` is always memory-safe regardless of how you try to (mis-)use it
 
   Usage notes:
+  - If the type has a destructor, it must be valid to
+    call it on the `.init` value.
   - `Vec` allows slicing and `ref` access to its members.
     Due to this, stale pointers do not result in UB;
     they will simply point to a default value (`.init`).
-    This is also why `.init`-less types are not supported.
 */
 struct Vec(T)
 {
+	private enum elementsHaveDefaultValue = is(typeof({ T t; }));
 	private enum elementsAreCopyable = is(typeof({ T t = void; T u = t; }));
 
 	// Lifetime
@@ -107,9 +109,36 @@ struct Vec(T)
 
 	/// Array primitives
 
+	private void ensureCapacity(size_t newCapacity)
+	out(; data.capacity >= newCapacity)
+	{
+		if (newCapacity > data.capacity)
+		{
+			T[] newData;
+			newData.reserve(newCapacity);
+			assert(newData.capacity >= newCapacity);
+			newData = newData.ptr[0 .. data.length];
+			newData.assumeSafeAppend();
+			foreach (i; 0 .. data.length)
+				moveEmplace(data[i], newData[i]);
+			data = newData[0 .. data.length];
+		}
+	}
+
+	private T[] extendUninitialized(size_t howMany)
+	out(result; result.length == howMany)
+	{
+		auto oldLength = data.length;
+		auto newLength = oldLength + howMany;
+		ensureCapacity(newLength);
+		data = data.ptr[0 .. newLength];
+		return data[oldLength .. newLength];
+	}
+
 	@property size_t length() const { return data.length; }
 	alias opDollar = length; /// ditto
 
+	static if (elementsHaveDefaultValue)
 	@property size_t length(size_t newLength)
 	{
 		if (newLength < data.length)
@@ -120,19 +149,10 @@ struct Vec(T)
 		else
 		if (newLength > data.length)
 		{
-			T[] newData;
-			if (newLength <= data.capacity)
-			{
-				newData = data;
-				newData.length = newLength;
-				assert(newData.ptr == data.ptr);
-			}
-			else
-			{
-				newData = new T[newLength];
-				foreach (i; 0 .. data.length)
-					move(data[i], newData[i]);
-			}
+			ensureCapacity(newLength);
+			auto newData = data;
+			newData.length = newLength;
+			assert(newData.ptr == data.ptr);
 			data = newData;
 		}
 		return data.length;
@@ -153,18 +173,15 @@ struct Vec(T)
 	static if (elementsAreCopyable)
 	ref Vec opOpAssign(string op : "~")(scope T[] values...)
 	{
-		auto oldLength = length;
-		length = oldLength + values.length;
-		data[oldLength .. $] = values;
+		foreach (i, ref target; extendUninitialized(values.length))
+			copyEmplace(values[i], target);
 		return this;
 	} /// ditto
 
 	static if (!elementsAreCopyable)
 	ref Vec opOpAssign(string op : "~")(T value)
 	{
-		auto oldLength = length;
-		length = oldLength + 1;
-		data[oldLength] = move(value);
+		moveEmplace(value, extendUninitialized(1)[0]);
 		return this;
 	} /// ditto
 
@@ -254,9 +271,11 @@ unittest
 {
 	struct S
 	{
+		@disable this();
 		@disable this(this);
+		this(int) {}
 	}
 
 	Vec!S v;
-	v ~= S();
+	v ~= S(1);
 }
