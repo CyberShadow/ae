@@ -40,9 +40,12 @@ import std.meta : allSatisfy;
 */
 struct Vec(T)
 {
+	private enum elementsAreCopyable = is(typeof({ T t = void; T u = t; }));
+
 	// Lifetime
 
 	/// Construct from a list or slice of values
+	static if (elementsAreCopyable)
 	this(scope T[] values...)
 	{
 		data = values.dup;
@@ -81,6 +84,7 @@ struct Vec(T)
 	@disable this(this);
 
 	/// Create a shallow copy of this `Vec`.
+	static if (elementsAreCopyable)
 	Vec!T dup()
 	{
 		typeof(return) result;
@@ -139,11 +143,21 @@ struct Vec(T)
 
 	typeof(null) opAssign(typeof(null)) { data[] = T.init; data = null; return null; } /// ditto
 
+	static if (elementsAreCopyable)
 	ref Vec opOpAssign(string op : "~")(scope T[] values...)
 	{
 		auto oldLength = length;
 		length = oldLength + values.length;
 		data[oldLength .. $] = values;
+		return this;
+	} /// ditto
+
+	static if (!elementsAreCopyable)
+	ref Vec opOpAssign(string op : "~")(T value)
+	{
+		auto oldLength = length;
+		length = oldLength + 1;
+		data[oldLength] = move(value);
 		return this;
 	} /// ditto
 
@@ -226,4 +240,16 @@ unittest
 	int sum;
 	foreach (i; v) sum += i;
 	assert(sum == 6);
+}
+
+// Test non-copyable elements
+unittest
+{
+	struct S
+	{
+		@disable this(this);
+	}
+
+	Vec!S v;
+	v ~= S();
 }
