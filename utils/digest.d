@@ -246,7 +246,8 @@ deprecated ("Use std.digest.murmurhash")
 
 // ************************************************************************
 
-deprecated public import std.digest.md;
+deprecated("legacy transitive import - please `import std.digest.md;`.")
+public import std.digest.md;
 
 /// Get digest string of given data.
 /// Short-hand for std.digest.md5Of (and similar) and toHexString.

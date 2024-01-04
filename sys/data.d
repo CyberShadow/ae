@@ -1149,7 +1149,8 @@ alias Data = TData!ubyte;
 
 // ************************************************************************
 
-deprecated public import ae.sys.dataset : copyTo, joinData, joinToHeap, DataVec, shift, bytes, DataSetBytes;
+deprecated("legacy transitive import - please `import ae.sys.dataset;`.")
+public import ae.sys.dataset : copyTo, joinData, joinToHeap, DataVec, shift, bytes, DataSetBytes;
 
 deprecated alias DataWrapper = Memory;
 
