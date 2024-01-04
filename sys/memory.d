@@ -78,12 +78,20 @@ private void callExtend()
 	GC.extend(null, 0, 0, null);
 }
 
+/// Asserts that we are not inside a GC collection cycle,
+/// by performing a no-op GC operation.
+/// If we are, an `InvalidMemoryOperationError` is raised by the runtime.
+void assertNotInCollect() @nogc
+{
+	(cast(void function() @nogc)&callExtend)();
+}
+
 /// Checks if we are inside a GC collection cycle.
 /// This is currently done in a dumb and expensive way, so use sparingly.
 bool inCollect() @nogc
 {
 	try
-		(cast(void function() @nogc)&callExtend)();
+		assertNotInCollect();
 	catch (InvalidMemoryOperationError)
 		return true;
 	return false;
