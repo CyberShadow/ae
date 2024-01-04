@@ -21,22 +21,29 @@ import std.meta : allSatisfy;
 
   Properties:
   - Owns its data
-  - If copied, will copy its contents
-	- Use pointers / `ref` or `opSlice` to avoid copying
+  - Not implicitly copyable
+    - Use pointers / `ref` or `opSlice` to avoid copying
+    - Use `.dup` to copy explicitly
     - Use `std.typecons.RefCounted` for reference counting
   - If destroyed, will destroy (clobber) its contents
   - O(1) indexing
   - Does not work with `.init`-less types
     (wrap in `Nullable` to avoid this)
 
-  Differences from std.containers.array.Array:
+  Differences from `std.containers.array.Array`:
   - Memory-safe
   - Like D arrays, has an initial null state (distinct from the empty state)
   - No reference counting
   - Uses the D GC heap
   - Separates object lifetime from memory lifetime:
     the latter is still managed by the GC,
-	so `Vec` is always memory-safe regardless of how you try to (mis-)use it
+    so `Vec` is always memory-safe regardless of how you try to (mis-)use it
+
+  Usage notes:
+  - `Vec` allows slicing and `ref` access to its members.
+    Due to this, stale pointers do not result in UB;
+    they will simply point to a default value (`.init`).
+    This is also why `.init`-less types are not supported.
 */
 struct Vec(T)
 {
