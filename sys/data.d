@@ -338,8 +338,8 @@ public:
 		return result;
 	}
 
-	// Create a new instance slicing all of the given memory's contents.
-	package this(Memory memory)
+	/// Create a new instance slicing all of the given memory's contents.
+	this(Memory memory)
 	{
 		this.memory = memory;
 		this.memory.referenceCount++;
