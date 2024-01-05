@@ -62,15 +62,23 @@ auto makeRiff(R)(R r, uint sampleRate = 44100)
 	else
 	{
 		enum numChannels = r.front.length;
-		auto bytesPerSample = r.front[0].sizeof;
+		alias ChannelSample = typeof(r.front[0]);
+		auto bytesPerSample = ChannelSample.sizeof;
 		auto bitsPerSample = bytesPerSample * 8;
+		static if (is(ChannelSample : long))
+			enum format = 1; // Integer PCM
+		else
+		static if (is(ChannelSample : real))
+			enum format = 3; // Floating-point PCM
+		else
+			static assert(false, "Unknown sample format: " ~ Sample.stringof);
 
 		return riffChunk("RIFF",
 			chain(
 				fourCC("WAVE"),
 				riffChunk("fmt ",
 					valueReprRange(WaveFmt(
-						1, // PCM
+						format,
 						to!ushort(numChannels),
 						sampleRate,
 						to!uint  (sampleRate * bytesPerSample * numChannels),
