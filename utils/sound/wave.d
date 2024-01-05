@@ -21,32 +21,34 @@ import std.range;
 import ae.utils.math;
 import ae.utils.range;
 
+enum sampleMax(T) = is(T : long) ? T.max : T(1);
+
 /// Simple wave generator.
 auto squareWave(T)(real interval)
 {
 	return infiniteIota!size_t
-		.map!(n => cast(T)(T.max + cast(int)(n * 2 / interval) % 2));
+		.map!(n => cast(T)(sampleMax!T + cast(int)(n * 2 / interval) % 2));
 }
 
 /// ditto
 auto sawToothWave(T)(real interval)
 {
 	return infiniteIota!size_t
-		.map!(n => cast(T)((n % interval * 2 - interval) * T.max / interval));
+		.map!(n => cast(T)((n % interval * 2 - interval) * sampleMax!T / interval));
 }
 
 /// ditto
 auto triangleWave(T)(real interval)
 {
 	return infiniteIota!size_t
-		.map!(n => cast(T)((abs(n % interval * 2 - interval) * 2 - interval) * T.max / interval));
+		.map!(n => cast(T)((abs(n % interval * 2 - interval) * 2 - interval) * sampleMax!T / interval));
 }
 
 /// ditto
 auto sineWave(T)(real interval)
 {
 	return infiniteIota!size_t
-		.map!(n => (sin(n * 2 * PI / interval) * T.max).to!T);
+		.map!(n => (sin(n * 2 * PI / interval) * sampleMax!T).to!T);
 }
 
 /// ditto
@@ -62,7 +64,7 @@ auto whiteNoiseSqr(T)()
 {
 	import std.random;
 	return infiniteIota!size_t
-		.map!(n => Xorshift(cast(uint)n).front % 2 ? T.max : T.min);
+		.map!(n => Xorshift(cast(uint)n).front % 2 ? sampleMax!T : T.min);
 }
 
 /// Fade out this wave (multiply samples by a linearly descending factor).
