@@ -81,6 +81,8 @@ unittest
 	assert(ok == 3, [cast(char)('0'+ok)]);
 }
 
+// ****************************************************************************
+
 /// Given a function `fun` which returns a promise,
 /// globally memoize it (across all threads),
 /// so that at most one invocation of `fun` with the given parameters
@@ -172,4 +174,104 @@ unittest
 {
 	Promise!void funImpl() { return resolve(); }
 	alias fun = globallyMemoized!funImpl;
+}
+
+// ****************************************************************************
+
+/// Runs tasks asynchronously in an ordered manner.
+/// For each `put` call, return a `Promise` which
+/// resolves to the given delegate's return value.
+/// The `taskFun` is evaluated in a separate thread.
+/// Unlike `threadAsync`, at most one task will execute
+/// at any given time (per `AsyncQueue` instance),
+/// they will be executed in the order of the `put` calls,
+/// and the promises will be resolved in the main thread
+/// in the same order.
+final class AsyncQueue(T, E = Exception)
+{
+	this()
+	{
+		// Note: std.concurrency can't support daemon tasks
+		anchor = new ThreadAnchor(No.daemon);
+		tid = spawn(&threadFunc, thisTid);
+	} ///
+
+	Promise!(T, E) put(T delegate() taskFun)
+	{
+		auto promise = new Promise!(T, E);
+		tid.send(cast(immutable)Task(taskFun, promise, anchor));
+		return promise;
+	} ///
+
+	/// Close the queue. Must be called to free up resources
+	/// (thread and message queue).
+	void close()
+	{
+		tid.send(cast(immutable)EOF(anchor));
+		anchor = null;
+	}
+
+private:
+	import std.concurrency : spawn, send, receive, Tid, thisTid;
+
+	ThreadAnchor anchor;
+	Tid tid;
+
+	struct Task
+	{
+		T delegate() fun;
+		Promise!(T, E) promise;
+		ThreadAnchor anchor;
+	}
+	struct EOF
+	{
+		ThreadAnchor anchor;
+	}
+
+	static void threadFunc(Tid _)
+	{
+		bool done;
+		while (!done)
+		{
+			receive(
+				(immutable Task immutableTask)
+				{
+					auto task = cast()immutableTask;
+					try
+					{
+						auto result = task.fun().voidStruct;
+						task.anchor.runAsync({
+							task.promise.fulfill(result.tupleof);
+						});
+					}
+					catch (E e)
+						task.anchor.runAsync({
+							task.promise.reject(e);
+						});
+				},
+				(immutable EOF immutableEOF)
+				{
+					auto eof = cast()immutableEOF;
+					eof.anchor.close();
+					done = true;
+				},
+			);
+		}
+	}
+}
+
+unittest
+{
+	import ae.net.asockets : socketManager;
+
+	int[] result;
+	{
+		auto queue = new AsyncQueue!void;
+		scope(exit) queue.close();
+		auto taskFun(int n) { return () { Thread.sleep(n.msecs); result ~= n; }; }
+		queue.put(taskFun(200));
+		queue.put(taskFun(100));
+	}
+	socketManager.loop();
+	assert(result == [200, 100]);
 }
