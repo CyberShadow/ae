@@ -31,7 +31,7 @@ if (is(C == class))
 
 	private RCClassStore!C* _rcClassStore;
 
-	@property C _rcClassGet()
+	@property inout(C) _rcClassGet() inout
 	{
 		return cast(C)_rcClassStore.data.ptr;
 	}
@@ -53,6 +53,7 @@ if (is(C == class))
 	ref typeof(this) opAssign(T)(T value)
 	if (is(T == typeof(null)))
 	{
+		assert(value is null);
 		_rcClassDestroy();
 		_rcClassStore = null;
 		return this;
@@ -68,18 +69,18 @@ if (is(C == class))
 		return this;
 	} ///
 
-	T opCast(T)()
+	inout(T) opCast(T)() inout
 	if (is(T == RCClass!U, U) && is(typeof({C c; U u = cast(U)c;})))
 	{
 		static if (!is(T == RCClass!U, U)) // Destructure into U
 			assert(false);
-		T result;
+		inout(T) result;
 		// Check if dynamic cast is valid
 		if (!cast(U)this._rcClassGet())
 			return result;
-		result._rcClassStore = cast(typeof(result._rcClassStore))_rcClassStore;
+		cast()result._rcClassStore = cast(typeof(result._rcClassStore))_rcClassStore;
 		if (_rcClassStore)
-			_rcClassStore.refCount++;
+			(cast()_rcClassStore.refCount)++;
 		return result;
 	} ///
 
