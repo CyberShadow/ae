@@ -83,7 +83,7 @@ if (is(C == class))
 		return result;
 	} ///
 
-	bool opCast(T)()
+	bool opCast(T)() const
 	if (is(T == bool))
 	{
 		return !!_rcClassStore;
