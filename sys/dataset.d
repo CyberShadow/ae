@@ -17,7 +17,7 @@ import std.algorithm.mutation : move;
 import std.range.primitives : ElementType, front;
 
 import ae.sys.data;
-import ae.utils.array : asBytes;
+import ae.utils.array : asBytes, as;
 import ae.utils.vec;
 
 /// Copy a `Data` array's contents to a specified buffer.
@@ -187,11 +187,11 @@ unittest
 	ds = DataVec(
 		Data("aaaaa".asBytes),
 	);
-	s = cast(string)(ds.joinToHeap);
+	s = ds.joinToGC().as!string;
 	assert(s == "aaaaa");
-	s = cast(string)(ds.bytes[].joinToHeap);
+	s = ds.bytes[].joinToGC().as!string;
 	assert(s == "aaaaa");
-	s = cast(string)(ds.bytes[1..4].joinToHeap);
+	s = ds.bytes[1..4].joinToGC().as!string;
 	assert(s == "aaa");
 
 	ds = DataVec(
@@ -206,16 +206,16 @@ unittest
 	assert(dsb[ 5]=='b');
 	assert(dsb[ 9]=='b');
 	assert(dsb[10]=='c');
-	s = cast(string)(dsb[ 3..12].joinToHeap);
+	s = dsb[ 3..12].joinToGC().as!string;
 	assert(s == "aabbbbbcc");
-	s = cast(string)(ds.joinToHeap);
+	s = ds.joinToGC().as!string;
 	assert(s == "aaaaabbbbbccccc", s);
-	s = cast(string)(dsb[ 0.. 6].joinToHeap);
+	s = dsb[ 0.. 6].joinToGC().as!string;
 	assert(s == "aaaaab");
-	s = cast(string)(dsb[ 9..15].joinToHeap);
+	s = dsb[ 9..15].joinToGC().as!string;
 	assert(s == "bccccc");
-	s = cast(string)(dsb[ 0.. 0].joinToHeap);
+	s = dsb[ 0.. 0].joinToGC().as!string;
 	assert(s == "");
-	s = cast(string)(dsb[15..15].joinToHeap);
+	s = dsb[15..15].joinToGC().as!string;
 	assert(s == "");
 }

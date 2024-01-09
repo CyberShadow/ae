@@ -29,7 +29,7 @@ import ae.net.ietf.headerparse;
 import ae.net.ietf.headers;
 import ae.net.ssl;
 import ae.sys.data;
-import ae.sys.dataset : bytes, shift, DataVec, joinToHeap;
+import ae.sys.dataset : bytes, shift, DataVec, joinToGC;
 import ae.sys.log;
 import ae.utils.array;
 import ae.utils.container.listnode;
@@ -119,7 +119,7 @@ protected:
 
 			if (!parseHeaders(inBuffer, reqLine, headers))
 			{
-				debug (HTTP) debugLog("Headers not yet received. Data in buffer:\n%s---", cast(string)inBuffer.joinToHeap());
+				debug (HTTP) debugLog("Headers not yet received. Data in buffer:\n%s---", inBuffer.joinToGC().as!string);
 				return;
 			}
 

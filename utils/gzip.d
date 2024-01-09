@@ -23,7 +23,7 @@ import std.range.primitives : ElementType;
 debug import std.stdio, std.file;
 
 import ae.sys.data;
-import ae.sys.dataset : DataVec, bytes, joinData, copyTo, joinToHeap;
+import ae.sys.dataset : DataVec, bytes, joinData, copyTo, joinToGC;
 import ae.utils.array;
 import ae.utils.bitmanip;
 
@@ -116,7 +116,7 @@ DataVec uncompress(scope Data[] data)
 	DataVec uncompressed = zlib.uncompress(gzipToRawDeflate(data)[], options);
 
 	LittleEndian!uint size;
-	bytes[$-4 .. $].copyTo(size.asSlice);
+	bytes[$-4 .. $].copyTo(size.asSlice.asBytes);
 	enforce(cast(uint)uncompressed.bytes.length == size, "Decompressed data length mismatch");
 
 	return uncompressed;
@@ -135,7 +135,7 @@ unittest
 		DataVec srcData;
 		foreach (c; src)
 			srcData ~= Data([c]);
-		res = cast(ubyte[])uncompress(compress(srcData[])[]).joinToHeap;
+		res = uncompress(compress(srcData[])[]).joinToGC;
 		assert(res == src);
 	}
 

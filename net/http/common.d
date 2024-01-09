@@ -30,7 +30,7 @@ import std.typecons : tuple;
 import ae.net.ietf.headers;
 import ae.sys.data;
 import ae.sys.dataset;
-import ae.utils.array : amap, afilter, auniq, asort, asBytes;
+import ae.utils.array : amap, afilter, auniq, asort, asBytes, as;
 import ae.utils.text;
 import ae.utils.time;
 
@@ -322,9 +322,9 @@ public:
 		switch (contentType.value)
 		{
 			case "application/x-www-form-urlencoded":
-				return decodeUrlParameters(cast(string)data.joinToHeap());
+				return decodeUrlParameters(data.joinToGC().as!string);
 			case "multipart/form-data":
-				return decodeMultipart(data.joinData, contentType.properties.get("boundary", null))
+				return decodeMultipart(data.joinData(), contentType.properties.get("boundary", null))
 					.map!(part => tuple(
 						part.headers.get("Content-Disposition", null).decodeTokenHeader.properties.get("name", null),
 						part.data.asDataOf!char.toGC().assumeUnique,

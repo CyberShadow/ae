@@ -24,10 +24,10 @@ import ae.net.http.common;
 import ae.net.ietf.headers;
 import ae.net.ietf.url;
 import ae.sys.data;
-import ae.sys.dataset : DataVec, joinToHeap;
+import ae.sys.dataset : DataVec, joinToGC;
 import ae.sys.log;
 import ae.sys.net;
-import ae.utils.array : as;
+import ae.utils.array : as, fromBytes;
 import ae.utils.json;
 import ae.utils.meta;
 
@@ -203,7 +203,7 @@ struct GitHub
 		request.data = DataVec(jsonData);
 
 		auto response = net.httpRequest(request);
-		string result = cast(string)response.data.joinToHeap;
+		string result = response.data.joinToGC.as!string;
 		validate(result);
 		return result;
 	}

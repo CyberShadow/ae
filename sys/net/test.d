@@ -19,7 +19,7 @@ import std.process : environment;
 
 import ae.net.http.common;
 import ae.sys.data : Data;
-import ae.sys.dataset : DataVec, joinToHeap;
+import ae.sys.dataset : DataVec, joinToGC;
 import ae.utils.array : asBytes;
 
 static import ae.sys.net.ae;
@@ -88,7 +88,7 @@ void test(string moduleName, string className)()
 		auto response = net.httpRequest(request);
 		assert(response.status == HttpStatusCode.Accepted);
 		assert(response.statusMessage == "Custom Message");
-		assert(response.data.joinToHeap == "PUT foo bar");
+		assert(response.data.joinToGC() == "PUT foo bar");
 		assert(response.headers["Test-Response-Header"] == "baz");
 	}
 }

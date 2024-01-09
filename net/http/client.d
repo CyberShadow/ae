@@ -30,7 +30,7 @@ import ae.net.ietf.headers;
 import ae.net.ietf.headerparse;
 import ae.net.ietf.url;
 import ae.net.ssl;
-import ae.sys.dataset : DataVec, bytes, joinToHeap;
+import ae.sys.dataset : DataVec, bytes, joinToGC;
 import ae.utils.array : as, asBytes, asSlice, shift;
 import ae.utils.exception : CaughtException;
 import ae.sys.data;
@@ -190,7 +190,7 @@ protected:
 			debug(HTTP)
 			{
 				stderr.writefln("Got response:");
-				auto reqMessage = cast(string)oldData.bytes[0..oldData.bytes.length-headerBuffer.bytes.length].joinToHeap();
+				auto reqMessage = oldData.bytes[0..oldData.bytes.length-headerBuffer.bytes.length].joinToGC().as!string;
 				foreach (line; reqMessage.split("\r\n"))
 					stderr.writeln("< ", line);
 			}

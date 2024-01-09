@@ -19,8 +19,8 @@ import std.array;
 
 import ae.net.ietf.headers;
 import ae.sys.data;
-import ae.sys.dataset : DataVec, joinToHeap;
-import ae.utils.array : asBytes;
+import ae.sys.dataset : DataVec, joinToGC;
+import ae.utils.array : asBytes, as;
 import ae.utils.text;
 
 /**
@@ -129,7 +129,7 @@ unittest
 		assert(headers["From"] == "John Smith <john@smith.net>");
 		assert(headers["To"] == "Mary Smith <john@smith.net>");
 		assert(headers["Subject"] == "Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.");
-		assert(cast(string)data.joinToHeap() == "Message body goes here");
+		assert(data.joinToGC().as!string == "Message body goes here");
 	}
 
 	string message = q"EOS

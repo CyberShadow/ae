@@ -250,7 +250,7 @@ class CachedCurlNetwork : Network
 			case "PATCH"  : req.method = HTTP.Method.patch; break;
 			default: throw new Exception("Unknown HTTP method: " ~ request.method);
 		}
-		req.data = request.data.joinToHeap;
+		req.data = request.data.joinToGC();
 		foreach (name, value; request.headers)
 			req.headers ~= [name, value];
 		req.maxRedirects = uint.max; // Do not follow redirects, return them as-is
