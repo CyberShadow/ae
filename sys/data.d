@@ -1182,8 +1182,6 @@ T pop(T)(ref Data data)
 
 // ************************************************************************
 
-package:
-
 /// Base abstract class which owns a block of memory.
 abstract class Memory
 {
@@ -1201,6 +1199,8 @@ abstract class Memory
 }
 
 // ************************************************************************
+
+package:
 
 /// How many bytes are currently in `Data`-owned memory.
 static /*thread-local*/ size_t dataMemory, dataMemoryPeak;
