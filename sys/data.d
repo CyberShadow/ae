@@ -1142,6 +1142,16 @@ unittest
 	});
 }
 
+/// Get the underlying type of a `TData`.
+/// (For `Data`, this will be `ubyte`.)
+template DataElementType(D)
+if (is(D == TData!T, T))
+{
+	static if (is(D == TData!T, T))
+		alias DataElementType = T;
+}
+static assert(is(DataElementType!Data == ubyte));
+
 /// The most common use case of manipulating unmanaged memory is
 /// working with raw bytes, whether they're received from the network,
 /// read from a file, or elsewhere.
