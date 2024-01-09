@@ -14,15 +14,15 @@
 module ae.sys.dataset;
 
 import std.algorithm.mutation : move;
-import std.range.primitives : ElementType;
+import std.range.primitives : ElementType, front;
 
 import ae.sys.data;
 import ae.utils.array : asBytes;
 import ae.utils.vec;
 
 /// Copy a `Data` array's contents to a specified buffer.
-void[] copyTo(R)(auto ref R data, void[] buffer)
-if (is(ElementType!R == Data))
+T[] copyTo(R, T)(auto ref R data, T[] buffer)
+if (is(ElementType!R == TData!T))
 {
 	size_t pos = 0;
 	foreach (ref d; data)
@@ -36,12 +36,20 @@ if (is(ElementType!R == Data))
 	return buffer;
 }
 
-/// Join an array of Data to a single Data.
-Data joinData(R)(auto ref R data)
+deprecated void[] copyTo(R)(auto ref R data, void[] buffer)
 if (is(ElementType!R == Data))
 {
+	return data.copyTo(cast(ubyte[])buffer);
+}
+
+/// Join an array of Data to a single Data.
+TData!(DataElementType!(ElementType!R)) joinData(R)(auto ref R data)
+if (is(ElementType!R == TData!T, T))
+{
+	alias T = DataElementType!(ElementType!R);
+
 	if (data.length == 0)
-		return Data();
+		return TData!T();
 	else
 	if (data.length == 1)
 		return data[0];
@@ -49,8 +57,8 @@ if (is(ElementType!R == Data))
 	size_t size = 0;
 	foreach (ref d; data)
 		size += d.length;
-	Data result = Data(size);
-	result.enter((scope void[] contents) {
+	TData!T result = TData!T(size);
+	result.enter((scope T[] contents) {
 		data.copyTo(contents);
 	});
 	return result;
@@ -58,27 +66,36 @@ if (is(ElementType!R == Data))
 
 unittest
 {
+	assert(([TData!int([1]), TData!int([2])].joinData().unsafeContents) == [1, 2]);
 	assert(cast(int[])([Data([1].asBytes), Data([2].asBytes)].joinData().unsafeContents) == [1, 2]);
 }
 
 /// Join an array of Data to a memory block on the managed heap.
-@property
-void[] joinToHeap(R)(auto ref R data)
-if (is(ElementType!R == Data))
+DataElementType!(ElementType!R)[] joinToGC(R)(auto ref R data)
+if (is(ElementType!R == TData!T, T))
 {
 	size_t size = 0;
 	foreach (ref d; data)
 		size += d.length;
-	auto result = new void[size];
+	auto result = new DataElementType!(ElementType!R)[size];
 	data.copyTo(result);
 	return result;
 }
 
 unittest
 {
-	assert(cast(int[])([Data([1].asBytes), Data([2].asBytes)].joinToHeap()) == [1, 2]);
+	assert(([TData!int([1]), TData!int([2])].joinToGC()) == [1, 2]);
+	assert(cast(int[])([Data([1].asBytes), Data([2].asBytes)].joinToGC()) == [1, 2]);
 }
 
+deprecated @property void[] joinToHeap(R)(auto ref R data)
+if (is(ElementType!R == Data))
+{ return data.joinToGC(); }
+
+deprecated unittest
+{
+	assert(cast(int[])([Data([1].asBytes), Data([2].asBytes)].joinToHeap()) == [1, 2]);
+}
 
 /// A vector of `Data` with deterministic lifetime.
 alias DataVec = Vec!Data;
