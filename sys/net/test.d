@@ -20,7 +20,7 @@ import std.process : environment;
 import ae.net.http.common;
 import ae.sys.data : Data;
 import ae.sys.dataset : DataVec, joinToGC;
-import ae.utils.array : asBytes;
+import ae.utils.array : asBytes, as;
 
 static import ae.sys.net.ae;
 static import ae.sys.net.curl;
@@ -75,7 +75,7 @@ void test(string moduleName, string className)()
 
 	debug std.stdio.stderr.writeln(" - post");
 	{
-		auto result = cast(string)net.post(testBaseURL ~ "testUrl4", "Hello world\n");
+		auto result = net.post(testBaseURL ~ "testUrl4", "Hello world\n".asBytes).as!string;
 		assert(result == "Hello world\n", result);
 	}
 

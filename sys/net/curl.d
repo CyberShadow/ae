@@ -35,12 +35,12 @@ class CurlNetwork : Network
 		std.file.write(target, getFile(url));
 	} ///
 
-	override void[] getFile(string url)
+	override ubyte[] getFile(string url)
 	{
 		return get!(AutoProtocol, ubyte)(url);
 	} ///
 
-	override void[] post(string url, const(void)[] data)
+	override ubyte[] post(string url, const(ubyte)[] data)
 	{
 		return .post!ubyte(url, data);
 	} ///

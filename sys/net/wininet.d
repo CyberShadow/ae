@@ -93,7 +93,7 @@ protected:
 		return HNet(hReq);
 	}
 
-	final static void sendRequest(ref HNet hReq, string headers = null, const(void)[] optionalData = null)
+	final static void sendRequest(ref HNet hReq, string headers = null, const(ubyte)[] optionalData = null)
 	{
 		HttpSendRequestA(hReq, headers.ptr, headers.length.to!DWORD, cast(void*)optionalData.ptr, optionalData.length.to!DWORD)
 			.wenforce("HttpSendRequest");
@@ -195,7 +195,7 @@ public:
 		hReq.I!doDownload(&f.rawWrite!ubyte);
 	} ///
 
-	override void[] getFile(string url)
+	override ubyte[] getFile(string url)
 	{
 		auto result = appender!(ubyte[]);
 		auto hNet = open();
@@ -205,7 +205,7 @@ public:
 		return result.data;
 	} ///
 
-	override void[] post(string url, const(void)[] data)
+	override ubyte[] post(string url, const(ubyte)[] data)
 	{
 		auto request = new HttpRequest(url);
 

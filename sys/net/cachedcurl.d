@@ -31,6 +31,7 @@ import ae.sys.dataio;
 import ae.sys.dataset;
 import ae.sys.file;
 import ae.sys.net;
+import ae.utils.array;
 import ae.utils.digest;
 import ae.utils.json;
 import ae.utils.time;
@@ -71,7 +72,7 @@ class CachedCurlNetwork : Network
 	{
 		string url; ///
 		HTTP.Method method = HTTP.Method.get; ///
-		const(void)[] data; ///
+		const(ubyte)[] data; ///
 		const(string[2])[] headers; ///
 
 		/// Maximum number of redirects to follow.
@@ -114,10 +115,11 @@ class CachedCurlNetwork : Network
 				};
 			if (request.data)
 			{
-				const(void)[] data = request.data;
+				const(ubyte)[] data = request.data;
 				http.addRequestHeader("Content-Length", data.length.text);
-				http.onSend = (void[] buf)
+				http.onSend = (void[] voidBuf)
 					{
+						auto buf = cast(ubyte[])voidBuf;
 						size_t len = min(buf.length, data.length);
 						buf[0..len] = data[0..len];
 						data = data[len..$];
@@ -179,7 +181,7 @@ class CachedCurlNetwork : Network
 	/// Perform a raw request and return information about the resulting cached response.
 	Response cachedReq(ref const Request request)
 	{
-		auto hash = getDigestString!MD5(request.url ~ cast(char)request.method ~ request.data);
+		auto hash = getDigestString!MD5(request.url.asBytes ~ cast(char)request.method ~ request.data);
 		auto path = buildPath(cacheDir, hash[0..2], hash);
 		ensurePathExists(path);
 		auto metadataPath = path ~ ".metadata";
@@ -190,7 +192,7 @@ class CachedCurlNetwork : Network
 	}
 
 	/// ditto
-	Response cachedReq(string url, HTTP.Method method, const(void)[] data = null)
+	Response cachedReq(string url, HTTP.Method method, const(ubyte)[] data = null)
 	{
 		auto req = Request(url, method, data);
 		return cachedReq(req);
@@ -206,7 +208,7 @@ class CachedCurlNetwork : Network
 		std.file.copy(downloadFile(url), target);
 	} ///
 
-	override void[] getFile(string url)
+	override ubyte[] getFile(string url)
 	{
 		return cachedReq(url, HTTP.Method.get).responseData;
 	} ///
@@ -228,7 +230,7 @@ class CachedCurlNetwork : Network
 				[$-1]);
 	} ///
 
-	override void[] post(string url, const(void)[] data)
+	override ubyte[] post(string url, const(ubyte)[] data)
 	{
 		return cachedReq(url, HTTP.Method.post, data).responseData;
 	} ///

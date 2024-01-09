@@ -48,17 +48,17 @@ class AENetwork : Network
 		});
 	} ///
 
-	override void[] getFile(string url)
+	override ubyte[] getFile(string url)
 	{
 		return getData(url).toGC();
 	} ///
 
-	override void[] post(string url, const(void)[] data)
+	override ubyte[] post(string url, const(ubyte)[] data)
 	{
 		Data result;
 		bool got;
 
-		httpPost(url, DataVec(Data(cast(const(ubyte)[])data)), null,
+		httpPost(url, DataVec(Data(data)), null,
 			(Data data) { result = data; got = true; },
 			(string error) { throw new Exception(error); }
 		);

@@ -31,10 +31,10 @@ class Network
 		notImplemented();
 	}
 
-	// TODO: use ubyte[] instead of void[]
+	// TODO: use Data instead of ubyte[]?
 
 	/// Get resource located at the indicated URL.
-	void[] getFile(string url)
+	ubyte[] getFile(string url)
 	{
 		notImplemented();
 		assert(false);
@@ -42,7 +42,7 @@ class Network
 
 	/// Post data to the specified URL.
 	// TODO: Content-Type?
-	void[] post(string url, const(void)[] data)
+	ubyte[] post(string url, const(ubyte)[] data)
 	{
 		notImplemented();
 		assert(false);
@@ -87,7 +87,7 @@ static this()
 
 /// UFCS-able global synonym functions.
 void downloadFile(string url, string target) { net.downloadFile(url, target); }
-void[] getFile(string url) { return net.getFile(url); } /// ditto
-void[] post(string url, const(void)[] data) { return net.post(url, data); } /// ditto
+ubyte[] getFile(string url) { return net.getFile(url); } /// ditto
+ubyte[] post(string url, const(ubyte)[] data) { return net.post(url, data); } /// ditto
 bool urlOK(string url) { return net.urlOK(url); } /// ditto
 string resolveRedirect(string url) { return net.resolveRedirect(url); } /// ditto
