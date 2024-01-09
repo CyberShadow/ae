@@ -54,6 +54,9 @@ class MappedMemory : Memory
 		printf("? -> %p: Deleted MappedMemory\n", cast(void*)this);
 	}
 
+	static typeof(this) create(string name, MmMode mode, size_t from, size_t to) { return unmanagedNew!(typeof(this))(name, mode, from, to); }
+	override void destroy() nothrow @nogc { unmanagedDelete(this); }
+
 	override @property inout(ubyte)[] contents() inout { return mappedData; } ///
 	override @property size_t size() const { return mappedData.length; } ///
 	override void setSize(size_t newSize) { assert(false, "Can't resize MappedMemory"); } ///
@@ -63,7 +66,7 @@ class MappedMemory : Memory
 /// Returns a `Data` viewing a mapped file.
 Data mapFile(string name, MmMode mode, size_t from = 0, size_t to = 0)
 {
-	auto memory = unmanagedNew!MappedMemory(name, mode, from, to);
+	auto memory = MappedMemory.create(name, mode, from, to);
 	return Data(memory);
 }
 

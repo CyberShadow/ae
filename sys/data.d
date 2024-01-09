@@ -88,9 +88,9 @@ private:
 	static T[] allocateMemory(U)(out Memory memory, size_t initialSize, size_t capacity, scope void delegate(Unqual!U[] contents) /*pure*/ @safe nothrow @nogc fill)
 	{
 		if (capacity * T.sizeof < OSAllocator.pageSize)
-			memory = unmanagedNew!CMemory(initialSize * T.sizeof, capacity * T.sizeof);
+			memory = CMemory.create(initialSize * T.sizeof, capacity * T.sizeof);
 		else
-			memory = unmanagedNew!OSMemory(initialSize * T.sizeof, capacity * T.sizeof);
+			memory = OSMemory.create(initialSize * T.sizeof, capacity * T.sizeof);
 		fill(cast(Unqual!U[])memory.contents);
 		return cast(T[])memory.contents;
 	}
@@ -376,7 +376,7 @@ public:
 			memory.referenceCount--;
 			debug (DATA_REFCOUNT) debugLog("%p -> %p: Decrementing refcount to %d", cast(void*)&this, cast(void*)memory, memory.referenceCount);
 			if (memory.referenceCount == 0)
-				unmanagedDelete(memory);
+				memory.destroy();
 
 			memory = null;
 		}
@@ -1190,6 +1190,7 @@ abstract class Memory
 	abstract @property size_t size() const pure @safe nothrow @nogc;  /// Length of `contents`.
 	abstract void setSize(size_t newSize) pure @safe nothrow @nogc; /// Resize `contents` up to `capacity`.
 	abstract @property size_t capacity() const pure @safe nothrow @nogc; /// Maximum possible size.
+	abstract void destroy() nothrow @nogc; /// Destroy and free this `Memory` instance.
 
 	debug ~this() nothrow @nogc
 	{
@@ -1236,7 +1237,7 @@ if (is(C == class))
 	//   Memory implementations may have impure destructors,
 	//   such as closing file descriptors for memory-mapped files.
 	//   However, implementations SHOULD be pure as far as the program's state is concerned.
-	static void callDestroy(C c) nothrow { c.destroy(); }
+	static void callDestroy(C c) nothrow { destroy(c); }
 	// No pure due to: https://issues.dlang.org/show_bug.cgi?id=23959
 	(cast(void function(C) /*pure*/ nothrow @nogc) &callDestroy)(c);
 
@@ -1393,6 +1394,9 @@ static if (useGC)
 		dataMemory -= capacity;
 		dataCount --;
 	}
+
+	static typeof(this) create(size_t size, size_t capacity) { return unmanagedNew!(typeof(this))(size, capacity); }
+	override void destroy() nothrow @nogc { unmanagedDelete(this); }
 
 	@property override
 	size_t size() const pure @safe nothrow @nogc { return _size; }
