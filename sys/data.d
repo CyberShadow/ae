@@ -1201,6 +1201,91 @@ abstract class Memory
 
 // ************************************************************************
 
+private class ScopedMemory : Memory
+{
+	ubyte[] data;
+	override @property inout(ubyte)[] contents() inout pure @safe nothrow @nogc { return data; }
+	override @property size_t size() const pure @safe nothrow @nogc { return data.length; }
+	override void setSize(size_t newSize) pure @safe nothrow @nogc { assert(false); }
+	override @property size_t capacity() const pure @safe nothrow @nogc { return data.length; }
+	override void destroy() nothrow @nogc {}
+}
+
+struct ScopedData(T)
+if (!hasIndirections!T)
+{
+	@disable this();
+	@disable this(this);
+
+	this(scope T[] contents)
+	{
+		memory = scoped!ScopedMemory();
+		memory.data = contents.asBytes;
+	}
+
+	// Because of how much more likely and dangerous this bug is, this
+	// check is always enabled.
+	~this()
+	{
+		if (memory.referenceCount != 0)
+			assert(false, "Leaked Data referencing ScopedData");
+	} ///
+
+	@property TData!T data() { return TData!T(memory); }
+	alias data this;
+
+private:
+	import std.typecons : scoped;
+	import ae.utils.array : asBytes;
+	typeof(scoped!ScopedMemory()) memory;
+
+}
+
+/// Wraps a `scope` slice into a `Data` without copying.
+/// The returned object has the same scope as the data.
+ScopedData!T asScopedData(T)(return scope T[] data)
+if (!hasIndirections!T)
+{ return ScopedData!T(data); }
+
+unittest
+{
+	void useData(Data d)
+	{
+		assert(d.length == 3);
+	}
+
+	void useScoped(scope ubyte[] arr)
+	{
+		auto d = arr.asScopedData();
+		useData(d);
+	}
+
+	useScoped([1, 2, 3]);
+}
+
+// Leak test
+unittest
+{
+	Data leakyReference;
+
+	void useData(Data d)
+	{
+		leakyReference = d;
+	}
+
+	void useScoped(scope ubyte[] arr)
+	{
+		auto d = arr.asScopedData();
+		useData(d);
+	}
+
+	import std.exception : assertThrown;
+	import core.exception : AssertError;
+	useScoped([1, 2, 3]).assertThrown!AssertError;
+}
+
+// ************************************************************************
+
 package:
 
 /// How many bytes are currently in `Data`-owned memory.
