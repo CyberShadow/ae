@@ -307,9 +307,7 @@ unittest
 	assert([1, 2, 3].indexOf([2]) == 1);
 }
 
-/// Reimplementation of `std.algorithm.indexOf`,
-/// but with no auto-decoding.
-sizediff_t indexOfElement(T, D)(in T[] arr, auto ref const D val)
+deprecated ptrdiff_t indexOfElement(T, D)(in T[] arr, auto ref const D val)
 	if (is(typeof(arr[0]==val)))
 {
 	foreach (i, ref v; arr)
@@ -322,7 +320,7 @@ sizediff_t indexOfElement(T, D)(in T[] arr, auto ref const D val)
 bool contains(T, V)(in T[] arr, auto ref const V val)
 	if (is(typeof(arr[0]==val)))
 {
-	return arr.indexOfElement(val) >= 0;
+	return arr.indexOf(val) >= 0;
 }
 
 /// Ditto, for substrings
