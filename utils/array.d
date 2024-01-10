@@ -277,11 +277,15 @@ T[] repeatOne(T)(T c, size_t l)
 	return result;
 }
 
+static import std.string;
+/// Pull in overload set
+private alias indexOf = std.string.indexOf;
+
 /// Complement to std.string.indexOf which works with arrays
 /// of non-character types.
 /// Unlike std.algorithm.countUntil, it does not auto-decode,
 /// and returns an index usable for array indexing/slicing.
-sizediff_t indexOf(T, D)(in T[] arr, in D val)
+ptrdiff_t indexOf(T, D)(in T[] arr, in D val)
 //	if (!isSomeChar!T)
 	if (!isSomeChar!T && is(typeof(arr.countUntil(val))) && is(typeof(arr[0]==val)))
 {
@@ -289,11 +293,19 @@ sizediff_t indexOf(T, D)(in T[] arr, in D val)
 	return arr.countUntil(val);
 }
 
-sizediff_t indexOf(T)(in T[] arr, in T[] val) /// ditto
+ptrdiff_t indexOf(T)(in T[] arr, in T[] val) /// ditto
 	if (!isSomeChar!T && is(typeof(arr.countUntil(val))))
 {
 	return arr.countUntil(val);
 } /// ditto
+
+unittest
+{
+	assert("abc".indexOf('b') == 1);
+	assert("abc".indexOf("b") == 1);
+	assert([1, 2, 3].indexOf( 2 ) == 1);
+	assert([1, 2, 3].indexOf([2]) == 1);
+}
 
 /// Reimplementation of `std.algorithm.indexOf`,
 /// but with no auto-decoding.
