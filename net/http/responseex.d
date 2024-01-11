@@ -311,16 +311,21 @@ public:
 		.cacheForever(headers);
 	}
 
-	/// Construct and return a copy of this `HttpResponseEx`.
-	HttpResponseEx dup()
+	/// For `dup`.
+	protected void copyTo(typeof(this) other)
 	{
-		auto c = new HttpResponseEx;
-		c.status = this.status;
-		c.statusMessage = this.statusMessage;
-		c.headers = this.headers.dup;
-		c.data = this.data.dup;
-		return c;
+		super.copyTo(other);
+		other.pageTokens = pageTokens.dup;
+		other.errorTokens = errorTokens.dup;
 	}
+	alias copyTo = typeof(super).copyTo;
+
+	final typeof(this) dup()
+	{
+		auto result = new typeof(this);
+		copyTo(result);
+		return result;
+	} ///
 
 	/**
 	   Request a username and password.

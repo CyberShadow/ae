@@ -75,6 +75,16 @@ public:
 	{
 		return Clock.currTime() - creationTime;
 	}
+
+	/// For `dup`.
+	protected void copyTo(typeof(this) other)
+	{
+		other.protocol = protocol;
+		other.protocolVersion = protocolVersion;
+		other.headers = headers.dup;
+		other.data = data.dup;
+		other.creationTime = creationTime;
+	}
 }
 
 // TODO: Separate this from an URL type
@@ -97,6 +107,24 @@ public:
 	this(string url)
 	{
 		this.resource = url;
+	} ///
+
+	/// For `dup`.
+	protected void copyTo(typeof(this) other)
+	{
+		super.copyTo(other);
+		other.method = method;
+		other.proxy = proxy;
+		other._resource = _resource;
+		other._port = _port;
+	}
+	alias copyTo = typeof(super).copyTo;
+
+	final typeof(this) dup()
+	{
+		auto result = new typeof(this);
+		copyTo(result);
+		return result;
 	} ///
 
 	/// Resource part of URL (everything after the hostname)
@@ -663,6 +691,21 @@ public:
 			}
 		}
 	}
+
+	protected void copyTo(typeof(this) other)
+	{
+		other.status = status;
+		other.statusMessage = statusMessage;
+		other.compressionLevel = compressionLevel;
+	}
+	alias copyTo = typeof(super).copyTo;
+
+	final typeof(this) dup()
+	{
+		auto result = new typeof(this);
+		copyTo(result);
+		return result;
+	} ///
 }
 
 /// Sets headers to request clients to not cache a response.
