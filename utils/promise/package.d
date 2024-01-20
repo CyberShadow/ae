@@ -510,6 +510,21 @@ unittest
 	}
 }
 
+// Following
+unittest
+{
+    auto p = new Promise!void;
+    bool ok;
+    p.then({
+        return resolve(true);
+    }).then((value) {
+        ok = value;
+    });
+    p.fulfill();
+    socketManager.loop();
+    assert(ok);
+}
+
 // ****************************************************************************
 
 /// Returns a new `Promise!void` which is resolved.
