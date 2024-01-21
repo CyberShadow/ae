@@ -245,7 +245,7 @@ template SerializationCoder(alias Coder, S)
 		mixin Visitor!false;
 	}
 
-	S deserialize(E encoded)
+	S deserialize(E encoded) @nogc
 	{
 		Deserializer deserializer;
 		deserializer.decoder = Coder.Decoder(encoded);
