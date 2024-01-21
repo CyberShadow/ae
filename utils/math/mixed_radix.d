@@ -31,15 +31,20 @@ template MixedRadixCoder(
 		size_t maxItems,
 	)
 	{
+	private:
 		struct Item { I n, card; }
 		MaybeDynamicArray!(Item, maxItems) items;
 
+	public:
+		/// Encode one item.
+		/// `card` is the item's cardinality, i.e. one past its maximum.
 		void put(I n, I card)
 		in(0 <= n && n < card)
 		{
 			items ~= Item(n, card);
 		}
 
+		/// Finish encoding and return the encoded result.
 		E finish()
 		{
 			E result = withEOF ? 1 : 0;
@@ -59,30 +64,36 @@ template MixedRadixCoder(
 	/// Instead, the user is expected to put the items in reverse order.
 	struct RetroEncoder
 	{
+	private:
 		E encoded = withEOF ? 1 : 0;
 
+	public:
 		void put(I n, I card)
 		{
 			assert(0 <= n && n < card);
 			encoded *= card;
 			encoded += n;
-		}
+		} ///
 
 		E finish()
 		{
 			return encoded;
-		}
+		} ///
 	}
 
+	/// The decoder.
 	struct Decoder
 	{
+	private:
 		E encoded;
+
+	public:
 		this(E encoded)
 		{
 			this.encoded = encoded;
 			static if (withEOF)
 				assert(encoded > 0);
-		}
+		} ///
 
 		I get(I card)
 		in(card > 0)
@@ -92,11 +103,26 @@ template MixedRadixCoder(
 			static if (withEOF)
 				assert(encoded > 0, "Decoding error");
 			return value;
-		}
+		} ///
 
 		static if (withEOF)
-		@property bool empty() const { return encoded == 1; }
+		@property bool empty() const { return encoded == 1; } ///
 	}
+}
+
+///
+unittest
+{
+	alias Coder = MixedRadixCoder!(uint, uint, true);
+	Coder.Encoder!2 encoder;
+	encoder.put(5, 8);
+	encoder.put(1, 2);
+	auto result = encoder.finish();
+
+	auto decoder = Coder.Decoder(result);
+	assert(decoder.get(8) == 5);
+	assert(decoder.get(2) == 1);
+	assert(decoder.empty);
 }
 
 unittest
@@ -159,6 +185,8 @@ unittest
 		}
 }
 
+/// Serializes structs and static arrays using a `MixedRadixCoder`.
+/// Consults types' `.max' property to obtain cardinality.
 template SerializationCoder(alias Coder, S)
 {
 	private alias I = typeof(Coder.Decoder.init.get(0));
@@ -195,7 +223,7 @@ template SerializationCoder(alias Coder, S)
 		Serializer serializer;
 		serializer.put(s);
 		return serializer.encoder.finish();
-	}
+	} ///
 
 	private struct Deserializer
 	{
@@ -232,9 +260,10 @@ template SerializationCoder(alias Coder, S)
 		static if (__traits(hasMember, deserializer.decoder, "empty"))
 			assert(deserializer.decoder.empty);
 		return result;
-	}
+	} ///
 }
 
+///
 unittest
 {
 	static struct WithMax(T, T max_)
