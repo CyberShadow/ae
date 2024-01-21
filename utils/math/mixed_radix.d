@@ -53,6 +53,25 @@ template MixedRadixCoder(
 		}
 	}
 
+	/// Like `Encoder`, but does not use a temporary buffer.
+	/// Instead, the user is expected to put the items in reverse order.
+	struct RetroEncoder
+	{
+		E encoded = withEOF ? 1 : 0;
+
+		void put(I n, I max)
+		{
+			assert(0 <= n && n < max);
+			encoded *= max;
+			encoded += n;
+		}
+
+		E finish()
+		{
+			return encoded;
+		}
+	}
+
 	struct Decoder
 	{
 		E encoded;
@@ -81,22 +100,34 @@ template MixedRadixCoder(
 unittest
 {
 	import std.meta : AliasSeq;
+	import std.traits : EnumMembers;
 	import std.exception : assertThrown;
 	import core.exception : AssertError;
 
 	alias I = uint;
 	alias E = uint;
 
-	foreach (dynamicSize; AliasSeq!(false, true))
+	enum Mode { dynamicSize, staticSize, retro }
+	foreach (mode; EnumMembers!Mode)
 		foreach (withEOF; AliasSeq!(false, true))
 		{
 			void testImpl()
 			{
 				alias Coder = MixedRadixCoder!(I, E, withEOF);
-				Coder.Encoder!(dynamicSize ? -1 : 2) encoder;
 
-				encoder.put(5, 8);
-				encoder.put(1, 2);
+				static if (mode == Mode.retro)
+				{
+					Coder.RetroEncoder encoder;
+					encoder.put(1, 2);
+					encoder.put(5, 8);
+				}
+				else
+				{
+					Coder.Encoder!(mode == Mode.dynamicSize ? -1 : 2) encoder;
+
+					encoder.put(5, 8);
+					encoder.put(1, 2);
+				}
 				auto result = encoder.finish();
 
 				auto decoder = Coder.Decoder(result);
@@ -113,13 +144,13 @@ unittest
 				else
 					assert(decoder.get(42) == 0);
 			}
-			static if (!dynamicSize)
+			static if (mode == Mode.dynamicSize)
+				testImpl();
+			else
 			{
 				@nogc void test() { testImpl(); }
 				test();
 			}
-			else
-				testImpl();
 		}
 }
 private struct MaybeDynamicArray(T, size_t size = -1)
