@@ -255,6 +255,38 @@ template SerializationCoder(alias Coder, S)
 			assert(deserializer.decoder.empty);
 		return result;
 	} ///
+
+	private struct MinWriter
+	{
+		Coder.RetroEncoder encoder;
+		void handleLeaf(I /*value*/, I card) { encoder.put(0, card); }
+		mixin Visitor!true;
+	}
+
+	E minValue() @nogc
+	{
+		MinWriter writer;
+		S s = S.init;
+		writer.visit(s);
+		return writer.encoder.finish();
+	} ///
+
+	private struct MaxWriter
+	{
+		Coder.RetroEncoder encoder;
+		void handleLeaf(I /*value*/, I card) { encoder.put(cast(I)(card - 1), card); }
+		mixin Visitor!true;
+	}
+
+	E maxValue() @nogc
+	{
+		MaxWriter writer;
+		S s = S.init;
+		writer.visit(s);
+		return writer.encoder.finish();
+	} ///
+
+	E cardinality() @nogc { return (maxValue - minValue) + 1; }
 }
 
 ///
@@ -280,7 +312,9 @@ unittest
 
 	alias Coder = SerializationCoder!(MixedRadixCoder!(uint, ulong, true), S);
 	auto s = S(1, true, [E.a, E.b, E.c], D6(4));
-	assert(Coder.deserialize(Coder.serialize(s)) == s);
+	auto encoded = Coder.serialize(s);
+	assert(Coder.deserialize(encoded) == s);
+	assert(Coder.minValue() <= encoded && encoded <= Coder.maxValue());
 }
 
 private struct MaybeDynamicArray(T, size_t size = -1)
