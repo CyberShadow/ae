@@ -28,16 +28,16 @@ template MixedRadixCoder(
 	/// until `.finish` is called.
 	struct Encoder(
 		/// Maximum number of encoded items.
-		size_t maxSize,
+		size_t maxItems,
 	)
 	{
-		struct Item { I n, max; }
-		MaybeDynamicArray!(Item, maxSize) items;
+		struct Item { I n, card; }
+		MaybeDynamicArray!(Item, maxItems) items;
 
-		void put(I n, I max)
+		void put(I n, I card)
+		in(0 <= n && n < card)
 		{
-			assert(0 <= n && n < max);
-			items ~= Item(n, max);
+			items ~= Item(n, card);
 		}
 
 		E finish()
@@ -45,7 +45,7 @@ template MixedRadixCoder(
 			E result = withEOF ? 1 : 0;
 			foreach_reverse (ref item; items)
 			{
-				result *= item.max;
+				result *= item.card;
 				result += item.n;
 			}
 			return result;
@@ -61,10 +61,10 @@ template MixedRadixCoder(
 	{
 		E encoded = withEOF ? 1 : 0;
 
-		void put(I n, I max)
+		void put(I n, I card)
 		{
-			assert(0 <= n && n < max);
-			encoded *= max;
+			assert(0 <= n && n < card);
+			encoded *= card;
 			encoded += n;
 		}
 
@@ -84,11 +84,11 @@ template MixedRadixCoder(
 				assert(encoded > 0);
 		}
 
-		I get(I max)
+		I get(I card)
+		in(card > 0)
 		{
-			assert(max > 0);
-			I value = encoded % max;
-			encoded /= max;
+			I value = encoded % card;
+			encoded /= card;
 			static if (withEOF)
 				assert(encoded > 0, "Decoding error");
 			return value;
