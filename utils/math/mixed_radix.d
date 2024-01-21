@@ -1,5 +1,5 @@
 /**
- * ae.utils.math.mixed_radix_coding
+ * ae.utils.math.mixed_radix
  *
  * License:
  *   This Source Code Form is subject to the terms of
@@ -186,7 +186,7 @@ unittest
 }
 
 /// Serializes structs and static arrays using a `MixedRadixCoder`.
-/// Consults types' `.max' property to obtain cardinality.
+/// Consults types' `.max` property to obtain cardinality.
 template SerializationCoder(alias Coder, S)
 {
 	private alias I = typeof(Coder.Decoder.init.get(0));
