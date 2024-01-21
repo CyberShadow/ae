@@ -192,63 +192,57 @@ template SerializationCoder(alias Coder, S)
 	private alias I = typeof(Coder.Decoder.init.get(0));
 	private alias E = typeof(Coder.RetroEncoder.init.finish());
 
-	private struct Serializer
+	private mixin template Visitor(bool retro)
 	{
-		Coder.RetroEncoder encoder;
-
-		void put(T)(auto ref const T value)
+		void visit(T)(ref T value)
 		{
 			static if (is(T : I) && is(typeof(T.max) : I))
 			{
 				I max = T.max;
 				I card = max; card++;
 				assert(card > max, "Overflow");
-				encoder.put(value, card);
+				handleLeaf(value, card);
 			}
 			else
 			static if (is(T == struct))
-				foreach_reverse (const ref field; value.tupleof)
-					put(field);
+				static if (retro)
+					foreach_reverse (ref field; value.tupleof)
+						visit(field);
+				else
+					foreach (ref field; value.tupleof)
+						visit(field);
 			else
 			static if (is(T == Q[N], Q, size_t N))
-				foreach_reverse (ref item; value)
-					put(item);
+				static if (retro)
+					foreach_reverse (ref item; value)
+						visit(item);
+				else
+					foreach (ref item; value)
+						visit(item);
 			else
-				static assert(false, "Don't know how to serialize " ~ T.stringof);
+				static assert(false, "Don't know what to do with " ~ T.stringof);
 		}
+	}
+
+	private struct Serializer
+	{
+		Coder.RetroEncoder encoder;
+		void handleLeaf(I value, I card) { encoder.put(value, card); }
+		mixin Visitor!true;
 	}
 
 	E serialize()(auto ref const S s)
 	{
 		Serializer serializer;
-		serializer.put(s);
+		serializer.visit(s);
 		return serializer.encoder.finish();
 	} ///
 
 	private struct Deserializer
 	{
 		Coder.Decoder decoder;
-
-		void get(T)(ref T value)
-		{
-			static if (is(T : I) && is(typeof(T.max) : I))
-			{
-				I max = T.max;
-				I card = max; card++;
-				assert(card > max, "Overflow");
-				value = cast(T)decoder.get(card);
-			}
-			else
-			static if (is(T == struct))
-				foreach (ref field; value.tupleof)
-					get(field);
-			else
-			static if (is(T == Q[N], Q, size_t N))
-				foreach (ref item; value)
-					get(item);
-			else
-				static assert(false, "Don't know how to deserialize " ~ T.stringof);
-		}
+		void handleLeaf(T)(ref T value, I card) { value = cast(T)decoder.get(card); }
+		mixin Visitor!false;
 	}
 
 	S deserialize(E encoded)
@@ -256,7 +250,7 @@ template SerializationCoder(alias Coder, S)
 		Deserializer deserializer;
 		deserializer.decoder = Coder.Decoder(encoded);
 		S result;
-		deserializer.get(result);
+		deserializer.visit(result);
 		static if (__traits(hasMember, deserializer.decoder, "empty"))
 			assert(deserializer.decoder.empty);
 		return result;
