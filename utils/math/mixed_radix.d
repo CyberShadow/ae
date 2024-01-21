@@ -81,6 +81,8 @@ template MixedRadixCoder(
 unittest
 {
 	import std.meta : AliasSeq;
+	import std.exception : assertThrown;
+	import core.exception : AssertError;
 
 	alias I = uint;
 	alias E = uint;
@@ -103,6 +105,13 @@ unittest
 				static if (withEOF) assert(!decoder.empty);
 				assert(decoder.get(2) == 1);
 				static if (withEOF) assert(decoder.empty);
+
+				static if (withEOF)
+				{
+					debug assertThrown!AssertError(decoder.get(42));
+				}
+				else
+					assert(decoder.get(42) == 0);
 			}
 			static if (!dynamicSize)
 			{
