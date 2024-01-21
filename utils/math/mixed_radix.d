@@ -28,8 +28,7 @@ template MixedRadixCoder(
 	/// until `.finish` is called.
 	struct Encoder(
 		/// Maximum number of encoded items.
-		/// If -1, a dynamic array will be used.
-		size_t maxSize = -1,
+		size_t maxSize,
 	)
 	{
 		struct Item { I n, max; }
@@ -52,6 +51,9 @@ template MixedRadixCoder(
 			return result;
 		}
 	}
+
+	/// As above. This will allocate the items dynamically.
+	alias VariableLengthEncoder = Encoder!(-1);
 
 	/// Like `Encoder`, but does not use a temporary buffer.
 	/// Instead, the user is expected to put the items in reverse order.
@@ -123,7 +125,10 @@ unittest
 				}
 				else
 				{
-					Coder.Encoder!(mode == Mode.dynamicSize ? -1 : 2) encoder;
+					static if (mode == Mode.dynamicSize)
+						Coder.VariableLengthEncoder encoder;
+					else
+						Coder.Encoder!2 encoder;
 
 					encoder.put(5, 8);
 					encoder.put(1, 2);
