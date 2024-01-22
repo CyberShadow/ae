@@ -245,7 +245,7 @@ template SerializationCoder(alias Coder, S)
 		mixin Visitor!false;
 	}
 
-	S deserialize(E encoded) @nogc
+	S deserialize(E encoded) nothrow @nogc
 	{
 		Deserializer deserializer;
 		deserializer.decoder = Coder.Decoder(encoded);
@@ -263,7 +263,7 @@ template SerializationCoder(alias Coder, S)
 		mixin Visitor!true;
 	}
 
-	E minValue() @nogc
+	E minValue() nothrow @nogc
 	{
 		MinWriter writer;
 		S s = S.init;
@@ -278,7 +278,7 @@ template SerializationCoder(alias Coder, S)
 		mixin Visitor!true;
 	}
 
-	E maxValue() @nogc
+	E maxValue() nothrow @nogc
 	{
 		MaxWriter writer;
 		S s = S.init;
@@ -286,7 +286,7 @@ template SerializationCoder(alias Coder, S)
 		return writer.encoder.finish();
 	} ///
 
-	E cardinality() @nogc { return (maxValue - minValue) + 1; }
+	E cardinality() nothrow @nogc { return (maxValue - minValue) + 1; }
 }
 
 ///
