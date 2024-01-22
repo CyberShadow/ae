@@ -69,8 +69,8 @@ template MixedRadixCoder(
 
 	public:
 		void put(I n, I card)
+		in (0 <= n && n < card)
 		{
-			assert(0 <= n && n < card);
 			encoded *= card;
 			encoded += n;
 		} ///
