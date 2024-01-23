@@ -280,6 +280,7 @@ T[] repeatOne(T)(T c, size_t l)
 static import std.string;
 /// Pull in overload set
 private alias indexOf = std.string.indexOf;
+private alias lastIndexOf = std.string.lastIndexOf;
 
 /// Complement to std.string.indexOf which works with arrays
 /// of non-character types.
@@ -307,7 +308,44 @@ unittest
 	assert([1, 2, 3].indexOf([2]) == 1);
 }
 
-deprecated ptrdiff_t indexOfElement(T, D)(in T[] arr, auto ref const D val)
+/// Same for `lastIndexOf`.
+ptrdiff_t lastIndexOf(T, D)(in T[] arr, in D val)
+	// if (!isSomeChar!T)
+	if (!isSomeChar!T && is(typeof(arr[0]==val)))
+{
+	foreach_reverse (i, ref v; arr)
+		if (v == val)
+			return i;
+	return -1;
+}
+
+ptrdiff_t lastIndexOf(T)(in T[] arr, in T[] val) /// ditto
+	if (!isSomeChar!T && is(typeof(arr[0..1]==val[0..1])))
+{
+	if (val.length > arr.length)
+		return -1;
+	foreach_reverse (i; 0 .. arr.length - val.length + 1)
+		if (arr[i .. i + val.length] == val)
+			return i;
+	return -1;
+} /// ditto
+
+unittest
+{
+	assert("abc".lastIndexOf('b') == 1);
+	assert("abc".lastIndexOf("b") == 1);
+	assert([1, 2, 3].lastIndexOf( 2 ) == 1);
+	assert([1, 2, 3].lastIndexOf([2]) == 1);
+
+	assert([1, 2, 3, 2, 4].lastIndexOf( 2 ) == 3);
+	assert([1, 2, 3, 2, 4].lastIndexOf([2]) == 3);
+	assert([1, 2, 3, 2, 4].lastIndexOf([2, 3]) == 1);
+	assert([1, 2, 3, 2, 4].lastIndexOf([2, 5]) == -1);
+	assert([].lastIndexOf([2, 5]) == -1);
+}
+
+deprecated("Use `indexOf`")
+ptrdiff_t indexOfElement(T, D)(in T[] arr, auto ref const D val)
 	if (is(typeof(arr[0]==val)))
 {
 	foreach (i, ref v; arr)
