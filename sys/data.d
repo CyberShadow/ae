@@ -739,6 +739,10 @@ public:
 		}
 	}
 
+	bool opEquals(ref TData other) const { return data == other.data; }
+	bool opEquals(TData other) const { return data == other.data; }
+	bool opEquals(scope T[] other) const { return data == other; }
+
 	package(ae) // ditto
 	static if (is(T == ubyte))
 	deprecated sizediff_t indexOf(const(void)[] needle) const
@@ -951,6 +955,12 @@ unittest
 					auto oldContents = d.unsafeContents;
 					d.length = d.capacity + 1;
 					assert(d.unsafeContents.ptr != oldContents.ptr);
+				}
+				// Equality
+				{
+					auto d1 = generator();
+					auto d2 = generator();
+					assert(d1 == d2);
 				}
 				// Concatenation
 				{
