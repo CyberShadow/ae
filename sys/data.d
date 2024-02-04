@@ -752,7 +752,7 @@ public:
 	@property bool empty() const { return length == 0; }
 	static if (!is(Unqual!T == void))
 	T front() { return data[0]; } ///
-	void popFront() { data = data[1 .. $]; } ///
+	void popFront() { this = this[1 .. $]; } ///
 
 	// /// Return a new `Data` for the first `size` bytes, and slice this instance from size to end.
 	// Data popFront(size_t size)
@@ -1140,6 +1140,12 @@ unittest
 		d = contents ~ d;
 		d ~= contents;
 	});
+}
+
+unittest
+{
+	import std.format : format;
+	assert(format!"%s"(TData!char("hello")) == "hello");
 }
 
 /// Get the underlying type of a `TData`.
