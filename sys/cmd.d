@@ -62,6 +62,12 @@ ulong getCurrentThreadID()
 
 private struct ProcessParams
 {
+	string shellCommand;
+	string[] processArgs;
+
+	string toShellCommand() { return shellCommand ? shellCommand :  escapeShellCommand(processArgs); }
+	// Note: a portable toProcessArgs() cannot exist because CMD.EXE does not use CommandLineToArgvW.
+
 	const(string[string]) environment = null;
 	std.process.Config config = std.process.Config.none;
 	size_t maxOutput = size_t.max;
@@ -69,92 +75,109 @@ private struct ProcessParams
 
 	this(Params...)(Params params)
 	{
-		foreach (arg; params)
-		{
-			static if (is(typeof(arg) == string))
-				workDir = arg;
+		static foreach (i; 0 .. params.length)
+		{{
+			auto arg = params[i];
+			static if (i == 0)
+			{
+				static if (is(typeof(arg) == string))
+					shellCommand = arg;
+				else
+				static if (is(typeof(arg) == string[]))
+					processArgs = arg;
+				else
+					static assert(false, "Unknown type for process invocation command line: " ~ typeof(arg).stringof);
+				assert(arg, "Null command");
+			}
 			else
-			static if (is(typeof(arg) : const(string[string])))
-				environment = arg;
-			else
-			static if (is(typeof(arg) == size_t))
-				maxOutput = arg;
-			else
-			static if (is(typeof(arg) == std.process.Config))
-				config = arg;
-			else
-				static assert(false, "Unknown type for process invocation parameter: " ~ typeof(arg).stringof);
-		}
+			{
+				static if (is(typeof(arg) == string))
+					workDir = arg;
+				else
+				static if (is(typeof(arg) : const(string[string])))
+					environment = arg;
+				else
+				static if (is(typeof(arg) == size_t))
+					maxOutput = arg;
+				else
+				static if (is(typeof(arg) == std.process.Config))
+					config = arg;
+				else
+					static assert(false, "Unknown type for process invocation parameter: " ~ typeof(arg).stringof);
+			}
+		}}
 	}
 }
 
-private void invoke(alias runner)(string[] args)
+private void invoke(alias runner)(string command)
 {
 	//debug scope(failure) std.stdio.writeln("[CWD] ", getcwd());
-	debug(CMD) std.stdio.stderr.writeln("invoke: ", args);
+	debug(CMD) std.stdio.stderr.writeln("invoke: ", command);
 	auto status = runner();
 	enforce(status == 0,
-		"Command `%s` failed with status %d".format(escapeShellCommand(args), status));
+		"Command `%s` failed with status %d".format(command, status));
 }
 
 /// std.process helper.
 /// Run a command, and throw if it exited with a non-zero status.
-void run(Params...)(string[] args, Params params)
+void run(Params...)(Params params)
 {
 	auto parsed = ProcessParams(params);
-	invoke!({ return spawnProcess(
-				args, stdin, stdout, stderr,
+	invoke!({
+		auto pid = parsed.processArgs
+			? spawnProcess(
+				parsed.processArgs, stdin, stdout, stderr,
 				parsed.environment, parsed.config, parsed.workDir
-			).wait(); })(args);
+			)
+			: spawnShell(
+				parsed.shellCommand, stdin, stdout, stderr,
+				parsed.environment, parsed.config, parsed.workDir
+			);
+		return pid.wait();
+	})(parsed.toShellCommand());
 }
 
 /// std.process helper.
 /// Run a command and collect its output.
 /// Throw if it exited with a non-zero status.
-string query(Params...)(string[] args, Params params)
+string query(Params...)(Params params)
 {
 	auto parsed = ProcessParams(params);
 	string output;
 	invoke!({
-		// Don't use execute due to https://issues.dlang.org/show_bug.cgi?id=17844
-		version (none)
-		{
-			auto result = execute(args, parsed.environment, parsed.config, parsed.maxOutput, parsed.workDir);
-			output = result.output.stripRight();
-			return result.status;
-		}
-		else
-		{
-			auto pipes = pipeProcess(args, Redirect.stdout,
-				parsed.environment, parsed.config, parsed.workDir);
-			output = cast(string)readFile(pipes.stdout);
-			return pipes.pid.wait();
-		}
-	})(args);
+		auto result = parsed.processArgs
+			? execute(parsed.processArgs, parsed.environment, parsed.config, parsed.maxOutput, parsed.workDir)
+			: executeShell(parsed.shellCommand, parsed.environment, parsed.config, parsed.maxOutput, parsed.workDir);
+		output = result.output.stripRight();
+		return result.status;
+	})(parsed.toShellCommand());
 	return output;
 }
 
 /// std.process helper.
 /// Run a command, feed it the given input, and collect its output.
 /// Throw if it exited with non-zero status. Return output.
-T[] pipe(T, Params...)(in T[] input, string[] args, Params params)
+T[] pipe(T, Params...)(in T[] input, Params params)
 if (!hasIndirections!T)
 {
 	auto parsed = ProcessParams(params);
 	T[] output;
 	invoke!({
-		auto pipes = pipeProcess(args, Redirect.stdin | Redirect.stdout,
-			parsed.environment, parsed.config, parsed.workDir);
+		auto pipes = parsed.processArgs
+			? pipeProcess(parsed.processArgs, Redirect.stdin | Redirect.stdout,
+				parsed.environment, parsed.config, parsed.workDir)
+			: pipeShell(parsed.shellCommand, Redirect.stdin | Redirect.stdout,
+				parsed.environment, parsed.config, parsed.workDir);
 		auto f = pipes.stdin;
 		auto writer = writeFileAsync(f, input);
 		scope(exit) writer.join();
 		output = cast(T[])readFile(pipes.stdout);
 		return pipes.pid.wait();
-	})(args);
+	})(parsed.toShellCommand());
 	return output;
 }
 
-TData!T pipe(T, Params...)(in TData!T input, string[] args, Params params)
+TData!T pipe(T, Params...)(in TData!T input, Params params)
 if (!hasIndirections!T)
 {
 	import ae.sys.dataio : readFileData;
@@ -162,14 +185,17 @@ if (!hasIndirections!T)
 	auto parsed = ProcessParams(params);
 	TData!T output;
 	invoke!({
-		auto pipes = pipeProcess(args, Redirect.stdin | Redirect.stdout,
-			parsed.environment, parsed.config, parsed.workDir);
+		auto pipes = parsed.processArgs
+			? pipeProcess(parsed.processArgs, Redirect.stdin | Redirect.stdout,
+				parsed.environment, parsed.config, parsed.workDir)
+			: pipeShell(parsed.shellCommand, Redirect.stdin | Redirect.stdout,
+				parsed.environment, parsed.config, parsed.workDir);
 		auto f = pipes.stdin;
 		auto writer = writeFileAsync(f, input.unsafeContents);
 		scope(exit) writer.join();
 		output = readFileData(pipes.stdout).asDataOf!T;
 		return pipes.pid.wait();
-	})(args);
+	})(parsed.toShellCommand());
 	return output;
 }
 
@@ -177,6 +203,22 @@ deprecated T[] pipe(T, Params...)(string[] args, in T[] input, Params params)
 if (!hasIndirections!T)
 {
 	return pipe(input, args, params);
+}
+
+unittest
+{
+	if (false) // Instantiation test
+	{
+		import ae.sys.data : Data;
+		import ae.utils.array : asBytes;
+
+		run("cat");
+		run(["cat"]);
+		query(["cat"]);
+		query("cat | cat");
+		pipe("hello", "rev");
+		pipe(Data("hello".asBytes), "rev");
+	}
 }
 
 // ************************************************************************
