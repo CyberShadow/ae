@@ -133,6 +133,11 @@ struct AbsTime
 	AbsTime opBinary(string op : "+")(Duration d) const pure @safe nothrow @nogc { return AbsTime(this.stdTime + d.stdTime); }
 	AbsTime opBinaryRight(string op : "+")(Duration d) const pure @safe nothrow @nogc { return AbsTime(d.stdTime + this.stdTime); }
 
+	Duration opBinary(string op : "%")(Duration d) const pure @safe nothrow @nogc { return (this.stdTime % d.stdTime).stdDur; }
+
+	ref AbsTime opOpAssign(string op : "-")(Duration d) pure @safe nothrow @nogc { this.stdTime -= d.stdTime; return this; }
+	ref AbsTime opOpAssign(string op : "+")(Duration d) pure @safe nothrow @nogc { this.stdTime += d.stdTime; return this; }
+
 	string toString() const @safe nothrow { return sysTime.toString(); }
 
 	static enum min = AbsTime(SysTime.min.stdTime);
