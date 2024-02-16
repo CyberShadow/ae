@@ -28,8 +28,8 @@ import ae.sys.file;
 /// Returns a very unique name for a temporary file.
 string getTempFileName(string extension)
 {
-	import std.random;
-	import std.file;
+	import std.random : uniform;
+	import std.file : tempDir;
 	import std.path : buildPath;
 
 	static int counter;
@@ -47,13 +47,13 @@ ulong getCurrentThreadID()
 {
 	version (Windows)
 	{
-		import core.sys.windows.windows;
+		import core.sys.windows.windows : GetCurrentThreadId;
 		return GetCurrentThreadId();
 	}
 	else
 	version (Posix)
 	{
-		import core.sys.posix.pthread;
+		import core.sys.posix.pthread : pthread_self;
 		return cast(ulong)pthread_self();
 	}
 }
@@ -192,7 +192,7 @@ ubyte[] iconv(const(void)[] data, string inputEncoding, string outputEncoding)
 /// ditto
 string iconv(const(void)[] data, string inputEncoding)
 {
-	import std.utf;
+	import std.utf : validate;
 	auto result = cast(string)iconv(data, inputEncoding, "UTF-8");
 	validate(result);
 	return result;
@@ -239,7 +239,7 @@ void setEnvironment(string[string] env)
 /// Expand Windows-like variable placeholders (`"%VAR%"`) in the given string.
 string expandWindowsEnvVars(alias getenv = environment.get)(string s)
 {
-	import std.array;
+	import std.array : appender;
 	auto buf = appender!string();
 
 	size_t lastPercent = 0;
