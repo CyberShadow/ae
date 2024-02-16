@@ -280,6 +280,8 @@ int waitTimeout(Pid pid, Duration time)
 				pid.kill();
 			catch (Exception) {} // Ignore race condition
 	}).start();
+	scope(exit) t.join();
+
 	auto result = pid.wait();
 	ok = true;
 	return result;
@@ -288,9 +290,9 @@ int waitTimeout(Pid pid, Duration time)
 /// Wait for process to exit asynchronously.
 /// Call callback when it exits.
 /// WARNING: the callback will be invoked in another thread!
-void waitAsync(Pid pid, void delegate(int) callback = null)
+Thread waitAsync(Pid pid, void delegate(int) callback = null)
 {
-	auto t = new Thread({
+	return new Thread({
 		auto result = pid.wait();
 		if (callback)
 			callback(result);
