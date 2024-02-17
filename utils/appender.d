@@ -82,8 +82,9 @@ private:
 		}
 
 		newStart[0..size] = start[0..size];
-		if (unique)
-			allocator.deallocate(start[0..capacity]);
+		static if (hasMember!(Allocator, "deallocate"))
+			if (unique)
+				allocator.deallocate(start[0..capacity]);
 		start = newStart;
 		cursor = start + size;
 		end = start + newCapacity;
@@ -117,8 +118,9 @@ public:
 
 	~this()
 	{
-		if (cursor && unique)
-			allocator.deallocate(start[0..end-start]);
+		static if (hasMember!(Allocator, "deallocate"))
+			if (cursor && unique)
+				allocator.deallocate(start[0..end-start]);
 	}
 
 	/// Put elements.
@@ -310,6 +312,21 @@ unittest
 			a.allocate(3)[] = 'x';
 			assert(a.get == "xxx");
 		}
+}
+
+unittest
+{
+	static struct MinimalAllocator
+	{
+		static MinimalAllocator instance;
+
+		void[] allocate(size_t size)
+		{
+			return new void[](size);
+		}
+	}
+
+	alias Test = FastAppender!(int, MinimalAllocator);
 }
 
 /// UFCS shim for classic output ranges, which only take a single-argument put.
