@@ -101,7 +101,7 @@ private struct ProcessParams
 					maxOutput = arg;
 				else
 				static if (is(typeof(arg) == std.process.Config))
-					config = arg;
+					config |= arg;
 				else
 					static assert(false, "Unknown type for process invocation parameter: " ~ typeof(arg).stringof);
 			}
@@ -142,7 +142,7 @@ void run(Params...)(Params params)
 /// Throw if it exited with a non-zero status.
 string query(Params...)(Params params)
 {
-	auto parsed = ProcessParams(params);
+	auto parsed = ProcessParams(params, Config.stderrPassThrough);
 	string output;
 	invoke!({
 		auto result = parsed.processArgs
