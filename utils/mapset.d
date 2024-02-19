@@ -1701,6 +1701,27 @@ unittest
 	assert(result == [11, 12, 13, 21, 22, 23, 31, 32, 33]);
 }
 
+// Same, with `copy`.
+unittest
+{
+	alias M = MapSet!(string, int);
+	M m = M.unitSet;
+	m = m.cartesianProduct("x", [10, 20, 30]);
+	m = m.cartesianProduct("y", [ 1,  2,  3]);
+	auto v = MapSetVisitor!(string, int)(m);
+	int[] result;
+	while (v.next())
+	{
+		v.copy("x", "tmp");
+		auto x = v.get("tmp"); // First resolve
+		v.copy("y", "tmp");
+		auto y = v.get("tmp"); // Second resolve
+		result ~= x + y;
+	}
+	result.sort();
+	assert(result == [11, 12, 13, 21, 22, 23, 31, 32, 33]);
+}
+
 // targetTransform
 unittest
 {
