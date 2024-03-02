@@ -288,8 +288,8 @@ bool quiet; /// True if "-q" or ~--quiet" is present on the command line.
 shared static this()
 {
 	import core.runtime : Runtime;
-	foreach (arg; Runtime.args[1..$])
-		if (arg == "-q" || arg == "--quiet")
+	foreach (i, arg; Runtime.args)
+		if (i > 0 && (arg == "-q" || arg == "--quiet"))
 			quiet = true;
 }
 
