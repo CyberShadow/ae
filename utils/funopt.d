@@ -63,7 +63,7 @@ template Option(T, string description=null, string placeholder=null, char shorth
 	alias Option = _OptionImpl!(OptionType.option, T, description, shorthand, placeholder, name);
 }
 
-/// An ordered parameter.
+/// A positional parameter.
 template Parameter(T, string description=null, string name=null)
 {
 	alias Parameter = _OptionImpl!(OptionType.parameter, T, description, 0, null, name);
@@ -204,6 +204,7 @@ if (isCallable!FUN)
 	alias Params = staticMap!(Unqual, ParameterTypeTuple!FUN);
 	Params values;
 	enum names = optionNames!FUN;
+	static immutable bool[] isIndexParameter = [staticMap!(isParameter, Params)];
 	alias defaults = ParameterDefaultValueTuple!FUN;
 
 	foreach (i, defaultValue; defaults)
@@ -218,7 +219,7 @@ if (isCallable!FUN)
 
 	// Can't pass options with empty names to getopt, filter them out.
 	static immutable string[] namesArr = [names];
-	static immutable bool[] optionUseGetOpt = Params.length.iota.map!(n => namesArr[n].length > 0).array;
+	static immutable bool[] optionUseGetOpt = Params.length.iota.map!(n => namesArr[n].length > 0 && !isIndexParameter[n]).array;
 
 	enum structFields =
 		config.getoptConfig.length.iota.map!(n => "std.getopt.config config%d = std.getopt.config.%s;\n".format(n, config.getoptConfig[n])).join() ~
