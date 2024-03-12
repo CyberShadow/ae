@@ -254,6 +254,7 @@ if (isCallable!FUN)
 
 	getopt(args,
 		std.getopt.config.bundling,
+		std.getopt.config.caseSensitive,
 		getOptArgs.tupleof,
 		"h|help", &help,
 	);
