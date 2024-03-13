@@ -567,7 +567,7 @@ class Rfc850Message
 	}
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	auto post = new Rfc850Message("From: msonke at example.org (=?ISO-8859-1?Q?S=F6nke_Martin?=)\n\nText");
 	assert(post.author == "Sönke Martin");
@@ -681,7 +681,7 @@ string encodeRfc1522Chunk(string str) pure
 	return result;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	auto text = "В лесу родилась ёлочка";
 	assert(decodeRfc1522(encodeRfc1522(text)) == text);

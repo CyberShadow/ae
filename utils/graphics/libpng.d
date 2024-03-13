@@ -357,7 +357,7 @@ Image!COLOR decodePNG(COLOR)(ubyte[] data, bool strict = true)
 	return img;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	static struct BitWriter
 	{

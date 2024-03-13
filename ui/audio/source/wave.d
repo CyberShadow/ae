@@ -71,7 +71,7 @@ WaveSoundSource!Wave waveSoundSource(Wave)(Wave wave, uint sampleRate)
 	return new WaveSoundSource!Wave(wave, sampleRate);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	auto w = waveSoundSource([short.max, short.min], 44100);
 }

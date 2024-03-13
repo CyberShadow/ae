@@ -33,14 +33,14 @@ alias FastAppender!           char   StringBuffer ; /// Reusable variant.
 static assert(isStringSink!StringBuilder);
 static assert(isStringSink!StringBuffer);
 
-unittest
+version(ae_unittest) unittest
 {
 	StringBuilder sb;
 	sb.put("Hello", ' ', "world!");
 	assert(sb.get() == "Hello world!");
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	StringBuilder sb;
 	foreach (n; 0..4096)
@@ -97,9 +97,9 @@ struct BlindWriter(T)
 
 static assert(isStringSink!(BlindWriter!char));
 
-version(unittest) import ae.utils.time;
+version(ae_unittest) import ae.utils.time;
 
-unittest
+version(ae_unittest) unittest
 {
 	import std.datetime;
 
@@ -164,7 +164,7 @@ void put(S)(ref S sink, dchar c)
 	sink.put(buf[0..size]);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	StringBuilder sb;
 	put(sb, 'Я');
@@ -188,7 +188,7 @@ void putDecimal(S, N)(ref S sink, N n)
 	sink.put(toDec(n, buf));
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	void test(N)(N n)
 	{

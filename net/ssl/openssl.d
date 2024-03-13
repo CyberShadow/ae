@@ -715,7 +715,7 @@ T sslEnforce(T)(T v, string message = null)
 
 // ***************************************************************************
 
-unittest
+version(ae_unittest) unittest
 {
 	auto p = new OpenSSLProvider;
 	auto sc = p.createContext(SSLContext.Kind.server);
@@ -751,5 +751,5 @@ unittest
 	assert(ok);
 }
 
-version (unittest) import ae.net.ssl.test;
-unittest { testSSL(new OpenSSLProvider); }
+version (ae_unittest) import ae.net.ssl.test;
+version(ae_unittest) unittest { testSSL(new OpenSSLProvider); }

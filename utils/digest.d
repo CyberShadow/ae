@@ -229,7 +229,7 @@ deprecated ("Use std.digest.murmurhash")
 		return format("%08X%08X%08X%08X", digest[0], digest[1], digest[2], digest[3]);
 	}
 
-	unittest
+	version(ae_unittest) unittest
 	{
 		assert(murmurHash3_32("The quick brown fox jumps over the lazy dog") == 0x2e4ff723);
 		assert(murmurHash3_32("The quick brown fox jumps over the lazy cog") == 0xf08200fc);
@@ -288,7 +288,7 @@ template getDigestString(Digest)
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	assert(getDigestString!MD5("abc") == "900150983CD24FB0D6963F7D28E17F72");
 }
@@ -339,7 +339,7 @@ deprecated("Use std.digest.hmac")
 	auto HMAC_SHA1   ()(in ubyte[] key, in ubyte[] message) { import std.digest.sha; return HMAC!(SHA1  , 64)(key, message); }
 	auto HMAC_SHA256 ()(in ubyte[] key, in ubyte[] message) { import std.digest.sha; return HMAC!(SHA256, 64)(key, message); }
 
-	unittest
+	version(ae_unittest) unittest
 	{
 		import std.string : representation;
 		import std.conv : hexString;

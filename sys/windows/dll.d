@@ -63,10 +63,10 @@ mixin template DynamicLoadMulti(string DLL, FUNCS...)
 	}
 }
 
-version(unittest) mixin(importWin32!q{winuser});
+version(ae_unittest) mixin(importWin32!q{winuser});
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	mixin DynamicLoad!(GetVersion, "kernel32.dll");
 	GetVersion(); // called via GetProcAddress

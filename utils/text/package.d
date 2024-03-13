@@ -49,7 +49,7 @@ string formatAs(T)(auto ref T obj, string fmt)
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	assert(5.formatAs("%03d") == "005");
 }
@@ -72,7 +72,7 @@ deprecated template eatLine(OnEof onEof)
 	}
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	string s = "Hello\nworld";
 	assert(s.eatLine() == "Hello");
@@ -206,7 +206,7 @@ T[] fastReplace(T)(T[] what, T[] from, T[] to)
 	return what;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	import std.array;
 	void test(string haystack, string from, string to)
@@ -289,7 +289,7 @@ T[][] splitAsciiLines(T)(T[] text)
 	return lines;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert(splitAsciiLines("a\nb\r\nc\r\rd\n\re\r\n\nf") == ["a", "b", "c\r\rd", "\re", "", "f"]);
 	assert(splitAsciiLines(string.init) == splitLines(string.init));
@@ -326,7 +326,7 @@ T[][] asciiSplit(T)(T[] text)
 	return result;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	foreach (s; ["", " ", "a", " a", "a ", "a b", " a b", "a b ", " a b ",
 			"  ", "  a", "a  ", "a  b", "a  b  ", "a b  c"])
@@ -345,7 +345,7 @@ T[] asciiStrip(T)(T[] s)
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	string s = "Hello, world!";
 	assert(asciiStrip(s) is s);
@@ -397,7 +397,7 @@ ascii normalizeWhitespace(ascii s)
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	assert(normalizeWhitespace(" Mary  had\ta\nlittle\r\n\tlamb") == "Mary had a little lamb");
 }
@@ -421,7 +421,7 @@ string[] splitByCamelCase(string s)
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	assert(splitByCamelCase("parseIPString") == ["parse", "IP", "String"]);
 	assert(splitByCamelCase("IPString") == ["IP", "String"]);
@@ -438,7 +438,7 @@ string camelCaseJoin(string[] arr)
 	return result;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert("parse-IP-string".split('-').camelCaseJoin() == "parseIPString");
 }
@@ -542,7 +542,7 @@ string verbatimWrap(
 alias CIAsciiString = NormalizedArray!(immutable(char), s => s.byCodeUnit.map!(std.ascii.toLower));
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	CIAsciiString s = "test";
 	assert(s == "TEST");
@@ -560,7 +560,7 @@ import std.uni : toLower;
 alias CIUniString = NormalizedArray!(immutable(char), s => s.map!(toLower));
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	CIUniString s = "привет";
 	assert(s == "ПРИВЕТ");
@@ -598,7 +598,7 @@ ascii UTF8ToRaw(in char[] r) pure
 	return s[0..i];
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	char[1] c;
 	for (int i=0; i<256; i++)
@@ -649,7 +649,7 @@ C[] fromZArray(C)(C[] arr)
 	return arr[0 .. p<0 ? $ : p];
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	char[4] arr = "ab\0d";
 	assert(arr.fromZArray == "ab");
@@ -657,7 +657,7 @@ unittest
 	assert(arr.fromZArray == "abcd");
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	string arr = "ab\0d";
 	assert(arr.fromZArray == "ab");
@@ -805,7 +805,7 @@ if (is(Hex == char[N*2]))
 		);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	foreach (checked; TypeTuple!(false, true))
 		foreach (lower; TypeTuple!(false, true))
@@ -912,13 +912,13 @@ template toHex(alias digits = hexDigits)
 
 alias toLowerHex = toHex!lowerHexDigits; /// ditto
 
-unittest
+version(ae_unittest) unittest
 {
 	ubyte[] bytes = [0x12, 0x34];
 	assert(toHex(bytes) == "1234");
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	ubyte[] bytes = [0x12, 0x34];
 	char[] buf = new char[4];
@@ -926,19 +926,19 @@ unittest
 	assert(buf == "1234");
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	char[8] buf;
 	toHex(0x01234567, buf);
 	assert(buf == "01234567");
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert(toHex(0x01234567) == "01234567");
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	ubyte[2] bytes = [0x12, 0x34];
 	auto buf = bytes.toLowerHex();
@@ -946,7 +946,7 @@ unittest
 	assert(buf == "1234");
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	import core.exception : AssertError;
 
@@ -1147,7 +1147,7 @@ template fpToString(F)
 	}
 
 	static if (!is(Unqual!F == real))
-	unittest
+	version(ae_unittest) unittest
 	{
 		union U
 		{
@@ -1181,14 +1181,14 @@ template fpToString(F)
 
 alias doubleToString = fpToString!double; ///
 
-unittest
+version(ae_unittest) unittest
 {
 	alias floatToString = fpToString!float;
 	alias realToString = fpToString!real;
 	alias crealToString = fpToString!(const(real));
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert(2.3841857910156251e-07.doubleToString == "2.384185791015625e-07");
 	assert(1.3e-07.doubleToString == "1.3e-07");
@@ -1228,7 +1228,7 @@ struct FPAsString(T)
 FPAsString!T fpAsString(T)(T f) { return FPAsString!T(f); } /// ditto
 
 @safe //nothrow @nogc
-unittest
+version(ae_unittest) unittest
 {
 	StaticBuf!(char, 1024) buf;
 	buf.formattedWrite!"%s"(fpAsString(0.1));

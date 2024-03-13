@@ -22,7 +22,7 @@ import ae.utils.graphics.color : solidStorageUnit;
 import ae.utils.math;
 import ae.utils.meta : structFields, SignedBitsType, UnsignedBitsType;
 
-version(unittest) import ae.utils.graphics.image;
+version(ae_unittest) import ae.utils.graphics.image;
 
 // Constraints could be simpler if this was fixed:
 // https://issues.dlang.org/show_bug.cgi?id=12386
@@ -39,7 +39,7 @@ COLOR safeGet(V, COLOR)(auto ref V v, xy_t x, xy_t y, COLOR def)
 		return def;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	auto v = onePixel(7);
 	assert(v.safeGet(0, 0, 0) == 7);
@@ -55,7 +55,7 @@ void safePut(V, COLOR)(auto ref V v, xy_t x, xy_t y, COLOR value)
 		v[x, y] = value;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	auto v = Image!int(1, 1);
 	v.safePut(0, 0, 7);
@@ -75,7 +75,7 @@ void putPixel(bool CHECKED, V, COLOR)(auto ref V v, xy_t x, xy_t y, COLOR value)
 		v[x, y] = value;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	auto v = Image!int(1, 1);
 	v.putPixel!false(0, 0, 7);
@@ -90,7 +90,7 @@ if (isDirectView!V && is(typeof(&v.scanline(0)[0][0])))
 	return &v.scanline(y)[x][0];
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	auto v = Image!xy_t(1, 1);
 	v[0, 0] = 7;
@@ -118,7 +118,7 @@ void fill(V, COLOR)(auto ref V v, COLOR c)
 }
 deprecated alias clear = fill;
 
-unittest
+version(ae_unittest) unittest
 {
 	auto i = onePixel(0).copy();
 	i.fill(1);
@@ -735,7 +735,7 @@ void aaLine(bool CHECKED=true, V, COLOR, frac)(auto ref V v, float x1, float y1,
 			v.aaPutPixel!CHECKED(itpl(x1, x2, y, y1, y2), y, color, alpha);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	// Test instantiation
 	import ae.utils.graphics.color;

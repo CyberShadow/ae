@@ -91,7 +91,7 @@ version(none)
 }
 
 static if (haveChildTrait && haveFieldAliasBinding)
-unittest
+version(ae_unittest) unittest
 {
 	static struct A()
 	{
@@ -271,7 +271,7 @@ struct BoundDgPointer(Dg)
 }
 
 static if (haveMethodAliasBinding)
-unittest
+version(ae_unittest) unittest
 {
 	static struct A
 	{
@@ -393,7 +393,7 @@ struct DispatchToFirstArg(T)
 }
 
 static if (haveMethodAliasBinding)
-unittest
+version(ae_unittest) unittest
 {
 	static struct Consumer
 	{

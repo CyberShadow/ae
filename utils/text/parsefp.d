@@ -566,7 +566,7 @@ if (is(Target == string) &&
 }
 
     ///
-@safe unittest
+version(ae_unittest) @safe unittest
 {
     import std.math : isClose;
     auto str = "123.456";
@@ -574,7 +574,7 @@ if (is(Target == string) &&
     assert(parse!double(str).isClose(123.456));
 }
 
-@safe unittest
+version(ae_unittest) @safe unittest
 {
     if (inCI()) return;
 
@@ -664,7 +664,7 @@ if (is(Target == string) &&
 }
 
 // Tests for the double implementation
-@system unittest
+version(ae_unittest) @system unittest
 {
     // @system because strtod is not @safe.
     static if (real.mant_dig == 53)
@@ -738,7 +738,7 @@ if (is(Target == string) &&
     }
 }
 
-@system unittest
+version(ae_unittest) @system unittest
 {
     import core.stdc.errno;
     import core.stdc.stdlib;
@@ -810,14 +810,14 @@ if (is(Target == string) &&
 }
 
 // Fails on some CI services (not reproducible locally even with Travis CI docker image)
-version (unittest)
+version (ae_unittest)
 {
     private @property bool haveEnvVarImpl(string s) { import std.process; return !!environment.get(s); }
     private @property bool haveEnvVar(string s) pure @trusted nothrow @nogc { return (cast(bool function(string) pure nothrow @nogc)&haveEnvVarImpl)(s); }
     private bool inCI() pure @safe nothrow @nogc { return (haveEnvVar("TRAVIS") || haveEnvVar("GITHUB_ACTIONS") || haveEnvVar("BUILDKITE_AGENT_NAME")); }
 }
 
-@safe pure unittest
+version(ae_unittest) @safe pure unittest
 {
     if (inCI()) return;
 

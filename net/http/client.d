@@ -726,13 +726,13 @@ void httpPost(string url, UrlParameters vars, void delegate(string) resultHandle
 }
 
 // https://issues.dlang.org/show_bug.cgi?id=7016
-version (unittest)
+version (ae_unittest)
 {
 	static import ae.net.http.server;
 	static import ae.net.http.responseex;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	import ae.net.http.common : HttpRequest, HttpResponse;
 	import ae.net.http.server : HttpServer, HttpServerConnection;

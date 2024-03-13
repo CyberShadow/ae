@@ -14,7 +14,7 @@
 
 module ae.net.http.app.server;
 
-debug version(unittest) version = SSL;
+debug version(ae_unittest) version = SSL;
 
 import std.algorithm.comparison;
 import std.algorithm.searching;
@@ -499,7 +499,7 @@ private:
 	}
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	alias Test = Server!false;
 }

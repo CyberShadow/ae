@@ -292,7 +292,7 @@ final class SQLite
 				static assert(0, "Can't get column with type " ~ T.stringof);
 		}
 
-		unittest
+		version(ae_unittest) unittest
 		{
 			PreparedStatement s;
 			if (false)

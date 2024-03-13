@@ -405,9 +405,9 @@ bool throttle(ref MonoTime last, Duration span)
 }
 
 // https://issues.dlang.org/show_bug.cgi?id=7016
-version(unittest) static import ae.utils.array;
+version(ae_unittest) static import ae.utils.array;
 
-unittest
+version(ae_unittest) unittest
 {
 	import core.thread : Thread;
 

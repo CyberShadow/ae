@@ -236,7 +236,7 @@ struct KeyValueDatabase
 	alias _getSQLite this;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	import std.file;
 
@@ -284,7 +284,7 @@ unittest
 	assert(store.keys == ["key2"]);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	if (false)
 	{
@@ -293,7 +293,7 @@ unittest
 	}
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	if (false)
 	{
@@ -302,7 +302,7 @@ unittest
 	}
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	if (false)
 	{
@@ -314,7 +314,7 @@ unittest
 	}
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	import std.file;
 

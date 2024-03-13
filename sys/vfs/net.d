@@ -37,7 +37,7 @@ class NetVFS : VFS
 	override void write(string path, const(void)[] data) { assert(false, "NetVFS is read-only"); }
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	if (false)
 	{

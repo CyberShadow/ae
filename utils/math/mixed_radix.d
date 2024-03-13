@@ -111,7 +111,7 @@ template MixedRadixCoder(
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	alias Coder = MixedRadixCoder!(uint, uint, true);
 	Coder.Encoder!2 encoder;
@@ -125,7 +125,7 @@ unittest
 	assert(decoder.empty);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	import std.meta : AliasSeq;
 	import std.traits : EnumMembers;
@@ -290,7 +290,7 @@ template SerializationCoder(alias Coder, S)
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	static struct WithMax(T, T max_)
 	{

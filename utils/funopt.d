@@ -317,7 +317,7 @@ if (isCallable!FUN)
 	return FUN(values);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	void f1(bool verbose, Option!int tries, string filename)
 	{
@@ -519,7 +519,7 @@ string optionWrap(string text, string firstIndent, size_t indentWidth)
 	return result;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	void f1(
 		Switch!("Enable verbose logging", 'v') verbose,
@@ -796,7 +796,7 @@ string generateManPage(alias FUN)(
 	return result;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	@(`Frobnicates whatsits.`)
 	void f1(
@@ -909,7 +909,7 @@ string funoptDispatchUsage(alias Actions)()
 	return result;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	@(`Test program.`)
 	struct Actions

@@ -259,7 +259,7 @@ class FS : VFS
 	}
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	testVFS("");
 }

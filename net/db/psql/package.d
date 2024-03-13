@@ -265,7 +265,7 @@ private:
 mixin DeclareException!q{PgSqlException};
 
 version (HAVE_PSQL_SERVER)
-unittest
+version(ae_unittest) unittest
 {
 	import std.process : environment;
 

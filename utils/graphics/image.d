@@ -45,7 +45,7 @@ struct ImageRef(COLOR, StorageType = PlainStorageUnit!COLOR)
 	mixin DirectView;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	static assert(isDirectView!(ImageRef!ubyte));
 }
@@ -60,7 +60,7 @@ ImageRef!(ViewColor!SRC) toRef(SRC)(auto ref SRC src)
 		src.scanline(0).ptr);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	auto i = Image!ubyte(1, 1);
 	auto r = i.toRef();
@@ -116,7 +116,7 @@ struct Image(COLOR, StorageType = PlainStorageUnit!COLOR)
 	}
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	static assert(isDirectView!(Image!ubyte));
 }
@@ -151,7 +151,7 @@ auto copy(SRC)(auto ref SRC src)
 	return src.copy(target);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	auto v = onePixel(0);
 	auto i = v.copy();
@@ -211,7 +211,7 @@ auto vjoin(R)(R images)
 	return images.vjoin(target);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	auto h = 10
 		.iota
@@ -314,7 +314,7 @@ template downscale(int HRX, int HRY=HRX)
 	}
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	onePixel(RGB.init).nearestNeighbor(4, 4).copy.downscale!(2, 2)();
 //	onePixel(RGBA.init).nearestNeighbor(4, 4).copy.downscale!(2, 2)();
@@ -392,7 +392,7 @@ if (isView!SRC)
 	return src.downscaleTo(target);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	onePixel(RGB.init).nearestNeighbor(4, 4).copy.downscaleTo(2, 2);
 //	onePixel(RGBA.init).nearestNeighbor(4, 4).copy.downscaleTo(2, 2);
@@ -527,7 +527,7 @@ auto parsePBM(COLOR)(const(void)[] vdata)
 	return vdata.parsePBM(target);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	import std.conv : hexString;
 	auto data = "P6\n2\n2\n255\n" ~
@@ -538,7 +538,7 @@ unittest
 	assert(i[0, 1] == RGB.fromHex("000FFF"));
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	import std.conv : hexString;
 	auto data = "P5\n2\n2\n255\n" ~
@@ -571,7 +571,7 @@ ubyte[] toPBM(SRC)(auto ref SRC src)
 	return data;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	import std.conv : hexString;
 	assert(onePixel(RGB(1,2,3)).toPBM == "P6\n1 1 255\n" ~ hexString!"01 02 03");
@@ -603,7 +603,7 @@ auto fromPixels(C = InputColor, INPUT)(INPUT[] input, xy_t w, xy_t h)
 	return fromPixels!COLOR(input, w, h, target);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	import std.conv : hexString;
 	Image!L8 i;
@@ -778,7 +778,7 @@ auto parseBMP(COLOR)(const(void)[] data)
 	return data.parseBMP(target);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	alias parseBMP!BGR parseBMP24;
 	if (false)
@@ -840,7 +840,7 @@ ubyte[] toBMP(SRC)(auto ref SRC src)
 	return data;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	Image!BGR output;
 	onePixel(BGR(1,2,3)).toBMP().parseBMP!BGR(output);
@@ -999,7 +999,7 @@ ubyte[] makePNG(PNGChunk[] chunks)
 	return data;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	onePixel(RGB(1,2,3)).toPNG();
 	onePixel(5).toPNG();

@@ -691,7 +691,7 @@ string readUntil(ref StringStream s, char until)
 	return start[0..len];
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	enum xmlText =
 		`<?xml version="1.0" encoding="UTF-8"?>` ~
@@ -704,7 +704,7 @@ unittest
 	assert(doc.toString() == xmlText, doc.toString());
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	string testOne(bool preserve)(string s)
 	{
@@ -731,7 +731,7 @@ unittest
 	}
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	static struct ParseConfig
 	{
@@ -747,7 +747,7 @@ unittest
 }
 
 // Parsing naked tags while preserving whitespace
-unittest
+version(ae_unittest) unittest
 {
 	static struct ParseConfig
 	{

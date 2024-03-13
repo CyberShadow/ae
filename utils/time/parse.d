@@ -412,9 +412,9 @@ alias parseTime = parseTimeLike!SysTime;
 /// This version parses fmt at runtime.
 alias parseTimeUsing = parseTimeLikeUsing!SysTime;
 
-version(unittest) import ae.utils.time.format;
+version(ae_unittest) import ae.utils.time.format;
 
-unittest
+version(ae_unittest) unittest
 {
 	const s0 = "Tue Jun 07 13:23:19 GMT+0100 2011";
 	//enum t = s0.parseTime!(TimeFormats.STD_DATE); // https://issues.dlang.org/show_bug.cgi?id=12042
@@ -425,13 +425,13 @@ unittest
 	assert(t == t1);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	"Tue, 21 Nov 2006 21:19:46 +0000".parseTime!(TimeFormats.RFC2822);
 	"Tue, 21 Nov 2006 21:19:46 +0000".parseTimeUsing(TimeFormats.RFC2822);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	const char[] s = "Tue, 21 Nov 2006 21:19:46 +0000";
 	auto d = s.parseTime!(TimeFormats.RFC2822);
@@ -439,7 +439,7 @@ unittest
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	enum buildTime = __TIMESTAMP__.parseTime!(TimeFormats.CTIME).stdTime;
 }
@@ -485,7 +485,7 @@ alias parseDateTime = parseTimeLike!DateTime;
 /// or milliseconds, are parsed but silently discarded.
 alias parseDateTimeUsing = parseTimeLikeUsing!DateTime;
 
-unittest
+version(ae_unittest) unittest
 {
 	const char[] s = "Tue, 21 Nov 2006 21:19:46 +0000";
 	auto d = s.parseDateTime!(TimeFormats.RFC2822);
@@ -504,7 +504,7 @@ alias parseDate = parseTimeLike!Date;
 /// or time of day, are parsed but silently discarded.
 alias parseDateUsing = parseTimeLikeUsing!Date;
 
-unittest
+version(ae_unittest) unittest
 {
 	const char[] s = "Tue, 21 Nov 2006 21:19:46 +0000";
 	auto d = s.parseDate!(TimeFormats.RFC2822);
@@ -523,7 +523,7 @@ alias parseTimeOfDay = parseTimeLike!TimeOfDay;
 /// year/month/day or timezone, are parsed but silently discarded.
 alias parseTimeOfDayUsing = parseTimeLikeUsing!TimeOfDay;
 
-unittest
+version(ae_unittest) unittest
 {
 	const char[] s = "Tue, 21 Nov 2006 21:19:46 +0000";
 	auto d = s.parseTimeOfDay!(TimeFormats.RFC2822);
@@ -542,7 +542,7 @@ alias parseAbsTime = parseTimeLike!AbsTime;
 /// are parsed but silently discarded.
 alias parseAbsTimeUsing = parseTimeLikeUsing!AbsTime;
 
-unittest
+version(ae_unittest) unittest
 {
 	const char[] s = "Tue, 21 Nov 2006 21:19:46 +0000";
 	auto d = s.parseAbsTime!(TimeFormats.RFC2822);

@@ -225,7 +225,7 @@ struct NoopStringFilter
 	auto handleXmlString(S)(S s) { return s; }
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	// Test instantiation
 	XmlDom!string dom;

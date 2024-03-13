@@ -125,7 +125,7 @@ ref auto gammaRamp(LUM_BASETYPE, PIX_BASETYPE, alias value)()
 	return S.ramp;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	// test instantiation
 	auto lum = onePixel(RGB16(1, 2, 3));

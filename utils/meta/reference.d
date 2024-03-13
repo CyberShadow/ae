@@ -96,7 +96,7 @@ T dereference(T)(T v)
 	return v;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	Object o = new Object;
 	assert(o.reference is o);

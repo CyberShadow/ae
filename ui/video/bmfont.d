@@ -62,7 +62,7 @@ protected:
 	}
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	// Test instantiation
 	if (false)

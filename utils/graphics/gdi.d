@@ -109,7 +109,7 @@ struct GDICanvas(COLOR)
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	alias RGB = ae.utils.graphics.color.RGB;
 
@@ -139,7 +139,7 @@ unittest
 //	i.savePNM("gditest.pnm");
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	auto b = GDICanvas!bool(100, 100);
 	b.fill(true);

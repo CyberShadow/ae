@@ -321,7 +321,7 @@ private struct Escapes(EscapeScope escapeScope)
 	}
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	string[string] quotes;
 	quotes["Alan Perlis"] = "When someone says, \"I want a programming language in which I need only say what I want done,\" give him a lollipop.";

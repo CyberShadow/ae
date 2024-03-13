@@ -117,7 +117,7 @@ if (is(T : long) && T.sizeof >= 2)
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	assert(longMul(1, 1) == LongInt!int(1, 0));
 	assert(longMul(1, 2) == LongInt!int(2, 0));
@@ -200,7 +200,7 @@ if (is(T : long) && T.sizeof >= 2 && is(L == LongInt!T))
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	assert(longDiv(LongInt!int(1, 0), 1) == DivResult!int(1, 0));
 	assert(longDiv(LongInt!int(5, 0), 2) == DivResult!int(2, 1));

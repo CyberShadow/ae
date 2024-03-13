@@ -64,7 +64,7 @@ template decimalSize(T : ulong)
 
 deprecated alias DecimalSize = decimalSize;
 
-unittest
+version(ae_unittest) unittest
 {
 	template decimalSize2(T : ulong)
 	{
@@ -153,7 +153,7 @@ string toDec(T : ulong)(T n)
 	}
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	import std.conv : to;
 	assert(toDec(42) == "42");
@@ -187,7 +187,7 @@ char[U] toDecFixed(size_t U, N : ulong)(N n)
 	return buf;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert(toDecFixed!6(12345u) == "012345");
 }
@@ -221,7 +221,7 @@ T fromDec(T)(string s)
 	return n;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert(fromDec!int("456") == 456);
 	assert(fromDec!int("-42") == -42);

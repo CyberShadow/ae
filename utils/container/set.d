@@ -39,7 +39,7 @@ struct Set(T, uint INITSIZE=64)
 	}
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	Set!int s;
 	s ~= 1;

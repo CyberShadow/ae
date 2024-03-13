@@ -1016,7 +1016,7 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 	} ///
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	import std.algorithm.sorting : sort;
 

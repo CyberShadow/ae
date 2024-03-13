@@ -19,7 +19,7 @@ package:
 	
 enum BTRFS_IOCTL_MAGIC = 0x94;
 
-version (unittest)
+version (ae_unittest)
 {
 	import ae.sys.file;
 	import std.stdio : stderr;

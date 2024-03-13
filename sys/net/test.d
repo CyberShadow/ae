@@ -93,7 +93,7 @@ void test(string moduleName, string className)()
 	}
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	// Don't do network requests on the project tester.
 	// See:

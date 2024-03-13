@@ -24,7 +24,7 @@
 module ae.utils.meta.tuplerange;
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	int a = 2;
 	int offset = 1;
@@ -40,7 +40,7 @@ import std.meta;
 
 import ae.utils.meta.caps;
 
-unittest
+version(ae_unittest) unittest
 {
 	static struct X
 	{
@@ -102,7 +102,7 @@ auto trOnly(T...)(T values)
 	return Result(values);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	static int fun()
 	{
@@ -118,7 +118,7 @@ unittest
 	static assert(fun() == 3);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	static int fun()
 	{
@@ -135,7 +135,7 @@ unittest
 	static assert(fun() == 3);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	struct S
 	{
@@ -179,7 +179,7 @@ auto trFilter(alias pred, R)(auto ref R r)
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	int a = 2;
 	int b = 3;
@@ -221,7 +221,7 @@ auto trCTFilter(alias pred, R)(auto ref R r)
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	enum isNumeric(T) = is(typeof(cast(int)T.init));
 	int[] results;
@@ -256,7 +256,7 @@ auto trMap(alias pred, R)(auto ref R r)
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	int result;
 	(2)
@@ -332,7 +332,7 @@ auto trJoiner(R)(auto ref R r)
 	return Result(r);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	int[] values;
 	trOnly(
@@ -362,7 +362,7 @@ auto trIter(R)(auto ref R r)
 	return Result(r);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	int[] values;
 	trOnly(

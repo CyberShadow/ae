@@ -773,7 +773,7 @@ public:
 	// }
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	import core.exception : AssertError;
 	import core.memory : GC;
@@ -1119,7 +1119,7 @@ unittest
 
 // pure/@safe/nothrow/@nogc compilation test
 // No pure due to https://issues.dlang.org/show_bug.cgi?id=23959
-/*pure*/ @safe nothrow @nogc unittest
+version(ae_unittest) /*pure*/ @safe nothrow @nogc unittest
 {
 	TData!ubyte d;
 	d.enter((scope contents) { ubyte[] _ = contents; });
@@ -1152,7 +1152,7 @@ unittest
 	});
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	import std.format : format;
 	assert(format!"%s"(TData!char("hello")) == "hello");

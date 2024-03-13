@@ -27,12 +27,12 @@ R binomialCoefficient(T, R=T)(T n, T k)
 	return result;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert(binomialCoefficient(3067L, 3) == 4803581405);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	import std.bigint : BigInt;
 	assert(binomialCoefficient!(int, BigInt)(3067, 3) == 4803581405);
@@ -44,7 +44,7 @@ R multisetCoefficient(T, R=T)(T n, T k)
 	return binomialCoefficient!(T, R)(n + k - 1, k);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert(multisetCoefficient(3067L, 3) == 4812987894);
 }
@@ -81,7 +81,7 @@ struct BinomialCoefficientTable(T, T maxN, T maxK)
 	}
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert(BinomialCoefficientTable!(ulong, 5000, 3).generate().binomialCoefficient(3067, 3) == 4803581405);
 }
@@ -212,7 +212,7 @@ static:
 }
 
 static if (__VERSION__ >= 2_096)
-unittest
+version(ae_unittest) unittest
 {
 	enum N = 3;
 	enum cardinality = 10;

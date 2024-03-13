@@ -38,7 +38,7 @@ auto parallelSort(alias less = "a < b", R)(R r)
 	return impl(r);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert([3, 1, 2].parallelSort.release == [1, 2, 3]);
 }
@@ -59,7 +59,7 @@ auto parallelEagerMap(R, Pred)(R input, Pred pred, size_t workUnitSize = 0)
 	return result;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert([1, 2, 3].parallelEagerMap((int n) => n + 1) == [2, 3, 4]);
 }
@@ -84,7 +84,7 @@ bool parallelEqual(T)(T[] a, T[] b)
 	return chunkEqual.all!(a => a)();
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	import std.array : array;
 	auto a = 1024.iota.array;
@@ -157,7 +157,7 @@ if (is(N : ulong))
 	return result;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	import std.algorithm.iteration : sum;
 	assert([1, 2, 3].parallelChunks((int[] arr) => arr.sum).sum == 6);

@@ -51,7 +51,7 @@ deprecated T[] toArray(T)(ref T v) { return v.asSlice; }
 	return (&v)[0..1];
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	int[1] arr = 1.asUnitStaticArray;
 	int i;
@@ -74,7 +74,7 @@ template toStaticArray(size_t n)
 	}
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	auto a = [1, 2, 3];
 	assert(a.toStaticArray!3 == [1, 2, 3]);
@@ -103,7 +103,7 @@ unittest
 deprecated @property inout(ubyte)[] bytes(T)(ref inout(T) value) if (!hasIndirections!T) { return value.asBytes; }
 deprecated @property inout(ubyte)[] bytes(T)(inout(T) value) if (is(T U : U[]) && !hasIndirections!U) { return value.asBytes; }
 
-unittest
+version(ae_unittest) unittest
 {
 	ubyte b = 5;
 	assert(b.asBytes == [5]);
@@ -139,7 +139,7 @@ inout(T) as(T)(inout(ubyte)[] bytes)
 deprecated ref inout(T) fromBytes(T)(inout(ubyte)[] bytes) if (!hasIndirections!T) { return bytes.as!T; }
 deprecated inout(T) fromBytes(T)(inout(ubyte)[] bytes) if (is(T U == U[]) && !hasIndirections!U) { return bytes.as!T; }
 
-unittest
+version(ae_unittest) unittest
 {
 	{       ubyte b = 5; assert(b.asBytes.as!ubyte == 5); }
 	{ const ubyte b = 5; assert(b.asBytes.as!ubyte == 5); }
@@ -147,7 +147,7 @@ unittest
 	{       ubyte b = 5; assert(b.asBytes.as!S == S(5)); }
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	struct S { ubyte a, b; }
 	ubyte[] arr = [1, 2];
@@ -170,7 +170,7 @@ unittest
 	return *cast(inout(ubyte)[T.sizeof]*)&value;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	ubyte[4] arr = 1.asStaticBytes;
 
@@ -193,7 +193,7 @@ auto emptySlice(T)() pure @trusted
 	return p[0..0];
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	int[] arr = emptySlice!int;
 	assert(arr.ptr);
@@ -213,7 +213,7 @@ bool isIdentical(T)(auto ref T a, auto ref T b)
 		return a.asStaticBytes == b.asStaticBytes;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	float nan;
 	assert(isIdentical(nan, nan));
@@ -300,7 +300,7 @@ ptrdiff_t indexOf(T)(in T[] arr, in T[] val) /// ditto
 	return arr.countUntil(val);
 } /// ditto
 
-unittest
+version(ae_unittest) unittest
 {
 	assert("abc".indexOf('b') == 1);
 	assert("abc".indexOf("b") == 1);
@@ -330,7 +330,7 @@ ptrdiff_t lastIndexOf(T)(in T[] arr, in T[] val) /// ditto
 	return -1;
 } /// ditto
 
-unittest
+version(ae_unittest) unittest
 {
 	assert("abc".lastIndexOf('b') == 1);
 	assert("abc".lastIndexOf("b") == 1);
@@ -368,7 +368,7 @@ if (is(Unqual!T == Unqual!U))
 	return str._indexOf(what) >= 0;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert( "abc".contains('b'));
 	assert(!"abc".contains('x'));
@@ -383,7 +383,7 @@ bool containsAt(T)(in T[] haystack, in T[] needle, size_t offset)
 		&& haystack[offset..offset+needle.length] == needle;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert( "abracadabra".containsAt("ada", 5));
 	assert(!"abracadabra".containsAt("ada", 6));
@@ -465,7 +465,7 @@ size_t elementIndex(T)(const(T)[] arr, ref const T element) @trusted
 	return p - start;
 }
 
-@safe unittest
+version(ae_unittest) @safe unittest
 {
 	auto arr = [1, 2, 3];
 	assert(arr.elementIndex(arr[1]) == 1);
@@ -521,7 +521,7 @@ H[] splitWithSuffix(H, S)(H haystack, S separator)
 	return result;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert("a\nb".splitWithSuffix('\n') == ["a\n", "b"]);
 	assert([1, 0, 2].splitWithSuffix(0) == [[1, 0], [2]]);
@@ -547,7 +547,7 @@ H[] splitWithPrefix(H, S)(H haystack, S separator)
 	return result;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert("a\nb".splitWithPrefix('\n') == ["a", "\nb"]);
 	assert([1, 0, 2].splitWithPrefix(0) == [[1], [0, 2]]);
@@ -575,7 +575,7 @@ S[] splitWithPrefixAndSuffix(S)(S haystack, S prefix, S suffix)
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	auto s = q"EOF
 Section 1:
@@ -617,7 +617,7 @@ template mapNull(alias dg)
 	}
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert(string.init.mapNull!(s => s          )  is null);
 	assert(string.init.mapNull!(s => ""         )  is null);
@@ -632,7 +632,7 @@ auto ref sample(T)(T[] arr)
 	return arr[uniform(0, $)];
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert([7, 7, 7].sample == 7);
 	auto s = ["foo", "bar"].sample(); // Issue 13807
@@ -650,7 +650,7 @@ T pluck(T)(ref T[] arr)
 	return result;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	auto arr = [1, 2, 3];
 	auto res = [arr.pluck, arr.pluck, arr.pluck];
@@ -674,7 +674,7 @@ bool removeFirst(T, alias eq = binaryFun!"a == b", SwapStrategy swapStrategy = S
 	return false;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	int[] arr = [1, 2, 3, 2];
 	arr.removeFirst(2);
@@ -690,7 +690,7 @@ size_t removeAll(T, alias eq = binaryFun!"a == b", SwapStrategy swapStrategy = S
 	return oldLength - arr.length;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	int[] arr = [1, 2, 3, 2];
 	arr.removeAll(2);
@@ -749,7 +749,7 @@ void countSort(alias orderPred = "a", T)(T[] arr)
 	countSort!orderPred(arr, valuesBuf, countsBuf);
 } /// ditto
 
-unittest
+version(ae_unittest) unittest
 {
 	auto arr = [3, 2, 5, 2, 1];
 	arr.countSort();
@@ -804,7 +804,7 @@ T[N] shift(size_t N, T)(ref T[] arr) { T[N] result = cast(T[N])(arr[0..N]); arr 
 void unshift(T)(ref T[] arr, T value) { arr.insertInPlace(0, value); }
 void unshift(T)(ref T[] arr, T[] value) { arr.insertInPlace(0, value); } /// ditto
 
-unittest
+version(ae_unittest) unittest
 {
 	int[] arr = [1, 2, 3];
 	assert(arr.shift == 1);
@@ -922,7 +922,7 @@ template skipWhile(alias pred)
 	}
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	import std.ascii : isDigit;
 
@@ -949,7 +949,7 @@ template eatUntil(OnEof onEof = OnEof.throwException)
 	}
 }
 
-deprecated unittest
+version(ae_unittest) deprecated unittest
 {
 	string s;
 
@@ -1003,14 +1003,14 @@ template afilter(alias pred) { auto afilter(T)(T[] arr) { return array(filter!pr
 auto auniq(T)(T[] arr) { return array(uniq(arr)); } /// ditto
 auto asort(alias pred, T)(T[] arr) { sort!pred(arr); return arr; } /// ditto
 
-unittest
+version(ae_unittest) unittest
 {
 	assert([1, 2, 3].amap!`a*2`() == [2, 4, 6]);
 	assert([1, 2, 3].amap!(n => n*n)() == [1, 4, 9]);
 	assert([1, 2, 3].staticArray.amap!(n => n*n)() == [1, 4, 9].staticArray);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	struct NC
 	{
@@ -1024,7 +1024,7 @@ unittest
 	assert(3.iota.amap!(i => NC(i))[1].i == 1);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	import std.range : iota;
 	immutable(int)[] arr;
@@ -1093,7 +1093,7 @@ auto list(Args...)(auto ref Args args)
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	string name, value;
 	list(name, null, value) = "NAME=VALUE".findSplit("=");
@@ -1101,7 +1101,7 @@ unittest
 }
 
 version(LittleEndian)
-unittest
+version(ae_unittest) unittest
 {
 	uint onlyValue;
 	ubyte[] data = [ubyte(42), 0, 0, 0];

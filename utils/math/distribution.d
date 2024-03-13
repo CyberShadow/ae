@@ -123,14 +123,14 @@ Range!T range(T)(T lo, T hi) { return Range!T(lo, hi, (lo + hi) / 2, true); } //
 Range!T range(T)(T val) { return Range!T(val, val, val, true); } /// ditto
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	assert(range(1, 2) + 1 == range(2, 3));
 	assert(1 + range(1, 2) == range(2, 3));
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	auto a = range(10, 20);
 	auto b = range(10, 20);
@@ -138,7 +138,7 @@ unittest
 	assert(c.avg == 225);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	auto a = range(10, 20);
 	a = a.fuzzyAssign(25);
@@ -239,7 +239,7 @@ if (op.isOneOf("<", "<=", ">", ">="))
 		return Probability(p);
 	}
 
-	unittest // int unittest
+	version(ae_unittest) unittest // int unittest
 	{
 		auto a = range(1, 2);
 		foreach (b; 0..4)
@@ -268,7 +268,7 @@ if (op.isOneOf("<", "<=", ">", ">="))
 			return .cmp!(">" ~ op[1..$])(b, a);
 	}
 
-	unittest
+	version(ae_unittest) unittest
 	{
 		auto b = range(1, 2);
 		foreach (a; 0..4)
@@ -353,7 +353,7 @@ if (op.isOneOf("<", "<=", ">", ">="))
 	}
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert(cmp!">"(0, 1).p == 0  );
 	assert(cmp!">"(1, 0).p == 1  );
@@ -362,7 +362,7 @@ unittest
 	assert(cmp!"<"(0, 1).p == 1  );
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	auto a = range(1.0, 3.0);
 	assert(cmp!"<"(a, 0.0).p == 0  );
@@ -374,7 +374,7 @@ unittest
 	assert(cmp!">"(a, 5.0).p == 0  );
 }
 
-unittest // number-to-range, int
+version(ae_unittest) unittest // number-to-range, int
 {
 	auto a = range(1, 2);
 
@@ -391,7 +391,7 @@ unittest // number-to-range, int
 	alias ge = cmp!">=";
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert(cmp!"<" (range(0.), range(1.)).p == 1);
 	assert(cmp!"<" (range(1.), range(0.)).p == 0);
@@ -475,7 +475,7 @@ version (none)
 		}
 	}
 
-	unittest
+	version(ae_unittest) unittest
 	{
 		import std.random : Random, uniform, uniform01;
 		import std.math.operations : isClose;

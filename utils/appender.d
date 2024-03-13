@@ -292,7 +292,7 @@ public:
 	}
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	import std.meta : AliasSeq;
 	import std.experimental.allocator.mallocator;

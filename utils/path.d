@@ -42,7 +42,7 @@ string relPath(string path, string base)
 
 deprecated alias fastRelativePath = relPath;
 
-unittest
+version(ae_unittest) unittest
 {
 	version(Windows)
 	{
@@ -86,7 +86,7 @@ bool pathStartsWith(in char[] path, in char[] prefix)
 		(path.length == prefix.length || isDirSeparator(path[prefix.length]));
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert( "/foo/bar"    .pathStartsWith("/foo/bar"));
 	assert( "/foo/bar/baz".pathStartsWith("/foo/bar"));

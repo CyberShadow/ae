@@ -193,7 +193,7 @@ IniHandler!S iniHandler(S)(void delegate(S, S) leafHandler, IniThickLeafHandler!
 }
 
 
-unittest
+version(ae_unittest) unittest
 {
 	int count;
 
@@ -377,7 +377,7 @@ void parseIniInto(R, T)(R r, ref T result)
 	parseIni(r, result.makeIniHandler!(ElementType!R));
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	static struct File
 	{
@@ -405,7 +405,7 @@ unittest
 	assert(f.s.a==["foo":1, "bar":2]);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	static struct Custom
 	{
@@ -438,9 +438,9 @@ unittest
 	assert(c == Custom([Custom.Section("one", ["a" : "a"]), Custom.Section("two", ["b" : "b"])]));
 }
 
-version(unittest) static import ae.utils.aa;
+version(ae_unittest) static import ae.utils.aa;
 
-unittest
+version(ae_unittest) unittest
 {
 	import ae.utils.aa;
 
@@ -458,7 +458,7 @@ unittest
 	assert(o["a"]=="a" && o["b"] == "b");
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	import ae.utils.aa;
 
@@ -478,7 +478,7 @@ unittest
 	assert(o["a"].x == "a" && o["b"].x == "b");
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	static struct S { string x, y; }
 
@@ -494,7 +494,7 @@ unittest
 	assert(r["a"].x == "x" && r["a"].y == "y");
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	static struct S { string x, y; }
 	static struct T { S* s; }
@@ -513,7 +513,7 @@ unittest
 	}
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	auto r = parseIni!(string[string])
 	(
@@ -525,7 +525,7 @@ unittest
 	assert(r == ["a.b.c" : "d.e.f"]);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	struct S {}
 	auto r = parseIni!(S[string])
@@ -538,7 +538,7 @@ unittest
 	assert(r == ["a" : S()]);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	struct S { Nullable!bool a, b, c; }
 	auto r = parseIni!S
@@ -607,7 +607,7 @@ struct IniFragment(S)
 	}
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	static struct File
 	{
@@ -778,7 +778,7 @@ S formatIni(S = string, T)(
 	return writer.writer.get().prettifyIni;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	struct S { int i; S* next; }
 	assert(formatIni(S(1, new S(2))) == q"EOF
@@ -789,14 +789,14 @@ i=2
 EOF");
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert(formatIni(["one" : 1]) == q"EOF
 one=1
 EOF");
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert(formatIni(["one" : 1]) == q"EOF
 one=1
@@ -877,7 +877,7 @@ void updateIni(S)(ref S[] lines, S name, S value)
 			lines = lines[0..valueLine] ~ lines[valueLine+1..$];
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	auto ini = q"<
 		a=1
@@ -888,7 +888,7 @@ unittest
 	assert(parseIni!S(ini).a == 3);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	auto ini = q"<
 		a=1
@@ -909,7 +909,7 @@ unittest
 	>".strip.splitLines.map!strip), text(ini));
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	auto ini = q"<
 		[s]
@@ -927,7 +927,7 @@ unittest
 	>".strip.splitLines.map!strip));
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	auto ini = q"<
 		a=1
@@ -948,7 +948,7 @@ void updateIniFile(S)(string fileName, S name, S value)
 	lines.map!(l => chain(l.byCodeUnit, only(typeof(S.init[0])('\n')))).joiner.toFile(fileName);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	import std.file;
 	enum fn = "temp.ini";
@@ -981,7 +981,7 @@ void updateIni(S, T)(ref S[] lines, auto ref T value)
 	visitWithPath!(visitor, S)(null, value);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	struct S { int a, b, c; }
 	auto ini = q"<

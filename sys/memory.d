@@ -58,7 +58,7 @@ bool onStack(const(void)* p)
 	return p0 <= p && p <= p1;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	/* .......... */ int l; auto pl = &l;
 	static /* ... */ int s; auto ps = &s;
@@ -97,7 +97,7 @@ bool inCollect() @nogc
 	return false;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert(!inCollect());
 

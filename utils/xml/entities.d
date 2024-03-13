@@ -402,7 +402,7 @@ public string decodeEntities(string str)
 
 deprecated alias decodeEntities convertEntities;
 
-unittest
+version(ae_unittest) unittest
 {
 	assert(encodeEntities(`The <Smith & Wesson> "lock'n'load"`) == `The &lt;Smith &amp; Wesson&gt; &quot;lock&apos;n&apos;load&quot;`);
 	assert(encodeAllEntities("©,€") == "&copy;,&euro;");

@@ -76,7 +76,7 @@ struct BoundFunctorOf(R, alias f)
 }
 
 static if (haveChildTrait)
-unittest
+version(ae_unittest) unittest
 {
 	static struct Test
 	{

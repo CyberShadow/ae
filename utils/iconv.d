@@ -130,7 +130,7 @@ shared static this()
 	codepages["ascii8"] =      " ¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ"w;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	foreach (name, chars; codepages)
 		assert(chars.length == 128);

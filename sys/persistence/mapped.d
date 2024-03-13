@@ -48,7 +48,7 @@ struct Mapped(T)
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	static struct S
 	{

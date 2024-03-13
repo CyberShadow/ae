@@ -50,7 +50,7 @@ alias hnsecs  = dur!"hnsecs";  /// Ditto
 alias nsecs   = dur!"nsecs";   /// Ditto
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	import core.time : msecs;
 	static assert(1.5.seconds == 1500.msecs);
@@ -64,7 +64,7 @@ if (is(F : real))
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	import core.time : seconds, msecs;
 	assert(durScale(1.seconds, 1.5) == 1500.msecs);
@@ -77,7 +77,7 @@ T fracTotal(string units, T = real)(Duration d)
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	import core.time : seconds, msecs;
 	assert(1500.msecs.fracTotal!"seconds" == 1.5);

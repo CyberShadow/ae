@@ -39,7 +39,7 @@ Regex!char re(string pattern, alias flags = [])()
 	return r;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert( "123".match(re!`^\d+$`));
 	assert(!"abc".match(re!`^\d+$`));
@@ -65,7 +65,7 @@ bool matchInto(S, R, Args...)(S s, R r, ref Args args)
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	string name, fruit;
 	int count;
@@ -89,7 +89,7 @@ bool matchCaptures(S, R, Ret, Args...)(S s, R r, Ret delegate(Args args) fun)
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	assert("Mary has 5 apples"
 		.matchCaptures(`^(\w+) has (\d+) (\w+)$`,
@@ -146,7 +146,7 @@ if (isSomeString!S)
 } /// ditto
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	auto s = "One 2 three 42";
 	auto r = `(\d+)`;
@@ -155,7 +155,7 @@ unittest
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	auto s = "2.3 4.56 78.9";
 	auto r = `(\d+)\.(\d+)`;
@@ -340,7 +340,7 @@ private Transformation[] splitRETransformation(string s)
 	return result;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	auto actual = splitRETransformation("s/from/to/");
 	Transformation expected = { type : Transformation.Type.replace, replace : { search : "from", replacement : "to", flags : "" } };
@@ -365,7 +365,7 @@ string applyRE()(string str, string transformation)
 	return str;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	auto transformation = buildReplaceTransformation(`(?<=\d)(?=(\d\d\d)+\b)`, `,`, "g");
 	assert("12000 + 42100 = 54100".applyRE(transformation) == "12,000 + 42,100 = 54,100");

@@ -57,7 +57,7 @@ template formattingFunctor(
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	import std.array : appender;
 	import std.format : singleSpec;
@@ -69,7 +69,7 @@ unittest
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	import std.array : appender;
 	auto a = appender!string;
@@ -139,7 +139,7 @@ if (isFunctor!F)
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	import std.conv : text;
 	auto f = (void delegate(const(char)[]) sink) => sink("Hello");
@@ -157,7 +157,7 @@ auto formatted(string fmt = null, T...)(auto ref T values)
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	import std.conv : text;
 	import std.format : format;
@@ -181,7 +181,7 @@ template stringifiable(alias fun, T...)
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	alias humanSize = stringifiable!(
 		(size, sink)
@@ -228,7 +228,7 @@ if (isFunctor!T && isFunctor!F)
 }
 
 ///
-unittest
+version(ae_unittest) unittest
 {
 	import std.conv : text;
 	assert(fmtIf(true , () => 5, () => "apple").text == "5");
@@ -252,7 +252,7 @@ auto fmtSeq(string fmt = "%s", Values...)(Values values) @nogc
 		.stringifiable;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	import std.conv : text;
 	assert(fmtSeq(5, " ", "apple").text == "5 apple");

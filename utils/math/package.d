@@ -82,7 +82,7 @@ T rangeIntersection(T)(T a0, T a1, T b0, T b1)
 	return x0 < x1 ? x1 - x0 : 0;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert(rangeIntersection(0, 2, 1, 3) == 1);
 	assert(rangeIntersection(0, 1, 2, 3) == 0);
@@ -107,7 +107,7 @@ template unary(char op)
 /// Like the ~ operator, but without int-promotion.
 alias flipBits = unary!'~';
 
-unittest
+version(ae_unittest) unittest
 {
 	ubyte b = 0x80;
 	auto b2 = b.flipBits;
@@ -163,7 +163,7 @@ ubyte ilog2(T)(T n)
 	return result;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert(ilog2(0) == 0);
 	assert(ilog2(1) == 0);
@@ -179,7 +179,7 @@ ubyte bitsFor(T)(T n)
 	return cast(ubyte)(ilog2(n)+1);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	assert(bitsFor( int.max) == 31);
 	assert(bitsFor(uint.max) == 32);
@@ -227,7 +227,7 @@ if (is(typeof({ import std.algorithm.comparison : max; v = max(v, args); })))
 	v = max(v, args);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	int i = 5;
 	i.minimize(2); assert(i == 2);

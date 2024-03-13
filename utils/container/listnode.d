@@ -223,7 +223,7 @@ template SEDListContainer(T)
 	alias ListContainer!(T, true, false) SEDListContainer;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	class C
 	{

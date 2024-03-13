@@ -75,7 +75,7 @@ mixin template SoftwareRenderer()
 	} ///
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	import ae.utils.graphics.color;
 	import ae.utils.graphics.image;

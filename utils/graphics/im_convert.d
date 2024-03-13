@@ -54,7 +54,7 @@ auto parseViaIMConvert(C = TargetColor, TARGET)(const(void)[] data, auto ref TAR
 	return data.parseViaIMConvert!(ViewColor!TARGET)(transformations).copy(target);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	if (false)
 	{
@@ -77,7 +77,7 @@ auto encodeViaIMConvert(SRC)(auto ref SRC src, string format, string[] transform
 		.pipe(["convert".imageMagickBinary()] ~ convertFlags ~ ["-[0]"] ~ transformations ~ [format ~ ":-"]);
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	if (false)
 	{
@@ -209,7 +209,7 @@ deprecated alias VideoStream = DecodeStream;
 DecodeStream!COLOR streamViaIMConvert(COLOR)(File f) { return DecodeStream!COLOR(f); }
 DecodeStream!COLOR streamViaIMConvert(COLOR)(string fn) { return DecodeStream!COLOR(fn); } /// ditto
 
-unittest
+version(ae_unittest) unittest
 {
 	if (false)
 	{

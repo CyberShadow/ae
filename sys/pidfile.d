@@ -65,7 +65,7 @@ string defaultPidFilePath()
 		return tempDir;
 }
 
-unittest
+version(ae_unittest) unittest
 {
 	createPidFile();
 
