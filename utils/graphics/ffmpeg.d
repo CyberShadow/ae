@@ -202,8 +202,4 @@ private:
 
 	Pid pid;
 	File output;
-	bool done;
-
-	alias BitmapHeader!3 Header;
-	Image!BGR frame;
 }
