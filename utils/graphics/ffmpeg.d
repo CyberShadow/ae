@@ -171,6 +171,26 @@ struct VideoOutputStream
 	{
 		auto pipes = pipe();
 		output = pipes.writeEnd;
+
+		version (linux)
+		{
+			// Set the pipe size to the maximum allowed. Hint:
+			// sudo sysctl fs.pipe-user-pages-soft=$((4*1024*1024))
+			// sudo sysctl fs.pipe-max-size=$((256*1024*1024))
+
+			int maxSize = {
+				import std.file : readText;
+				import std.string : chomp;
+				import std.conv : to;
+				return "/proc/sys/fs/pipe-max-size".readText.chomp.to!int;
+			}();
+
+			import core.sys.linux.fcntl : fcntl;
+			enum F_SETPIPE_SZ = 1024 + 7;
+			auto res = fcntl(pipes.readEnd.fileno, F_SETPIPE_SZ, maxSize);
+			errnoEnforce(res >= 0, "Failed to set the pipe size");
+		}
+
 		auto args = [
 			"ffmpeg",
 			// Additional input arguments (such as -framerate)
