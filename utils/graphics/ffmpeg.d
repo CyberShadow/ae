@@ -150,9 +150,13 @@ VideoInputStream streamVideo(string fn, string[] ffmpegArgs = null) { return Vid
 /// Represents a video encoding process as a D output range of frames.
 struct VideoOutputStream
 {
-	void put(ref Image!BGR frame)
+	void put(I)(ref I frame)
+	if (is(typeof(frame.toBMP())) || is(typeof(frame.toPNG(0))))
 	{
-		output.rawWrite(frame.toBMP);
+		static if (is(typeof(frame.toBMP)))
+			output.rawWrite(frame.toBMP);
+		else
+			output.rawWrite(frame.toPNG(0));
 	} ///
 
 	@disable this(this);
