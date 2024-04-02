@@ -519,16 +519,15 @@ else // Use select
 				if (!conn.socket)
 					continue;
 
-				if (readset.isSet(conn.socket))
-				{
-					debug (ASOCKETS) stderr.writefln("\t%s - calling onReadable", conn);
-					return conn.onReadable();
-				}
-				else
 				if (writeset.isSet(conn.socket))
 				{
 					debug (ASOCKETS) stderr.writefln("\t%s - calling onWritable", conn);
 					return conn.onWritable();
+				}
+				if (readset.isSet(conn.socket))
+				{
+					debug (ASOCKETS) stderr.writefln("\t%s - calling onReadable", conn);
+					return conn.onReadable();
 				}
 			}
 
