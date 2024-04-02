@@ -39,6 +39,8 @@ struct LittleEndian(T)
 	this(T value) { _endian_value(value); } ///
 }
 
+alias NetworkByteOrder = BigEndian;
+
 ///
 version(ae_unittest) unittest
 {
