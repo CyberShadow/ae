@@ -13,14 +13,17 @@
 
 module ae.net.http.websocket;
 
+import core.time : Duration, minutes;
+
 import std.conv : to;
 import std.exception : enforce;
 import std.random : Mt19937_64, uniform;
 
-import ae.net.asockets : ConnectionAdapter, IConnection, DisconnectType, ConnectionState;
+import ae.net.asockets : ConnectionAdapter, IConnection, DisconnectType, ConnectionState, now;
 import ae.sys.data : Data;
 import ae.sys.dataset : joinData, DataVec, bytes;
 import ae.sys.osrng : genRandom;
+import ae.sys.timing : TimerTask, mainTimer, Timer;
 import ae.utils.array : as, asBytes, asStaticBytes, asSlice;
 import ae.utils.bitmanip : NetworkByteOrder;
 
@@ -58,17 +61,21 @@ class WebSocketAdapter : ConnectionAdapter
 
 	bool useMask, requireMask, sendBinary;
 
+	Duration idleTimeout;
+
 	this(
 		IConnection next,
 		bool useMask = false,
 		bool requireMask = false,
 		bool sendBinary = true,
+		Duration idleTimeout = 1.minutes,
 	)
 	{
 		super(next);
 		this.useMask = useMask;
 		this.requireMask = requireMask;
 		this.sendBinary = sendBinary;
+		this.idleTimeout = idleTimeout;
 
 		if (useMask)
 		{
@@ -76,6 +83,10 @@ class WebSocketAdapter : ConnectionAdapter
 			genRandom(bytes);
 			this.maskRNG = Mt19937_64(bytes.as!ulong);
 		}
+
+		idleTask = new TimerTask();
+		idleTask.handleTask = &onIdle;
+		mainTimer.add(idleTask, now + idleTimeout);
 	}
 
 	final void send(Data message)
@@ -109,6 +120,10 @@ private:
 
 	/// The accumulated fragments.
 	DataVec outBuffer;
+
+	/// Timeout handling.
+	TimerTask idleTask;
+	bool pingSent; /// ditto
 
 	void sendFrame(Flags flags, Data payload)
 	{
@@ -173,6 +188,18 @@ private:
 
 		});
 		next.send(packet);
+	}
+
+	void onIdle(Timer /*timer*/, TimerTask /*task*/)
+	{
+		mainTimer.add(idleTask, now + idleTimeout);
+		if (pingSent)
+			disconnect("Time-out");
+		else
+		{
+			pingSent = true;
+			sendFrame(cast(Flags)(Flags.opPing | Flags.fin), Data.init);
+		}
 	}
 
 protected:
@@ -290,6 +317,10 @@ protected:
 
 					case Flags.opPong:
 						enforce(flags & Flags.fin, "Fragmented pong frame");
+						enforce(pingSent, "Unexpected pong frame");
+						pingSent = false;
+						if (idleTask)
+							idleTask.restart(now + idleTimeout);
 						break;
 
 					default:
@@ -304,6 +335,8 @@ protected:
 		super.onDisconnect(reason, type);
 		inBuffer.clear();
 		outBuffer = null;
+		idleTask.cancel();
+		idleTask = null;
 	}
 }
 
