@@ -53,7 +53,7 @@ Promise!(T, E) async(T, E = Exception)(T function() task)
 if (!is(T == return))
 {
 	import std.functional : toDelegate;
-	return threadAsync(task.toDelegate);
+	return async(task.toDelegate);
 }
 
 /// Synchronously waits until the promise `p` is fulfilled.
@@ -102,6 +102,7 @@ version(ae_unittest) unittest
 {
 	if (false)
 	{
+		async({}).await();
 		async({}()).await();
 	}
 }
