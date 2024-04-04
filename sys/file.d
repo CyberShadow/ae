@@ -2821,6 +2821,18 @@ import std.traits;
 import std.typetuple;
 import ae.utils.meta;
 
+/// Returns a unique file name (suited for a temporary file) based on `target`.
+string tempFileNameExtension(string target)
+{
+	static int counter;
+	return "%s.%s.%s.%s.temp".format(
+		target,
+		thisProcessID,
+		getCurrentThreadID,
+		counter++,
+	);
+}
+
 /// Parameter names that `atomic` assumes
 /// indicate a destination file by default.
 enum targetParameterNames = "target/to/name/dst";
@@ -2842,7 +2854,7 @@ auto atomic(alias impl, size_t targetIndex)(staticMap!(Unqual, ParameterTypeTupl
 {
 	// idup for https://issues.dlang.org/show_bug.cgi?id=12503
 	auto target = args[targetIndex].idup;
-	auto temp = "%s.%s.%s.temp".format(target, thisProcessID, getCurrentThreadID);
+	auto temp = target.tempFileNameExtension();
 	if (temp.exists) temp.removeRecurse();
 	scope(success) rename(temp, target);
 	scope(failure) if (temp.exists) temp.removeRecurse();
