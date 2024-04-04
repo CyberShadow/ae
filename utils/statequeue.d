@@ -66,6 +66,9 @@ private:
 		oldState = newState = resultState;
 		currentTransition = null;
 
+		if (newState == goalState)
+			goalPromise.fulfill();
+
 		prod();
 	}
 
@@ -83,6 +86,9 @@ public:
 
 	/// The final state that we want to be in.
 	State goalState;
+
+	/// The promise that will be fulfilled when we reach the goal state.
+	Promise!void goalPromise;
 
 	/// The current state transition.
 	Promise!void currentTransition;
@@ -107,13 +113,24 @@ public:
 	{
 		this.stateFunc = stateFunc;
 		this.oldState = this.newState = this.goalState = initialState;
+		goalPromise = resolve();
 	}
 
 	/// Set the goal state.  Starts off a transition operation if needed.
-	void setGoal(State state)
+	/// Returns a promise that will be fulfilled when we reach the goal state,
+	/// or rejected if the goal state changes before it is reached.
+	Promise!void setGoal(State state)
 	{
-		this.goalState = state;
-		enqueueProd();
+		if (goalState != state)
+		{
+			if (currentTransition || newState != goalState)
+				goalPromise.reject(new Exception("Goal changed"));
+			goalPromise = new Promise!void;
+
+			this.goalState = state;
+			enqueueProd();
+		}
+		return goalPromise;
 	}
 
 	/// Can be used to indicate that the state has been changed externally
@@ -153,8 +170,8 @@ version(ae_unittest) unittest
 	auto q = StateQueue!int(&changeState);
 	assert(workDone == 0);
 
-	q.setGoal(1);
-	q.setGoal(2);
+	q.setGoal(1).ignoreResult();
+	q.setGoal(2).ignoreResult();
 	socketManager.loop();
 	assert(state == 2 && workDone == 1);
 }
@@ -178,7 +195,7 @@ version(ae_unittest) unittest
 	auto q = StateQueue!int(&changeState);
 	assert(workDone == 0);
 
-	q.setGoal(3);
+	q.setGoal(3).ignoreResult();
 	socketManager.loop();
 	assert(state == 3 && workDone == 3);
 }
