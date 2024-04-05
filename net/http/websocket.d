@@ -245,7 +245,8 @@ protected:
 					NetworkByteOrder!ulong len;
 					foreach (ref b; len.asBytes)
 						b = bytes[pos++];
-					length = len.to!size_t;
+					ulong value = len;
+					length = value.to!size_t;
 				}
 				else
 					length = (lengthByte & LengthByte.lengthMask);
