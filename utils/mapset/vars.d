@@ -217,40 +217,43 @@ struct MapSetVars(
 
 		alias opEquals = opBinary!"==";
 
-		static struct CompareResult
+		static if (Value.min < 0)
 		{
-			Var var;
-			alias var this;
-		}
+			static struct CompareResult
+			{
+				Var var;
+				alias var this;
+			}
 
-		CompareResult /*opCmp*/cmp(Var other)
-		{
-			auto result = vars.allocate();
-			vars.visitor.multiTransform([this.name, other.name], [result.name],
-				(scope Value[] inputValues, scope Value[] outputValues)
-				{
-					outputValues[0] =
-						inputValues[0] < inputValues[1] ? -1 :
-						inputValues[0] > inputValues[1] ? +1 :
-						0;
-				}
-			);
-			return CompareResult(result);
-		}
+			CompareResult /*opCmp*/cmp(Var other)
+			{
+				auto result = vars.allocate();
+				vars.visitor.multiTransform([this.name, other.name], [result.name],
+					(scope Value[] inputValues, scope Value[] outputValues)
+					{
+						outputValues[0] =
+							inputValues[0] < inputValues[1] ? -1 :
+							inputValues[0] > inputValues[1] ? +1 :
+							0;
+					}
+				);
+				return CompareResult(result);
+			}
 
-		CompareResult /*opCmp*/cmp(Value other)
-		{
-			auto result = vars.allocate();
-			vars.visitor.multiTransform([this.name], [result.name],
-				(scope Value[] inputValues, scope Value[] outputValues)
-				{
-					outputValues[0] =
-						inputValues[0] < other ? -1 :
-						inputValues[0] > other ? +1 :
-						0;
-				}
-			);
-			return CompareResult(result);
+			CompareResult /*opCmp*/cmp(Value other)
+			{
+				auto result = vars.allocate();
+				vars.visitor.multiTransform([this.name], [result.name],
+					(scope Value[] inputValues, scope Value[] outputValues)
+					{
+						outputValues[0] =
+							inputValues[0] < other ? -1 :
+							inputValues[0] > other ? +1 :
+							0;
+					}
+				);
+				return CompareResult(result);
+			}
 		}
 
 		// D does not allow overloading comparison operators :( :( :( :( :(
