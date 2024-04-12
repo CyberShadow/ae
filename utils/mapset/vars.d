@@ -53,6 +53,14 @@ struct MapSetVars(
 		return varCounter++;
 	}
 
+	private void deallocate(VarName name)
+	{
+		// best-effort de-bump-the-pointer
+		auto next = name; next++;
+		if (next > name && next == varCounter)
+			varCounter = name;
+	}
+
 	bool next()
 	{
 		varCounter = VarName.tempVarStart;
@@ -142,8 +150,11 @@ struct MapSetVars(
 		~this()
 		{
 			// Must not be in GC!
-			if (name >= VarName.tempVarStart && name < VarName.tempVarEnd)
+			if (vars && name >= VarName.tempVarStart && name < VarName.tempVarEnd)
+			{
 				vars.visitor.put(name, nullValue);
+				vars.deallocate(name);
+			}
 		}
 
 		// --- Transformation operations
