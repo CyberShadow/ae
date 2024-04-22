@@ -13,6 +13,9 @@
 
 module ae.utils.math.mixed_radix;
 
+import std.meta : staticIndexOf, staticMap;
+import std.sumtype;
+
 // TODO: Find what this thing is actually called.
 /// A mixed-radix number coding system.
 template MixedRadixCoder(
@@ -192,8 +195,10 @@ template SerializationCoder(alias Coder, S)
 	private alias I = typeof(Coder.Decoder.init.get(0));
 	private alias E = typeof(Coder.RetroEncoder.init.finish());
 
-	private mixin template Visitor(bool retro)
+	private mixin template Visitor(bool serializing, bool deserializing, bool retro)
 	{
+		static assert(!(serializing && deserializing));
+
 		void visit(T)(ref T value)
 		{
 			static if (is(T : I) && is(typeof(T.max) : I))
@@ -202,6 +207,55 @@ template SerializationCoder(alias Coder, S)
 				I card = max; card++;
 				assert(card > max, "Overflow");
 				handleLeaf(value, card);
+			}
+			else
+			static if (is(T == SumType!Types, Types...))
+			{
+				alias SubCoder = MixedRadixCoder!(I, E, false); // No EOF
+
+				I totalCard = 0;
+				static foreach (Type; Types)
+					totalCard += SerializationCoder!(SubCoder, Type).cardinality;
+
+				I encoded;
+				static if (serializing)
+				{
+					I handler(FieldType)(ref const FieldType field)
+					{
+						I encoded;
+						enum typeIndex = staticIndexOf!(FieldType, Types);
+						static assert(typeIndex >= 0);
+						static foreach (Type; Types[0 .. typeIndex])
+						{{
+							E fieldCard = SerializationCoder!(SubCoder, Type).cardinality;
+							encoded += fieldCard;
+						}}
+
+						auto encodedField = SerializationCoder!(SubCoder, FieldType).serialize(field);
+						encoded += encodedField;
+						return encoded;
+					}
+					alias handlers = staticMap!(handler, Types);
+					encoded = value.match!(handlers);
+				}
+				handleLeaf(encoded, totalCard);
+				static if (deserializing)
+				{
+					I lowBound;
+					static foreach (Type; Types)
+					{{
+						E fieldCard = SerializationCoder!(SubCoder, Type).cardinality;
+						I highBound = lowBound; highBound += fieldCard;
+						if (encoded < highBound)
+						{
+							auto encodedField = encoded - lowBound;
+							value = T(SerializationCoder!(SubCoder, Type).deserialize(encodedField));
+							return;
+						}
+						lowBound = highBound;
+					}}
+					assert(false);
+				}
 			}
 			else
 			static if (is(T == struct))
@@ -228,7 +282,7 @@ template SerializationCoder(alias Coder, S)
 	{
 		Coder.RetroEncoder encoder;
 		void handleLeaf(I value, I card) { encoder.put(value, card); }
-		mixin Visitor!true;
+		mixin Visitor!(true, false, true);
 	}
 
 	E serialize()(auto ref const S s)
@@ -242,7 +296,7 @@ template SerializationCoder(alias Coder, S)
 	{
 		Coder.Decoder decoder;
 		void handleLeaf(T)(ref T value, I card) { value = cast(T)decoder.get(card); }
-		mixin Visitor!false;
+		mixin Visitor!(false, true, false);
 	}
 
 	S deserialize(E encoded) nothrow @nogc
@@ -260,7 +314,7 @@ template SerializationCoder(alias Coder, S)
 	{
 		Coder.RetroEncoder encoder;
 		void handleLeaf(I /*value*/, I card) { encoder.put(0, card); }
-		mixin Visitor!true;
+		mixin Visitor!(false, false, true);
 	}
 
 	E minValue() nothrow @nogc
@@ -275,7 +329,7 @@ template SerializationCoder(alias Coder, S)
 	{
 		Coder.RetroEncoder encoder;
 		void handleLeaf(I /*value*/, I card) { encoder.put(cast(I)(card - 1), card); }
-		mixin Visitor!true;
+		mixin Visitor!(false, false, true);
 	}
 
 	E maxValue() nothrow @nogc
@@ -315,6 +369,20 @@ version(ae_unittest) unittest
 	auto encoded = Coder.serialize(s);
 	assert(Coder.deserialize(encoded) == s);
 	assert(Coder.minValue() <= encoded && encoded <= Coder.maxValue());
+}
+
+version(ae_unittest) unittest
+{
+	struct A {}
+	struct B { bool v; }
+	struct C {}
+	alias S = SumType!(A, B, C);
+
+	alias Coder = SerializationCoder!(MixedRadixCoder!(uint, ulong, false), S);
+	static assert(Coder.cardinality == 4);
+
+	foreach (s; [S(A()), S(B(false)), S(B(true)), S(C())])
+		assert(Coder.deserialize(Coder.serialize(s)) == s);
 }
 
 private struct MaybeDynamicArray(T, size_t size = -1)
