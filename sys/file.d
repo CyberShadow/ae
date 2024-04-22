@@ -2464,6 +2464,22 @@ version(ae_unittest) unittest
 	assert("test.txt".readText == "xyz");
 }
 
+/// Truncate the given file to the given size.
+void allocate(File f, ulong length)
+{
+	version (linux)
+	{
+		import core.sys.linux.fcntl : fallocate;
+		f.flush();
+		// TODO: add overloads for other parameters
+		auto res = fallocate(f.fileno, 0, 0, length);
+		errnoEnforce(res == 0, "fallocate");
+	}
+	else
+		// TODO: use posix_fallocate on POSIX and SetFileValidData on Windows
+		assert(false, "Not implemented");
+}
+
 /// Calculate the digest of a file.
 auto fileDigest(Digest)(string fn)
 {
