@@ -165,3 +165,32 @@ version(ae_unittest) unittest
 	assert([1, 2, 3].parallelChunks!(arr => arr.sum).sum == 6);
 	assert(4.parallelChunks!((low, high) => iota(low, high).sum).sum == 6);
 }
+
+template parallelReduce(alias fun)
+{
+	auto parallelReduce(R)(R range)
+	{
+		import std.algorithm.iteration : reduce;
+		return range.parallelChunks!(chunk => chunk.reduce!fun).reduce!fun;
+	}
+}
+
+// alias parallelSum = parallelReduce!((a, b) => a + b);
+
+version(ae_unittest) unittest
+{
+	import std.algorithm.iteration : sum;
+	assert([1, 2, 3].parallelReduce!((a, b) => a + b) == 6);
+}
+
+auto parallelSum(R)(R range)
+{
+	import std.algorithm.iteration : sum;
+	return range.parallelChunks!sum.sum;
+}
+
+version(ae_unittest) unittest
+{
+	import std.algorithm.iteration : sum;
+	assert([1, 2, 3].parallelSum == 6);
+}
