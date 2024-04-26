@@ -340,6 +340,9 @@ struct Git
 			/// GPG signature certifying this commit, if any.
 			string[][] gpgsig;
 
+			/// "mergetag" signatures (on commits that merge a tag), if any.
+			string[][] mergetag;
+
 			/// Get or set author/committer lines as parsed object.
 			@property Authorship parsedAuthor() { return Authorship(author); }
 			@property Authorship parsedCommitter() { return Authorship(committer); } /// ditto
@@ -384,6 +387,15 @@ struct Git
 						if (p < 0)
 							p = lines.length;
 						result.gpgsig ~= [line] ~ lines[0 .. p].apply!(each!((ref line) => line.skipOver(" ").enforce("gpgsig line without leading space")));
+						lines = lines[p .. $];
+						break;
+					}
+					case "mergetag":
+					{
+						auto p = lines.countUntil!(line => !line.startsWith(" "));
+						if (p < 0)
+							p = lines.length;
+						result.mergetag ~= [line] ~ lines[0 .. p].apply!(each!((ref line) => line.skipOver(" ").enforce("mergetag line without leading space")));
 						lines = lines[p .. $];
 						break;
 					}
