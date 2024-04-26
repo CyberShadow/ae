@@ -338,7 +338,7 @@ struct Git
 			string[] message;
 
 			/// GPG signature certifying this commit, if any.
-			string[] gpgsig;
+			string[][] gpgsig;
 
 			/// Get or set author/committer lines as parsed object.
 			@property Authorship parsedAuthor() { return Authorship(author); }
@@ -383,7 +383,7 @@ struct Git
 						auto p = lines.countUntil!(line => !line.startsWith(" "));
 						if (p < 0)
 							p = lines.length;
-						result.gpgsig = [line] ~ lines[0 .. p].apply!(each!((ref line) => line.skipOver(" ").enforce("gpgsig line without leading space")));
+						result.gpgsig ~= [line] ~ lines[0 .. p].apply!(each!((ref line) => line.skipOver(" ").enforce("gpgsig line without leading space")));
 						lines = lines[p .. $];
 						break;
 					}
