@@ -14,7 +14,9 @@
 module ae.utils.math.mixed_radix;
 
 import std.meta : staticIndexOf, staticMap;
-import std.sumtype;
+
+static if (is(typeof({ import std.sumtype : SumType, match; })))
+	import std.sumtype : SumType, match;
 
 // TODO: Find what this thing is actually called.
 /// A mixed-radix number coding system.
@@ -371,6 +373,7 @@ version(ae_unittest) unittest
 	assert(Coder.minValue() <= encoded && encoded <= Coder.maxValue());
 }
 
+static if (is(SumType!int))
 version(ae_unittest) unittest
 {
 	struct A {}
