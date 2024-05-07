@@ -13,10 +13,14 @@
 
 module ae.utils.parallelism;
 
+import ae.utils.array : amap;
+
 import std.algorithm.comparison : min;
+import std.algorithm.iteration;
 import std.algorithm.mutation;
 import std.algorithm.searching;
 import std.algorithm.sorting;
+import std.array;
 import std.parallelism;
 import std.range : chunks, iota;
 import std.range.primitives;
@@ -162,6 +166,42 @@ version(ae_unittest) unittest
 	assert([1, 2, 3].parallelChunks!(arr => arr.sum).sum == 6);
 	assert(4.parallelChunks!((low, high) => iota(low, high).sum).sum == 6);
 }
+
+// ************************************************************************
+
+/// Filters `input` in parallel.
+/// This version calls `fun` only once per `input` element
+/// (at the expense of additional used memory).
+auto parallelCachedFilter(alias fun, R)(R input)
+if (isInputRange!R && is(typeof(fun(input.front))))
+{
+	import ae.utils.functor.primitives : functor;
+
+	auto inputOffsets = parallelChunkOffsets(input.length);
+
+	bool[][] wantedChunks = input.parallelChunks!(chunk => chunk.map!fun.array);
+	auto numChunks = wantedChunks.length;
+	auto outputCounts = wantedChunks.parallelEagerMap(functor!((bool[] chunk) => chunk.reduce!((a, b) => size_t(a) + size_t(b))));
+	auto outputOffsets = 0 ~ outputCounts.cumulativeFold!((a, b) => a + b).array;
+	auto outputTotal = outputOffsets[$-1];
+	auto output = new typeof(input.front)[outputTotal];
+	foreach (chunkIndex; numChunks.iota.parallel)
+	{
+		auto chunkOutputIndex = outputOffsets[chunkIndex];
+		auto chunkInputOffset = inputOffsets[chunkIndex];
+		foreach (chunkInputIndex, wanted; wantedChunks[chunkIndex])
+			if (wanted)
+				output[chunkOutputIndex++] = input[chunkInputOffset + chunkInputIndex];
+	}
+	return output;
+}
+
+unittest
+{
+	assert([1, 2, 3].parallelCachedFilter!(x => x % 2 == 0) == [2]);
+}
+
+// ************************************************************************
 
 template parallelReduce(alias fun)
 {
