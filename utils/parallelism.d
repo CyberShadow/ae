@@ -94,6 +94,13 @@ version(ae_unittest) unittest
 	assert(!parallelEqual(a, b));
 }
 
+// ************************************************************************
+
+private auto parallelChunkOffsets(size_t length)
+{
+	size_t numChunks = min(length, totalCPUs);
+	return (numChunks + 1).iota.map!(chunkIndex => chunkIndex * length / numChunks);
+}
 
 /// Split a range into chunks, processing each chunk in parallel.
 /// Returns a dynamic array containing the result of calling `fun` on each chunk.
@@ -101,14 +108,11 @@ version(ae_unittest) unittest
 T[] parallelChunks(R, T)(R range, scope T delegate(R) fun)
 if (isRandomAccessRange!R)
 {
-	auto total = range.length;
-	size_t numChunks = min(total, totalCPUs);
+	auto offsets = parallelChunkOffsets(range.length);
+	size_t numChunks = offsets.length - 1;
 	auto result = new T[numChunks];
 	foreach (chunkIndex; numChunks.iota.parallel(1))
-		result[chunkIndex] = fun(range[
-			(chunkIndex + 0) * total / numChunks ..
-			(chunkIndex + 1) * total / numChunks
-		]);
+		result[chunkIndex] = fun(range[offsets[chunkIndex] .. offsets[chunkIndex + 1]]);
 	return result;
 }
 
@@ -116,13 +120,11 @@ if (isRandomAccessRange!R)
 T[] parallelChunks(N, T)(N total, scope T delegate(N start, N end) fun)
 if (is(N : ulong))
 {
-	size_t numChunks = min(total, totalCPUs);
+	auto offsets = parallelChunkOffsets(total);
+	size_t numChunks = offsets.length - 1;
 	auto result = new T[numChunks];
 	foreach (chunkIndex; numChunks.iota.parallel(1))
-		result[chunkIndex] = fun(
-			cast(N)((chunkIndex + 0) * total / numChunks),
-			cast(N)((chunkIndex + 1) * total / numChunks),
-		);
+		result[chunkIndex] = fun(cast(N)offsets[chunkIndex], cast(N)offsets[chunkIndex + 1]);
 	return result;
 }
 
@@ -131,14 +133,11 @@ auto parallelChunks(alias fun, R)(R range)
 if (isRandomAccessRange!R)
 {
 	alias T = typeof(fun(range[0..0]));
-	auto total = range.length;
-	size_t numChunks = min(total, totalCPUs);
+	auto offsets = parallelChunkOffsets(range.length);
+	size_t numChunks = offsets.length - 1;
 	auto result = new T[numChunks];
 	foreach (chunkIndex; numChunks.iota.parallel(1))
-		result[chunkIndex] = fun(range[
-			(chunkIndex + 0) * total / numChunks ..
-			(chunkIndex + 1) * total / numChunks
-		]);
+		result[chunkIndex] = fun(range[offsets[chunkIndex] .. offsets[chunkIndex + 1]]);
 	return result;
 }
 
@@ -147,13 +146,11 @@ auto parallelChunks(alias fun, N)(N total)
 if (is(N : ulong))
 {
 	alias T = typeof(fun(N.init, N.init));
-	size_t numChunks = min(total, totalCPUs);
+	auto offsets = parallelChunkOffsets(total);
+	size_t numChunks = offsets.length - 1;
 	auto result = new T[numChunks];
 	foreach (chunkIndex; numChunks.iota.parallel(1))
-		result[chunkIndex] = fun(
-			cast(N)((chunkIndex + 0) * total / numChunks),
-			cast(N)((chunkIndex + 1) * total / numChunks),
-		);
+		result[chunkIndex] = fun(cast(N)offsets[chunkIndex], cast(N)offsets[chunkIndex + 1]);
 	return result;
 }
 
