@@ -82,6 +82,19 @@ version (linux)
 			enforce(spawnProcess(["xdotool", "mousemove", text(x), text(y)]).wait() == 0, "xdotool failed");
 	}
 
+	int[2] getMousePos()
+	{
+		// TODO static if (haveX11)
+		import ae.sys.cmd : query;
+		import std.algorithm.searching : skipOver;
+		auto s = query(["xdotool", "getmouselocation"]);
+		auto t = s.split();
+		enforce(t.length == 4);
+		enforce(t[0].skipOver("x:"));
+		enforce(t[1].skipOver("y:"));
+		return [t[0].to!int, t[1].to!int];
+	}
+
 	/// Type used for window IDs.
 	static if (haveX11)
 		alias Window = deimos.X11.X.Window;
