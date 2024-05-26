@@ -919,7 +919,7 @@ private struct JsonParser(C)
 	void skipValue()
 	{
 		skipWhitespace();
-		C c = peek();
+		Unqual!C c = peek();
 		switch (c)
 		{
 			case '"':
@@ -927,7 +927,12 @@ private struct JsonParser(C)
 				break;
 			case '0': .. case '9':
 			case '-':
-				readNumber!real(); // TODO: Optimize
+				while (c=='+' || c=='-' || (c>='0' && c<='9') || c=='e' || c=='E' || c=='.')
+				{
+					p++;
+					if (eof) break;
+					c = peek();
+				}
 				break;
 			case '{':
 				next();
