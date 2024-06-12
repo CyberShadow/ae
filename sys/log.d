@@ -297,7 +297,7 @@ shared static this()
 Logger createLogger(string name)
 {
 	Logger result;
-	version (ae_unittest)
+	debug (ae_unittest)
 		result = consoleLogger(name);
 	else
 	{

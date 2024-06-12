@@ -75,9 +75,9 @@ void asyncWait(Pid pid, void delegate(int status) dg)
 	addSignalHandler(SIGCHLD, &handler);
 }
 
-version(ae_unittest) import ae.sys.timing, ae.net.asockets;
+debug(ae_unittest) import ae.sys.timing, ae.net.asockets;
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	string order;
 

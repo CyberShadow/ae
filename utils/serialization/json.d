@@ -525,7 +525,7 @@ S toJson(S = string, T)(auto ref T v)
 
 // ***************************************************************************
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static string jsonToJson(string s)
 	{

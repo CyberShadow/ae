@@ -90,7 +90,7 @@ template SEDList(T)
 	alias List!(T, true, false) SEDList;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	DList!int l;
 	auto i1 = l.pushBack(1);

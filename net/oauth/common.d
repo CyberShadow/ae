@@ -115,7 +115,7 @@ struct OAuthSession
 		return Base64.encode(digest);
 	}
 
-	version(ae_unittest) unittest
+	debug(ae_unittest) unittest
 	{
 		// Example from https://dev.twitter.com/oauth/overview/creating-signatures
 

@@ -20,7 +20,7 @@ public import ae.utils.time.parse;
 public import ae.utils.time.parsedur;
 public import ae.utils.time.types;
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import core.stdc.time : time_t;
 
@@ -34,7 +34,7 @@ version(ae_unittest) unittest
 // ***************************************************************************
 
 // fpdur conflict test
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.datetime;
 	import ae.utils.time.fpdur;

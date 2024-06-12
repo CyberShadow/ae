@@ -37,18 +37,18 @@ jobs:
         run: |
           echo "C:\hostedtoolcache\windows\dc\ldc2-1.32.2\x64\ldc2-1.32.2-windows-multilib\lib32" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - run: dub test --arch=${{ matrix.arch }}
+      - run: dub test --debug=ae_unittest --arch=${{ matrix.arch }}
 
-      - run: dub test --arch=${{ matrix.arch }} :sys-net-test
+      - run: dub test --debug=ae_unittest --arch=${{ matrix.arch }} :sys-net-test
 
       - if: ${{ matrix.os == 'ubuntu-20.04' }}
-        run: dub test --arch=${{ matrix.arch }} :sqlite
+        run: dub test --debug=ae_unittest --arch=${{ matrix.arch }} :sqlite
 
       - if: ${{ matrix.os == 'ubuntu-20.04' && matrix.dc == 'dmd-2.100.0' }} # old Dub versions can't fetch packages
-        run: dub test --arch=${{ matrix.arch }} :libpng
+        run: dub test --debug=ae_unittest --arch=${{ matrix.arch }} :libpng
 
       - if: ${{ matrix.dc == 'dmd-2.100.0' }}
-        run: dub test --arch=${{ matrix.arch }} :windows
+        run: dub test --debug=ae_unittest --arch=${{ matrix.arch }} :windows
 
   compilation-test:
     timeout-minutes: 5

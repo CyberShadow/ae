@@ -231,7 +231,7 @@ Data compress(Data input, int level)
 	return compress(input, ZlibOptions(level));
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	void testRoundtrip(ubyte[] src)
 	{

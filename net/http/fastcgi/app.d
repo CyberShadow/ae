@@ -529,7 +529,7 @@ class FastCGIResponderServer : FastCGIAppSocketServer
 	}
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	new FastCGIResponderServer;
 }

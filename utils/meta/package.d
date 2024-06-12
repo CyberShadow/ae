@@ -70,7 +70,7 @@ template arrayToTuple(alias arr, Elements...)
 }
 deprecated alias ArrayToTuple = arrayToTuple;
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	alias X = arrayToTuple!"abc";
 	static assert(X[0] == 'a' && X[2] == 'c');
@@ -94,7 +94,7 @@ template expand(alias arr, size_t offset = 0)
 	}
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	int[3] arr = [1, 2, 3];
 	void test(int a, int b, int c) {}
@@ -110,7 +110,7 @@ auto tupleMap(alias pred, Values...)(auto ref Values values)
 		return tuple(pred(values[0]), tupleMap!pred(values[1 .. $]).expand);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	assert(tuple(2, 3.0).expand.tupleMap!(n => n + 1) == tuple(3, 4.0));
 }
@@ -128,7 +128,7 @@ template CTIterate(alias A)
 		alias CTIterate = A;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	foreach (c; CTIterate!"abc") {}
 	string s;
@@ -157,7 +157,7 @@ mixin template FieldList(Fields...)
 	mixin(_GenFieldList!(-1, 0));
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	struct S
 	{
@@ -193,7 +193,7 @@ template isValueOfTypeInTuple(X, T...)
 		enum bool isValueOfTypeInTuple = isValueOfTypeInTuple!(X, T[0..$/2]) || isValueOfTypeInTuple!(X, T[$/2..$]);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static assert( isValueOfTypeInTuple!(int, valueTuple!("a", 42)));
 	static assert(!isValueOfTypeInTuple!(int, valueTuple!("a", 42.42)));
@@ -216,7 +216,7 @@ template findValueOfTypeInTuple(X, T...)
 		enum findValueOfTypeInTuple = findValueOfTypeInTuple!(X, T[1..$]);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static assert(findValueOfTypeInTuple!(int, valueTuple!("a", 42))==42);
 	static assert(findValueOfTypeInTuple!(int, "a", int, Object, 42)==42);
@@ -231,7 +231,7 @@ if (X.length == 1)
 	alias AllMembers = staticMap!(GetMember, __traits(allMembers, X));
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.typetuple : AliasSeq;
 
@@ -258,7 +258,7 @@ deprecated alias EnumLength = enumLength;
 	return iota(T.init, enumLength!T);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.algorithm.comparison : equal;
 	enum E { a, b, c }
@@ -305,7 +305,7 @@ auto has(E)(ref E e) if (is(E == enum)) { return Has!(E, true)(&e); }
 auto has(E)(    E e) if (is(E == enum)) { return Has!(E, false)(e); } /// ditto
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	enum E
 	{
@@ -396,7 +396,7 @@ if (is(T == void))
 	return Result();
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.typetuple : AliasSeq;
 
@@ -516,7 +516,7 @@ static size_t findParameter()(string[] searchedNames, string soughtNames, string
 	}
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static void fun(int a, int b, int c) {}
 
@@ -549,7 +549,7 @@ template structFun(S)
 	}());
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static struct Test
 	{
@@ -599,7 +599,7 @@ if (args.length == 1 || args.length == 2)
 	}());
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static void fun(string a, int b = 42) {}
 	alias S = StructFromParams!fun;
@@ -607,7 +607,7 @@ version(ae_unittest) unittest
 	static assert(S.init.b == 42);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static void fun(string, int = 42) {}
 	alias Fun = typeof(&fun);
@@ -634,7 +634,7 @@ template apply(alias dg)
 }
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	int i = 7;
 	int j = i.apply!((ref v) => v++);
@@ -651,7 +651,7 @@ Args[$-1] progn(Args...)(lazy Args args)
 	return args[$-1];
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	// Test that expressions are correctly evaluated exactly once.
 	int a, b, c, d;
@@ -661,7 +661,7 @@ version(ae_unittest) unittest
 	assert(a==2 && b==2 && c == 2 && d == 2);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	// Test void expressions.
 	int a, b;
@@ -680,7 +680,7 @@ Args[0] prog1(Args...)(lazy Args args)
 	return result;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	int a = 10, b = 20, c = 30;
 	int d = prog1(a++, b++, c++);
@@ -704,7 +704,7 @@ if (haveCommonType!Args)
 	return args[$-1];
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	assert(or(0, 7, 5) == 7);
 	assert(or(0, 0, 0) == 0);
@@ -725,7 +725,7 @@ if (haveCommonType!Args)
 	return args[$-1];
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	assert(and(7, 5, 0) == 0);
 	assert(and(7, 5, 3) == 3);
@@ -786,7 +786,7 @@ static if (haveUDA)
 		enum T getAttribute = findValueOfTypeInTuple!(T, __traits(getAttributes, D));
 	}
 
-	version(ae_unittest) unittest
+	debug(ae_unittest) unittest
 	{
 		struct Attr { int i; }
 
@@ -850,7 +850,7 @@ mixin template GenerateConstructorProxies()
 
 deprecated alias GenerateContructorProxies = GenerateConstructorProxies;
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	class A
 	{
@@ -889,7 +889,7 @@ version(ae_unittest) unittest
 	return instance;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static class C
 	{
@@ -927,7 +927,7 @@ version(ae_unittest) unittest
 	return instance;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	int n;
 	int gen(int _ = 0)
@@ -1112,7 +1112,7 @@ if (is(T == class))
 }
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	class C { int n = 42; }
 	assert(classInit!C.n == 42);
@@ -1136,7 +1136,7 @@ template functor(alias fun)
 }
 
 static if (haveAliasStructBinding)
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static void caller(F)(F fun)
 	{

@@ -302,7 +302,7 @@ if (isFormattableTime!Time)
 		putToken!(c, context, sink)();
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	assert(SysTime.fromUnixTime(0, UTC()).formatTime!(TimeFormats.STD_DATE) == "Thu Jan 01 00:00:00 GMT+0000 1970");
 	assert(SysTime(0, new immutable(SimpleTimeZone)(Duration.zero)).formatTime!"T" == "+00:00");

@@ -159,7 +159,7 @@ struct HashTable(K, V, uint SIZE, alias ALLOCATOR, alias HASHFUNC="k")
 	}
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import ae.utils.alloc;
 

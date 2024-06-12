@@ -46,7 +46,7 @@ string applyRelativeURL(string base, string rel)
 }
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	assert(applyRelativeURL("http://example.com/", "index.html") == "http://example.com/index.html");
 	assert(applyRelativeURL("http://example.com/index.html", "page.html") == "http://example.com/page.html");
@@ -66,7 +66,7 @@ string fileNameFromURL(string url)
 }
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	assert(fileNameFromURL("http://example.com/index.html") == "index.html");
 	assert(fileNameFromURL("http://example.com/dir/index.html") == "index.html");
@@ -137,7 +137,7 @@ import std.ascii;
 /// except `'-'` and `'_'`.
 alias encodeUrlParameter = encodeUrlPart!(c => isAlphaNum(c) || c=='-' || c=='_');
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	assert(encodeUrlParameter("abc?123") == "abc%3F123");
 }
@@ -198,7 +198,7 @@ UrlParameters decodeUrlParameters(string qs)
 	return dic;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	assert(decodeUrlParameters("").length == 0);
 }

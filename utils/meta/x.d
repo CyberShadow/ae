@@ -47,7 +47,7 @@ private string xImpl(string x)
 }
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	enum VAR = "aoeu";
 	int aoeu;

@@ -168,7 +168,7 @@ public:
 	}
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	// keep socketManager running -
 	// ThreadAnchor sockets are daemon

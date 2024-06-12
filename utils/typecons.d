@@ -27,7 +27,7 @@ ref T require(T)(ref Nullable!T value, lazy T defaultValue)
 }
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	Nullable!int i;
 	assert(i.require(3) == 3);
@@ -36,7 +36,7 @@ version(ae_unittest) unittest
 
 deprecated alias map = std.typecons.apply;
 
-version(ae_unittest) deprecated unittest
+debug(ae_unittest) deprecated unittest
 {
 	assert(Nullable!int( ).map!(n => n+1).isNull);
 	assert(Nullable!int(1).map!(n => n+1).get() == 2);
@@ -52,7 +52,7 @@ Nullable!T flatten(T)(Nullable!(Nullable!T) value)
 }
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	auto i = 3.nullable.nullable;
 	assert(i.flatten.get == 3);

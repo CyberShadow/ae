@@ -389,7 +389,7 @@ string toJson(T)(auto ref T v)
 }
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	struct X { int a; string b; }
 	X x = {17, "aoeu"};
@@ -403,7 +403,7 @@ version(ae_unittest) unittest
 	assert(toJson(tuple(42, "banana")) == `[42,"banana"]`);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	struct A
 	{
@@ -431,7 +431,7 @@ string toPrettyJson(T)(T v)
 }
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	struct X { int a; string b; int[] c, d; }
 	X x = {17, "aoeu", [1, 2, 3]};
@@ -990,7 +990,7 @@ T jsonParse(T, C)(C[] s)
 	return result;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	struct S { int i; S[] arr; S* p0, p1; }
 	S s = S(42, [S(1), S(2)], null, new S(15));
@@ -1006,7 +1006,7 @@ version(ae_unittest) unittest
 	assert(jsonParse!(string[string])(`null`) is null);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	struct T { string s; wstring w; dstring d; }
 	T t;
@@ -1026,13 +1026,13 @@ version(ae_unittest) unittest
 	jsonParse!T(s.to!dstring);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	jsonParse!(int[2])(`[ 1 , 2 ]`);
 }
 
 // NaNs and infinities are serialized as strings.
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	void check(double f, string s)
 	{
@@ -1052,7 +1052,7 @@ void jsonParse(T, C)(C[] s, ref T result)
 	parser.read!T(result);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	struct S { int a, b; }
 	S s;
@@ -1093,13 +1093,13 @@ private template doSkipSerialize(T, string member)
 	enum bool doSkipSerialize = __traits(hasMember, T, member ~ "_nonSerialized");
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	struct Point { int x, y, z; mixin NonSerialized!(x, z); }
 	assert(jsonParse!Point(toJson(Point(1, 2, 3))) == Point(0, 2, 0));
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	enum En { one, two }
 	assert(En.one.toJson() == `"one"`);
@@ -1114,7 +1114,7 @@ version(ae_unittest) unittest
 	assert(s.en == En.two);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	alias B = Nullable!bool;
 	B b;
@@ -1138,13 +1138,13 @@ version(ae_unittest) unittest
 	assert(NS.init.toJson == "null");
 }
 
-version(ae_unittest) unittest // Issue 49
+debug(ae_unittest) unittest // Issue 49
 {
 	immutable bool b;
 	assert(toJson(b) == "false");
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import ae.utils.aa : OrderedMap;
 	alias M = OrderedMap!(string, int);
@@ -1156,38 +1156,38 @@ version(ae_unittest) unittest
 	assert(j.jsonParse!M == m);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	assert(string.init.toJson.jsonParse!string  is null);
 	assert(""         .toJson.jsonParse!string !is null);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	char[] s = "{}".dup;
 	assert(s.jsonParse!(string[string]) == null);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	typeof(null) n;
 	assert(n.toJson.jsonParse!(typeof(null)) is null);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	double f = 1.5;
 	assert(f.toJson() == "1.5");
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	dchar c = '😸';
 	assert(c.toJson() == `"😸"`);
 }
 
 /// `fromJSON` / `toJSON` can be added to a type to control their serialized representation.
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static struct S
 	{
@@ -1200,7 +1200,7 @@ version(ae_unittest) unittest
 	assert(s.toJson.jsonParse!S == s);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static struct S
 	{
@@ -1216,7 +1216,7 @@ version(ae_unittest) unittest
 
 /// `fromJSON` / `toJSON` can also accept/return a `JSONFragment`,
 /// which allows full control over JSON serialization.
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static struct BigInt
 	{
@@ -1248,20 +1248,20 @@ private template getJsonName(S, string FIELD)
 /// User-defined attribute - only serialize this field if its value is different from its .init value.
 struct JSONOptional {}
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static struct S { @JSONOptional bool a=true, b=false; }
 	assert(S().toJson == `{}`, S().toJson);
 	assert(S(false, true).toJson == `{"a":false,"b":true}`);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static struct S { @JSONOptional float f; }
 	assert(S().toJson == `{}`, S().toJson);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static struct S { @JSONOptional int[1] a; }
 	assert(S().toJson == `{}`, S().toJson);
@@ -1272,7 +1272,7 @@ version(ae_unittest) unittest
 /// User-defined attribute - skip unknown fields when deserializing.
 struct JSONPartial {}
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	@JSONPartial static struct S { int b; }
 	assert(`{"a":1,"b":2,"c":3.4,"d":[5,"x"],"de":[],"e":{"k":"v"},"ee":{},"f":true,"g":false,"h":null}`.jsonParse!S == S(2));
@@ -1291,7 +1291,7 @@ struct JSONFragment
 	bool opCast(T)() const if (is(T==bool)) { return !!json; } ///
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	JSONFragment[] arr = [JSONFragment(`1`), JSONFragment(`true`), JSONFragment(`"foo"`), JSONFragment(`[55]`)];
 	assert(arr.toJson == `[1,true,"foo",[55]]`);

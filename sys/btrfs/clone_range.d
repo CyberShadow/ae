@@ -53,7 +53,7 @@ void cloneRange(
 	errnoEnforce(ret >= 0, "ioctl(BTRFS_IOC_CLONE_RANGE)");
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	if (!checkBtrfs())
 		return;

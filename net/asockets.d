@@ -1311,7 +1311,7 @@ class Duplex : IConnection
 	@property void handleBufferFlushed(BufferFlushedHandler value) { writer.handleBufferFlushed = value; }
 }
 
-version(ae_unittest) unittest { if (false) new Duplex(null, null); }
+debug(ae_unittest) unittest { if (false) new Duplex(null, null); }
 
 // ***************************************************************************
 
@@ -1899,7 +1899,7 @@ public:
 }
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	auto server = new UdpConnection();
 	server.bind("127.0.0.1", 0);
@@ -2216,7 +2216,7 @@ private:
 
 // ***************************************************************************
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	void testTimer()
 	{

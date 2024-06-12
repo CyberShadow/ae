@@ -798,7 +798,7 @@ EOF");
 			return str.replaceAll(re!`\\([^\\ ]*? [^\\]*)(?=\\)`, `\"$1"`);
 		}
 
-		version(ae_unittest) unittest
+		debug(ae_unittest) unittest
 		{
 			assert(dDoTestEscape(`C:\Foo boo bar\baz quuz\derp.exe`) == `C:\"Foo boo bar"\"baz quuz"\derp.exe`);
 		}

@@ -67,7 +67,7 @@ if (!is(T == return))
 	return threadAsync(value.toDelegate);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import ae.net.asockets : socketManager;
 
@@ -170,7 +170,7 @@ if (is(ReturnType!fun == Promise!(T, E), T, E))
 		static assert(false, "Not a function: " ~ __traits(identifier, fun));
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	Promise!void funImpl() { return resolve(); }
 	alias fun = globallyMemoized!funImpl;
@@ -260,7 +260,7 @@ private:
 	}
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import ae.net.asockets : socketManager;
 

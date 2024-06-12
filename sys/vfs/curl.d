@@ -70,7 +70,7 @@ class CurlVFS : VFS
 	}
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	if (false)
 	{

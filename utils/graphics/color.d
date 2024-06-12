@@ -327,7 +327,7 @@ version(all)
 	alias Color!(double , "r", "g", "b"     ) RGBd   ;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static assert(RGB.sizeof == 3);
 	RGB[2] arr;
@@ -351,7 +351,7 @@ version(ae_unittest) unittest
 static assert(RGB.min == RGB(  0,   0,   0));
 static assert(RGB.max == RGB(255, 255, 255));
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.conv;
 
@@ -361,7 +361,7 @@ version(ae_unittest) unittest
 	assert(r ==  L8(150), text(r));
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.conv;
 
@@ -380,7 +380,7 @@ version(ae_unittest) unittest
 	assert(r ==  LA(100, 255), text(r));
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.conv;
 
@@ -399,12 +399,12 @@ version(ae_unittest) unittest
 	assert(r ==  L8(100), text(r));
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	Color!(real, "r", "g", "b") c;
 }
 
-version(ae_unittest) deprecated unittest
+debug(ae_unittest) deprecated unittest
 {
 	const RGB c;
 	RGB x = cast(RGB)c;
@@ -478,7 +478,7 @@ alias ExpandChannelTypeSigned(COLOR, int BYTES) =
 
 static assert(is(ExpandChannelType!(RGB, 1) == RGB16));
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	alias RGBf = ChangeChannelType!(RGB, float);
 	auto rgb = RGB(1, 2, 3);
@@ -540,7 +540,7 @@ if (!is(expr == struct))
 }
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	// Effortlessly reordering channels with no modification.
 	assert(RGB(1, 2, 3).channelMap!BGR == BGR(3, 2, 1));
@@ -658,7 +658,7 @@ struct Gradient(Value, Color)
 	}
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	Gradient!(int, L8) grad;
 	grad.points = [
@@ -673,7 +673,7 @@ version(ae_unittest) unittest
 	assert(grad.get(15) == L8(100));
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	Gradient!(float, L8) grad;
 	grad.points = [

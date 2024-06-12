@@ -119,7 +119,7 @@ static:
 }
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import ae.utils.graphics.color;
 	HLS!RGB hls;
@@ -130,7 +130,7 @@ version(ae_unittest) unittest
 	assert(h==0 && l==120 && s==240);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import ae.utils.graphics.color;
 	enum MAX = 30_000;

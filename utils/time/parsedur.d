@@ -129,7 +129,7 @@ Duration parseDuration(string s)
 }
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	assert(parseDuration("1 day, 1 hour and 30 minutes") == 1.days + 1.hours + 30.minutes);
 	assert(parseDuration("0.5 hours") == 30.minutes);

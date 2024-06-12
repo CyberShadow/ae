@@ -26,7 +26,7 @@ enum isFunctor(f...) = f.length == 1 && (
 	isCallable!f || __traits(hasMember, f, "opCall")
 );
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static assert(isFunctor!(typeof(() => 5)));
 	int i;
@@ -57,7 +57,7 @@ if (isFunctor!T && isFunctor!F)
 { return select(cond.valueFunctor, t, f); } /// ditto
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	assert(select(true , 5.valueFunctor, 7.valueFunctor)() == 5);
 	assert(select(false, 5.valueFunctor, 7.valueFunctor)() == 7);
@@ -82,7 +82,7 @@ if (allSatisfy!(isFunctor, Functors))
 }
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	auto addFive = functor!(p => *p += 5)();
 	auto addThree = functor!(p => *p += 3)();

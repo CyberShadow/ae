@@ -53,7 +53,7 @@ if (is(ElementType!R : const(Data)))
 	return *cast(uint*)result.ptr;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	assert(crc32([Data("ab".asBytes), Data("c".asBytes)]) == 0x352441C2);
 }
@@ -124,7 +124,7 @@ DataVec uncompress(scope Data[] data)
 
 Data uncompress(Data input) { return uncompress(input.asSlice).joinData(); } /// ditto
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	void testRoundtrip(ubyte[] src)
 	{

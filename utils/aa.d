@@ -32,7 +32,7 @@ ref V require(K, V)(ref V[K] aa, K key, lazy V value = V.init)
 	return aa[key] = value;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	int[int] aa;
 	aa.require(1, 2);
@@ -137,7 +137,7 @@ ref V getOrAdd(K, V)(ref V[K] aa, auto ref K key)
 	return getOrAdd(aa, key, V.init);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	int[int] aa;
 	aa.getOrAdd(1, 2) = 3;
@@ -157,7 +157,7 @@ bool addNew(K, V)(ref V[K] aa, auto ref K key, auto ref V value)
 	return added;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	int[int] aa;
 	assert( aa.addNew(1, 2));
@@ -165,7 +165,7 @@ version(ae_unittest) unittest
 	assert(aa[1] == 2);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	OrderedMap!(int, int) aa;
 	assert( aa.addNew(1, 2));
@@ -213,7 +213,7 @@ V[K] merge(K, V)(auto ref V[K] target, V[K] source)
 	return target;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	int[int] target;
 	int[int] source = [2:4];
@@ -227,7 +227,7 @@ version(ae_unittest) unittest
 	assert(merge([1:1], [2:2]) == [1:1, 2:2]);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	ubyte[][string] a, b;
 	merge(a, b);
@@ -255,7 +255,7 @@ auto toAA(R)(R r)
 	return r.map!(el => tuple(el.tupleof)).toAA();
 }
 
-version(ae_unittest) deprecated unittest
+debug(ae_unittest) deprecated unittest
 {
 	assert([[2, 4]].toAA() == [2:4]);
 	assert([2:4].pairs.toAA() == [2:4]);
@@ -272,7 +272,7 @@ V[K] nonNull(K, V)(V[K] aa)
 	return aa;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	int[int] aa;
 	assert(aa is null);
@@ -1348,7 +1348,7 @@ public:
 /// An associative array which retains the order in which elements were added.
 alias OrderedMap(K, V) = HashCollection!(K, V, true, false);
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	alias M = OrderedMap!(string, int);
 	M m;
@@ -1409,7 +1409,7 @@ version(ae_unittest) unittest
 			assert(v == -1);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	OrderedMap!(string, int) m;
 	m["a"] = 1;
@@ -1418,7 +1418,7 @@ version(ae_unittest) unittest
 	assert(m["b"] == 2);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	OrderedMap!(string, int) m;
 	m["a"] = 1;
@@ -1428,7 +1428,7 @@ version(ae_unittest) unittest
 	assert(m["a"] == 1);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	OrderedMap!(string, int) m;
 	m["a"] = 1;
@@ -1438,14 +1438,14 @@ version(ae_unittest) unittest
 	assert(m2["a"] == 1);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	class C {}
 	const OrderedMap!(string, C) m;
 	cast(void)m.byKeyValue;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	OrderedMap!(int, int) m;
 	m.update(10,
@@ -1461,7 +1461,7 @@ version(ae_unittest) unittest
 }
 
 // https://issues.dlang.org/show_bug.cgi?id=18606
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	struct S
 	{
@@ -1475,27 +1475,27 @@ version(ae_unittest) unittest
 	}
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	OrderedMap!(string, int) m;
 	static assert(is(typeof(m.keys)));
 	static assert(is(typeof(m.values)));
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	OrderedMap!(string, int) m;
 	foreach (k, v; m)
 		k = k ~ k;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	struct S { @disable this(); }
 	const OrderedMap!(string, S) m;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	class C {}
 	OrderedMap!(string, C) m;
@@ -1519,20 +1519,20 @@ if (is(typeof(input.front.key)) && is(typeof(input.front.value)) && !is(typeof(i
 	return OrderedMap!(K, V)(input);
 } /// ditto
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	auto map = 3.iota.map!(n => tuple(n, n + 1)).orderedMap;
 	assert(map.length == 3 && map[1] == 2);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	OrderedMap!(string, int) m;
 	m = m.byKeyValue.orderedMap;
 	m = m.byPair.orderedMap;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	OrderedMap!(string, int) m;
 	const(char)[] s;
@@ -1544,7 +1544,7 @@ version(ae_unittest) unittest
 /// Helper/wrapper for void[0][T]
 alias HashSet(T) = HashCollection!(T, void, false, false);
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	HashSet!int s;
 	assert(!s);
@@ -1575,7 +1575,7 @@ version(ae_unittest) unittest
 	assert(!t.remove(5));
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	struct S { int[int] aa; }
 	HashSet!S set;
@@ -1591,28 +1591,28 @@ auto toSet(R)(R r)
 	return HashSet!E(r);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	auto set = [1, 2, 3].toSet();
 	assert(2 in set);
 	assert(4 !in set);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	HashSet!int m;
 	const int i;
 	m.remove(i);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	HashSet!Object m;
 	Object o;
 	m.remove(o);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	struct S
 	{
@@ -1628,7 +1628,7 @@ version(ae_unittest) unittest
 /// the order in which elements are added.
 alias OrderedSet(T) = HashCollection!(T, void, true, false);
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	OrderedSet!int set;
 
@@ -1703,7 +1703,7 @@ auto orderedSet(R)(R r)
 /// through iteration
 alias MultiAA(K, V) = HashCollection!(K, V, false, true);
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	alias MASS = MultiAA!(string, int);
 	MASS aa;
@@ -1719,7 +1719,7 @@ version(ae_unittest) unittest
 	aa["a"] = i;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	MultiAA!(int, int) m;
 	int[][int] a;
@@ -1785,7 +1785,7 @@ auto staticAA(alias aa)()
 	return StaticMap();
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static immutable aa = staticAA!([
 		"foo" : 1,

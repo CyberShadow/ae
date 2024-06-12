@@ -119,7 +119,7 @@ Headers parseHeadersImpl(bool FIRST_LINE)(string headerData, out string firstLin
 	return headers;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	void test(string message)
 	{

@@ -202,7 +202,7 @@ struct FileCache(alias DataGetter, alias DataPutter = None, FlushPolicy flushPol
 }
 
 // Sleep between writes to make sure timestamps differ
-version(ae_unittest) import core.thread;
+debug(ae_unittest) import core.thread;
 
 package
 version (Windows)
@@ -220,7 +220,7 @@ else
 }
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.file;
 	static void[] readProxy(string fn) { return std.file.read(fn); }

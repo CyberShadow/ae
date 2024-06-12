@@ -472,7 +472,7 @@ private void callSoon(void delegate() dg) @safe nothrow { socketManager.onNextTi
 // This is just a simple instantiation test.
 // The full test suite (D translation of the Promises/A+ conformance
 // test) is here: https://github.com/CyberShadow/ae-promises-tests
-version(ae_unittest) nothrow unittest
+debug(ae_unittest) nothrow unittest
 {
 	static bool never; if (never)
 	{
@@ -491,7 +491,7 @@ version(ae_unittest) nothrow unittest
 }
 
 // Non-Exception based errors
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static bool never; if (never)
 	{
@@ -511,7 +511,7 @@ version(ae_unittest) unittest
 }
 
 // Following
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
     auto p = new Promise!void;
     bool ok;
@@ -628,7 +628,7 @@ if (is(P == Promise!(T, E), T, E))
 	return allPromise;
 }
 
-version(ae_unittest) nothrow unittest
+debug(ae_unittest) nothrow unittest
 {
 	import std.exception : assertNotThrown;
 	int result;
@@ -644,7 +644,7 @@ version(ae_unittest) nothrow unittest
 	assert(result == 6);
 }
 
-version(ae_unittest) nothrow unittest
+debug(ae_unittest) nothrow unittest
 {
 	import std.exception : assertNotThrown;
 	int called;
@@ -662,7 +662,7 @@ version(ae_unittest) nothrow unittest
 	assert(called);
 }
 
-version(ae_unittest) nothrow unittest
+debug(ae_unittest) nothrow unittest
 {
 	import std.exception : assertNotThrown;
 	Promise!void[] promises;
@@ -759,7 +759,7 @@ if (allSatisfy!(isPromise, Promises))
 	return allPromise;
 }
 
-version(ae_unittest) nothrow unittest
+debug(ae_unittest) nothrow unittest
 {
 	import std.exception : assertNotThrown;
 	import ae.utils.meta : I;
@@ -780,7 +780,7 @@ version(ae_unittest) nothrow unittest
 	assert(result == 4);
 }
 
-version(ae_unittest) nothrow unittest
+debug(ae_unittest) nothrow unittest
 {
 	bool ok;
 	import std.exception : assertNotThrown;
@@ -807,7 +807,7 @@ Promise!(T, E) require(T, E)(ref Promise!(T, E) p, lazy Promise!(T, E) lp)
     return p;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
     Promise!int p;
     int work;
@@ -861,7 +861,7 @@ struct PromiseQueue(T, E = Exception)
 	}
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	PromiseQueue!int q;
 	q.fulfillOne(1);
@@ -873,7 +873,7 @@ version(ae_unittest) unittest
 	assert(result == [1, 2]);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	PromiseQueue!int q;
 	int[] result;

@@ -171,7 +171,7 @@ template SliceType(INPUT)
 	alias typeof(ptrSlice(T.init.ptr, T.init.ptr)) SliceType;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	// Just test compilation with a dummy receiver
 	static struct DummyOutput
@@ -228,7 +228,7 @@ S getXmlDecodedString(S)(S s)
 	return s;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	auto s0 = "<";
 	auto s1 = s0.getXmlDecodedString();
@@ -272,7 +272,7 @@ bool[256] genTable(string COND)()
 immutable bool[256] xmlWhiteChars = genTable!q{isWhite   (c)                              }();
 immutable bool[256] xmlWordChars  = genTable!q{isAlphaNum(c) || c=='-' || c=='_' || c==':'}();
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	assert( xmlIsWhite(' '));
 	assert(!xmlIsWhite('a'));

@@ -295,7 +295,7 @@ string wrapText(Paragraph[] paragraphs, int margin = DEFAULT_WRAP_LENGTH)
 	return lines.join("\n");
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	// Space-stuffing
 	assert(wrapText(unwrapText(" Hello", WrapFormat.fixed)) == "  Hello");

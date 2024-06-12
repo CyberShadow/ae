@@ -37,7 +37,7 @@ template JsonFileCache(T, FlushPolicy flushPolicy = FlushPolicy.none)
 	alias JsonFileCache = FileCache!(getJson!T, putJson!T, flushPolicy);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.file;
 
@@ -49,7 +49,7 @@ version(ae_unittest) unittest
 	assert(cache.length == 0);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.file;
 
@@ -65,7 +65,7 @@ version(ae_unittest) unittest
 	assert(cache2["foo"] == "bar");
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.file;
 

@@ -47,7 +47,7 @@ struct PersistentMemoized(alias fun, FlushPolicy flushPolicy = FlushPolicy.atThr
 	} ///
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.file : exists, remove;
 

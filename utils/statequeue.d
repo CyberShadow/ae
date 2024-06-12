@@ -153,7 +153,7 @@ public:
 }
 
 // Test changing the goal multiple times per tick
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import ae.utils.promise.timing : sleep;
 
@@ -177,7 +177,7 @@ version(ae_unittest) unittest
 }
 
 // Test incremental transitions towards the goal
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import ae.utils.promise.timing : sleep;
 

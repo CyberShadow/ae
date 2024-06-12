@@ -725,7 +725,7 @@ struct HybridBufferAllocator(size_t SIZE, BASE_TYPE=ubyte, alias ALLOCATOR=heapA
 }
 
 static if (haveFieldAliasBinding)
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static class C { int x=2; this() {} this(int p) { x = p; } }
 

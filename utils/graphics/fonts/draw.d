@@ -43,13 +43,13 @@ void drawText(V, FONT, S, COLOR)(auto ref V v, xy_t x, xy_t y, S s, ref FONT fon
 	}
 }
 
-version(ae_unittest)
+debug(ae_unittest)
 {
 	import ae.utils.graphics.image;
 	import ae.utils.graphics.fonts.font8x8;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	auto v = Image!ubyte(100, 8);
 	v.drawText(0, 0, "Hello World!", font8x8, ubyte(255));

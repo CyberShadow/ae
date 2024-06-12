@@ -154,7 +154,7 @@ private:
 INotify iNotify;
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.file, ae.sys.file;
 

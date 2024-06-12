@@ -60,7 +60,7 @@ if (isInputRange!R)
 	return p;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.algorithm.iteration : map;
 	import ae.sys.timing : setTimeout;

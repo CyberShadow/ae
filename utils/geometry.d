@@ -72,7 +72,7 @@ struct Rect(T)
 }
 auto rect(T...)(T args) { return Rect!(CommonType!T)(args); } /// ditto
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	Rect!int rint;
 }

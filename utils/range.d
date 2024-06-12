@@ -85,7 +85,7 @@ T[] ptrSlice(T)(T* a, T* b)
 	return a[0..b-a];
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	FastArrayRange!ubyte r;
 	auto x = r.save;
@@ -108,7 +108,7 @@ auto nullTerminatedPtrRange(E)(E* ptr)
 } /// ditto
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	void test(S)(S s)
 	{
@@ -141,7 +141,7 @@ template pairwise(alias pred)
 }
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.algorithm.comparison : equal;
 	assert(equal(pairwise!"a+b"([1, 2, 3]), [3, 5]));
@@ -210,7 +210,7 @@ static assert(isForwardRange!(typeof(onlyLazy(1))));
 static assert(isBidirectionalRange!(typeof(onlyLazy(1))));
 static assert(isRandomAccessRange!(typeof(onlyLazy(1))));
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.algorithm.comparison;
 	import std.range;
@@ -249,7 +249,7 @@ auto lazyInitRange(R)(R delegate() constructor)
 }
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.algorithm.iteration;
 	import std.range;
@@ -305,7 +305,7 @@ auto fastCartesianProduct(R...)(R ranges)
 	return Product(0, end, ranges);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.algorithm.comparison : equal;
 	assert(fastCartesianProduct().length == 1);
@@ -327,7 +327,7 @@ auto average(R)(R range) if (hasLength!R)
 	return sum(range) / range.length;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	assert([1, 2, 3].average == 2);
 }

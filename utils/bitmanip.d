@@ -42,7 +42,7 @@ struct LittleEndian(T)
 alias NetworkByteOrder = BigEndian;
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	union U
 	{
@@ -63,13 +63,13 @@ version(ae_unittest) unittest
 	assert(u.le == 0x7856);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	enum E : uint { e }
 	BigEndian!E be;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	const e = BigEndian!int(1);
 	assert(e == 1);
@@ -193,7 +193,7 @@ if (is(E == enum))
 	}
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.algorithm.comparison : equal;
 

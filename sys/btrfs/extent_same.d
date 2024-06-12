@@ -120,7 +120,7 @@ SameExtentResult sameExtent(in Extent[] extents, ulong length)
 	return result;
 } /// ditto
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	if (!checkBtrfs())
 		return;

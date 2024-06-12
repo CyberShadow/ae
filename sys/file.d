@@ -964,7 +964,7 @@ public:
 
 private alias InlineStr = InlineArr!(char, 255); // ditto
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	auto tmpDir = deleteme ~ "-dir";
 	if (tmpDir.exists) tmpDir.removeRecurse();
@@ -1333,7 +1333,7 @@ alias collectNotFoundError = collectOSError!(
 );
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	auto fn = deleteme;
 	if (fn.exists) fn.removeRecurse();
@@ -1354,7 +1354,7 @@ alias collectFileExistsError = collectOSError!(
 );
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	auto fn = deleteme;
 	foreach (dg; [
@@ -1489,13 +1489,13 @@ void forceDelete(Flag!"atomic" atomic=Yes.atomic)(string fn, Flag!"recursive" re
 deprecated void forceDelete(bool atomic)(string fn, bool recursive = false) { forceDelete!(cast(Flag!"atomic")atomic)(fn, cast(Flag!"recursive")recursive); }
 //deprecated void forceDelete()(string fn, bool recursive) { forceDelete!(Yes.atomic)(fn, cast(Flag!"recursive")recursive); }
 
-version(ae_unittest) deprecated unittest
+debug(ae_unittest) deprecated unittest
 {
 	mkdir("testdir"); touch("testdir/b"); forceDelete!(false     )("testdir", true);
 	mkdir("testdir"); touch("testdir/b"); forceDelete!(true      )("testdir", true);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	mkdir("testdir"); touch("testdir/b"); forceDelete             ("testdir", Yes.recursive);
 	mkdir("testdir"); touch("testdir/b"); forceDelete!(No .atomic)("testdir", Yes.recursive);
@@ -1614,7 +1614,7 @@ ulong getFileID()(string fn)
 	}
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	auto base = deleteme;
 	touch(base ~ "a");
@@ -1747,9 +1747,9 @@ version (Windows)
 else
 	alias std.file.symlink dirLink; /// `std.file.symlink` is used to implement `dirLink` on POSIX.
 
-version(Windows) version(ae_unittest) static mixin(importWin32!q{winnt});
+version(Windows) debug(ae_unittest) static mixin(importWin32!q{winnt});
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	// Wine's implementation of symlinks/junctions is incomplete
 	version (Windows)
@@ -1815,7 +1815,7 @@ version (Posix)
 	alias deleteHardLink = remove; /// `std.file.remove` is used to implement `deleteHardLink` on POSIX.
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	write("a", "foo"); scope(exit) remove("a");
 	hardLink("a", "b");
@@ -1903,7 +1903,7 @@ version (linux)
 		return result;
 	}
 
-	version(ae_unittest) unittest
+	debug(ae_unittest) unittest
 	{
 		assert(unescapeMountString(`a\040b\040c`) == "a b c");
 		assert(unescapeMountString(`\040`) == " ");
@@ -1935,7 +1935,7 @@ version (linux)
 		);
 	}
 
-	version(ae_unittest) unittest
+	debug(ae_unittest) unittest
 	{
 		auto mi = parseMountInfo(`drvfs /mnt/c 9p rw,dirsync,noatime,aname=drvfs;path=C:\;uid=1000;gid=1000;symlinkroot=/mnt/,mmap,access=client,msize=262144,trans=virtio 0 0`);
 		assert(mi == MountInfo("drvfs", "/mnt/c", "9p", `rw,dirsync,noatime,aname=drvfs;path=C:\;uid=1000;gid=1000;symlinkroot=/mnt/,mmap,access=client,msize=262144,trans=virtio`, 0, 0));
@@ -2096,7 +2096,7 @@ version (linux)
 	}
 
 	///
-	version(ae_unittest) unittest
+	debug(ae_unittest) unittest
 	{
 		if (!xAttrs(".").supported)
 		{
@@ -2184,11 +2184,11 @@ uint hardLinkCount(string fn)
 }
 
 // https://issues.dlang.org/show_bug.cgi?id=7016
-version (ae_unittest)
+debug (ae_unittest)
 	version (Windows)
 		import ae.sys.windows.misc : getWineVersion;
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	// FindFirstFileNameW not implemented in Wine
 	version (Windows)
@@ -2298,7 +2298,7 @@ File openFile()(string fn, string mode = "rb")
 	return f;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	enum Existence { any, mustExist, mustNotExist }
 	enum Pos { none /* not readable/writable */, start, end, empty }
@@ -2454,7 +2454,7 @@ void truncate(File f, ulong length)
 		ftruncate(f.fileno, length.to!off_t);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	write("test.txt", "abcde");
 	auto f = File("test.txt", "r+b");
@@ -2499,7 +2499,7 @@ template mdFile()
 }
 
 version (HAVE_WIN32)
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.digest : toHexString;
 	write("test.txt", "Hello, world!");
@@ -2526,7 +2526,7 @@ template mdFileCached()
 }
 
 version (HAVE_WIN32)
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.digest : toHexString;
 	write("test.txt", "Hello, world!");
@@ -2545,7 +2545,7 @@ ubyte[] readFile(File f)
 	return result.data;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	auto s = "0123456789".replicate(10_000);
 	write("test.txt", s);
@@ -2890,7 +2890,7 @@ auto atomicDg(size_t targetIndexA = size_t.max, Impl, Args...)(Impl impl, Args a
 
 deprecated alias safeUpdate = atomic;
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	enum fn = "atomic.tmp";
 	scope(exit) if (fn.exists) fn.remove();
@@ -2945,7 +2945,7 @@ private void copy2(string source, string target) { std.file.copy(source, target)
 /// with another file's, atomically.
 alias atomic!copy2 atomicCopy;
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	enum fn = "cached.tmp";
 	scope(exit) if (fn.exists) fn.remove();

@@ -83,7 +83,7 @@ T await(T, E)(Promise!(T, E) p)
 }
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import ae.net.asockets : socketManager;
 
@@ -98,7 +98,7 @@ version(ae_unittest) unittest
 	assert(sum == 3);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	if (false)
 	{

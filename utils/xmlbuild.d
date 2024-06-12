@@ -117,10 +117,10 @@ struct XmlBuildInfo
 	XmlBuildNode[] children;
 }
 
-version(ae_unittest) import std.array : split;
-version(ae_unittest) import std.algorithm.sorting : sort;
+debug(ae_unittest) import std.array : split;
+debug(ae_unittest) import std.algorithm.sorting : sort;
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	auto svg = newXml().svg();
 	svg.xmlns = "http://www.w3.org/2000/svg";

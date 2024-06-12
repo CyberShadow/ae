@@ -41,7 +41,7 @@ private:
 }
 
 ///
-version(ae_unittest) @nogc unittest
+debug(ae_unittest) @nogc unittest
 {
 	import std.algorithm.comparison : equal;
 	import std.range : iota, only;

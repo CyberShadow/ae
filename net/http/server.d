@@ -665,9 +665,9 @@ string formatAddress(string protocol, Address address, string vhost = null, usho
 		(port is null || port == "80" ? "" : ":" ~ port);
 }
 
-version (ae_unittest) import ae.net.http.client;
-version (ae_unittest) import ae.net.http.responseex;
-version(ae_unittest) unittest
+debug (ae_unittest) import ae.net.http.client;
+debug (ae_unittest) import ae.net.http.responseex;
+debug(ae_unittest) unittest
 {
 	int[] replies;
 	int closeAfter;
@@ -771,7 +771,7 @@ b=7654321").asBytes));
 }
 
 // Test form-data
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	// Temporarily disabled due to DMD regression
 	// https://issues.dlang.org/show_bug.cgi?id=24050

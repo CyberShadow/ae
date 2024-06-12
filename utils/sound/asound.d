@@ -88,7 +88,7 @@ void playWave(Wave)(Wave wave, int sampleRate = 44100)
 	enforce(pid.wait() == 0, "aplay failed");
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	if (false)
 		playWave(iota(100));

@@ -72,7 +72,7 @@ MemorySoundSource!Sample memorySoundSource(Sample)(Sample[] samples, uint sample
 	return new MemorySoundSource!Sample(samples, sampleRate);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	auto w = memorySoundSource([short.max, short.min], 44100);
 }

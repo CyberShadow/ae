@@ -71,7 +71,7 @@ struct PersistentStringSet
 }
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.file, std.conv, core.thread;
 

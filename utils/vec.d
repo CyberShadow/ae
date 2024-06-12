@@ -228,7 +228,7 @@ private:
 }
 
 // Test object lifetime
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	struct S
 	{
@@ -256,7 +256,7 @@ version(ae_unittest) unittest
 }
 
 // Test iteration
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	// Ensure iterating twice over a Vec does not consume it.
 	auto v = Vec!int(1, 2, 3);
@@ -267,7 +267,7 @@ version(ae_unittest) unittest
 }
 
 // Test non-copyable elements
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	struct S
 	{

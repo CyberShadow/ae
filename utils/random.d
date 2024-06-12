@@ -65,7 +65,7 @@ auto incrementalRandomShuffle(Range)(Range range)
 if (isInputRange!Range)
 { return incrementalRandomShuffle(range, rndGen); }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	auto shuffled = [1, 2].incrementalRandomShuffle;
 	assert(shuffled.equal([1, 2]) || shuffled.equal([2, 1]));

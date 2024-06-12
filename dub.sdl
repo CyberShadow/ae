@@ -66,11 +66,6 @@ excludedSourceFiles "utils/container/package.d"
 excludedSourceFiles "utils/serialization/*.d"
 excludedSourceFiles "utils/xmldom.d"
 
-
-configuration "unittest" {
-	versions "ae_unittest"
-}
-
 ---------------------------
 
 subPackage {

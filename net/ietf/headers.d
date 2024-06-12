@@ -192,7 +192,7 @@ struct Headers
 	}
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	Headers headers;
 	headers["test"] = "test";
@@ -253,7 +253,7 @@ string normalizeHeaderName(string header) pure
 	return s;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	assert(normalizeHeaderName("X-ORIGINATING-IP") == "X-Originating-IP");
 }

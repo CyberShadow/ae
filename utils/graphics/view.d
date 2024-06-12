@@ -131,7 +131,7 @@ auto onePixel(COLOR)(COLOR c)
 	return solid(c, 1, 1);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	assert(onePixel(42)[0, 0] == 42);
 }
@@ -256,7 +256,7 @@ auto crop(V)(auto ref V src, xy_t x0, xy_t y0, xy_t x1, xy_t y1)
 	return Crop(src, x0, y0, x1, y1);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	auto g = procedural!((x, y) => y)(1, 256);
 	auto c = g.crop(0, 10, 1, 20);
@@ -284,7 +284,7 @@ auto tile(V)(auto ref V src, xy_t w, xy_t h)
 	return Tile(src, w, h);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	auto i = onePixel(4);
 	auto t = i.tile(100, 100);
@@ -311,7 +311,7 @@ auto nearestNeighbor(V)(auto ref V src, xy_t w, xy_t h)
 	return NearestNeighbor(src, w, h);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	auto g = procedural!((x, y) => x+10*y)(10, 10);
 	auto n = g.nearestNeighbor(100, 100);
@@ -411,7 +411,7 @@ alias vflip = warp!(q{x}, q{h-y-1});
 /// Return a view of src with both coordinates inverted.
 alias flip = warp!(q{w-x-1}, q{h-y-1});
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import ae.utils.graphics.image;
 	auto vband = procedural!((x, y) => y)(1, 256).copy();
@@ -435,7 +435,7 @@ auto rotateCCW(V)(auto ref V src)
 	return src.flipXY().vflip();
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	auto g = procedural!((x, y) => x+10*y)(10, 10);
 	xy_t[] corners(V)(V v) { return [v[0, 0], v[9, 0], v[0, 9], v[9, 9]]; }
@@ -505,7 +505,7 @@ auto vjoiner(V)(V[] views)
 	return VJoiner(views);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.algorithm : map;
 	import std.array : array;
@@ -570,7 +570,7 @@ auto border(V, COLOR)(auto ref V src, xy_t x0, xy_t y0, xy_t x1, xy_t y1, COLOR 
 		.overlay(src, x0, y0);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	auto g = procedural!((x, y) => cast(int)(x+10*y))(10, 10);
 	auto b = g.border(5, 5, 5, 5, 42);
@@ -615,7 +615,7 @@ auto blend(SRCS...)(SRCS sources)
 	return Blend(sources);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import ae.utils.graphics.color : LA;
 	auto v0 = onePixel(LA(  0, 255));
@@ -690,9 +690,9 @@ auto rotate(V, COLOR)(auto ref V src, double angle,
 }
 
 // https://issues.dlang.org/show_bug.cgi?id=7016
-version(ae_unittest) static import ae.utils.geometry;
+debug(ae_unittest) static import ae.utils.geometry;
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import ae.utils.graphics.image;
 	import ae.utils.geometry;
@@ -768,7 +768,7 @@ template colorMap(alias getFun, alias setFun)
 // TODO: skip alpha and padding
 alias invert = colorMap!(c => ~c, c => ~c);
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import ae.utils.graphics.color;
 	import ae.utils.graphics.image;
@@ -777,7 +777,7 @@ version(ae_unittest) unittest
 	assert(i.invert[0, 0].l == 254);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	// Mutable colorMap with just getFun
 	import ae.utils.graphics.image : Image;
@@ -877,7 +877,7 @@ template parallel(alias fun)
 	}
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import ae.utils.graphics.image;
 	auto g = procedural!((x, y) => x+10*y)(10, 10);

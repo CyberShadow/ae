@@ -104,7 +104,7 @@ struct AbsTime
 		return days;
 	}
 
-	version(ae_unittest) @safe unittest // As in SysTime
+	debug(ae_unittest) @safe unittest // As in SysTime
 	{
 		import std.datetime.date : DateTime;
 

@@ -64,7 +64,7 @@ if (is(ElementType!R == TData!T, T))
 	return result;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	assert(([TData!int([1]), TData!int([2])].joinData().unsafeContents) == [1, 2]);
 	assert(cast(int[])([Data([1].asBytes), Data([2].asBytes)].joinData().unsafeContents) == [1, 2]);
@@ -82,7 +82,7 @@ if (is(ElementType!R == TData!T, T))
 	return result;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	assert(([TData!int([1]), TData!int([2])].joinToGC()) == [1, 2]);
 	assert(cast(int[])([Data([1].asBytes), Data([2].asBytes)].joinToGC()) == [1, 2]);
@@ -92,7 +92,7 @@ deprecated @property void[] joinToHeap(R)(auto ref R data)
 if (is(ElementType!R == Data))
 { return data.joinToGC(); }
 
-version(ae_unittest) deprecated unittest
+debug(ae_unittest) deprecated unittest
 {
 	assert(cast(int[])([Data([1].asBytes), Data([2].asBytes)].joinToHeap()) == [1, 2]);
 }
@@ -179,7 +179,7 @@ struct DataSetBytes
 	} ///
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	DataVec ds;
 	string s;

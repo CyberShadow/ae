@@ -205,7 +205,7 @@ if (!hasIndirections!T)
 	return pipe(input, args, params);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	if (false) // Instantiation test
 	{
@@ -241,7 +241,7 @@ string iconv(const(void)[] data, string inputEncoding)
 }
 
 version (HAVE_UNIX)
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	assert(iconv("Hello"w, "UTF-16LE") == "Hello");
 }
@@ -254,7 +254,7 @@ string sha1sum(const(void)[] data)
 }
 
 version (HAVE_UNIX)
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	assert(sha1sum("") == "da39a3ee5e6b4b0d3255bfef95601890afd80709");
 	assert(sha1sum("a  b\nc\r\nd") == "667c71ffe2ac8a4fe500e3b96435417e4c5ec13b");
@@ -302,7 +302,7 @@ string expandWindowsEnvVars(alias getenv = environment.get)(string s)
 	return buf.data;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	std.process.environment[`FOOTEST`] = `bar`;
 	assert("a%FOOTEST%b".expandWindowsEnvVars() == "abarb");

@@ -320,14 +320,14 @@ struct SerializedObject(C)
 	}
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	SerializedObject!(immutable(char)) s1, s2;
 	s1 = "aoeu";
 	s1.read(&s2);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import ae.utils.serialization.json;
 	auto s = jsonParse!(SerializedObject!(immutable(char)))(`null`);

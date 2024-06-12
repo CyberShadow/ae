@@ -121,7 +121,7 @@ XmlNode[] findAll(XmlNode roots, string selector)
 } /// ditto
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	enum xmlText =
 		`<doc>` ~

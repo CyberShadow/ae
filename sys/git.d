@@ -265,7 +265,7 @@ struct Git
 			return buf[].idup;
 		}
 
-		version(ae_unittest) unittest
+		debug(ae_unittest) unittest
 		{
 			OID oid;
 			oid.sha1 = [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67];
@@ -794,7 +794,7 @@ struct Git
 			.chomp(".git");
 	}
 
-	version(ae_unittest) unittest
+	debug(ae_unittest) unittest
 	{
 		assert(repositoryNameFromURL("https://github.com/CyberShadow/ae.git") == "ae");
 		assert(repositoryNameFromURL("git@example.com:ae.git") == "ae");
@@ -810,7 +810,7 @@ deprecated Git.Authorship parseAuthorship(string authorship) { return Git.Author
 
 deprecated Git.CommitID toCommitHash(in char[] hash) { return Git.CommitID(Git.OID(hash)); }
 
-version(ae_unittest) deprecated unittest
+debug(ae_unittest) deprecated unittest
 {
 	assert(toCommitHash("0123456789abcdef0123456789ABCDEF01234567").oid.sha1 == [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67]);
 }

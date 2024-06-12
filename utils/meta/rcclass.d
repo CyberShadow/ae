@@ -138,7 +138,7 @@ if (is(C == class))
 }
 
 /// Constructors
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	void ctorTest(bool haveArglessCtor, bool haveArgCtor)()
 	{
@@ -190,7 +190,7 @@ version(ae_unittest) unittest
 }
 
 /// Lifetime
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static class C
 	{
@@ -210,7 +210,7 @@ version(ae_unittest) unittest
 }
 
 /// Inheritance
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static class Base
 	{
@@ -230,7 +230,7 @@ version(ae_unittest) unittest
 }
 
 /// Non-static opCall
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static class C
 	{
@@ -245,7 +245,7 @@ version(ae_unittest) unittest
 }
 
 /// Casting
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static class A {}
 	static class B : A {}

@@ -560,7 +560,7 @@ struct MapSetVisitor(A, V, V nullValue = V.init)
 /// An algorithm which divides two numbers.
 /// When the divisor is zero, we don't even query the dividend,
 /// therefore processing all dividends in one iteration.
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	alias M = MapSet!(string, int);
 	M m = M.unitSet
@@ -587,7 +587,7 @@ version(ae_unittest) unittest
 	assert(results.get("divisor", 0).count == 0);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.algorithm.sorting : sort;
 
@@ -599,7 +599,7 @@ version(ae_unittest) unittest
 	assert(v.currentSubset.all("x").dup.sort.release == [2, 4, 6]);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	alias M = MapSet!(string, int);
 	M m = M.unitSet.cartesianProduct("x", [1, 2, 3]);
@@ -612,7 +612,7 @@ version(ae_unittest) unittest
 }
 
 // Test that initialVarState does not interfere with flushing
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	alias M = MapSet!(string, int);
 	M m = M.unitSet.cartesianProduct("x", [1]);
@@ -625,7 +625,7 @@ version(ae_unittest) unittest
 }
 
 // Test resolving the same variable several times
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	alias M = MapSet!(string, int);
 	M m = M.unitSet.cartesianProduct("x", [10, 20, 30]);
@@ -642,7 +642,7 @@ version(ae_unittest) unittest
 }
 
 // Same, with `copy`.
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	alias M = MapSet!(string, int);
 	M m = M.unitSet;
@@ -663,7 +663,7 @@ version(ae_unittest) unittest
 }
 
 // targetTransform
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.algorithm.sorting : sort;
 
@@ -677,7 +677,7 @@ version(ae_unittest) unittest
 }
 
 // multiTransform
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	alias M = MapSet!(string, int);
 	M m = M.unitSet.cartesianProduct("x", [1, 2, 3, 4, 5]);

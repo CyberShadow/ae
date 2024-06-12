@@ -29,7 +29,7 @@ import ae.utils.meta.caps;
 
 ///
 static if (haveAliasStructBinding)
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	int a = 2;
 	int x;
@@ -38,7 +38,7 @@ version(ae_unittest) unittest
 }
 
 static if (haveAliasStructBinding)
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static struct X
 	{
@@ -81,7 +81,7 @@ auto chainIterator(Next)(Next next)
 	return ChainIterator!Next(next);
 } /// ditto
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	struct S
 	{
@@ -112,7 +112,7 @@ auto chainFunctor(alias fun)()
 
 ///
 static if (haveAliasStructBinding)
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	int[] results;
 	auto fn = chainFunctor!(n => results ~= cast(int)n);
@@ -169,7 +169,7 @@ alias chainFirst = chainControl!true; /// Stop iteration after this element
 
 ///
 static if (haveAliasStructBinding)
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	int a = 2;
 	int b = 3;
@@ -202,7 +202,7 @@ template chainMap(alias pred)
 } /// ditto
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	int result;
 	chainMap!(n => n+1)(chainMap!(n => n * 2)((int n) { result = n; return false; }))(2);

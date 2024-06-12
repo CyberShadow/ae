@@ -112,7 +112,7 @@ template ScopeProxy(alias a)
 }
 
 static if (haveChildTrait && haveFieldAliasBinding)
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	// Can't declare template at statement level
 	static struct Dummy

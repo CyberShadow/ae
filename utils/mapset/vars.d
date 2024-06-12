@@ -329,7 +329,7 @@ struct MapSetVars(
 /// An example.
 /// Note that, unlike the similar Visitor test case, this iterates only once,
 /// thanks to the opBinary support.
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	// Setup
 
@@ -364,7 +364,7 @@ version(ae_unittest) unittest
 	assert(results.all(VarName.z) == [11, 12, 13, 21, 22, 23, 31, 32, 33]);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	enum VarName : uint { tempVarStart = 100, tempVarEnd = 200 }
 	MapSetVars!(VarName, int) v;
@@ -378,7 +378,7 @@ version(ae_unittest) unittest
     assert(b.resolve == 5);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	enum VarName : uint { tempVarStart = 100, tempVarEnd = 200 }
 	MapSetVars!(VarName, int) v;
@@ -394,7 +394,7 @@ version(ae_unittest) unittest
     assert(a.resolve == 7);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	enum VarName : uint { tempVarStart = 100, tempVarEnd = 200 }
 	MapSetVars!(VarName, int) v;
@@ -413,7 +413,7 @@ if (is(T : Value))
     return index.map(value => array[value]);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	enum VarName : uint { tempVarStart = 100, tempVarEnd = 200 }
 	MapSetVars!(VarName, int) v;
@@ -453,7 +453,7 @@ template varCall(alias fun)
     }
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
     static int fun(int i) { return i + 1; }
 

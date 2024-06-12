@@ -52,7 +52,7 @@ mixin template DeclareException(string NAME, BASE = Exception)
 	}));
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	mixin DeclareException!q{OutOfCheeseException};
 	try
@@ -95,7 +95,7 @@ string exceptionContext(string messageExpr, string name = text(__LINE__))
 	});
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	try
 	{
@@ -143,7 +143,7 @@ template assertOp(string op)
 }
 alias assertEqual = assertOp!"=="; ///
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	assertThrown!AssertError(assertEqual(1, 2));
 }

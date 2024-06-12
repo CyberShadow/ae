@@ -116,7 +116,7 @@ template MixedRadixCoder(
 }
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	alias Coder = MixedRadixCoder!(uint, uint, true);
 	Coder.Encoder!2 encoder;
@@ -130,7 +130,7 @@ version(ae_unittest) unittest
 	assert(decoder.empty);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import std.meta : AliasSeq;
 	import std.traits : EnumMembers;
@@ -346,7 +346,7 @@ template SerializationCoder(alias Coder, S)
 }
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static struct WithMax(T, T max_)
 	{
@@ -374,7 +374,7 @@ version(ae_unittest) unittest
 }
 
 static if (is(SumType!int))
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	struct A {}
 	struct B { bool v; }

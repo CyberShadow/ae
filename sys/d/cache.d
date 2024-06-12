@@ -431,7 +431,7 @@ DCache createCache(string name, string cacheDir, ICacheHost cacheHost)
 	}
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	void testEngine(string name)
 	{

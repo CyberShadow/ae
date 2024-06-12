@@ -73,7 +73,7 @@ string rfc1459toUpper(string name) pure
 	return name.byChar.map!rfc1459toUpper.array;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	assert(rfc1459toLower("{}|[]\\") == "{}|{}|");
 	assert(rfc1459toUpper("{}|[]\\") == "[]\\[]\\");
@@ -85,7 +85,7 @@ int rfc1459cmp(in char[] a, in char[] b)
 	return cmp(a.byChar.map!rfc1459toUpper, b.byChar.map!rfc1459toUpper);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	assert(rfc1459cmp("{}|[]\\", "[]\\[]\\") == 0);
 	assert(rfc1459cmp("a", "b") == -1);

@@ -380,7 +380,7 @@ public:
 			.auniq();
 	}
 
-	version(ae_unittest) deprecated unittest
+	debug(ae_unittest) deprecated unittest
 	{
 		auto req = new HttpRequest();
 		assert(req.remoteHosts() == []);
@@ -760,7 +760,7 @@ string[] parseItemList(string s)
 		.amap!`a.str`();
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	assert(parseItemList("a, b, c;q=0.5, d") == ["a", "b", "d", "c"]);
 }
@@ -850,7 +850,7 @@ MultipartPart[] decodeMultipart(Data data, string boundary)
 	return result;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	auto parts = [
 		MultipartPart(Headers(["Foo" : "bar"]), Data.init),

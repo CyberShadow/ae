@@ -56,7 +56,7 @@ if (is(typeof(fun) == function))
 }
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static int fun(int a=1, int b=2, int c=3, int d=4, int e=5)
 	{
@@ -72,7 +72,7 @@ version(ae_unittest) unittest
 }
 
 /// Mixing named and positional arguments
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static int fun(int a, int b=2, int c=3, int d=4, int e=5)
 	{
@@ -111,7 +111,7 @@ if (is(S == struct))
 	}
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static struct S
 	{
@@ -127,7 +127,7 @@ version(ae_unittest) unittest
 	static assert(!is(typeof(args!(S, x=>42))));
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	struct S
 	{

@@ -31,7 +31,7 @@ class HttpException : Exception
 }
 
 ///
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import ae.net.http.responseex : HttpResponseEx;
 	auto response = new HttpResponseEx;

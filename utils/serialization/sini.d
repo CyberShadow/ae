@@ -111,7 +111,7 @@ T parseIni(T, R)(R r)
 	return result;
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	static struct File
 	{
@@ -139,7 +139,7 @@ version(ae_unittest) unittest
 	assert(f.s.a==["foo":1, "bar":2]);
 }
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	import ae.utils.serialization.serialization;
 	import std.conv;

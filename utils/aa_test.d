@@ -4,7 +4,7 @@ package(ae):
 
 import ae.utils.array;
 
-version(ae_unittest) unittest
+debug(ae_unittest) unittest
 {
 	int[int] aa;
 	aa.update(1,
