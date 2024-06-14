@@ -165,16 +165,21 @@ protected:
 		catch (CaughtException e)
 		{
 			debug (HTTP) debugLog("Exception onNewRequest: %s", e);
-			HttpResponse response;
-			debug
+			if (conn && conn.state == ConnectionState.connected)
 			{
-				response = new HttpResponse();
-				response.status = HttpStatusCode.InternalServerError;
-				response.statusMessage = HttpResponse.getStatusMessage(HttpStatusCode.InternalServerError);
-				response.headers["Content-Type"] = "text/plain";
-				response.data = DataVec(Data(e.toString().asBytes));
+				HttpResponse response;
+				debug
+				{
+					response = new HttpResponse();
+					response.status = HttpStatusCode.InternalServerError;
+					response.statusMessage = HttpResponse.getStatusMessage(HttpStatusCode.InternalServerError);
+					response.headers["Content-Type"] = "text/plain";
+					response.data = DataVec(Data(e.toString().asBytes));
+				}
+				sendResponse(response);
 			}
-			sendResponse(response);
+			else
+				assert(false, "Unhandled HTTP exception after disconnect");
 		}
 	}
 
