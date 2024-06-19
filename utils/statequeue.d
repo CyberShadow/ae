@@ -55,7 +55,7 @@ private:
 		// Start a new transition
 		newState = goalState;
 		currentTransition = stateFunc(goalState)
-			.then(&onComplete);
+			.then(&onComplete, &onFail);
 	}
 
 	void onComplete(State resultState)
@@ -70,6 +70,18 @@ private:
 			goalPromise.fulfill();
 
 		prod();
+	}
+
+	void onFail(Exception e)
+	{
+		assert(currentTransition);
+		debug assert(oldState != newState || stateWasReset);
+		debug stateWasReset = false;
+
+		// TODO: The logic here may be incomplete.
+		// For now, just notify the application that
+		// the transition failed.
+		goalPromise.reject(e);
 	}
 
 public:
