@@ -72,9 +72,13 @@ private struct ProcessParams
 	std.process.Config config = std.process.Config.none;
 	size_t maxOutput = size_t.max;
 	string workDir = null;
+	File[3] files;
+	size_t numFiles;
 
 	this(Params...)(Params params)
 	{
+		files = [stdin, stdout, stderr];
+
 		static foreach (i; 0 .. params.length)
 		{{
 			auto arg = params[i];
@@ -103,6 +107,9 @@ private struct ProcessParams
 				static if (is(typeof(arg) == std.process.Config))
 					config |= arg;
 				else
+				static if (is(typeof(arg) == File))
+					files[numFiles++] = arg;
+				else
 					static assert(false, "Unknown type for process invocation parameter: " ~ typeof(arg).stringof);
 			}
 		}}
@@ -126,11 +133,11 @@ void run(Params...)(Params params)
 	invoke!({
 		auto pid = parsed.processArgs
 			? spawnProcess(
-				parsed.processArgs, stdin, stdout, stderr,
+				parsed.processArgs, parsed.files[0], parsed.files[1], parsed.files[2],
 				parsed.environment, parsed.config, parsed.workDir
 			)
 			: spawnShell(
-				parsed.shellCommand, stdin, stdout, stderr,
+				parsed.shellCommand, parsed.files[0], parsed.files[1], parsed.files[2],
 				parsed.environment, parsed.config, parsed.workDir
 			);
 		return pid.wait();
@@ -143,6 +150,7 @@ void run(Params...)(Params params)
 string query(Params...)(Params params)
 {
 	auto parsed = ProcessParams(params, Config.stderrPassThrough);
+	assert(parsed.numFiles == 0, "Can't specify files with query");
 	string output;
 	invoke!({
 		auto result = parsed.processArgs
@@ -161,6 +169,7 @@ T[] pipe(T, Params...)(in T[] input, Params params)
 if (!hasIndirections!T)
 {
 	auto parsed = ProcessParams(params);
+	assert(parsed.numFiles == 0, "Can't specify files with pipe");
 	T[] output;
 	invoke!({
 		auto pipes = parsed.processArgs
@@ -183,6 +192,7 @@ if (!hasIndirections!T)
 	import ae.sys.dataio : readFileData;
 
 	auto parsed = ProcessParams(params);
+	assert(parsed.numFiles == 0, "Can't specify files with pipe");
 	TData!T output;
 	invoke!({
 		auto pipes = parsed.processArgs
