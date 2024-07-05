@@ -18,6 +18,7 @@ import core.time : Duration, minutes;
 import std.conv : to;
 import std.exception : enforce;
 import std.random : Mt19937_64, uniform;
+import std.uni : icmp;
 
 import ae.net.asockets : ConnectionAdapter, IConnection, DisconnectType, ConnectionState, now;
 import ae.sys.data : Data;
@@ -351,8 +352,8 @@ WebSocketAdapter accept(HttpRequest request, HttpServerConnection conn)
 	enforce(
 		request.method == "GET" &&
 		request.protocolVersion >= "1.1" &&
-		request.headers.get("Upgrade", null) == "websocket" &&
-		request.headers.get("Connection", null) == "Upgrade" &&
+		request.headers.get("Upgrade", null).icmp("websocket") == 0 &&
+		request.headers.get("Connection", null).icmp("Upgrade") == 0 &&
 		"Sec-WebSocket-Key" in request.headers &&
 		request.headers.get("Sec-WebSocket-Version", null) == "13",
 		"Invalid WebSockets request"
