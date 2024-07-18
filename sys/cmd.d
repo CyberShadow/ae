@@ -42,6 +42,12 @@ string getTempFileName(string extension)
 	));
 }
 
+version (linux)
+{
+	import core.sys.posix.sys.types : pid_t;
+	private extern(C) pid_t gettid();
+}
+
 /// Like `thisProcessID`, but for threads.
 ulong getCurrentThreadID()
 {
@@ -49,6 +55,11 @@ ulong getCurrentThreadID()
 	{
 		import core.sys.windows.windows : GetCurrentThreadId;
 		return GetCurrentThreadId();
+	}
+	else
+	version (linux)
+	{
+		return gettid();
 	}
 	else
 	version (Posix)
