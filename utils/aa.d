@@ -1013,7 +1013,9 @@ public:
 					delegate LookupValue()
 					{
 						addedIndex = items.length;
-						items ~= Item(key, getValue());
+						auto item = Item(key, getValue());
+						items.length++;
+						move(item, items[$-1]);
 						return [addedIndex];
 					},
 					delegate void(ref LookupValue existingIndex)
@@ -1537,6 +1539,13 @@ debug(ae_unittest) unittest
 	OrderedMap!(string, int) m;
 	const(char)[] s;
 	m.get(s, 0);
+}
+
+debug(ae_unittest) unittest
+{
+	OrderedMap!(string, OrderedMap!(string, string[][])) m;
+
+	m.require("");
 }
 
 // ***************************************************************************
