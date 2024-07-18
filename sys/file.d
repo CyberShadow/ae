@@ -2831,6 +2831,7 @@ auto pushd(string dir)
 
 // ****************************************************************************
 
+import core.atomic : atomicOp;
 import std.algorithm;
 import std.process : thisProcessID;
 import std.traits;
@@ -2840,12 +2841,12 @@ import ae.utils.meta;
 /// Returns a unique file name (suited for a temporary file) based on `target`.
 string tempFileNameExtension(string target)
 {
-	static int counter;
+	static shared int counter;
 	return "%s.%s.%s.%s.temp".format(
 		target,
 		thisProcessID,
 		getCurrentThreadID,
-		counter++,
+		counter.atomicOp!"+="(1),
 	);
 }
 
