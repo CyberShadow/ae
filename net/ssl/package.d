@@ -89,6 +89,9 @@ abstract class SSLAdapter : ConnectionAdapter
 	/// Specifies the expected host name (used for peer verification).
 	abstract void setHostName(string hostname, ushort port = 0, string service = null);
 
+	/// Retrieves the SNI hostname, if one was indicated.
+	abstract string getSNIHostname();
+
 	/// Retrieves the host (local) certificate.
 	abstract SSLCertificate getHostCertificate();
 

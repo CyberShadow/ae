@@ -139,6 +139,12 @@ private
 		enum X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS = 0x4;
 		extern(C) int X509_VERIFY_PARAM_set1_host(X509_VERIFY_PARAM *param, const char *name, size_t namelen) nothrow;
 	}
+
+	alias SSL_CTX_set_tlsext_servername_callback_fun = extern(C) int function(SSL *s, int *al, void *arg);
+	alias SSL_CTX_callback_ctrl_fun = extern (C) void function();
+	auto SSL_CTX_set_tlsext_servername_callback(SSL_CTX* ctx, SSL_CTX_set_tlsext_servername_callback_fun cb) {
+		return SSL_CTX_callback_ctrl(ctx, SSL_CTRL_SET_TLSEXT_SERVERNAME_CB, cast(SSL_CTX_callback_ctrl_fun)cb);
+	}
 }
 
 // ***************************************************************************
@@ -197,6 +203,12 @@ class OpenSSLContext : SSLContext
 		setCipherList(["ALL", "!MEDIUM", "!LOW", "!aNULL", "!eNULL", "!SSLv2", "!DH", "!TLSv1"]);
 
 		SSL_CTX_set_default_verify_paths(sslCtx);
+
+        if (kind == Kind.server)
+		{
+            SSL_CTX_set_tlsext_servername_callback(sslCtx, &servernameCallback);
+            SSL_CTX_set_tlsext_servername_arg(sslCtx, cast(void*)this);
+        }
 	} ///
 
 	/// OpenSSL uses different APIs to specify the cipher list for
@@ -324,6 +336,26 @@ class OpenSSLContext : SSLContext
 		return cast(uint)self.context.psk.length;
 	}
 
+    extern (C) private static int servernameCallback(SSL* ssl, int* ad, void* arg)
+    {
+        auto context = cast(OpenSSLContext)arg;
+		auto adapter = cast(OpenSSLAdapter)SSL_get_ex_data(ssl, 0);
+
+        auto sniName = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
+        if (sniName)
+        {
+            adapter.sniHostname = fromStringz(sniName).idup;
+            debug(OPENSSL) stderr.writeln("SNI hostname: ", context.sniHostname);
+        }
+        else
+        {
+            adapter.sniHostname = null;
+            debug(OPENSSL) stderr.writeln("No SNI hostname provided.");
+        }
+
+        return SSL_TLSEXT_ERR_OK;
+    }
+
 	override void setPeerVerify(Verify verify)
 	{
 		static const int[enumLength!Verify] modes =
@@ -387,6 +419,7 @@ class OpenSSLAdapter : SSLAdapter
 	OpenSSLContext context; ///
 	ConnectionState connectionState; ///
 	const(char)* hostname; ///
+	private string sniHostname;
 
 	this(OpenSSLContext context, IConnection next)
 	{
@@ -545,6 +578,11 @@ class OpenSSLAdapter : SSLAdapter
 	{
 		return new OpenSSLCertificate(SSL_get_peer_certificate(sslHandle).sslEnforce());
 	} /// ditto
+
+	override string getSNIHostname()
+	{
+		return sniHostname;
+	}
 
 protected:
 	MemoryBIO r; // BIO for incoming ciphertext
