@@ -16,6 +16,7 @@ module ae.utils.statequeue;
 import core.time;
 
 import ae.net.asockets;
+import ae.utils.array;
 import ae.utils.promise;
 
 /**
@@ -210,4 +211,189 @@ debug(ae_unittest) unittest
 	q.setGoal(3).ignoreResult();
 	socketManager.loop();
 	assert(state == 3 && workDone == 3);
+}
+
+
+/// A wrapper around a `StateQueue` which modifies its behavior, such
+/// that:
+/// 1. After a transition to a state completes, a temporary "lock" is
+///    obtained, which blocks any transitions while it is held;
+/// 2. Transition requests form a queue of arbitrary length.
+struct LockingStateQueue(
+	/// A type representing the state.
+	State,
+	/// If `true`, guarantee that requests for a certain goal state will
+	/// be satisfied strictly in the order that they were requested.
+	/// If `false` (default), requests for a certain state may be
+	/// grouped together and satisfied out-of-order.
+	bool strictlyOrdered = false,
+)
+{
+private:
+	StateQueue!State stateQueue;
+
+	struct DesiredState
+	{
+		State state;
+		Promise!Lock[] callbacks;
+	}
+	DesiredState[] desiredStates;
+
+	bool isLocked;
+	debug size_t lockIndex;
+
+	Lock acquire()
+	{
+		assert(!isLocked);
+
+		Lock lock;
+		debug lock.lockIndex = ++lockIndex;
+		isLocked = true;
+
+		return lock;
+	}
+
+	void prod()
+	{
+		if (isLocked)
+			return; // Waiting for .release() -> .prod()
+
+		// Drain fulfilled queued states
+		while (desiredStates.length > 0 && desiredStates[0].callbacks.length == 0)
+			desiredStates = desiredStates[1 .. $];
+
+		if (desiredStates.length == 0)
+			return; // Nothing to do
+
+		// Acquire the lock now, whether we are transitioning to another state,
+		// or immediately resolving a callback.
+		auto lock = acquire();
+		step(lock);
+	}
+
+	void step(Lock lock)
+	{
+		assert(desiredStates.length > 0);
+
+		// StateQueue should be idle
+		assert(stateQueue.oldState == stateQueue.newState && stateQueue.newState == stateQueue.goalState);
+
+		// Check for matches in the queue
+		size_t maxIndex = strictlyOrdered ? 1 : desiredStates.length;
+		foreach (ref desiredState; desiredStates[0 .. maxIndex])
+			if (desiredState.state == stateQueue.newState)
+			{
+				auto callback = desiredState.callbacks.queuePop();
+				callback.fulfill(lock);
+				// Execution will be resumed when .resume() is called with the lock
+				return;
+			}
+
+		// No matches in the queue? Go to the next queued goal state
+		stateQueue
+			.setGoal(desiredStates[0].state)
+			.then({
+				// TODO: if stateFunc moved incrementally but not fully towards goalState,
+				// this could still be useful for us when strictlyOrdered is false and
+				// this intermediary state is in the queue. However, currently StateQueue
+				// only resolves its returned promise when goalState is reached.
+
+				// Re-check queue
+				step(lock);
+			})
+			.except((Exception e) {
+				// On a transition error, drain all queued states
+				auto queue = desiredStates;
+				desiredStates = null;
+				foreach (ref desiredState; queue)
+					foreach (callback; desiredState.callbacks)
+						callback.reject(e);
+				release(lock);
+			});
+	}
+
+public:
+	/// Constructor.
+	this(
+		/// The function implementing the state transition operation.
+		/// Accepts the goal state, and returns a promise which is the
+		/// resulting (ideally but not necessarily, the goal) state.
+		Promise!State delegate(State) stateFunc,
+		/// The initial state.
+		State initialState = State.init,
+	)
+	{
+		this.stateQueue = StateQueue!State(stateFunc, initialState);
+	}
+
+	/// Represents a held lock.
+	/// The lock is acquired automatically when a desired state is reached.
+	/// To release the lock, call `.release` on the queue object.
+	struct Lock
+	{
+		debug private size_t lockIndex;
+	}
+
+	/// Enqueue a desired goal state.
+	Promise!Lock addGoal(State state)
+	{
+		scope(success) prod();
+		auto p = new Promise!Lock();
+		static if (!strictlyOrdered)
+			foreach (ref desiredState; desiredStates)
+				if (desiredState.state == state)
+				{
+					desiredState.callbacks ~= p;
+					return p;
+				}
+		desiredStates ~= DesiredState(state, [p]);
+		return p;
+	}
+
+	/// Relinquish the lock, allowing a transition to a different state.
+	void release(Lock lock)
+	{
+		assert(isLocked, "Attempting to release a lock when one is not held");
+		debug assert(lockIndex == lock.lockIndex, "Attempting to release a mismatching lock");
+
+		isLocked = false;
+		prod();
+	}
+
+	/// These may be useful to access in stateFunc.
+	@property State oldState() { return stateQueue.oldState; }
+	@property State newState() { return stateQueue.newState; } /// ditto
+	@property State goalState() { return stateQueue.goalState; } /// ditto
+}
+
+debug(ae_unittest) unittest
+{
+	import ae.utils.promise.timing : sleep;
+
+	Promise!int changeState(int i)
+	{
+		return sleep(1.msecs).then({ 
+			return i;
+		});
+	}
+
+	static foreach (bool strictlyOrdered; [false, true])
+	{{
+		auto q = LockingStateQueue!(int, strictlyOrdered)(&changeState);
+
+		int[] goals;
+		void addGoal(int goal)
+		{
+			q.addGoal(goal).then((lock) {
+				goals ~= goal;
+				q.release(lock);
+			});
+		}
+		addGoal(1);
+		addGoal(2);
+		addGoal(1);
+		socketManager.loop();
+		auto expectedGoals = strictlyOrdered ? [1, 2, 1] : [1, 1, 2];
+		assert(goals == expectedGoals);
+	}}
 }
