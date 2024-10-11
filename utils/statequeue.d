@@ -116,8 +116,8 @@ public:
 	/// Constructor.
 	this(
 		/// The function implementing the state transition operation.
-		/// Accepts the goal state, and returns a promise which is
-		/// the resulting (ideally but necessarily, the goal) state.
+		/// Accepts the goal state, and returns a promise which is the
+		/// resulting (ideally but not necessarily, the goal) state.
 		Promise!State delegate(State) stateFunc,
 		/// The initial state.
 		State initialState = State.init,
