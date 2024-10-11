@@ -18,7 +18,7 @@ module ae.net.asockets;
 
 import ae.sys.dataset : DataVec;
 import ae.sys.timing;
-import ae.utils.array : asSlice, asBytes;
+import ae.utils.array : asSlice, asBytes, queuePush, queuePop;
 import ae.utils.math;
 public import ae.sys.data;
 
@@ -2007,6 +2007,39 @@ class ConnectionAdapter : IConnection
 	/// Callback setter for when all queued data has been written.
 	@property void handleBufferFlushed(BufferFlushedHandler value) { bufferFlushedHandler = value; }
 	protected BufferFlushedHandler bufferFlushedHandler;
+}
+
+// ***************************************************************************
+
+/// Buffers the data received from the next connection,
+/// even when this object is not marked as readable (handleReadData unset).
+class BufferingAdapter : ConnectionAdapter
+{
+	Data[] buffer;
+
+	this(IConnection next)
+	{
+		super(next);
+		next.handleReadData = &onReadData;
+	}
+
+	override void onReadData(Data data)
+	{
+		if (readDataHandler)
+		{
+			assert(buffer.length == 0);
+			readDataHandler(data);
+		}
+		else
+			buffer.queuePush(data);
+	}
+
+	override @property void handleReadData(ReadDataHandler value)
+	{
+		readDataHandler = value;
+		while (readDataHandler && buffer.length)
+			readDataHandler(buffer.queuePop);
+	}
 }
 
 // ***************************************************************************
