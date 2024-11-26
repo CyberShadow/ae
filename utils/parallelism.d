@@ -196,7 +196,7 @@ if (isInputRange!R && is(typeof(fun(input.front))))
 	return output;
 }
 
-unittest
+debug(ae_unittest) unittest
 {
 	assert([1, 2, 3].parallelCachedFilter!(x => x % 2 == 0) == [2]);
 }
