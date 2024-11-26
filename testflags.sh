@@ -100,3 +100,9 @@ function check() {
 	fi
 }
 check_all
+
+# Check unittest blocks
+if git grep '^\s*unittest' ; then
+	printf 'All unittest blocks must have a debug(ae_unittest) guard!\n' >&2
+	exit 1
+fi
