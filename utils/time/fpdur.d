@@ -15,6 +15,8 @@ module ae.utils.time.fpdur;
 
 import core.time;
 
+import ae.utils.time.types : AbsTime;
+
 /// A variant of core.time.dur which accepts floating-point values.
 /// Useful for parsing command-line arguments.
 /// Beware of rounding / floating-point errors! Do not use where precision matters.
@@ -81,4 +83,14 @@ debug(ae_unittest) unittest
 {
 	import core.time : seconds, msecs;
 	assert(1500.msecs.fracTotal!"seconds" == 1.5);
+}
+
+AbsTime fromUnixTime(double unixTime)
+{
+	import std.datetime.systime : SysTime;
+	import std.datetime.timezone : UTC;
+
+	auto durationSinceUnixEpoch = unixTime.seconds;
+	enum stdTimeEpoch = SysTime.fromUnixTime(0, UTC()).stdTime;
+	return AbsTime(stdTimeEpoch) + durationSinceUnixEpoch;
 }
