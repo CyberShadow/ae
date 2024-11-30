@@ -28,6 +28,27 @@ import ae.utils.textout;
 
 // ************************************************************************
 
+/// JSON serialization / deserialization options
+struct JsonOptions
+{
+	/// What to do with associative arrays with non-string keys
+	enum NonStringKeys
+	{
+		/// Fail compilation.
+		error,
+
+		/// Serialize keys as-is - results in non-compliant JSON.
+		asIs,
+
+		/// Serialize keys as strings.
+		/// Note that this may result in multiple levels of quoting.
+		stringify,
+	}
+	NonStringKeys nonStringKeys = NonStringKeys.error; /// ditto
+}
+
+// ************************************************************************
+
 /// Basic JSON writer.
 struct JsonWriter(Output)
 {
@@ -124,9 +145,8 @@ struct JsonWriter(Output)
 		output.putEx('}');
 	} ///
 
-	void putKey(in char[] key)
+	void endKey()
 	{
-		putString(key);
 		output.putEx(':');
 	} ///
 
@@ -202,10 +222,8 @@ struct PrettyJsonWriter(Output, alias indent = '\t', alias newLine = '\n', alias
 		jsonWriter.endObject();
 	} ///
 
-	void putKey(in char[] key)
+	void endKey()
 	{
-		putIndent();
-		putString(key);
 		output.putEx(pad, ':', pad);
 	} ///
 
@@ -217,7 +235,7 @@ struct PrettyJsonWriter(Output, alias indent = '\t', alias newLine = '\n', alias
 }
 
 /// Abstract JSON serializer based on `Writer`.
-struct CustomJsonSerializer(Writer)
+struct CustomJsonSerializer(Writer, JsonOptions options = JsonOptions.init)
 {
 	Writer writer; /// Output.
 
@@ -282,7 +300,7 @@ struct CustomJsonSerializer(Writer)
 			}
 		}
 		else
-		static if (is(typeof(T.init.keys)) && is(typeof(T.init.values)) && is(typeof({string s = T.init.keys[0];})))
+		static if (is(typeof(T.init.keys)) && is(typeof(T.init.values)))
 		{
 			writer.beginObject();
 			bool first = true;
@@ -292,7 +310,17 @@ struct CustomJsonSerializer(Writer)
 					writer.putComma();
 				else
 					first = false;
-				writer.putKey(key);
+				static if (is(typeof({string s = T.init.keys[0];})))
+					writer.putValue(key);
+				else
+					static if (options.nonStringKeys == JsonOptions.NonStringKeys.asIs)
+						put(key);
+					else
+					static if (options.nonStringKeys == JsonOptions.NonStringKeys.stringify)
+						writer.putValue(key.toJson!options);
+					else
+						static assert(false, "Cannot serialize associative array with non-string key " ~ K.stringof);
+				writer.endKey();
 				put(value);
 			}
 			writer.endObject();
@@ -316,7 +344,8 @@ struct CustomJsonSerializer(Writer)
 						writer.putComma();
 					else
 						first = false;
-					writer.putKey(getJsonName!(T, v.tupleof[i].stringof[2..$]));
+					writer.putValue(getJsonName!(T, v.tupleof[i].stringof[2..$]));
+					writer.endKey();
 					put(field);
 				}
 			}
@@ -388,6 +417,14 @@ string toJson(T)(auto ref T v)
 	return serializer.writer.output.get();
 }
 
+/// ditto
+string toJson(JsonOptions options, T)(auto ref T v)
+{
+	CustomJsonSerializer!(JsonWriter!StringBuilder, options) serializer;
+	serializer.put(v);
+	return serializer.writer.output.get();
+}
+
 ///
 debug(ae_unittest) unittest
 {
@@ -430,6 +467,14 @@ string toPrettyJson(T)(T v)
 	return serializer.writer.output.get();
 }
 
+/// ditto
+string toPrettyJson(JsonOptions options, T)(T v)
+{
+	CustomJsonSerializer!(PrettyJsonWriter!StringBuilder, options) serializer;
+	serializer.put(v);
+	return serializer.writer.output.get();
+}
+
 ///
 debug(ae_unittest) unittest
 {
@@ -457,7 +502,7 @@ import std.conv;
 
 import ae.utils.text;
 
-private struct JsonParser(C)
+private struct JsonParser(C, JsonOptions options = JsonOptions.init)
 {
 	C[] s;
 	size_t p;
@@ -525,7 +570,7 @@ private struct JsonParser(C)
 		static if (isTuple!T)
 			readTuple!T(value);
 		else
-		static if (is(typeof(T.init.keys)) && is(typeof(T.init.values)) && is(typeof(T.init.keys[0])==string))
+		static if (is(typeof(T.init.keys)) && is(typeof(T.init.values)))
 			readAA!(T)(value);
 		else
 		static if (is(T==JSONFragment))
@@ -741,7 +786,7 @@ private struct JsonParser(C)
 		const(C)[] n;
 		auto start = p;
 		Unqual!C c = peek();
-		if (c == '"')
+		if (c == '"') // TODO: implicit type conversion should be optional
 			n = readSimpleString();
 		else
 		{
@@ -877,14 +922,27 @@ private struct JsonParser(C)
 
 		while (true)
 		{
-			auto jsonField = readString();
+			K jsonField;
+			static if (is(K == string))
+				jsonField = readString().to!K;
+			else
+			{
+				static if (options.nonStringKeys == JsonOptions.NonStringKeys.asIs)
+					read(jsonField);
+				else
+				static if (options.nonStringKeys == JsonOptions.NonStringKeys.stringify)
+					jsonField = readString().jsonParse!(K, options);
+				else
+					static assert(false, "Cannot parse associative array with non-string key " ~ K.stringof);
+			}
+
 			skipWhitespace();
 			expect(':');
 
 			// TODO: elide copy
 			typeof(v.values[0]) subvalue;
 			read(subvalue);
-			v[jsonField.to!K] = subvalue;
+			v[jsonField] = subvalue;
 
 			skipWhitespace();
 			if (peek()=='}')
@@ -986,13 +1044,16 @@ private struct JsonParser(C)
 }
 
 /// Parse the JSON in string `s` and deserialize it into an instance of `T`.
-T jsonParse(T, C)(C[] s)
+template jsonParse(T, JsonOptions options = JsonOptions.init)
 {
-	auto parser = JsonParser!C(s);
-	mixin(exceptionContext(q{format("Error at position %d", parser.p)}));
-	T result;
-	parser.read!T(result);
-	return result;
+	T jsonParse(C)(C[] s)
+	{
+		auto parser = JsonParser!(C, options)(s);
+		mixin(exceptionContext(q{format("Error at position %d", parser.p)}));
+		T result;
+		parser.read!T(result);
+		return result;
+	}
 }
 
 debug(ae_unittest) unittest
@@ -1301,4 +1362,28 @@ debug(ae_unittest) unittest
 	JSONFragment[] arr = [JSONFragment(`1`), JSONFragment(`true`), JSONFragment(`"foo"`), JSONFragment(`[55]`)];
 	assert(arr.toJson == `[1,true,"foo",[55]]`);
 	assert(arr.toJson.jsonParse!(JSONFragment[]) == arr);
+}
+
+// ************************************************************************
+
+debug(ae_unittest) unittest
+{
+	int[int] aa = [3: 4];
+	{
+		enum JsonOptions options = { nonStringKeys: JsonOptions.NonStringKeys.error };
+		static assert(!__traits(compiles, aa.toJson!options));
+		static assert(!__traits(compiles, "".jsonParse!(typeof(aa), options)));
+	}
+	{
+		enum JsonOptions options = { nonStringKeys: JsonOptions.NonStringKeys.asIs };
+		auto s = aa.toJson!options;
+		assert(s == `{3:4}`);
+		assert(s.jsonParse!(typeof(aa), options) == aa);
+	}
+	{
+		enum JsonOptions options = { nonStringKeys: JsonOptions.NonStringKeys.stringify };
+		auto s = aa.toJson!options;
+		assert(s == `{"3":4}`);
+		assert(s.jsonParse!(typeof(aa), options) == aa);
+	}
 }
