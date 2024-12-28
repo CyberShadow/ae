@@ -16,6 +16,7 @@ module ae.utils.promise.await;
 
 import core.thread : Fiber;
 
+import ae.net.asockets : socketManager;
 import ae.utils.promise;
 
 enum defaultFiberSize = 64 * 1024;
@@ -104,5 +105,43 @@ debug(ae_unittest) unittest
 	{
 		async({}).await();
 		async({}()).await();
+	}
+}
+
+/// Synchronously starts and event loop and waits for it to exit.
+/// Assumes that the promise `p` is resolved during the event loop;
+/// Propagates any return value or exception to the caller.
+T awaitSync(T, E)(Promise!(T, E) p)
+{
+	bool completed;
+	Promise!T.ValueTuple taskValue;
+	E taskError;
+
+	p.then((Promise!T.ValueTuple value) {
+		completed = true;
+		taskValue = value;
+	}, (E error) {
+		completed = true;
+		taskError = error;
+	});
+
+	socketManager.loop();
+
+	assert(completed, "Event loop exited but the promise remained unresolved");
+	if (taskError)
+		throw taskError;
+	else
+	{
+		static if (!is(T == void))
+			return taskValue[0];
+	}
+}
+
+debug(ae_unittest) unittest
+{
+	if (false)
+	{
+		async({}).awaitSync();
+		async({}()).awaitSync();
 	}
 }
