@@ -8,7 +8,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ ubuntu-20.04, windows-2022, macos-15 ]
-        dc: [ dmd-2.100.0, ldc-1.32.2 ]
+        dc: [ dmd-2.107.1, ldc-1.32.2 ]
         arch: [ x86_64 ]
         include:
         # also test an older DMD verrsion
@@ -23,7 +23,7 @@ jobs:
         # Do not try to use DMD on Windows
         # https://issues.dlang.org/show_bug.cgi?id=22044
         - os: windows-2022
-          dc: dmd-2.100.0
+          dc: dmd-2.107.1
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -46,10 +46,10 @@ jobs:
       - if: ${{ matrix.os == 'ubuntu-20.04' }}
         run: dub test --debug=ae_unittest --arch=${{ matrix.arch }} :sqlite
 
-      - if: ${{ matrix.os == 'ubuntu-20.04' && matrix.dc == 'dmd-2.100.0' }} # old Dub versions can't fetch packages
+      - if: ${{ matrix.os == 'ubuntu-20.04' && matrix.dc == 'dmd-2.107.1' }} # old Dub versions can't fetch packages
         run: dub test --debug=ae_unittest --arch=${{ matrix.arch }} :libpng
 
-      - if: ${{ matrix.dc == 'dmd-2.100.0' }}
+      - if: ${{ matrix.dc == 'dmd-2.107.1' }}
         run: dub test --debug=ae_unittest --arch=${{ matrix.arch }} :windows
 
   compilation-test:
@@ -57,7 +57,7 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-20.04 ]
-        dc: [ dmd-2.100.0 ]
+        dc: [ dmd-2.107.1 ]
 
     runs-on: ${{ matrix.os }}
     steps:
