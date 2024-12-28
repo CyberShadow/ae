@@ -1131,23 +1131,7 @@ private:
 		EventSpec!(SelectionRequest, simpleDecoder!(xEvent.SelectionRequest)),
 		EventSpec!(SelectionNotify , simpleDecoder!(xEvent.SelectionNotify )),
 		EventSpec!(ColormapNotify  , simpleDecoder!(xEvent.Colormap        )),
-		EventSpec!(ClientMessage   ,
-			function(
-				Data data,
-			) {
-				auto reader = DataReader(data);
-				auto packet = *reader.read!(xEvent.ClientMessage)().enforce("Unexpected reply size");
-				struct Result
-				{
-					Atom type;
-					ubyte[20] bytes;
-				}
-				return Result(
-					packet.b.type,
-					cast(ubyte[20])packet.b.bytes,
-				);
-			}
-		),
+		EventSpec!(ClientMessage   , simpleDecoder!(xEvent.ClientMessage   )),
 		EventSpec!(MappingNotify   , simpleDecoder!(xEvent.MappingNotify   )),
 	//	EventSpec!(GenericEvent    , simpleDecoder!(xGenericEvent          )),
 	);
