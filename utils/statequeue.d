@@ -52,7 +52,11 @@ private:
 			return; // Will be picked up in onComplete
 		assert(oldState == newState);
 		if (newState == goalState)
-			return; // Already in the goal state
+		{
+			// Already in the goal state
+			goalPromise.fulfill();
+			return;
+		}
 		// Start a new transition
 		newState = goalState;
 		currentTransition = stateFunc(goalState)
@@ -67,9 +71,6 @@ private:
 		oldState = newState = resultState;
 		currentTransition = null;
 
-		if (newState == goalState)
-			goalPromise.fulfill();
-
 		prod();
 	}
 
@@ -78,11 +79,22 @@ private:
 		assert(currentTransition);
 		debug assert(oldState != newState || stateWasReset);
 		debug stateWasReset = false;
+		currentTransition = null;
 
-		// TODO: The logic here may be incomplete.
-		// For now, just notify the application that
-		// the transition failed.
-		goalPromise.reject(e);
+		if (newState == goalState)
+		{
+			// State transition failed.
+			// We cannot reach the goal state; give up until further instructions.
+			newState = goalState = oldState;
+			goalPromise.reject(e);
+		}
+		else
+		{
+			// Actually, we now want to go somewhere else.
+			// Try again.
+			newState = oldState;
+			enqueueProd();
+		}
 	}
 
 public:
@@ -119,6 +131,8 @@ public:
 		/// The function implementing the state transition operation.
 		/// Accepts the goal state, and returns a promise which is the
 		/// resulting (ideally but not necessarily, the goal) state.
+		/// If the returned promise is rejected, it indicates that the
+		/// state hasn't changed and the goal cannot be reached.
 		Promise!State delegate(State) stateFunc,
 		/// The initial state.
 		State initialState = State.init,
