@@ -778,14 +778,6 @@ b=7654321").asBytes));
 // Test form-data
 debug(ae_unittest) unittest
 {
-	// Temporarily disabled due to DMD regression
-	// https://issues.dlang.org/show_bug.cgi?id=24050
-	{
-		import std.process : environment;
-		if ("BUILDKITE" in environment)
-			return;
-	}
-
 	bool ok;
 	auto s = new HttpServer;
 	s.handleRequest = (HttpRequest request, HttpServerConnection conn) {

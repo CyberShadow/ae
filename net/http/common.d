@@ -353,10 +353,11 @@ public:
 				return decodeUrlParameters(data.joinToGC().as!string);
 			case "multipart/form-data":
 				return decodeMultipart(data.joinData(), contentType.properties.get("boundary", null))
-					.map!(part => tuple(
+					.map!((ref part) => tuple(
 						part.headers.get("Content-Disposition", null).decodeTokenHeader.properties.get("name", null),
 						part.data.asDataOf!char.toGC().assumeUnique,
 					))
+					.array // https://issues.dlang.org/show_bug.cgi?id=24050
 					.UrlParameters;
 			case "":
 				throw new Exception("No Content-Type");
