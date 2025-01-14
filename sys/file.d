@@ -2648,7 +2648,6 @@ ubyte[] delegate() readFileAsync(File f)
 		this(ref File f)
 		{
 			this.target = f;
-			this.data = data;
 			super(&run);
 		}
 
