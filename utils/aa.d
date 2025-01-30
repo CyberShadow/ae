@@ -1094,10 +1094,16 @@ public:
 	{
 		static if (haveValues)
 		{
-			ref ReturnType _addSetFunc(AK, AV)(auto ref AK key, auto ref AV value)
+			ref ReturnType _addSetFunc(AK, AV)(auto ref AK key, ref AV value)
 			if (is(AK : K) && is(AV : V))
 			{
 				return addImpl!mode(key, () => value).returnValue;
+			}
+
+			ref ReturnType _addSetFunc(AK, AV)(auto ref AK key, AV value)
+			if (is(AK : K) && is(AV : V))
+			{
+				return addImpl!mode(key, () => move(value)).returnValue;
 			}
 		}
 		else
@@ -1209,11 +1215,17 @@ public:
 		static if (haveValues)
 		{
 			/// Same as `set(k, v)`.
-			ref IV opIndexAssign(AK, AV)(auto ref AV v, auto ref AK k)
+			ref IV opIndexAssign(AK, AV)(ref AV v, auto ref AK k)
 			if (is(AK : K) && is(AV : V))
 			{
 				return set(k, v);
 			}
+
+			ref IV opIndexAssign(AK, AV)(AV v, auto ref AK k)
+			if (is(AK : K) && is(AV : V))
+			{
+				return set(k, move(v));
+			} /// ditto
 
 			/// Perform cumulative operation with value
 			/// (initialized with `.init` if the key does not exist).
@@ -1546,6 +1558,15 @@ debug(ae_unittest) unittest
 	OrderedMap!(string, OrderedMap!(string, string[][])) m;
 
 	m.require("");
+}
+
+debug(ae_unittest) unittest
+{
+	struct Q { void* p; }
+	struct S { OrderedMap!(string, Q) m; }
+	OrderedMap!(string, S) objects;
+
+	objects[""] = S();
 }
 
 // ***************************************************************************
