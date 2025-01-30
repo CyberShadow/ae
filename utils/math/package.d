@@ -37,6 +37,10 @@ T itpl(T, U)(T low, T high, U r, U rLow, U rHigh)
 /// `-1` if `x < 0`, `+1` if `x > 0`,, or `0` if `x == 0`.
 byte sign(T)(T x) { return x<0 ? -1 : x>0 ? 1 : 0; }
 
+/// Returns the next and previous values of `v`, as defined by the ++ and -- operators.
+T next(T)(T v) { return ++v; }
+T prev(T)(T v) { return --v; } /// ditto
+
 /// Returns the logical value of `sign(b - a)`
 /// (but does not actually subtract to avoid overflow).
 int compare(T)(T a, T b)
