@@ -17,6 +17,7 @@ module ae.sys.net.cachedcurl;
 // TODO: refactor into an abstract Cached!Network wrapper?
 
 import std.algorithm.comparison;
+import std.algorithm.iteration;
 import std.conv;
 import std.exception;
 import std.file;
@@ -181,7 +182,7 @@ class CachedCurlNetwork : Network
 	/// Perform a raw request and return information about the resulting cached response.
 	Response cachedReq(ref const Request request)
 	{
-		auto hash = getDigestString!MD5(request.url.asBytes ~ cast(char)request.method ~ request.data);
+		auto hash = getDigestString!MD5(request.url.asBytes ~ cast(char)request.method ~ request.data ~ request.headers.map!(pair => pair[0].asBytes ~ pair[1].asBytes).join);
 		auto path = buildPath(cacheDir, hash[0..2], hash);
 		ensurePathExists(path);
 		auto metadataPath = path ~ ".metadata";
