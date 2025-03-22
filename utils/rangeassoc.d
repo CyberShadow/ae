@@ -126,6 +126,41 @@ public:
 		spans = newSpans;
 	}
 
+	void update(
+		K start, K end,
+		scope void delegate(K start, K end, ref V value) updateExisting,
+	) {
+		Span[] newSpans;
+		foreach (ref span; spans)
+		{
+			auto r1 = Span(
+				span.start,
+				min(span.end, start),
+				span.value
+			);
+			if (r1.start < r1.end)
+				newSpans ~= r1;
+			auto r2 = Span(
+				max(span.start, start),
+				min(span.end, end),
+				span.value
+			);
+			if (r2.start < r2.end)
+			{
+				updateExisting(r2.start, r2.end, r2.value);
+				newSpans ~= r2;
+			}
+			auto r3 = Span(
+				max(span.start, end),
+				span.end,
+				span.value
+			);
+			if (r3.start < r3.end)
+				newSpans ~= r3;
+		}
+		this.spans = newSpans;
+	}
+
 	void opIndexAssign(V value, Interval slice)
 	{
 		if (slice.start == slice.end)
@@ -139,35 +174,10 @@ public:
 	void opIndexOpAssign(string op, T)(T value, Interval slice)
 	if (is(typeof({ V v; mixin("v" ~ op ~ "= value;"); })))
 	{
-		Span[] newSpans;
-		foreach (ref span; spans)
-		{
-			auto r1 = Span(
-				span.start,
-				min(span.end, slice.start),
-				span.value
-			);
-			if (r1.start < r1.end)
-				newSpans ~= r1;
-			auto r2 = Span(
-				max(span.start, slice.start),
-				min(span.end, slice.end),
-				span.value
-			);
-			if (r2.start < r2.end)
-			{
-				mixin("r2.value" ~ op ~ "= value;");
-				newSpans ~= r2;
-			}
-			auto r3 = Span(
-				max(span.start, slice.end),
-				span.end,
-				span.value
-			);
-			if (r3.start < r3.end)
-				newSpans ~= r3;
-		}
-		this.spans = newSpans;
+		update(
+			slice.start, slice.end,
+			(start, end, ref v) { mixin("v" ~ op ~ "= value;"); }
+		);
 	}
 
 	void clear()
