@@ -24,8 +24,7 @@ import std.algorithm.sorting : sort;
 struct IntervalAssocArray(K, V)
 {
 private:
-	struct Interval
-	{ K start, end; }
+	struct Interval { K start, end; }
 
 	// TODO: Use a tree or another better data structure
 	struct Span
@@ -76,10 +75,10 @@ public:
 	}
 
 	Interval opSlice(size_t dim: 0)(K start, K end)
-		in (start <= end)
-		   {
-			   return Interval(start, end);
-		   }
+	in (start <= end)
+	{
+		return Interval(start, end);
+	}
 
 	/// Returns a subset of this array over the given range.
 	IntervalAssocArray opIndex(Interval slice)
@@ -101,31 +100,31 @@ public:
 	// Writing
 
 	void remove(K start, K end)
-		in (start <= end)
-		   {
-			   if (start == end)
-				   return;
+	in (start <= end)
+	{
+		if (start == end)
+			return;
 
-			   Span[] newSpans;
-			   foreach (ref span; spans)
-			   {
-				   auto r1 = Span(
-					   span.start,
-					   min(span.end, start),
-					   span.value
-				   );
-				   if (r1.start < r1.end)
-					   newSpans ~= r1;
-				   auto r2 = Span(
-					   max(span.start, end),
-					   span.end,
-					   span.value
-				   );
-				   if (r2.start < r2.end)
-					   newSpans ~= r2;
-			   }
-			   spans = newSpans;
-		   }
+		Span[] newSpans;
+		foreach (ref span; spans)
+		{
+			auto r1 = Span(
+				span.start,
+				min(span.end, start),
+				span.value
+			);
+			if (r1.start < r1.end)
+				newSpans ~= r1;
+			auto r2 = Span(
+				max(span.start, end),
+				span.end,
+				span.value
+			);
+			if (r2.start < r2.end)
+				newSpans ~= r2;
+		}
+		spans = newSpans;
+	}
 
 	void opIndexAssign(V value, Interval slice)
 	{
@@ -138,38 +137,38 @@ public:
 	}
 
 	void opIndexOpAssign(string op, T)(T value, Interval slice)
-		if (is(typeof({ V v; mixin("v" ~ op ~ "= value;"); })))
+	if (is(typeof({ V v; mixin("v" ~ op ~ "= value;"); })))
+	{
+		Span[] newSpans;
+		foreach (ref span; spans)
 		{
-			Span[] newSpans;
-			foreach (ref span; spans)
+			auto r1 = Span(
+				span.start,
+				min(span.end, slice.start),
+				span.value
+			);
+			if (r1.start < r1.end)
+				newSpans ~= r1;
+			auto r2 = Span(
+				max(span.start, slice.start),
+				min(span.end, slice.end),
+				span.value
+			);
+			if (r2.start < r2.end)
 			{
-				auto r1 = Span(
-					span.start,
-					min(span.end, slice.start),
-					span.value
-				);
-				if (r1.start < r1.end)
-					newSpans ~= r1;
-				auto r2 = Span(
-					max(span.start, slice.start),
-					min(span.end, slice.end),
-					span.value
-				);
-				if (r2.start < r2.end)
-				{
-					mixin("r2.value" ~ op ~ "= value;");
-					newSpans ~= r2;
-				}
-				auto r3 = Span(
-					max(span.start, slice.end),
-					span.end,
-					span.value
-				);
-				if (r3.start < r3.end)
-					newSpans ~= r3;
+				mixin("r2.value" ~ op ~ "= value;");
+				newSpans ~= r2;
 			}
-			this.spans = newSpans;
+			auto r3 = Span(
+				max(span.start, slice.end),
+				span.end,
+				span.value
+			);
+			if (r3.start < r3.end)
+				newSpans ~= r3;
 		}
+		this.spans = newSpans;
+	}
 
 	void clear()
 	{
