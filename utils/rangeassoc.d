@@ -114,6 +114,29 @@ public:
 		return result;
 	}
 
+	private void scanImpl(Dg)(
+		K start, K end,
+		scope Dg callback,
+	) const {
+		foreach (ref span; spans)
+		{
+			auto spanStart = max(span.start, start);
+			auto spanEnd = min(span.end, end);
+			if (spanStart < spanEnd)
+				callback(spanStart, spanEnd, span.value);
+		}
+	}
+
+	/// Iterates over a subset of this array, without allocating a copy.
+	void scan(K start, K end, scope void delegate(K start, K end, const ref V value)                    dg) const                    { return scanImpl(start, end, dg); }
+	void scan(K start, K end, scope void delegate(K start, K end, const ref V value)            nothrow dg) const            nothrow { return scanImpl(start, end, dg); } /// ditto
+	void scan(K start, K end, scope void delegate(K start, K end, const ref V value)      @safe         dg) const      @safe         { return scanImpl(start, end, dg); } /// ditto
+	void scan(K start, K end, scope void delegate(K start, K end, const ref V value)      @safe nothrow dg) const      @safe nothrow { return scanImpl(start, end, dg); } /// ditto
+	void scan(K start, K end, scope void delegate(K start, K end, const ref V value) pure               dg) const pure               { return scanImpl(start, end, dg); } /// ditto
+	void scan(K start, K end, scope void delegate(K start, K end, const ref V value) pure       nothrow dg) const pure       nothrow { return scanImpl(start, end, dg); } /// ditto
+	void scan(K start, K end, scope void delegate(K start, K end, const ref V value) pure @safe         dg) const pure @safe         { return scanImpl(start, end, dg); } /// ditto
+	void scan(K start, K end, scope void delegate(K start, K end, const ref V value) pure @safe nothrow dg) const pure @safe nothrow { return scanImpl(start, end, dg); } /// ditto
+
 	// Writing
 
 	void remove(K start, K end) pure @safe nothrow
