@@ -47,7 +47,7 @@ private:
 public:
 	// Reading
 
-	int opApply(scope int delegate(K start, K end, ref V value) dg)
+	private int opApplyImpl(Dg)(scope Dg dg)
 	{
 		foreach (ref span; spans)
 		{
@@ -58,7 +58,24 @@ public:
 		return 0;
 	}
 
-	ref V opIndex(K point)
+	int opApply(scope int delegate(K start, K end, ref V value)                          dg)                          { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref V value)                    @nogc dg)                    @nogc { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref V value)            nothrow       dg)            nothrow       { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref V value)            nothrow @nogc dg)            nothrow @nogc { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref V value)      @safe               dg)      @safe               { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref V value)      @safe         @nogc dg)      @safe         @nogc { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref V value)      @safe nothrow       dg)      @safe nothrow       { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref V value)      @safe nothrow @nogc dg)      @safe nothrow @nogc { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref V value) pure                     dg) pure                     { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref V value) pure               @nogc dg) pure               @nogc { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref V value) pure       nothrow       dg) pure       nothrow       { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref V value) pure       nothrow @nogc dg) pure       nothrow @nogc { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref V value) pure @safe               dg) pure @safe               { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref V value) pure @safe         @nogc dg) pure @safe         @nogc { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref V value) pure @safe nothrow       dg) pure @safe nothrow       { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref V value) pure @safe nothrow @nogc dg) pure @safe nothrow @nogc { return opApplyImpl(dg); }
+
+	ref V opIndex(K point) pure @safe nothrow @nogc
 	{
 		foreach (ref span; spans)
 			if (span.start <= point && point < span.end)
@@ -66,7 +83,7 @@ public:
 		assert(false, "Point not found in span");
 	}
 
-	V* opBinaryRight(string op : "in")(K key)
+	V* opBinaryRight(string op : "in")(K key) pure @safe nothrow @nogc
 	{
 		foreach (ref span; spans)
 			if (span.start <= key && key < span.end)
@@ -74,14 +91,14 @@ public:
 		return null;
 	}
 
-	Interval opSlice(size_t dim: 0)(K start, K end)
+	Interval opSlice(size_t dim: 0)(K start, K end) pure @safe nothrow @nogc
 	in (start <= end)
 	{
 		return Interval(start, end);
 	}
 
 	/// Returns a subset of this array over the given range.
-	IntervalAssocArray opIndex(Interval slice)
+	IntervalAssocArray opIndex(Interval slice) pure @safe nothrow
 	{
 		IntervalAssocArray result;
 		foreach (ref span; spans)
@@ -99,7 +116,7 @@ public:
 
 	// Writing
 
-	void remove(K start, K end)
+	void remove(K start, K end) pure @safe nothrow
 	in (start <= end)
 	{
 		if (start == end)
@@ -126,9 +143,9 @@ public:
 		spans = newSpans;
 	}
 
-	void update(
+	private void updateImpl(Dg)(
 		K start, K end,
-		scope void delegate(K start, K end, ref V value) updateExisting,
+		scope Dg updateExisting,
 	) {
 		Span[] newSpans;
 		foreach (ref span; spans)
@@ -161,7 +178,16 @@ public:
 		this.spans = newSpans;
 	}
 
-	void opIndexAssign(V value, Interval slice)
+	void update(K start, K end, scope void delegate(K start, K end, ref V value)                    dg)                    { return updateImpl(start, end, dg); }
+	void update(K start, K end, scope void delegate(K start, K end, ref V value)            nothrow dg)            nothrow { return updateImpl(start, end, dg); }
+	void update(K start, K end, scope void delegate(K start, K end, ref V value)      @safe         dg)      @safe         { return updateImpl(start, end, dg); }
+	void update(K start, K end, scope void delegate(K start, K end, ref V value)      @safe nothrow dg)      @safe nothrow { return updateImpl(start, end, dg); }
+	void update(K start, K end, scope void delegate(K start, K end, ref V value) pure               dg) pure               { return updateImpl(start, end, dg); }
+	void update(K start, K end, scope void delegate(K start, K end, ref V value) pure       nothrow dg) pure       nothrow { return updateImpl(start, end, dg); }
+	void update(K start, K end, scope void delegate(K start, K end, ref V value) pure @safe         dg) pure @safe         { return updateImpl(start, end, dg); }
+	void update(K start, K end, scope void delegate(K start, K end, ref V value) pure @safe nothrow dg) pure @safe nothrow { return updateImpl(start, end, dg); }
+
+	void opIndexAssign(V value, Interval slice) pure @safe nothrow
 	{
 		if (slice.start == slice.end)
 			return;
@@ -180,13 +206,13 @@ public:
 		);
 	}
 
-	void clear()
+	void clear() pure @safe nothrow @nogc
 	{
 		spans.length = 0;
 	}
 }
 
-debug(ae_unittest) unittest
+debug(ae_unittest) pure @safe nothrow unittest
 {
 	IntervalAssocArray!(int, string) a;
 
@@ -247,4 +273,11 @@ debug(ae_unittest) unittest
 	assert(a[4] == "CD");
 	assert(a[8] == "BD");
 	assert(a[9] == "B");
+}
+
+debug(ae_unittest) @nogc unittest
+{
+	IntervalAssocArray!(int, string) a;
+	foreach (start, end, ref value; a)
+		assert(start < end);
 }
