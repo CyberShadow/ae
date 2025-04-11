@@ -229,9 +229,20 @@ public:
 		);
 	}
 
-	void clear() pure @safe nothrow @nogc
+	void clear() pure @safe nothrow
 	{
 		spans.length = 0;
+	}
+
+	void defragment()()
+	{
+		Span[] newSpans;
+		foreach (ref span; spans)
+			if (newSpans.length > 0 && newSpans[$-1].end == span.start && newSpans[$-1].value == span.value)
+				newSpans[$-1].end = span.end;
+			else
+				newSpans ~= span;
+		spans = newSpans;
 	}
 }
 
@@ -296,6 +307,19 @@ debug(ae_unittest) pure @safe nothrow unittest
 	assert(a[4] == "CD");
 	assert(a[8] == "BD");
 	assert(a[9] == "B");
+
+	// Test defragmentation
+	a.clear();
+	a[0..2] = "A";
+	a[1..3] = "B";
+	a[2..4] = "C";
+	a[1..2] = "A";
+	a[2..4] = "A";
+	a.defragment();
+	int n;
+	foreach (start, end, ref value; a)
+		n++;
+	assert(n == 1);
 }
 
 debug(ae_unittest) @nogc unittest
