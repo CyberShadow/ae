@@ -26,18 +26,27 @@ import ae.utils.promise;
 /// Evaluate `value` in a new thread.
 /// The promise is resolved in the current (calling) thread.
 // TODO: is using lazy OK for this? https://issues.dlang.org/show_bug.cgi?id=23923
-Promise!(T, E) threadAsync(T, E = Exception)(lazy T value)
+Promise!(T, E) threadAsync(T, E = Exception)(
+	lazy T value,
+	ThreadAnchor resolutionThread = null,
+)
 if (!is(T == return))
 {
-	return threadAsync({ return value; });
+	return threadAsync(
+		{ return value; },
+		resolutionThread,
+	);
 }
 
 /// ditto
-Promise!(T, E) threadAsync(T, E = Exception)(T delegate() value)
+Promise!(T, E) threadAsync(T, E = Exception)(
+	T delegate() value,
+	ThreadAnchor resolutionThread = null,
+)
 if (!is(T == return))
 {
 	auto p = new Promise!T;
-	auto mainThread = new ThreadAnchor(No.daemon);
+	auto mainThread = resolutionThread ? resolutionThread : new ThreadAnchor(No.daemon);
 	Thread t;
 	t = new Thread({
 		try
@@ -53,7 +62,8 @@ if (!is(T == return))
 				t.join();
 				p.reject(e);
 			});
-		mainThread.close();
+		if (resolutionThread is null)
+			mainThread.close();
 	});
 	t.start();
 	return p;
