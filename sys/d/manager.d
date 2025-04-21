@@ -21,7 +21,7 @@ import std.exception;
 import std.file;
 import std.json : parseJSON;
 import std.path;
-import std.process : spawnProcess, wait, escapeShellCommand;
+import std.process : spawnProcess, wait, escapeShellCommand, escapeShellFileName;
 import std.range;
 import std.regex;
 import std.string;
@@ -37,6 +37,7 @@ import ae.utils.array;
 import ae.utils.digest;
 import ae.utils.json;
 import ae.utils.meta;
+import ae.utils.path : findExecutable, pathDirs;
 import ae.utils.regex;
 
 private alias ensureDirExists = ae.sys.file.ensureDirExists;
@@ -576,12 +577,18 @@ class DManager : ICacheHost
 				foreach (cc; ["cc", "gcc", "c++", "g++"])
 				{
 					auto fileName = binDir.buildPath(cc);
+					auto systemFileName = findExecutable(cc, pathDirs);
+					if (!systemFileName)
+					{
+						log("Warning: " ~ cc ~ " not found in PATH");
+						systemFileName = "/usr/bin/" ~ cc;
+					}
 					write(fileName, q"EOF
 #!/bin/sh
 set -eu
 
 tool=$(basename "$0")
-next=/usr/bin/$tool
+next=%1$s
 tmpdir=${TMP:-/tmp}
 flagfile=$tmpdir/nopie-flag-$tool
 
@@ -589,19 +596,22 @@ if [ ! -e "$flagfile" ]
 then
 	echo 'Testing for -no-pie...' 1>&2
 	testfile=$tmpdir/test-$$.c
-	echo 'int main(){return 0;}' > $testfile
-	if $next -no-pie -c -o$testfile.o $testfile
+	echo 'int main(){return 0;}' > "$testfile"
+	if "$next" -no-pie -c -o$testfile.o $testfile
 	then
-		printf "%s" "-no-pie" > "$flagfile".$$.tmp
+		printf -- "%%s" "-no-pie" > "$flagfile".$$.tmp
 		mv "$flagfile".$$.tmp "$flagfile"
 	else
 		touch "$flagfile"
 	fi
-	rm -f "$testfile" "$testfile.o"
+	rm -f "$testfile" "$testfile".o
 fi
 
 exec "$next" $(cat "$flagfile") "$@"
-EOF");
+EOF"
+						.format(
+							systemFileName.escapeShellFileName,
+						));
 					setAttributes(fileName, octal!755);
 				}
 			}
