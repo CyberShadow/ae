@@ -583,6 +583,10 @@ class DManager : ICacheHost
 						log("Warning: " ~ cc ~ " not found in PATH");
 						systemFileName = "/usr/bin/" ~ cc;
 					}
+					string[] extraArgs;
+					// Add -Wno-implicit-function-declaration to allow building gzip with GCC 14
+					if (cc.isOneOf("cc", "gcc"))
+						extraArgs ~= ["-Wno-implicit-function-declaration"];
 					write(fileName, q"EOF
 #!/bin/sh
 set -eu
@@ -607,10 +611,11 @@ then
 	rm -f "$testfile" "$testfile".o
 fi
 
-exec "$next" $(cat "$flagfile") "$@"
+exec "$next" $(cat "$flagfile") %2$s "$@"
 EOF"
 						.format(
 							systemFileName.escapeShellFileName,
+							extraArgs.escapeShellCommand,
 						));
 					setAttributes(fileName, octal!755);
 				}
