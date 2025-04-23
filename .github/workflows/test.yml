@@ -7,7 +7,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-20.04, windows-2022, macos-15]
+        os: [ubuntu-20.04, windows-2022, macos-14]
         dc: [dmd-2.107.1, ldc-1.32.2]
         arch: [x86_64]
         include:
