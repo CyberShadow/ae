@@ -1,5 +1,5 @@
 name: test
-on: [ push, pull_request ]
+on: [push, pull_request]
 
 jobs:
   test:
@@ -7,23 +7,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-20.04, windows-2022, macos-15 ]
-        dc: [ dmd-2.107.1, ldc-1.32.2 ]
-        arch: [ x86_64 ]
+        os: [ubuntu-20.04, windows-2022, macos-15]
+        dc: [dmd-2.107.1, ldc-1.32.2]
+        arch: [x86_64]
         include:
-        # also test an older DMD verrsion
-        - os: ubuntu-20.04
-          dc: dmd-2.096.0
-          arch: x86_64
-        # also test 32-bit (but only on Windows)
-        - os: windows-2022
-          dc: ldc-1.32.2
-          arch: x86_mscoff # not x86 to avoid OPTLINK deadlock bugs
+          # also test an older DMD verrsion
+          - os: ubuntu-20.04
+            dc: dmd-2.096.0
+            arch: x86_64
+          # also test 32-bit (but only on Windows)
+          - os: windows-2022
+            dc: ldc-1.32.2
+            arch: x86_mscoff # not x86 to avoid OPTLINK deadlock bugs
         exclude:
-        # Do not try to use DMD on Windows
-        # https://issues.dlang.org/show_bug.cgi?id=22044
-        - os: windows-2022
-          dc: dmd-2.107.1
+          # Do not try to use DMD on Windows
+          # https://issues.dlang.org/show_bug.cgi?id=22044
+          - os: windows-2022
+            dc: dmd-2.107.1
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -56,8 +56,8 @@ jobs:
     timeout-minutes: 5
     strategy:
       matrix:
-        os: [ ubuntu-20.04 ]
-        dc: [ dmd-2.107.1 ]
+        os: [ubuntu-20.04]
+        dc: [dmd-2.107.1]
 
     runs-on: ${{ matrix.os }}
     steps:
