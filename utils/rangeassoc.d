@@ -47,7 +47,7 @@ private:
 public:
 	// Reading
 
-	private int opApplyImpl(Dg)(scope Dg dg)
+	private int opApplyImpl(this This, Dg)(scope Dg dg)
 	{
 		foreach (ref span; spans)
 		{
@@ -58,22 +58,38 @@ public:
 		return 0;
 	}
 
-	int opApply(scope int delegate(K start, K end, ref V value)                          dg)                          { return opApplyImpl(dg); }
-	int opApply(scope int delegate(K start, K end, ref V value)                    @nogc dg)                    @nogc { return opApplyImpl(dg); }
-	int opApply(scope int delegate(K start, K end, ref V value)            nothrow       dg)            nothrow       { return opApplyImpl(dg); }
-	int opApply(scope int delegate(K start, K end, ref V value)            nothrow @nogc dg)            nothrow @nogc { return opApplyImpl(dg); }
-	int opApply(scope int delegate(K start, K end, ref V value)      @safe               dg)      @safe               { return opApplyImpl(dg); }
-	int opApply(scope int delegate(K start, K end, ref V value)      @safe         @nogc dg)      @safe         @nogc { return opApplyImpl(dg); }
-	int opApply(scope int delegate(K start, K end, ref V value)      @safe nothrow       dg)      @safe nothrow       { return opApplyImpl(dg); }
-	int opApply(scope int delegate(K start, K end, ref V value)      @safe nothrow @nogc dg)      @safe nothrow @nogc { return opApplyImpl(dg); }
-	int opApply(scope int delegate(K start, K end, ref V value) pure                     dg) pure                     { return opApplyImpl(dg); }
-	int opApply(scope int delegate(K start, K end, ref V value) pure               @nogc dg) pure               @nogc { return opApplyImpl(dg); }
-	int opApply(scope int delegate(K start, K end, ref V value) pure       nothrow       dg) pure       nothrow       { return opApplyImpl(dg); }
-	int opApply(scope int delegate(K start, K end, ref V value) pure       nothrow @nogc dg) pure       nothrow @nogc { return opApplyImpl(dg); }
-	int opApply(scope int delegate(K start, K end, ref V value) pure @safe               dg) pure @safe               { return opApplyImpl(dg); }
-	int opApply(scope int delegate(K start, K end, ref V value) pure @safe         @nogc dg) pure @safe         @nogc { return opApplyImpl(dg); }
-	int opApply(scope int delegate(K start, K end, ref V value) pure @safe nothrow       dg) pure @safe nothrow       { return opApplyImpl(dg); }
-	int opApply(scope int delegate(K start, K end, ref V value) pure @safe nothrow @nogc dg) pure @safe nothrow @nogc { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref       V value)                          dg)                                { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref       V value)                    @nogc dg)                          @nogc { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref       V value)            nothrow       dg)                  nothrow       { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref       V value)            nothrow @nogc dg)                  nothrow @nogc { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref       V value)      @safe               dg)            @safe               { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref       V value)      @safe         @nogc dg)            @safe         @nogc { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref       V value)      @safe nothrow       dg)            @safe nothrow       { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref       V value)      @safe nothrow @nogc dg)            @safe nothrow @nogc { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref       V value) pure                     dg)       pure                     { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref       V value) pure               @nogc dg)       pure               @nogc { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref       V value) pure       nothrow       dg)       pure       nothrow       { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref       V value) pure       nothrow @nogc dg)       pure       nothrow @nogc { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref       V value) pure @safe               dg)       pure @safe               { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref       V value) pure @safe         @nogc dg)       pure @safe         @nogc { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref       V value) pure @safe nothrow       dg)       pure @safe nothrow       { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref       V value) pure @safe nothrow @nogc dg)       pure @safe nothrow @nogc { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref const V value)                          dg) const                          { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref const V value)                    @nogc dg) const                    @nogc { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref const V value)            nothrow       dg) const            nothrow       { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref const V value)            nothrow @nogc dg) const            nothrow @nogc { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref const V value)      @safe               dg) const      @safe               { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref const V value)      @safe         @nogc dg) const      @safe         @nogc { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref const V value)      @safe nothrow       dg) const      @safe nothrow       { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref const V value)      @safe nothrow @nogc dg) const      @safe nothrow @nogc { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref const V value) pure                     dg) const pure                     { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref const V value) pure               @nogc dg) const pure               @nogc { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref const V value) pure       nothrow       dg) const pure       nothrow       { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref const V value) pure       nothrow @nogc dg) const pure       nothrow @nogc { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref const V value) pure @safe               dg) const pure @safe               { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref const V value) pure @safe         @nogc dg) const pure @safe         @nogc { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref const V value) pure @safe nothrow       dg) const pure @safe nothrow       { return opApplyImpl(dg); }
+	int opApply(scope int delegate(K start, K end, ref const V value) pure @safe nothrow @nogc dg) const pure @safe nothrow @nogc { return opApplyImpl(dg); }
 
 	ref V opIndex(K point) pure @safe nothrow @nogc
 	{
