@@ -46,17 +46,12 @@ class LegacyDMCInstaller : Installer
 			dmcURL = "http://downloads.dlang.org/other/dm" ~ ver ~ "c.zip";
 		else
 			dmcURL = "http://ftp.digitalmars.com/Digital_Mars_C++/Patch/dm" ~ ver ~ "c.zip";
+
+		initDigests();
 	} ///
 
-	static this()
-	{
-		urlDigests["http://ftp.digitalmars.com/Digital_Mars_C++/Patch/dm850c.zip"] = "de1d27c337f028f4d001aec903474b85275c7118";
-		urlDigests["http://downloads.dlang.org/other/dm855c.zip"				 ] = "5a177e50495f0062f107cba0c9231f780ebc56e1";
-		urlDigests["http://downloads.dlang.org/other/dm856c.zip"				 ] = "c46302e645f9ce649fe8b80c0dec513f1622ccc0";
-		urlDigests["http://downloads.dlang.org/other/dm857c.zip"				 ] = "c6bbaf8b872bfb1c82e611ef5e249dd19eab5272";
-	}
-
-	protected override void installImpl(string target)
+protected:
+	override void installImpl(string target)
 	{
 		auto dmcDir =
 			dmcURL
@@ -66,6 +61,18 @@ class LegacyDMCInstaller : Installer
 
 		enforce(buildPath(dmcDir, "dm", "bin", "dmc.exe").exists);
 		rename(buildPath(dmcDir, "dm"), target);
+	}
+
+	static void initDigests()
+	{
+		static bool digestsInitialized;
+		if (digestsInitialized) return;
+		scope(success) digestsInitialized = true;
+
+		urlDigests["http://ftp.digitalmars.com/Digital_Mars_C++/Patch/dm850c.zip"] = "de1d27c337f028f4d001aec903474b85275c7118";
+		urlDigests["http://downloads.dlang.org/other/dm855c.zip"                 ] = "5a177e50495f0062f107cba0c9231f780ebc56e1";
+		urlDigests["http://downloads.dlang.org/other/dm856c.zip"                 ] = "c46302e645f9ce649fe8b80c0dec513f1622ccc0";
+		urlDigests["http://downloads.dlang.org/other/dm857c.zip"                 ] = "c6bbaf8b872bfb1c82e611ef5e249dd19eab5272";
 	}
 }
 
@@ -81,10 +88,16 @@ class DMCInstaller : LegacyDMCInstaller
 	this()
 	{
 		super("857");
+
+		initDigests();
 	} ///
 
-	static this()
+	static void initDigests()
 	{
+		static bool digestsInitialized;
+		if (digestsInitialized) return;
+		scope(success) digestsInitialized = true;
+
 		urlDigests["http://downloads.dlang.org/other/optlink-8.00.15.zip"                  ] = "f5a161029d795063e57523824be7408282cbdb81";
 		urlDigests["http://downloads.dlang.org/releases/2.x/2.071.0/dmd.2.071.0.windows.7z"] = "c1bc880e54ff25ba8ee938abb2a1436ff6a9dec8";
 		urlDigests["http://downloads.dlang.org/releases/2.x/2.074.0/dmd.2.074.0.windows.7z"] = "b2f491a448a674c0c3854ffa6b38b2da638c0ea0";

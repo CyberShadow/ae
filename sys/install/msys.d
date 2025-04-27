@@ -36,6 +36,8 @@ protected:
 	override @property bool installedLocally()
 	{
 		return directory.buildPath(testFile).exists;
+
+		initDigests();
 	}
 
 	override void atomicInstallImpl()
@@ -50,8 +52,12 @@ protected:
 		assert(installedLocally);
 	}
 
-	static this()
+	static void initDigests()
 	{
+		static bool digestsInitialized;
+		if (digestsInitialized) return;
+		scope(success) digestsInitialized = true;
+
 		urlDigests["https://sourceforge.net/projects/mingw/files/MSYS/Base/msys-core/msys-1.0.18-1/msysCORE-1.0.18-1-msys-1.0.18-bin.tar.lzma"                            ] = "36d52ca7066eb6ad0da68c6f31214416f4c9dcec";
 		urlDigests["https://sourceforge.net/projects/mingw/files/MSYS/Base/gettext/gettext-0.18.1.1-1/libintl-0.18.1.1-1-msys-1.0.17-dll-8.tar.lzma"                      ] = "4000b935a5bc30b4c757fde69d27716fa3c2c269";
 		urlDigests["https://sourceforge.net/projects/mingw/files/MSYS/Base/libiconv/libiconv-1.14-1/libiconv-1.14-1-msys-1.0.17-dll-2.tar.lzma"                           ] = "056d16bfb7a91c3e3b1acf8adb20edea6fceecdd";

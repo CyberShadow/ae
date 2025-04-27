@@ -32,6 +32,11 @@ class SevenZipInstaller : Installer
 			return "7z";
 	}
 
+	this()
+	{
+		initDigests();
+	}
+
 protected:
 	@property override string name() { return "7-Zip"; }
 	@property override string subdirectory() { return "7z"; }
@@ -53,8 +58,12 @@ protected:
 		return haveExecutable("7z") || haveExecutable("7za");
 	}
 
-	static this()
+	static void initDigests()
 	{
+		static bool digestsInitialized;
+		if (digestsInitialized) return;
+		scope(success) digestsInitialized = true;
+
 		urlDigests["http://downloads.sourceforge.net/sevenzip/7za920.zip"] = "9ce9ce89ebc070fea5d679936f21f9dde25faae0";
 	}
 }

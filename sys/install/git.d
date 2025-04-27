@@ -31,6 +31,11 @@ class GitInstaller : Installer
 	/// URL to download and install.
 	string url = "https://github.com/git-for-windows/git/releases/download/v2.21.0.windows.1/PortableGit-2.21.0-32-bit.7z.exe";
 
+	this()
+	{
+		initDigests();
+	}
+
 protected:
 	@property override string[] requiredExecutables() { return ["git"]; }
 	@property override string[] binPaths() { return ["cmd"]; }
@@ -43,8 +48,12 @@ protected:
 			.I!unpackTo(target);
 	}
 
-	static this()
+	static void initDigests()
 	{
+		static bool digestsInitialized;
+		if (digestsInitialized) return;
+		scope(success) digestsInitialized = true;
+
 		urlDigests["https://github.com/git-for-windows/git/releases/download/v2.21.0.windows.1/PortableGit-2.21.0-32-bit.7z.exe"] = "db083fde82c743a26dbd7fbd597d3a6321522936";
 	}
 }

@@ -34,6 +34,8 @@ class DMDInstaller : Installer
 	this(string v = currentVersion)
 	{
 		dmdVersion = v;
+
+		initDigests();
 	} ///
 
 	// Note: we can't get the dot-release version. Assume ".0".
@@ -92,8 +94,12 @@ protected:
 			.I!unpackTo(target);
 	}
 
-	static this()
+	static void initDigests()
 	{
+		static bool digestsInitialized;
+		if (digestsInitialized) return;
+		scope(success) digestsInitialized = true;
+
 		urlDigests["http://downloads.dlang.org/releases/2.x/2.065.0/dmd.2.065.0.windows.zip"   ] = "d79b92cf4c7ccb01ebbb5f7ded8e583081391781";
 		urlDigests["http://downloads.dlang.org/releases/2.x/2.065.0/dmd.2.065.0.linux.zip"     ] = "53c28075672aca183d6247a80a163e10084c9add";
 		urlDigests["http://downloads.dlang.org/releases/2.x/2.065.0/dmd.2.065.0.freebsd-32.zip"] = "1df3915ea9ced62da504ec50de98148a1b22e4dc";
