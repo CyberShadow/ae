@@ -3,7 +3,7 @@ description "CyberShadow's ArmageddonEngine utilites for almost everything"
 authors "Vladimir Panteleev <vladimir@thecybershadow.net>"
 homepage "https://github.com/CyberShadow/ae"
 license "MPL-2.0"
-targetType "sourceLibrary"
+targetType "library"
 
 ---------------------------
 
@@ -70,7 +70,7 @@ excludedSourceFiles "utils/xmldom.d"
 
 subPackage {
 	name "zlib"
-	targetType "sourceLibrary"
+	targetType "library"
 
 	# libz (zlib) is a dependency on Phobos, and normally shouldn't be
 	# explicitly specified as required, however in some setups (such as
@@ -88,7 +88,7 @@ subPackage {
 
 subPackage {
 	name "sqlite"
-	targetType "sourceLibrary"
+	targetType "library"
 	libs "sqlite3" platform="posix"
 	systemDependencies "SQLite 3"
 	dependency "ae" version="*" path="."
@@ -102,7 +102,7 @@ subPackage {
 
 subPackage {
 	name "openssl"
-	targetType "sourceLibrary"
+	targetType "library"
 	systemDependencies "OpenSSL"
 	dependency "ae" version="*" path="."
 
@@ -142,7 +142,7 @@ subPackage {
 
 subPackage {
 	name "libpng"
-	targetType "sourceLibrary"
+	targetType "library"
 	systemDependencies "libpng"
 	dependency "ae" version="*" path="."
 	dependency "libpng" version="==1.6.17"
@@ -154,7 +154,7 @@ subPackage {
 
 subPackage {
 	name "sdl2"
-	targetType "sourceLibrary"
+	targetType "library"
 	systemDependencies "SDL 2"
 	libs "SDL2" "SDL2_image" platform="posix"
 	dependency "ae" version="*" path="."
@@ -171,7 +171,7 @@ subPackage {
 
 subPackage {
 	name "windows"
-	targetType "sourceLibrary"
+	targetType "library"
 	dependency "ae" version="*" path="."
         dependency "win32" version="==2.107.1" platform="posix"
 	sourceFiles \
@@ -185,7 +185,7 @@ subPackage {
 
 subPackage {
 	name "x11"
-	targetType "sourceLibrary"
+	targetType "library"
 	dependency "ae" version="*" path="."
 	dependency "libx11" version="0.0.2"
 	sourceFiles \
@@ -201,28 +201,28 @@ subPackage {
 
 subPackage {
 	name "sys-net-ae"
-	targetType "sourceLibrary"
+	targetType "library"
 	dependency "ae" version="*" path="."
 	sourceFiles "sys/net/ae.d"
 }
 
 subPackage {
 	name "sys-net-cachedcurl"
-	targetType "sourceLibrary"
+	targetType "library"
 	dependency "ae" version="*" path="."
 	sourceFiles "sys/net/cachedcurl.d"
 }
 
 subPackage {
 	name "sys-net-curl"
-	targetType "sourceLibrary"
+	targetType "library"
 	dependency "ae" version="*" path="."
 	sourceFiles "sys/net/curl.d"
 }
 
 subPackage {
 	name "sys-net-system"
-	targetType "sourceLibrary"
+	targetType "library"
 	dependency "ae" version="*" path="."
 	sourceFiles "sys/net/system.d"
 	dependency "ae:sys-net-wininet" version="*" path="." platform="windows"
@@ -232,14 +232,14 @@ subPackage {
 
 subPackage {
 	name "sys-net-wininet"
-	targetType "sourceLibrary"
+	targetType "library"
 	dependency "ae" version="*" path="."
 	sourceFiles "sys/net/wininet.d"
 }
 
 subPackage {
 	name "sys-net-test"
-	targetType "sourceLibrary"
+	targetType "library"
 	dependency "ae" version="*" path="."
 	dependency "ae:sys-net-ae" version="*" path="."
 	dependency "ae:sys-net-curl" version="*" path="."
@@ -252,21 +252,21 @@ subPackage {
 
 subPackage {
 	name "app-main-posix"
-	targetType "sourceLibrary"
+	targetType "library"
 	dependency "ae" version="*" path="."
 	sourceFiles "ui/app/posix/main.d"
 }
 
 subPackage {
 	name "app-main-windows"
-	targetType "sourceLibrary"
+	targetType "library"
 	dependency "ae" version="*" path="."
 	sourceFiles "ui/app/windows/main.d"
 }
 
 subPackage {
 	name "app-main"
-	targetType "sourceLibrary"
+	targetType "library"
 	sourceFiles "ui/app/main.d"
 	sourceFiles "ui/app/windows/main.d" platform="windows"
 	sourceFiles "ui/app/posix/main.d" platform="posix"
