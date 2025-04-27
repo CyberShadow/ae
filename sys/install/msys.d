@@ -24,7 +24,14 @@ public import ae.sys.install.common;
 /// Installs an MSYS component.
 final class MSYSComponent : Installer
 {
-	this(string componentName, string testFile, string url) { this.componentName = componentName; this.testFile = testFile; this.url = url; } ///
+	this(string componentName, string testFile, string url)
+	{
+		this.componentName = componentName;
+		this.testFile = testFile;
+		this.url = url;
+
+		initDigests();
+	} ///
 
 protected:
 	string componentName, testFile, url;
@@ -36,8 +43,6 @@ protected:
 	override @property bool installedLocally()
 	{
 		return directory.buildPath(testFile).exists;
-
-		initDigests();
 	}
 
 	override void atomicInstallImpl()
