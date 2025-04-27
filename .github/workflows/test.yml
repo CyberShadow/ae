@@ -24,6 +24,11 @@ jobs:
           # https://issues.dlang.org/show_bug.cgi?id=22044
           - os: windows-2022
             dc: dmd-2.107.1
+          # Do not try to use DMD on macOS
+          # Fails to link with errors such as:
+          # "ld: r_symbolnum=20 out of range in '.../libae.a[11668](xmlwriter_2cc8_ad9.o)'"
+          - os: macos-14
+            dc: dmd-2.107.1
 
     runs-on: ${{ matrix.os }}
     steps:
