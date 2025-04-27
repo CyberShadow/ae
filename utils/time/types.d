@@ -75,8 +75,8 @@ struct AbsTime
 {
 	StdTime stdTime;
 
-	this(StdTime stdTime) pure @safe nothrow @nogc { this.stdTime = stdTime; }
-	this(SysTime sysTime) pure @safe nothrow @nogc { this.stdTime = sysTime.stdTime; }
+	this(inout StdTime stdTime) pure @safe nothrow @nogc inout { this.stdTime = stdTime; }
+	this(inout SysTime sysTime) pure @safe nothrow @nogc inout { this.stdTime = sysTime.stdTime; }
 
 	this(DateTime dateTime, Duration fracSecs = Duration.zero) pure @safe nothrow @nogc
 	{
