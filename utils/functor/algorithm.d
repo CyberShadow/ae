@@ -78,7 +78,7 @@ if (isInputRange!(Unqual!Range))
 private struct PFilterResult(R, P)
 {
 	bool empty() { return r.empty; }
-	auto front() { return pred(r.front); }
+	auto front() { return r.front; }
 	void popFront() { r.popFront(); advance(); }
 
 	this(R r, P pred)
@@ -97,4 +97,13 @@ private:
 		while (!r.empty && !pred(r.front))
 			r.popFront();
 	}
+}
+
+///
+debug(ae_unittest) @nogc unittest
+{
+	import std.algorithm.comparison : equal;
+	import std.range : iota, only;
+
+	assert(5.iota.filter((int n) => n % 2 == 0).equal(only(0, 2, 4)));
 }
