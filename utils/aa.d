@@ -935,25 +935,119 @@ public:
 	static if (haveValues)
 	{
 		/// Iterate over values (maps).
-		int opApply(scope int delegate(      ref V) dg)       { return opApplyImpl(dg); }
-		int opApply(scope int delegate(const ref V) dg) const { return opApplyImpl(dg); } /// ditto
+		int opApply(scope int delegate(      ref V)                  dg)                        { return opApplyImpl(dg); }
+		int opApply(scope int delegate(      ref V)            @nogc dg)                  @nogc { return opApplyImpl(dg); } /// ditto
+		int opApply(scope int delegate(      ref V)      @safe       dg)            @safe       { return opApplyImpl(dg); } /// ditto
+		int opApply(scope int delegate(      ref V)      @safe @nogc dg)            @safe @nogc { return opApplyImpl(dg); } /// ditto
+		int opApply(scope int delegate(      ref V) pure             dg)       pure             { return opApplyImpl(dg); } /// ditto
+		int opApply(scope int delegate(      ref V) pure       @nogc dg)       pure       @nogc { return opApplyImpl(dg); } /// ditto
+		int opApply(scope int delegate(      ref V) pure @safe       dg)       pure @safe       { return opApplyImpl(dg); } /// ditto
+		int opApply(scope int delegate(      ref V) pure @safe @nogc dg)       pure @safe @nogc { return opApplyImpl(dg); } /// ditto
+		int opApply(scope int delegate(const ref V)                  dg) const                  { return opApplyImpl(dg); } /// ditto
+		int opApply(scope int delegate(const ref V)            @nogc dg) const            @nogc { return opApplyImpl(dg); } /// ditto
+		int opApply(scope int delegate(const ref V)      @safe       dg) const      @safe       { return opApplyImpl(dg); } /// ditto
+		int opApply(scope int delegate(const ref V)      @safe @nogc dg) const      @safe @nogc { return opApplyImpl(dg); } /// ditto
+		int opApply(scope int delegate(const ref V) pure             dg) const pure             { return opApplyImpl(dg); } /// ditto
+		int opApply(scope int delegate(const ref V) pure       @nogc dg) const pure       @nogc { return opApplyImpl(dg); } /// ditto
+		int opApply(scope int delegate(const ref V) pure @safe       dg) const pure @safe       { return opApplyImpl(dg); } /// ditto
+		int opApply(scope int delegate(const ref V) pure @safe @nogc dg) const pure @safe @nogc { return opApplyImpl(dg); } /// ditto
 	}
-	else
+	else // !haveValues (sets)
 	{
 		/// Iterate over keys (sets).
-		static if (needIter!(false, false)) int opApply(scope int delegate(    KeyIterationType!(false, false)) dg)       { return opApplyImpl(dg); }
-		static if (needIter!(true , false)) int opApply(scope int delegate(    KeyIterationType!(true , false)) dg) const { return opApplyImpl(dg); } /// ditto
-		static if (needIter!(false, true )) int opApply(scope int delegate(ref KeyIterationType!(false, true )) dg)       { return opApplyImpl(dg); } /// ditto
-		static if (needIter!(true , true )) int opApply(scope int delegate(ref KeyIterationType!(true , true )) dg) const { return opApplyImpl(dg); } /// ditto
+		static if (needIter!(false, false))
+		{
+			int opApply(scope int delegate(    KeyIterationType!(false, false))                  dg)                        { return opApplyImpl(dg); }
+			int opApply(scope int delegate(    KeyIterationType!(false, false))            @nogc dg)                  @nogc { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(    KeyIterationType!(false, false))      @safe       dg)            @safe       { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(    KeyIterationType!(false, false))      @safe @nogc dg)            @safe @nogc { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(    KeyIterationType!(false, false)) pure             dg)       pure             { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(    KeyIterationType!(false, false)) pure       @nogc dg)       pure       @nogc { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(    KeyIterationType!(false, false)) pure @safe       dg)       pure @safe       { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(    KeyIterationType!(false, false)) pure @safe @nogc dg)       pure @safe @nogc { return opApplyImpl(dg); } /// ditto
+		}
+		static if (needIter!(true, false))
+		{
+			int opApply(scope int delegate(    KeyIterationType!(true, false))                  dg) const                  { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(    KeyIterationType!(true, false))            @nogc dg) const            @nogc { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(    KeyIterationType!(true, false))      @safe       dg) const      @safe       { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(    KeyIterationType!(true, false))      @safe @nogc dg) const      @safe @nogc { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(    KeyIterationType!(true, false)) pure             dg) const pure             { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(    KeyIterationType!(true, false)) pure       @nogc dg) const pure       @nogc { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(    KeyIterationType!(true, false)) pure @safe       dg) const pure @safe       { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(    KeyIterationType!(true, false)) pure @safe @nogc dg) const pure @safe @nogc { return opApplyImpl(dg); } /// ditto
+		}
+		static if (needIter!(false, true))
+		{
+			int opApply(scope int delegate(ref KeyIterationType!(false, true))                  dg)                        { return opApplyImpl(dg); }
+			int opApply(scope int delegate(ref KeyIterationType!(false, true))            @nogc dg)                  @nogc { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(ref KeyIterationType!(false, true))      @safe       dg)            @safe       { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(ref KeyIterationType!(false, true))      @safe @nogc dg)            @safe @nogc { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(ref KeyIterationType!(false, true)) pure             dg)       pure             { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(ref KeyIterationType!(false, true)) pure       @nogc dg)       pure       @nogc { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(ref KeyIterationType!(false, true)) pure @safe       dg)       pure @safe       { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(ref KeyIterationType!(false, true)) pure @safe @nogc dg)       pure @safe @nogc { return opApplyImpl(dg); } /// ditto
+		}
+		static if (needIter!(true, true))
+		{
+			int opApply(scope int delegate(ref KeyIterationType!(true, true))                  dg) const                  { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(ref KeyIterationType!(true, true))            @nogc dg) const            @nogc { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(ref KeyIterationType!(true, true))      @safe       dg) const      @safe       { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(ref KeyIterationType!(true, true))      @safe @nogc dg) const      @safe @nogc { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(ref KeyIterationType!(true, true)) pure             dg) const pure             { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(ref KeyIterationType!(true, true)) pure       @nogc dg) const pure       @nogc { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(ref KeyIterationType!(true, true)) pure @safe       dg) const pure @safe       { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(ref KeyIterationType!(true, true)) pure @safe @nogc dg) const pure @safe @nogc { return opApplyImpl(dg); } /// ditto
+		}
 	}
 
 	static if (haveValues)
 	{
 		/// Iterate over keys and values.
-		static if (needIter!(false, false)) int opApply(scope int delegate(    KeyIterationType!(false, false),       ref V) dg)       { return opApplyImpl(dg); }
-		static if (needIter!(true , false)) int opApply(scope int delegate(    KeyIterationType!(true , false), const ref V) dg) const { return opApplyImpl(dg); } /// ditto
-		static if (needIter!(false, true )) int opApply(scope int delegate(ref KeyIterationType!(false, true ),       ref V) dg)       { return opApplyImpl(dg); } /// ditto
-		static if (needIter!(true , true )) int opApply(scope int delegate(ref KeyIterationType!(true , true ), const ref V) dg) const { return opApplyImpl(dg); } /// ditto
+		static if (needIter!(false, false))
+		{
+			int opApply(scope int delegate(    KeyIterationType!(false, false),       ref V)                  dg)                        { return opApplyImpl(dg); }
+			int opApply(scope int delegate(    KeyIterationType!(false, false),       ref V)            @nogc dg)                  @nogc { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(    KeyIterationType!(false, false),       ref V)      @safe       dg)            @safe       { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(    KeyIterationType!(false, false),       ref V)      @safe @nogc dg)            @safe @nogc { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(    KeyIterationType!(false, false),       ref V) pure             dg)       pure             { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(    KeyIterationType!(false, false),       ref V) pure       @nogc dg)       pure       @nogc { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(    KeyIterationType!(false, false),       ref V) pure @safe       dg)       pure @safe       { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(    KeyIterationType!(false, false),       ref V) pure @safe @nogc dg)       pure @safe @nogc { return opApplyImpl(dg); } /// ditto
+		}
+		static if (needIter!(true, false))
+		{
+			int opApply(scope int delegate(    KeyIterationType!(true, false), const ref V)                  dg) const                  { return opApplyImpl(dg); }
+			int opApply(scope int delegate(    KeyIterationType!(true, false), const ref V)            @nogc dg) const            @nogc { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(    KeyIterationType!(true, false), const ref V)      @safe       dg) const      @safe       { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(    KeyIterationType!(true, false), const ref V)      @safe @nogc dg) const      @safe @nogc { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(    KeyIterationType!(true, false), const ref V) pure             dg) const pure             { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(    KeyIterationType!(true, false), const ref V) pure       @nogc dg) const pure       @nogc { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(    KeyIterationType!(true, false), const ref V) pure @safe       dg) const pure @safe       { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(    KeyIterationType!(true, false), const ref V) pure @safe @nogc dg) const pure @safe @nogc { return opApplyImpl(dg); } /// ditto
+		}
+		static if (needIter!(false, true))
+		{
+			int opApply(scope int delegate(ref KeyIterationType!(false, true),       ref V)                  dg)                        { return opApplyImpl(dg); }
+			int opApply(scope int delegate(ref KeyIterationType!(false, true),       ref V)            @nogc dg)                  @nogc { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(ref KeyIterationType!(false, true),       ref V)      @safe       dg)            @safe       { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(ref KeyIterationType!(false, true),       ref V)      @safe @nogc dg)            @safe @nogc { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(ref KeyIterationType!(false, true),       ref V) pure             dg)       pure             { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(ref KeyIterationType!(false, true),       ref V) pure       @nogc dg)       pure       @nogc { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(ref KeyIterationType!(false, true),       ref V) pure @safe       dg)       pure @safe       { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(ref KeyIterationType!(false, true),       ref V) pure @safe @nogc dg)       pure @safe @nogc { return opApplyImpl(dg); } /// ditto
+		}
+		static if (needIter!(true, true))
+		{
+			int opApply(scope int delegate(ref KeyIterationType!(true, true), const ref V)                  dg) const                  { return opApplyImpl(dg); }
+			int opApply(scope int delegate(ref KeyIterationType!(true, true), const ref V)            @nogc dg) const            @nogc { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(ref KeyIterationType!(true, true), const ref V)      @safe       dg) const      @safe       { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(ref KeyIterationType!(true, true), const ref V)      @safe @nogc dg) const      @safe @nogc { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(ref KeyIterationType!(true, true), const ref V) pure             dg) const pure             { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(ref KeyIterationType!(true, true), const ref V) pure       @nogc dg) const pure       @nogc { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(ref KeyIterationType!(true, true), const ref V) pure @safe       dg) const pure @safe       { return opApplyImpl(dg); } /// ditto
+			int opApply(scope int delegate(ref KeyIterationType!(true, true), const ref V) pure @safe @nogc dg) const pure @safe @nogc { return opApplyImpl(dg); } /// ditto
+		}
 	}
 
 	private struct ByRef(bool isConst)
@@ -966,16 +1060,52 @@ public:
 		static if (haveValues)
 		{
 			static if (isConst)
-				int opApply(scope int delegate(ref KeyIterationType!(true , true ), const ref V) dg) const { return c.opApplyImpl(dg); }
-			else
-				int opApply(scope int delegate(ref KeyIterationType!(false, true ),       ref V) dg)       { return c.opApplyImpl(dg); }
+			{
+				int opApply(scope int delegate(ref KeyIterationType!(true , true ), const ref V)                  dg) const                  { return c.opApplyImpl(dg); }
+				int opApply(scope int delegate(ref KeyIterationType!(true , true ), const ref V)            @nogc dg) const            @nogc { return c.opApplyImpl(dg); } /// ditto
+				int opApply(scope int delegate(ref KeyIterationType!(true , true ), const ref V)      @safe       dg) const      @safe       { return c.opApplyImpl(dg); } /// ditto
+				int opApply(scope int delegate(ref KeyIterationType!(true , true ), const ref V)      @safe @nogc dg) const      @safe @nogc { return c.opApplyImpl(dg); } /// ditto
+				int opApply(scope int delegate(ref KeyIterationType!(true , true ), const ref V) pure             dg) const pure             { return c.opApplyImpl(dg); } /// ditto
+				int opApply(scope int delegate(ref KeyIterationType!(true , true ), const ref V) pure       @nogc dg) const pure       @nogc { return c.opApplyImpl(dg); } /// ditto
+				int opApply(scope int delegate(ref KeyIterationType!(true , true ), const ref V) pure @safe       dg) const pure @safe       { return c.opApplyImpl(dg); } /// ditto
+				int opApply(scope int delegate(ref KeyIterationType!(true , true ), const ref V) pure @safe @nogc dg) const pure @safe @nogc { return c.opApplyImpl(dg); } /// ditto
+			}
+			else // !isConst
+			{
+				int opApply(scope int delegate(ref KeyIterationType!(false, true ),       ref V)                  dg)                        { return c.opApplyImpl(dg); }
+				int opApply(scope int delegate(ref KeyIterationType!(false, true ),       ref V)            @nogc dg)                  @nogc { return c.opApplyImpl(dg); } /// ditto
+				int opApply(scope int delegate(ref KeyIterationType!(false, true ),       ref V)      @safe       dg)            @safe       { return c.opApplyImpl(dg); } /// ditto
+				int opApply(scope int delegate(ref KeyIterationType!(false, true ),       ref V)      @safe @nogc dg)            @safe @nogc { return c.opApplyImpl(dg); } /// ditto
+				int opApply(scope int delegate(ref KeyIterationType!(false, true ),       ref V) pure             dg)       pure             { return c.opApplyImpl(dg); } /// ditto
+				int opApply(scope int delegate(ref KeyIterationType!(false, true ),       ref V) pure       @nogc dg)       pure       @nogc { return c.opApplyImpl(dg); } /// ditto
+				int opApply(scope int delegate(ref KeyIterationType!(false, true ),       ref V) pure @safe       dg)       pure @safe       { return c.opApplyImpl(dg); } /// ditto
+				int opApply(scope int delegate(ref KeyIterationType!(false, true ),       ref V) pure @safe @nogc dg)       pure @safe @nogc { return c.opApplyImpl(dg); } /// ditto
+			}
 		}
-		else
+		else // !haveValues (sets)
 		{
 			static if (isConst)
-				int opApply(scope int delegate(ref KeyIterationType!(true , true )) dg) const { return c.opApplyImpl(dg); }
-			else
-				int opApply(scope int delegate(ref KeyIterationType!(false, true )) dg)       { return c.opApplyImpl(dg); }
+			{
+				int opApply(scope int delegate(ref KeyIterationType!(true , true ))                  dg) const                  { return c.opApplyImpl(dg); }
+				int opApply(scope int delegate(ref KeyIterationType!(true , true ))            @nogc dg) const            @nogc { return c.opApplyImpl(dg); } /// ditto
+				int opApply(scope int delegate(ref KeyIterationType!(true , true ))      @safe       dg) const      @safe       { return c.opApplyImpl(dg); } /// ditto
+				int opApply(scope int delegate(ref KeyIterationType!(true , true ))      @safe @nogc dg) const      @safe @nogc { return c.opApplyImpl(dg); } /// ditto
+				int opApply(scope int delegate(ref KeyIterationType!(true , true )) pure             dg) const pure             { return c.opApplyImpl(dg); } /// ditto
+				int opApply(scope int delegate(ref KeyIterationType!(true , true )) pure       @nogc dg) const pure       @nogc { return c.opApplyImpl(dg); } /// ditto
+				int opApply(scope int delegate(ref KeyIterationType!(true , true )) pure @safe       dg) const pure @safe       { return c.opApplyImpl(dg); } /// ditto
+				int opApply(scope int delegate(ref KeyIterationType!(true , true )) pure @safe @nogc dg) const pure @safe @nogc { return c.opApplyImpl(dg); } /// ditto
+			}
+			else // !isConst
+			{
+				int opApply(scope int delegate(ref KeyIterationType!(false, true ))                  dg)                        { return c.opApplyImpl(dg); }
+				int opApply(scope int delegate(ref KeyIterationType!(false, true ))            @nogc dg)                  @nogc { return c.opApplyImpl(dg); } /// ditto
+				int opApply(scope int delegate(ref KeyIterationType!(false, true ))      @safe       dg)            @safe       { return c.opApplyImpl(dg); } /// ditto
+				int opApply(scope int delegate(ref KeyIterationType!(false, true ))      @safe @nogc dg)            @safe @nogc { return c.opApplyImpl(dg); } /// ditto
+				int opApply(scope int delegate(ref KeyIterationType!(false, true )) pure             dg)       pure             { return c.opApplyImpl(dg); } /// ditto
+				int opApply(scope int delegate(ref KeyIterationType!(false, true )) pure       @nogc dg)       pure       @nogc { return c.opApplyImpl(dg); } /// ditto
+				int opApply(scope int delegate(ref KeyIterationType!(false, true )) pure @safe       dg)       pure @safe       { return c.opApplyImpl(dg); } /// ditto
+				int opApply(scope int delegate(ref KeyIterationType!(false, true )) pure @safe @nogc dg)       pure @safe @nogc { return c.opApplyImpl(dg); } /// ditto
+			}
 		}
 	}
 
