@@ -85,14 +85,14 @@ debug(ae_unittest) unittest
 }
 
 /// Writes n as decimal number to buf (right-aligned), returns slice of buf containing result.
-char[] toDec(N : ulong, size_t U)(N o, ref char[U] buf) pure
+char[] toDec(N : ulong, size_t U)(N o, ref char[U] buf) pure @trusted
 {
 	static assert(U >= decimalSize!N, "Buffer too small to fit any " ~ N.stringof ~ " value");
 
 	Unqual!N n = o;
-	char* p = buf.ptr+buf.length;
+	char* p = buf.ptr + buf.length;
 
-	if (isSigned!N && n<0)
+	if (isSigned!N && n < 0)
 	{
 		do
 		{
@@ -153,7 +153,7 @@ string toDec(T : ulong)(T n)
 	}
 }
 
-debug(ae_unittest) unittest
+debug(ae_unittest) @safe unittest
 {
 	import std.conv : to;
 	assert(toDec(42) == "42");

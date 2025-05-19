@@ -184,11 +184,11 @@ void put(S, N)(ref S sink, N n)
 /// Write a number `n` in decimal to `sink`.
 void putDecimal(S, N)(ref S sink, N n)
 {
-	char[decimalSize!N] buf = void;
+	char[decimalSize!N] buf /*= void*/;
 	sink.put(toDec(n, buf));
 }
 
-debug(ae_unittest) unittest
+debug(ae_unittest) @safe unittest
 {
 	void test(N)(N n)
 	{

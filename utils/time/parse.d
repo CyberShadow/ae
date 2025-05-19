@@ -26,6 +26,8 @@ import std.string : strip, startsWith;
 import ae.utils.time.common;
 import ae.utils.time.types : AbsTime;
 
+@safe:
+
 private struct ParseContext(Char, bool checked)
 {
 	int year=0, month=1, day=1, hour=0, minute=0, second=0, nsecs=0;
@@ -36,8 +38,8 @@ private struct ParseContext(Char, bool checked)
 	bool escaping;
 
 	// CTFE-compatible alternative to Rebindable
-	@property immutable(TimeZone) tz() { return cast(immutable)tz_; }
-	@property void tz(immutable(TimeZone) tz) { tz_ = cast()tz; }
+	@property immutable(TimeZone) tz() @trusted { return cast(immutable)tz_; }
+	@property void tz(immutable(TimeZone) tz) @trusted { tz_ = cast()tz; }
 
 	void need(size_t n)()
 	{
@@ -97,10 +99,15 @@ private struct ParseContext(Char, bool checked)
 		throw new Exception(name ~ " expected");
 	}
 
+	private @trusted char trustedPeek()
+	{
+		return *t.ptr; // validity guaranteed by caller
+	}
+
 	char peek()
 	{
 		need!1();
-		return *t.ptr;
+		return trustedPeek();
 	}
 }
 
@@ -414,7 +421,7 @@ alias parseTimeUsing = parseTimeLikeUsing!SysTime;
 
 debug(ae_unittest) import ae.utils.time.format;
 
-debug(ae_unittest) unittest
+debug(ae_unittest) @safe unittest
 {
 	const s0 = "Tue Jun 07 13:23:19 GMT+0100 2011";
 	//enum t = s0.parseTime!(TimeFormats.STD_DATE); // https://issues.dlang.org/show_bug.cgi?id=12042
@@ -425,13 +432,13 @@ debug(ae_unittest) unittest
 	assert(t == t1);
 }
 
-debug(ae_unittest) unittest
+debug(ae_unittest) @safe unittest
 {
 	"Tue, 21 Nov 2006 21:19:46 +0000".parseTime!(TimeFormats.RFC2822);
 	"Tue, 21 Nov 2006 21:19:46 +0000".parseTimeUsing(TimeFormats.RFC2822);
 }
 
-debug(ae_unittest) unittest
+debug(ae_unittest) @safe unittest
 {
 	const char[] s = "Tue, 21 Nov 2006 21:19:46 +0000";
 	auto d = s.parseTime!(TimeFormats.RFC2822);
@@ -439,7 +446,7 @@ debug(ae_unittest) unittest
 }
 
 ///
-debug(ae_unittest) unittest
+debug(ae_unittest) @safe unittest
 {
 	enum buildTime = __TIMESTAMP__.parseTime!(TimeFormats.CTIME).stdTime;
 }
@@ -485,7 +492,7 @@ alias parseDateTime = parseTimeLike!DateTime;
 /// or milliseconds, are parsed but silently discarded.
 alias parseDateTimeUsing = parseTimeLikeUsing!DateTime;
 
-debug(ae_unittest) unittest
+debug(ae_unittest) @safe unittest
 {
 	const char[] s = "Tue, 21 Nov 2006 21:19:46 +0000";
 	auto d = s.parseDateTime!(TimeFormats.RFC2822);
@@ -504,7 +511,7 @@ alias parseDate = parseTimeLike!Date;
 /// or time of day, are parsed but silently discarded.
 alias parseDateUsing = parseTimeLikeUsing!Date;
 
-debug(ae_unittest) unittest
+debug(ae_unittest) @safe unittest
 {
 	const char[] s = "Tue, 21 Nov 2006 21:19:46 +0000";
 	auto d = s.parseDate!(TimeFormats.RFC2822);
@@ -523,7 +530,7 @@ alias parseTimeOfDay = parseTimeLike!TimeOfDay;
 /// year/month/day or timezone, are parsed but silently discarded.
 alias parseTimeOfDayUsing = parseTimeLikeUsing!TimeOfDay;
 
-debug(ae_unittest) unittest
+debug(ae_unittest) @safe unittest
 {
 	const char[] s = "Tue, 21 Nov 2006 21:19:46 +0000";
 	auto d = s.parseTimeOfDay!(TimeFormats.RFC2822);
@@ -542,7 +549,7 @@ alias parseAbsTime = parseTimeLike!AbsTime;
 /// are parsed but silently discarded.
 alias parseAbsTimeUsing = parseTimeLikeUsing!AbsTime;
 
-debug(ae_unittest) unittest
+debug(ae_unittest) @safe unittest
 {
 	const char[] s = "Tue, 21 Nov 2006 21:19:46 +0000";
 	auto d = s.parseAbsTime!(TimeFormats.RFC2822);

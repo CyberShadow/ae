@@ -147,7 +147,7 @@ enum MaxTimezoneNameLength = 256;
 
 /// Calculate the maximum amount of characters needed to store a time in this format.
 /// Can be evaluated at compile-time.
-size_t timeFormatSize(string fmt)
+size_t timeFormatSize(string fmt) @safe
 {
 	import std.algorithm.iteration : map, reduce;
 	import std.algorithm.comparison : max;

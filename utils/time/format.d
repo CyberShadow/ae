@@ -32,10 +32,10 @@ private struct FormatContext
 	bool escaping;
 }
 
-private FormatContext makeContext(SysTime t) { return FormatContext(t, cast(DateTime)t); }
-private FormatContext makeContext(DateTime t) { return FormatContext(SysTime(t), t); }
-private FormatContext makeContext(Date t) { return FormatContext(SysTime(t), DateTime(t)); }
-private FormatContext makeContext(AbsTime t) { auto s = t.sysTime(UTC()); return FormatContext(s, cast(DateTime)s); }
+private FormatContext makeContext(SysTime  t) @safe { return FormatContext(t, cast(DateTime)t); }
+private FormatContext makeContext(DateTime t) @safe { return FormatContext(SysTime(t), t); }
+private FormatContext makeContext(Date     t) @safe { return FormatContext(SysTime(t), DateTime(t)); }
+private FormatContext makeContext(AbsTime  t) @safe { auto s = t.sysTime(UTC()); return FormatContext(s, cast(DateTime)s); }
 // TODO: TimeOfDay support
 
 private string enumMemberNameByValue(E, T)(T value)
@@ -379,7 +379,7 @@ enum isFormattableTime(T) = is(typeof({ T t = void; return makeContext(t); }));
 
 /// Format a time value using the format spec fmt.
 /// This version generates specialized code for the given fmt.
-string formatTime(string fmt, Time)(Time t)
+string formatTime(string fmt, Time)(Time t) @safe
 if (isFormattableTime!Time)
 {
 	enum maxSize = timeFormatSize(fmt);
@@ -397,7 +397,7 @@ if (isStringSink!S && isFormattableTime!Time)
 
 /// Format a time value using the format spec fmt.
 /// This version parses fmt at runtime.
-string formatTime(Time)(Time t, string fmt)
+string formatTime(Time)(Time t, string fmt) @safe
 if (isFormattableTime!Time)
 {
 	auto result = StringBuilder(timeFormatSize(fmt));
@@ -406,7 +406,7 @@ if (isFormattableTime!Time)
 }
 
 /// ditto
-deprecated string formatTime(string fmt, SysTime t = Clock.currTime())
+deprecated string formatTime(string fmt, SysTime t = Clock.currTime()) @safe
 {
 	auto result = StringBuilder(48);
 	putTime(result, fmt, t);
@@ -435,7 +435,7 @@ if (isFormattableTime!Time)
 		putToken!(c, context, sink)();
 }
 
-debug(ae_unittest) unittest
+debug(ae_unittest) @safe unittest
 {
 	assert(SysTime.fromUnixTime(0, UTC()).formatTime!(TimeFormats.STD_DATE) == "Thu Jan 01 00:00:00 GMT+0000 1970");
 	assert(SysTime(0, new immutable(SimpleTimeZone)(Duration.zero)).formatTime!"T" == "+00:00");
