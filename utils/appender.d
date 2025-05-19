@@ -19,6 +19,8 @@ import std.experimental.allocator.common : stateSize;
 import std.experimental.allocator.gc_allocator : GCAllocator;
 import std.traits;
 
+@safe:
+
 /// Optimized appender. Not copyable.
 struct FastAppender(I, Allocator = GCAllocator)
 {
@@ -26,12 +28,12 @@ private:
 	enum PAGE_SIZE = 4096;
 	enum MIN_SIZE  = PAGE_SIZE / 2 + 1; // smallest size that can expand
 
-	alias Unqual!I T;
+	alias T = Unqual!I;
 
 	T* cursor, start, end;
 	bool unique; // Holding a unique reference to the buffer?
 
-	void reserve(size_t len)
+	void reserve(size_t len) @trusted
 	{
 		immutable size = cursor-start;
 		immutable newSize = size + len;
@@ -107,15 +109,22 @@ public:
 	}
 
 	/// Start with a given buffer
-	this(I[] arr)
+	this(T[] arr) @trusted
 	{
-		start = cursor = cast(T*)arr.ptr;
+		start = cursor = arr.ptr;
 		end = start + arr.length;
 	}
 
+	static if (!is(I == T))
+		this(I[] arr) @system
+		{
+			start = cursor = cast(T*)arr.ptr;
+			end = start + arr.length;
+		}
+
 	@disable this(this);
 
-	~this()
+	~this() @trusted
 	{
 		if (cursor && unique)
 			allocator.deallocate(start[0..end-start]);
@@ -124,7 +133,7 @@ public:
 	/// Put elements.
 	/// Accepts any number of items (and will allocate at most once per call).
 	/// Items can be of the element type (I), or arrays.
-	void putEx(U...)(U items)
+	void putEx(U...)(scope U items) @trusted
 		if (CanPutAll!U)
 	{
 		// TODO: check for static if length is 1
@@ -247,7 +256,7 @@ public:
 	/// As with `get`, but ownership is preserved.
 	/// The return value is valid until the next allocation,
 	/// or until Appender is destroyed.
-	I[] peek()
+	I[] peek() @trusted
 	{
 		return cast(I[])start[0..cursor-start];
 	}
@@ -275,7 +284,7 @@ public:
 	static if (is(I == T)) // mutable types only
 	{
 		/// Set the length (up to the current capacity).
-		@property void length(size_t value)
+		@property void length(size_t value) @trusted
 		{
 			if (start + value > end)
 				preallocate(start + value - end);
@@ -292,10 +301,10 @@ public:
 	}
 }
 
-debug(ae_unittest) unittest
+debug(ae_unittest) @safe unittest
 {
 	import std.meta : AliasSeq;
-	import std.experimental.allocator.mallocator;
+	import std.experimental.allocator.mallocator : Mallocator;
 
 	foreach (Allocator; AliasSeq!(GCAllocator, Mallocator))
 		foreach (C; AliasSeq!(char, wchar, dchar))
@@ -307,6 +316,18 @@ debug(ae_unittest) unittest
 			assert(a.get == "abcde");
 			a.clear();
 			assert(a.get == "");
+		}
+}
+
+debug(ae_unittest) @system unittest
+{
+	import std.meta : AliasSeq;
+	import std.experimental.allocator.mallocator : Mallocator;
+
+	foreach (Allocator; AliasSeq!(GCAllocator, Mallocator))
+		foreach (C; AliasSeq!(char, wchar, dchar))
+		{
+			FastAppender!(C, Allocator) a;
 			a.allocate(3)[] = 'x';
 			assert(a.get == "xxx");
 		}
