@@ -138,6 +138,23 @@ struct AbsTime
 	ref AbsTime opOpAssign(string op : "-")(Duration d) pure @safe nothrow @nogc { this.stdTime -= d.stdTime; return this; }
 	ref AbsTime opOpAssign(string op : "+")(Duration d) pure @safe nothrow @nogc { this.stdTime += d.stdTime; return this; }
 
+	ref AbsTime add(string units)(long value, AllowDayOverflow allowOverflow = AllowDayOverflow.yes) @safe nothrow scope
+	if (is(typeof((Date d) { d.add!units(value); })))
+	{
+		auto d0 = cast(Date)this;
+		auto d1 = d0;
+		d1.add!units(value, allowOverflow);
+		stdTime += (d1 - d0).stdTime;
+		return this;
+	}
+
+	debug(ae_unittest) @safe unittest
+	{
+		auto t = AbsTime(Date(2000, 1, 1));
+		t.add!"months"(1);
+		assert(t == AbsTime(Date(2000, 2, 1)));
+	}
+
 	string toString() const @safe nothrow { return sysTime.toString(); }
 
 	static enum min = AbsTime(SysTime.min.stdTime);
