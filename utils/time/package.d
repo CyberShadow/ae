@@ -13,6 +13,7 @@
 
 module ae.utils.time;
 
+public import ae.utils.time.caldur;
 public import ae.utils.time.common;
 public import ae.utils.time.format;
 public import ae.utils.time.fpdur;
