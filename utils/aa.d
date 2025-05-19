@@ -149,7 +149,7 @@ debug(ae_unittest) unittest
 /// Otherwise, return false.
 bool addNew(K, V)(ref V[K] aa, auto ref K key, auto ref V value)
 {
-	bool added = void;
+	bool added /*= void*/;
 	updateVoid(aa, key,
 		delegate V   (       ) { added = true ; return value; },
 		delegate void(ref V v) { added = false;               },
@@ -157,7 +157,7 @@ bool addNew(K, V)(ref V[K] aa, auto ref K key, auto ref V value)
 	return added;
 }
 
-debug(ae_unittest) unittest
+debug(ae_unittest) @safe unittest
 {
 	int[int] aa;
 	assert( aa.addNew(1, 2));
