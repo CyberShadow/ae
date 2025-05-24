@@ -234,6 +234,34 @@ public:
 	void update(K start, K end, scope void delegate(K start, K end, ref V value) pure @safe         dg) pure @safe         { return updateImpl(start, end, dg); }
 	void update(K start, K end, scope void delegate(K start, K end, ref V value) pure @safe nothrow dg) pure @safe nothrow { return updateImpl(start, end, dg); }
 
+	void require(K start, K end, lazy V value) pure @safe /*nothrow*/
+	in (start <= end)
+	{
+		if (start == end)
+			return;
+
+		Span[] newSpans;
+		K p = start;
+
+		foreach (ref span; spans)
+		{
+			if (p < end) // not done yet
+				if (p < span.start) // there is a gap
+				{
+					auto p1 = min(span.start, end); // how much of the gap to fill
+					newSpans ~= Span(p, p1, value);
+					p = p1;
+				}
+
+			newSpans ~= span;
+			p = max(span.end, p);
+		}
+		if (p < end)
+			newSpans ~= Span(p, end, value);
+
+		spans = newSpans;
+	}
+
 	void opIndexAssign(V value, Interval slice) pure @safe nothrow
 	{
 		if (slice.start == slice.end)
@@ -351,4 +379,55 @@ debug(ae_unittest) @nogc unittest
 	IntervalAssocArray!(int, string) a;
 	foreach (start, end, ref value; a)
 		assert(start < end);
+}
+
+debug(ae_unittest) pure @safe /*nothrow*/ unittest
+{
+	IntervalAssocArray!(int, string) a;
+
+	// Test require on empty array
+	a.require(0, 5, "A");
+	assert(a[0] == "A");
+	assert(a[2] == "A");
+	assert(a[4] == "A");
+	assert(2 in a);
+	assert(6 !in a);
+
+	// Test require on existing range (should not overwrite)
+	a.require(2, 7, "B");
+	assert(a[2] == "A");
+	assert(a[4] == "A");
+	assert(a[5] == "B");
+	assert(a[6] == "B");
+
+	// Test require with gap
+	a.require(10, 15, "C");
+	assert(a[12] == "C");
+	assert(9 !in a);
+
+	// Test require filling gaps between existing ranges
+	a.require(0, 15, "D");
+	assert(a[2] == "A");  // still A
+	assert(a[5] == "B");  // still B
+	assert(a[7] == "D");  // gap filled with D
+	assert(a[8] == "D");  // gap filled with D
+	assert(a[9] == "D");  // gap filled with D
+	assert(a[12] == "C"); // still C
+
+	// Test require with overlapping ranges
+	a.clear();
+	a[3..7] = "P";
+	a[9..12] = "Q";
+	a.require(0, 15, "R");
+	assert(a[1] == "R");   // gap before P
+	assert(a[5] == "P");   // still P
+	assert(a[8] == "R");   // gap between P and Q
+	assert(a[10] == "Q");  // still Q
+	assert(a[13] == "R");  // gap after Q
+
+	// Test empty range (should do nothing)
+	a.clear();
+	a[0..5] = "A";
+	a.require(2, 2, "B");
+	assert(a[2] == "A");
 }
