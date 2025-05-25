@@ -34,7 +34,7 @@ private:
 	}
 	Span[] spans;
 
-	invariant
+	debug(ae_unittest) invariant
 	{
 		foreach (i, ref span; spans)
 		{
