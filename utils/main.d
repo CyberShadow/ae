@@ -23,7 +23,7 @@ module ae.utils.main;
  * to the user - on standard error, or, for Windows
  * GUI programs, in a message box.
  */
-mixin template main(alias realMain)
+mixin template main(alias realMain, bool printStackTrace = isDebug)
 {
 	version (unittest_only)
 	{
@@ -80,8 +80,8 @@ mixin template main(alias realMain)
 			}
 		}
 
-		debug
-			static if(is(std.getopt.GetOptException))
+		static if (printStackTrace)
+			static if (is(std.getopt.GetOptException))
 				return runCatchingException!(std.getopt.GetOptException, "Usage error")(args);
 			else
 				return run(args);
@@ -89,3 +89,8 @@ mixin template main(alias realMain)
 			return runCatchingException!(Throwable, "Fatal error")(args);
 	}
 }
+
+debug
+	private enum isDebug = true;
+else
+	private enum isDebug = false;
