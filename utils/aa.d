@@ -623,17 +623,23 @@ public:
 	/// Index access (for ordered collections).
 	/// For maps, returns the key.
 	static if (ordered)
-	ref inout(K) at()(size_t i) inout
+	ref inout(K) atIndex()(size_t i) inout
 	{
 		return items[i].key;
 	}
 
+	static if (ordered)
+	deprecated alias at = atIndex;
+
 	/// ditto
 	static if (ordered)
-	auto ref inout(K) getAt()(size_t i, auto ref K defaultValue) inout
+	auto ref inout(K) getAtIndex()(size_t i, auto ref K defaultValue) inout
 	{
 		return i < items.length ? items[i].key : defaultValue;
 	}
+
+	static if (ordered)
+	deprecated alias getAt = getAtIndex;
 
 	// *** Query (by key/index - DWIM) ***
 
@@ -1843,9 +1849,9 @@ debug(ae_unittest) unittest
 		assert(set[i] == 2);
 	}
 
-	assert(set.at(set.indexOf(2)) == 2);
-	assert(set.getAt(set.indexOf(2), 99) == 2);
-	assert(set.getAt(99, 99) == 99);
+	assert(set.atIndex(set.indexOf(2)) == 2);
+	assert(set.getAtIndex(set.indexOf(2), 99) == 2);
+	assert(set.getAtIndex(99, 99) == 99);
 }
 
 /// Construct an ordered set from the range `r`.
