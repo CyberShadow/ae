@@ -978,15 +978,15 @@ template amap(alias pred)
 		import core.memory : GC;
 		import core.lifetime : emplace;
 		alias T = typeof(unaryFun!pred(range.front));
-		auto result = uninitializedArray!(Unqual!T[])(range.length);
+		auto result = (() @trusted => uninitializedArray!(Unqual!T[])(range.length))();
 		foreach (i; 0 .. range.length)
 		{
 			auto value = cast()unaryFun!pred(range.front);
-			moveEmplace(value, result[i]);
+			(() @trusted { moveEmplace(value, result[i]); })();
 			range.popFront();
 		}
 		assert(range.empty);
-		return cast(T[])result;
+		return (() @trusted => cast(T[])result)();
 	}
 
 	/// Like `amap` but with a static array.
@@ -1003,14 +1003,14 @@ template afilter(alias pred) { auto afilter(T)(T[] arr) { return array(filter!pr
 auto auniq(T)(T[] arr) { return array(uniq(arr)); } /// ditto
 auto asort(alias pred, T)(T[] arr) { sort!pred(arr); return arr; } /// ditto
 
-debug(ae_unittest) unittest
+debug(ae_unittest) @safe unittest
 {
 	assert([1, 2, 3].amap!`a*2`() == [2, 4, 6]);
 	assert([1, 2, 3].amap!(n => n*n)() == [1, 4, 9]);
 	assert([1, 2, 3].staticArray.amap!(n => n*n)() == [1, 4, 9].staticArray);
 }
 
-debug(ae_unittest) unittest
+debug(ae_unittest) @safe unittest
 {
 	struct NC
 	{
@@ -1024,7 +1024,7 @@ debug(ae_unittest) unittest
 	assert(3.iota.amap!(i => NC(i))[1].i == 1);
 }
 
-debug(ae_unittest) unittest
+debug(ae_unittest) @safe unittest
 {
 	import std.range : iota;
 	immutable(int)[] arr;
