@@ -20,58 +20,80 @@ import std.utf;
 
 import ae.utils.aa;
 
-void toCSV(Output)(OrderedMap!(string, string)[] rows, Output output)
+void putCSVCell(Output)(ref Output output, string value)
 {
-	void putValue(string value)
+	if (value.empty || value.byChar.any!(c => c == '"' || c == '\'' || c == '\n' || c == '\r' || c == ',' || c == ';' || c == ' ' || c == '\t'))
 	{
-		if (value.empty || value.byChar.any!(c => c == '"' || c == '\'' || c == '\n' || c == '\r' || c == ',' || c == ';' || c == ' ' || c == '\t'))
+		output.put('"');
+		foreach (c; value)
 		{
-			output.put('"');
-			foreach (c; value)
-			{
-				if (c == '"')
-					output.put('"');
-				output.put(c);
-			}
-			output.put('"');
+			if (c == '"')
+				output.put('"');
+			output.put(c);
 		}
+		output.put('"');
+	}
+	else
+		output.put(value);
+}
+
+void putCSVRow(Output, Row)(ref Output output, Row row)
+{
+	bool first = true;
+	foreach (value; row)
+	{
+		if (first)
+			first = false;
 		else
-			output.put(value);
+			output.put(',');
+		output.putCSVCell(value);
 	}
+	output.put("\r\n");
+}
 
-	enforce(rows.length > 0, "Cannot write empty CSV");
-
-	{
-		bool first = true;
-		foreach (header; rows[0].byKey)
-		{
-			if (first)
-				first = false;
-			else
-				output.put(',');
-			putValue(header);
-		}
-		output.put("\r\n");
-	}
-
+void putCSV(Output)(Output output, string[] headers, string[][] rows)
+{
+	output.putCSVRow(headers);
 	foreach (row; rows)
-	{
-		bool first = true;
-		foreach (name, value; row)
-		{
-			if (first)
-				first = false;
-			else
-				output.put(',');
-			putValue(value);
-		}
-		output.put("\r\n");
-	}
+		output.putCSVRow(row);
 }
 		
+string toCSV(string[] headers, string[][] rows)
+{
+	auto buffer = appender!string;
+	buffer.putCSV(headers, rows);
+	return buffer.data;
+}
+
+debug(ae_unittest) unittest
+{
+	auto csv = toCSV(["a", "b"], [["1", "2"], ["3 4", `5"6`]]);
+	assert(csv == "a,b\r\n1,2\r\n\"3 4\",\"5\"\"6\"\r\n");
+}
+
+void putCSV(Output)(Output output, OrderedMap!(string, string)[] rows)
+{
+	enforce(rows.length > 0, "Cannot write empty CSV");
+
+	output.putCSVRow(rows[0].byKey);
+	foreach (row; rows)
+		output.putCSVRow(row.byValue);
+}
+
 string toCSV(OrderedMap!(string, string)[] rows)
 {
 	auto buffer = appender!string;
-	toCSV(rows, buffer);
+	buffer.putCSV(rows);
 	return buffer.data;
+}
+
+debug(ae_unittest) unittest
+{
+	import std.typecons : tuple;
+
+	auto csv = toCSV([
+		orderedMap([tuple("a", "1"), tuple("b", "2")]),
+		orderedMap([tuple("a", "3 4"), tuple("b", `5"6`)]),
+	]);
+	assert(csv == "a,b\r\n1,2\r\n\"3 4\",\"5\"\"6\"\r\n");
 }
