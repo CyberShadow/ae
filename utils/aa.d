@@ -261,6 +261,28 @@ debug(ae_unittest) deprecated unittest
 	assert([2:4].pairs.toAA() == [2:4]);
 }
 
+/// Group a range's elements (using a predicate) into an associative array of arrays,
+/// using the predicate's return value as the key.
+auto assocGroup(alias getKey, R)(R range)
+if (is(typeof(getKey(range.front))))
+{
+	alias V = typeof(range.front);
+	alias K = typeof(getKey(range.front));
+	V[][K] result;
+	foreach (ref v; range)
+		result[getKey(v)] ~= v;
+	return result;
+}
+
+debug(ae_unittest) unittest
+{
+	auto fruits = ["apple", "banana", "apricot", "blackberry", "blueberry"];
+	auto byFirstLetter = fruits.assocGroup!(s => char(s[0]));
+	assert(byFirstLetter == [
+		'a': ["apple", "apricot"],
+		'b': ["banana", "blackberry", "blueberry"]
+	]);
+}
 /// Ensure that arr is non-null if empty.
 V[K] nonNull(K, V)(V[K] aa)
 {
