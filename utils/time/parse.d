@@ -290,6 +290,7 @@ private void parseToken(alias c, alias context)()
 				hour = d.hour;
 				minute = d.minute;
 				second = d.second;
+				tz = UTC();
 				break;
 			}
 
