@@ -46,6 +46,11 @@ jobs:
 
       - run: dub test --debug=ae_unittest --arch=${{ matrix.arch }}
 
+      # Test in non-UTC timezone
+      - run: dub test --debug=ae_unittest --arch=${{ matrix.arch }}
+        env:
+          TZ: America/New_York
+
       - run: dub test --debug=ae_unittest --arch=${{ matrix.arch }} :sys-net-test
 
       - if: ${{ matrix.os == 'ubuntu-22.04' }}
