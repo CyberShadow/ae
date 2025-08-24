@@ -20,23 +20,25 @@ import std.traits;
 /// Stores `T` in big-endian byte order.
 struct BigEndian(T)
 {
-	private ubyte[T.sizeof] _endian_bytes;
-	@property T _endian_value() const { return cast(T)bigEndianToNative!(OriginalType!T)(_endian_bytes); }
-	@property void _endian_value(T value) { _endian_bytes = nativeToBigEndian(OriginalType!T(value)); }
+	ubyte[T.sizeof] bytes;
+	@property T _endian_value() const { return cast(T)bigEndianToNative!(OriginalType!T)(bytes); }
+	@property void _endian_value(T value) { bytes = nativeToBigEndian(OriginalType!T(value)); }
 	alias _endian_value this;
 	alias opAssign = _endian_value; ///
 	this(T value) { _endian_value(value); } ///
+	this(ubyte[T.sizeof] bytes) { this.bytes = bytes; } ///
 }
 
 /// Stores `T` in little-endian byte order.
 struct LittleEndian(T)
 {
-	private ubyte[T.sizeof] _endian_bytes;
-	@property T _endian_value() const { return cast(T)littleEndianToNative!(OriginalType!T)(_endian_bytes); }
-	@property void _endian_value(T value) { _endian_bytes = nativeToLittleEndian(OriginalType!T(value)); }
+	ubyte[T.sizeof] bytes;
+	@property T _endian_value() const { return cast(T)littleEndianToNative!(OriginalType!T)(bytes); }
+	@property void _endian_value(T value) { bytes = nativeToLittleEndian(OriginalType!T(value)); }
 	alias _endian_value this;
 	alias opAssign = _endian_value; ///
 	this(T value) { _endian_value(value); } ///
+	this(ubyte[T.sizeof] bytes) { this.bytes = bytes; } ///
 }
 
 alias NetworkByteOrder = BigEndian;
@@ -54,9 +56,13 @@ debug(ae_unittest) unittest
 
 	u.be = 0x1234;
 	assert(u.bytes == [0x12, 0x34]);
+	assert(u.be.bytes == [0x12, 0x34]);
+	assert(u.le.bytes == [0x12, 0x34]);
 
 	u.le = 0x1234;
 	assert(u.bytes == [0x34, 0x12]);
+	assert(u.be.bytes == [0x34, 0x12]);
+	assert(u.le.bytes == [0x34, 0x12]);
 
 	u.bytes = [0x56, 0x78];
 	assert(u.be == 0x5678);
