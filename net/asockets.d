@@ -129,7 +129,9 @@ version (LIBEV)
 				nextTickHandlers = null;
 
 				foreach (handler; thisTickHandlers)
-					handler();
+					runUserEventHandler({
+						handler();
+					});
 			}
 
 			socketManager.updateTimer(wokeDueToTimeout);
@@ -152,7 +154,9 @@ version (LIBEV)
 					while (remaining <= Duration.zero)
 					{
 						debug (ASOCKETS) stderr.writefln("remaining=%s, prodding timer.", remaining);
-						mainTimer.prod(socketManager.now);
+						runUserEventHandler({
+							mainTimer.prod(socketManager.now);
+						});
 						remaining = mainTimer.getRemainingTime(socketManager.now);
 					}
 					ev_tstamp tstamp = remaining.total!"hnsecs" * 1.0 / convert!("seconds", "hnsecs")(1);
@@ -467,7 +471,9 @@ else // Use select
 				{
 					// Handle just one event at a time, as the first
 					// handler might invalidate select()'s results.
-					handleEvent(readset, writeset);
+					runUserEventHandler({
+						handleEvent(readset, writeset);
+					});
 				}
 				else
 				if (idleHandlers.length)
@@ -479,11 +485,15 @@ else // Use select
 					// in case the handler unregisters itself.
 					idleHandlers ~= handler;
 
-					handler();
+					runUserEventHandler({
+						handler();
+					});
 				}
 
 				// Timers may invalidate our select results, so fire them after processing the latter
-				mainTimer.prod(now);
+				runUserEventHandler({
+					mainTimer.prod(now);
+				});
 
 				eventCounter++;
 			}
@@ -591,6 +601,146 @@ void onNextTick(ref SocketManager socketManager, void delegate() dg) pure @safe 
 		socketManager.now = MonoTime.currTime();
 	}
 	return socketManager.now;
+}
+
+// ***************************************************************************
+
+debug (ae_unittest) debug (linux) debug = ASOCKETS_SLOW_EVENT_HANDLER;
+
+// Slow event handler watchdog
+private debug (ASOCKETS_SLOW_EVENT_HANDLER)
+{
+	import core.sync.condition : Condition;
+	import core.sync.mutex : Mutex;
+	import core.thread : Thread, ThreadID;
+	import std.stdio : stderr;
+
+	import core.sys.posix.pthread;
+	import core.sys.posix.unistd;
+	import core.sys.posix.signal;
+
+	import ae.utils.time.parsedur : parseDuration;
+
+	extern (C)
+	{
+		int backtrace(void** buffer, int size);
+		void backtrace_symbols_fd(const(void*)* buffer, int size, int fd);
+	}
+
+	struct SlowEventHandlerWatchdog
+	{
+	static:
+		shared int signal;
+		shared Duration timeout;
+
+		extern (C) void stackTraceHandler(int /*sig*/)
+		{
+			void*[64] buffer;
+			int nptrs = backtrace(buffer.ptr, cast(int)buffer.length);
+			const(char)[] header = "--- WATCHDOG TIMEOUT: STACK TRACE ---\n";
+			const(char)[] footer = "-------------------------------------\n";
+			write(STDERR_FILENO, header.ptr, header.length);
+			backtrace_symbols_fd(buffer.ptr, nptrs, STDERR_FILENO);
+			write(STDERR_FILENO, footer.ptr, footer.length);
+		}
+
+		shared static this()
+		{
+			import std.process : environment;
+
+			// Initialize settings and parse any additional configuration from environment
+			signal = environment.get("AE_SLOW_EVENT_HANDLER_SIGNAL", SIGUSR1.to!string).to!int;
+			timeout = parseDuration(environment.get("AE_SLOW_EVENT_HANDLER_TIMEOUT", "100ms"));
+
+			// Install signal handler
+			{
+				sigaction_t sa;
+				sa.sa_handler = &stackTraceHandler;
+				sigemptyset(&sa.sa_mask);
+				sa.sa_flags = 0;
+				if (sigaction(signal, &sa, null) == -1)
+					throw new ErrnoException("sigaction failed");
+			}
+		}
+
+		final class WatchdogThread : Thread
+		{
+			Mutex mutex;
+			Condition cond;
+
+			ThreadID eventThreadID;
+			MonoTime deadline;
+
+			this(ThreadID eventThreadID)
+			{
+				this.eventThreadID = eventThreadID;
+				this.mutex = new Mutex(this);
+				this.cond = new Condition(this.mutex);
+
+				this.isDaemon = true;
+				super(&run);
+			}
+
+			void run()
+			{
+				synchronized (this.mutex)
+				{
+					while (true)
+					{
+						if (deadline is MonoTime.init)
+						{
+							this.cond.wait();
+							continue;
+						}
+
+						auto timeLeft = deadline - MonoTime.currTime;
+						if (timeLeft > Duration.zero)
+						{
+							this.cond.wait(timeLeft);
+							continue;
+						}
+
+						// Deadline reached, time-out
+						stderr.writeln("Watchdog: Detected timeout!");
+
+						pthread_kill(eventThreadID, signal);
+						deadline = MonoTime.init;
+					}
+				}
+			}
+		}
+
+		WatchdogThread thread; // TLS variable in the event loop thread's local storage
+
+		void arm()
+		{
+			if (!thread)
+			{
+				thread = new WatchdogThread(Thread.getThis().id);
+				thread.start();
+			}
+			synchronized (thread.mutex)
+				thread.deadline = MonoTime.currTime() + timeout;
+			thread.cond.notify();
+		}
+
+		void disarm()
+		{
+			synchronized (thread.mutex)
+				thread.deadline = MonoTime.init;
+			thread.cond.notify();
+		}
+	}
+}
+
+void runUserEventHandler(scope void delegate() dg)
+{
+	debug (ASOCKETS_SLOW_EVENT_HANDLER)
+		SlowEventHandlerWatchdog.arm();
+	scope (exit)
+		debug (ASOCKETS_SLOW_EVENT_HANDLER)
+			SlowEventHandlerWatchdog.disarm();
+	dg();
 }
 
 // ***************************************************************************
