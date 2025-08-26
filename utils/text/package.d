@@ -681,7 +681,7 @@ string hexDump(const(void)[] b)
 		foreach (x; 0..16)
 		{
 			if (i+x<data.length)
-				s ~= format("%02X ", data[i+x]);
+				s ~= toHex(data[i+x]) ~ " ";
 			else
 				s ~= "   ";
 			if (x==7)
