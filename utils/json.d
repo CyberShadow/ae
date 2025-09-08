@@ -721,6 +721,11 @@ private struct JsonParser(C, JsonOptions options = JsonOptions.init)
 				}
 			}
 			result ~= s[start..p-1];
+			if (result is null)
+			{
+				static C[0] empty;
+				return empty[];
+			}
 			return result;
 		}
 		else
@@ -1225,6 +1230,8 @@ debug(ae_unittest) unittest
 debug(ae_unittest) unittest
 {
 	assert(string.init.toJson.jsonParse!string  is null);
+	assert(""                                  !is null);
+	assert(""         .toJson                  == `""`);
 	assert(""         .toJson.jsonParse!string !is null);
 }
 
