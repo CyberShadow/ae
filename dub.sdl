@@ -173,7 +173,7 @@ subPackage {
 	name "windows"
 	targetType "library"
 	dependency "ae" version="*" path="."
-        dependency "win32" version="==2.107.1" platform="posix"
+        dependency "win32" version="==2.111.0" platform="posix"
 	sourceFiles \
 		"sys/windows/pe/package.d" \
 		"sys/windows/pe/pe.d" \

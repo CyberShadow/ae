@@ -8,7 +8,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04, windows-2022, macos-14]
-        dc: [dmd-2.107.1, ldc-1.32.2]
+        dc: [dmd-2.111.0, ldc-1.32.2]
         arch: [x86_64]
         include:
           # also test an older DMD verrsion
@@ -23,12 +23,12 @@ jobs:
           # Do not try to use DMD on Windows
           # https://issues.dlang.org/show_bug.cgi?id=22044
           - os: windows-2022
-            dc: dmd-2.107.1
+            dc: dmd-2.111.0
           # Do not try to use DMD on macOS
           # Fails to link with errors such as:
           # "ld: r_symbolnum=20 out of range in '.../libae.a[11668](xmlwriter_2cc8_ad9.o)'"
           - os: macos-14
-            dc: dmd-2.107.1
+            dc: dmd-2.111.0
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -56,10 +56,10 @@ jobs:
       - if: ${{ matrix.os == 'ubuntu-22.04' }}
         run: dub test --debug=ae_unittest --arch=${{ matrix.arch }} :sqlite
 
-      - if: ${{ matrix.os == 'ubuntu-22.04' && matrix.dc == 'dmd-2.107.1' }} # old Dub versions can't fetch packages
+      - if: ${{ matrix.os == 'ubuntu-22.04' && matrix.dc == 'dmd-2.111.0' }} # old Dub versions can't fetch packages
         run: dub test --debug=ae_unittest --arch=${{ matrix.arch }} :libpng
 
-      - if: ${{ matrix.dc == 'dmd-2.107.1' }}
+      - if: ${{ matrix.dc == 'dmd-2.111.0' }}
         run: dub test --debug=ae_unittest --arch=${{ matrix.arch }} :windows
 
   compilation-test:
@@ -67,7 +67,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-22.04]
-        dc: [dmd-2.107.1]
+        dc: [dmd-2.111.0]
 
     runs-on: ${{ matrix.os }}
     steps:
