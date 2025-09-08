@@ -1944,7 +1944,7 @@ version (linux)
 	/// Returns an iterator of MountInfo structs.
 	auto getMounts()
 	{
-		return File("/proc/self/mounts", "rb").byLine().map!parseMountInfo();
+		return File("/proc/self/mounts", "rb").byLine().map!parseMountInfo().array;
 	}
 
 	/// Get MountInfo with longest mount point matching path.
