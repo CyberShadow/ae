@@ -117,8 +117,20 @@ struct Vec(T)
 			T[] newData;
 			newData.reserve(newCapacity);
 			assert(newData.capacity >= newCapacity);
-			newData = newData.ptr[0 .. data.length];
-			newData.assumeSafeAppend();
+			auto p0 = newData.ptr;
+			static if (__traits(hasMember, GC, "expandArrayUsed"))
+			{
+				auto res = gc_getProxy.expandArrayUsed(newData, data.length * T.sizeof);
+				if (!res)
+					assert(false, "Array expansion failed");
+				newData = newData.ptr[0 .. data.length]; // has to go after expansion			}
+			}
+			else
+			{
+				newData = newData.ptr[0 .. data.length];
+				newData.assumeSafeAppend();
+			}
+			assert(newData.ptr is p0, "Array was reallocated");
 			foreach (i; 0 .. data.length)
 				moveEmplace(data[i], newData[i]);
 			data = newData[0 .. data.length];
@@ -226,6 +238,10 @@ struct Vec(T)
 private:
 	T[] data;
 }
+
+// https://github.com/dlang/dmd/issues/21826#issuecomment-3264427803
+import core.gc.gcinterface : GC;
+private extern(C) GC gc_getProxy();
 
 // Test object lifetime
 debug(ae_unittest) unittest
