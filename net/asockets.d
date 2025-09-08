@@ -975,6 +975,7 @@ class Connection : GenericSocket, IConnection
 {
 private:
 	ConnectionState _state;
+protected:
 	final @property ConnectionState state(ConnectionState value) { return _state = value; }
 
 public:
