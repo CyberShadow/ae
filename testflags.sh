@@ -47,6 +47,8 @@ bad_flags=(
 	-preview=dip1021
 	# Seems unfinished, see https://forum.dlang.org/post/t05jts$2j48$1@digitalmars.com
 	-preview=nosharedaccess
+	# Too strict
+	-preview=safer
 	# Includes the above
 	-preview=all
 )
