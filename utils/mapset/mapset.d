@@ -139,7 +139,8 @@ struct MapSet(DimName, DimValue, DimValue nullValue = DimValue.init)
 					first = false;
 				else
 					sink(", ");
-				sink.formattedWrite("%s : %s", pair.value, pair.set);
+				sink.formattedWrite("%s : ", pair.value);
+				pair.set.toString(sink);
 			}
 			sink(" ] }");
 		} ///
