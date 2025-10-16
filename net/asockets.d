@@ -307,7 +307,9 @@ else // Use select
 
 			debug
 			{
-				auto handle = conn.socket.handle;
+				auto socket = conn.socket;
+				assert(socket, "Trying to unregister an uninitialized socket");
+				auto handle = socket.handle;
 				assert(handle != socket_t.init, "Can't unregister a closed socket");
 				auto pconn = handle in socketHandles;
 				assert(pconn, "This socket handle is not registered");
