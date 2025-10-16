@@ -1519,9 +1519,12 @@ protected:
 	{
 		if (state == ConnectionState.connecting && addressQueue.length)
 		{
-			socketManager.unregister(this);
-			conn.close();
-			conn = null;
+			if (conn)
+			{
+				socketManager.unregister(this);
+				conn.close();
+				conn = null;
+			}
 
 			return tryNextAddress();
 		}
