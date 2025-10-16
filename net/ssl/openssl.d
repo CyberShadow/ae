@@ -169,7 +169,7 @@ class OpenSSLProvider : SSLProvider
 	override SSLAdapter createAdapter(SSLContext context, IConnection next)
 	{
 		auto ctx = cast(OpenSSLContext)context;
-		assert(ctx, "Not an OpenSSLContext");
+		if (!ctx) assert(false, "Not an OpenSSLContext");
 		return new OpenSSLAdapter(ctx, next);
 	} ///
 }
@@ -494,7 +494,7 @@ class OpenSSLAdapter : SSLAdapter
 
 	override void send(scope Data[] data, int priority = DEFAULT_PRIORITY)
 	{
-		assert(state == ConnectionState.connected, "Attempting to send to a non-connected socket");
+		if (state != ConnectionState.connected) assert(false, "Attempting to send to a non-connected socket");
 		while (data.length)
 		{
 			auto datum = data[0];
