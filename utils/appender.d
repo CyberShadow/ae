@@ -19,6 +19,28 @@ import std.experimental.allocator.common : stateSize;
 import std.experimental.allocator.gc_allocator : GCAllocator;
 import std.traits;
 
+/// UFCS shim for classic output ranges, which only take a single-argument put.
+void putEx(R, U...)(auto ref R r, U items)
+{
+	foreach (item; items)
+	{
+		static if (is(typeof(r.put(item))))
+			r.put(item);
+		else
+		static if (is(typeof(r.put(item[]))))
+			r.put(item[]);
+		else
+		static if (is(typeof({ foreach (c; item) r.put(c); })))
+			foreach (c; item)
+				r.put(c);
+		else
+		static if (is(typeof(r.put((&item)[0..1]))))
+			r.put((&item)[0..1]);
+		else
+			static assert(false, "Can't figure out how to put " ~ typeof(item).stringof ~ " into a " ~ R.stringof);
+	}
+}
+
 @safe:
 
 /// Optimized appender. Not copyable.
@@ -333,24 +355,13 @@ debug(ae_unittest) @system unittest
 		}
 }
 
-/// UFCS shim for classic output ranges, which only take a single-argument put.
-void putEx(R, U...)(auto ref R r, U items)
+debug(ae_unittest) @system unittest
 {
-	foreach (item; items)
+	struct UnsafeSink
 	{
-		static if (is(typeof(r.put(item))))
-			r.put(item);
-		else
-		static if (is(typeof(r.put(item[]))))
-			r.put(item[]);
-		else
-		static if (is(typeof({ foreach (c; item) r.put(c); })))
-			foreach (c; item)
-				r.put(c);
-		else
-		static if (is(typeof(r.put((&item)[0..1]))))
-			r.put((&item)[0..1]);
-		else
-			static assert(false, "Can't figure out how to put " ~ typeof(item).stringof ~ " into a " ~ R.stringof);
+		void put(T)(T _) @system {}
 	}
+
+	UnsafeSink s;
+	s.putEx("hello");
 }
