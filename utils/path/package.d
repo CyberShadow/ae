@@ -16,6 +16,8 @@ module ae.utils.path;
 import std.algorithm.searching;
 import std.path;
 
+public import ae.utils.path.glob;
+
 /// Modify a path under oldBase to a new path with the same subpath under newBase.
 /// E.g.: `/foo/bar`.rebasePath(`/foo`, `/quux`) == `/quux/bar`
 string rebasePath(string path, string oldBase, string newBase)
