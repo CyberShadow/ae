@@ -88,6 +88,37 @@ struct CompiledGlob(C)
 							w.put('\\');
 						w.put(range.end);
 					}
+					// Output POSIX classes
+					if (charClass.posixClasses != PosixClass.none)
+					{
+						import std.range.primitives : put;
+
+						// Helper to output a POSIX class if its flag is set
+						void outputClass(PosixClass flag, string name)
+						{
+							if (charClass.posixClasses & flag)
+							{
+								w.put('[');
+								w.put(':');
+								put(w, name);
+								w.put(':');
+								w.put(']');
+							}
+						}
+
+						outputClass(PosixClass.alnum,  "alnum");
+						outputClass(PosixClass.alpha,  "alpha");
+						outputClass(PosixClass.blank,  "blank");
+						outputClass(PosixClass.cntrl,  "cntrl");
+						outputClass(PosixClass.digit,  "digit");
+						outputClass(PosixClass.graph,  "graph");
+						outputClass(PosixClass.lower,  "lower");
+						outputClass(PosixClass.print,  "print");
+						outputClass(PosixClass.punct,  "punct");
+						outputClass(PosixClass.space,  "space");
+						outputClass(PosixClass.upper,  "upper");
+						outputClass(PosixClass.xdigit, "xdigit");
+					}
 					w.put(']');
 					break;
 
@@ -109,6 +140,24 @@ struct CompiledGlob(C)
 		}
 	}
 
+	/// POSIX character class flags (bitfield)
+	private enum PosixClass : ushort
+	{
+		none    = 0,
+		alnum   = 1 << 0,  /// Alphanumeric: [A-Za-z0-9]
+		alpha   = 1 << 1,  /// Alphabetic: [A-Za-z]
+		blank   = 1 << 2,  /// Space and tab
+		cntrl   = 1 << 3,  /// Control characters
+		digit   = 1 << 4,  /// Digits: [0-9]
+		graph   = 1 << 5,  /// Visible characters (no space)
+		lower   = 1 << 6,  /// Lowercase: [a-z]
+		print   = 1 << 7,  /// Printable characters
+		punct   = 1 << 8,  /// Punctuation
+		space   = 1 << 9,  /// Whitespace
+		upper   = 1 << 10, /// Uppercase: [A-Z]
+		xdigit  = 1 << 11, /// Hexadecimal digits: [0-9A-Fa-f]
+	}
+
 	/// Character class data
 	private struct CharClassData
 	{
@@ -121,6 +170,7 @@ struct CompiledGlob(C)
 
 		const(C)[] chars;
 		const(Range)[] ranges;
+		PosixClass posixClasses;  // Bitfield of POSIX classes
 		bool negated;
 	}
 
@@ -248,6 +298,24 @@ struct CompiledGlob(C)
 						}
 					}
 
+					// Check POSIX classes
+					if (!found && charClass.posixClasses != PosixClass.none)
+					{
+						// Check each flag in the bitfield
+						if ((charClass.posixClasses & PosixClass.alnum)  && matchesPosixClass(ch, PosixClass.alnum))  found = true;
+						if ((charClass.posixClasses & PosixClass.alpha)  && matchesPosixClass(ch, PosixClass.alpha))  found = true;
+						if ((charClass.posixClasses & PosixClass.blank)  && matchesPosixClass(ch, PosixClass.blank))  found = true;
+						if ((charClass.posixClasses & PosixClass.cntrl)  && matchesPosixClass(ch, PosixClass.cntrl))  found = true;
+						if ((charClass.posixClasses & PosixClass.digit)  && matchesPosixClass(ch, PosixClass.digit))  found = true;
+						if ((charClass.posixClasses & PosixClass.graph)  && matchesPosixClass(ch, PosixClass.graph))  found = true;
+						if ((charClass.posixClasses & PosixClass.lower)  && matchesPosixClass(ch, PosixClass.lower))  found = true;
+						if ((charClass.posixClasses & PosixClass.print)  && matchesPosixClass(ch, PosixClass.print))  found = true;
+						if ((charClass.posixClasses & PosixClass.punct)  && matchesPosixClass(ch, PosixClass.punct))  found = true;
+						if ((charClass.posixClasses & PosixClass.space)  && matchesPosixClass(ch, PosixClass.space))  found = true;
+						if ((charClass.posixClasses & PosixClass.upper)  && matchesPosixClass(ch, PosixClass.upper))  found = true;
+						if ((charClass.posixClasses & PosixClass.xdigit) && matchesPosixClass(ch, PosixClass.xdigit)) found = true;
+					}
+
 					if (found == charClass.negated)
 						return size_t.max;
 
@@ -352,13 +420,25 @@ struct CompiledGlob(C)
 				if (searchStart < pattern.length && pattern[searchStart] == ']')
 					searchStart++;
 
-				// Find closing ] (handling escapes)
+				// Find closing ] (handling escapes and POSIX classes)
 				size_t end = searchStart;
 				while (end < pattern.length)
 				{
 					if (pattern[end] == '\\' && end + 1 < pattern.length)
 					{
 						end += 2; // Skip escaped character
+					}
+					else if (pattern[end] == '[' && end + 1 < pattern.length && pattern[end + 1] == ':')
+					{
+						// Skip over POSIX class [:...:]
+						end += 2;
+						while (end + 1 < pattern.length &&
+							   !(pattern[end] == ':' && pattern[end + 1] == ']'))
+						{
+							end++;
+						}
+						if (end + 1 < pattern.length)
+							end += 2; // Skip past :]
 					}
 					else if (pattern[end] == ']')
 					{
@@ -381,6 +461,7 @@ struct CompiledGlob(C)
 					// Parse character class content, extracting ranges
 					C[] chars;
 					CharClassData.Range[] ranges;
+					PosixClass posixClasses = PosixClass.none;
 
 					for (size_t j = start; j < end; )
 					{
@@ -389,6 +470,61 @@ struct CompiledGlob(C)
 							// Escaped character - always literal
 							chars ~= pattern[j + 1];
 							j += 2;
+						}
+						// Check for POSIX character class [:name:]
+						else if (pattern[j] == '[' && j + 1 < end && pattern[j + 1] == ':')
+						{
+							// Find the closing :]
+							size_t posixEnd = j + 2;
+							while (posixEnd + 1 < end &&
+								   !(pattern[posixEnd] == ':' && pattern[posixEnd + 1] == ']'))
+							{
+								posixEnd++;
+							}
+
+							if (posixEnd + 1 < end && pattern[posixEnd] == ':' && pattern[posixEnd + 1] == ']')
+							{
+								// Extract POSIX class name
+								auto className = pattern[j + 2 .. posixEnd];
+								bool recognized = true;
+
+								// Match against known POSIX classes using switch
+								switch (className)
+								{
+									case "alnum":  posixClasses |= PosixClass.alnum;  break;
+									case "alpha":  posixClasses |= PosixClass.alpha;  break;
+									case "blank":  posixClasses |= PosixClass.blank;  break;
+									case "cntrl":  posixClasses |= PosixClass.cntrl;  break;
+									case "digit":  posixClasses |= PosixClass.digit;  break;
+									case "graph":  posixClasses |= PosixClass.graph;  break;
+									case "lower":  posixClasses |= PosixClass.lower;  break;
+									case "print":  posixClasses |= PosixClass.print;  break;
+									case "punct":  posixClasses |= PosixClass.punct;  break;
+									case "space":  posixClasses |= PosixClass.space;  break;
+									case "upper":  posixClasses |= PosixClass.upper;  break;
+									case "xdigit": posixClasses |= PosixClass.xdigit; break;
+									default:
+										recognized = false;
+										break;
+								}
+
+								if (recognized)
+								{
+									j = posixEnd + 2; // Skip past :]
+								}
+								else
+								{
+									// Unknown POSIX class, treat as literal
+									chars ~= pattern[j];
+									j++;
+								}
+							}
+							else
+							{
+								// No closing :], treat as literal
+								chars ~= pattern[j];
+								j++;
+							}
 						}
 						// Check for range pattern: char-char (not escaped)
 						else if (j + 2 < end && pattern[j + 1] == '-' && pattern[j + 2] != ']')
@@ -408,7 +544,7 @@ struct CompiledGlob(C)
 					Instruction instr;
 					instr.type = Instruction.Type.charClass;
 					() @trusted {
-						instr.charClass = CharClassData(chars, ranges, negated);
+						instr.charClass = CharClassData(chars, ranges, posixClasses, negated);
 					}();
 					instructions ~= instr;
 					i = end + 1;
@@ -521,6 +657,29 @@ struct CompiledGlob(C)
 		instr.type = Instruction.Type.literal;
 		instr.literal = str.dup;
 		return instr;
+	}
+
+	// Helper to check if character matches a POSIX class
+	private static bool matchesPosixClass(C)(C c, PosixClass pc) pure nothrow @nogc @safe
+	{
+		import std.ascii;
+
+		final switch (pc)
+		{
+			case PosixClass.none:    return false;
+			case PosixClass.alnum:   return isAlphaNum(c);
+			case PosixClass.alpha:   return isAlpha(c);
+			case PosixClass.blank:   return c == ' ' || c == '\t';
+			case PosixClass.cntrl:   return isControl(c);
+			case PosixClass.digit:   return isDigit(c);
+			case PosixClass.graph:   return isGraphical(c);
+			case PosixClass.lower:   return isLower(c);
+			case PosixClass.print:   return isPrintable(c);
+			case PosixClass.punct:   return isPunctuation(c);
+			case PosixClass.space:   return isWhite(c);
+			case PosixClass.upper:   return isUpper(c);
+			case PosixClass.xdigit:  return isHexDigit(c);
+		}
 	}
 }
 
@@ -796,6 +955,112 @@ debug(ae_unittest) @safe unittest
 	testRoundTrip("[\\]]");
 	testRoundTrip("[\\\\]");
 	testRoundTrip("[]a]");
+}
+
+// Test POSIX character classes
+debug(ae_unittest) unittest
+{
+	// [:alpha:] - alphabetic
+	assert(compileGlob("[[:alpha:]]").match("a"));
+	assert(compileGlob("[[:alpha:]]").match("Z"));
+	assert(!compileGlob("[[:alpha:]]").match("5"));
+	assert(!compileGlob("[[:alpha:]]").match("_"));
+
+	// [:digit:] - digits
+	assert(compileGlob("[[:digit:]]").match("0"));
+	assert(compileGlob("[[:digit:]]").match("9"));
+	assert(!compileGlob("[[:digit:]]").match("a"));
+
+	// [:alnum:] - alphanumeric
+	assert(compileGlob("[[:alnum:]]").match("a"));
+	assert(compileGlob("[[:alnum:]]").match("5"));
+	assert(!compileGlob("[[:alnum:]]").match("_"));
+	assert(!compileGlob("[[:alnum:]]").match("-"));
+
+	// [:space:] - whitespace
+	assert(compileGlob("[[:space:]]").match(" "));
+	assert(compileGlob("[[:space:]]").match("\t"));
+	assert(compileGlob("[[:space:]]").match("\n"));
+	assert(!compileGlob("[[:space:]]").match("a"));
+
+	// [:blank:] - space and tab only
+	assert(compileGlob("[[:blank:]]").match(" "));
+	assert(compileGlob("[[:blank:]]").match("\t"));
+	assert(!compileGlob("[[:blank:]]").match("\n"));
+	assert(!compileGlob("[[:blank:]]").match("a"));
+
+	// [:upper:] - uppercase
+	assert(compileGlob("[[:upper:]]").match("A"));
+	assert(compileGlob("[[:upper:]]").match("Z"));
+	assert(!compileGlob("[[:upper:]]").match("a"));
+
+	// [:lower:] - lowercase
+	assert(compileGlob("[[:lower:]]").match("a"));
+	assert(compileGlob("[[:lower:]]").match("z"));
+	assert(!compileGlob("[[:lower:]]").match("A"));
+
+	// [:xdigit:] - hexadecimal digits
+	assert(compileGlob("[[:xdigit:]]").match("0"));
+	assert(compileGlob("[[:xdigit:]]").match("9"));
+	assert(compileGlob("[[:xdigit:]]").match("a"));
+	assert(compileGlob("[[:xdigit:]]").match("F"));
+	assert(!compileGlob("[[:xdigit:]]").match("g"));
+
+	// [:punct:] - punctuation
+	assert(compileGlob("[[:punct:]]").match("."));
+	assert(compileGlob("[[:punct:]]").match("_"));
+	assert(compileGlob("[[:punct:]]").match("!"));
+	assert(!compileGlob("[[:punct:]]").match("a"));
+
+	// [:graph:] - visible characters (no space)
+	assert(compileGlob("[[:graph:]]").match("a"));
+	assert(compileGlob("[[:graph:]]").match("!"));
+	assert(!compileGlob("[[:graph:]]").match(" "));
+
+	// [:print:] - printable characters (including space)
+	assert(compileGlob("[[:print:]]").match("a"));
+	assert(compileGlob("[[:print:]]").match(" "));
+	assert(!compileGlob("[[:print:]]").match("\t"));
+
+	// [:cntrl:] - control characters
+	assert(compileGlob("[[:cntrl:]]").match("\t"));
+	assert(compileGlob("[[:cntrl:]]").match("\n"));
+	assert(!compileGlob("[[:cntrl:]]").match("a"));
+
+	// Negated POSIX classes
+	assert(!compileGlob("[![:digit:]]").match("5"));
+	assert(compileGlob("[![:digit:]]").match("a"));
+
+	// Combined with regular chars
+	assert(compileGlob("[[:digit:]_]").match("5"));
+	assert(compileGlob("[[:digit:]_]").match("_"));
+	assert(!compileGlob("[[:digit:]_]").match("a"));
+
+	// Combined with ranges
+	assert(compileGlob("[a-z[:digit:]]").match("a"));
+	assert(compileGlob("[a-z[:digit:]]").match("5"));
+	assert(!compileGlob("[a-z[:digit:]]").match("A"));
+
+	// Multiple POSIX classes
+	assert(compileGlob("[[:alpha:][:digit:]]").match("a"));
+	assert(compileGlob("[[:alpha:][:digit:]]").match("5"));
+	assert(!compileGlob("[[:alpha:][:digit:]]").match("_"));
+
+	// In patterns
+	assert(compileGlob("test[[:digit:]].txt").match("test5.txt"));
+	assert(!compileGlob("test[[:digit:]].txt").match("testA.txt"));
+
+	// Test toString round-trip
+	import std.array : appender;
+	auto p1 = compileGlob("[[:alpha:]]");
+	auto app = appender!string;
+	p1.toString(app);
+	assert(app.data == "[[:alpha:]]");
+
+	auto p2 = compileGlob("[a[:digit:]z]");
+	app = appender!string;
+	p2.toString(app);
+	assert(app.data == "[az[:digit:]]"); // Reordered: chars before POSIX classes
 }
 
 // Test patterns within braces
