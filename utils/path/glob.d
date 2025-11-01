@@ -45,6 +45,7 @@ struct CompiledGlob(C)
 			final switch (type)
 			{
 				case Type.literal:
+					auto literal = (() @trusted => this.literal)();
 					foreach (c; literal)
 					{
 						// Escape special characters
@@ -66,21 +67,32 @@ struct CompiledGlob(C)
 					break;
 
 				case Type.charClass:
+					auto charClass = (() @trusted => this.charClass)();
 					w.put('[');
 					if (charClass.negated)
 						w.put('!');
+					// Escape special characters in character classes
 					foreach (c; charClass.chars)
+					{
+						if (c == ']' || c == '\\')
+							w.put('\\');
 						w.put(c);
+					}
 					foreach (range; charClass.ranges)
 					{
+						if (range.start == ']' || range.start == '\\')
+							w.put('\\');
 						w.put(range.start);
 						w.put('-');
+						if (range.end == ']' || range.end == '\\')
+							w.put('\\');
 						w.put(range.end);
 					}
 					w.put(']');
 					break;
 
 				case Type.braceAlternatives:
+					auto alternatives = (() @trusted => this.alternatives)();
 					w.put('{');
 					bool first = true;
 					foreach (alt; alternatives)
@@ -334,10 +346,29 @@ struct CompiledGlob(C)
 					start++;
 				}
 
-				// Find closing ]
-				size_t end = start;
-				while (end < pattern.length && pattern[end] != ']')
-					end++;
+				// Special case: ] as first character is literal
+				// e.g., []abc] or [!]abc]
+				size_t searchStart = start;
+				if (searchStart < pattern.length && pattern[searchStart] == ']')
+					searchStart++;
+
+				// Find closing ] (handling escapes)
+				size_t end = searchStart;
+				while (end < pattern.length)
+				{
+					if (pattern[end] == '\\' && end + 1 < pattern.length)
+					{
+						end += 2; // Skip escaped character
+					}
+					else if (pattern[end] == ']')
+					{
+						break;
+					}
+					else
+					{
+						end++;
+					}
+				}
 
 				if (end >= pattern.length)
 				{
@@ -353,8 +384,14 @@ struct CompiledGlob(C)
 
 					for (size_t j = start; j < end; )
 					{
-						// Check for range pattern: char-char
-						if (j + 2 < end && pattern[j + 1] == '-')
+						if (pattern[j] == '\\' && j + 1 < end)
+						{
+							// Escaped character - always literal
+							chars ~= pattern[j + 1];
+							j += 2;
+						}
+						// Check for range pattern: char-char (not escaped)
+						else if (j + 2 < end && pattern[j + 1] == '-' && pattern[j + 2] != ']')
 						{
 							// It's a range
 							ranges ~= CharClassData.Range(pattern[j], pattern[j + 2]);
@@ -708,6 +745,57 @@ debug(ae_unittest) @safe unittest
 	assert(globMatch("a", "[a-a]"));   // Single char range
 	assert(globMatch("-", "[-]"));     // Literal dash at start
 	assert(globMatch("-", "[a-]"));    // Literal dash at end
+}
+
+// Test character class escaping
+debug(ae_unittest) @safe unittest
+{
+	// Escape ] inside character class
+	assert(globMatch("]", "[\\]]"));
+	assert(globMatch("]", "[]a]"));     // ] as first character
+	assert(globMatch("a", "[]a]"));
+	assert(!globMatch("b", "[]a]"));
+
+	// Escape \ inside character class
+	assert(globMatch("\\", "[\\\\]"));
+	assert(globMatch("\\", "[\\\\a]"));
+	assert(globMatch("a", "[\\\\a]"));
+
+	// Escape - to prevent range
+	assert(globMatch("-", "[a\\-z]"));
+	assert(globMatch("a", "[a\\-z]"));
+	assert(globMatch("z", "[a\\-z]"));
+	assert(!globMatch("b", "[a\\-z]")); // Not a range!
+
+	// Negated with escaped chars
+	assert(!globMatch("]", "[!\\]]"));
+	assert(globMatch("a", "[!\\]]"));
+	assert(!globMatch("\\", "[!\\\\]"));
+	assert(globMatch("a", "[!\\\\]"));
+
+	// Mixed escaped and unescaped
+	assert(globMatch("]", "[\\]a-z]"));
+	assert(globMatch("a", "[\\]a-z]"));
+	assert(globMatch("b", "[\\]a-z]"));
+	assert(globMatch("z", "[\\]a-z]"));
+
+	// Test toString round-trip for escaped chars
+	import std.array : appender;
+	auto testRoundTrip(string pattern)
+	{
+		auto compiled = compileGlob(pattern);
+		auto app = appender!string;
+		compiled.toString(app);
+		auto reconstructed = compileGlob(app.data);
+		// Test that both patterns match the same way
+		assert(compiled.match("]") == reconstructed.match("]"));
+		assert(compiled.match("\\") == reconstructed.match("\\"));
+		assert(compiled.match("a") == reconstructed.match("a"));
+	}
+
+	testRoundTrip("[\\]]");
+	testRoundTrip("[\\\\]");
+	testRoundTrip("[]a]");
 }
 
 // Test patterns within braces
