@@ -38,6 +38,63 @@ struct CompiledGlob(C)
 			CharClassData charClass;           /// For charClass
 			const(Instruction[])[] alternatives; /// For braceAlternatives
 		}
+
+		/// String representation of this instruction
+		void toString(Writer)(ref Writer w) const
+		{
+			final switch (type)
+			{
+				case Type.literal:
+					foreach (c; literal)
+					{
+						// Escape special characters
+						if (c == '*' || c == '?' || c == '[' || c == ']' ||
+							c == '{' || c == '}' || c == '\\' || c == ',')
+						{
+							w.put('\\');
+						}
+						w.put(c);
+					}
+					break;
+
+				case Type.star:
+					w.put('*');
+					break;
+
+				case Type.question:
+					w.put('?');
+					break;
+
+				case Type.charClass:
+					w.put('[');
+					if (charClass.negated)
+						w.put('!');
+					foreach (c; charClass.chars)
+						w.put(c);
+					foreach (range; charClass.ranges)
+					{
+						w.put(range.start);
+						w.put('-');
+						w.put(range.end);
+					}
+					w.put(']');
+					break;
+
+				case Type.braceAlternatives:
+					w.put('{');
+					bool first = true;
+					foreach (alt; alternatives)
+					{
+						if (!first)
+							w.put(',');
+						first = false;
+						foreach (ref instr; alt)
+							instr.toString(w);
+					}
+					w.put('}');
+					break;
+			}
+		}
 	}
 
 	/// Character class data
@@ -69,6 +126,13 @@ struct CompiledGlob(C)
 	this(const(C)[] pattern) pure
 	{
 		this.instructions = compilePattern(pattern);
+	}
+
+	/// String representation (reconstructs pattern from instructions)
+	void toString(Writer)(ref Writer w) const
+	{
+		foreach (ref instr; instructions)
+			instr.toString(w);
 	}
 
 	/// Match a path against this compiled pattern (@nogc, fast)
@@ -723,4 +787,57 @@ debug(ae_unittest) @safe unittest
 	assert(globMatch("abcdef", "{a{b{c}d}e}f"));
 	assert(globMatch("abcd", "a{b{c}d}"));
 	assert(!globMatch("abc", "{a{b{c}d}e}f"));  // Missing parts
+}
+
+// Test stringification
+debug(ae_unittest) unittest
+{
+	import std.conv : to;
+
+	// Test explicit instantiation with a simple sink
+	static struct DummySink
+	{
+		char[] data;
+		void put(char c) { data ~= c; }
+	}
+
+	auto pattern = compileGlob("foo.bar");
+	DummySink sink;
+	pattern.toString(sink);
+	assert(sink.data == "foo.bar");
+
+	// Simple patterns
+	assert(compileGlob("foo.bar").to!string == "foo.bar");
+	assert(compileGlob("*.txt").to!string == "*.txt");
+	assert(compileGlob("test?").to!string == "test?");
+	assert(compileGlob("f*b?r").to!string == "f*b?r");
+
+	// Character classes (note: chars and ranges may be reordered)
+	assert(compileGlob("[abc]").to!string == "[abc]");
+	assert(compileGlob("[a-z]").to!string == "[a-z]");
+	assert(compileGlob("[!0-9]").to!string == "[!0-9]");
+	assert(compileGlob("[a-z0-9_]").to!string == "[_a-z0-9]"); // Reordered: chars before ranges
+
+	// Brace alternatives
+	assert(compileGlob("{foo,bar}").to!string == "{foo,bar}");
+	assert(compileGlob("test.{c,cpp,d}").to!string == "test.{c,cpp,d}");
+	assert(compileGlob("{foo,bar}.{baz,qux}").to!string == "{foo,bar}.{baz,qux}");
+
+	// Nested braces
+	assert(compileGlob("{a,{b,c}}").to!string == "{a,{b,c}}");
+	assert(compileGlob("{{1,2},{3,4}}").to!string == "{{1,2},{3,4}}");
+
+	// Wildcards in braces
+	assert(compileGlob("{foo-*,bar}").to!string == "{foo-*,bar}");
+	assert(compileGlob("{*-bar,foo}").to!string == "{*-bar,foo}");
+
+	// Escaped characters (special chars in literals get escaped)
+	assert(compileGlob("\\*").to!string == "\\*");
+	assert(compileGlob("\\?").to!string == "\\?");
+	assert(compileGlob("\\[").to!string == "\\[");
+	assert(compileGlob("\\{").to!string == "\\{");
+
+	// Complex patterns
+	assert(compileGlob("src/**/*.{c,cpp,d}").to!string == "src/**/*.{c,cpp,d}");
+	assert(compileGlob("test[0-9].{log,txt}").to!string == "test[0-9].{log,txt}");
 }
