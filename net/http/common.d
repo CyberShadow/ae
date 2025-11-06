@@ -695,6 +695,7 @@ public:
 
 	protected void copyTo(typeof(this) other)
 	{
+		super.copyTo(other);
 		other.status = status;
 		other.statusMessage = statusMessage;
 		other.compressionLevel = compressionLevel;
@@ -707,6 +708,23 @@ public:
 		copyTo(result);
 		return result;
 	} ///
+}
+
+debug(ae_unittest) unittest
+{
+	// Test that HttpResponse.dup correctly copies the data field
+	auto response = new HttpResponse;
+	response.data ~= Data("Hello ".representation);
+	response.data ~= Data("World".representation);
+	response.data ~= Data("!".representation);
+	response.status = HttpStatusCode.OK;
+
+	assert(response.data.length == 3, "Original response should have 3 data items");
+
+	auto duped = response.dup;
+
+	assert(duped.data.length == 3, "Duplicated response should have 3 data items");
+	assert(duped.status == HttpStatusCode.OK, "Duplicated response should have same status");
 }
 
 /// Sets headers to request clients to not cache a response.
