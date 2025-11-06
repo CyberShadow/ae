@@ -341,10 +341,10 @@ import ae.utils.textout;
 }
 
 /// Encode HTML entities and return the resulting string.
-public alias encodeEntities = _encodeEntitiesImpl!(false, (char c) => c=='<' || c=='>' || c=='"' || c=='\'' || c=='&');
+public alias encodeEntities = _encodeEntitiesImpl!(false, (c) => c=='<' || c=='>' || c=='"' || c=='\'' || c=='&');
 
 /// Write a string to a sink, encoding HTML entities.
-public alias putEncodedEntities = _putEncodedEntitiesImpl!(false, (char c) => c=='<' || c=='>' || c=='"' || c=='\'' || c=='&');
+public alias putEncodedEntities = _putEncodedEntitiesImpl!(false, (c) => c=='<' || c=='>' || c=='"' || c=='\'' || c=='&');
 
 /// Encode all known characters as HTML entities.
 public string encodeAllEntities(string str)
