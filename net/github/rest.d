@@ -13,8 +13,6 @@
 
 module ae.net.github.rest;
 
-package(ae):
-
 import std.algorithm.searching;
 import std.conv;
 import std.string;
