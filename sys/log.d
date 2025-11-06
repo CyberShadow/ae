@@ -327,3 +327,113 @@ Logger createLogger(string name, string target)
 	}
 	return result;
 }
+
+/// Asynchronous logger that queues log operations to a background thread.
+/// This prevents the main thread from blocking on slow I/O operations.
+class CAsyncLogger : CLogger
+{
+	import std.concurrency : Tid, send, spawn, thisTid, receive, receiveOnly;
+
+	private Logger underlyingLogger;
+	private Tid workerTid;
+	private Tid mainThreadTid;
+	private bool closed;
+
+	this(Logger logger)
+	{
+		this.underlyingLogger = logger;
+		this.closed = false;
+		this.mainThreadTid = thisTid;
+		// Pass the logger to the worker thread.
+		// We cast to shared and then back in the worker thread.
+		// This is safe because:
+		// 1. The main thread only sends messages, never calls logger methods
+		// 2. The worker thread has exclusive access to the logger for method calls
+		// 3. The parent keeps a reference so it won't be destroyed
+		CLogger classRef = this.underlyingLogger;  // Get class ref via alias this
+		auto sharedClassRef = cast(shared)classRef;  // class refs are pointers in D
+
+		// Spawn worker thread
+		this.workerTid = spawn(&workerThreadFunc, sharedClassRef, this.mainThreadTid);
+
+		super(logger.name);
+	} ///
+
+	override void log(in char[] str)
+	{
+		assert(!closed, "AsyncLogger is already closed");
+		// Make a copy of str since it may be stack-allocated
+		// and won't be valid when the background thread processes it
+		immutable string strCopy = str.idup;
+		send(workerTid, immutable LogMessage(strCopy));
+	} ///
+
+	override void rename(string name)
+	{
+		assert(!closed, "AsyncLogger is already closed");
+		// Note: rename is asynchronous and returns immediately
+		send(workerTid, immutable RenameMessage(name));
+	} ///
+
+	override void close()
+	{
+		if (!closed)
+		{
+			closed = true;
+			// Check if the Tid is still valid before trying to send
+			if (workerTid != Tid.init)
+			{
+				try
+				{
+					send(workerTid, immutable ShutdownMessage());
+					// Wait for confirmation that the thread has finished
+					receiveOnly!ShutdownComplete();
+				}
+				catch (Throwable e)
+				{
+					// Thread may have already terminated, ignore
+				}
+			}
+			// Now close the underlying logger to release file descriptors
+			underlyingLogger.close();
+		}
+	} ///
+
+	~this()
+	{
+		close();
+	}
+
+private:
+	static struct LogMessage { string text; }
+	static struct RenameMessage { string name; }
+	static struct ShutdownMessage {}
+	static struct ShutdownComplete {}
+
+	static void workerThreadFunc(shared(CLogger) loggerPtr, Tid mainThreadTid)
+	{
+		// Cast back to get access to the logger
+		// This is safe because this thread has exclusive access for method calls
+		CLogger logger = cast()loggerPtr;
+		bool done = false;
+		while (!done)
+		{
+			receive(
+				(immutable LogMessage msg) {
+					logger.log(msg.text);
+				},
+				(immutable RenameMessage msg) {
+					logger.rename(msg.name);
+				},
+				(immutable ShutdownMessage msg) {
+					cast(void) msg;
+					done = true;
+				},
+			);
+		}
+		// Send confirmation back to main thread
+		send(mainThreadTid, ShutdownComplete());
+	}
+}
+alias AsyncLogger = RCClass!CAsyncLogger; /// ditto
+alias asyncLogger = rcClass!CAsyncLogger; /// ditto
