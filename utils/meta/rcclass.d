@@ -33,7 +33,7 @@ if (is(C == class))
 
 	@property inout(C) _rcClassGet() inout
 	{
-		return cast(C)_rcClassStore.data.ptr;
+		return cast(inout(C))_rcClassStore.data.ptr;
 	}
 
 	alias _rcClassGet this;
