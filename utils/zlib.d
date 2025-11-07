@@ -138,7 +138,11 @@ struct ZlibProcess(bool COMPRESSING)
 			allocChunk(adjustSize(zs.avail_in));
 
 		while (!zend(processFunc(&zs, Z_FINISH)))
-			allocChunk(zs.avail_out*2+1);
+		{
+			// Allocate reasonable chunk size instead of 1 byte when avail_out==0
+			import std.algorithm.comparison : max;
+			allocChunk(max(zs.avail_out*2+1, 4096));
+		}
 
 		saveChunk();
 		return move(outputChunks);
