@@ -114,8 +114,11 @@ struct Vec(T)
 	{
 		if (newCapacity > data.capacity)
 		{
+			// Use exponential growth to amortize reallocation cost
+			import std.algorithm.comparison : max;
+			auto growCapacity = max(newCapacity, data.capacity + (data.capacity >> 1)); // 1.5x growth
 			T[] newData;
-			newData.reserve(newCapacity);
+			newData.reserve(growCapacity);
 			assert(newData.capacity >= newCapacity);
 			auto p0 = newData.ptr;
 			static if (__traits(hasMember, GC, "expandArrayUsed"))
