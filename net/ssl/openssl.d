@@ -437,7 +437,14 @@ class OpenSSLAdapter : SSLAdapter
 	override void onConnect()
 	{
 		debug(OPENSSL) stderr.writefln("OpenSSL: * Transport is connected");
-		initialize();
+		try
+			initialize();
+		catch (Exception e)
+		{
+			debug(OPENSSL) stderr.writefln("OpenSSL: SSL handshake failed: %s", e.msg);
+			disconnect(e.msg, DisconnectType.error);
+			return;
+		}
 	} /// `SSLAdapter` method implementation.
 
 	override void onReadData(Data data)
