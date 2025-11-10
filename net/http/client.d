@@ -528,14 +528,21 @@ class HttpsClient : HttpClient
 	}
 }
 
-// Experimental for now
+/// Abstract connection factory for use with `HttpClient`.
+/// Implementations provide connection objects that can be wrapped with adapters
+/// before the actual network connection is established.
 class Connector
 {
+	/// Get the connection object for wrapping with adapters.
+	/// Called during `HttpClient` construction, before connecting.
 	abstract IConnection getConnection();
+
+	/// Initiate the connection to the specified host and port.
+	/// Called when a request is made.
 	abstract void connect(string host, ushort port);
 }
 
-// ditto
+/// Base connector for socket-based connections.
 class SocketConnector(SocketType) : Connector
 {
 	protected SocketType conn;
@@ -551,7 +558,7 @@ class SocketConnector(SocketType) : Connector
 	}
 }
 
-// ditto
+/// Default TCP connector using `TcpConnection`.
 class TcpConnector : SocketConnector!TcpConnection
 {
 	override void connect(string host, ushort port)
@@ -560,7 +567,7 @@ class TcpConnector : SocketConnector!TcpConnection
 	}
 }
 
-// ditto
+/// Unix domain socket connector (Posix only).
 version(Posix)
 class UnixConnector : SocketConnector!SocketConnection
 {
