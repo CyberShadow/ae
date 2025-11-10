@@ -503,6 +503,13 @@ class HttpsClient : HttpClient
 		super(timeout);
 	}
 
+	/// Constructor with custom connector (e.g., for SOCKS5).
+	this(Duration timeout, Connector connector)
+	{
+		ctx = ssl.createContext(SSLContext.Kind.client);
+		super(timeout, connector);
+	}
+
 	protected override IConnection adaptConnection(IConnection conn)
 	{
 		adapter = ssl.createAdapter(ctx, conn);
