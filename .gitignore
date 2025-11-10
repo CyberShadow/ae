@@ -28,6 +28,7 @@
 /demo/pewpew/pewpew
 /demo/portforward/portforward
 /demo/render/main
+/demo/socks5/socks5demo
 /demo/sqlite/exec
 /demo/turtle/main
 /demo/ui/main
@@ -45,6 +46,7 @@
 /demo/pewpew/ae-demo-pewpew
 /demo/portforward/ae-demo-portforward
 /demo/render/ae-demo-render
+/demo/socks5/ae-demo-socks5
 /demo/sqlite/ae-demo-sqlite
 /demo/turtle/ae-demo-turtle
 /demo/ui/ae-demo-ui

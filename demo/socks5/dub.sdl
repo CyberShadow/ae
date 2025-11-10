@@ -1,0 +1,6 @@
+name "ae-demo-socks5"
+mainSourceFile "socks5demo.d"
+targetType "executable"
+
+dependency "ae" version="*" path="../../"
+dependency "ae:openssl" version="*" path="../../"
