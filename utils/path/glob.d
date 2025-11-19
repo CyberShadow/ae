@@ -13,8 +13,11 @@
 
 module ae.utils.path.glob;
 
+import std.traits : isSomeChar;
+
 /// Compiled glob pattern with fast @nogc matching
 struct CompiledGlob(C)
+if (isSomeChar!C)
 {
 	/// A single matching instruction
 	private struct Instruction
@@ -685,12 +688,14 @@ struct CompiledGlob(C)
 
 /// Compile a glob pattern (GC allowed, done once)
 CompiledGlob!C compileGlob(C)(const(C)[] pattern) pure
+if (isSomeChar!C)
 {
 	return CompiledGlob!C(pattern);
 }
 
 // std.path-like API for testing
 private bool globMatch(C)(const(C)[] path, const(C)[] pattern)
+if (isSomeChar!C)
 {
 	auto compiled = compileGlob(pattern);
 	return compiled.match(path);
