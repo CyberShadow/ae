@@ -207,6 +207,15 @@ if (isSomeChar!C)
 		return consumed != size_t.max && consumed == path.length;
 	}
 
+	/// Returns true if the pattern is a literal (no wildcards or special characters)
+	bool isLiteral() const pure nothrow @nogc @safe
+	{
+		foreach (ref instr; instructions)
+			if (instr.type != Instruction.Type.literal)
+				return false;
+		return true;
+	}
+
 	// Recursive matching implementation
 	// Returns: number of path characters consumed, or size_t.max if no match
 	// continuation: linked list of continuations to match after current pattern
@@ -746,6 +755,29 @@ debug(ae_unittest) @safe unittest
 
 	auto pattern10 = compileGlob("[fg]???bar");
 	assert(!pattern10.match("Goo.bar"));
+}
+
+debug(ae_unittest) @safe unittest
+{
+	// Test isLiteral
+	assert(compileGlob("foo.bar").isLiteral);
+	assert(compileGlob("simple").isLiteral);
+	assert(compileGlob("path/to/file.txt").isLiteral);
+	assert(compileGlob("file with spaces").isLiteral);
+	assert(compileGlob("\\*").isLiteral);  // Escaped * is a literal
+	assert(compileGlob("\\?").isLiteral);  // Escaped ? is a literal
+	assert(compileGlob("foo\\?bar").isLiteral);  // Escape inside a literal is a literal
+	assert(compileGlob("").isLiteral);  // Empty string is a literal
+
+	assert(!compileGlob("*").isLiteral);
+	assert(!compileGlob("*.txt").isLiteral);
+	assert(!compileGlob("foo*bar").isLiteral);
+	assert(!compileGlob("test?").isLiteral);
+	assert(!compileGlob("f???bar").isLiteral);
+	assert(!compileGlob("[abc]").isLiteral);
+	assert(!compileGlob("[a-z]").isLiteral);
+	assert(!compileGlob("{foo,bar}").isLiteral);
+	assert(!compileGlob("test.{c,d}").isLiteral);
 }
 
 debug(ae_unittest) @safe unittest
