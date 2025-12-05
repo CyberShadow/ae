@@ -412,27 +412,45 @@ private:
 
 	static void workerThreadFunc(shared(CLogger) loggerPtr, Tid mainThreadTid)
 	{
+		import std.concurrency : OwnerTerminated;
+
 		// Cast back to get access to the logger
 		// This is safe because this thread has exclusive access for method calls
 		CLogger logger = cast()loggerPtr;
 		bool done = false;
 		while (!done)
 		{
-			receive(
-				(immutable LogMessage msg) {
-					logger.log(msg.text);
-				},
-				(immutable RenameMessage msg) {
-					logger.rename(msg.name);
-				},
-				(immutable ShutdownMessage msg) {
-					cast(void) msg;
-					done = true;
-				},
-			);
+			try
+			{
+				receive(
+					(immutable LogMessage msg) {
+						logger.log(msg.text);
+					},
+					(immutable RenameMessage msg) {
+						logger.rename(msg.name);
+					},
+					(immutable ShutdownMessage msg) {
+						cast(void) msg;
+						done = true;
+					},
+				);
+			}
+			catch (OwnerTerminated)
+			{
+				// Owner thread terminated without calling close()
+				// This is normal during application shutdown
+				done = true;
+			}
 		}
-		// Send confirmation back to main thread
-		send(mainThreadTid, ShutdownComplete());
+		// Send confirmation back to main thread (only if it's still alive)
+		try
+		{
+			send(mainThreadTid, ShutdownComplete());
+		}
+		catch (Exception)
+		{
+			// Main thread may have already terminated
+		}
 	}
 }
 alias AsyncLogger = RCClass!CAsyncLogger; /// ditto
