@@ -185,7 +185,8 @@ subPackage {
 
 subPackage {
 	name "x11"
-	targetType "library"
+        # ae:x11 can't be targetType "library" due to DMD bugs causing linking errors
+	targetType "sourceLibrary"
 	dependency "ae" version="*" path="."
 	dependency "libx11" version="0.0.2"
 	sourceFiles \
