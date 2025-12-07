@@ -663,6 +663,9 @@ private debug (ASOCKETS_SLOW_EVENT_HANDLER)
 				if (sigaction(signal, &sa, null) == -1)
 					throw new ErrnoException("sigaction failed");
 			}
+
+			// Initialize mutex for tracking all watchdog threads
+			allThreadsMutex = new Mutex();
 		}
 
 		final class WatchdogThread : Thread
@@ -672,6 +675,7 @@ private debug (ASOCKETS_SLOW_EVENT_HANDLER)
 
 			ThreadID eventThreadID;
 			MonoTime deadline;
+			bool shouldStop;
 
 			this(ThreadID eventThreadID)
 			{
@@ -687,7 +691,7 @@ private debug (ASOCKETS_SLOW_EVENT_HANDLER)
 			{
 				synchronized (this.mutex)
 				{
-					while (true)
+					while (!shouldStop)
 					{
 						if (deadline is MonoTime.init)
 						{
@@ -710,9 +714,35 @@ private debug (ASOCKETS_SLOW_EVENT_HANDLER)
 					}
 				}
 			}
+
+			void stop()
+			{
+				synchronized (this.mutex)
+					shouldStop = true;
+				this.cond.notify();
+			}
 		}
 
 		WatchdogThread thread; // TLS variable in the event loop thread's local storage
+
+		// Global registry of all watchdog threads for cleanup on program exit
+		__gshared WatchdogThread[] allThreads;
+		__gshared Mutex allThreadsMutex;
+
+		shared static ~this()
+		{
+			WatchdogThread[] threadsToStop;
+			synchronized (allThreadsMutex)
+			{
+				threadsToStop = allThreads;
+				allThreads = null;
+			}
+			foreach (t; threadsToStop)
+			{
+				t.stop();
+				t.join();
+			}
+		}
 
 		void arm()
 		{
@@ -720,6 +750,8 @@ private debug (ASOCKETS_SLOW_EVENT_HANDLER)
 			{
 				thread = new WatchdogThread(Thread.getThis().id);
 				thread.start();
+				synchronized (allThreadsMutex)
+					allThreads ~= thread;
 			}
 			synchronized (thread.mutex)
 				thread.deadline = MonoTime.currTime() + timeout;
