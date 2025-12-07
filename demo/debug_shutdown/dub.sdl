@@ -1,0 +1,10 @@
+name "ae-demo-debug-shutdown"
+mainSourceFile "debug_shutdown.d"
+targetType "executable"
+
+dependency "ae" version="*" path="../../"
+
+// Enable the shutdown debugging feature
+debugVersions "ASOCKETS_DEBUG_SHUTDOWN"
+// Also enable timer tracking for full stack traces
+debugVersions "TIMER_TRACK"

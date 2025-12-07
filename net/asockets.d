@@ -38,6 +38,7 @@ else version (Posix)
 debug(ASOCKETS) import std.stdio : stderr;
 debug(PRINTDATA) import std.stdio : stderr;
 debug(PRINTDATA) import ae.utils.text : hexDump;
+debug(ASOCKETS_DEBUG_SHUTDOWN) import ae.utils.exception : captureStackTrace, printCapturedStackTrace, TraceInfo;
 private import std.conv : to;
 
 
@@ -189,6 +190,7 @@ version (LIBEV)
 			ev_io_init(&socket.evRead , &ioCallback, fd, EV_READ );
 			ev_io_init(&socket.evWrite, &ioCallback, fd, EV_WRITE);
 			count++;
+			debug (ASOCKETS_DEBUG_SHUTDOWN) socket.registrationStackTrace = captureStackTrace();
 		}
 
 		/// Unregister a socket with the manager.
@@ -209,6 +211,8 @@ version (LIBEV)
 		/// Loop continuously until no sockets are left.
 		void loop()
 		{
+			debug (ASOCKETS_DEBUG_SHUTDOWN) ShutdownDebugger.register();
+
 			auto evLoop = ev_default_loop(0);
 			enforce(evLoop, "libev initialization failure");
 
@@ -281,6 +285,8 @@ else // Use select
 
 		void delegate()[] nextTickHandlers, idleHandlers;
 
+		debug (ASOCKETS_DEBUG_SHUTDOWN) TrackedHandler[] trackedIdleHandlers;
+
 	public:
 		MonoTime now;
 
@@ -298,6 +304,8 @@ else // Use select
 				assert(handle !in socketHandles, "This socket handle is already registered");
 				socketHandles[handle] = conn;
 			}
+
+			debug (ASOCKETS_DEBUG_SHUTDOWN) conn.registrationStackTrace = captureStackTrace();
 		}
 
 		/// Unregister a socket with the manager.
@@ -336,6 +344,7 @@ else // Use select
 		void loop()
 		{
 			debug (ASOCKETS) stderr.writeln("Starting event loop.");
+			debug (ASOCKETS_DEBUG_SHUTDOWN) ShutdownDebugger.register();
 
 			SocketSet readset, writeset;
 			size_t sockcount;
@@ -482,10 +491,12 @@ else // Use select
 				{
 					import ae.utils.array : shift;
 					auto handler = idleHandlers.shift();
+					debug (ASOCKETS_DEBUG_SHUTDOWN) auto trackedHandler = trackedIdleHandlers.shift();
 
 					// Rotate the idle handler queue before running it,
 					// in case the handler unregisters itself.
 					idleHandlers ~= handler;
+					debug (ASOCKETS_DEBUG_SHUTDOWN) trackedIdleHandlers ~= trackedHandler;
 
 					runUserEventHandler({
 						handler();
@@ -556,6 +567,8 @@ else // Use select
 			assert(handler !is idleHandler);
 
 		socketManager.idleHandlers ~= handler;
+		debug (ASOCKETS_DEBUG_SHUTDOWN)
+			socketManager.trackedIdleHandlers ~= TrackedHandler(handler, captureStackTrace());
 	}
 
 	/// Unregister a function previously registered with `addIdleHandler`.
@@ -566,6 +579,8 @@ else // Use select
 			{
 				import std.algorithm : remove;
 				socketManager.idleHandlers = socketManager.idleHandlers.remove(i);
+				debug (ASOCKETS_DEBUG_SHUTDOWN)
+					socketManager.trackedIdleHandlers = socketManager.trackedIdleHandlers.remove(i);
 				return;
 			}
 		assert(false, "No such idle handler");
@@ -779,11 +794,217 @@ void runUserEventHandler(scope void delegate() dg)
 
 // ***************************************************************************
 
+// Shutdown debugging: prints objects that are blocking the event loop from exiting
+// when the application doesn't shut down cleanly after a shutdown was requested.
+private debug (ASOCKETS_DEBUG_SHUTDOWN)
+{
+	import std.process : environment;
+	import ae.utils.time.parsedur : parseDuration;
+
+	struct ShutdownDebugger
+	{
+	static:
+		bool registered = false;
+		Duration timeout;
+		TimerTask watchdogTask;
+		bool shutdownWasRequested;
+
+		void onShutdown(scope const(char)[] /*reason*/)
+		{
+			import std.stdio : stderr;
+
+			if (shutdownWasRequested)
+				return;
+			shutdownWasRequested = true;
+
+			stderr.writeln("[ASOCKETS_DEBUG_SHUTDOWN] Shutdown requested. " ~
+				"Watchdog will trigger in ", timeout, " if the event loop doesn't exit.");
+			stderr.flush();
+
+			watchdogTask = new TimerTask((Timer, TimerTask) { onWatchdogTimeout(); });
+			mainTimer.add(watchdogTask, MonoTime.currTime() + timeout);
+		}
+
+		void onWatchdogTimeout()
+		{
+			import std.stdio : stderr;
+			import std.range : repeat;
+			import std.array : join;
+
+			stderr.writeln("\n[ASOCKETS_DEBUG_SHUTDOWN] Shutdown did not complete in time!");
+			stderr.writeln("=".repeat(72).join);
+			stderr.writeln("Objects blocking the event loop:");
+			stderr.writeln();
+
+			printBlockingSockets();
+			printBlockingTimerTasks();
+			printBlockingIdleHandlers();
+			printBlockingNextTickHandlers();
+
+			stderr.writeln("=".repeat(72).join);
+			stderr.flush();
+		}
+
+		void printBlockingSockets()
+		{
+			import std.stdio : stderr;
+			size_t count;
+
+			foreach (sock; socketManager.sockets)
+			{
+				if (sock is null || sock.socket is null)
+					continue;
+				if (sock.notifyRead && !sock.daemonRead || sock.notifyWrite && !sock.daemonWrite)
+				{
+					stderr.writefln("SOCKET: %s", sock);
+					stderr.writefln("  notifyRead=%s (daemon=%s), notifyWrite=%s (daemon=%s)",
+						sock.notifyRead, sock.daemonRead, sock.notifyWrite, sock.daemonWrite);
+					if (sock.registrationStackTrace !is null)
+					{
+						stderr.writeln("  Registered at:");
+						printCapturedStackTrace(sock.registrationStackTrace);
+					}
+					stderr.writeln();
+					count++;
+				}
+			}
+
+			if (count == 0)
+				stderr.writeln("SOCKETS: None blocking\n");
+			else
+				stderr.writefln("SOCKETS: %d blocking\n", count);
+		}
+
+		void printBlockingTimerTasks()
+		{
+			import std.stdio : stderr;
+
+			if (!mainTimer.isWaiting())
+			{
+				stderr.writeln("TIMER TASKS: None pending\n");
+				return;
+			}
+
+			auto now = MonoTime.currTime();
+			size_t count;
+
+			foreach (task; mainTimer.pendingTasks())
+			{
+				// Skip our own watchdog task
+				if (task is watchdogTask)
+					continue;
+
+				count++;
+				stderr.writefln("TIMER TASK: %s", cast(void*)task);
+				stderr.writefln("  fires at: %s (in %s)", task.when, task.when - now);
+				debug(TIMER_TRACK)
+				{
+					if (task.debugCreationStackTrace !is null)
+					{
+						stderr.writeln("  Created at:");
+						printCapturedStackTrace(task.debugCreationStackTrace);
+					}
+					if (task.debugAdditionStackTrace !is null)
+					{
+						stderr.writeln("  Added at:");
+						printCapturedStackTrace(task.debugAdditionStackTrace);
+					}
+				}
+				else
+				{
+					stderr.writeln("  (Enable debug=TIMER_TRACK for stack traces)");
+				}
+				stderr.writeln();
+			}
+
+			if (count == 0)
+				stderr.writeln("TIMER TASKS: Only the shutdown watchdog is pending\n");
+			else
+				stderr.writefln("TIMER TASKS: %d pending\n", count);
+		}
+
+		void printBlockingIdleHandlers()
+		{
+			import std.stdio : stderr;
+
+			version (LIBEV)
+			{
+				stderr.writeln("IDLE HANDLERS: Not tracked with LIBEV\n");
+			}
+			else
+			{
+				auto handlers = socketManager.idleHandlers;
+				if (handlers.length == 0)
+				{
+					stderr.writeln("IDLE HANDLERS: None registered\n");
+					return;
+				}
+
+				stderr.writefln("IDLE HANDLERS: %d registered", handlers.length);
+				foreach (i, ref handler; socketManager.trackedIdleHandlers)
+				{
+					stderr.writefln("  [%d] %s", i, handler.dg);
+					if (handler.stackTrace !is null)
+					{
+						stderr.writeln("  Registered at:");
+						printCapturedStackTrace(handler.stackTrace);
+					}
+				}
+				stderr.writeln();
+			}
+		}
+
+		void printBlockingNextTickHandlers()
+		{
+			import std.stdio : stderr;
+
+			auto handlers = socketManager.nextTickHandlers;
+			if (handlers.length == 0)
+			{
+				stderr.writeln("NEXT TICK HANDLERS: None queued\n");
+				return;
+			}
+
+			// Note: onNextTick is pure @safe nothrow, so we can't capture stack traces there.
+			// NextTick handlers are transient anyway (run once per tick).
+			stderr.writefln("NEXT TICK HANDLERS: %d queued (stack traces not available)", handlers.length);
+			foreach (i, handler; handlers)
+			{
+				stderr.writefln("  [%d] %s", i, handler);
+			}
+			stderr.writeln();
+		}
+
+		/// Register lazily, only for threads that actually run an event loop.
+		void register()
+		{
+			if (registered)
+				return;
+			registered = true;
+
+			timeout = parseDuration(environment.get("AE_DEBUG_SHUTDOWN_TIMEOUT", "5 secs"));
+
+			import ae.net.shutdown : addShutdownHandler;
+			addShutdownHandler((scope const(char)[] reason) { onShutdown(reason); });
+		}
+	}
+
+	struct TrackedHandler
+	{
+		void delegate() dg;
+		TraceInfo stackTrace;
+	}
+}
+
+// ***************************************************************************
+
 /// General methods for an asynchronous socket.
 abstract class GenericSocket
 {
 	/// Declares notifyRead and notifyWrite.
 	mixin SocketMixin;
+
+	debug (ASOCKETS_DEBUG_SHUTDOWN) TraceInfo registrationStackTrace;
 
 protected:
 	/// The socket this class wraps.

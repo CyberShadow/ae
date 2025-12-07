@@ -38,6 +38,7 @@
 /demo/binview/ae-demo-binview
 /demo/canvas/ae-demo-canvas
 /demo/colorcube/ae-demo-colorcube
+/demo/debug_shutdown/ae-demo-debug-shutdown
 /demo/drawsprite/ae-demo-drawsprite
 /demo/http/ae-demo-http
 /demo/inputtiming/ae-demo-inputtiming

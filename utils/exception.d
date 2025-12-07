@@ -127,6 +127,45 @@ string[] getStackTrace(string until = __FUNCTION__, string since = "_d_run_main"
 	return lines[start+1..end];
 }
 
+/// Alias for the stack trace info type.
+package(ae) alias TraceInfo = Throwable.TraceInfo;
+
+// Get access to the trace context function from druntime
+private extern (C) TraceInfo _d_traceContext(void* ptr = null) @nogc nothrow;
+
+/// Captures the current stack trace.
+/// This is cheaper than getStackTrace() because it defers symbol resolution
+/// until the stack trace is actually printed.
+/// Returns null if no trace handler is installed.
+package(ae) TraceInfo captureStackTrace() @nogc nothrow
+{
+	return _d_traceContext();
+}
+
+/// Prints a captured stack trace to stderr.
+/// Uses the same pattern as Throwable.toString() for printing.
+package(ae) void printCapturedStackTrace(TraceInfo info)
+{
+	import core.stdc.stdio : stderr, fprintf, fwrite;
+
+	if (info is null)
+		return;
+
+	try
+	{
+		fprintf(stderr, "----------------\n");
+		foreach (line; info)
+		{
+			fwrite(line.ptr, 1, line.length, stderr);
+			fprintf(stderr, "\n");
+		}
+	}
+	catch (Throwable)
+	{
+		// Ignore errors during trace printing, same as Throwable.toString()
+	}
+}
+
 // --------------------------------------------------------------------------
 
 import core.exception;

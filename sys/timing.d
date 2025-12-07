@@ -21,7 +21,7 @@ import std.exception;
 debug(TIMER_VERBOSE) debug = TIMER;
 debug(TIMER) import std.stdio : stderr;
 debug(TIMER_TRACK) import std.stdio : stderr;
-debug(TIMER_TRACK) import ae.utils.exception;
+debug(TIMER_TRACK) import ae.utils.exception : captureStackTrace, printCapturedStackTrace, TraceInfo;
 
 /// Manages and schedules a list of timer tasks.
 final class Timer
@@ -44,7 +44,7 @@ private:
 	void add(TimerTask task, TimerTask start, MonoTime when) pure
 	{
 		debug(TIMER_VERBOSE) stderr.writefln("Adding task %s which fires at %s.", cast(void*)task, task.state.when);
-		debug(TIMER_TRACK) task.additionStackTrace = getStackTrace();
+		debug(TIMER_TRACK) task.additionStackTrace = captureStackTrace();
 
 		if (start !is null)
 			assert(start.owner is this);
@@ -228,8 +228,13 @@ public:
 			return Duration.max;
 
 		debug(TIMER) stderr.writefln("First task is %s, due to fire in %s", cast(void*)head, head.state.when - now);
-		debug(TIMER_TRACK) stderr.writefln("\tCreated:\n\t\t%-(%s\n\t\t%)\n\tAdded:\n\t\t%-(%s\n\t\t%)",
-			head.creationStackTrace, head.additionStackTrace);
+		debug(TIMER_TRACK)
+		{
+			stderr.writeln("\tCreated:");
+			printCapturedStackTrace(head.creationStackTrace);
+			stderr.writeln("\tAdded:");
+			printCapturedStackTrace(head.additionStackTrace);
+		}
 
 		if (now < head.state.when) // "when" is in the future
 			return head.state.when - now;
@@ -240,6 +245,21 @@ public:
 	deprecated Duration getRemainingTime()
 	{
 		return getRemainingTime(MonoTime.currTime());
+	}
+
+	/// Returns a range over all pending timer tasks.
+	/// Useful for debugging stuck shutdown scenarios.
+	auto pendingTasks() pure
+	{
+		static struct PendingTasksRange
+		{
+			TimerTask current;
+
+			bool empty() pure { return current is null; }
+			TimerTask front() pure { return current; }
+			void popFront() pure { current = current.state.next; }
+		}
+		return PendingTasksRange(head);
 	}
 
 	debug invariant()
@@ -278,13 +298,13 @@ private:
 	Timer.TimerTaskState state;
 	deprecated Duration _delay;
 
-	debug(TIMER_TRACK) string[] creationStackTrace, additionStackTrace;
+	debug(TIMER_TRACK) TraceInfo creationStackTrace, additionStackTrace;
 
 public:
-	this(Handler handler = null) pure
+	this(Handler handler = null)
 	{
 		handleTask = handler;
-		debug(TIMER_TRACK) creationStackTrace = getStackTrace();
+		debug(TIMER_TRACK) creationStackTrace = captureStackTrace();
 	} ///
 
 	deprecated this(Duration delay, Handler handler = null)
@@ -341,6 +361,20 @@ public:
 	{
 		assert(isWaiting(), "This TimerTask is not active");
 		return state.when;
+	}
+
+	/// Stack trace of where this task was created.
+	/// Only available when compiled with `debug=TIMER_TRACK`.
+	debug(TIMER_TRACK) @property TraceInfo debugCreationStackTrace()
+	{
+		return creationStackTrace;
+	}
+
+	/// Stack trace of where this task was added to a timer.
+	/// Only available when compiled with `debug=TIMER_TRACK`.
+	debug(TIMER_TRACK) @property TraceInfo debugAdditionStackTrace()
+	{
+		return additionStackTrace;
 	}
 
 	/// Called when this timer task fires.
