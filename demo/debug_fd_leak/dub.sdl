@@ -1,0 +1,19 @@
+name "ae-demo-debug-fd-leak"
+mainSourceFile "debug_fd_leak.d"
+targetType "executable"
+
+dependency "ae" version="*" path="../../"
+
+// Use the fdtrack subpackage - it's a sourceLibrary that compiles
+// __wrap_* symbols directly into this executable and adds the
+// necessary --wrap linker flags.
+dependency "ae:fdtrack" version="*" path="../../"
+
+// Enable the file descriptor tracking feature
+debugVersions "AE_DEBUG_FD_LEAK"
+
+// Set a low threshold for the demo so it triggers quickly.
+// Note: This only applies when running via `dub run`. To use a custom
+// threshold, build first and run the executable directly:
+//   dub build && AE_DEBUG_FD_LEAK_THRESHOLD=5 ./ae-demo-debug-fd-leak
+environments "AE_DEBUG_FD_LEAK_THRESHOLD" "10"

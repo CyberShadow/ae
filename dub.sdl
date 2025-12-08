@@ -58,6 +58,9 @@ excludedSourceFiles "sys/benchmark.d"
 excludedSourceFiles "sys/vfs_curl.d"
 excludedSourceFiles "utils/meta/misc.d"
 
+# In ae:fdtrack
+excludedSourceFiles "sys/fdtrack.d"
+
 # Requires non-standard compiler features
 excludedSourceFiles "utils/alloc.d"
 excludedSourceFiles "utils/container/hashtable.d"
@@ -271,4 +274,32 @@ subPackage {
 	sourceFiles "ui/app/main.d"
 	sourceFiles "ui/app/windows/main.d" platform="windows"
 	sourceFiles "ui/app/posix/main.d" platform="posix"
+}
+
+---------------------------
+
+# FD tracking subpackage - uses sourceLibrary so that __wrap_* symbols
+# are compiled directly into the depending executable (required for
+# linker --wrap to work).
+subPackage {
+	name "fdtrack"
+	targetType "sourceLibrary"
+	sourceFiles "sys/fdtrack.d"
+
+	# GNU linker --wrap flags to intercept libc calls at link time
+	lflags "--wrap=open" "--wrap=open64" \
+	       "--wrap=openat" "--wrap=openat64" \
+	       "--wrap=creat" "--wrap=creat64" \
+	       "--wrap=fopen" "--wrap=fopen64" \
+	       "--wrap=freopen" "--wrap=freopen64" "--wrap=fclose" \
+	       "--wrap=opendir" "--wrap=fdopendir" "--wrap=closedir" \
+	       "--wrap=socket" "--wrap=close" \
+	       "--wrap=accept" "--wrap=accept4" \
+	       "--wrap=pipe" "--wrap=pipe2" \
+	       "--wrap=dup" "--wrap=dup2" "--wrap=dup3" \
+	       "--wrap=socketpair" \
+	       "--wrap=epoll_create" "--wrap=epoll_create1" \
+	       "--wrap=eventfd" "--wrap=signalfd" "--wrap=timerfd_create" \
+	       "--wrap=inotify_init" "--wrap=inotify_init1" \
+	       platform="linux"
 }
