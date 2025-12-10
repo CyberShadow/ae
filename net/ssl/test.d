@@ -83,7 +83,7 @@ version (SSL_test)
 
 		testServer(              "rsa2048.badssl.com").assertNotThrown;
 		testServer(              "rsa4096.badssl.com").assertNotThrown;
-		testServer(              "rsa8192.badssl.com").assertNotThrown;
+		// testServer(              "rsa8192.badssl.com").assertNotThrown; // Currently expired
 
 		// testServer(  "extended-validation.badssl.com").assertNotThrown; // Currently expired - https://github.com/chromium/badssl.com/issues/516
 
