@@ -427,17 +427,21 @@ class OpenSSLAdapter : SSLAdapter
 		this.context = context;
 		super(next);
 
-		sslHandle = sslEnforce(SSL_new(context.sslCtx));
-		SSL_set_ex_data(sslHandle, 0, cast(void*)this).sslEnforce();
-		SSL_set_bio(sslHandle, r.bio, w.bio);
-
 		if (next.state == ConnectionState.connected)
-			initialize();
+			onConnect();
 	} ///
 
 	override void onConnect()
 	{
 		debug(OPENSSL) stderr.writefln("OpenSSL: * Transport is connected");
+
+		// Create SSL handle (or recreate after disconnect/reconnect)
+		sslHandle = sslEnforce(SSL_new(context.sslCtx));
+		SSL_set_ex_data(sslHandle, 0, cast(void*)this).sslEnforce();
+		SSL_set_bio(sslHandle, r.bio, w.bio);
+		if (hostname)
+			SSL_set_tlsext_host_name(sslHandle, cast(char*)hostname);
+
 		try
 			initialize();
 		catch (Exception e)
@@ -574,7 +578,6 @@ class OpenSSLAdapter : SSLAdapter
 	override void setHostName(string hostname, ushort port = 0, string service = null)
 	{
 		this.hostname = cast(char*)hostname.toStringz();
-		SSL_set_tlsext_host_name(sslHandle, cast(char*)this.hostname);
 	} /// ditto
 
 	override OpenSSLCertificate getHostCertificate()
@@ -799,3 +802,50 @@ debug(ae_unittest) unittest
 
 debug (ae_unittest) import ae.net.ssl.test;
 debug(ae_unittest) unittest { testSSL(new OpenSSLProvider); }
+
+// Test that OpenSSLAdapter.setHostName works after disconnect.
+// Regression test for segfault when setHostName was called with null sslHandle.
+debug(ae_unittest) unittest
+{
+	// Simple mock connection for testing
+	static class MockConnection : IConnection
+	{
+		ConnectionState state_ = ConnectionState.disconnected;
+		@property ConnectionState state() { return state_; }
+		void send(scope Data[] data, int priority = DEFAULT_PRIORITY) {}
+		void disconnect(string reason = defaultDisconnectReason, DisconnectType type = DisconnectType.requested) {}
+		@property void handleConnect(void delegate() handler) {}
+		@property void handleDisconnect(void delegate(string, DisconnectType) handler) {}
+		@property void handleReadData(void delegate(Data) handler) {}
+		@property void handleBufferFlushed(void delegate() handler) {}
+	}
+
+	auto p = new OpenSSLProvider;
+	auto cc = p.createContext(SSLContext.Kind.client);
+	cc.setPeerVerify(SSLContext.Verify.none);
+	auto mockConn = new MockConnection;
+	auto a = cast(OpenSSLAdapter) p.createAdapter(cc, mockConn);
+
+	// Initially sslHandle should be null (created lazily in onConnect)
+	assert(a.sslHandle is null, "sslHandle should be null before onConnect");
+
+	// setHostName should work even with null sslHandle (just stores hostname)
+	a.setHostName("example.com");
+
+	// Simulate connection - this should create the SSL handle
+	mockConn.state_ = ConnectionState.connected;
+	a.onConnect();
+	assert(a.sslHandle !is null, "sslHandle should exist after onConnect");
+
+	// Simulate disconnect - SSL handle should be freed
+	a.onDisconnect("test disconnect", DisconnectType.requested);
+	assert(a.sslHandle is null, "sslHandle should be null after onDisconnect");
+
+	// setHostName should still work after disconnect (this was the bug)
+	a.setHostName("example2.com"); // Would segfault before the fix
+
+	// Simulate reconnection
+	mockConn.state_ = ConnectionState.connected;
+	a.onConnect();
+	assert(a.sslHandle !is null, "sslHandle should be recreated after reconnect");
+}
