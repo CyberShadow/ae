@@ -88,6 +88,10 @@ class SOCKS5ClientAdapter : ConnectionAdapter
 	/// Target port to connect to through the proxy
 	ushort targetPort;
 
+	/// If true, always send the host as a domain name, forcing the proxy to resolve it.
+	/// Useful for privacy (hiding DNS queries) or accessing networks only visible to the proxy.
+	bool remoteResolve;
+
 	/**
 	 * Create a SOCKS5 adapter.
 	 *
@@ -95,11 +99,13 @@ class SOCKS5ClientAdapter : ConnectionAdapter
 	 *   next = The connection to the SOCKS5 proxy server
 	 *   targetHost = The destination host to connect to through the proxy (can be set later via setTarget)
 	 *   targetPort = The destination port to connect to through the proxy (can be set later via setTarget)
+	 *   remoteResolve = If true, always send the host as a domain name, forcing the proxy to resolve it
 	 */
-	this(IConnection next, string targetHost = null, ushort targetPort = 0)
+	this(IConnection next, string targetHost = null, ushort targetPort = 0, bool remoteResolve = false)
 	{
 		this.targetHost = targetHost;
 		this.targetPort = targetPort;
+		this.remoteResolve = remoteResolve;
 		super(next);
 		socksState = State.greeting;
 	}
@@ -130,6 +136,8 @@ class SOCKS5ClientAdapter : ConnectionAdapter
 
 	override void onReadData(Data data)
 	{
+		debug(SOCKS5) stderr.writefln("SOCKS5: Got %d bytes", data.length);
+
 		inBuffer ~= data;
 
 		while (inBuffer.length > 0)
@@ -230,34 +238,37 @@ private:
 
 		Data request;
 
-		// Try to parse as IP address first
+		// Try to parse as IP address first (unless remoteResolve is set)
 		bool isIPv4, isIPv6;
 		ubyte[4] ipv4Bytes;
 		ubyte[16] ipv6Bytes;
 
-		try
-		{
-			auto addr = new InternetAddress(targetHost, targetPort);
-			isIPv4 = true;
-			// Get the raw address bytes in network byte order
-			auto sin = cast(sockaddr_in*)addr.name();
-			auto addrBytes = cast(ubyte*)&sin.sin_addr.s_addr;
-			ipv4Bytes[] = addrBytes[0..4];
-		}
-		catch (Exception)
+		if (!remoteResolve)
 		{
 			try
 			{
-				auto addr = new Internet6Address(targetHost, targetPort);
-				isIPv6 = true;
-				// Get the raw address bytes
-				auto sin6 = cast(sockaddr_in6*)addr.name();
-				auto addrBytes = cast(ubyte*)&sin6.sin6_addr;
-				ipv6Bytes[] = addrBytes[0..16];
+				auto addr = new InternetAddress(targetHost, targetPort);
+				isIPv4 = true;
+				// Get the raw address bytes in network byte order
+				auto sin = cast(sockaddr_in*)addr.name();
+				auto addrBytes = cast(ubyte*)&sin.sin_addr.s_addr;
+				ipv4Bytes[] = addrBytes[0..4];
 			}
 			catch (Exception)
 			{
-				// Not an IP address, use domain name
+				try
+				{
+					auto addr = new Internet6Address(targetHost, targetPort);
+					isIPv6 = true;
+					// Get the raw address bytes
+					auto sin6 = cast(sockaddr_in6*)addr.name();
+					auto addrBytes = cast(ubyte*)&sin6.sin6_addr;
+					ipv6Bytes[] = addrBytes[0..16];
+				}
+				catch (Exception)
+				{
+					// Not an IP address, use domain name
+				}
 			}
 		}
 
@@ -274,8 +285,8 @@ private:
 			req ~= port.asBytes[];
 			request = Data(req);
 
-			debug(SOCKS5) stderr.writefln("SOCKS5: Sending CONNECT request for IPv4 %s:%d",
-				targetHost, targetPort);
+			debug(SOCKS5) stderr.writefln("SOCKS5: Sending CONNECT request for IPv4 of %s %(%d.%):%d",
+				targetHost, ipv4Bytes[], targetPort);
 		}
 		else if (isIPv6)
 		{
@@ -290,8 +301,8 @@ private:
 			req ~= port.asBytes[];
 			request = Data(req);
 
-			debug(SOCKS5) stderr.writefln("SOCKS5: Sending CONNECT request for IPv6 %s:%d",
-				targetHost, targetPort);
+			debug(SOCKS5) stderr.writefln("SOCKS5: Sending CONNECT request for IPv6 of %s [%(%02x:%)]:%d",
+				targetHost, ipv6Bytes[], targetPort);
 		}
 		else
 		{
@@ -429,6 +440,7 @@ static if (__traits(compiles, { import ae.net.http.client; }))
 	{
 		private string proxyHost;
 		private ushort proxyPort;
+		private bool remoteResolve;
 		private SOCKS5ClientAdapter adapter;
 		private TcpConnection tcpConn;
 
@@ -438,16 +450,18 @@ static if (__traits(compiles, { import ae.net.http.client; }))
 		 * Params:
 		 *   proxyHost = Hostname or IP address of the SOCKS5 proxy server
 		 *   proxyPort = Port number of the SOCKS5 proxy server
+		 *   remoteResolve = If true, always send the host as a domain name, forcing the proxy to resolve it
 		 */
-		this(string proxyHost, ushort proxyPort)
+		this(string proxyHost, ushort proxyPort, bool remoteResolve = false)
 		{
 			this.proxyHost = proxyHost;
 			this.proxyPort = proxyPort;
+			this.remoteResolve = remoteResolve;
 
 			// Create the TCP connection and SOCKS5 adapter immediately
 			// (target will be set later in connect())
 			tcpConn = new TcpConnection();
-			adapter = new SOCKS5ClientAdapter(tcpConn);
+			adapter = new SOCKS5ClientAdapter(tcpConn, null, 0, remoteResolve);
 		}
 
 		/// Get the connection (IConnection interface).
@@ -477,10 +491,19 @@ debug(ae_unittest) unittest
 	auto socks = new SOCKS5ClientAdapter(conn, "example.com", 80);
 	assert(socks !is null);
 
+	// Test with remoteResolve option
+	auto conn2 = new TcpConnection();
+	auto socks2 = new SOCKS5ClientAdapter(conn2, "192.168.1.1", 443, true);
+	assert(socks2 !is null);
+	assert(socks2.remoteResolve == true);
+
 	// Test connector if http.client is available
 	static if (__traits(compiles, { import ae.net.http.client; }))
 	{
 		auto connector = new SOCKS5Connector("localhost", 1080);
 		assert(connector !is null);
+
+		auto connector2 = new SOCKS5Connector("localhost", 1080, true);
+		assert(connector2 !is null);
 	}
 }
