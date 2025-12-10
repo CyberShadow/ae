@@ -201,6 +201,7 @@ class OpenSSLContext : SSLContext
 		}
 		sslCtx = SSL_CTX_new(method).sslEnforce();
 		setCipherList(["ALL", "!MEDIUM", "!LOW", "!aNULL", "!eNULL", "!SSLv2", "!DH", "!TLSv1"]);
+		SSL_CTX_set_min_proto_version(sslCtx, TLS1_2_VERSION);
 
 		SSL_CTX_set_default_verify_paths(sslCtx);
 
