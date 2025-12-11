@@ -433,35 +433,41 @@ private:
 
 static if (__traits(compiles, { import ae.net.http.client; }))
 {
-	import ae.net.http.client : Connector;
+	import ae.net.http.client : Connector, TcpConnector;
 
 	/// Connector for use with ae.net.http.client.HttpClient to route HTTP requests through a SOCKS5 proxy.
+	/// Can wrap another connector for chaining (e.g., with TimeoutConnector).
 	class SOCKS5Connector : Connector
 	{
+		private Connector inner;
 		private string proxyHost;
 		private ushort proxyPort;
-		private bool remoteResolve;
 		private SOCKS5ClientAdapter adapter;
-		private TcpConnection tcpConn;
 
 		/**
-		 * Create a SOCKS5 connector.
+		 * Create a SOCKS5 connector wrapping another connector.
 		 *
 		 * Params:
+		 *   inner = The underlying connector (e.g., TcpConnector or TimeoutConnector)
 		 *   proxyHost = Hostname or IP address of the SOCKS5 proxy server
 		 *   proxyPort = Port number of the SOCKS5 proxy server
 		 *   remoteResolve = If true, always send the host as a domain name, forcing the proxy to resolve it
 		 */
-		this(string proxyHost, ushort proxyPort, bool remoteResolve = false)
+		this(Connector inner, string proxyHost, ushort proxyPort, bool remoteResolve = false)
 		{
+			this.inner = inner;
 			this.proxyHost = proxyHost;
 			this.proxyPort = proxyPort;
-			this.remoteResolve = remoteResolve;
 
-			// Create the TCP connection and SOCKS5 adapter immediately
+			// Create the SOCKS5 adapter wrapping the inner connection
 			// (target will be set later in connect())
-			tcpConn = new TcpConnection();
-			adapter = new SOCKS5ClientAdapter(tcpConn, null, 0, remoteResolve);
+			adapter = new SOCKS5ClientAdapter(inner.getConnection(), null, 0, remoteResolve);
+		}
+
+		/// Convenience constructor using TcpConnector as the inner connector.
+		this(string proxyHost, ushort proxyPort, bool remoteResolve = false)
+		{
+			this(new TcpConnector(), proxyHost, proxyPort, remoteResolve);
 		}
 
 		/// Get the connection (IConnection interface).
@@ -477,7 +483,7 @@ static if (__traits(compiles, { import ae.net.http.client; }))
 			adapter.setTarget(host, port);
 
 			// Connect to the SOCKS5 proxy (the adapter handles the SOCKS5 handshake)
-			tcpConn.connect(proxyHost, proxyPort);
+			inner.connect(proxyHost, proxyPort);
 		}
 	}
 }
@@ -500,10 +506,24 @@ debug(ae_unittest) unittest
 	// Test connector if http.client is available
 	static if (__traits(compiles, { import ae.net.http.client; }))
 	{
+		import ae.net.http.client : TcpConnector, TimeoutConnector;
+		import core.time : seconds;
+
+		// Test convenience constructor (backwards compatible)
 		auto connector = new SOCKS5Connector("localhost", 1080);
 		assert(connector !is null);
 
 		auto connector2 = new SOCKS5Connector("localhost", 1080, true);
 		assert(connector2 !is null);
+
+		// Test chainable connector with explicit inner connector
+		auto connector3 = new SOCKS5Connector(new TcpConnector(), "localhost", 1080);
+		assert(connector3 !is null);
+
+		// Test chaining with TimeoutConnector for handshake timeout
+		auto connector4 = new SOCKS5Connector(
+			new TimeoutConnector(new TcpConnector(), 30.seconds),
+			"localhost", 1080, true);
+		assert(connector4 !is null);
 	}
 }
