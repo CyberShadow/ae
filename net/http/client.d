@@ -27,6 +27,7 @@ import std.utf;
 
 import ae.net.asockets;
 import ae.net.ietf.headers;
+import ae.sys.timing : mainTimer, Timer, TimerTask;
 import ae.net.ietf.headerparse;
 import ae.net.ietf.url;
 import ae.net.ssl;
@@ -583,6 +584,114 @@ class UnixConnector : SocketConnector!SocketConnection
 		import std.socket;
 		auto addr = new UnixAddress(path);
 		conn.connect([AddressInfo(AddressFamily.UNIX, SocketType.STREAM, cast(ProtocolType)0, addr, path)]);
+	}
+}
+
+/// Base class for connectors that wrap another connector and add an adapter.
+/// Subclasses should create the adapter in their constructor using `inner.getConnection()`.
+class AdaptingConnector : Connector
+{
+	protected Connector inner;
+	protected IConnection adapted;
+
+	this(Connector inner)
+	{
+		this.inner = inner;
+	}
+
+	override IConnection getConnection()
+	{
+		return adapted;
+	}
+
+	override void connect(string host, ushort port)
+	{
+		inner.connect(host, port);
+	}
+}
+
+/// Connector that adds connect and idle timeout handling to another connector.
+class TimeoutConnector : AdaptingConnector
+{
+	private Duration connectTimeout;
+	private Duration idleTimeout;
+	private TimeoutAdapter idleAdapter;
+	private TimerTask connectTimer;
+
+	/**
+	 * Create a timeout connector with separate connect and idle timeouts.
+	 *
+	 * Params:
+	 *   inner = The underlying connector to wrap
+	 *   connectTimeout = Maximum duration to establish connection
+	 *   idleTimeout = Maximum duration of inactivity after connection is established
+	 */
+	this(Connector inner, Duration connectTimeout, Duration idleTimeout)
+	{
+		super(inner);
+		this.connectTimeout = connectTimeout;
+		this.idleTimeout = idleTimeout;
+
+		// Create idle timeout adapter wrapping the inner connection
+		idleAdapter = new TimeoutAdapter(inner.getConnection());
+		// Note: idle timeout is set in onConnect, not here
+		adapted = new ConnectTimeoutAdapter(idleAdapter, this);
+	}
+
+	/// Convenience constructor using the same duration for both timeouts.
+	this(Connector inner, Duration timeout)
+	{
+		this(inner, timeout, timeout);
+	}
+
+	override void connect(string host, ushort port)
+	{
+		// Start connect timeout timer
+		if (connectTimer is null)
+		{
+			connectTimer = new TimerTask(&onConnectTimeout);
+		}
+		else if (connectTimer.isWaiting())
+		{
+			connectTimer.cancel();
+		}
+		mainTimer.add(connectTimer, now + connectTimeout);
+
+		inner.connect(host, port);
+	}
+
+	private void onConnectTimeout(Timer, TimerTask)
+	{
+		if (adapted.state.disconnectable)
+			adapted.disconnect("Connect timeout", DisconnectType.error);
+	}
+
+	private void onConnected()
+	{
+		// Cancel connect timeout
+		if (connectTimer && connectTimer.isWaiting())
+			connectTimer.cancel();
+
+		// Start idle timeout
+		idleAdapter.setIdleTimeout(idleTimeout);
+	}
+
+	/// Helper adapter to intercept onConnect and trigger timeout logic.
+	private static class ConnectTimeoutAdapter : ConnectionAdapter
+	{
+		private TimeoutConnector owner;
+
+		this(IConnection next, TimeoutConnector owner)
+		{
+			super(next);
+			this.owner = owner;
+		}
+
+		override void onConnect()
+		{
+			owner.onConnected();
+			super.onConnect();
+		}
 	}
 }
 
