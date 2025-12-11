@@ -456,7 +456,7 @@ class OpenSSLAdapter : SSLAdapter
 	{
 		debug(OPENSSL_DATA) stderr.writefln("OpenSSL: { Got %d incoming bytes from network", data.length);
 
-		if (next.state == ConnectionState.disconnecting)
+		if (next.state == ConnectionState.disconnecting || next.state == ConnectionState.disconnected)
 		{
 			return;
 		}
