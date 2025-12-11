@@ -212,6 +212,11 @@ class OpenSSLContext : SSLContext
         }
 	} ///
 
+	~this()
+	{
+		SSL_CTX_free(sslCtx);
+	}
+
 	/// OpenSSL uses different APIs to specify the cipher list for
 	/// TLSv1.2 and below and to specify the ciphersuites for TLSv1.3.
 	/// When calling `setCipherList`, use this value to delimit them:
