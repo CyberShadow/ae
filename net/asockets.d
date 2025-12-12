@@ -2457,15 +2457,19 @@ class BufferingAdapter : ConnectionAdapter
 /// Splits data stream into delimiter-separated lines.
 class LineBufferedAdapter : ConnectionAdapter
 {
+	/// The default `LineBufferedAdapter` delimiter.
+	static immutable defaultDelimiter = "\r\n";
+
 	/// The protocol's line delimiter.
-	string delimiter = "\r\n";
+	string delimiter = defaultDelimiter;
 
 	/// Maximum line length (0 means unlimited).
 	size_t maxLength = 0;
 
-	this(IConnection next)
+	this(IConnection next, string delimiter = defaultDelimiter)
 	{
 		super(next);
+		this.delimiter = delimiter;
 	} ///
 
 	/// Append a line to the send buffer.
