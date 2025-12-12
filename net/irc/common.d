@@ -104,7 +104,8 @@ public:
 	this(IConnection c, size_t maxLineLength = 512)
 	{
 		c = line = new LineBufferedAdapter(c);
-		line.delimiter = "\n";
+		line.delimiter = "\n"; // Lenient receive: accept \n
+		line.sendDelimiter = "\r\n"; // RFC-compliant send: use \r\n
 		line.maxLength = maxLineLength;
 
 		c = timer = new TimeoutAdapter(c);
@@ -117,12 +118,10 @@ public:
 	} ///
 
 	/// Send `line`, plus a newline.
-	void send(string line)
+	void send(string ln)
 	{
-		debug(IRC) stderr.writeln("> ", line);
-		// Send with \r\n, but support receiving with \n
-		import ae.sys.data;
-		conn.send(Data(line.asBytes ~ "\r\n".asBytes));
+		debug(IRC) stderr.writeln("> ", ln);
+		line.send(ln);
 	}
 
 	/// Inactivity handler (for sending a `PING` request).

@@ -2460,8 +2460,12 @@ class LineBufferedAdapter : ConnectionAdapter
 	/// The default `LineBufferedAdapter` delimiter.
 	static immutable defaultDelimiter = "\r\n";
 
-	/// The protocol's line delimiter.
+	/// The protocol's line delimiter for receiving.
 	string delimiter = defaultDelimiter;
+
+	/// The protocol's line delimiter for sending.
+	/// If null, uses the same delimiter as for receiving.
+	string sendDelimiter = null;
 
 	/// Maximum line length (0 means unlimited).
 	size_t maxLength = 0;
@@ -2472,13 +2476,28 @@ class LineBufferedAdapter : ConnectionAdapter
 		this.delimiter = delimiter;
 	} ///
 
-	/// Append a line to the send buffer.
-	void send(string line)
+	/// Expose inherited send overloads hidden by the string overload.
+	alias send = typeof(super).send;
+
+	/// Override to append delimiter after each send.
+	override void send(scope Data[] data, int priority = DEFAULT_PRIORITY)
 	{
-		//super.send(Data(line ~ delimiter));
-		// https://issues.dlang.org/show_bug.cgi?id=13985
-		ConnectionAdapter ca = this;
-		ca.send(Data(line.asBytes ~ delimiter.asBytes));
+		super.send(data, priority);
+		auto delimiterDatum = Data(this.effectiveSendDelimiter.asBytes);
+		super.send(delimiterDatum.asSlice, priority);
+	}
+
+	/// Append a line with delimiter to the send buffer.
+	void send(string line, int priority = DEFAULT_PRIORITY)
+	{
+		auto datum = Data(line.asBytes);
+		super.send(datum.asSlice, priority);
+	}
+
+private:
+	@property string effectiveSendDelimiter()
+	{
+		return sendDelimiter !is null ? sendDelimiter : delimiter;
 	}
 
 protected:
