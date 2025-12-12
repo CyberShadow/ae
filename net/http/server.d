@@ -273,7 +273,7 @@ protected:
 	/// Send the given HTTP response, and do nothing else.
 	final void writeResponse(HttpResponse response)
 	{
-		assert(response.status != 0);
+		assert(response.status != 0, "Attempting to write a response without a status code");
 
 		if (currentRequest)
 		{
