@@ -20,7 +20,7 @@ import std.traits;
 import std.typecons;
 
 import ae.utils.appender;
-import ae.utils.array : isIdentical;
+import ae.utils.array : isIdentical, nonNull;
 import ae.utils.exception;
 import ae.utils.functor.primitives : functor;
 import ae.utils.meta;
@@ -311,7 +311,7 @@ struct CustomJsonSerializer(Writer, JsonOptions options = JsonOptions.init)
 				else
 					first = false;
 				static if (is(typeof({string s = T.init.keys[0];})))
-					writer.putValue(key);
+					writer.putValue(key.nonNull);
 				else
 					static if (options.nonStringKeys == JsonOptions.NonStringKeys.asIs)
 						put(key);
@@ -455,6 +455,15 @@ debug(ae_unittest) unittest
 
 	B b;
 	b.toJson();
+}
+
+// Test that null string keys in associative arrays are serialized as empty strings.
+debug(ae_unittest) unittest
+{
+	int[string] aa;
+	aa[null] = 42;
+	auto s = aa.toJson;
+	assert(s == `{"":42}`, s);
 }
 
 // ************************************************************************
