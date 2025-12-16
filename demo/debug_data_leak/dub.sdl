@@ -1,0 +1,8 @@
+name "ae-demo-debug-data-leak"
+mainSourceFile "debug_data_leak.d"
+targetType "executable"
+
+dependency "ae" version="*" path="../../"
+
+// Enable the Data allocation tracking feature
+debugVersions "AE_DEBUG_DATA_LEAK"

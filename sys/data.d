@@ -1367,7 +1367,10 @@ static if (useGC)
 				.allocatedThreshold = 0;
 			}
 		if (data is null)
+		{
+			debug (AE_DEBUG_DATA_LEAK) dumpDataAllocations();
 			onOutOfMemoryError();
+		}
 
 		dataMemory += capacity;
 		if (dataMemoryPeak < dataMemory)
@@ -1377,6 +1380,8 @@ static if (useGC)
 
 		this._size = size;
 		this._capacity = capacity;
+
+		debug (AE_DEBUG_DATA_LEAK) trackAllocation(this);
 
 		static if (useGC)
 		{
@@ -1395,6 +1400,7 @@ static if (useGC)
 	/// Destructor - destroys the wrapped data.
 	~this() @nogc
 	{
+		debug (AE_DEBUG_DATA_LEAK) untrackAllocation(this);
 		Allocator.deallocate(data, capacity);
 		data = null;
 		// If Memory is created and manually deleted, there is no need to cause frequent collections
@@ -1533,4 +1539,68 @@ debug(DATA_REFCOUNT) void debugStackTrace()
 			fprintf(stderr, "\t%.*s\n", cast(int)line.length, line.ptr);
 	catch (Throwable e)
 		fprintf(stderr, "\t(stacktrace error: %.*s)", cast(int)e.msg.length, e.msg.ptr);
+}
+
+// ************************************************************************
+
+// Data leak tracking: captures stack traces for all live Data allocations
+// and dumps them grouped by allocation site when out of memory occurs.
+debug(AE_DEBUG_DATA_LEAK)
+{
+	import ae.utils.exception : TraceInfo, captureStackTrace, printCapturedStackTrace;
+
+	// Track live allocations: Memory instance -> allocation stack trace
+	private __gshared TraceInfo[Memory] liveAllocations;
+
+	private void trackAllocation(Memory mem) nothrow
+	{
+		liveAllocations[mem] = captureStackTrace();
+	}
+
+	private void untrackAllocation(Memory mem) nothrow @nogc
+	{
+		liveAllocations.remove(mem);
+	}
+
+public:
+
+	void dumpDataAllocations()
+	{
+		import core.stdc.stdio : stderr, fprintf, fflush;
+		import std.array : array;
+		import std.algorithm.sorting : sort;
+
+		fprintf(stderr, "\n============================================================\n");
+		fprintf(stderr, "AE_DEBUG_DATA_LEAK: Dumping live allocations\n");
+		fprintf(stderr, "Total: %zu bytes in %u allocations\n", dataMemory, dataCount);
+		fprintf(stderr, "============================================================\n\n");
+
+		// Aggregate by stack trace string
+		struct Stats { size_t bytes; uint count; TraceInfo trace; }
+		Stats[string] byTrace;
+
+		foreach (mem, trace; liveAllocations)
+		{
+			auto key = trace ? trace.toString() : "(no trace)";
+			if (auto p = key in byTrace)
+			{
+				p.bytes += mem.capacity;
+				p.count++;
+			}
+			else
+				byTrace[key] = Stats(mem.capacity, 1, trace);
+		}
+
+		// Print sorted by bytes descending
+		auto sorted = byTrace.byKeyValue.array.sort!((a, b) => a.value.bytes > b.value.bytes);
+		foreach (kv; sorted)
+		{
+			fprintf(stderr, "--- %zu bytes (%u allocations) ---\n", kv.value.bytes, kv.value.count);
+			printCapturedStackTrace(kv.value.trace);
+			fprintf(stderr, "\n");
+		}
+
+		fprintf(stderr, "============================================================\n\n");
+		fflush(stderr);
+	}
 }
