@@ -21,18 +21,22 @@ import ae.utils.promise;
 
 enum defaultFiberSize = 64 * 1024;
 
+/// UDA marking functions that must be called from within a fiber context (created via `async()`).
+/// This is a documentation convention; the requirement is enforced at runtime by `await()`.
+typeof(assert(false)) async()() { static assert(false, "This should be used only as an UDA (@async)"); }
+
 /// Evaluates `task` in a new fiber, and returns a promise which is
 /// fulfilled when `task` exits.  `task` may use `await` to block on
 /// other promises.
 // TODO: is using lazy OK for this? https://issues.dlang.org/show_bug.cgi?id=23923
-Promise!(T, E) async(T, E = Exception)(lazy T task, size_t size = defaultFiberSize)
+Promise!(T, E) async(T, E = Exception)(@async lazy T task, size_t size = defaultFiberSize)
 if (!is(T == return))
 {
 	return async({ return task; }, size);
 }
 
 /// ditto
-Promise!(T, E) async(T, E = Exception)(T delegate() task, size_t size = defaultFiberSize)
+Promise!(T, E) async(T, E = Exception)(@async T delegate() task, size_t size = defaultFiberSize)
 if (!is(T == return))
 {
 	auto p = new Promise!T;
@@ -50,7 +54,7 @@ if (!is(T == return))
 }
 
 /// ditto
-Promise!(T, E) async(T, E = Exception)(T function() task)
+Promise!(T, E) async(T, E = Exception)(@async T function() task)
 if (!is(T == return))
 {
 	import std.functional : toDelegate;
@@ -59,7 +63,7 @@ if (!is(T == return))
 
 /// Synchronously waits until the promise `p` is fulfilled.
 /// Can only be called in a fiber.
-T await(T, E)(Promise!(T, E) p)
+T await(T, E)(Promise!(T, E) p) @async
 {
 	Promise!T.ValueTuple fiberValue;
 	E fiberError;
