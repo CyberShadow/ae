@@ -40,15 +40,7 @@ Promise!(T, E) async(T, E = Exception)(@async T delegate() task, size_t size = d
 if (!is(T == return))
 {
 	auto p = new Promise!T;
-	auto f = new Fiber({
-		try
-			static if (is(T == void))
-				task(), p.fulfill();
-			else
-				p.fulfill(task());
-		catch (E e)
-			p.reject(e);
-	}, size);
+	auto f = new Fiber({ p.tryResolve(task); }, size);
 	f.call();
 	return p;
 }
@@ -65,26 +57,13 @@ if (!is(T == return))
 /// Can only be called in a fiber.
 T await(T, E)(Promise!(T, E) p) @async
 {
-	Promise!T.ValueTuple fiberValue;
-	E fiberError;
+	PromiseResult!(T, E) result;
 
 	auto f = Fiber.getThis();
 	assert(f, "await called while not in a fiber");
-	p.then((Promise!T.ValueTuple value) {
-		fiberValue = value;
-		f.call();
-	}, (E error) {
-		fiberError = error;
-		f.call();
-	});
+	result.capture(p, { f.call(); });
 	Fiber.yield();
-	if (fiberError)
-		throw fiberError;
-	else
-	{
-		static if (!is(T == void))
-			return fiberValue[0];
-	}
+	return result.unwrap();
 }
 
 ///
@@ -117,28 +96,10 @@ debug(ae_unittest) unittest
 /// Propagates any return value or exception to the caller.
 T awaitSync(T, E)(Promise!(T, E) p)
 {
-	bool completed;
-	Promise!T.ValueTuple taskValue;
-	E taskError;
-
-	p.then((Promise!T.ValueTuple value) {
-		completed = true;
-		taskValue = value;
-	}, (E error) {
-		completed = true;
-		taskError = error;
-	});
-
+	PromiseResult!(T, E) result;
+	result.capture(p);
 	socketManager.loop();
-
-	assert(completed, "Event loop exited but the promise remained unresolved");
-	if (taskError)
-		throw taskError;
-	else
-	{
-		static if (!is(T == void))
-			return taskValue[0];
-	}
+	return result.unwrap();
 }
 
 debug(ae_unittest) unittest
