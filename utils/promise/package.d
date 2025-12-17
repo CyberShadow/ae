@@ -589,6 +589,57 @@ if (is(P == Promise!(T, E), T, E))
 
 // ****************************************************************************
 
+/// Convert any returned value or exception thrown by `task` into
+/// the corresponding Promise resolution.
+/// Somewhat equivalent to Promise.try in ES2025.
+void tryResolve(T, E)(Promise!(T, E) p, scope T delegate() task)
+{
+	try
+		static if (is(T == void))
+			task(), p.fulfill();
+		else
+			p.fulfill(task());
+	catch (E e)
+		p.reject(e);
+}
+
+/// Helper for converting a promise to a returned value / thrown exception.
+struct PromiseResult(T, E)
+{
+	Promise!T.ValueTuple value;
+	E error;
+	bool isResolved;
+
+	void capture(Promise!(T, E) p, void delegate() onComplete = null)
+	{
+		p.then((Promise!T.ValueTuple value) {
+			assert(!isResolved, "Promise resolved multiple times");
+			this.value = value;
+			isResolved = true;
+			if (onComplete) onComplete();
+		}, (E error) {
+			assert(!isResolved, "Promise resolved multiple times");
+			this.error = error;
+			isResolved = true;
+			if (onComplete) onComplete();
+		});
+	}
+
+	T unwrap()
+	{
+		assert(isResolved, "Promise was not resolved");
+		if (error)
+			throw error;
+		else
+		{
+			static if (!is(T == void))
+				return value[0];
+		}
+	}
+}
+
+// ****************************************************************************
+
 /// Wait for all promises to be resolved, or for any to be rejected.
 PromiseValueTransform!(P, x => [x]) all(P)(P[] promises)
 if (is(P == Promise!(T, E), T, E))
