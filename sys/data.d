@@ -1214,6 +1214,10 @@ abstract class Memory
 	}
 }
 
+/// Set threshold of allocated memory to trigger a garbage collection.
+static if (useGC)
+void setGCThreshold(size_t value) { collectThreshold = value; }
+
 // ************************************************************************
 
 package:
@@ -1224,10 +1228,6 @@ static /*thread-local*/ size_t dataMemory, dataMemoryPeak;
 static /*thread-local*/ uint   dataCount;
 /// How many allocations have been done so far.
 static /*thread-local*/ uint   allocCount;
-
-/// Set threshold of allocated memory to trigger a garbage collection.
-static if (useGC)
-void setGCThreshold(size_t value) { collectThreshold = value; }
 
 /// Allocate and construct a new class in `malloc`'d memory.
 C unmanagedNew(C, Args...)(auto ref Args args) @trusted
