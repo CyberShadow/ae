@@ -32,7 +32,7 @@ import ae.net.ietf.headerparse;
 import ae.net.ietf.url;
 import ae.net.ssl;
 import ae.sys.dataset : DataVec, bytes, joinToGC;
-import ae.utils.array : as, asBytes, asSlice, shift;
+import ae.utils.array : as, asBytes, asSlice, nonNull, shift;
 import ae.utils.exception : CaughtException;
 import ae.sys.data;
 
@@ -330,7 +330,7 @@ protected:
 
 		// If we were expecting any more responses, we're not getting them.
 		while (receivedResponses < sentRequests)
-			onDone(null, reason, type == DisconnectType.error);
+			onDone(null, reason.nonNull, type == DisconnectType.error);
 
 		// If there are more requests queued (keepAlive == false),
 		// reconnect and keep going.
