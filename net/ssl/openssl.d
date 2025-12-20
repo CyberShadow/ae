@@ -57,6 +57,7 @@ import deimos.openssl.x509v3;
 
 import ae.net.asockets;
 import ae.net.ssl;
+import ae.utils.array : nonNull;
 import ae.utils.exception : CaughtException;
 import ae.utils.meta : enumLength;
 import ae.utils.text;
@@ -452,7 +453,7 @@ class OpenSSLAdapter : SSLAdapter
 		catch (Exception e)
 		{
 			debug(OPENSSL) stderr.writefln("OpenSSL: SSL handshake failed: %s", e.msg);
-			disconnect(e.msg, DisconnectType.error);
+			disconnect(e.msg.nonNull, DisconnectType.error);
 			return;
 		}
 	} /// `SSLAdapter` method implementation.
@@ -503,7 +504,7 @@ class OpenSSLAdapter : SSLAdapter
 		{
 			debug(OPENSSL) stderr.writeln("Error while %s and processing incoming data: %s".format(next.state, e.msg));
 			if (next.state != ConnectionState.disconnecting && next.state != ConnectionState.disconnected)
-				disconnect(e.msg, DisconnectType.error);
+				disconnect(e.msg.nonNull, DisconnectType.error);
 			else
 				throw e;
 		}
@@ -657,7 +658,7 @@ protected:
 					}
 				catch (Exception e)
 				{
-					disconnect(e.msg, DisconnectType.error);
+					disconnect(e.msg.nonNull, DisconnectType.error);
 					return;
 				}
 			super.onConnect();
