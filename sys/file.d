@@ -2472,7 +2472,7 @@ void allocate(File f, ulong length)
 		import core.sys.linux.fcntl : fallocate;
 		f.flush();
 		// TODO: add overloads for other parameters
-		auto res = fallocate(f.fileno, 0, 0, length);
+		auto res = fallocate(f.fileno, 0, 0, length.to!off_t);
 		errnoEnforce(res == 0, "fallocate");
 	}
 	else
