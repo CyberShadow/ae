@@ -72,6 +72,24 @@ template Parameter(T, string description=null, string name=null)
 /// Specify this as the description to hide the option from --help output.
 enum hiddenOption = "hiddenOption";
 
+/// UDA for specifying program version.
+/// Enables a `--version` option.
+/// Specify this as the full version string to be displayed,
+/// e.g. `@Version("myapp v1.2.3")`.
+struct Version
+{
+	string value;
+}
+
+/// Extracts version string from a symbol's `Version` UDA, or returns `null` if absent.
+template getVersionString(alias sym)
+{
+	static if (hasAttribute!(Version, sym))
+		enum getVersionString = getAttribute!(Version, sym).value;
+	else
+		enum string getVersionString = null;
+}
+
 private template OptionValueType(T)
 {
 	static if (is(T == _OptionImpl!Args, Args...))
@@ -196,9 +214,17 @@ void defaultUsageFun(string usage)
 	stderr.writeln(usage);
 }
 
+/// Default version text print function.
+/// Sends the text to stdout.writeln.
+void defaultVersionFun(string ver)
+{
+	import std.stdio;
+	stdout.writeln(ver);
+}
+
 /// Parse the given arguments according to FUN's parameters, and call FUN.
 /// Throws GetOptException on errors.
-auto funopt(alias FUN, FunOptConfig config = FunOptConfig.init, alias usageFun = defaultUsageFun)(string[] args)
+auto funopt(alias FUN, FunOptConfig config = FunOptConfig.init, alias usageFun = defaultUsageFun, alias versionFun = defaultVersionFun)(string[] args)
 if (isCallable!FUN)
 {
 	alias Params = staticMap!(Unqual, ParameterTypeTuple!FUN);
@@ -251,12 +277,23 @@ if (isCallable!FUN)
 
 	auto origArgs = args;
 	bool help;
+	enum ver = getVersionString!FUN;
+	enum haveVersion = ver.length > 0;
+	static if (haveVersion)
+		bool showVersion;
+
+	struct FlagOpt { string selector; bool* value; }
+	struct NoOpt {}
+	Select!(haveVersion, FlagOpt, NoOpt) versionOpt;
+	static if (haveVersion)
+		versionOpt = FlagOpt("V|version", &showVersion);
 
 	getopt(args,
 		std.getopt.config.bundling,
 		std.getopt.config.caseSensitive,
 		getOptArgs.tupleof,
 		"h|help", &help,
+		versionOpt.tupleof,
 	);
 
 	void printUsage()
@@ -271,6 +308,18 @@ if (isCallable!FUN)
 			return;
 		else
 			return ReturnType!FUN.init;
+	}
+
+	static if (haveVersion)
+	{
+		if (showVersion)
+		{
+			versionFun(ver);
+			static if (is(ReturnType!FUN == void))
+				return;
+			else
+				return ReturnType!FUN.init;
+		}
 	}
 
 	args = args[1..$];
@@ -364,6 +413,30 @@ debug(ae_unittest) unittest
 	funopt!((int[] n) { assert(n == [12, 34]); })(["program", "12", "34"]);
 }
 
+debug(ae_unittest) unittest
+{
+	// Test --version support
+	static string versionOutput;
+	static void testVersionFun(string ver) { versionOutput = ver; }
+
+	@Version("myapp 1.2.3")
+	void f1() { assert(false, "should not be called"); }
+
+	versionOutput = null;
+	funopt!(f1, FunOptConfig.init, defaultUsageFun, testVersionFun)(["program", "--version"]);
+	assert(versionOutput == "myapp 1.2.3", versionOutput);
+
+	versionOutput = null;
+	funopt!(f1, FunOptConfig.init, defaultUsageFun, testVersionFun)(["program", "-V"]);
+	assert(versionOutput == "myapp 1.2.3", versionOutput);
+
+	// Without @Version, --version should not be recognized
+	void f2() {}
+
+	import std.exception : assertThrown;
+	assertThrown!GetOptException(funopt!f2(["program", "--version"]));
+}
+
 // ***************************************************************************
 
 private string canonicalizeCommandLineArgument(string s) { return s.replace("-", ""); }
@@ -403,8 +476,12 @@ string getUsageFormatString(alias FUN)()
 	alias ParameterTypeTuple!FUN Params;
 	enum names = [optionNames!FUN];
 	alias defaults = ParameterDefaultValueTuple!FUN;
+	enum ver = getVersionString!FUN;
 
-	string result = "Usage: %1$s";
+	string result;
+	static if (ver.length > 0)
+		result = ver ~ "\n\n";
+	result ~= "Usage: %1$s";
 	enum inSynopsis(Param) = isParameter!Param || !optionHasDescription!Param;
 	enum haveOmittedOptions = !allSatisfy!(inSynopsis, Params);
 	static if (haveOmittedOptions)
@@ -633,6 +710,23 @@ Refrobnicates the transmogrifier.
 Options:
   --verbose  Be verbose.
 ", usage);
+
+	// Test version in help output
+	@Version("myapp 1.0.0")
+	@(`Does something useful.`)
+	void f9(Switch!"Be verbose." verbose){}
+
+	usage = getUsage!f9("program");
+	assert(usage ==
+"myapp 1.0.0
+
+Usage: program [OPTION]...
+
+Does something useful.
+
+Options:
+  --verbose  Be verbose.
+", usage);
 }
 
 // ***************************************************************************
@@ -839,7 +933,7 @@ Seconds to wait each try
 /// first parameter on the given command line (the "action").
 /// String UDAs are used as usage documentation for generating --help output
 /// (or when no action is specified).
-auto funoptDispatch(alias Actions, FunOptConfig config = FunOptConfig.init, alias usageFun = defaultUsageFun)(string[] args)
+auto funoptDispatch(alias Actions, FunOptConfig config = FunOptConfig.init, alias usageFun = defaultUsageFun, alias versionFun = defaultVersionFun)(string[] args)
 {
 	string program = args[0];
 
@@ -856,9 +950,9 @@ auto funoptDispatch(alias Actions, FunOptConfig config = FunOptConfig.init, alia
 				{
 					auto args = [getProgramName(program) ~ " " ~ action] ~ actionArguments;
 					static if (is(member == struct))
-						return funoptDispatch!(member, config, usageFun)(args);
+						return funoptDispatch!(member, config, usageFun, versionFun)(args);
 					else
-						return funopt!(member, config, usageFun)(args);
+						return funopt!(member, config, usageFun, versionFun)(args);
 				}
 			}
 
@@ -867,11 +961,15 @@ auto funoptDispatch(alias Actions, FunOptConfig config = FunOptConfig.init, alia
 
 	static if (hasAttribute!(string, Actions))
 	{
+		@Version(getVersionString!Actions)
 		@(getAttribute!(string, Actions))
 		auto fun(string action, string[] actionArguments = []) { return funImpl(action, actionArguments); }
 	}
 	else
+	{
+		@Version(getVersionString!Actions)
 		auto fun(string action, string[] actionArguments = []) { return funImpl(action, actionArguments); }
+	}
 
 	static void myUsageFun(string usage) { usageFun(usage ~ funoptDispatchUsage!Actions()); }
 
@@ -880,7 +978,7 @@ auto funoptDispatch(alias Actions, FunOptConfig config = FunOptConfig.init, alia
 		c.getoptConfig ~= std.getopt.config.stopOnFirstNonOption;
 		return c;
 	}();
-	return funopt!(fun, myConfig, myUsageFun)(args);
+	return funopt!(fun, myConfig, myUsageFun, versionFun)(args);
 }
 
 /// Constructs the `funoptDispatch` usage string.
@@ -968,4 +1066,38 @@ An action sub-group
 Actions:
   new  Create a new foobar
 ", usage);
+}
+
+debug(ae_unittest) unittest
+{
+	// Test --version support with funoptDispatch
+	static string versionOutput;
+	static void testVersionFun(string ver) { versionOutput = ver; }
+
+	@Version("mytool 2.0.0")
+	@(`Test program.`)
+	struct Actions
+	{
+		@(`Perform action f1`)
+		static void f1() {}
+	}
+
+	versionOutput = null;
+	funoptDispatch!(Actions, FunOptConfig.init, defaultUsageFun, testVersionFun)(["program", "--version"]);
+	assert(versionOutput == "mytool 2.0.0", versionOutput);
+
+	versionOutput = null;
+	funoptDispatch!(Actions, FunOptConfig.init, defaultUsageFun, testVersionFun)(["program", "-V"]);
+	assert(versionOutput == "mytool 2.0.0", versionOutput);
+
+	// Without @Version, --version should not be recognized
+	@(`Test program without version.`)
+	struct ActionsNoVersion
+	{
+		@(`Perform action f1`)
+		static void f1() {}
+	}
+
+	import std.exception : assertThrown;
+	assertThrown!GetOptException(funoptDispatch!ActionsNoVersion(["program", "--version"]));
 }
