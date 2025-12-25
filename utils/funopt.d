@@ -562,6 +562,20 @@ debug(ae_unittest) unittest
 		assert(count.get == 3);
 	}
 	funopt!f8(["program", "3"]);  // Positional, not --count
+
+	// Parameter!(Nullable!T) - explicit positional parameter wrapper
+	void f9(Parameter!(Nullable!int, "Count value") count)
+	{
+		assert(count.value.isNull);
+	}
+	funopt!f9(["program"]);
+
+	void f10(Parameter!(Nullable!int, "Count value") count)
+	{
+		assert(!count.value.isNull);
+		assert(count.value.get == 42);
+	}
+	funopt!f10(["program", "42"]);
 }
 
 // ***************************************************************************
@@ -649,7 +663,8 @@ string getUsageFormatString(alias FUN)()
 			static if (isParameter!Param)
 			{
 				result ~= " ";
-				static if (!is(defaults[i] == void))
+				// Parameters are optional if they have a default value or are Nullable
+				static if (!is(defaults[i] == void) || isNullable!(OptionValueType!Param))
 				{
 					result ~= "[";
 					optionalEnd ~= "]";
@@ -869,6 +884,33 @@ Options:
 Options:
   --retries=N   Number of retries
   --format=STR  Output format
+", usage);
+
+	// Test Nullable positional parameters show as optional
+	void f11(
+		string requiredFile,
+		Nullable!int optionalCount,
+	)
+	{}
+
+	usage = getUsage!f11("program");
+	assert(usage ==
+"Usage: program REQUIRED-FILE [OPTIONAL-COUNT]
+", usage);
+
+	// Test Parameter!(Nullable!T) also shows as optional
+	void f12(
+		string requiredFile,
+		Parameter!(Nullable!string, "Optional output path") outputPath,
+	)
+	{}
+
+	usage = getUsage!f12("program");
+	assert(usage ==
+"Usage: program REQUIRED-FILE [OUTPUT-PATH]
+
+Options:
+  OUTPUT-PATH  Optional output path
 ", usage);
 }
 
