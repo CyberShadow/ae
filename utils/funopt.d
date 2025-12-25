@@ -22,6 +22,7 @@ import std.path;
 import std.range;
 import std.string;
 import std.traits;
+import std.typecons : Nullable, nullable;
 import std.typetuple;
 
 import ae.utils.meta : structFields, hasAttribute, getAttribute, rangeTuple, I, ParameterNames;
@@ -129,6 +130,36 @@ private template isOptionArray(Param)
 		enum isOptionArray = false;
 }
 
+private template isNullable(T)
+{
+	static if (is(T : Nullable!U, U))
+		enum isNullable = true;
+	else
+		enum isNullable = false;
+}
+
+/// For Nullable!T, returns T. Otherwise, returns the type unchanged.
+private template NullableTarget(T)
+{
+	static if (is(T : Nullable!U, U))
+		alias NullableTarget = U;
+	else
+		alias NullableTarget = T;
+}
+
+/// Returns the type that getopt should parse for a given option type.
+/// For Nullable types, this is the inner type.
+private template GetoptValueType(Param)
+{
+	alias T = OptionValueType!Param;
+	alias GetoptValueType = NullableTarget!T;
+}
+
+private template isNullableOption(Param)
+{
+	enum isNullableOption = isNullable!(OptionValueType!Param);
+}
+
 private template optionShorthand(T)
 {
 	static if (is(T == _OptionImpl!Args, Args...))
@@ -159,6 +190,9 @@ private template optionPlaceholder(T)
 	else
 	static if (isOptionArray!T)
 		enum optionPlaceholder = optionPlaceholder!(typeof(T.init[0]));
+	else
+	static if (isNullable!T)
+		enum optionPlaceholder = optionPlaceholder!(NullableTarget!T);
 	else
 	static if (is(T : real))
 		enum optionPlaceholder = "N";
@@ -246,12 +280,18 @@ if (isCallable!FUN)
 	// Can't pass options with empty names to getopt, filter them out.
 	static immutable string[] namesArr = [names];
 	static immutable bool[] optionUseGetOpt = Params.length.iota.map!(n => namesArr[n].length > 0 && !isIndexParameter[n]).array;
+	static immutable bool[] isNullableArr = [staticMap!(isNullableOption, Params)];
 
+	// For Nullable types, we use a delegate handler instead of a pointer,
+	// so that we can detect whether the option was specified.
+	// std.getopt accepts void delegate(string, string) for custom parsing.
 	enum structFields =
 		config.getoptConfig.length.iota.map!(n => "std.getopt.config config%d = std.getopt.config.%s;\n".format(n, config.getoptConfig[n])).join() ~
 		Params.length.iota
 			.filter!(n => optionUseGetOpt[n])
-			.map!(n => "string selector%d; OptionValueType!(Params[%d])* value%d;\n".format(n, n, n)).join();
+			.map!(n => isNullableArr[n]
+				? "string selector%d; void delegate(string, string) handler%d;\n".format(n, n)
+				: "string selector%d; OptionValueType!(Params[%d])* value%d;\n".format(n, n, n)).join();
 
 	static struct GetOptArgs { mixin(structFields); }
 	GetOptArgs getOptArgs;
@@ -272,7 +312,10 @@ if (isCallable!FUN)
 		{
 			enum selector = optionSelector!i();
 			mixin("getOptArgs.selector%d = selector;".format(i));
-			mixin("getOptArgs.value%d = optionValue(values[%d]);".format(i, i));
+			static if (isNullableOption!(Params[i]))
+				mixin("getOptArgs.handler%d = (string, string val) { *optionValue(values[%d]) = nullable(val.to!(GetoptValueType!(Params[%d]))); };".format(i, i, i));
+			else
+				mixin("getOptArgs.value%d = optionValue(values[%d]);".format(i, i));
 		}
 
 	auto origArgs = args;
@@ -340,20 +383,28 @@ if (isCallable!FUN)
 			{
 				if (args.length)
 				{
-					values[i] = to!(OptionValueType!T)(args[0]);
+					// For Nullable types, convert to the inner type then wrap
+					static if (isNullable!(OptionValueType!T))
+						*optionValue(values[i]) = nullable(to!(GetoptValueType!T)(args[0]));
+					else
+						values[i] = to!(OptionValueType!T)(args[0]);
 					args = args[1..$];
 				}
 				else
 				{
 					static if (is(defaults[i] == void))
 					{
-						// If the first argument is mandatory,
-						// and no arguments were given, print usage.
-						if (origArgs.length == 1)
-							printUsage();
+						// Nullable types without a default don't require an argument
+						static if (!isNullable!(OptionValueType!T))
+						{
+							// If the first argument is mandatory,
+							// and no arguments were given, print usage.
+							if (origArgs.length == 1)
+								printUsage();
 
-						enum plainName = names[i].identifierToPlainText;
-						throw new GetOptException("No " ~ plainName ~ " specified.");
+							enum plainName = names[i].identifierToPlainText;
+							throw new GetOptException("No " ~ plainName ~ " specified.");
+						}
 					}
 				}
 			}
@@ -435,6 +486,82 @@ debug(ae_unittest) unittest
 
 	import std.exception : assertThrown;
 	assertThrown!GetOptException(funopt!f2(["program", "--version"]));
+}
+
+debug(ae_unittest) unittest
+{
+	// Test Nullable support for detecting unspecified options
+
+	// Nullable!int option - not specified
+	void f1(Option!(Nullable!int, "Number of retries") retries)
+	{
+		assert(retries.value.isNull);
+	}
+	funopt!f1(["program"]);
+
+	// Nullable!int option - specified
+	void f2(Option!(Nullable!int, "Number of retries") retries)
+	{
+		assert(!retries.value.isNull);
+		assert(retries.value.get == 5);
+	}
+	funopt!f2(["program", "--retries", "5"]);
+
+	// Nullable!string option - not specified
+	void f3(Option!(Nullable!string, "Output format") format)
+	{
+		assert(format.value.isNull);
+	}
+	funopt!f3(["program"]);
+
+	// Nullable!string option - specified
+	void f4(Option!(Nullable!string, "Output format") format)
+	{
+		assert(!format.value.isNull);
+		assert(format.value.get == "json");
+	}
+	funopt!f4(["program", "--format", "json"]);
+
+	// Mix of Nullable and non-Nullable options
+	void f5(
+		Option!(Nullable!int, "Nullable option") nullableOpt,
+		Option!(int, "Regular option") regularOpt = 10,
+		Switch!"Verbose mode" verbose
+	)
+	{
+		assert(nullableOpt.value.isNull);
+		assert(regularOpt == 10);
+		assert(!verbose);
+	}
+	funopt!f5(["program"]);
+
+	// Mix with some options specified
+	void f6(
+		Option!(Nullable!int, "Nullable option") nullableOpt,
+		Option!(int, "Regular option") regularOpt = 10,
+		Switch!"Verbose mode" verbose
+	)
+	{
+		assert(!nullableOpt.value.isNull);
+		assert(nullableOpt.value.get == 42);
+		assert(regularOpt == 10);
+		assert(verbose);
+	}
+	funopt!f6(["program", "--nullable-opt", "42", "--verbose"]);
+
+	// Bare Nullable as positional parameter (without Option wrapper)
+	void f7(Nullable!int count)
+	{
+		assert(count.isNull);
+	}
+	funopt!f7(["program"]);
+
+	void f8(Nullable!int count)
+	{
+		assert(!count.isNull);
+		assert(count.get == 3);
+	}
+	funopt!f8(["program", "3"]);  // Positional, not --count
 }
 
 // ***************************************************************************
@@ -726,6 +853,22 @@ Does something useful.
 
 Options:
   --verbose  Be verbose.
+", usage);
+
+	// Test Nullable options show correct placeholder
+	void f10(
+		Option!(Nullable!int, "Number of retries") retries,
+		Option!(Nullable!string, "Output format") format,
+	)
+	{}
+
+	usage = getUsage!f10("program");
+	assert(usage ==
+"Usage: program OPTION...
+
+Options:
+  --retries=N   Number of retries
+  --format=STR  Output format
 ", usage);
 }
 
