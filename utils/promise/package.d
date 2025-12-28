@@ -400,7 +400,7 @@ public:
 	/// Registers a rejection handler.
 	/// Equivalent to `then(null, onRejected)`.
 	/// Similar to the `catch` method in JavaScript promises.
-	Promise!(R, F) except(R, F = E)(R delegate(E) onRejected)
+	Promise!(CommonType!(Unpromise!R, T), F) except(R, F = E)(R delegate(E) onRejected)
 	{
 		return this.then(null, onRejected);
 	}
@@ -507,6 +507,24 @@ debug(ae_unittest) unittest
 		test.except((OtherException e) {});
 		test.fulfill(1);
 		test.reject(OtherException.init);
+	}
+}
+
+// Test that except() return type matches then(null, onRejected)
+// when the handler returns a type with a common type to T.
+debug(ae_unittest) unittest
+{
+	static bool never; if (never)
+	{
+		// When Promise!long is rejected and handler returns int,
+		// the result type should be CommonType!(int, long) = long.
+		Promise!long p;
+		auto p2 = p.except((Exception e) { return 5; });
+		static assert(is(typeof(p2) == Promise!long));
+
+		// Same scenario with then(null, ...) for comparison
+		auto p3 = p.then(null, (Exception e) { return 5; });
+		static assert(is(typeof(p2) == typeof(p3)));
 	}
 }
 
