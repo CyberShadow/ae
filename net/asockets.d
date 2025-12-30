@@ -45,27 +45,31 @@ private import std.conv : to;
 // https://issues.dlang.org/show_bug.cgi?id=7016
 static import ae.utils.array;
 
+private enum EventLoopMechanism { select, epoll, libev }
+
 // Choose a default event loop mechanism
 // If one was explicitly requested, use it:
-version (SELECT) version = use_SELECT; else
-version (EPOLL) version = use_EPOLL; else
-version (LIBEV) version = use_LIBEV; else
-// Otherwise, pick a default:
-{
-	version (linux)
-		version = use_EPOLL;
-	else
-	version (Have_libev)
-		version = use_LIBEV;
-	else
-		version = use_SELECT;
-}
+private enum eventLoopMechanism = {
+	version (SELECT) return EventLoopMechanism.select; else
+	version (EPOLL) return EventLoopMechanism.epoll; else
+	version (LIBEV) return EventLoopMechanism.libev; else
+	// Otherwise, pick a default:
+	{
+		version (linux)
+			return EventLoopMechanism.epoll;
+		else
+		version (Have_libev)
+			return EventLoopMechanism.libev;
+		else
+			return EventLoopMechanism.select;
+	}
+}();
 
-version(use_EPOLL)
+static if (eventLoopMechanism == EventLoopMechanism.epoll)
 {
 	import core.sys.linux.epoll;
 }
-version(use_LIBEV)
+static if (eventLoopMechanism == EventLoopMechanism.libev)
 {
 	import deimos.ev;
 	pragma(lib, "ev");
@@ -81,7 +85,7 @@ else
 
 int eventCounter;
 
-version (use_EPOLL)
+static if (eventLoopMechanism == EventLoopMechanism.epoll)
 {
 	// Use the epoll_event.data.ptr field to store the parent GenericSocket address.
 	// Track read/write interest separately and update epoll via epoll_ctl when they change.
@@ -376,7 +380,7 @@ version (use_EPOLL)
 	}
 }
 else
-version (use_LIBEV)
+static if (eventLoopMechanism == EventLoopMechanism.libev)
 {
 	// Watchers are a GenericSocket field (as declared in SocketMixin).
 	// Use one watcher per read and write event.
@@ -585,7 +589,7 @@ version (use_LIBEV)
 	}
 }
 else
-version (use_SELECT)
+static if (eventLoopMechanism == EventLoopMechanism.select)
 {
 	/// `select`-based event loop implementation.
 	struct SocketManager
@@ -1245,7 +1249,7 @@ private debug (ASOCKETS_DEBUG_SHUTDOWN)
 		{
 			import std.stdio : stderr;
 
-			version (use_LIBEV)
+			static if (eventLoopMechanism == EventLoopMechanism.libev)
 			{
 				stderr.writeln("IDLE HANDLERS: Not tracked with LIBEV\n");
 			}
