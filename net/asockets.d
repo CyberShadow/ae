@@ -52,7 +52,10 @@ version (EPOLL) version = use_EPOLL; else
 version (LIBEV) version = use_LIBEV; else
 // Otherwise, pick a default:
 {
-	version = use_SELECT;
+	version (linux)
+		version = use_EPOLL;
+	else
+		version = use_SELECT;
 }
 
 version(use_EPOLL)
