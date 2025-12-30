@@ -45,7 +45,16 @@ private import std.conv : to;
 // https://issues.dlang.org/show_bug.cgi?id=7016
 static import ae.utils.array;
 
-version(LIBEV)
+// Choose a default event loop mechanism
+// If one was explicitly requested, use it:
+version (SELECT) version = use_SELECT; else
+version (LIBEV) version = use_LIBEV; else
+// Otherwise, pick a default:
+{
+	version = use_SELECT;
+}
+
+version(use_LIBEV)
 {
 	import deimos.ev;
 	pragma(lib, "ev");
@@ -61,7 +70,7 @@ else
 
 int eventCounter;
 
-version (LIBEV)
+version (use_LIBEV)
 {
 	// Watchers are a GenericSocket field (as declared in SocketMixin).
 	// Use one watcher per read and write event.
@@ -269,7 +278,8 @@ version (LIBEV)
 		}
 	}
 }
-else // Use select
+else
+version (use_SELECT)
 {
 	/// `select`-based event loop implementation.
 	struct SocketManager
@@ -596,6 +606,8 @@ else // Use select
 		bool notifyWrite;
 	}
 }
+else
+	static assert(false, "No event loop mechanism selected");
 
 /// The default socket manager.
 SocketManager socketManager;
@@ -927,7 +939,7 @@ private debug (ASOCKETS_DEBUG_SHUTDOWN)
 		{
 			import std.stdio : stderr;
 
-			version (LIBEV)
+			version (use_LIBEV)
 			{
 				stderr.writeln("IDLE HANDLERS: Not tracked with LIBEV\n");
 			}
