@@ -121,6 +121,9 @@ private template isParameter(T)
 private template isOptionArray(Param)
 {
 	alias T = OptionValueType!Param;
+	static if (isInstanceOf!(Nullable, T))
+		enum isOptionArray = false;
+	else
 	static if (is(Unqual!T == string))
 		enum isOptionArray = false;
 	else
