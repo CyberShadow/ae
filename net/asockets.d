@@ -48,12 +48,17 @@ static import ae.utils.array;
 // Choose a default event loop mechanism
 // If one was explicitly requested, use it:
 version (SELECT) version = use_SELECT; else
+version (EPOLL) version = use_EPOLL; else
 version (LIBEV) version = use_LIBEV; else
 // Otherwise, pick a default:
 {
 	version = use_SELECT;
 }
 
+version(use_EPOLL)
+{
+	import core.sys.linux.epoll;
+}
 version(use_LIBEV)
 {
 	import deimos.ev;
@@ -70,6 +75,301 @@ else
 
 int eventCounter;
 
+version (use_EPOLL)
+{
+	// Use the epoll_event.data.ptr field to store the parent GenericSocket address.
+	// Track read/write interest separately and update epoll via epoll_ctl when they change.
+
+	/// `epoll`-based event loop implementation.
+	struct SocketManager
+	{
+	private:
+		int epollFd = -1;
+		epoll_event[100] events; // Batch size for epoll_wait
+
+		/// List of all sockets to poll (needed for daemon tracking and debug).
+		GenericSocket[] sockets;
+
+		/// Debug AA to check for dangling socket references.
+		debug GenericSocket[socket_t] socketHandles;
+
+		void delegate()[] nextTickHandlers, idleHandlers;
+		debug (ASOCKETS_DEBUG_SHUTDOWN) TrackedHandler[] trackedIdleHandlers;
+
+	public:
+		MonoTime now;
+
+		/// Register a socket with the manager.
+		void register(GenericSocket conn)
+		{
+			debug (ASOCKETS) stderr.writefln("Registering %s (%d total)", conn, sockets.length + 1);
+			assert(!conn.socket.blocking, "Trying to register a blocking socket");
+
+			// Lazily create epoll instance
+			if (epollFd < 0)
+			{
+				epollFd = epoll_create1(0);
+				assert(epollFd >= 0, "epoll_create1 failed");
+			}
+
+			epoll_event ev;
+			ev.data.ptr = cast(void*)conn;
+			// Don't set any events yet - will be updated when notifyRead/notifyWrite change
+			int ret = epoll_ctl(epollFd, EPOLL_CTL_ADD, conn.socket.handle, &ev);
+			assert(ret == 0, "epoll_ctl ADD failed");
+
+			sockets ~= conn;
+
+			debug
+			{
+				auto handle = conn.socket.handle;
+				assert(handle != socket_t.init, "Can't register a closed socket");
+				assert(handle !in socketHandles, "This socket handle is already registered");
+				socketHandles[handle] = conn;
+			}
+
+			debug (ASOCKETS_DEBUG_SHUTDOWN) conn.registrationStackTrace = captureStackTrace();
+		}
+
+		/// Unregister a socket with the manager.
+		void unregister(GenericSocket conn)
+		{
+			debug (ASOCKETS) stderr.writefln("Unregistering %s (%d total)", conn, sockets.length - 1);
+
+			debug
+			{
+				auto socket = conn.socket;
+				assert(socket, "Trying to unregister an uninitialized socket");
+				auto handle = socket.handle;
+				assert(handle != socket_t.init, "Can't unregister a closed socket");
+				auto pconn = handle in socketHandles;
+				assert(pconn, "This socket handle is not registered");
+				assert(*pconn is conn, "This socket handle is registered but belongs to another GenericSocket");
+				socketHandles.remove(handle);
+			}
+
+			int ret = epoll_ctl(epollFd, EPOLL_CTL_DEL, conn.socket.handle, null);
+			assert(ret == 0, "epoll_ctl DEL failed");
+
+			conn._epollEvents = 0;
+
+			foreach (size_t i, GenericSocket s; sockets)
+				if (s is conn)
+				{
+					sockets = sockets[0 .. i] ~ sockets[i + 1 .. sockets.length];
+					return;
+				}
+			assert(false, "Socket not registered");
+		}
+
+		/// Returns the number of registered sockets.
+		size_t size()
+		{
+			return sockets.length;
+		}
+
+		/// Loop continuously until no sockets are left.
+		void loop()
+		{
+			import core.sys.posix.unistd : close;
+
+			debug (ASOCKETS) stderr.writeln("Starting event loop.");
+			debug (ASOCKETS_DEBUG_SHUTDOWN) ShutdownDebugger.register();
+
+			while (true)
+			{
+				if (nextTickHandlers.length)
+				{
+					auto thisTickHandlers = nextTickHandlers;
+					nextTickHandlers = null;
+
+					foreach (handler; thisTickHandlers)
+						handler();
+
+					continue;
+				}
+
+				// Check if there are any active (non-daemon) sockets
+				bool haveActive;
+				foreach (conn; sockets)
+				{
+					if (!conn.socket)
+						continue;
+					if (conn.notifyRead && !conn.daemonRead)
+						haveActive = true;
+					if (conn.notifyWrite && !conn.daemonWrite)
+						haveActive = true;
+				}
+
+				debug (ASOCKETS) stderr.writefln("Waiting (%sactive with %d sockets, %s timer events, %d idle handlers)...",
+					haveActive ? "" : "not ",
+					sockets.length,
+					mainTimer.isWaiting() ? "with" : "no",
+					idleHandlers.length,
+				);
+
+				if (!haveActive && !mainTimer.isWaiting() && !nextTickHandlers.length)
+				{
+					debug (ASOCKETS) stderr.writeln("No more active sockets or timer events, exiting loop.");
+					break;
+				}
+
+				int timeout_msec;
+				if (mainTimer.isWaiting())
+				{
+					now = MonoTime.currTime();
+					auto remaining = mainTimer.getRemainingTime(now);
+					long msec = (remaining.total!"hnsecs" + 9999) / 10_000;
+					timeout_msec = msec > int.max ? -1 : (msec <= 0 ? 0 : cast(int)msec);
+				}
+				else
+				{
+					timeout_msec = -1; // Wait indefinitely
+				}
+
+				debug (ASOCKETS) stderr.writefln("epoll_wait with timeout %d ms", timeout_msec);
+				int nfds = epoll_wait(epollFd, events.ptr, cast(int)events.length, timeout_msec);
+				debug (ASOCKETS) stderr.writefln("%d events fired.", nfds);
+
+				now = MonoTime.currTime();
+
+				if (nfds > 0)
+				{
+					// Process events
+					foreach (ref ev; events[0 .. nfds])
+					{
+						auto conn = cast(GenericSocket)ev.data.ptr;
+						assert(conn !is null, "epoll event with null socket");
+
+						runUserEventHandler({
+							// Handle errors first
+							if (ev.events & (EPOLLERR | EPOLLHUP))
+							{
+								debug (ASOCKETS) stderr.writefln("\t%s - error/hangup", conn);
+								conn.onError("epoll error");
+								return;
+							}
+
+							// Write takes priority (like in select version)
+							if (ev.events & EPOLLOUT)
+							{
+								debug (ASOCKETS) stderr.writefln("\t%s - calling onWritable", conn);
+								conn.onWritable();
+							}
+							// Then read
+							else if (ev.events & EPOLLIN)
+							{
+								debug (ASOCKETS) stderr.writefln("\t%s - calling onReadable", conn);
+								conn.onReadable();
+							}
+						});
+					}
+				}
+				else if (nfds == 0 && idleHandlers.length)
+				{
+					// Timeout with no events - run idle handlers
+					import ae.utils.array : shift;
+					auto handler = idleHandlers.shift();
+					debug (ASOCKETS_DEBUG_SHUTDOWN) auto trackedHandler = trackedIdleHandlers.shift();
+
+					idleHandlers ~= handler;
+					debug (ASOCKETS_DEBUG_SHUTDOWN) trackedIdleHandlers ~= trackedHandler;
+
+					runUserEventHandler({
+						handler();
+					});
+				}
+
+				// Fire timers
+				runUserEventHandler({
+					mainTimer.prod(now);
+				});
+
+				eventCounter++;
+			}
+
+			// Cleanup
+			if (epollFd >= 0)
+			{
+				close(epollFd);
+				epollFd = -1;
+			}
+		}
+	}
+
+	// Use UFCS to allow addIdleHandler/removeIdleHandler
+	/// Register a function to be called when the event loop is idle.
+	void addIdleHandler(ref SocketManager socketManager, void delegate() handler)
+	{
+		foreach (i, idleHandler; socketManager.idleHandlers)
+			assert(handler !is idleHandler);
+
+		socketManager.idleHandlers ~= handler;
+		debug (ASOCKETS_DEBUG_SHUTDOWN)
+			socketManager.trackedIdleHandlers ~= TrackedHandler(handler, captureStackTrace());
+	}
+
+	/// Unregister a function previously registered with `addIdleHandler`.
+	void removeIdleHandler(alias pred=(a, b) => a is b, Args...)(ref SocketManager socketManager, Args args)
+	{
+		foreach (i, idleHandler; socketManager.idleHandlers)
+			if (pred(idleHandler, args))
+			{
+				import std.algorithm : remove;
+				socketManager.idleHandlers = socketManager.idleHandlers.remove(i);
+				debug (ASOCKETS_DEBUG_SHUTDOWN)
+					socketManager.trackedIdleHandlers = socketManager.trackedIdleHandlers.remove(i);
+				return;
+			}
+		assert(false, "No such idle handler");
+	}
+
+	private mixin template SocketMixin()
+	{
+		private uint _epollEvents; // Current epoll event mask
+
+		private final void updateEpoll()
+		{
+			if (!conn)
+				return; // Not connected yet
+
+			uint newEvents = 0;
+			if (_notifyRead) newEvents |= EPOLLIN;
+			if (_notifyWrite) newEvents |= EPOLLOUT;
+
+			if (newEvents != _epollEvents)
+			{
+				_epollEvents = newEvents;
+				epoll_event ev;
+				ev.events = newEvents;
+				ev.data.ptr = cast(void*)this;
+				int ret = epoll_ctl(socketManager.epollFd, EPOLL_CTL_MOD, conn.handle, &ev);
+				// May fail if socket not yet registered, which is fine
+				debug (ASOCKETS) if (ret != 0)
+					stderr.writefln("epoll_ctl MOD failed for %s", this);
+			}
+		}
+
+		private bool _notifyRead, _notifyWrite;
+
+		/// Interested in read notifications (onReadable)?
+		@property final void notifyRead(bool value)
+		{
+			_notifyRead = value;
+			updateEpoll();
+		}
+		@property final bool notifyRead() { return _notifyRead; } /// ditto
+
+		/// Interested in write notifications (onWritable)?
+		@property final void notifyWrite(bool value)
+		{
+			_notifyWrite = value;
+			updateEpoll();
+		}
+		@property final bool notifyWrite() { return _notifyWrite; } /// ditto
+	}
+}
+else
 version (use_LIBEV)
 {
 	// Watchers are a GenericSocket field (as declared in SocketMixin).
