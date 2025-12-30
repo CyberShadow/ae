@@ -103,8 +103,8 @@ static if (eventLoopMechanism == EventLoopMechanism.epoll)
 		/// Debug AA to check for dangling socket references.
 		debug GenericSocket[socket_t] socketHandles;
 
-		void delegate()[] nextTickHandlers, idleHandlers;
-		debug (ASOCKETS_DEBUG_SHUTDOWN) TrackedHandler[] trackedIdleHandlers;
+		void delegate()[] nextTickHandlers;
+		IdleHandler[] idleHandlers;
 
 	public:
 		MonoTime now;
@@ -279,14 +279,14 @@ static if (eventLoopMechanism == EventLoopMechanism.epoll)
 				{
 					// Timeout with no events - run idle handlers
 					import ae.utils.array : shift;
-					auto handler = idleHandlers.shift();
-					debug (ASOCKETS_DEBUG_SHUTDOWN) auto trackedHandler = trackedIdleHandlers.shift();
+					auto idleHandler = idleHandlers.shift();
 
-					idleHandlers ~= handler;
-					debug (ASOCKETS_DEBUG_SHUTDOWN) trackedIdleHandlers ~= trackedHandler;
+					// Rotate the idle handler queue before running it,
+					// in case the handler unregisters itself.
+					idleHandlers ~= idleHandler;
 
 					runUserEventHandler({
-						handler();
+						idleHandler.dg();
 					});
 				}
 
@@ -311,24 +311,20 @@ static if (eventLoopMechanism == EventLoopMechanism.epoll)
 	/// Register a function to be called when the event loop is idle.
 	void addIdleHandler(ref SocketManager socketManager, void delegate() handler)
 	{
-		foreach (i, idleHandler; socketManager.idleHandlers)
-			assert(handler !is idleHandler);
+		foreach (ref idleHandler; socketManager.idleHandlers)
+			assert(handler !is idleHandler.dg);
 
-		socketManager.idleHandlers ~= handler;
-		debug (ASOCKETS_DEBUG_SHUTDOWN)
-			socketManager.trackedIdleHandlers ~= TrackedHandler(handler, captureStackTrace());
+		socketManager.idleHandlers ~= IdleHandler(handler);
 	}
 
 	/// Unregister a function previously registered with `addIdleHandler`.
 	void removeIdleHandler(alias pred=(a, b) => a is b, Args...)(ref SocketManager socketManager, Args args)
 	{
-		foreach (i, idleHandler; socketManager.idleHandlers)
-			if (pred(idleHandler, args))
+		foreach (i, ref idleHandler; socketManager.idleHandlers)
+			if (pred(idleHandler.dg, args))
 			{
 				import std.algorithm : remove;
 				socketManager.idleHandlers = socketManager.idleHandlers.remove(i);
-				debug (ASOCKETS_DEBUG_SHUTDOWN)
-					socketManager.trackedIdleHandlers = socketManager.trackedIdleHandlers.remove(i);
 				return;
 			}
 		assert(false, "No such idle handler");
@@ -603,9 +599,8 @@ static if (eventLoopMechanism == EventLoopMechanism.select)
 		/// Debug AA to check for dangling socket references.
 		debug GenericSocket[socket_t] socketHandles;
 
-		void delegate()[] nextTickHandlers, idleHandlers;
-
-		debug (ASOCKETS_DEBUG_SHUTDOWN) TrackedHandler[] trackedIdleHandlers;
+		void delegate()[] nextTickHandlers;
+		IdleHandler[] idleHandlers;
 
 	public:
 		MonoTime now;
@@ -810,16 +805,14 @@ static if (eventLoopMechanism == EventLoopMechanism.select)
 				if (idleHandlers.length)
 				{
 					import ae.utils.array : shift;
-					auto handler = idleHandlers.shift();
-					debug (ASOCKETS_DEBUG_SHUTDOWN) auto trackedHandler = trackedIdleHandlers.shift();
+					auto idleHandler = idleHandlers.shift();
 
 					// Rotate the idle handler queue before running it,
 					// in case the handler unregisters itself.
-					idleHandlers ~= handler;
-					debug (ASOCKETS_DEBUG_SHUTDOWN) trackedIdleHandlers ~= trackedHandler;
+					idleHandlers ~= idleHandler;
 
 					runUserEventHandler({
-						handler();
+						idleHandler.dg();
 					});
 				}
 
@@ -883,24 +876,20 @@ static if (eventLoopMechanism == EventLoopMechanism.select)
 	/// and would otherwise sleep.
 	void addIdleHandler(ref SocketManager socketManager, void delegate() handler)
 	{
-		foreach (i, idleHandler; socketManager.idleHandlers)
-			assert(handler !is idleHandler);
+		foreach (ref idleHandler; socketManager.idleHandlers)
+			assert(handler !is idleHandler.dg);
 
-		socketManager.idleHandlers ~= handler;
-		debug (ASOCKETS_DEBUG_SHUTDOWN)
-			socketManager.trackedIdleHandlers ~= TrackedHandler(handler, captureStackTrace());
+		socketManager.idleHandlers ~= IdleHandler(handler);
 	}
 
 	/// Unregister a function previously registered with `addIdleHandler`.
 	void removeIdleHandler(alias pred=(a, b) => a is b, Args...)(ref SocketManager socketManager, Args args)
 	{
-		foreach (i, idleHandler; socketManager.idleHandlers)
-			if (pred(idleHandler, args))
+		foreach (i, ref idleHandler; socketManager.idleHandlers)
+			if (pred(idleHandler.dg, args))
 			{
 				import std.algorithm : remove;
 				socketManager.idleHandlers = socketManager.idleHandlers.remove(i);
-				debug (ASOCKETS_DEBUG_SHUTDOWN)
-					socketManager.trackedIdleHandlers = socketManager.trackedIdleHandlers.remove(i);
 				return;
 			}
 		assert(false, "No such idle handler");
@@ -1116,6 +1105,23 @@ void runUserEventHandler(scope void delegate() dg)
 
 // ***************************************************************************
 
+private struct IdleHandler
+{
+	void delegate() dg;
+	debug (ASOCKETS_DEBUG_SHUTDOWN) TraceInfo stackTrace;
+
+	this(void delegate() dg)
+	{
+		this.dg = dg;
+		debug (ASOCKETS_DEBUG_SHUTDOWN) stackTrace = captureStackTrace();
+	}
+
+	bool opEquals(void delegate() other) const
+	{
+		return dg is other;
+	}
+}
+
 // Shutdown debugging: prints objects that are blocking the event loop from exiting
 // when the application doesn't shut down cleanly after a shutdown was requested.
 private debug (ASOCKETS_DEBUG_SHUTDOWN)
@@ -1263,7 +1269,7 @@ private debug (ASOCKETS_DEBUG_SHUTDOWN)
 				}
 
 				stderr.writefln("IDLE HANDLERS: %d registered", handlers.length);
-				foreach (i, ref handler; socketManager.trackedIdleHandlers)
+				foreach (i, ref handler; handlers)
 				{
 					stderr.writefln("  [%d] %s", i, handler.dg);
 					if (handler.stackTrace !is null)
@@ -1309,12 +1315,6 @@ private debug (ASOCKETS_DEBUG_SHUTDOWN)
 			import ae.net.shutdown : addShutdownHandler;
 			addShutdownHandler((scope const(char)[] reason) { onShutdown(reason); });
 		}
-	}
-
-	struct TrackedHandler
-	{
-		void delegate() dg;
-		TraceInfo stackTrace;
 	}
 }
 
