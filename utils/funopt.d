@@ -525,8 +525,8 @@ debug(ae_unittest) unittest
 	// Mix of Nullable and non-Nullable options
 	void f5(
 		Option!(Nullable!int, "Nullable option") nullableOpt,
+		Switch!"Verbose mode" verbose,
 		Option!(int, "Regular option") regularOpt = 10,
-		Switch!"Verbose mode" verbose
 	)
 	{
 		assert(nullableOpt.value.isNull);
@@ -538,8 +538,8 @@ debug(ae_unittest) unittest
 	// Mix with some options specified
 	void f6(
 		Option!(Nullable!int, "Nullable option") nullableOpt,
+		Switch!"Verbose mode" verbose,
 		Option!(int, "Regular option") regularOpt = 10,
-		Switch!"Verbose mode" verbose
 	)
 	{
 		assert(!nullableOpt.value.isNull);
