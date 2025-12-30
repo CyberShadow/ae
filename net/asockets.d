@@ -936,7 +936,7 @@ void onNextTick(ref SocketManager socketManager, void delegate() dg) pure @safe 
 debug (ae_unittest) debug (linux) debug = ASOCKETS_SLOW_EVENT_HANDLER;
 
 // Slow event handler watchdog
-private debug (ASOCKETS_SLOW_EVENT_HANDLER)
+debug (ASOCKETS_SLOW_EVENT_HANDLER)
 {
 	import core.sync.condition : Condition;
 	import core.sync.mutex : Mutex;
@@ -958,6 +958,7 @@ private debug (ASOCKETS_SLOW_EVENT_HANDLER)
 	struct SlowEventHandlerWatchdog
 	{
 	static:
+	private:
 		shared int signal;
 		shared Duration timeout;
 
@@ -1070,6 +1071,7 @@ private debug (ASOCKETS_SLOW_EVENT_HANDLER)
 			}
 		}
 
+	public:
 		void arm()
 		{
 			if (!thread)
