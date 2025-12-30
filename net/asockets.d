@@ -55,6 +55,9 @@ version (LIBEV) version = use_LIBEV; else
 	version (linux)
 		version = use_EPOLL;
 	else
+	version (Have_libev)
+		version = use_LIBEV;
+	else
 		version = use_SELECT;
 }
 
