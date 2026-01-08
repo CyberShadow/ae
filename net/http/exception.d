@@ -35,6 +35,7 @@ debug(ae_unittest) unittest
 {
 	import ae.net.http.responseex : HttpResponseEx;
 	auto response = new HttpResponseEx;
+	HttpRequest request; // Would normally come from the server
 	bool evilDetected = true;
 	try
 	{
@@ -42,9 +43,9 @@ debug(ae_unittest) unittest
 			throw new HttpException(HttpStatusCode.Forbidden, "Do no evil!");
 	}
 	catch (HttpException e)
-		response.writeError(e.status, e.msg);
+		response.writeError(request, e.status, e.msg);
 	catch (Exception e)
-		response.writeError(HttpStatusCode.InternalServerError, e.msg);
+		response.writeError(request, HttpStatusCode.InternalServerError, e.msg);
 }
 
 /// Throws a corresponding `HttpException` if `val` is false-ish.
