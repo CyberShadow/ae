@@ -125,7 +125,7 @@ public:
 	{
 		if (!checkPath(path))
 		{
-			writeError(HttpStatusCode.Forbidden);
+			writeErrorImpl(HttpStatusCode.Forbidden, null, false);
 			return this;
 		}
 
@@ -144,7 +144,7 @@ public:
 			else
 			if (!enableIndex)
 			{
-				writeError(HttpStatusCode.Forbidden);
+				writeErrorImpl(HttpStatusCode.Forbidden, null, false);
 				return this;
 			}
 			else
@@ -177,7 +177,7 @@ public:
 
 		if (!exists(filename) || !isFile(filename))
 		{
-			writeError(HttpStatusCode.NotFound);
+			writeErrorImpl(HttpStatusCode.NotFound, null, false);
 			return this;
 		}
 
@@ -271,22 +271,74 @@ public:
 		}
 	}
 
-	/// Serve a nice error page using `this.errorTemplate`,
+	/// Serve an error page using `this.errorTemplate`,
 	/// `this.errorTokens`, and `writePageContents`.
+	///
+	/// The response content type is determined by examining the request's
+	/// `Accept` header: if the client prefers `text/html` over `text/plain`,
+	/// an HTML page is served; otherwise, a plain text response is served.
+	HttpResponseEx writeError(HttpRequest request, HttpStatusCode code, string details=null)
+	{
+		return writeErrorImpl(code, details, !prefersHtml(request));
+	}
+
+	/// Serve a nice HTML error page using `this.errorTemplate`,
+	/// `this.errorTokens`, and `writePageContents`.
+	deprecated("Use overload taking a request to enable content negotiation")
 	HttpResponseEx writeError(HttpStatusCode code, string details=null)
+	{
+		return writeErrorImpl(code, details, false);
+	}
+
+	private HttpResponseEx writeErrorImpl(HttpStatusCode code, string details, bool plainText)
 	{
 		setStatus(code);
 
-		string[string] dictionary = errorTokens.dup;
-		dictionary["code"] = to!string(cast(int)code);
-		dictionary["message"] = encodeEntities(getStatusMessage(code));
-		dictionary["explanation"] = encodeEntities(getStatusExplanation(code));
-		dictionary["details"] = details ? "Error details:<br/><pre>" ~ encodeEntities(details) ~ "</pre>"  : "";
 		string title = to!string(cast(int)code) ~ " - " ~ getStatusMessage(code);
-		string html = parseTemplate(errorTemplate, dictionary);
 
-		writePageContents(title, html);
+		if (plainText)
+		{
+			string text = title;
+			auto explanation = getStatusExplanation(code);
+			if (explanation.length)
+				text ~= "\n" ~ explanation;
+			if (details)
+				text ~= "\nError details:\n" ~ details;
+			data = DataVec(Data(text.asBytes));
+			headers["Content-Type"] = "text/plain; charset=utf-8";
+		}
+		else
+		{
+			string[string] dictionary = errorTokens.dup;
+			dictionary["code"] = to!string(cast(int)code);
+			dictionary["message"] = encodeEntities(getStatusMessage(code));
+			dictionary["explanation"] = encodeEntities(getStatusExplanation(code));
+			dictionary["details"] = details ? "Error details:<br/><pre>" ~ encodeEntities(details) ~ "</pre>"  : "";
+			string html = parseTemplate(errorTemplate, dictionary);
+			writePageContents(title, html);
+		}
 		return this;
+	}
+
+	/// Returns whether the request's `Accept` header indicates a preference
+	/// for `text/html` over `text/plain`.
+	private static bool prefersHtml(HttpRequest request)
+	{
+		if (request is null)
+			return false;
+		auto accept = request.headers.get("Accept", null);
+		if (!accept)
+			return false;
+		auto items = parseItemList(accept);
+		foreach (item; items)
+		{
+			// First match wins (items are sorted by quality)
+			if (item == "text/html")
+				return true;
+			if (item == "text/plain" || item == "text/*" || item == "*/*")
+				return false;
+		}
+		return false;
 	}
 
 	/// Set a `"Refresh"` header requesting a refresh after the given
@@ -363,7 +415,7 @@ public:
 		if (!check())
 		{
 			headers["WWW-Authenticate"] = `Basic`;
-			writeError(HttpStatusCode.Unauthorized);
+			writeError(request, HttpStatusCode.Unauthorized);
 			return false;
 		}
 		return true;
@@ -425,4 +477,49 @@ public:
 
 	/// Additional variables to use when filling out error templates.
 	string[string] errorTokens;
+}
+
+debug(ae_unittest) unittest
+{
+	// Test writeError content negotiation
+	auto response = new HttpResponseEx;
+
+	// Test with request preferring plain text
+	auto reqPlain = new HttpRequest;
+	reqPlain.headers["Accept"] = "text/plain, text/html;q=0.9";
+	response.writeError(reqPlain, HttpStatusCode.NotFound);
+	assert(response.headers["Content-Type"] == "text/plain; charset=utf-8");
+	assert(response.status == HttpStatusCode.NotFound);
+
+	// Test with request preferring HTML
+	response = new HttpResponseEx;
+	auto reqHtml = new HttpRequest;
+	reqHtml.headers["Accept"] = "text/html, text/plain;q=0.9";
+	response.writeError(reqHtml, HttpStatusCode.NotFound);
+	assert(response.headers["Content-Type"] == "text/html; charset=utf-8");
+
+	// Test with no Accept header (defaults to plain text)
+	response = new HttpResponseEx;
+	auto reqNoAccept = new HttpRequest;
+	response.writeError(reqNoAccept, HttpStatusCode.NotFound);
+	assert(response.headers["Content-Type"] == "text/plain; charset=utf-8");
+
+	// Test with null request (defaults to plain text)
+	response = new HttpResponseEx;
+	response.writeError(null, HttpStatusCode.NotFound);
+	assert(response.headers["Content-Type"] == "text/plain; charset=utf-8");
+
+	// Test with wildcard accepting anything (defaults to plain text)
+	response = new HttpResponseEx;
+	auto reqWildcard = new HttpRequest;
+	reqWildcard.headers["Accept"] = "*/*";
+	response.writeError(reqWildcard, HttpStatusCode.NotFound);
+	assert(response.headers["Content-Type"] == "text/plain; charset=utf-8");
+
+	// Test with text/* wildcard (defaults to plain text)
+	response = new HttpResponseEx;
+	auto reqTextWildcard = new HttpRequest;
+	reqTextWildcard.headers["Accept"] = "text/*";
+	response.writeError(reqTextWildcard, HttpStatusCode.NotFound);
+	assert(response.headers["Content-Type"] == "text/plain; charset=utf-8");
 }
