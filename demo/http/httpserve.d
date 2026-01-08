@@ -76,7 +76,7 @@ void httpserve(
 					true,
 					formatAddress("http", conn.localAddress, request.host, request.port) ~ "/");
 			catch (Exception e)
-				response.writeError(HttpStatusCode.InternalServerError, e.msg);
+				response.writeError(request, HttpStatusCode.InternalServerError, e.msg);
 			conn.sendResponse(response);
 		};
 	server.listen(port, host);
