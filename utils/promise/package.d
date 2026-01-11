@@ -639,6 +639,20 @@ struct Result(T, E)
 	}
 }
 
+/// Execute a task and capture the result or thrown exception into a Result.
+Result!(T, E) toResult(E = Exception, T)(scope T delegate() task)
+{
+	Result!(T, E) result;
+	try
+		static if (is(T == void))
+			task();
+		else
+			result.value[0] = task();
+	catch (E e)
+		result.error = e;
+	return result;
+}
+
 /// Capture a promise's resolution (fulfillment or rejection) into a Result.
 /// Returns a promise that is fulfilled with the Result when the input promise is resolved.
 Promise!(Result!(T, E)) toResult(T, E)(Promise!(T, E) p)
