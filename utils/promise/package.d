@@ -686,6 +686,15 @@ Promise!(Result!(T, E)) toResult(T, E)(Promise!(T, E) p)
 	return resultPromise;
 }
 
+/// Convert a Promise of Result back to a regular Promise.
+/// The returned promise is fulfilled or rejected based on the Result's contents.
+Promise!(T, E) unwrap(T, E)(Promise!(Result!(T, E)) p)
+{
+	auto unwrapped = new Promise!(T, E);
+	p.dmd21804workaround.then((result) { unwrapped.resolve(result); });
+	return unwrapped;
+}
+
 /// Deprecated alias for backwards compatibility.
 deprecated alias PromiseResult = Result;
 
