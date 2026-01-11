@@ -621,31 +621,14 @@ void tryResolve(T, E)(Promise!(T, E) p, scope T delegate() task)
 		p.reject(e);
 }
 
-/// Helper for converting a promise to a returned value / thrown exception.
-struct PromiseResult(T, E)
+/// Result of a promise resolution (fulfilled value or rejected error).
+struct Result(T, E)
 {
 	Promise!T.ValueTuple value;
 	E error;
-	bool isResolved;
-
-	void capture(Promise!(T, E) p, void delegate() onComplete = null)
-	{
-		p.then((Promise!T.ValueTuple value) {
-			assert(!isResolved, "Promise resolved multiple times");
-			this.value = value;
-			isResolved = true;
-			if (onComplete) onComplete();
-		}, (E error) {
-			assert(!isResolved, "Promise resolved multiple times");
-			this.error = error;
-			isResolved = true;
-			if (onComplete) onComplete();
-		});
-	}
 
 	T unwrap()
 	{
-		assert(isResolved, "Promise was not resolved");
 		if (error)
 			throw error;
 		else
@@ -654,6 +637,39 @@ struct PromiseResult(T, E)
 				return value[0];
 		}
 	}
+}
+
+/// Capture a promise's resolution (fulfillment or rejection) into a Result.
+/// Returns a promise that is fulfilled with the Result when the input promise is resolved.
+Promise!(Result!(T, E)) toResult(T, E)(Promise!(T, E) p)
+{
+	bool isResolved;
+	auto resultPromise = new typeof(return);
+
+	p.then((Promise!T.ValueTuple value) {
+		assert(!isResolved, "Promise resolved multiple times");
+		isResolved = true;
+		Result!(T, E) result;
+		result.value = value;
+		resultPromise.fulfill(result);
+	}, (E error) {
+		assert(!isResolved, "Promise resolved multiple times");
+		isResolved = true;
+		Result!(T, E) result;
+		result.error = error;
+		resultPromise.fulfill(result);
+	});
+
+	return resultPromise;
+}
+
+/// Deprecated alias for backwards compatibility.
+deprecated alias PromiseResult = Result;
+
+/// Deprecated shim for backwards compatibility.
+deprecated void capture(T, E)(ref Result!(T, E) result, Promise!(T, E) p, void delegate() onComplete = null)
+{
+	p.toResult.dmd21804workaround.then((r) { result = r; if (onComplete) onComplete(); });
 }
 
 // ****************************************************************************
