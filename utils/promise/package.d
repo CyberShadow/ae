@@ -276,6 +276,15 @@ public:
 		doReject(e);
 	}
 
+	/// Resolve the promise based on a Result (fulfill with value or reject with error).
+	void resolve(Result!(T, E) result)
+	{
+		if (result.error)
+			reject(result.error);
+		else
+			fulfill(result.value);
+	}
+
 	/// Registers the specified fulfillment and rejection handlers.
 	/// If the promise is already resolved, they are called
 	/// as soon as possible (but not immediately).
