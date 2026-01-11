@@ -616,20 +616,6 @@ if (is(P == Promise!(T, E), T, E))
 
 // ****************************************************************************
 
-/// Convert any returned value or exception thrown by `task` into
-/// the corresponding Promise resolution.
-/// Somewhat equivalent to Promise.try in ES2025.
-void tryResolve(T, E)(Promise!(T, E) p, scope T delegate() task)
-{
-	try
-		static if (is(T == void))
-			task(), p.fulfill();
-		else
-			p.fulfill(task());
-	catch (E e)
-		p.reject(e);
-}
-
 /// Result of a promise resolution (fulfilled value or rejected error).
 struct Result(T, E)
 {
@@ -693,6 +679,14 @@ Promise!(T, E) unwrap(T, E)(Promise!(Result!(T, E)) p)
 	auto unwrapped = new Promise!(T, E);
 	p.dmd21804workaround.then((result) { unwrapped.resolve(result); });
 	return unwrapped;
+}
+
+/// Convert any returned value or exception thrown by `task` into
+/// the corresponding Promise resolution.
+/// Somewhat equivalent to Promise.try in ES2025.
+void tryResolve(T, E)(Promise!(T, E) p, scope T delegate() task)
+{
+	p.resolve(toResult!E(task));
 }
 
 /// Deprecated alias for backwards compatibility.
