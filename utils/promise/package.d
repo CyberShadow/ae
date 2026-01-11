@@ -14,7 +14,7 @@
 module ae.utils.promise;
 
 import std.functional;
-import std.meta : allSatisfy, AliasSeq;
+import std.meta : allSatisfy, AliasSeq, staticMap;
 import std.traits : CommonType;
 
 import ae.net.asockets : socketManager, onNextTick;
@@ -865,6 +865,75 @@ debug(ae_unittest) nothrow unittest
 	p3.fulfill();
 	socketManager.loop().assertNotThrown;
 	assert(ok);
+}
+
+// ****************************************************************************
+
+/// Returns a promise that resolves or rejects as soon as any of the input
+/// promises resolves or rejects, with the value or error of that promise.
+P race(P)(P[] promises)
+if (is(P == Promise!(T, E), T, E))
+{
+	auto racePromise = new P;
+
+	foreach (p; promises)
+		p.then((P.ValueTuple result) {
+			if (racePromise)
+			{
+				racePromise.fulfill(result);
+				racePromise = null; // ignore successive resolves / rejects
+			}
+		}, (error) {
+			if (racePromise)
+			{
+				racePromise.reject(error);
+				racePromise = null; // ignore successive resolves / rejects
+			}
+		});
+
+	return racePromise;
+}
+
+debug(ae_unittest) nothrow unittest
+{
+	import std.exception : assertNotThrown;
+	int result;
+	auto p1 = new Promise!int;
+	auto p2 = new Promise!int;
+	auto p3 = new Promise!int;
+	auto pRace = race([p1, p2, p3]);
+	p2.fulfill(2);
+	pRace.dmd21804workaround.then((value) { result = value; });
+	p1.fulfill(1);
+	p3.fulfill(3);
+	socketManager.loop().assertNotThrown;
+	assert(result == 2);
+}
+
+debug(ae_unittest) nothrow unittest
+{
+	import std.exception : assertNotThrown;
+	int result;
+	auto p1 = new Promise!int;
+	auto p2 = new Promise!int;
+	auto pRace = race([p1, p2]);
+	p1.reject(new Exception("error"));
+	pRace.then((value) { result = 1; }, (e) { result = 2; });
+	socketManager.loop().assertNotThrown;
+	assert(result == 2);
+}
+
+debug(ae_unittest) nothrow unittest
+{
+	import std.exception : assertNotThrown;
+	bool called;
+	auto p1 = new Promise!void;
+	auto p2 = new Promise!void;
+	auto pRace = race([p1, p2]);
+	p2.fulfill();
+	pRace.then({ called = true; });
+	socketManager.loop().assertNotThrown;
+	assert(called);
 }
 
 // ****************************************************************************
