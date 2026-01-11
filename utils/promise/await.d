@@ -15,6 +15,7 @@
 module ae.utils.promise.await;
 
 import core.thread : Fiber;
+import std.typecons : Nullable;
 
 import ae.net.asockets : socketManager;
 import ae.utils.promise;
@@ -57,13 +58,13 @@ if (!is(T == return))
 /// Can only be called in a fiber.
 T await(T, E)(Promise!(T, E) p) @async
 {
-	PromiseResult!(T, E) result;
+	Nullable!(Result!(T, E)) result;
 
 	auto f = Fiber.getThis();
 	assert(f, "await called while not in a fiber");
-	result.capture(p, { f.call(); });
+	p.toResult.dmd21804workaround.then((r) { result = r; f.call(); });
 	Fiber.yield();
-	return result.unwrap();
+	return result.get.unwrap();
 }
 
 ///
@@ -96,10 +97,10 @@ debug(ae_unittest) unittest
 /// Propagates any return value or exception to the caller.
 T awaitSync(T, E)(Promise!(T, E) p)
 {
-	PromiseResult!(T, E) result;
-	result.capture(p);
+	Nullable!(Result!(T, E)) result;
+	p.toResult.dmd21804workaround.then((r) { result = r; });
 	socketManager.loop();
-	return result.unwrap();
+	return result.get.unwrap();
 }
 
 debug(ae_unittest) unittest
