@@ -694,7 +694,7 @@ string getUsageFormatString(alias FUN)()
 	enum haveDescriptions = anySatisfy!(optionHasDescription, Params);
 	static if (haveDescriptions)
 	{
-		enum haveShorthands = anySatisfy!(optionShorthand, Params);
+		enum haveShorthands = /*anySatisfy!(optionShorthand, Params)*/ true; // -h is always present
 		string[Params.length] selectors;
 		size_t longestSelector;
 
@@ -715,10 +715,23 @@ string getUsageFormatString(alias FUN)()
 				longestSelector = max(longestSelector, selectors[i].length);
 			}
 
+		// Include --help and --version in selector width calculation
+		enum helpSelector = "-h, --help";
+		longestSelector = max(longestSelector, helpSelector.length);
+		static if (ver.length > 0)
+		{
+			enum versionSelector = "-V, --version";
+			longestSelector = max(longestSelector, versionSelector.length);
+		}
+
 		result ~= "\nOptions:\n";
 		foreach (i, Param; Params)
 			static if (optionHasDescription!Param)
 				result ~= optionWrap(optionDescription!Param.escapeFmt(), selectors[i], longestSelector);
+
+		result ~= optionWrap("Print this help and exit", helpSelector, longestSelector);
+		static if (ver.length > 0)
+			result ~= optionWrap("Print version information and exit", versionSelector, longestSelector);
 	}
 
 	return result;
@@ -762,6 +775,7 @@ Options:
       --tries=N       Number of tries
       --timeout=SECS  Seconds to
                       wait each try
+  -h, --help          Print this help and exit
 ", usage);
 
 	void f2(
@@ -797,7 +811,8 @@ Options:
 "Usage: program [ARGS...]
 
 Options:
-  ARGS  The program arguments.
+      ARGS    The program arguments.
+  -h, --help  Print this help and exit
 ", usage);
 
 	void f5(
@@ -810,7 +825,8 @@ Options:
 "Usage: program [OPTION]...
 
 Options:
-  --without=STR  Features to disable.
+      --without=STR  Features to disable.
+  -h, --help         Print this help and exit
 ", usage);
 
 	// If all options are on the command line, don't add "[OPTION]..."
@@ -825,7 +841,8 @@ Options:
 "Usage: program [--verbose] [FILES...]
 
 Options:
-  FILES  Files to transmogrify.
+      FILES   Files to transmogrify.
+  -h, --help  Print this help and exit
 ", usage);
 
 	// Ensure % characters work as expected.
@@ -839,7 +856,8 @@ Options:
 "Usage: program POWER-PCT
 
 Options:
-  POWER-PCT  How much power % to use.
+      POWER-PCT  How much power % to use.
+  -h, --help     Print this help and exit
 ", usage);
 
 	// Test program descriptions
@@ -853,7 +871,8 @@ Options:
 Refrobnicates the transmogrifier.
 
 Options:
-  --verbose  Be verbose.
+      --verbose  Be verbose.
+  -h, --help     Print this help and exit
 ", usage);
 
 	// Test version in help output
@@ -870,7 +889,9 @@ Usage: program [OPTION]...
 Does something useful.
 
 Options:
-  --verbose  Be verbose.
+      --verbose  Be verbose.
+  -h, --help     Print this help and exit
+  -V, --version  Print version information and exit
 ", usage);
 
 	// Test Nullable options show correct placeholder
@@ -885,8 +906,9 @@ Options:
 "Usage: program OPTION...
 
 Options:
-  --retries=N   Number of retries
-  --format=STR  Output format
+      --retries=N   Number of retries
+      --format=STR  Output format
+  -h, --help        Print this help and exit
 ", usage);
 
 	// Test Nullable positional parameters show as optional
@@ -913,7 +935,8 @@ Options:
 "Usage: program REQUIRED-FILE [OUTPUT-PATH]
 
 Options:
-  OUTPUT-PATH  Optional output path
+      OUTPUT-PATH  Optional output path
+  -h, --help       Print this help and exit
 ", usage);
 }
 
