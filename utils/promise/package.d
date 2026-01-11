@@ -954,6 +954,84 @@ debug(ae_unittest) nothrow unittest
 
 // ****************************************************************************
 
+/// Returns a promise that is fulfilled with an array of Results when all
+/// input promises have settled (either fulfilled or rejected).
+/// Unlike `all`, this never rejects - it collects all outcomes.
+Promise!(Result!(PromiseValue!P, PromiseError!P)[]) allSettled(P)(P[] promises)
+if (isPromise!P)
+{
+	alias T = PromiseValue!P;
+	alias E = PromiseError!P;
+
+	auto allPromise = new typeof(return);
+	auto results = new Result!(T, E)[promises.length];
+
+	if (promises.length)
+	{
+		size_t numSettled;
+		foreach (i, p; promises)
+			(i, p) {
+				p.toResult.dmd21804workaround.then((result) {
+					results[i] = result;
+					if (++numSettled == promises.length)
+						allPromise.fulfill(results);
+				});
+			}(i, p);
+	}
+	else
+		allPromise.fulfill(results);
+
+	return allPromise;
+}
+
+debug(ae_unittest) nothrow unittest
+{
+	import std.exception : assertNotThrown;
+	auto p1 = new Promise!int;
+	auto p2 = new Promise!int;
+	auto p3 = new Promise!int;
+	p2.fulfill(2);
+	auto pAll = allSettled([p1, p2, p3]);
+	p1.reject(new Exception("error"));
+	Result!(int, Exception)[] results;
+	pAll.dmd21804workaround.then((r) { results = r; });
+	p3.fulfill(3);
+	socketManager.loop().assertNotThrown;
+	assert(results.length == 3);
+	assert(results[0].error !is null);
+	assert(results[1].value[0] == 2);
+	assert(results[2].value[0] == 3);
+}
+
+debug(ae_unittest) nothrow unittest
+{
+	import std.exception : assertNotThrown;
+	auto p1 = new Promise!void;
+	auto p2 = new Promise!void;
+	p1.fulfill();
+	p2.reject(new Exception("error"));
+	auto pAll = allSettled([p1, p2]);
+	Result!(void, Exception)[] results;
+	pAll.dmd21804workaround.then((r) { results = r; });
+	socketManager.loop().assertNotThrown;
+	assert(results.length == 2);
+	assert(results[0].error is null);
+	assert(results[1].error !is null);
+}
+
+debug(ae_unittest) nothrow unittest
+{
+	import std.exception : assertNotThrown;
+	Promise!int[] promises;
+	auto pAll = allSettled(promises);
+	Result!(int, Exception)[] results;
+	pAll.dmd21804workaround.then((r) { results = r; });
+	socketManager.loop().assertNotThrown;
+	assert(results.length == 0);
+}
+
+// ****************************************************************************
+
 Promise!(T, E) require(T, E)(ref Promise!(T, E) p, lazy Promise!(T, E) lp)
 {
     if (!p)
