@@ -617,7 +617,7 @@ if (is(P == Promise!(T, E), T, E))
 // ****************************************************************************
 
 /// Result of a promise resolution (fulfilled value or rejected error).
-struct Result(T, E)
+struct Result(T, E = Exception)
 {
 	Promise!T.ValueTuple value;
 	E error;
