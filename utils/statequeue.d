@@ -175,8 +175,10 @@ public:
 		{
 			oldState = newState = state;
 			if (state != goalState)
+			{
 				goalPromise = new Promise!void;
-			enqueueProd();
+				enqueueProd();
+			}
 		}
 	}
 }
