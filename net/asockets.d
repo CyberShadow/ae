@@ -252,8 +252,8 @@ static if (eventLoopMechanism == EventLoopMechanism.epoll)
 						assert(conn !is null, "epoll event with null socket");
 
 						runUserEventHandler({
-							// Handle errors first
-							if (ev.events & (EPOLLERR | EPOLLHUP))
+							// Handle errors
+							if (ev.events & EPOLLERR)
 							{
 								debug (ASOCKETS) stderr.writefln("\t%s - error", conn);
 								string errMsg = "socket error";
@@ -273,8 +273,8 @@ static if (eventLoopMechanism == EventLoopMechanism.epoll)
 								debug (ASOCKETS) stderr.writefln("\t%s - calling onWritable", conn);
 								conn.onWritable();
 							}
-							// Then read
-							else if (ev.events & EPOLLIN)
+							// Then read (EPOLLHUP also triggers read so recv() returns 0 for EOF)
+							else if (ev.events & (EPOLLIN | EPOLLHUP))
 							{
 								debug (ASOCKETS) stderr.writefln("\t%s - calling onReadable", conn);
 								conn.onReadable();
