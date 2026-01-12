@@ -255,8 +255,15 @@ static if (eventLoopMechanism == EventLoopMechanism.epoll)
 							// Handle errors first
 							if (ev.events & (EPOLLERR | EPOLLHUP))
 							{
-								debug (ASOCKETS) stderr.writefln("\t%s - error/hangup", conn);
-								conn.onError("epoll error");
+								debug (ASOCKETS) stderr.writefln("\t%s - error", conn);
+								string errMsg = "socket error";
+								if (conn.socket)
+								{
+									auto socketErr = conn.socket.getErrorText();
+									if (socketErr.length)
+										errMsg = socketErr;
+								}
+								conn.onError(errMsg);
 								return;
 							}
 
