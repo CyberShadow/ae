@@ -2065,6 +2065,13 @@ protected:
 		this.datagram = datagram;
 	}
 
+	this(Socket conn, Address peerAddress, bool datagram = false)
+	{
+		super(conn);
+		this.datagram = datagram;
+		cachedAddress[false] = peerAddress;
+	}
+
 	override sizediff_t doSend(scope const(void)[] buffer)
 	{
 		return conn.send(buffer);
@@ -2146,6 +2153,11 @@ protected:
 		super(conn, false);
 	}
 
+	this(Socket conn, Address peerAddress)
+	{
+		super(conn, peerAddress, false);
+	}
+
 public:
 	/// Default constructor
 	this()
@@ -2216,11 +2228,25 @@ protected:
 		override void onReadable()
 		{
 			debug (ASOCKETS) stderr.writefln("Accepting connection from listener @ %s", cast(void*)this);
-			Socket acceptSocket = conn.accept();
+
+			// Use C accept() directly to atomically capture the peer address.
+			// This avoids a race condition where the peer disconnects before
+			// we can call getpeername(), which would fail with ENOTCONN.
+			// TODO: Use Phobos accept(out Address) overload once available:
+			// https://github.com/dlang/phobos/pull/10941
+			ubyte[128] buf; // Enough for any socket address (sockaddr_storage is 128 bytes)
+			auto sa = cast(c_socks.sockaddr*)buf.ptr;
+			c_socks.socklen_t saLen = buf.length;
+			auto newsock = c_socks.accept(conn.handle, sa, &saLen);
+			if (newsock == cast(typeof(newsock))-1)
+				throw new SocketOSException("Unable to accept socket connection");
+
+			auto peerAddress = new UnknownAddressReference(cast(const(c_socks.sockaddr)*)sa, saLen);
+			auto acceptSocket = new Socket(cast(socket_t)newsock, conn.addressFamily);
 			acceptSocket.blocking = false;
 			if (handleAccept)
 			{
-				auto connection = createConnection(acceptSocket);
+				auto connection = createConnection(acceptSocket, peerAddress);
 				debug (ASOCKETS) stderr.writefln("\tAccepted connection %s from %s", connection, connection.remoteAddressStr);
 				connection.setKeepAlive();
 				//assert(connection.connected);
@@ -2251,9 +2277,9 @@ protected:
 		}
 	}
 
-	SocketConnection createConnection(Socket socket)
+	SocketConnection createConnection(Socket socket, Address peerAddress)
 	{
-		return new SocketConnection(socket, datagram);
+		return new SocketConnection(socket, peerAddress, datagram);
 	}
 
 	/// Whether the socket is listening.
@@ -2380,9 +2406,9 @@ public:
 class TcpServer : SocketServer
 {
 protected:
-	override SocketConnection createConnection(Socket socket)
+	override SocketConnection createConnection(Socket socket, Address peerAddress)
 	{
-		return new TcpConnection(socket);
+		return new TcpConnection(socket, peerAddress);
 	}
 
 public:
