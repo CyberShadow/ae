@@ -557,6 +557,8 @@ private:
 		Promise!PreparedStatement preparePromise;
 		// For close
 		Promise!void closePromise;
+		// Set when ErrorResponse received, prevents double completion
+		bool hadError;
 	}
 
 	/// Queue of pending operations (FIFO - PostgreSQL processes in order)
@@ -714,6 +716,7 @@ private:
 
 				if (currentOp)
 				{
+					currentOp.hadError = true;
 					final switch (currentOp.type)
 					{
 						case PendingOpType.query:
@@ -772,17 +775,22 @@ private:
 
 				if (currentOp)
 				{
-					final switch (currentOp.type)
+					// Only complete successfully if no error occurred
+					// (errors are already handled in ErrorResponse)
+					if (!currentOp.hadError)
 					{
-						case PendingOpType.query:
-							currentOp.result.onComplete();
-							break;
-						case PendingOpType.prepare:
-							currentOp.preparePromise.fulfill(currentOp.stmt);
-							break;
-						case PendingOpType.close:
-							currentOp.closePromise.fulfill();
-							break;
+						final switch (currentOp.type)
+						{
+							case PendingOpType.query:
+								currentOp.result.onComplete();
+								break;
+							case PendingOpType.prepare:
+								currentOp.preparePromise.fulfill(currentOp.stmt);
+								break;
+							case PendingOpType.close:
+								currentOp.closePromise.fulfill();
+								break;
+						}
 					}
 					// Pop completed operation from queue
 					pendingOps = pendingOps[1..$];
