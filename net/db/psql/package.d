@@ -28,10 +28,10 @@ import std.digest.md : md5Of, toHexString, LetterCase;
 
 import ae.net.asockets;
 import ae.utils.array;
+import ae.utils.auth.scram : ScramSHA256Client;
 import ae.utils.exception;
 import ae.utils.promise;
 
-// TODO: SCRAM-SHA-256 authentication (modern default, more secure than MD5)
 // TODO: SSL/TLS support - wrap connection with OpenSSLAdapter before passing to PgSqlConnection
 // TODO: COPY protocol for bulk data import/export
 // TODO: LISTEN/NOTIFY for async notifications
@@ -538,6 +538,9 @@ private:
 	string database;
 	string password;
 
+	/// SCRAM authentication state (only used during auth handshake)
+	ScramSHA256Client scramClient;
+
 	/// Promise for ready() property
 	Promise!TransactionStatus readyPromise;
 	bool isReady;
@@ -936,9 +939,87 @@ private:
 				sendMD5PasswordMessage(user, password, salt);
 				break;
 
+			case 10: // AuthenticationSASL
+				enforce!PgSqlException(password !is null, "Password required but not provided");
+				processSASLInit(data);
+				break;
+
+			case 11: // AuthenticationSASLContinue
+				processSASLContinue(data);
+				break;
+
+			case 12: // AuthenticationSASLFinal
+				processSASLFinal(data);
+				break;
+
 			default:
 				throw new PgSqlException("Unsupported authentication method: " ~ authType.to!string);
 		}
+	}
+
+	void processSASLInit(ref Data data)
+	{
+		// Parse list of supported mechanisms (null-terminated strings, ending with empty string)
+		bool scramSha256Supported = false;
+		while (data.length > 0)
+		{
+			auto mechanism = readString(data);
+			if (mechanism.length == 0)
+				break;
+			if (mechanism == "SCRAM-SHA-256")
+				scramSha256Supported = true;
+		}
+
+		enforce!PgSqlException(scramSha256Supported, "Server doesn't support SCRAM-SHA-256");
+
+		// Initialize SCRAM client and send first message
+		scramClient = ScramSHA256Client(user, password);
+		auto clientFirst = scramClient.clientFirstMessage();
+
+		sendSASLInitialResponse("SCRAM-SHA-256", clientFirst);
+	}
+
+	void processSASLContinue(ref Data data)
+	{
+		// Get server-first-message
+		const(char)[] serverFirst;
+		data.asDataOf!char.enter((scope s) {
+			serverFirst = s.idup;
+		});
+
+		// Generate and send client-final-message
+		auto clientFinal = scramClient.clientFinalMessage(cast(string) serverFirst);
+		sendSASLResponse(clientFinal);
+	}
+
+	void processSASLFinal(ref Data data)
+	{
+		// Get server-final-message and verify
+		const(char)[] serverFinal;
+		data.asDataOf!char.enter((scope s) {
+			serverFinal = s.idup;
+		});
+
+		enforce!PgSqlException(
+			scramClient.verifyServerFinal(cast(string) serverFinal),
+			"SCRAM server signature verification failed");
+
+		// Clear SCRAM state
+		scramClient = ScramSHA256Client.init;
+	}
+
+	void sendSASLInitialResponse(const(char)[] mechanism, const(char)[] response)
+	{
+		auto buf = appender!(ubyte[]);
+		write(buf, mechanism);
+		write(buf, cast(int) response.length);
+		buf.put(cast(const(ubyte)[]) response);
+		sendPacket('p', buf.data);
+	}
+
+	void sendSASLResponse(const(char)[] response)
+	{
+		sendPacket('p', cast(const(ubyte)[]) response);
 	}
 
 	void sendPasswordMessage(string pwd)
