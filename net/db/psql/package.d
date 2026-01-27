@@ -237,6 +237,7 @@ public:
 
 	/// Lazy query result handle.
 	/// The query is not sent until a consumption method is called.
+	/// Each Result can only be consumed once (via array(), map(), or foreach).
 	final class Result
 	{
 		private const(char)[] sql;
@@ -244,6 +245,7 @@ public:
 		private const(char)[][] queryArgs;
 		private bool started;
 		private bool completed;
+		private bool consumed;
 		private FieldDescription[] fields;
 		private const(char)[] commandTag;
 		private PgSqlException error;
@@ -267,6 +269,9 @@ public:
 		/// Collect all rows and return as array.
 		Promise!(Row[]) array()
 		{
+			enforce!PgSqlException(!consumed, "Result has already been consumed");
+			consumed = true;
+
 			if (error)
 			{
 				auto p = new Promise!(Row[]);
@@ -284,6 +289,9 @@ public:
 		/// Map a function over rows as they arrive, returning collected results.
 		Promise!(T[]) map(T)(T delegate(Row) fn)
 		{
+			enforce!PgSqlException(!consumed, "Result has already been consumed");
+			consumed = true;
+
 			auto resultPromise = new Promise!(T[]);
 			T[] results;
 
@@ -320,6 +328,9 @@ public:
 		int opApply(scope int delegate(Row) dg)
 		{
 			import ae.utils.promise.await : await;
+
+			enforce!PgSqlException(!consumed, "Result has already been consumed");
+			consumed = true;
 
 			if (error)
 				throw error;
