@@ -81,3 +81,19 @@ jobs:
 
       - shell: bash
         run: ./testflags.sh
+
+  nix:
+    timeout-minutes: 60
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v18
+
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@v11
+
+      - name: Run flake checks
+        run: nix flake check --print-build-logs
