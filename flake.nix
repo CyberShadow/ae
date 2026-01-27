@@ -29,19 +29,32 @@
               export PGDATABASE="testdb"
 
               echo "Initializing PostgreSQL..."
-              initdb -D "$PGDATA" --auth=trust -U "$PGUSER"
+              # Initialize with trust auth for initial setup, then switch to scram-sha-256
+              initdb -D "$PGDATA" --auth=trust --username=postgres
 
               cat >> "$PGDATA/postgresql.conf" <<EOF
               unix_socket_directories = '$TMPDIR'
               listen_addresses = 'localhost'
               port = 5432
+              password_encryption = scram-sha-256
+              EOF
+
+              # Configure pg_hba.conf to use scram-sha-256 for TCP connections
+              cat > "$PGDATA/pg_hba.conf" <<EOF
+              # TYPE  DATABASE        USER            ADDRESS                 METHOD
+              local   all             postgres                                trust
+              local   all             all                                     scram-sha-256
+              host    all             all             127.0.0.1/32            scram-sha-256
+              host    all             all             ::1/128                 scram-sha-256
               EOF
 
               echo "Starting PostgreSQL..."
               pg_ctl -D "$PGDATA" -l "$PGDATA/logfile" start -w
 
-              echo "Creating test database..."
-              createdb -h "$TMPDIR" -U "$PGUSER" "$PGDATABASE"
+              echo "Creating test user and database with SCRAM-SHA-256..."
+              # Create user with password using postgres superuser (trust auth on local socket)
+              psql -h "$TMPDIR" -U postgres -d postgres -c "CREATE USER $PGUSER WITH PASSWORD '$PGPASSWORD';"
+              psql -h "$TMPDIR" -U postgres -d postgres -c "CREATE DATABASE $PGDATABASE OWNER $PGUSER;"
 
               # Set PGHOST to localhost for TCP connections in the D test
               export PGHOST="localhost"
