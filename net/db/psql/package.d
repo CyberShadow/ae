@@ -255,6 +255,10 @@ public:
 		// For map() mode
 		private void delegate(Row) rowCallback;
 
+		// For lazy iteration (opApply)
+		private bool iterating;
+		private PromiseQueue!(Nullable!Row) iterQueue;
+
 		private this(const(char)[] sql)
 		{
 			this.sql = sql;
@@ -312,13 +316,48 @@ public:
 		}
 
 		/// Fiber-based foreach iteration (requires fiber context).
+		/// Rows are processed lazily as they arrive from the server.
 		int opApply(scope int delegate(Row) dg)
 		{
 			import ae.utils.promise.await : await;
-			auto rows = await(array());
-			foreach (row; rows)
-				if (auto r = dg(row))
+
+			if (error)
+				throw error;
+
+			// If already completed, iterate buffered rows
+			if (completed)
+			{
+				foreach (row; bufferedRows)
+					if (auto r = dg(row))
+						return r;
+				return 0;
+			}
+
+			// Lazy iteration: process rows as they arrive
+			iterating = true;
+			iterQueue = PromiseQueue!(Nullable!Row).init;
+			scope(exit)
+			{
+				iterating = false;
+				iterQueue = PromiseQueue!(Nullable!Row).init;
+			}
+
+			startIfNeeded();
+
+			while (true)
+			{
+				auto item = iterQueue.waitOne().await;
+
+				if (error)
+					throw error;
+
+				if (item.isNull)
+					break;  // End of results
+
+				if (auto r = dg(item.get))
 					return r;
+			}
+
 			return 0;
 		}
 
@@ -339,7 +378,9 @@ public:
 		private void onDataRow(const(const(char)[])[] values, const(bool)[] nulls)
 		{
 			auto row = Row(fields, values, nulls);
-			if (rowCallback)
+			if (iterating)
+				iterQueue.fulfillOne(Nullable!Row(row));
+			else if (rowCallback)
 				rowCallback(row);
 			else
 				bufferedRows ~= row;
@@ -355,6 +396,8 @@ public:
 			completed = true;
 			if (arrayPromise)
 				arrayPromise.fulfill(bufferedRows);
+			if (iterating)
+				iterQueue.fulfillOne(Nullable!Row.init);  // End marker
 		}
 
 		private void onError(PgSqlException e)
@@ -363,6 +406,8 @@ public:
 			completed = true;
 			if (arrayPromise)
 				arrayPromise.reject(e);
+			if (iterating)
+				iterQueue.fulfillOne(Nullable!Row.init);  // Signal to unblock, error checked after
 		}
 	}
 
@@ -1270,7 +1315,7 @@ debug(ae_unittest) unittest
 		pg.handleReadyForQuery = null;
 
 		// Test 1: Simple query with .array
-		pg.query("SELECT 1 + 1 AS result").array.then((rows) {
+		pg.query("SELECT 1 + 1 AS result").array.dmd21804workaround.then((rows) {
 			assert(rows.length == 1, "Expected 1 row");
 			assert(rows[0].column!int(0) == 2, "Expected 1+1=2");
 			assert(rows[0].column!int("result") == 2, "Expected column by name");
@@ -1281,7 +1326,7 @@ debug(ae_unittest) unittest
 		});
 
 		// Test 2: Pipelined query (sent before first completes)
-		pg.query("SELECT 2 * 3 AS product").array.then((rows) {
+		pg.query("SELECT 2 * 3 AS product").array.dmd21804workaround.then((rows) {
 			assert(rows.length == 1, "Expected 1 row");
 			assert(rows[0].column!int("product") == 6, "Expected 2*3=6");
 			completed++;
@@ -1291,7 +1336,7 @@ debug(ae_unittest) unittest
 		});
 
 		// Test 3: Another pipelined query with multiple rows
-		pg.query("SELECT generate_series(1, 3) AS n").array.then((rows) {
+		pg.query("SELECT generate_series(1, 3) AS n").array.dmd21804workaround.then((rows) {
 			assert(rows.length == 3, "Expected 3 rows from generate_series");
 			assert(rows[0].column!int("n") == 1);
 			assert(rows[1].column!int("n") == 2);
@@ -1303,15 +1348,15 @@ debug(ae_unittest) unittest
 		});
 
 		// Test 4: Prepared statement with parameters
-		pg.prepare("SELECT $1::int + $2::int AS sum").then((PgSqlConnection.PreparedStatement stmt) {
-			stmt.query(10, 20).array.then((rows) {
+		pg.prepare("SELECT $1::int + $2::int AS sum").dmd21804workaround.then((PgSqlConnection.PreparedStatement stmt) {
+			stmt.query(10, 20).array.dmd21804workaround.then((rows) {
 				assert(rows.length == 1, "Expected 1 row from prepared stmt");
 				assert(rows[0].column!int("sum") == 30, "Expected 10+20=30");
 				completed++;
 				checkDone();
 
 				// Test 5: Reuse prepared statement with different params
-				stmt.query(100, 200).array.then((rows2) {
+				stmt.query(100, 200).array.dmd21804workaround.then((rows2) {
 					assert(rows2.length == 1, "Expected 1 row from reused stmt");
 					assert(rows2[0].column!int("sum") == 300, "Expected 100+200=300");
 					completed++;
