@@ -92,7 +92,7 @@ debug(ae_unittest) unittest
 	}
 }
 
-/// Synchronously starts and event loop and waits for it to exit.
+/// Synchronously starts an event loop and waits for it to exit.
 /// Assumes that the promise `p` is resolved during the event loop;
 /// Propagates any return value or exception to the caller.
 T awaitSync(T, E)(Promise!(T, E) p)
