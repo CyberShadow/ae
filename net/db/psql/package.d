@@ -1484,15 +1484,14 @@ debug(ae_unittest) unittest
 version (HAVE_PSQL_SERVER)
 debug(ae_unittest) unittest
 {
-	import ae.utils.promise.await : async, await;
+	import ae.utils.promise.await : async, await, awaitSync;
 
 	auto pg = new PgSqlConnection();
-	bool done;
 
-	// Run tests in a fiber using async
 	async({
 		// Wait for connection to be ready (replaces handleReadyForQuery callback)
 		pg.ready.await;
+		scope(exit) pg.disconnect("Test cleanup");
 
 		// Test 1: Simple query with await
 		auto rows1 = pg.query("SELECT 1 + 1 AS result").array.await;
@@ -1516,11 +1515,5 @@ debug(ae_unittest) unittest
 		foreach (row; stmt.query(2, 3))
 			product *= row.column!int("product");
 		assert(product == 6, "Expected 2*3=6");
-
-		done = true;
-		pg.disconnect("Fiber test complete");
-	});
-
-	socketManager.loop();
-	assert(done, "Fiber test did not complete");
+	}).awaitSync();
 }
