@@ -221,7 +221,7 @@ static if (eventLoopMechanism == EventLoopMechanism.epoll)
 					idleHandlers.length,
 				);
 
-				if (!haveActive && !mainTimer.isWaiting() && !nextTickHandlers.length)
+				if (!haveActive && !mainTimer.hasNonDaemonTasks() && !nextTickHandlers.length)
 				{
 					debug (ASOCKETS) stderr.writeln("No more active sockets or timer events, exiting loop.");
 					break;
@@ -761,7 +761,7 @@ static if (eventLoopMechanism == EventLoopMechanism.select)
 					mainTimer.isWaiting() ? "with" : "no",
 					idleHandlers.length,
 				);
-				if (!haveActive && !mainTimer.isWaiting() && !nextTickHandlers.length)
+				if (!haveActive && !mainTimer.hasNonDaemonTasks() && !nextTickHandlers.length)
 				{
 					debug (ASOCKETS) stderr.writeln("No more sockets or timer events, exiting loop.");
 					break;
@@ -1229,7 +1229,7 @@ static if (haveEventLoopDebug)
 				continue;
 
 			count++;
-			stderr.writefln("TIMER TASK: %s", cast(void*)task);
+			stderr.writefln("TIMER TASK: %s%s", cast(void*)task, task.daemon ? " (daemon)" : "");
 			stderr.writefln("  fires at: %s (in %s)", task.when, task.when - now);
 			debug(TIMER_TRACK)
 			{
@@ -1338,6 +1338,7 @@ private debug (ASOCKETS_DEBUG_SHUTDOWN)
 			stderr.flush();
 
 			watchdogTask = new TimerTask((Timer, TimerTask) { onWatchdogTimeout(); });
+			watchdogTask.daemon = true;  // Don't keep the event loop alive
 			mainTimer.add(watchdogTask, MonoTime.currTime() + timeout);
 		}
 
@@ -1451,6 +1452,7 @@ private debug (ASOCKETS_DEBUG_IDLE)
 			stderr.flush();
 
 			periodicTask = new TimerTask((Timer t, TimerTask task) { onPeriodicCheck(t, task); });
+			periodicTask.daemon = true;  // Don't keep the event loop alive
 			mainTimer.add(periodicTask, MonoTime.currTime() + checkInterval);
 		}
 	}

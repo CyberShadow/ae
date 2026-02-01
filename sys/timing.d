@@ -215,6 +215,18 @@ public:
 		return !disabled && head !is null;
 	}
 
+	/// Return true if there are pending non-daemon tasks scheduled.
+	/// Daemon tasks do not prevent the event loop from exiting.
+	bool hasNonDaemonTasks() pure
+	{
+		if (disabled)
+			return false;
+		for (auto t = head; t !is null; t = t.state.next)
+			if (!t.daemon)
+				return true;
+		return false;
+	}
+
 	/// Return the MonoTime of the next scheduled task, or MonoTime.max if no tasks are scheduled.
 	MonoTime getNextEvent() pure
 	{
@@ -306,6 +318,10 @@ public:
 		handleTask = handler;
 		debug(TIMER_TRACK) creationStackTrace = captureStackTrace();
 	} ///
+
+	/// If true, this task does not prevent the event loop from exiting.
+	/// Daemon tasks are still executed if the loop is kept alive by other means.
+	bool daemon;
 
 	deprecated this(Duration delay, Handler handler = null)
 	{
