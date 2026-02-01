@@ -1177,7 +1177,7 @@ private:
             else
             {
                 nulls[i] = false;
-                auto strLen = readLenEncInt(data);
+                auto strLen = readLenEncInt(data).to!size_t;
                 data.asDataOf!char.enter((scope s) {
                     values[i] = s[0..strLen].dup;
                 });
@@ -1270,7 +1270,7 @@ private:
             case set:
             case geometry:
             case json:
-                auto len = readLenEncInt(data);
+                auto len = readLenEncInt(data).to!size_t;
                 const(char)[] result;
                 data.asDataOf!char.enter((scope s) {
                     result = s[0..len].dup;
@@ -1291,7 +1291,7 @@ private:
             case datetime2:
             case time2:
                 // Fall back to string read
-                auto len = readLenEncInt(data);
+                auto len = readLenEncInt(data).to!size_t;
                 const(char)[] result;
                 data.asDataOf!char.enter((scope s) {
                     result = s[0..len].dup;
@@ -1463,7 +1463,7 @@ private:
     /// Read a length-encoded string
     static const(char)[] readLenEncString(ref Data data)
     {
-        auto len = readLenEncInt(data);
+        auto len = readLenEncInt(data).to!size_t;
         if (len == 0)
             return null;
         const(char)[] result;
