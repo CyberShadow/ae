@@ -18,6 +18,9 @@
 
             nativeBuildInputs = [ pkgs.postgresql pkgs.ldc ];
 
+            # Keep debug symbols for meaningful stack traces
+            dontStrip = true;
+
             # Localhost TCP connections work within the sandbox
 
             buildPhase = ''
@@ -66,6 +69,7 @@
               ldc2 \
                 -i \
                 -I"$TMPDIR/ae-parent" \
+                -g \
                 -d-debug=ae_unittest \
                 -d-version=HAVE_PSQL_SERVER \
                 -unittest \
