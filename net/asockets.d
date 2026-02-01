@@ -227,22 +227,48 @@ static if (eventLoopMechanism == EventLoopMechanism.epoll)
 					break;
 				}
 
-				int timeout_msec;
-				if (mainTimer.isWaiting())
+				int nfds;
+
+				// If no sockets are registered, we can't use epoll_wait (epollFd may be -1).
+				// Use nanosleep instead to wait for timers.
+				if (sockets.length == 0)
 				{
-					now = MonoTime.currTime();
-					auto remaining = mainTimer.getRemainingTime(now);
-					long msec = (remaining.total!"hnsecs" + 9999) / 10_000;
-					timeout_msec = msec > int.max ? -1 : (msec <= 0 ? 0 : cast(int)msec);
+					if (mainTimer.isWaiting())
+					{
+						now = MonoTime.currTime();
+						auto remaining = mainTimer.getRemainingTime(now);
+						if (remaining > Duration.zero)
+						{
+							debug (ASOCKETS) stderr.writefln("nanosleep for %s (no sockets)", remaining);
+							import core.sys.posix.time : nanosleep, timespec;
+							auto ts = timespec(
+								cast(typeof(timespec.tv_sec))remaining.total!"seconds",
+								cast(typeof(timespec.tv_nsec))(remaining.total!"nsecs" % 1_000_000_000)
+							);
+							nanosleep(&ts, null);
+						}
+					}
+					nfds = 0;
 				}
 				else
 				{
-					timeout_msec = -1; // Wait indefinitely
-				}
+					int timeout_msec;
+					if (mainTimer.isWaiting())
+					{
+						now = MonoTime.currTime();
+						auto remaining = mainTimer.getRemainingTime(now);
+						long msec = (remaining.total!"hnsecs" + 9999) / 10_000;
+						timeout_msec = msec > int.max ? -1 : (msec <= 0 ? 0 : cast(int)msec);
+					}
+					else
+					{
+						timeout_msec = -1; // Wait indefinitely
+					}
 
-				debug (ASOCKETS) stderr.writefln("epoll_wait with timeout %d ms", timeout_msec);
-				int nfds = epoll_wait(epollFd, events.ptr, cast(int)events.length, timeout_msec);
-				debug (ASOCKETS) stderr.writefln("%d events fired.", nfds);
+					debug (ASOCKETS) stderr.writefln("epoll_wait with timeout %d ms", timeout_msec);
+					nfds = epoll_wait(epollFd, events.ptr, cast(int)events.length, timeout_msec);
+					debug (ASOCKETS) stderr.writefln("%d events fired.", nfds);
+				}
 
 				now = MonoTime.currTime();
 
