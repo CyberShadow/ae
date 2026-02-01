@@ -1150,6 +1150,166 @@ private struct IdleHandler
 	}
 }
 
+// Common event loop state printing functions, used by both ASOCKETS_DEBUG_SHUTDOWN and ASOCKETS_DEBUG_IDLE.
+private debug (ASOCKETS_DEBUG_SHUTDOWN)
+{
+	import ae.utils.exception : captureStackTrace, printCapturedStackTrace, TraceInfo;
+	enum haveEventLoopDebug = true;
+}
+else debug (ASOCKETS_DEBUG_IDLE)
+{
+	import ae.utils.exception : captureStackTrace, printCapturedStackTrace, TraceInfo;
+	enum haveEventLoopDebug = true;
+}
+else
+	enum haveEventLoopDebug = false;
+
+static if (haveEventLoopDebug)
+{
+	/// Prints the current state of the event loop to stderr.
+	/// Params:
+	///   onlyBlocking = If true, only show non-daemon sockets that are blocking shutdown.
+	///                  If false, show all registered sockets.
+	///   skipTask = Timer task to skip (e.g., the debugger's own watchdog task).
+	///   skipTaskLabel = Label to use when the only pending task is the skipped one.
+	void printEventLoopState(bool onlyBlocking, TimerTask skipTask = null, string skipTaskLabel = "watchdog")
+	{
+		printEventLoopSockets(onlyBlocking);
+		printEventLoopTimerTasks(skipTask, skipTaskLabel);
+		printEventLoopIdleHandlers();
+		printEventLoopNextTickHandlers();
+	}
+
+	void printEventLoopSockets(bool onlyBlocking)
+	{
+		import std.stdio : stderr;
+		size_t count;
+
+		foreach (sock; socketManager.sockets)
+		{
+			if (sock is null || sock.socket is null)
+				continue;
+			if (onlyBlocking && !(sock.notifyRead && !sock.daemonRead || sock.notifyWrite && !sock.daemonWrite))
+				continue;
+
+			stderr.writefln("SOCKET: %s", sock);
+			stderr.writefln("  notifyRead=%s (daemon=%s), notifyWrite=%s (daemon=%s)",
+				sock.notifyRead, sock.daemonRead, sock.notifyWrite, sock.daemonWrite);
+			if (sock.registrationStackTrace !is null)
+			{
+				stderr.writeln("  Registered at:");
+				printCapturedStackTrace(sock.registrationStackTrace);
+			}
+			stderr.writeln();
+			count++;
+		}
+
+		if (count == 0)
+			stderr.writeln(onlyBlocking ? "SOCKETS: None blocking\n" : "SOCKETS: None registered\n");
+		else
+			stderr.writefln("SOCKETS: %d %s\n", count, onlyBlocking ? "blocking" : "registered");
+	}
+
+	void printEventLoopTimerTasks(TimerTask skipTask, string skipTaskLabel)
+	{
+		import std.stdio : stderr;
+
+		if (!mainTimer.isWaiting())
+		{
+			stderr.writeln("TIMER TASKS: None pending\n");
+			return;
+		}
+
+		auto now = MonoTime.currTime();
+		size_t count;
+
+		foreach (task; mainTimer.pendingTasks())
+		{
+			if (task is skipTask)
+				continue;
+
+			count++;
+			stderr.writefln("TIMER TASK: %s", cast(void*)task);
+			stderr.writefln("  fires at: %s (in %s)", task.when, task.when - now);
+			debug(TIMER_TRACK)
+			{
+				if (task.debugCreationStackTrace !is null)
+				{
+					stderr.writeln("  Created at:");
+					printCapturedStackTrace(task.debugCreationStackTrace);
+				}
+				if (task.debugAdditionStackTrace !is null)
+				{
+					stderr.writeln("  Added at:");
+					printCapturedStackTrace(task.debugAdditionStackTrace);
+				}
+			}
+			else
+			{
+				stderr.writeln("  (Enable debug=TIMER_TRACK for stack traces)");
+			}
+			stderr.writeln();
+		}
+
+		if (count == 0)
+			stderr.writefln("TIMER TASKS: Only the %s is pending\n", skipTaskLabel);
+		else
+			stderr.writefln("TIMER TASKS: %d pending\n", count);
+	}
+
+	void printEventLoopIdleHandlers()
+	{
+		import std.stdio : stderr;
+
+		static if (eventLoopMechanism == EventLoopMechanism.libev)
+		{
+			stderr.writeln("IDLE HANDLERS: Not tracked with LIBEV\n");
+		}
+		else
+		{
+			auto handlers = socketManager.idleHandlers;
+			if (handlers.length == 0)
+			{
+				stderr.writeln("IDLE HANDLERS: None registered\n");
+				return;
+			}
+
+			stderr.writefln("IDLE HANDLERS: %d registered", handlers.length);
+			foreach (i, ref handler; handlers)
+			{
+				stderr.writefln("  [%d] %s", i, handler.dg);
+				if (handler.stackTrace !is null)
+				{
+					stderr.writeln("  Registered at:");
+					printCapturedStackTrace(handler.stackTrace);
+				}
+			}
+			stderr.writeln();
+		}
+	}
+
+	void printEventLoopNextTickHandlers()
+	{
+		import std.stdio : stderr;
+
+		auto handlers = socketManager.nextTickHandlers;
+		if (handlers.length == 0)
+		{
+			stderr.writeln("NEXT TICK HANDLERS: None queued\n");
+			return;
+		}
+
+		// Note: onNextTick is pure @safe nothrow, so we can't capture stack traces there.
+		// NextTick handlers are transient anyway (run once per tick).
+		stderr.writefln("NEXT TICK HANDLERS: %d queued (stack traces not available)", handlers.length);
+		foreach (i, handler; handlers)
+		{
+			stderr.writefln("  [%d] %s", i, handler);
+		}
+		stderr.writeln();
+	}
+}
+
 // Shutdown debugging: prints objects that are blocking the event loop from exiting
 // when the application doesn't shut down cleanly after a shutdown was requested.
 private debug (ASOCKETS_DEBUG_SHUTDOWN)
@@ -1192,143 +1352,10 @@ private debug (ASOCKETS_DEBUG_SHUTDOWN)
 			stderr.writeln("Objects blocking the event loop:");
 			stderr.writeln();
 
-			printBlockingSockets();
-			printBlockingTimerTasks();
-			printBlockingIdleHandlers();
-			printBlockingNextTickHandlers();
+			printEventLoopState(true, watchdogTask, "shutdown watchdog");
 
 			stderr.writeln("=".repeat(72).join);
 			stderr.flush();
-		}
-
-		void printBlockingSockets()
-		{
-			import std.stdio : stderr;
-			size_t count;
-
-			foreach (sock; socketManager.sockets)
-			{
-				if (sock is null || sock.socket is null)
-					continue;
-				if (sock.notifyRead && !sock.daemonRead || sock.notifyWrite && !sock.daemonWrite)
-				{
-					stderr.writefln("SOCKET: %s", sock);
-					stderr.writefln("  notifyRead=%s (daemon=%s), notifyWrite=%s (daemon=%s)",
-						sock.notifyRead, sock.daemonRead, sock.notifyWrite, sock.daemonWrite);
-					if (sock.registrationStackTrace !is null)
-					{
-						stderr.writeln("  Registered at:");
-						printCapturedStackTrace(sock.registrationStackTrace);
-					}
-					stderr.writeln();
-					count++;
-				}
-			}
-
-			if (count == 0)
-				stderr.writeln("SOCKETS: None blocking\n");
-			else
-				stderr.writefln("SOCKETS: %d blocking\n", count);
-		}
-
-		void printBlockingTimerTasks()
-		{
-			import std.stdio : stderr;
-
-			if (!mainTimer.isWaiting())
-			{
-				stderr.writeln("TIMER TASKS: None pending\n");
-				return;
-			}
-
-			auto now = MonoTime.currTime();
-			size_t count;
-
-			foreach (task; mainTimer.pendingTasks())
-			{
-				// Skip our own watchdog task
-				if (task is watchdogTask)
-					continue;
-
-				count++;
-				stderr.writefln("TIMER TASK: %s", cast(void*)task);
-				stderr.writefln("  fires at: %s (in %s)", task.when, task.when - now);
-				debug(TIMER_TRACK)
-				{
-					if (task.debugCreationStackTrace !is null)
-					{
-						stderr.writeln("  Created at:");
-						printCapturedStackTrace(task.debugCreationStackTrace);
-					}
-					if (task.debugAdditionStackTrace !is null)
-					{
-						stderr.writeln("  Added at:");
-						printCapturedStackTrace(task.debugAdditionStackTrace);
-					}
-				}
-				else
-				{
-					stderr.writeln("  (Enable debug=TIMER_TRACK for stack traces)");
-				}
-				stderr.writeln();
-			}
-
-			if (count == 0)
-				stderr.writeln("TIMER TASKS: Only the shutdown watchdog is pending\n");
-			else
-				stderr.writefln("TIMER TASKS: %d pending\n", count);
-		}
-
-		void printBlockingIdleHandlers()
-		{
-			import std.stdio : stderr;
-
-			static if (eventLoopMechanism == EventLoopMechanism.libev)
-			{
-				stderr.writeln("IDLE HANDLERS: Not tracked with LIBEV\n");
-			}
-			else
-			{
-				auto handlers = socketManager.idleHandlers;
-				if (handlers.length == 0)
-				{
-					stderr.writeln("IDLE HANDLERS: None registered\n");
-					return;
-				}
-
-				stderr.writefln("IDLE HANDLERS: %d registered", handlers.length);
-				foreach (i, ref handler; handlers)
-				{
-					stderr.writefln("  [%d] %s", i, handler.dg);
-					if (handler.stackTrace !is null)
-					{
-						stderr.writeln("  Registered at:");
-						printCapturedStackTrace(handler.stackTrace);
-					}
-				}
-				stderr.writeln();
-			}
-		}
-
-		void printBlockingNextTickHandlers()
-		{
-			import std.stdio : stderr;
-
-			auto handlers = socketManager.nextTickHandlers;
-			if (handlers.length == 0)
-			{
-				stderr.writeln("NEXT TICK HANDLERS: None queued\n");
-				return;
-			}
-
-			// Note: onNextTick is pure @safe nothrow, so we can't capture stack traces there.
-			// NextTick handlers are transient anyway (run once per tick).
-			stderr.writefln("NEXT TICK HANDLERS: %d queued (stack traces not available)", handlers.length);
-			foreach (i, handler; handlers)
-			{
-				stderr.writefln("  [%d] %s", i, handler);
-			}
-			stderr.writeln();
 		}
 
 		/// Register lazily, only for threads that actually run an event loop.
@@ -1392,10 +1419,7 @@ private debug (ASOCKETS_DEBUG_IDLE)
 				stderr.writeln("Objects in the event loop:");
 				stderr.writeln();
 
-				printBlockingSockets();
-				printBlockingTimerTasks();
-				printBlockingIdleHandlers();
-				printBlockingNextTickHandlers();
+				printEventLoopState(false, periodicTask, "idle watchdog");
 
 				stderr.writeln("=".repeat(72).join);
 				stderr.flush();
@@ -1405,134 +1429,6 @@ private debug (ASOCKETS_DEBUG_IDLE)
 
 			// Reschedule periodic check
 			mainTimer.add(periodicTask, now + checkInterval);
-		}
-
-		void printBlockingSockets()
-		{
-			import std.stdio : stderr;
-			size_t count;
-
-			foreach (sock; socketManager.sockets)
-			{
-				if (sock is null || sock.socket is null)
-					continue;
-				// For idle debugging, show all registered sockets, not just non-daemon ones
-				stderr.writefln("SOCKET: %s", sock);
-				stderr.writefln("  notifyRead=%s (daemon=%s), notifyWrite=%s (daemon=%s)",
-					sock.notifyRead, sock.daemonRead, sock.notifyWrite, sock.daemonWrite);
-				if (sock.registrationStackTrace !is null)
-				{
-					stderr.writeln("  Registered at:");
-					printCapturedStackTrace(sock.registrationStackTrace);
-				}
-				stderr.writeln();
-				count++;
-			}
-
-			if (count == 0)
-				stderr.writeln("SOCKETS: None registered\n");
-			else
-				stderr.writefln("SOCKETS: %d registered\n", count);
-		}
-
-		void printBlockingTimerTasks()
-		{
-			import std.stdio : stderr;
-
-			if (!mainTimer.isWaiting())
-			{
-				stderr.writeln("TIMER TASKS: None pending\n");
-				return;
-			}
-
-			auto now = MonoTime.currTime();
-			size_t count;
-
-			foreach (task; mainTimer.pendingTasks())
-			{
-				// Skip our own periodic task
-				if (task is periodicTask)
-					continue;
-
-				count++;
-				stderr.writefln("TIMER TASK: %s", cast(void*)task);
-				stderr.writefln("  fires at: %s (in %s)", task.when, task.when - now);
-				debug(TIMER_TRACK)
-				{
-					if (task.debugCreationStackTrace !is null)
-					{
-						stderr.writeln("  Created at:");
-						printCapturedStackTrace(task.debugCreationStackTrace);
-					}
-					if (task.debugAdditionStackTrace !is null)
-					{
-						stderr.writeln("  Added at:");
-						printCapturedStackTrace(task.debugAdditionStackTrace);
-					}
-				}
-				else
-				{
-					stderr.writeln("  (Enable debug=TIMER_TRACK for stack traces)");
-				}
-				stderr.writeln();
-			}
-
-			if (count == 0)
-				stderr.writeln("TIMER TASKS: Only the idle watchdog is pending\n");
-			else
-				stderr.writefln("TIMER TASKS: %d pending\n", count);
-		}
-
-		void printBlockingIdleHandlers()
-		{
-			import std.stdio : stderr;
-
-			static if (eventLoopMechanism == EventLoopMechanism.libev)
-			{
-				stderr.writeln("IDLE HANDLERS: Not tracked with LIBEV\n");
-			}
-			else
-			{
-				auto handlers = socketManager.idleHandlers;
-				if (handlers.length == 0)
-				{
-					stderr.writeln("IDLE HANDLERS: None registered\n");
-					return;
-				}
-
-				stderr.writefln("IDLE HANDLERS: %d registered", handlers.length);
-				foreach (i, ref handler; handlers)
-				{
-					stderr.writefln("  [%d] %s", i, handler.dg);
-					if (handler.stackTrace !is null)
-					{
-						stderr.writeln("  Registered at:");
-						printCapturedStackTrace(handler.stackTrace);
-					}
-				}
-				stderr.writeln();
-			}
-		}
-
-		void printBlockingNextTickHandlers()
-		{
-			import std.stdio : stderr;
-
-			auto handlers = socketManager.nextTickHandlers;
-			if (handlers.length == 0)
-			{
-				stderr.writeln("NEXT TICK HANDLERS: None queued\n");
-				return;
-			}
-
-			// Note: onNextTick is pure @safe nothrow, so we can't capture stack traces there.
-			// NextTick handlers are transient anyway (run once per tick).
-			stderr.writefln("NEXT TICK HANDLERS: %d queued (stack traces not available)", handlers.length);
-			foreach (i, handler; handlers)
-			{
-				stderr.writefln("  [%d] %s", i, handler);
-			}
-			stderr.writeln();
 		}
 
 		/// Register lazily, only for threads that actually run an event loop.
