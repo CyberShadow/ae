@@ -16,6 +16,7 @@ importPaths ".."
 excludedSourceFiles "sys/database.d"
 excludedSourceFiles "sys/sqlite3.d"
 excludedSourceFiles "sys/persistence/keyvalue.d"
+excludedSourceFiles "net/db/sqlite/*"
 
 # In ae:openssl
 excludedSourceFiles "net/ssl/openssl.d"
@@ -98,7 +99,8 @@ subPackage {
 	sourceFiles \
 		"sys/database.d" \
 		"sys/sqlite3.d" \
-		"sys/persistence/keyvalue.d"
+		"sys/persistence/keyvalue.d" \
+		"net/db/sqlite/package.d"
 }
 
 ---------------------------
