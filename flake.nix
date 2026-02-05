@@ -1,5 +1,5 @@
 {
-  description = "ae library integration tests";
+  description = "ae library tests";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -11,25 +11,61 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
 
-        # Build MySQL test binary separately
+        # Common dub test function
+        dubTest = { name, subpackage ? null, extraDeps ? [], extraFlags ? [] }:
+          pkgs.stdenv.mkDerivation {
+            name = "ae-${name}-test";
+
+            nativeBuildInputs = [ pkgs.dub pkgs.ldc pkgs.git ] ++ extraDeps;
+            dontStrip = true;
+
+            # Don't use src = self; we need to set up the directory structure manually
+            unpackPhase = ''
+              cp -a ${self} ae
+              chmod -R u+w ae
+              cd ae
+            '';
+
+            buildPhase = ''
+              export HOME="$TMPDIR"
+
+              echo "Running ${name} tests..."
+              dub test \
+                --compiler=ldc2 \
+                --debug=ae_unittest \
+                ${if subpackage != null then ":${subpackage}" else ""} \
+                ${builtins.concatStringsSep " " extraFlags}
+              echo "${name} tests passed!"
+            '';
+
+            installPhase = ''
+              touch $out
+            '';
+          };
+
+        # ===========================================
+        # Test Binaries (for integration tests that need server setup)
+        # These use ldc2 directly because they need special version flags
+        # ===========================================
+
+        # MySQL test binary - needs HAVE_MYSQL_SERVER version flag
         mysql-test-bin = pkgs.stdenv.mkDerivation {
           name = "ae-mysql-test-bin";
-          src = self;
 
           nativeBuildInputs = [ pkgs.ldc ];
-
-          # Keep debug symbols for meaningful stack traces
           dontStrip = true;
+
+          unpackPhase = ''
+            cp -a ${self} ae
+          '';
 
           buildPhase = ''
             echo "Compiling MySQL client tests..."
-            mkdir -p "$TMPDIR/ae-parent"
-            ln -s "$src" "$TMPDIR/ae-parent/ae"
 
             # ASOCKETS_DEBUG_IDLE: DO NOT REMOVE - essential for detecting stuck event loops
             ldc2 \
               -i \
-              -I"$TMPDIR/ae-parent" \
+              -I. \
               -g \
               -d-debug=ae_unittest \
               -d-debug=ASOCKETS_DEBUG_IDLE \
@@ -37,7 +73,7 @@
               -unittest \
               --main \
               -of=mysql_test \
-              net/db/mysql/package.d
+              ae/net/db/mysql/package.d
           '';
 
           installPhase = ''
@@ -46,31 +82,32 @@
           '';
         };
 
-        # Build PostgreSQL test binary separately
+        # PostgreSQL test binary - needs HAVE_PSQL_SERVER version flag
         psql-test-bin = pkgs.stdenv.mkDerivation {
           name = "ae-psql-test-bin";
-          src = self;
 
           nativeBuildInputs = [ pkgs.ldc ];
-
-          # Keep debug symbols for meaningful stack traces
           dontStrip = true;
+
+          unpackPhase = ''
+            cp -a ${self} ae
+          '';
 
           buildPhase = ''
             echo "Compiling PostgreSQL client tests..."
-            mkdir -p "$TMPDIR/ae-parent"
-            ln -s "$src" "$TMPDIR/ae-parent/ae"
 
+            # ASOCKETS_DEBUG_IDLE: DO NOT REMOVE - essential for detecting stuck event loops
             ldc2 \
               -i \
-              -I"$TMPDIR/ae-parent" \
+              -I. \
               -g \
               -d-debug=ae_unittest \
+              -d-debug=ASOCKETS_DEBUG_IDLE \
               -d-version=HAVE_PSQL_SERVER \
               -unittest \
               --main \
               -of=psql_test \
-              net/db/psql/package.d
+              ae/net/db/psql/package.d
           '';
 
           installPhase = ''
@@ -85,6 +122,34 @@
         };
 
         checks = {
+          # ===========================================
+          # Unit Tests (using dub test)
+          # ===========================================
+
+          # Main library unit tests
+          main = dubTest {
+            name = "main";
+          };
+
+          # SQLite subpackage unit tests
+          sqlite = dubTest {
+            name = "sqlite";
+            subpackage = "sqlite";
+            extraDeps = [ pkgs.sqlite ];
+          };
+
+          # zlib subpackage unit tests
+          zlib = dubTest {
+            name = "zlib";
+            subpackage = "zlib";
+            extraDeps = [ pkgs.zlib ];
+          };
+
+          # ===========================================
+          # Integration Tests (with database servers)
+          # ===========================================
+
+          # MySQL/MariaDB integration tests
           mysql = pkgs.stdenv.mkDerivation {
             name = "ae-mysql-test";
             src = self;
@@ -118,7 +183,6 @@
               done
 
               echo "Creating test user and database..."
-              # Temporarily unset MYSQL_PWD for root connection
               MYSQL_PWD= mysql --socket="$MYSQL_UNIX_PORT" -u root <<EOF
               CREATE USER '$MYSQL_USER'@'localhost' IDENTIFIED BY '$MYSQL_PWD';
               CREATE USER '$MYSQL_USER'@'127.0.0.1' IDENTIFIED BY '$MYSQL_PWD';
@@ -146,13 +210,12 @@
             '';
           };
 
+          # PostgreSQL integration tests
           psql = pkgs.stdenv.mkDerivation {
             name = "ae-psql-test";
             src = self;
 
             nativeBuildInputs = [ pkgs.postgresql psql-test-bin ];
-
-            # Localhost TCP connections work within the sandbox
 
             buildPhase = ''
               export HOME="$TMPDIR"
@@ -163,7 +226,6 @@
               export PGDATABASE="testdb"
 
               echo "Initializing PostgreSQL..."
-              # Initialize with trust auth for initial setup, then switch to scram-sha-256
               initdb -D "$PGDATA" --auth=trust --username=postgres
 
               cat >> "$PGDATA/postgresql.conf" <<EOF
@@ -173,7 +235,6 @@
               password_encryption = scram-sha-256
               EOF
 
-              # Configure pg_hba.conf to use scram-sha-256 for TCP connections
               cat > "$PGDATA/pg_hba.conf" <<EOF
               # TYPE  DATABASE        USER            ADDRESS                 METHOD
               local   all             postgres                                trust
@@ -186,11 +247,9 @@
               pg_ctl -D "$PGDATA" -l "$PGDATA/logfile" start -w
 
               echo "Creating test user and database with SCRAM-SHA-256..."
-              # Create user with password using postgres superuser (trust auth on local socket)
               psql -h "$TMPDIR" -U postgres -d postgres -c "CREATE USER $PGUSER WITH PASSWORD '$PGPASSWORD';"
               psql -h "$TMPDIR" -U postgres -d postgres -c "CREATE DATABASE $PGDATABASE OWNER $PGUSER;"
 
-              # Set PGHOST to localhost for TCP connections in the D test
               export PGHOST="localhost"
 
               echo "Running PostgreSQL client tests..."
@@ -209,7 +268,15 @@
         };
 
         devShells.default = pkgs.mkShell {
-          buildInputs = [ pkgs.ldc pkgs.postgresql ];
+          buildInputs = [
+            pkgs.dub
+            pkgs.ldc
+            pkgs.git
+            pkgs.postgresql
+            pkgs.mariadb
+            pkgs.sqlite
+            pkgs.zlib
+          ];
         };
       }
     );
