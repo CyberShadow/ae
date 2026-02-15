@@ -27,10 +27,11 @@ import std.exception;
 import std.datetime;
 import std.typecons : tuple;
 
+import ae.net.asockets : ConnectionAdapter;
 import ae.net.ietf.headers;
 import ae.sys.data;
 import ae.sys.dataset;
-import ae.utils.array : amap, afilter, auniq, asort, asBytes, as;
+import ae.utils.array : amap, afilter, auniq, asort, asBytes, asSlice, as;
 import ae.utils.text;
 import ae.utils.time;
 
@@ -883,6 +884,128 @@ debug(ae_unittest) unittest
 		assert(parts[p].headers == parts2[p].headers);
 		assert(parts[p].data.unsafeContents == parts2[p].data.unsafeContents);
 	}
+}
+
+/// Adapter which frames incoming data by Content-Length.
+///
+/// Passes through exactly `expected` bytes to `readDataHandler`,
+/// then fires `handleFinished` with any remaining data.
+class ContentLengthAdapter : ConnectionAdapter
+{
+	import ae.net.asockets : IConnection;
+
+	this(IConnection next, size_t expected)
+	{
+		super(next);
+		this.remaining = expected;
+	}
+
+	/// Called when `expected` bytes have been received.
+	/// The parameter contains any data remaining after the body
+	/// (e.g. a pipelined request).
+	void delegate(scope Data[] rest) handleFinished;
+
+	public override void onReadData(Data data)
+	{
+		assert(remaining > 0, "ContentLengthAdapter received data after body was complete");
+
+		if (data.length <= remaining)
+		{
+			remaining -= data.length;
+			super.onReadData(data);
+			if (remaining == 0 && handleFinished)
+				handleFinished(null);
+		}
+		else
+		{
+			// Data straddles the boundary
+			auto bodyPart = data[0 .. remaining];
+			auto rest = data[remaining .. data.length];
+			remaining = 0;
+			super.onReadData(bodyPart);
+			if (handleFinished)
+				handleFinished(rest.asSlice);
+		}
+	}
+
+private:
+	size_t remaining;
+}
+
+debug(ae_unittest) unittest
+{
+	import ae.net.asockets : IConnection, ConnectionState, DisconnectType;
+	import ae.sys.dataset : bytes, joinToGC;
+	import ae.utils.array : as, asBytes;
+
+	Data[] received;
+	bool finished;
+	Data[] remaining;
+
+	alias ReadDataHandler = void delegate(Data);
+	alias ConnectHandler = void delegate();
+	alias DisconnectHandler = void delegate(string, DisconnectType);
+	alias BufferFlushedHandler = void delegate();
+
+	auto inner = new class IConnection
+	{
+		ReadDataHandler rdh;
+
+		@property ConnectionState state() { return ConnectionState.connected; }
+		void send(scope Data[] data, int priority) {}
+		void disconnect(string reason, DisconnectType type) {}
+		@property void handleConnect(ConnectHandler value) {}
+		@property void handleReadData(ReadDataHandler value) { rdh = value; }
+		@property void handleDisconnect(DisconnectHandler value) {}
+		@property void handleBufferFlushed(BufferFlushedHandler value) {}
+	};
+
+	void setupCL(size_t len)
+	{
+		received = null;
+		finished = false;
+		remaining = null;
+		auto adapter = new ContentLengthAdapter(inner, len);
+		adapter.handleReadData = (Data d) { received ~= d; };
+		adapter.handleFinished = (scope Data[] rest) { finished = true; remaining = rest.dup; inner.rdh = null; };
+	}
+
+	// Exact-length body in one chunk.
+	setupCL(5);
+	inner.rdh(Data("Hello".asBytes));
+	auto result = received.bytes[].joinToGC().as!string;
+	assert(result == "Hello", result);
+	assert(finished);
+	assert(remaining.length == 0);
+
+	// Body split across multiple chunks.
+	setupCL(10);
+	inner.rdh(Data("Hello".asBytes));
+	assert(!finished);
+	inner.rdh(Data("World".asBytes));
+	result = received.bytes[].joinToGC().as!string;
+	assert(result == "HelloWorld", result);
+	assert(finished);
+
+	// Body with remaining data (pipelining).
+	setupCL(5);
+	inner.rdh(Data("HelloGET / HTTP".asBytes));
+	result = received.bytes[].joinToGC().as!string;
+	assert(result == "Hello", result);
+	assert(finished);
+	auto restStr = remaining.bytes[].joinToGC().as!string;
+	assert(restStr == "GET / HTTP", restStr);
+
+	// Byte-by-byte feeding.
+	setupCL(3);
+	foreach (c; "abc")
+	{
+		ubyte[1] b = [cast(ubyte) c];
+		inner.rdh(Data(b[]));
+	}
+	result = received.bytes[].joinToGC().as!string;
+	assert(result == "abc", result);
+	assert(finished);
 }
 
 private bool asciiStartsWith(string s, string prefix) pure nothrow @nogc
