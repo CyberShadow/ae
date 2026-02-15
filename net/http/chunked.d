@@ -15,8 +15,8 @@ module ae.net.http.chunked;
 
 import ae.net.asockets : ConnectionAdapter, IConnection, DisconnectType, ConnectionState;
 import ae.sys.data : Data;
-import ae.sys.dataset : bytes;
-import ae.utils.array : asBytes, asSlice;
+import ae.sys.dataset : bytes, DataVec, joinToGC;
+import ae.utils.array : as, asBytes, asSlice;
 
 /// Adapter which encodes outgoing data as HTTP chunked transfer encoding.
 ///
@@ -68,6 +68,211 @@ class ChunkedEncodingAdapter : ConnectionAdapter
 		if (next.state == ConnectionState.connected)
 			next.send(Data("0\r\n\r\n".asBytes));
 		super.disconnect(reason, type);
+	}
+}
+
+/// Adapter which decodes incoming chunked transfer-encoded data.
+///
+/// Buffers incoming data and emits decoded chunks to `readDataHandler`.
+/// When the terminal chunk (`0\r\n\r\n`) is received, fires
+/// `handleChunkedFinished` and then disconnects.
+///
+/// Chunk extensions and trailers are parsed and discarded.
+class ChunkedDecodingAdapter : ConnectionAdapter
+{
+	this(IConnection next)
+	{
+		super(next);
+	}
+
+	/// Called when the terminal chunk has been received and all
+	/// body data has been delivered via `handleReadData`.
+	void delegate() handleChunkedFinished;
+
+	public override void onReadData(Data data)
+	{
+		buffer ~= data;
+		decodeChunks();
+	}
+
+private:
+	DataVec buffer;
+
+	/// Current parser state.
+	enum State { chunkSize, chunkData, chunkDataCRLF, chunkTrailer, finished }
+	State state;
+
+	size_t currentChunkRemaining; // bytes remaining in the current chunk body
+
+	void decodeChunks()
+	{
+		while (buffer.bytes.length > 0 && state != State.finished)
+		{
+			final switch (state)
+			{
+				case State.chunkSize:
+					if (!parseChunkSize())
+						return; // need more data
+					break;
+
+				case State.chunkData:
+					if (!consumeChunkData())
+						return; // need more data
+					break;
+
+				case State.chunkDataCRLF:
+					if (!skipChunkDataCRLF())
+						return; // need more data
+					break;
+
+				case State.chunkTrailer:
+					if (!skipTrailers())
+						return; // need more data
+					break;
+
+				case State.finished:
+					return;
+			}
+		}
+	}
+
+	/// Parse a chunk-size line: `<hex-size>[;extensions]\r\n`
+	/// Returns false if we need more data.
+	bool parseChunkSize()
+	{
+		auto lineEnd = findCRLF();
+		if (lineEnd < 0)
+			return false;
+
+		// Extract the line as a string
+		auto line = buffer.bytes[0 .. lineEnd].joinToGC().as!string;
+		buffer = buffer.bytes[lineEnd + 2 .. buffer.bytes.length]; // skip past \r\n
+
+		// Strip chunk extensions (everything after ';')
+		auto semiPos = indexOf(line, ';');
+		auto sizeStr = semiPos >= 0 ? line[0 .. semiPos] : line;
+
+		// Parse hex size
+		currentChunkRemaining = 0;
+		foreach (c; sizeStr)
+		{
+			int digit;
+			if (c >= '0' && c <= '9')
+				digit = c - '0';
+			else if (c >= 'a' && c <= 'f')
+				digit = 10 + c - 'a';
+			else if (c >= 'A' && c <= 'F')
+				digit = 10 + c - 'A';
+			else
+				throw new Exception("Invalid character in chunk size: " ~ sizeStr);
+			currentChunkRemaining = currentChunkRemaining * 16 + digit;
+		}
+
+		if (currentChunkRemaining == 0)
+		{
+			// Terminal chunk — skip trailers
+			state = State.chunkTrailer;
+		}
+		else
+			state = State.chunkData;
+
+		return true;
+	}
+
+	/// Consume chunk body data.
+	/// Returns false if we need more data.
+	bool consumeChunkData()
+	{
+		auto available = buffer.bytes.length;
+		if (available == 0)
+			return false;
+
+		if (available < currentChunkRemaining)
+		{
+			// Deliver what we have so far
+			auto partial = buffer.bytes[0 .. available];
+			buffer = DataVec.init;
+			currentChunkRemaining -= available;
+			foreach (ref d; partial[])
+				super.onReadData(d);
+			return false;
+		}
+
+		// We have the full chunk body (or the remaining portion)
+		if (currentChunkRemaining > 0)
+		{
+			auto chunk = buffer.bytes[0 .. currentChunkRemaining];
+			buffer = buffer.bytes[currentChunkRemaining .. buffer.bytes.length];
+			foreach (ref d; chunk[])
+				super.onReadData(d);
+			currentChunkRemaining = 0;
+		}
+
+		state = State.chunkDataCRLF;
+		return true;
+	}
+
+	/// Skip the \r\n after chunk data.
+	/// Returns false if we need more data.
+	bool skipChunkDataCRLF()
+	{
+		if (buffer.bytes.length < 2)
+			return false;
+
+		buffer = buffer.bytes[2 .. buffer.bytes.length];
+		state = State.chunkSize;
+		return true;
+	}
+
+	/// Skip trailer headers after the terminal chunk.
+	/// Trailers end with an empty line (\r\n).
+	/// Returns false if we need more data.
+	bool skipTrailers()
+	{
+		// Look for \r\n — either an empty line (end of trailers)
+		// or a trailer header line to skip.
+		while (true)
+		{
+			auto lineEnd = findCRLF();
+			if (lineEnd < 0)
+				return false;
+
+			if (lineEnd == 0)
+			{
+				// Empty line — end of trailers (and end of chunked message)
+				buffer = buffer.bytes[2 .. buffer.bytes.length];
+				state = State.finished;
+				if (handleChunkedFinished)
+					handleChunkedFinished();
+				return true;
+			}
+
+			// Skip this trailer line
+			buffer = buffer.bytes[lineEnd + 2 .. buffer.bytes.length];
+		}
+	}
+
+	/// Find index of first \r\n in the buffer, or -1.
+	sizediff_t findCRLF()
+	{
+		auto len = buffer.bytes.length;
+		if (len < 2)
+			return -1;
+		auto bts = buffer.bytes;
+		foreach (i; 0 .. len - 1)
+		{
+			if (bts[i] == '\r' && bts[i + 1] == '\n')
+				return cast(sizediff_t) i;
+		}
+		return -1;
+	}
+
+	static sizediff_t indexOf(string s, char c)
+	{
+		foreach (i, ch; s)
+			if (ch == c)
+				return cast(sizediff_t) i;
+		return -1;
 	}
 }
 
@@ -150,4 +355,91 @@ debug(ae_unittest) unittest
 	sent = null;
 	adapter.send(Data());
 	assert(sent.length == 0);
+}
+
+// Test ChunkedDecodingAdapter
+debug(ae_unittest) unittest
+{
+	import ae.net.asockets : IConnection;
+
+	// Collect decoded data and finished signal.
+	Data[] received;
+	bool finished;
+
+	alias ReadDataHandler = void delegate(Data);
+	alias ConnectHandler = void delegate();
+	alias DisconnectHandler = void delegate(string, DisconnectType);
+	alias BufferFlushedHandler = void delegate();
+
+	auto inner = new class IConnection
+	{
+		ReadDataHandler rdh;
+
+		@property ConnectionState state() { return ConnectionState.connected; }
+		void send(scope Data[] data, int priority) {}
+		void disconnect(string reason, DisconnectType type) {}
+		@property void handleConnect(ConnectHandler value) {}
+		@property void handleReadData(ReadDataHandler value) { rdh = value; }
+		@property void handleDisconnect(DisconnectHandler value) {}
+		@property void handleBufferFlushed(BufferFlushedHandler value) {}
+	};
+
+	auto adapter = new ChunkedDecodingAdapter(inner);
+	adapter.handleReadData = (Data d) { received ~= d; };
+	adapter.handleChunkedFinished = () { finished = true; };
+
+	// Feed a complete chunked body in one go:
+	// 5 bytes "Hello", then 7 bytes " World!", then terminal chunk.
+	inner.rdh(Data(("5\r\nHello\r\n7\r\n World!\r\n0\r\n\r\n").asBytes));
+
+	auto result = received.bytes[].joinToGC().as!string;
+	assert(result == "Hello World!", result);
+	assert(finished);
+
+	// Test incremental feeding: data arrives byte-by-byte.
+	received = null;
+	finished = false;
+
+	adapter = new ChunkedDecodingAdapter(inner);
+	adapter.handleReadData = (Data d) { received ~= d; };
+	adapter.handleChunkedFinished = () { finished = true; };
+
+	auto chunked = "A\r\n0123456789\r\n0\r\n\r\n";
+	foreach (i, c; chunked)
+	{
+		ubyte[1] b = [cast(ubyte) c];
+		inner.rdh(Data(b[]));
+	}
+
+	result = received.bytes[].joinToGC().as!string;
+	assert(result == "0123456789", result);
+	assert(finished);
+
+	// Test chunk extensions are ignored.
+	received = null;
+	finished = false;
+
+	adapter = new ChunkedDecodingAdapter(inner);
+	adapter.handleReadData = (Data d) { received ~= d; };
+	adapter.handleChunkedFinished = () { finished = true; };
+
+	inner.rdh(Data("3;ext=val\r\nabc\r\n0\r\n\r\n".asBytes));
+
+	result = received.bytes[].joinToGC().as!string;
+	assert(result == "abc", result);
+	assert(finished);
+
+	// Test trailers are skipped.
+	received = null;
+	finished = false;
+
+	adapter = new ChunkedDecodingAdapter(inner);
+	adapter.handleReadData = (Data d) { received ~= d; };
+	adapter.handleChunkedFinished = () { finished = true; };
+
+	inner.rdh(Data("2\r\nOK\r\n0\r\nTrailer: value\r\n\r\n".asBytes));
+
+	result = received.bytes[].joinToGC().as!string;
+	assert(result == "OK", result);
+	assert(finished);
 }
