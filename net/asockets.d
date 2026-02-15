@@ -2893,7 +2893,11 @@ class ConnectionAdapter : IConnection
 			connectHandler();
 	}
 
-	protected void onReadData(Data data)
+	/// Called by the wrapped connection when data is available.
+	/// Can also be called directly to inject e.g. initial buffered data.
+	/// Note: downstream data handler (`handleReadData`) must be set up
+	/// before calling this method.
+	public void onReadData(Data data)
 	{
 		// onReadData should be fired only if readDataHandler is set
 		assert(readDataHandler, "onReadData caled with null readDataHandler");
