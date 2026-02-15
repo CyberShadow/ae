@@ -29,7 +29,7 @@ import ae.net.ietf.headerparse;
 import ae.net.ietf.headers;
 import ae.net.ssl;
 import ae.sys.data;
-import ae.sys.dataset : bytes, shift, DataVec, joinToGC;
+import ae.sys.dataset : bytes, DataVec, joinData, joinToGC;
 import ae.sys.log;
 import ae.utils.array;
 import ae.utils.container.listnode;
@@ -74,9 +74,9 @@ public:
 protected:
 	string protocol;
 	DataVec inBuffer;
-	sizediff_t expect;
 	size_t responseSize;
 	bool requestProcessing; // user code is asynchronously processing current request
+	DataVec bodyData; // accumulated decoded body data during body reading
 	bool firstRequest = true;
 	Duration timeout = HttpServer.defaultTimeout;
 	bool timeoutActive;
@@ -148,16 +148,19 @@ protected:
 			}
 			debug (HTTP) debugLog("This %s connection %s persistent", currentRequest.protocolVersion, persistent ? "IS" : "is NOT");
 
-			expect = 0;
 			if ("Content-Length" in currentRequest.headers)
-				expect = to!size_t(currentRequest.headers["Content-Length"]);
-
-			if (expect > 0)
 			{
-				if (expect > inBuffer.bytes.length)
-					conn.handleReadData = &onContinuation;
+				auto contentLength = to!size_t(currentRequest.headers["Content-Length"]);
+				if (contentLength > 0)
+				{
+					auto decoder = new ContentLengthAdapter(conn, contentLength);
+					decoder.handleReadData = &onBodyData;
+					decoder.handleDisconnect = &onDisconnect;
+					decoder.handleFinished = &onBodyFinished;
+					setupBodyDecoder(decoder);
+				}
 				else
-					processRequest(inBuffer.shift(expect));
+					processRequest(DataVec.init);
 			}
 			else
 				processRequest(DataVec.init);
@@ -189,16 +192,40 @@ protected:
 		connected = false;
 	}
 
-	final void onContinuation(Data data)
+	/// Set up a body framing adapter and feed it any data already
+	/// buffered after the headers.
+	final void setupBodyDecoder(ConnectionAdapter decoder)
 	{
-		debug (HTTP) debugLog("Receiving continuation of request: \n%s---", cast(string)data.unsafeContents);
-		inBuffer ~= data;
-
-		if (!requestProcessing && inBuffer.bytes.length >= expect)
+		bodyData = DataVec.init;
+		// Feed any body data already buffered after the headers.
+		// Use joinData to produce a single Data so that if the adapter
+		// fires handleFinished synchronously, the iteration is complete.
+		if (inBuffer.bytes.length > 0)
 		{
-			debug (HTTP) debugLog("%s/%s", inBuffer.bytes.length, expect);
-			processRequest(inBuffer.shift(expect));
+			auto buffered = inBuffer.joinData();
+			inBuffer = DataVec.init;
+			decoder.onReadData(buffered);
 		}
+	}
+
+	final void onBodyData(Data data)
+	{
+		debug (HTTP) debugLog("Receiving body data: %d bytes", data.length);
+		bodyData ~= data;
+	}
+
+	final void onBodyFinished(scope Data[] rest)
+	{
+		debug (HTTP) debugLog("Request body complete (%d bytes)", bodyData.bytes.length);
+		inBuffer ~= rest;
+		// Unwire the body adapter; accumulate any further data for pipelining
+		conn.handleReadData = &onBodyAccumulate;
+		processRequest(move(bodyData));
+	}
+
+	final void onBodyAccumulate(Data data)
+	{
+		inBuffer ~= data;
 	}
 
 	final void processRequest(DataVec data)
