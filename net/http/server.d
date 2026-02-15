@@ -25,6 +25,7 @@ import std.string;
 import std.uri;
 
 import ae.net.asockets;
+import ae.net.http.chunked : ChunkedDecodingAdapter;
 import ae.net.ietf.headerparse;
 import ae.net.ietf.headers;
 import ae.net.ssl;
@@ -148,6 +149,17 @@ protected:
 			}
 			debug (HTTP) debugLog("This %s connection %s persistent", currentRequest.protocolVersion, persistent ? "IS" : "is NOT");
 
+			auto transferEncoding = toLower(currentRequest.headers.get("Transfer-Encoding", null));
+			if (transferEncoding == "chunked")
+			{
+				debug (HTTP) debugLog("Request uses chunked transfer encoding");
+				auto decoder = new ChunkedDecodingAdapter(conn);
+				decoder.handleReadData = &onBodyData;
+				decoder.handleDisconnect = &onDisconnect;
+				decoder.handleFinished = &onBodyFinished;
+				setupBodyDecoder(decoder);
+			}
+			else
 			if ("Content-Length" in currentRequest.headers)
 			{
 				auto contentLength = to!size_t(currentRequest.headers["Content-Length"]);
@@ -842,6 +854,44 @@ Content-Disposition: form-data; name="e"
 f
 --------------------------f7d0ffeae587957a--
 EOF".replace("\n", "\r\n")).asBytes));
+		c.disconnect();
+	};
+	c.connect("127.0.0.1", port);
+
+	socketManager.loop();
+
+	assert(ok);
+}
+
+// Test chunked transfer encoding on requests
+debug(ae_unittest) unittest
+{
+	bool ok;
+	auto s = new HttpServer;
+	s.handleRequest = (HttpRequest request, HttpServerConnection conn) {
+		auto post = request.decodePostData();
+		assert(post["a"] == "2");
+		assert(post["b"] == "3");
+		ok = true;
+		auto response = new HttpResponseEx;
+		conn.sendResponse(response.serveText("OK"));
+		s.close();
+	};
+	auto port = s.listen(0, "127.0.0.1");
+
+	TcpConnection c = new TcpConnection;
+	c.handleConnect = {
+		c.send(Data(("POST /?x=1 HTTP/1.1\r\n" ~
+			"Host: localhost\r\n" ~
+			"Transfer-Encoding: chunked\r\n" ~
+			"Content-Type: application/x-www-form-urlencoded\r\n" ~
+			"\r\n" ~
+			"3\r\n" ~
+			"a=2\r\n" ~
+			"4\r\n" ~
+			"&b=3\r\n" ~
+			"0\r\n" ~
+			"\r\n").asBytes));
 		c.disconnect();
 	};
 	c.connect("127.0.0.1", port);
