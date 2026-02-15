@@ -75,7 +75,7 @@ class ChunkedEncodingAdapter : ConnectionAdapter
 ///
 /// Buffers incoming data and emits decoded chunks to `readDataHandler`.
 /// When the terminal chunk (`0\r\n\r\n`) is received, fires
-/// `handleChunkedFinished` and then disconnects.
+/// `handleFinished` with any remaining data after the chunked body.
 ///
 /// Chunk extensions and trailers are parsed and discarded.
 class ChunkedDecodingAdapter : ConnectionAdapter
@@ -87,10 +87,13 @@ class ChunkedDecodingAdapter : ConnectionAdapter
 
 	/// Called when the terminal chunk has been received and all
 	/// body data has been delivered via `handleReadData`.
-	void delegate() handleChunkedFinished;
+	/// The parameter contains any data remaining after the chunked
+	/// body (e.g. a pipelined request).
+	void delegate(scope Data[] rest) handleFinished;
 
 	public override void onReadData(Data data)
 	{
+		assert(state != State.finished, "ChunkedDecodingAdapter received data after body was complete");
 		buffer ~= data;
 		decodeChunks();
 	}
@@ -242,8 +245,8 @@ private:
 				// Empty line — end of trailers (and end of chunked message)
 				buffer = buffer.bytes[2 .. buffer.bytes.length];
 				state = State.finished;
-				if (handleChunkedFinished)
-					handleChunkedFinished();
+				if (handleFinished)
+					handleFinished(buffer[]);
 				return true;
 			}
 
@@ -365,6 +368,7 @@ debug(ae_unittest) unittest
 	// Collect decoded data and finished signal.
 	Data[] received;
 	bool finished;
+	Data[] remaining;
 
 	alias ReadDataHandler = void delegate(Data);
 	alias ConnectHandler = void delegate();
@@ -384,12 +388,19 @@ debug(ae_unittest) unittest
 		@property void handleBufferFlushed(BufferFlushedHandler value) {}
 	};
 
-	auto adapter = new ChunkedDecodingAdapter(inner);
-	adapter.handleReadData = (Data d) { received ~= d; };
-	adapter.handleChunkedFinished = () { finished = true; };
+	void setupChunked()
+	{
+		received = null;
+		finished = false;
+		remaining = null;
+		auto adapter = new ChunkedDecodingAdapter(inner);
+		adapter.handleReadData = (Data d) { received ~= d; };
+		adapter.handleFinished = (scope Data[] rest) { finished = true; remaining = rest.dup; inner.rdh = null; };
+	}
 
 	// Feed a complete chunked body in one go:
 	// 5 bytes "Hello", then 7 bytes " World!", then terminal chunk.
+	setupChunked();
 	inner.rdh(Data(("5\r\nHello\r\n7\r\n World!\r\n0\r\n\r\n").asBytes));
 
 	auto result = received.bytes[].joinToGC().as!string;
@@ -397,12 +408,7 @@ debug(ae_unittest) unittest
 	assert(finished);
 
 	// Test incremental feeding: data arrives byte-by-byte.
-	received = null;
-	finished = false;
-
-	adapter = new ChunkedDecodingAdapter(inner);
-	adapter.handleReadData = (Data d) { received ~= d; };
-	adapter.handleChunkedFinished = () { finished = true; };
+	setupChunked();
 
 	auto chunked = "A\r\n0123456789\r\n0\r\n\r\n";
 	foreach (i, c; chunked)
@@ -416,13 +422,7 @@ debug(ae_unittest) unittest
 	assert(finished);
 
 	// Test chunk extensions are ignored.
-	received = null;
-	finished = false;
-
-	adapter = new ChunkedDecodingAdapter(inner);
-	adapter.handleReadData = (Data d) { received ~= d; };
-	adapter.handleChunkedFinished = () { finished = true; };
-
+	setupChunked();
 	inner.rdh(Data("3;ext=val\r\nabc\r\n0\r\n\r\n".asBytes));
 
 	result = received.bytes[].joinToGC().as!string;
@@ -430,16 +430,21 @@ debug(ae_unittest) unittest
 	assert(finished);
 
 	// Test trailers are skipped.
-	received = null;
-	finished = false;
-
-	adapter = new ChunkedDecodingAdapter(inner);
-	adapter.handleReadData = (Data d) { received ~= d; };
-	adapter.handleChunkedFinished = () { finished = true; };
-
+	setupChunked();
 	inner.rdh(Data("2\r\nOK\r\n0\r\nTrailer: value\r\n\r\n".asBytes));
 
 	result = received.bytes[].joinToGC().as!string;
 	assert(result == "OK", result);
 	assert(finished);
+
+	// Test remaining data is returned (pipelining).
+	setupChunked();
+	inner.rdh(Data("2\r\nOK\r\n0\r\n\r\nGET / HTTP".asBytes));
+
+	result = received.bytes[].joinToGC().as!string;
+	assert(result == "OK", result);
+	assert(finished);
+	auto restStr = remaining.bytes[].joinToGC().as!string;
+	assert(restStr == "GET / HTTP", restStr);
 }
+
