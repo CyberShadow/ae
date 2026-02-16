@@ -56,7 +56,8 @@ public:
 	/// Utility function to serve arbitrary data.
 	HttpResponseEx serveData(DataVec data, string contentType)
 	{
-		setStatus(HttpStatusCode.OK);
+		if (!status)
+			setStatus(HttpStatusCode.OK);
 		headers["Content-Type"] = contentType;
 		this.data = move(data);
 		return this;
@@ -169,7 +170,8 @@ public:
 					html ~= `<li><a href="` ~ encodeUrlParameter(name) ~ suffix ~ `">` ~ encodeEntities(name) ~ suffix ~ `</a></li>`;
 				}
 				html ~= `</ul>`;
-				setStatus(HttpStatusCode.OK);
+				if (!status)
+					setStatus(HttpStatusCode.OK);
 				writePage(title, html);
 				return this;
 			}
@@ -188,7 +190,8 @@ public:
 			data = DataVec(mapFile(filename, MmMode.read));
 		catch (Exception)
 			data = DataVec(readData(filename));
-		setStatus(HttpStatusCode.OK);
+		if (!status)
+			setStatus(HttpStatusCode.OK);
 		return this;
 	}
 
