@@ -24,6 +24,26 @@ import std.traits;
 
 import ae.sys.data : TData;
 import ae.sys.file;
+import ae.utils.array : asBytes;
+import ae.utils.text.ascii : ascii;
+
+private template hasIndirections(T)
+{
+    static if (is(T == enum))
+        enum hasIndirections = hasIndirections!(OriginalType!T);
+    else static if (is(T == struct) || is(T == union))
+        enum hasIndirections = anySatisfy!(.hasIndirections, typeof(T.tupleof));
+    else static if (__traits(isAssociativeArray, T) || is(T == class) || is(T == interface))
+        enum hasIndirections = true;
+    else static if (is(T == E[N], E, size_t N))
+        enum hasIndirections = T.sizeof && hasIndirections!(BaseElemOf!E);
+    else static if (isFunctionPointer!T)
+        enum hasIndirections = false;
+    else static if (is(immutable(T) == immutable(void)))
+        enum hasIndirections = true;
+    else
+        enum hasIndirections = isPointer!T || isDelegate!T || isDynamicArray!T;
+}
 
 /// Returns a very unique name for a temporary file.
 string getTempFileName(string extension)
@@ -245,7 +265,7 @@ debug(ae_unittest) unittest
 // ************************************************************************
 
 /// Wrapper for the `iconv` program.
-ubyte[] iconv(const(void)[] data, string inputEncoding, string outputEncoding)
+ubyte[] iconv(const(ubyte)[] data, string inputEncoding, string outputEncoding)
 {
 	auto args = ["timeout", "30", "iconv", "-f", inputEncoding, "-t", outputEncoding];
 	auto result = data.pipe(args);
@@ -253,12 +273,24 @@ ubyte[] iconv(const(void)[] data, string inputEncoding, string outputEncoding)
 }
 
 /// ditto
-string iconv(const(void)[] data, string inputEncoding)
+string iconv(const(ubyte)[] data, string inputEncoding)
 {
 	import std.utf : validate;
 	auto result = cast(string)iconv(data, inputEncoding, "UTF-8");
 	validate(result);
 	return result;
+}
+
+/// ditto
+ubyte[] iconv(ascii data, string inputEncoding, string outputEncoding)
+{
+	return iconv(data.asBytes, inputEncoding, outputEncoding);
+}
+
+/// ditto
+string iconv(ascii data, string inputEncoding)
+{
+	return iconv(data.asBytes, inputEncoding);
 }
 
 version (HAVE_UNIX)
@@ -268,7 +300,7 @@ debug(ae_unittest) unittest
 }
 
 /// Wrapper for the `sha1sum` program.
-string sha1sum(const(void)[] data)
+string sha1sum(const(ubyte)[] data)
 {
 	auto output = cast(string)data.pipe(["sha1sum", "-b", "-"]);
 	return output[0..40];

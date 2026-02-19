@@ -26,7 +26,7 @@ import ae.utils.graphics.color;
 import ae.utils.graphics.image;
 
 /// Invoke ImageMagick's `convert` program to parse the given data.
-auto parseViaIMConvert(COLOR)(const(void)[] data, string[] transformations = null)
+auto parseViaIMConvert(COLOR)(const(ubyte)[] data, string[] transformations = null)
 {
 	string[] convertFlags;
 	static if (is(COLOR : BGR))
@@ -48,7 +48,7 @@ auto parseViaIMConvert(COLOR)(const(void)[] data, string[] transformations = nul
 }
 
 /// ditto
-auto parseViaIMConvert(C = TargetColor, TARGET)(const(void)[] data, auto ref TARGET target, string[] transformations = null)
+auto parseViaIMConvert(C = TargetColor, TARGET)(const(ubyte)[] data, auto ref TARGET target, string[] transformations = null)
 	if (isWritableView!TARGET && isTargetColor!(C, TARGET))
 {
 	return data.parseViaIMConvert!(ViewColor!TARGET)(transformations).copy(target);
@@ -58,7 +58,7 @@ debug(ae_unittest) unittest
 {
 	if (false)
 	{
-		void[] data;
+		ubyte[] data;
 		parseViaIMConvert!BGR(data);
 
 		Image!BGR i;
