@@ -13,7 +13,7 @@
 
 module ae.net.http.websocket;
 
-import core.time : Duration, minutes;
+import core.time : Duration, minutes, seconds;
 
 import std.conv : to;
 import std.exception : enforce;
@@ -380,7 +380,7 @@ WebSocketAdapter accept(HttpRequest request, HttpServerConnection conn)
 }
 
 import ae.net.asockets : TimeoutAdapter;
-import ae.net.http.client : HttpClient;
+import ae.net.http.client : HttpClient, Connector, TcpConnector;
 import ae.net.ssl : ssl, SSLContext, SSLAdapter;
 import std.algorithm.mutation : move;
 import std.algorithm.searching : skipOver;
@@ -397,51 +397,88 @@ void connectWebSocket(
 	void delegate(string) errorHandler,
 )
 {
-	new WsClient(url, handler, errorHandler);
-}
-
-private class WsClient : HttpClient
-{
-	string wsKey;
-	void delegate(WebSocketAdapter) wsHandler;
-	void delegate(string) wsErrorHandler;
+	auto resource = url;
+	bool secure;
+	if (resource.skipOver("wss://"))
+	{
+		resource = "https://" ~ resource;
+		secure = true;
+	}
+	else if (resource.skipOver("ws://"))
+		resource = "http://" ~ resource;
 
 	SSLContext sslCtx;
-	SSLAdapter sslAdapter;
+	if (secure)
+		sslCtx = ssl.createContext(SSLContext.Kind.client);
 
-	this(
-		string url,
-		void delegate(WebSocketAdapter) handler,
-		void delegate(string) errorHandler,
-	)
+	auto client = sslCtx ? new WebSocketClient(sslCtx) : new WebSocketClient;
+
+	client.handleWebSocketConnect = (WebSocketAdapter ws, HttpResponse /*response*/) {
+		handler(ws);
+	};
+
+	client.handleResponse = (HttpResponse response, string reason) {
+		if (errorHandler)
+			errorHandler(response
+				? "WebSocket upgrade failed: HTTP " ~ response.status.to!string
+				: reason);
+	};
+
+	auto req = new HttpRequest(resource);
+	client.upgradeRequest(req);
+}
+
+/// WebSocket client that performs the HTTP upgrade handshake.
+///
+/// Subclasses `HttpClient` to handle the WebSocket opening handshake
+/// (RFC 6455 Section 4). For simple use cases, see `connectWebSocket`.
+///
+/// Usage with custom headers:
+/// ---
+/// auto client = new WebSocketClient;
+/// client.handleWebSocketConnect = (ws, response) { /* ... */ };
+/// client.handleResponse = (response, reason) { /* error */ };
+/// auto req = new HttpRequest("http://example.com/ws");
+/// req.headers["Authorization"] = "Bearer token";
+/// client.upgradeRequest(req);
+/// ---
+///
+/// Usage with custom TLS:
+/// ---
+/// auto ctx = ssl.createContext(SSLContext.Kind.client);
+/// ctx.setCertificate("/path/to/cert.pem");
+/// auto client = new WebSocketClient(ctx);
+/// client.handleWebSocketConnect = (ws, response) { /* ... */ };
+/// auto req = new HttpRequest("https://example.com/ws");
+/// client.upgradeRequest(req);
+/// ---
+class WebSocketClient : HttpClient
+{
+	/// Called on successful WebSocket upgrade.
+	/// The `HttpResponse` is provided so the caller can read
+	/// `Sec-WebSocket-Protocol`, `Sec-WebSocket-Extensions`, etc.
+	void delegate(WebSocketAdapter, HttpResponse) handleWebSocketConnect;
+
+	/// Constructor for plain `ws://` connections.
+	this(Duration timeout = 30.seconds, Connector connector = new TcpConnector)
 	{
-		this.wsHandler = handler;
-		this.wsErrorHandler = errorHandler;
+		super(timeout, connector);
+	}
 
-		auto resource = url;
-		bool secure;
-		if (resource.skipOver("wss://"))
-		{
-			resource = "https://" ~ resource;
-			secure = true;
-		}
-		else if (resource.skipOver("ws://"))
-			resource = "http://" ~ resource;
+	/// Constructor with custom SSL context for `wss://` connections.
+	/// Allows configuring client certificates, custom CA, etc.
+	this(SSLContext sslContext, Duration timeout = 30.seconds, Connector connector = new TcpConnector)
+	{
+		sslCtx = sslContext;
+		super(timeout, connector);
+	}
 
-		if (secure)
-			sslCtx = ssl.createContext(SSLContext.Kind.client);
-
-		super();
-
-		this.handleResponse = (HttpResponse response, string reason) {
-			if (wsErrorHandler)
-				wsErrorHandler(response
-					? "WebSocket upgrade failed: HTTP " ~ response.status.to!string
-					: reason);
-		};
-
-		auto req = new HttpRequest(resource);
-
+	/// Send a WebSocket upgrade request.
+	/// Adds required headers (`Upgrade`, `Connection`, `Sec-WebSocket-Key`,
+	/// `Sec-WebSocket-Version`). Custom headers should be set on the
+	/// request before calling this method.
+	void upgradeRequest(HttpRequest req)
+	{
 		ubyte[16] keyBytes;
 		genRandom(keyBytes);
 		wsKey = Base64.encode(keyBytes[]).assumeUnique;
@@ -454,7 +491,13 @@ private class WsClient : HttpClient
 		this.request(req, false);
 	}
 
-	protected override IConnection adaptConnection(IConnection conn)
+private:
+	string wsKey;
+	SSLContext sslCtx;
+	SSLAdapter sslAdapter;
+
+protected:
+	override IConnection adaptConnection(IConnection conn)
 	{
 		if (sslCtx)
 		{
@@ -464,7 +507,7 @@ private class WsClient : HttpClient
 		return conn;
 	}
 
-	protected override void connect(HttpRequest request)
+	override void connect(HttpRequest request)
 	{
 		super.connect(request);
 		if (sslAdapter && conn.state == ConnectionState.connecting)
@@ -508,6 +551,7 @@ private class WsClient : HttpClient
 			"Invalid Sec-WebSocket-Accept in WebSocket handshake response"
 		);
 
+		auto response = currentResponse;
 		auto rest = move(headerBuffer);
 
 		receivedResponses = sentRequests;
@@ -530,7 +574,8 @@ private class WsClient : HttpClient
 			false, // requireMask
 		);
 
-		wsHandler(ws);
+		if (handleWebSocketConnect)
+			handleWebSocketConnect(ws, response);
 
 		if (rest.bytes.length)
 			ws.onReadData(rest.joinData);
