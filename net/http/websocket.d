@@ -347,6 +347,9 @@ import ae.net.http.server : HttpServerConnection;
 import std.base64 : Base64;
 import std.digest.sha : sha1Of;
 
+private enum wsGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+
+/// Accept a WebSocket upgrade request on the server side.
 WebSocketAdapter accept(HttpRequest request, HttpServerConnection conn)
 {
 	enforce(
@@ -364,7 +367,7 @@ WebSocketAdapter accept(HttpRequest request, HttpServerConnection conn)
 	response.headers["Upgrade"] = "websocket";
 	response.headers["Connection"] = "Upgrade";
 	response.headers["Sec-WebSocket-Accept"] = Base64.encode(sha1Of(
-		request.headers["Sec-WebSocket-Key"] ~ "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+		request.headers["Sec-WebSocket-Key"] ~ wsGUID
 	));
 	auto upgrade = conn.upgrade(response);
 	enforce(upgrade.initialData.bytes.length == 0, "WebSocket data before handshake");
@@ -374,4 +377,197 @@ WebSocketAdapter accept(HttpRequest request, HttpServerConnection conn)
 		false, // useMask
 		true, // requireMask
 	);
+}
+
+import ae.net.asockets : TimeoutAdapter;
+import ae.net.http.client : HttpClient;
+import ae.net.ssl : ssl, SSLContext, SSLAdapter;
+import std.algorithm.mutation : move;
+import std.algorithm.searching : skipOver;
+import std.exception : assumeUnique;
+
+/// Connect to a WebSocket server.
+///
+/// Performs the client-side opening handshake (RFC 6455 Section 4)
+/// and, on success, calls `handler` with a ready-to-use `WebSocketAdapter`.
+/// On failure, calls `errorHandler` with an error message.
+void connectWebSocket(
+	string url,
+	void delegate(WebSocketAdapter) handler,
+	void delegate(string) errorHandler,
+)
+{
+	new WsClient(url, handler, errorHandler);
+}
+
+private class WsClient : HttpClient
+{
+	string wsKey;
+	void delegate(WebSocketAdapter) wsHandler;
+	void delegate(string) wsErrorHandler;
+
+	SSLContext sslCtx;
+	SSLAdapter sslAdapter;
+
+	this(
+		string url,
+		void delegate(WebSocketAdapter) handler,
+		void delegate(string) errorHandler,
+	)
+	{
+		this.wsHandler = handler;
+		this.wsErrorHandler = errorHandler;
+
+		auto resource = url;
+		bool secure;
+		if (resource.skipOver("wss://"))
+		{
+			resource = "https://" ~ resource;
+			secure = true;
+		}
+		else if (resource.skipOver("ws://"))
+			resource = "http://" ~ resource;
+
+		if (secure)
+			sslCtx = ssl.createContext(SSLContext.Kind.client);
+
+		super();
+
+		this.handleResponse = (HttpResponse response, string reason) {
+			if (wsErrorHandler)
+				wsErrorHandler(response
+					? "WebSocket upgrade failed: HTTP " ~ response.status.to!string
+					: reason);
+		};
+
+		auto req = new HttpRequest(resource);
+
+		ubyte[16] keyBytes;
+		genRandom(keyBytes);
+		wsKey = Base64.encode(keyBytes[]).assumeUnique;
+
+		req.headers["Upgrade"] = "websocket";
+		req.headers["Connection"] = "Upgrade";
+		req.headers["Sec-WebSocket-Key"] = wsKey;
+		req.headers["Sec-WebSocket-Version"] = "13";
+
+		this.request(req, false);
+	}
+
+	protected override IConnection adaptConnection(IConnection conn)
+	{
+		if (sslCtx)
+		{
+			sslAdapter = ssl.createAdapter(sslCtx, conn);
+			return sslAdapter;
+		}
+		return conn;
+	}
+
+	protected override void connect(HttpRequest request)
+	{
+		super.connect(request);
+		if (sslAdapter && conn.state == ConnectionState.connecting)
+			sslAdapter.setHostName(request.host);
+	}
+
+	override void sendRequest(HttpRequest request)
+	{
+		// WebSocket requires HTTP/1.1 (HttpClient defaults to HTTP/1.0)
+		string reqMessage = request.method ~ " ";
+		if (request.proxy !is null)
+		{
+			reqMessage ~= "http://" ~ request.host;
+			if (request.port != 80)
+				reqMessage ~= ":" ~ request.port.to!string;
+		}
+		reqMessage ~= request.resource ~ " HTTP/1.1\r\n";
+
+		foreach (string header, string value; request.headers)
+			if (value !is null)
+				reqMessage ~= header ~ ": " ~ value ~ "\r\n";
+
+		reqMessage ~= "\r\n";
+
+		conn.send(Data(reqMessage.asBytes));
+		conn.send(request.data[]);
+	}
+
+	override void onHeadersReceived()
+	{
+		if (currentResponse.status != HttpStatusCode.SwitchingProtocols)
+		{
+			super.onHeadersReceived();
+			return;
+		}
+
+		auto expectedAccept = Base64.encode(sha1Of(wsKey ~ wsGUID));
+
+		enforce(
+			currentResponse.headers.get("Sec-WebSocket-Accept", null) == expectedAccept,
+			"Invalid Sec-WebSocket-Accept in WebSocket handshake response"
+		);
+
+		auto rest = move(headerBuffer);
+
+		receivedResponses = sentRequests;
+		currentResponse = null;
+
+		IConnection baseConn;
+		if (timer)
+		{
+			timer.cancelIdleTimeout();
+			baseConn = timer.next;
+		}
+		else
+			baseConn = conn;
+
+		conn = null;
+
+		auto ws = new WebSocketAdapter(
+			baseConn,
+			true,  // useMask (client must mask)
+			false, // requireMask
+		);
+
+		wsHandler(ws);
+
+		if (rest.bytes.length)
+			ws.onReadData(rest.joinData);
+	}
+}
+
+debug(ae_unittest) unittest
+{
+	import ae.net.http.server : HttpServer, HttpServerConnection;
+	import ae.net.asockets : socketManager;
+
+	auto s = new HttpServer;
+	s.handleRequest = (HttpRequest request, HttpServerConnection serverConn) {
+		auto ws = accept(request, serverConn);
+		ws.handleReadData = (Data data) {
+			ws.send(data); // echo
+		};
+	};
+	auto port = s.listen(0, "127.0.0.1");
+
+	bool ok;
+	connectWebSocket(
+		"ws://127.0.0.1:" ~ port.to!string ~ "/",
+		(WebSocketAdapter ws) {
+			ws.handleReadData = (Data data) {
+				assert(data.toGC() == "Hello WebSocket");
+				ok = true;
+				ws.disconnect("Test complete");
+				s.close();
+			};
+			ws.send(Data("Hello WebSocket".asBytes));
+		},
+		(string error) {
+			assert(false, "WebSocket connection failed: " ~ error);
+		},
+	);
+
+	socketManager.loop();
+	assert(ok);
 }
