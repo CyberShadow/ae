@@ -41,7 +41,7 @@ version (Windows)
 	void genRandom(ubyte[] buf)
 	{
 		HCRYPTPROV hCryptProv;
-		wenforce(CryptAcquireContext(&hCryptProv, null, null, PROV_RSA_FULL, 0), "CryptAcquireContext");
+		wenforce(CryptAcquireContext(&hCryptProv, null, null, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT), "CryptAcquireContext");
 		scope(exit) wenforce(CryptReleaseContext(hCryptProv, 0), "CryptReleaseContext");
 		wenforce(CryptGenRandom(hCryptProv, buf.length.to!DWORD, buf.ptr), "CryptGenRandom");
 	}
