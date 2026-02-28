@@ -290,9 +290,18 @@ static if (eventLoopMechanism == EventLoopMechanism.epoll)
 								string errMsg = "socket error";
 								if (conn.socket)
 								{
-									auto socketErr = conn.socket.getErrorText();
-									if (socketErr.length)
-										errMsg = socketErr;
+									try
+									{
+										auto socketErr = conn.socket.getErrorText();
+										if (socketErr.length)
+											errMsg = socketErr;
+									}
+									catch (SocketOSException)
+									{
+										// getsockopt(SO_ERROR) not supported for non-socket
+										// fds (e.g. pipes via FileConnection).
+										errMsg = "EPOLLERR on fd " ~ to!string(cast(int) conn.socket.handle);
+									}
 								}
 								conn.onError(errMsg);
 								return;
