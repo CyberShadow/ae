@@ -17,7 +17,7 @@ module ae.utils.promise.await;
 import core.thread : Fiber;
 import std.typecons : Nullable;
 
-import ae.net.asockets : socketManager;
+import ae.net.asockets : socketManager, onNextTick;
 import ae.utils.promise;
 
 enum defaultFiberSize = 64 * 1024;
@@ -92,11 +92,15 @@ debug(ae_unittest) unittest
 	}
 }
 
-/// Synchronously starts an event loop and waits for it to exit.
-/// Assumes that the promise `p` is resolved during the event loop;
-/// Propagates any return value or exception to the caller.
+/// Synchronously waits for the promise `p` to be resolved, then
+/// propagates any return value or exception to the caller.
+/// If called from within a fiber, yields to the existing event loop.
+/// Otherwise, starts a new event loop and blocks until it exits.
 T awaitSync(T, E)(Promise!(T, E) p)
 {
+	if (Fiber.getThis())
+		return p.await();
+
 	Nullable!(Result!(T, E)) result;
 	p.toResult.dmd21804workaround.then((r) { result = r; });
 	socketManager.loop();
@@ -110,4 +114,15 @@ debug(ae_unittest) unittest
 		async({}).awaitSync();
 		async({}()).awaitSync();
 	}
+}
+
+debug(ae_unittest) unittest
+{
+	// awaitSync inside a fiber should yield, not start nested loop
+	auto result = async({
+		auto p = new Promise!int;
+		socketManager.onNextTick({ p.fulfill(42); });
+		return p.awaitSync();
+	}).awaitSync();
+	assert(result == 42);
 }
