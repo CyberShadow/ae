@@ -14,11 +14,13 @@
 
 module ae.sys.net.ae;
 
-import ae.net.asockets;
 import ae.net.http.client;
 import ae.net.ietf.url;
+import ae.sys.data : Data;
 import ae.sys.dataset : DataVec;
 import ae.sys.net;
+import ae.utils.promise : Promise;
+import ae.utils.promise.await : awaitSync;
 
 static import std.file;
 
@@ -27,17 +29,14 @@ class AENetwork : Network
 {
 	private Data getData(string url)
 	{
-		Data result;
-		bool got;
+		auto promise = new Promise!Data;
 
 		httpGet(url,
-			(Data data) { result = data; got = true; },
-			(string error) { throw new Exception(error); }
+			(Data data) { promise.fulfill(data); },
+			(string error) { promise.reject(new Exception(error)); }
 		);
 
-		socketManager.loop();
-		assert(got);
-		return result;
+		return promise.awaitSync();
 	}
 
 	override void downloadFile(string url, string target)
@@ -55,22 +54,19 @@ class AENetwork : Network
 
 	override ubyte[] post(string url, const(ubyte)[] data)
 	{
-		Data result;
-		bool got;
+		auto promise = new Promise!Data;
 
 		httpPost(url, DataVec(Data(data)), null,
-			(Data data) { result = data; got = true; },
-			(string error) { throw new Exception(error); }
+			(Data data) { promise.fulfill(data); },
+			(string error) { promise.reject(new Exception(error)); }
 		);
 
-		socketManager.loop();
-		assert(got);
-		return result.toGC();
+		return promise.awaitSync().toGC();
 	} ///
 
 	override bool urlOK(string url)
 	{
-		bool got, result;
+		auto promise = new Promise!bool;
 
 		auto request = new HttpRequest;
 		request.method = "HEAD";
@@ -80,26 +76,22 @@ class AENetwork : Network
 			.httpRequest(request,
 				(HttpResponse response, string disconnectReason)
 				{
-					got = true;
 					if (!response)
-						result = false;
+						promise.fulfill(false);
 					else
-						result = response.status == HttpStatusCode.OK;
+						promise.fulfill(response.status == HttpStatusCode.OK);
 				} ///
 			);
 
-			socketManager.loop();
+			return promise.awaitSync();
 		} ///
 		catch (Exception e)
 			return false;
-
-		assert(got);
-		return result;
 	} ///
 
 	override string resolveRedirect(string url)
 	{
-		string result; bool got;
+		auto promise = new Promise!string;
 
 		auto request = new HttpRequest;
 		request.method = "HEAD";
@@ -108,39 +100,35 @@ class AENetwork : Network
 			(HttpResponse response, string disconnectReason)
 			{
 				if (!response)
-					throw new Exception(disconnectReason);
+					promise.reject(new Exception(disconnectReason));
 				else
 				{
-					got = true;
-					result = response.headers.get("Location", null);
-					if (result)
-						result = url.applyRelativeURL(result);
+					string location = response.headers.get("Location", null);
+					if (location)
+						location = url.applyRelativeURL(location);
+					promise.fulfill(location);
 				} ///
 			} ///
 		);
 
-		socketManager.loop();
-		assert(got);
-		return result;
+		return promise.awaitSync();
 	} ///
 
 	override HttpResponse httpRequest(HttpRequest request)
 	{
-		HttpResponse result;
+		auto promise = new Promise!HttpResponse;
 
 		.httpRequest(request,
 			(HttpResponse response, string disconnectReason)
 			{
 				if (!response)
-					throw new Exception(disconnectReason);
+					promise.reject(new Exception(disconnectReason));
 				else
-					result = response;
+					promise.fulfill(response);
 			} ///
 		);
 
-		socketManager.loop();
-		assert(result);
-		return result;
+		return promise.awaitSync();
 	} ///
 }
 
