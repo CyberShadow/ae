@@ -112,6 +112,8 @@ struct Vec(T)
 	private void ensureCapacity(size_t requiredCapacity)
 	out(; data.capacity >= requiredCapacity)
 	{
+		if (data.capacity < data.length)
+			assert(false, "Array capacity unavailable"); // Alternative is horrible O(n^2) performance
 		auto oldCapacity = data.capacity;
 		if (requiredCapacity > oldCapacity)
 		{
@@ -147,8 +149,11 @@ struct Vec(T)
 	{
 		auto oldLength = data.length;
 		auto newLength = oldLength + howMany;
+		assert(data.capacity >= data.length);
 		ensureCapacity(newLength);
 		data = data.ptr[0 .. newLength];
+		data.assumeSafeAppend();
+		assert(data.capacity >= data.length);
 		return data[oldLength .. newLength];
 	}
 
