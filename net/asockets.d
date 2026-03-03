@@ -283,6 +283,12 @@ static if (eventLoopMechanism == EventLoopMechanism.epoll)
 						assert(conn !is null, "epoll event with null socket");
 
 						runUserEventHandler({
+							// Skip stale events for connections that were
+							// disconnected during this event loop iteration
+							// (e.g. Duplex closing both sides when one gets EOF).
+							if (conn.conn is null)
+								return;
+
 							// Handle errors
 							if (ev.events & EPOLLERR)
 							{
