@@ -58,6 +58,7 @@ struct Vec(T)
 	this(scope T[] values...)
 	{
 		data = values.dup;
+		cap = data.length;
 	}
 
 	private enum bool isConstituent(C) = is(C == T) || is(C == T[]) || is(C == Vec!T);
@@ -74,6 +75,7 @@ struct Vec(T)
 			else
 				length += arg.length;
 		data = new T[length];
+		cap = length;
 		size_t p = 0;
 		foreach (ref arg; args)
 			static if (is(typeof(arg) == T))
@@ -98,6 +100,7 @@ struct Vec(T)
 	{
 		typeof(return) result;
 		result.data = data.dup;
+		result.cap = result.data.length;
 		return result;
 	}
 
@@ -105,42 +108,29 @@ struct Vec(T)
 	{
 		data[] = T.init;
 		data = null;
+		cap = 0;
 	}
 
 	/// Array primitives
 
 	private void ensureCapacity(size_t requiredCapacity)
-	out(; data.capacity >= requiredCapacity)
+	out(; cap >= requiredCapacity)
 	{
-		if (data.capacity < data.length)
+		if (cap < data.length)
 			assert(false, "Array capacity unavailable"); // Alternative is horrible O(n^2) performance
-		auto oldCapacity = data.capacity;
-		if (requiredCapacity > oldCapacity)
+		if (requiredCapacity > cap)
 		{
 			// Use exponential growth to amortize reallocation cost
 			import std.algorithm.comparison : max;
-			auto growCapacity = max(requiredCapacity, oldCapacity + (oldCapacity >> 1)); // 1.5x growth
+			auto growCapacity = max(requiredCapacity, cap + (cap >> 1)); // 1.5x growth
 			T[] newData;
 			newData.reserve(growCapacity);
-			auto newCapacity = newData.capacity;
-			assert(newCapacity >= requiredCapacity);
-			auto p0 = newData.ptr;
-			static if (__traits(hasMember, GC, "expandArrayUsed"))
-			{
-				auto res = gc_getProxy.expandArrayUsed(newData, data.length * T.sizeof);
-				if (!res)
-					assert(false, "Array expansion failed");
-				newData = newData.ptr[0 .. data.length]; // has to go after expansion			}
-			}
-			else
-			{
-				newData = newData.ptr[0 .. data.length];
-				newData.assumeSafeAppend();
-			}
-			assert(newData.ptr is p0, "Array was reallocated");
+			cap = newData.capacity;
+			assert(cap >= requiredCapacity);
+			newData = newData.ptr[0 .. data.length];
 			foreach (i; 0 .. data.length)
 				moveEmplace(data[i], newData[i]);
-			data = newData[0 .. data.length];
+			data = newData;
 		}
 	}
 
@@ -149,21 +139,9 @@ struct Vec(T)
 	{
 		auto oldLength = data.length;
 		auto newLength = oldLength + howMany;
-		assert(data.capacity >= data.length, "Array capacity unavailable");
+		assert(cap >= data.length, "Array capacity unavailable");
 		ensureCapacity(newLength);
-		static if (__traits(hasMember, GC, "expandArrayUsed"))
-		{
-			auto res = gc_getProxy.expandArrayUsed(data, newLength * T.sizeof);
-			if (!res)
-				assert(false, "Array expansion failed");
-			data = data.ptr[0 .. newLength]; // has to go after expansion			}
-		}
-		else
-		{
-			data = data.ptr[0 .. newLength];
-			data.assumeSafeAppend();
-		}
-		assert(data.capacity >= data.length, "Array capacity unavailable after extension");
+		data = data.ptr[0 .. newLength];
 		return data[oldLength .. newLength];
 	}
 
@@ -181,11 +159,10 @@ struct Vec(T)
 		else
 		if (newLength > data.length)
 		{
+			auto oldLength = data.length;
 			ensureCapacity(newLength);
-			auto newData = data;
-			newData.length = newLength;
-			assert(newData.ptr == data.ptr);
-			data = newData;
+			data = data.ptr[0 .. newLength];
+			data[oldLength .. newLength] = T.init;
 		}
 		return data.length;
 	} /// ditto
@@ -200,7 +177,7 @@ struct Vec(T)
 		return data[index];
 	} /// ditto
 
-	typeof(null) opAssign(typeof(null)) { data[] = T.init; data = null; return null; } /// ditto
+	typeof(null) opAssign(typeof(null)) { data[] = T.init; data = null; cap = 0; return null; } /// ditto
 
 	static if (elementsAreCopyable)
 	ref Vec opOpAssign(string op : "~")(scope T[] values...)
@@ -228,6 +205,7 @@ struct Vec(T)
 	{
 		data[0] = T.init;
 		data = data[1 .. $];
+		cap--;
 	} /// ditto
 
 	void popBack()
@@ -257,11 +235,8 @@ struct Vec(T)
 
 private:
 	T[] data;
+	size_t cap;
 }
-
-// https://github.com/dlang/dmd/issues/21826#issuecomment-3264427803
-import core.gc.gcinterface : GC;
-private extern(C) GC gc_getProxy();
 
 // Test object lifetime
 debug(ae_unittest) unittest
