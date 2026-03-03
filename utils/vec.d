@@ -109,17 +109,19 @@ struct Vec(T)
 
 	/// Array primitives
 
-	private void ensureCapacity(size_t newCapacity)
-	out(; data.capacity >= newCapacity)
+	private void ensureCapacity(size_t requiredCapacity)
+	out(; data.capacity >= requiredCapacity)
 	{
-		if (newCapacity > data.capacity)
+		auto oldCapacity = data.capacity;
+		if (requiredCapacity > oldCapacity)
 		{
 			// Use exponential growth to amortize reallocation cost
 			import std.algorithm.comparison : max;
-			auto growCapacity = max(newCapacity, data.capacity + (data.capacity >> 1)); // 1.5x growth
+			auto growCapacity = max(requiredCapacity, oldCapacity + (oldCapacity >> 1)); // 1.5x growth
 			T[] newData;
 			newData.reserve(growCapacity);
-			assert(newData.capacity >= newCapacity);
+			auto newCapacity = newData.capacity;
+			assert(newCapacity >= requiredCapacity);
 			auto p0 = newData.ptr;
 			static if (__traits(hasMember, GC, "expandArrayUsed"))
 			{
