@@ -151,8 +151,18 @@ struct Vec(T)
 		auto newLength = oldLength + howMany;
 		assert(data.capacity >= data.length, "Array capacity unavailable");
 		ensureCapacity(newLength);
-		data = data.ptr[0 .. newLength];
-		data.assumeSafeAppend();
+		static if (__traits(hasMember, GC, "expandArrayUsed"))
+		{
+			auto res = gc_getProxy.expandArrayUsed(data, newLength * T.sizeof);
+			if (!res)
+				assert(false, "Array expansion failed");
+			data = data.ptr[0 .. newLength]; // has to go after expansion			}
+		}
+		else
+		{
+			data = data.ptr[0 .. newLength];
+			data.assumeSafeAppend();
+		}
 		assert(data.capacity >= data.length, "Array capacity unavailable after extension");
 		return data[oldLength .. newLength];
 	}
