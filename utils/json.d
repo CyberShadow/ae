@@ -157,7 +157,7 @@ struct JsonWriter(Output)
 }
 
 /// JSON writer with indentation.
-struct PrettyJsonWriter(Output, alias indent = '\t', alias newLine = '\n', alias pad = ' ')
+struct PrettyJsonWriter(Output, alias indent = '\t', alias newLine = '\n', alias preColon = ' ', alias postColon = preColon)
 {
 	JsonWriter!Output jsonWriter; /// Underlying writer.
 	alias jsonWriter this;
@@ -224,7 +224,7 @@ struct PrettyJsonWriter(Output, alias indent = '\t', alias newLine = '\n', alias
 
 	void endKey()
 	{
-		output.putEx(pad, ':', pad);
+		output.putEx(preColon, ':', postColon);
 	} ///
 
 	void putComma()
