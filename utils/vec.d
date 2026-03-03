@@ -315,3 +315,38 @@ debug(ae_unittest) unittest
 	Vec!S v;
 	v ~= S(1);
 }
+
+// Test append after popBack
+debug(ae_unittest) unittest
+{
+	Vec!int v;
+	foreach (i; 0 .. 10)
+		v ~= i;
+	v.popBack();
+	v ~= 42;
+	assert(v.length == 10);
+	assert(v[9] == 42);
+}
+
+// Test append after remove
+debug(ae_unittest) unittest
+{
+	Vec!int v;
+	foreach (i; 0 .. 10)
+		v ~= i;
+	v.remove(5);
+	v ~= 42;
+	assert(v.length == 10);
+}
+
+// Test append after length shrink
+debug(ae_unittest) unittest
+{
+	Vec!int v;
+	foreach (i; 0 .. 10)
+		v ~= i;
+	v.length = 5;
+	v ~= 42;
+	assert(v.length == 6);
+	assert(v[5] == 42);
+}
