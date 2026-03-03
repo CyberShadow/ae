@@ -149,11 +149,11 @@ struct Vec(T)
 	{
 		auto oldLength = data.length;
 		auto newLength = oldLength + howMany;
-		assert(data.capacity >= data.length);
+		assert(data.capacity >= data.length, "Array capacity unavailable");
 		ensureCapacity(newLength);
 		data = data.ptr[0 .. newLength];
 		data.assumeSafeAppend();
-		assert(data.capacity >= data.length);
+		assert(data.capacity >= data.length, "Array capacity unavailable after extension");
 		return data[oldLength .. newLength];
 	}
 
