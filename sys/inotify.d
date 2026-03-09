@@ -72,6 +72,7 @@ struct INotify
 			start();
 		auto wd = inotify_add_watch(fd, path.toStringz(), mask);
 		errnoEnforce(wd >= 0, "inotify_add_watch");
+		assert(handlers.get(wd, null) == null, "inotify watch already exists for this path");
 		handlers[wd] = handler;
 		activeHandlers++;
 		return WatchDescriptor(wd);
