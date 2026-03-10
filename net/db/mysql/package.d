@@ -891,7 +891,10 @@ private:
             auto ex = new MySqlException(err);
 
             if (readyPromise)
+            {
                 readyPromise.reject(ex);
+                readyPromiseFulfilled = true;
+            }
             else if (handleError)
                 handleError(err);
             else
