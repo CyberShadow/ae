@@ -516,7 +516,18 @@ public:
 			readyPromise = new Promise!TransactionStatus;
 			// If already ready, fulfill immediately
 			if (isReady)
+			{
 				readyPromise.fulfill(currentTransactionStatus);
+				readyPromiseFulfilled = true;
+			}
+			// If already disconnected (e.g. DNS failure during constructor),
+			// reject immediately — onDisconnect already ran before .ready
+			// was accessed, so nothing else will resolve this promise.
+			else if (conn.state == ConnectionState.disconnected)
+			{
+				readyPromise.reject(new PgSqlException("Connection failed before ready"));
+				readyPromiseFulfilled = true;
+			}
 		}
 		return readyPromise;
 	}
@@ -543,6 +554,7 @@ private:
 
 	/// Promise for ready() property
 	Promise!TransactionStatus readyPromise;
+	bool readyPromiseFulfilled;
 	bool isReady;
 	TransactionStatus currentTransactionStatus;
 
@@ -650,9 +662,12 @@ private:
 		// Fail all pending operations
 		auto err = new PgSqlException("Connection lost: " ~ reason);
 
-		// Reject ready promise if not yet ready
-		if (!isReady && readyPromise)
+		// Reject ready promise if not yet fulfilled
+		if (readyPromise && !readyPromiseFulfilled)
+		{
 			readyPromise.reject(err);
+			readyPromiseFulfilled = true;
+		}
 
 		foreach (ref op; pendingOps)
 		{
@@ -734,10 +749,11 @@ private:
 					}
 					// Don't pop here - wait for ReadyForQuery
 				}
-				else if (!isReady && readyPromise)
+				else if (!isReady && readyPromise && !readyPromiseFulfilled)
 				{
 					// Error during connection setup - reject ready promise
 					readyPromise.reject(err);
+					readyPromiseFulfilled = true;
 				}
 				else if (handleError)
 					handleError(response);
@@ -772,8 +788,11 @@ private:
 				if (!isReady)
 				{
 					isReady = true;
-					if (readyPromise)
+					if (readyPromise && !readyPromiseFulfilled)
+					{
 						readyPromise.fulfill(status);
+						readyPromiseFulfilled = true;
+					}
 				}
 
 				if (currentOp)
