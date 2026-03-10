@@ -554,6 +554,14 @@ public:
                 readyPromise.fulfill();
                 readyPromiseFulfilled = true;
             }
+            // If already disconnected (e.g. DNS failure during constructor),
+            // reject immediately — onDisconnect already ran before .ready
+            // was accessed, so nothing else will resolve this promise.
+            else if (state == ConnectionState.disconnected)
+            {
+                readyPromise.reject(new MySqlException("Connection failed before ready"));
+                readyPromiseFulfilled = true;
+            }
         }
         return readyPromise;
     }
