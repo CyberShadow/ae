@@ -126,6 +126,15 @@ private:
 	void onReadData(Data data)
 	{
 		while (data.length)
+		{
+			if (fd < 0)
+			{
+				// A handler may remove the last watch, which calls stop() and
+				// nullifies the handler table.  Check fd to discard any remaining
+				// events in the buffer.
+				break;
+			}
+
 			data.enter((scope contents) {
 				enforce(data.length >= inotify_event.sizeof, "Insufficient bytes for inotify_event");
 				auto pheader = cast(inotify_event*)contents.ptr; // inotify_event is non-copyable
@@ -155,6 +164,7 @@ private:
 				}
 				data = data[end..$];
 			});
+		}
 	}
 }
 
