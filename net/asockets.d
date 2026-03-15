@@ -722,11 +722,12 @@ static if (eventLoopMechanism == EventLoopMechanism.select)
 			debug (ASOCKETS_DEBUG_SHUTDOWN) ShutdownDebugger.register();
 			debug (ASOCKETS_DEBUG_IDLE) IdleDebugger.register();
 
-			SocketSet readset, writeset;
+			SocketSet readset, writeset, exceptset;
 			size_t sockcount;
 			uint setSize = FD_SETSIZE; // Can't trust SocketSet.max due to Issue 14012
 			readset  = new SocketSet(setSize);
 			writeset = new SocketSet(setSize);
+			exceptset = new SocketSet(setSize);
 			while (true)
 			{
 				if (nextTickHandlers.length)
@@ -757,11 +758,13 @@ static if (eventLoopMechanism == EventLoopMechanism.select)
 					setSize = minSize * 2;
 					readset  = new SocketSet(setSize);
 					writeset = new SocketSet(setSize);
+					exceptset = new SocketSet(setSize);
 				}
 				else
 				{
 					readset.reset();
 					writeset.reset();
+					exceptset.reset();
 				}
 
 				sockcount = 0;
@@ -784,6 +787,9 @@ static if (eventLoopMechanism == EventLoopMechanism.select)
 					if (conn.notifyWrite)
 					{
 						writeset.add(conn.socket);
+						// On Windows, failed non-blocking connects are reported
+						// via the exception set, not the write set.
+						exceptset.add(conn.socket);
 						if (!conn.daemonWrite)
 							haveActive = true;
 						debug (ASOCKETS) stderr.write(" WRITE", conn.daemonWrite ? "[daemon]" : "");
@@ -816,7 +822,7 @@ static if (eventLoopMechanism == EventLoopMechanism.select)
 					if (sockcount==0)
 						events = 0;
 					else
-						events = Socket.select(readset, writeset, null, 0.seconds);
+						events = Socket.select(readset, writeset, exceptset, 0.seconds);
 				}
 				else
 				if (USE_SLEEP && sockcount==0)
@@ -844,10 +850,10 @@ static if (eventLoopMechanism == EventLoopMechanism.select)
 					// slow event handler does not skew everything else
 					now = MonoTime.currTime();
 
-					events = Socket.select(readset, writeset, null, mainTimer.getRemainingTime(now));
+					events = Socket.select(readset, writeset, exceptset, mainTimer.getRemainingTime(now));
 				}
 				else
-					events = Socket.select(readset, writeset, null);
+					events = Socket.select(readset, writeset, exceptset);
 
 				debug (ASOCKETS) stderr.writefln("%d events fired.", events);
 
@@ -861,7 +867,7 @@ static if (eventLoopMechanism == EventLoopMechanism.select)
 					// Handle just one event at a time, as the first
 					// handler might invalidate select()'s results.
 					runUserEventHandler({
-						handleEvent(readset, writeset);
+						handleEvent(readset, writeset, exceptset);
 					});
 				}
 				else
@@ -907,7 +913,7 @@ static if (eventLoopMechanism == EventLoopMechanism.select)
 			}
 		}
 
-		private void handleEvent(SocketSet readset, SocketSet writeset)
+		private void handleEvent(SocketSet readset, SocketSet writeset, SocketSet exceptset)
 		{
 			debug (ASOCKETS)
 			{
@@ -923,6 +929,11 @@ static if (eventLoopMechanism == EventLoopMechanism.select)
 				if (writeset.isSet(conn.socket))
 				{
 					debug (ASOCKETS) stderr.writefln("\t%s - calling onWritable", conn);
+					return conn.onWritable();
+				}
+				if (exceptset.isSet(conn.socket))
+				{
+					debug (ASOCKETS) stderr.writefln("\t%s - calling onWritable (from exceptset)", conn);
 					return conn.onWritable();
 				}
 				if (readset.isSet(conn.socket))
