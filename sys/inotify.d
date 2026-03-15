@@ -83,7 +83,14 @@ struct INotify
 	{
 		assert(handlers.get(wd.wd, null) != null, "No such descriptor registered");
 		auto result = inotify_rm_watch(fd, wd.wd);
-		errnoEnforce(result >= 0, "inotify_rm_watch");
+		if (result < 0)
+		{
+			// Tolerate EINVAL: the kernel auto-removes watches when the watched
+			// file is deleted or the filesystem is unmounted (signalled via
+			// IN_IGNORED), so the descriptor may already be invalid.
+			import core.stdc.errno : errno, EINVAL;
+			errnoEnforce(errno == EINVAL, "inotify_rm_watch");
+		}
 		handlers[wd.wd] = null; // Keep tombstone to avoid race conditions
 		activeHandlers--;
 		if (!activeHandlers)
