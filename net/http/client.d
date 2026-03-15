@@ -72,7 +72,7 @@ protected:
 			connector.connect(request.proxyHost, request.proxyPort);
 		else
 			connector.connect(request.host, request.port);
-		assert(conn.state.among(ConnectionState.connecting, ConnectionState.disconnected));
+		assert(conn.state.among(ConnectionState.resolving, ConnectionState.connecting, ConnectionState.disconnected));
 	}
 
 	/// Pop off a request from the queue and return it, while incrementing `sentRequests`.
