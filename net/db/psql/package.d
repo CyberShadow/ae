@@ -1536,3 +1536,60 @@ debug(ae_unittest) unittest
 		assert(product == 6, "Expected 2*3=6");
 	}).awaitSync();
 }
+
+// Test: DNS resolution failure — .ready should reject, not hang.
+// Uses trailing dot to prevent Windows DNS suffix search list expansion.
+debug(ae_unittest) unittest
+{
+	import ae.utils.promise.await : async, await, awaitSync;
+
+	bool gotError = false;
+	async({
+		auto pg = new PgSqlConnection("nonexistent.invalid.", 5432, "user", "db", "pass");
+		try
+			await(pg.ready);
+		catch (Exception e)
+			gotError = true;
+	}).awaitSync();
+	assert(gotError, "Expected DNS resolution error from .ready");
+}
+
+// Test: connection refused — .ready should reject with proper error
+debug(ae_unittest) unittest
+{
+	import ae.utils.promise.await : async, await, awaitSync;
+
+	bool gotError = false;
+	async({
+		auto pg = new PgSqlConnection("127.0.0.1", 63999, "user", "db", "pass");
+		try
+			await(pg.ready);
+		catch (Exception e)
+			gotError = true;
+	}).awaitSync();
+	assert(gotError, "Expected connection refused error from .ready");
+}
+
+// Test: authentication error — .ready should reject cleanly (no double-reject crash)
+version (HAVE_PSQL_SERVER)
+debug(ae_unittest) unittest
+{
+	import ae.utils.promise.await : async, await, awaitSync;
+	import std.process : environment;
+
+	bool gotError = false;
+	async({
+		auto pg = new PgSqlConnection(
+			environment.get("PGHOST", "localhost"),
+			environment.get("PGPORT", "5432").to!ushort,
+			environment.get("PGUSER", "testuser"),
+			environment.get("PGDATABASE", "testdb"),
+			"definitely_wrong_password_12345"
+		);
+		try
+			await(pg.ready);
+		catch (PgSqlException e)
+			gotError = true;
+	}).awaitSync();
+	assert(gotError, "Expected authentication error from .ready");
+}

@@ -2308,3 +2308,60 @@ debug(ae_unittest) unittest
         mysql.query("DROP TABLE ae_mysql_large").array.await;
     }).awaitSync();
 }
+
+// Test: DNS resolution failure — .ready should reject, not hang.
+// Uses trailing dot to prevent Windows DNS suffix search list expansion.
+debug(ae_unittest) unittest
+{
+    import ae.utils.promise.await : async, await, awaitSync;
+
+    bool gotError = false;
+    async({
+        auto mysql = new MySqlConnection("nonexistent.invalid.", 3306, "user", "db", "pass");
+        try
+            await(mysql.ready);
+        catch (Exception e)
+            gotError = true;
+    }).awaitSync();
+    assert(gotError, "Expected DNS resolution error from .ready");
+}
+
+// Test: connection refused — .ready should reject with proper error
+debug(ae_unittest) unittest
+{
+    import ae.utils.promise.await : async, await, awaitSync;
+
+    bool gotError = false;
+    async({
+        auto mysql = new MySqlConnection("127.0.0.1", 63999, "user", "db", "pass");
+        try
+            await(mysql.ready);
+        catch (Exception e)
+            gotError = true;
+    }).awaitSync();
+    assert(gotError, "Expected connection refused error from .ready");
+}
+
+// Test: authentication error — .ready should reject cleanly (no double-reject crash)
+version (HAVE_MYSQL_SERVER)
+debug(ae_unittest) unittest
+{
+    import ae.utils.promise.await : async, await, awaitSync;
+    import std.process : environment;
+
+    bool gotError = false;
+    async({
+        auto mysql = new MySqlConnection(
+            environment.get("MYSQL_HOST", "127.0.0.1"),
+            environment.get("MYSQL_TCP_PORT", "3306").to!ushort,
+            environment.get("MYSQL_USER", "testuser"),
+            environment.get("MYSQL_DATABASE", "testdb"),
+            "definitely_wrong_password_12345"
+        );
+        try
+            await(mysql.ready);
+        catch (MySqlException e)
+            gotError = true;
+    }).awaitSync();
+    assert(gotError, "Expected authentication error from .ready");
+}
