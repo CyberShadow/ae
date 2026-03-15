@@ -56,16 +56,25 @@ import std.process;
 void asyncWait(Pid pid, void delegate(int status) dg)
 {
 	auto anchor = new ThreadAnchor;
+	bool removed;
 
 	void handler() nothrow @nogc
 	{
 		anchor.runAsync(
 			{
+				if (removed)
+				{
+					// Race: another SIGCHLD fired before we could
+					// call removeSignalHandler in the main thread
+					return;
+				}
+
 				// Linux may coalesce multiple SIGCHLD into one, so
 				// we need to explicitly check if our process exited.
 				auto result = tryWait(pid);
 				if (result.terminated)
 				{
+					removed = true;
 					removeSignalHandler(SIGCHLD, &handler);
 					dg(result.status);
 				}
