@@ -145,6 +145,23 @@ public:
 		socket = new AnchorSocket(daemon);
 	}
 
+	/// Pre-signal that a pending operation will be submitted later
+	/// via `runAsync`. Keeps the event loop alive (by temporarily
+	/// making this a non-daemon socket) until the callback completes.
+	/// Must be called from the event loop thread.
+	void armPending() nothrow @nogc
+	{
+		socket.daemonRead = false;
+	}
+
+	/// Cancel a previous `armPending` call. Restores the daemon state
+	/// so this socket no longer prevents the event loop from exiting.
+	/// Must be called from the event loop thread.
+	void disarmPending() nothrow @nogc
+	{
+		socket.daemonRead = socket.daemon;
+	}
+
 	/// Run the specified delegate in the origin thread,
 	/// without waiting for it to finish.
 	void runAsync(Dg dg) nothrow @nogc
