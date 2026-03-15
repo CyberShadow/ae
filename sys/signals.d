@@ -124,7 +124,7 @@ synchronized class HandlerSet
 					deregister();
 				return;
 			}
-		assert(0);
+		assert(false, "Handler not found");
 	}
 	const(T)[] get() pure nothrow @nogc { return cast(const(T[]))handlers; }
 }
