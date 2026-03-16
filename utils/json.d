@@ -337,16 +337,32 @@ struct CustomJsonSerializer(Writer, JsonOptions options = JsonOptions.init)
 			{
 				static if (!doSkipSerialize!(T, v.tupleof[i].stringof[2..$]))
 				{
-					static if (hasAttribute!(JSONOptional, v.tupleof[i]))
-						if (isIdentical(v.tupleof[i], T.init.tupleof[i]))
-							continue;
-					if (!first)
-						writer.putComma();
+					static if (is(typeof(field) == JSONExtras))
+					{
+						foreach (key, ref value; field)
+						{
+							if (!first)
+								writer.putComma();
+							else
+								first = false;
+							writer.putValue(key);
+							writer.endKey();
+							put(value);
+						}
+					}
 					else
-						first = false;
-					writer.putValue(getJsonName!(T, v.tupleof[i].stringof[2..$]));
-					writer.endKey();
-					put(field);
+					{
+						static if (hasAttribute!(JSONOptional, v.tupleof[i]))
+							if (isIdentical(v.tupleof[i], T.init.tupleof[i]))
+								continue;
+						if (!first)
+							writer.putComma();
+						else
+							first = false;
+						writer.putValue(getJsonName!(T, v.tupleof[i].stringof[2..$]));
+						writer.endKey();
+						put(field);
+					}
 				}
 			}
 			writer.endObject();
@@ -888,15 +904,32 @@ private struct JsonParser(C, JsonOptions options = JsonOptions.init)
 			bool found;
 			foreach (i, ref field; v.tupleof)
 			{
-				enum name = getJsonName!(T, v.tupleof[i].stringof[2..$]);
-				if (name == jsonField)
+				static if (!is(typeof(field) == JSONExtras))
 				{
-					read(field);
-					found = true;
-					break;
+					enum name = getJsonName!(T, v.tupleof[i].stringof[2..$]);
+					if (name == jsonField)
+					{
+						read(field);
+						found = true;
+						break;
+					}
 				}
 			}
 
+			if (!found)
+			{
+				foreach (j, ref extField; v.tupleof)
+				{
+					static if (is(typeof(extField) == JSONExtras))
+					{
+						auto start = p;
+						skipValue();
+						extField[cast(string)jsonField] = JSONFragment(s[start..p]);
+						found = true;
+						break;
+					}
+				}
+			}
 			if (!found)
 			{
 				static if (hasAttribute!(JSONPartial, T))
@@ -1358,6 +1391,67 @@ debug(ae_unittest) unittest
 {
 	@JSONPartial static struct S { int b; }
 	assert(`{"a":1,"b":2,"c":3.4,"d":[5,"x"],"de":[],"e":{"k":"v"},"ee":{},"f":true,"g":false,"h":null}`.jsonParse!S == S(2));
+}
+
+// ************************************************************************
+
+/// Type for a field that collects unknown fields during deserialization.
+/// During deserialization, any JSON key not matching another struct field is stored here.
+/// During serialization, each entry in the map is emitted as a top-level key-value pair.
+struct JSONExtras
+{
+	JSONFragment[string] _data;
+
+	alias _data this;
+}
+
+debug(ae_unittest) unittest
+{
+	static struct S { int a; JSONExtras extras; }
+	// Unknown fields are collected into extras
+	auto s = `{"a":1,"b":2,"c":"hello"}`.jsonParse!S;
+	assert(s.a == 1);
+	assert(s.extras["b"] == JSONFragment("2"));
+	assert(s.extras["c"] == JSONFragment(`"hello"`));
+}
+
+debug(ae_unittest) unittest
+{
+	static struct S { int a; JSONExtras extras; }
+	// Serialization re-emits extras as top-level fields
+	S s;
+	s.a = 1;
+	s.extras["b"] = JSONFragment("2");
+	s.extras["c"] = JSONFragment(`"hello"`);
+	auto json = s.toJson;
+	// Round-trip
+	auto s2 = json.jsonParse!S;
+	assert(s2.a == 1);
+	assert(s2.extras["b"] == JSONFragment("2"));
+	assert(s2.extras["c"] == JSONFragment(`"hello"`));
+}
+
+debug(ae_unittest) unittest
+{
+	// @JSONExtras works alongside @JSONOptional fields
+	static struct S { @JSONOptional int a; JSONExtras extras; }
+	auto s = `{"b":true}`.jsonParse!S;
+	assert(s.a == 0);
+	assert(s.extras["b"] == JSONFragment("true"));
+	// @JSONOptional field not emitted when default
+	assert(s.toJson == `{"b":true}`, s.toJson);
+}
+
+debug(ae_unittest) unittest
+{
+	// Struct without @JSONExtras and without @JSONPartial still throws on unknown fields
+	static struct S { int a; }
+	bool threw;
+	try
+		`{"a":1,"b":2}`.jsonParse!S;
+	catch (Exception e)
+		threw = true;
+	assert(threw);
 }
 
 // ************************************************************************
