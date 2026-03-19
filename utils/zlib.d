@@ -104,6 +104,7 @@ struct ZlibProcess(bool COMPRESSING)
 		else
 			//zenforce(inflateInit(&zs));
 			zenforce(inflateInit2(&zs, options.zwindowBits));
+		initialized_ = true;
 	}
 
 	/// Process one chunk of data.
@@ -166,13 +167,15 @@ struct ZlibProcess(bool COMPRESSING)
 
 	~this()
 	{
-		zenforce(endFunc(&zs));
+		if (initialized_)
+			endFunc(&zs);
 	}
 
 private:
 	z_stream zs;
 	Data currentChunk;
 	DataVec outputChunks;
+	bool initialized_;
 
 	static if (COMPRESSING)
 	{
