@@ -985,3 +985,85 @@ debug(ae_unittest) unittest
 	socketManager.loop();
 	assert(ok);
 }
+
+version (HAVE_WS_PEER)
+static if (haveZlib)
+debug(ae_unittest) unittest
+{
+	// Integration test: D client connects to external echo server configured
+	// with no_context_takeover. Multiple messages are sent to verify that
+	// the zlib stream is properly reset between messages.
+	import std.process : environment;
+	if (environment.get("WS_TEST_MODE", "") != "client_nctx") return;
+
+	import ae.net.asockets : socketManager;
+
+	auto port = environment.get("WS_SERVER_PORT", "18765");
+	enum messages = ["Message one", "Message two", "Message three"];
+	int received;
+
+	bool ok;
+	connectWebSocket(
+		"ws://127.0.0.1:" ~ port ~ "/",
+		(WebSocketAdapter ws) {
+			assert(ws.deflateEnabled, "permessage-deflate was not negotiated");
+			ws.handleReadData = (Data data) {
+				assert(data.toGC() == messages[received], "Echo mismatch on message " ~ received.to!string);
+				received++;
+				if (received < messages.length)
+					ws.send(Data(messages[received].asBytes));
+				else
+				{
+					ok = true;
+					ws.disconnect("Test complete");
+				}
+			};
+			ws.send(Data(messages[0].asBytes));
+		},
+		(string error) {
+			assert(false, "WebSocket connection failed: " ~ error);
+		},
+	);
+
+	socketManager.loop();
+	assert(ok);
+	assert(received == messages.length);
+}
+
+version (HAVE_WS_PEER)
+static if (haveZlib)
+debug(ae_unittest) unittest
+{
+	// Integration test: D server accepts connection from external client
+	// configured with no_context_takeover. Multiple messages verify that
+	// the zlib stream is properly reset between messages.
+	import std.process : environment;
+	if (environment.get("WS_TEST_MODE", "") != "server_nctx") return;
+
+	import ae.net.http.server : HttpServer;
+	import ae.net.asockets : socketManager;
+	import ae.sys.timing : setTimeout;
+
+	auto s = new HttpServer;
+	int received;
+	s.handleRequest = (HttpRequest request, HttpServerConnection serverConn) {
+		auto ws = accept(request, serverConn);
+		assert(ws.deflateEnabled, "permessage-deflate was not negotiated with client");
+		ws.handleReadData = (Data data) {
+			received++;
+			ws.send(data); // echo
+		};
+		ws.handleDisconnect = (string reason, DisconnectType type) {
+			setTimeout({ s.close(); }, 0.seconds);
+		};
+	};
+	auto port = environment.get("WS_PORT", "18767").to!ushort;
+	s.listen(port, "127.0.0.1");
+
+	// Signal readiness to the test harness
+	import std.file : fileWrite = write;
+	fileWrite(environment.get("WS_READY_FILE", "/tmp/ws_ready_nctx"), "ready");
+
+	socketManager.loop();
+	assert(received == 3, "Expected 3 messages, got " ~ received.to!string);
+}

@@ -410,6 +410,80 @@ PYEOF
 
               # Wait for D server to exit (closes after client disconnects)
               wait $D_PID
+
+              echo "=== Phase 3: D client with Python server (no_context_takeover) ==="
+
+              # Start Python echo server with no_context_takeover
+              python3 << 'PYEOF' &
+import asyncio, websockets
+from websockets.extensions.permessage_deflate import ServerPerMessageDeflateFactory
+async def echo(ws):
+    async for msg in ws:
+        await ws.send(msg)
+async def main():
+    async with websockets.serve(
+        echo, "127.0.0.1", 18768,
+        extensions=[ServerPerMessageDeflateFactory(
+            server_no_context_takeover=True,
+            client_no_context_takeover=True,
+        )],
+    ):
+        await asyncio.Future()
+asyncio.run(main())
+PYEOF
+              PY_PID=$!
+
+              for i in $(seq 1 30); do
+                if python3 -c "import socket; s = socket.create_connection(('127.0.0.1', 18768), timeout=1); s.close()" 2>/dev/null; then
+                  break
+                fi
+                sleep 0.5
+              done
+
+              echo "Python server (no_context_takeover) ready, running D client test..."
+              WS_TEST_MODE=client_nctx WS_SERVER_PORT=18768 ws_test
+              echo "D client no_context_takeover test passed!"
+
+              kill $PY_PID || true
+              wait $PY_PID 2>/dev/null || true
+
+              echo "=== Phase 4: D server with Python client (no_context_takeover) ==="
+
+              WS_TEST_MODE=server_nctx WS_PORT=18767 WS_READY_FILE="$TMPDIR/ws_ready_nctx" ws_test &
+              D_PID=$!
+
+              for i in $(seq 1 30); do
+                if [ -f "$TMPDIR/ws_ready_nctx" ]; then
+                  break
+                fi
+                sleep 0.5
+              done
+
+              echo "D server ready, running Python client (no_context_takeover) test..."
+              python3 << 'PYEOF'
+import asyncio, websockets
+from websockets.extensions.permessage_deflate import ClientPerMessageDeflateFactory
+async def main():
+    async with websockets.connect(
+        "ws://127.0.0.1:18767",
+        extensions=[ClientPerMessageDeflateFactory(
+            server_no_context_takeover=True,
+            client_no_context_takeover=True,
+        )],
+    ) as ws:
+        ext_names = [e.name for e in ws.protocol.extensions]
+        assert "permessage-deflate" in ext_names, f"Expected permessage-deflate, got: {ext_names}"
+        messages = ["Message one", "Message two", "Message three"]
+        for msg in messages:
+            await ws.send(msg)
+            response = await ws.recv()
+            assert response == msg.encode(), f"Expected {msg!r}, got: {response!r}"
+        print("Python client: no_context_takeover echo verified!")
+asyncio.run(main())
+PYEOF
+              echo "Python client no_context_takeover test passed!"
+
+              wait $D_PID
               echo "All WebSocket integration tests passed!"
             '';
 
