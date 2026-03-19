@@ -483,15 +483,12 @@ WebSocketAdapter accept(
 	int compressionLevel = -1,
 )
 {
-	enforce(
-		request.method == "GET" &&
-		request.protocolVersion >= "1.1" &&
-		request.headers.get("Upgrade", null).icmp("websocket") == 0 &&
-		request.headers.get("Connection", null).splitter(",").any!(t => t.strip.icmp("Upgrade") == 0) &&
-		"Sec-WebSocket-Key" in request.headers &&
-		request.headers.get("Sec-WebSocket-Version", null) == "13",
-		"Invalid WebSockets request"
-	);
+	enforce(request.method == "GET", "WebSocket request method is not GET");
+	enforce(request.protocolVersion >= "1.1", "WebSocket request HTTP version < 1.1");
+	enforce(request.headers.get("Upgrade", null).icmp("websocket") == 0, "WebSocket request missing 'Upgrade: websocket' header");
+	enforce(request.headers.get("Connection", null).splitter(",").any!(t => t.strip.icmp("Upgrade") == 0), "WebSocket request missing 'Connection: Upgrade' header");
+	enforce("Sec-WebSocket-Key" in request.headers, "WebSocket request missing Sec-WebSocket-Key header");
+	enforce(request.headers.get("Sec-WebSocket-Version", null) == "13", "WebSocket request Sec-WebSocket-Version is not 13");
 
 	auto response = new HttpResponse();
 	response.status = HttpStatusCode.SwitchingProtocols;
