@@ -830,6 +830,77 @@ debug(ae_unittest) unittest
 	assert(ok);
 }
 
+version (HAVE_WS_PEER)
+static if (haveZlib)
+debug(ae_unittest) unittest
+{
+	// Integration test: D client connects to external WebSocket echo server.
+	// The peer server must support permessage-deflate (RFC 7692).
+	import std.process : environment;
+	if (environment.get("WS_TEST_MODE", "") != "client") return;
+
+	import ae.net.asockets : socketManager;
+
+	auto port = environment.get("WS_SERVER_PORT", "18765");
+
+	bool ok;
+	connectWebSocket(
+		"ws://127.0.0.1:" ~ port ~ "/",
+		(WebSocketAdapter ws) {
+			assert(ws.deflateEnabled, "permessage-deflate was not negotiated with server");
+			ws.handleReadData = (Data data) {
+				assert(data.toGC() == "Hello from D client");
+				ok = true;
+				ws.disconnect("Test complete");
+			};
+			ws.send(Data("Hello from D client".asBytes));
+		},
+		(string error) {
+			assert(false, "WebSocket connection failed: " ~ error);
+		},
+	);
+
+	socketManager.loop();
+	assert(ok);
+}
+
+version (HAVE_WS_PEER)
+static if (haveZlib)
+debug(ae_unittest) unittest
+{
+	// Integration test: D server accepts connection from external WebSocket client.
+	// The peer client must support permessage-deflate (RFC 7692).
+	import std.process : environment;
+	if (environment.get("WS_TEST_MODE", "") != "server") return;
+
+	import ae.net.http.server : HttpServer;
+	import ae.net.asockets : socketManager;
+	import ae.sys.timing : setTimeout;
+
+	auto s = new HttpServer;
+	bool ok;
+	s.handleRequest = (HttpRequest request, HttpServerConnection serverConn) {
+		auto ws = accept(request, serverConn);
+		assert(ws.deflateEnabled, "permessage-deflate was not negotiated with client");
+		ws.handleReadData = (Data data) {
+			ok = true;
+			ws.send(data); // echo
+		};
+		ws.handleDisconnect = (string reason, DisconnectType type) {
+			setTimeout({ s.close(); }, 0.seconds);
+		};
+	};
+	auto port = environment.get("WS_PORT", "18766").to!ushort;
+	s.listen(port, "127.0.0.1");
+
+	// Signal readiness to the test harness
+	import std.file : fileWrite = write;
+	fileWrite(environment.get("WS_READY_FILE", "/tmp/ws_ready"), "ready");
+
+	socketManager.loop();
+	assert(ok);
+}
+
 static if (haveZlib)
 debug(ae_unittest) unittest
 {

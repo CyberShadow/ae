@@ -116,9 +116,44 @@
           '';
         };
 
+        # WebSocket test binary - needs HAVE_WS_PEER version flag and zlib
+        websocket-test-bin = pkgs.stdenv.mkDerivation {
+          name = "ae-websocket-test-bin";
+
+          nativeBuildInputs = [ pkgs.ldc pkgs.zlib ];
+          dontStrip = true;
+
+          unpackPhase = ''
+            cp -a ${self} ae
+          '';
+
+          buildPhase = ''
+            echo "Compiling WebSocket tests..."
+
+            # ASOCKETS_DEBUG_IDLE: DO NOT REMOVE - essential for detecting stuck event loops
+            ldc2 \
+              -i \
+              -I. \
+              -g \
+              -d-debug=ae_unittest \
+              -d-debug=ASOCKETS_DEBUG_IDLE \
+              -d-version=HAVE_WS_PEER \
+              -unittest \
+              --main \
+              -of=ws_test \
+              -L=-lz \
+              ae/net/http/websocket.d
+          '';
+
+          installPhase = ''
+            mkdir -p $out/bin
+            cp ws_test $out/bin/
+          '';
+        };
+
       in {
         packages = {
-          inherit mysql-test-bin psql-test-bin;
+          inherit mysql-test-bin psql-test-bin websocket-test-bin;
         };
 
         checks = {
@@ -259,6 +294,89 @@
               pg_ctl -D "$PGDATA" stop -m fast
 
               echo "PostgreSQL tests passed!"
+            '';
+
+            installPhase = ''
+              touch $out
+            '';
+          };
+
+          # WebSocket integration tests (with Python websockets peer)
+          websocket = pkgs.stdenv.mkDerivation {
+            name = "ae-websocket-test";
+            src = self;
+
+            nativeBuildInputs = [
+              websocket-test-bin
+              (pkgs.python3.withPackages (ps: [ ps.websockets ]))
+            ];
+
+            buildPhase = ''
+              export HOME="$TMPDIR"
+
+              echo "=== Phase 1: D client with Python server ==="
+
+              # Start Python WebSocket echo server (permessage-deflate enabled by default)
+              python3 << 'PYEOF' &
+import asyncio, websockets
+async def echo(ws):
+    async for msg in ws:
+        await ws.send(msg)
+async def main():
+    async with websockets.serve(echo, "127.0.0.1", 18765):
+        await asyncio.Future()
+asyncio.run(main())
+PYEOF
+              PY_PID=$!
+
+              # Wait for Python server to be ready
+              for i in $(seq 1 30); do
+                if python3 -c "import socket; s = socket.create_connection(('127.0.0.1', 18765), timeout=1); s.close()" 2>/dev/null; then
+                  break
+                fi
+                sleep 0.5
+              done
+
+              echo "Python server ready, running D client test..."
+              WS_TEST_MODE=client WS_SERVER_PORT=18765 ws_test
+              echo "D client test passed!"
+
+              kill $PY_PID || true
+              wait $PY_PID 2>/dev/null || true
+
+              echo "=== Phase 2: D server with Python client ==="
+
+              # Start D WebSocket echo server
+              WS_TEST_MODE=server WS_PORT=18766 WS_READY_FILE="$TMPDIR/ws_ready" ws_test &
+              D_PID=$!
+
+              # Wait for D server to be ready
+              for i in $(seq 1 30); do
+                if [ -f "$TMPDIR/ws_ready" ]; then
+                  break
+                fi
+                sleep 0.5
+              done
+
+              echo "D server ready, running Python client test..."
+              python3 << 'PYEOF'
+import asyncio, websockets
+async def main():
+    async with websockets.connect("ws://127.0.0.1:18766") as ws:
+        # Verify permessage-deflate was negotiated
+        ext_names = [e.name for e in ws.protocol.extensions]
+        assert "permessage-deflate" in ext_names, f"Expected permessage-deflate, got: {ext_names}"
+        await ws.send("Hello from Python client")
+        response = await ws.recv()
+        assert response == b"Hello from Python client", f"Expected echo, got: {response!r}"
+        print("Python client: echo verified with compression!")
+asyncio.run(main())
+PYEOF
+              echo "Python client test passed!"
+
+              # Wait for D server to exit (closes after client disconnects)
+              wait $D_PID
+              echo "All WebSocket integration tests passed!"
             '';
 
             installPhase = ''
