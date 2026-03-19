@@ -149,6 +149,30 @@ struct ZlibProcess(bool COMPRESSING)
 		return move(outputChunks);
 	}
 
+	/// Flush pending output without ending the stream.
+	/// Unlike `flush`, which uses `Z_FINISH` and terminates the stream,
+	/// this uses `Z_SYNC_FLUSH` and keeps the stream alive for further
+	/// `processChunk` / `syncFlush` cycles.
+	DataVec syncFlush()
+	{
+		if (zs.avail_out == 0)
+			allocChunk(adjustSize(1));
+
+		while (true)
+		{
+			auto ret = processFunc(&zs, Z_SYNC_FLUSH);
+			if (ret != Z_OK && ret != Z_BUF_ERROR)
+				throw new ZlibException(ret, &zs);
+			if (zs.avail_out > 0)
+				break;
+			allocChunk(4096);
+		}
+
+		saveChunk();
+		zs.avail_out = 0; // force new allocation on next processChunk
+		return move(outputChunks);
+	}
+
 	/// Process all input.
 	static DataVec process(scope const(Data)[] input, ZlibOptions options = ZlibOptions.init)
 	{
@@ -253,4 +277,38 @@ the quick brown fox jumps over the lazy dog\r
 ");
 	testRoundtrip([0]);
 	testRoundtrip(null);
+}
+
+debug(ae_unittest) unittest
+{
+	// Test syncFlush for streaming compression/decompression (raw deflate)
+	auto original = cast(ubyte[])(
+		"the quick brown fox jumps over the lazy dog\r\n" ~
+		"the quick brown fox jumps over the lazy dog\r\n");
+
+	ZlibDeflater deflater;
+	deflater.init(ZlibOptions(ZlibOptions.init.deflateLevel, 15, ZlibMode.raw));
+
+	auto chunk = Data(original);
+	deflater.processChunk(chunk);
+	auto compressed1 = deflater.syncFlush().joinData;
+
+	// Compress a second identical message through the same stream
+	deflater.processChunk(chunk);
+	auto compressed2 = deflater.syncFlush().joinData;
+
+	// Context takeover: second message should compress at least as well
+	assert(compressed2.length <= compressed1.length);
+
+	// Decompress both messages through a single inflate stream
+	ZlibInflater inflater;
+	inflater.init(ZlibOptions(ZlibOptions.init.deflateLevel, 15, ZlibMode.raw));
+
+	inflater.processChunk(compressed1);
+	auto decompressed1 = inflater.syncFlush().joinData;
+	assert(decompressed1.asDataOf!ubyte.toGC == original);
+
+	inflater.processChunk(compressed2);
+	auto decompressed2 = inflater.syncFlush().joinData;
+	assert(decompressed2.asDataOf!ubyte.toGC == original);
 }
