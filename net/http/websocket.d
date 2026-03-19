@@ -110,6 +110,8 @@ class WebSocketAdapter : ConnectionAdapter
 		Duration idleTimeout = 1.minutes,
 		bool useDeflate = false,
 		int compressionLevel = -1,
+		bool noDeflateContextTakeover = false,
+		bool noInflateContextTakeover = false,
 	)
 	{
 		super(next);
@@ -132,6 +134,8 @@ class WebSocketAdapter : ConnectionAdapter
 		static if (haveZlib)
 		{
 			this.useDeflate_ = useDeflate;
+			this.noDeflateContextTakeover_ = noDeflateContextTakeover;
+			this.noInflateContextTakeover_ = noInflateContextTakeover;
 			if (useDeflate)
 			{
 				deflater.init(zlib.ZlibOptions(compressionLevel, 15, zlib.ZlibMode.raw));
@@ -202,6 +206,8 @@ private:
 	{
 		bool useDeflate_;
 		bool messageCompressed_;
+		bool noDeflateContextTakeover_;
+		bool noInflateContextTakeover_;
 		zlib.ZlibProcess!true deflater;
 		zlib.ZlibProcess!false inflater;
 
@@ -210,6 +216,8 @@ private:
 			foreach (ref chunk; message)
 				deflater.processChunk(chunk);
 			auto compressed = deflater.syncFlush().joinData;
+			if (noDeflateContextTakeover_)
+				deflater.reset();
 			// Strip trailing 0x00 0x00 0xFF 0xFF (sync flush marker)
 			// per RFC 7692 Section 7.2.1.
 			// The tail is absent when there is nothing new to flush
@@ -228,7 +236,10 @@ private:
 			inflater.processChunk(compressed);
 			auto tail = Data(cast(ubyte[])[0x00, 0x00, 0xFF, 0xFF]);
 			inflater.processChunk(tail);
-			return inflater.syncFlush().joinData;
+			auto result = inflater.syncFlush().joinData;
+			if (noInflateContextTakeover_)
+				inflater.reset();
+			return result;
 		}
 	}
 
@@ -499,6 +510,8 @@ WebSocketAdapter accept(
 	));
 
 	bool useDeflate = false;
+	bool serverNoContextTakeover = false;
+	bool clientNoContextTakeover = false;
 	static if (haveZlib)
 	{
 		if (deflateMode != PerMessageDeflate.disable)
@@ -506,16 +519,37 @@ WebSocketAdapter accept(
 			auto exts = request.headers.get("Sec-WebSocket-Extensions", null);
 			if (exts !is null)
 			{
-				import std.algorithm.iteration : splitter;
-				import std.string : strip;
 				foreach (ext; exts.splitter(','))
 				{
-					if (ext.splitter(';').front.strip == "permessage-deflate")
+					auto params = ext.splitter(';');
+					if (params.front.strip != "permessage-deflate")
+						continue;
+					useDeflate = true;
+					params.popFront();
+					// Parse extension parameters (RFC 7692 Section 7.1)
+					string responseExt = "permessage-deflate";
+					foreach (param; params)
 					{
-						useDeflate = true;
-						response.headers["Sec-WebSocket-Extensions"] = "permessage-deflate";
-						break;
+						auto p = param.strip;
+						// RFC 7692 §7.1.1.1: If client offered server_no_context_takeover,
+						// server MUST include it in the response.
+						if (p == "server_no_context_takeover")
+						{
+							serverNoContextTakeover = true;
+							responseExt ~= "; server_no_context_takeover";
+						}
+						// RFC 7692 §7.1.2.1: If client offered client_no_context_takeover,
+						// server MAY include it in the response. We honor it.
+						else if (p == "client_no_context_takeover")
+						{
+							clientNoContextTakeover = true;
+							responseExt ~= "; client_no_context_takeover";
+						}
+						// client_max_window_bits (with or without value) — acknowledged
+						// server_max_window_bits — not currently supported
 					}
+					response.headers["Sec-WebSocket-Extensions"] = responseExt;
+					break;
 				}
 			}
 			if (deflateMode == PerMessageDeflate.force)
@@ -539,6 +573,8 @@ WebSocketAdapter accept(
 		1.minutes, // idleTimeout
 		useDeflate,
 		compressionLevel,
+		serverNoContextTakeover, // noDeflateContextTakeover (server's deflater)
+		clientNoContextTakeover, // noInflateContextTakeover (client's inflater = server's inflater for client msgs)
 	);
 }
 
@@ -737,6 +773,8 @@ protected:
 		);
 
 		bool useDeflate = false;
+		bool serverNoContextTakeover = false;
+		bool clientNoContextTakeover = false;
 		static if (haveZlib)
 		{
 			if (deflateMode_ != PerMessageDeflate.disable)
@@ -744,15 +782,22 @@ protected:
 				auto exts = currentResponse.headers.get("Sec-WebSocket-Extensions", null);
 				if (exts !is null)
 				{
-					import std.algorithm.iteration : splitter;
-					import std.string : strip;
 					foreach (ext; exts.splitter(','))
 					{
-						if (ext.splitter(';').front.strip == "permessage-deflate")
+						auto params = ext.splitter(';');
+						if (params.front.strip != "permessage-deflate")
+							continue;
+						useDeflate = true;
+						params.popFront();
+						foreach (param; params)
 						{
-							useDeflate = true;
-							break;
+							auto p = param.strip;
+							if (p == "server_no_context_takeover")
+								serverNoContextTakeover = true;
+							else if (p == "client_no_context_takeover")
+								clientNoContextTakeover = true;
 						}
+						break;
 					}
 				}
 				if (deflateMode_ == PerMessageDeflate.force)
@@ -785,6 +830,8 @@ protected:
 			1.minutes, // idleTimeout
 			useDeflate,
 			compressionLevel_,
+			clientNoContextTakeover, // noDeflateContextTakeover (client's deflater)
+			serverNoContextTakeover, // noInflateContextTakeover (server's inflater = client's inflater for server msgs)
 		);
 
 		if (handleWebSocketConnect)
