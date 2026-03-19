@@ -13,6 +13,22 @@
 
 module ae.net.http.websocket;
 
+version (ae_with_zlib) // Explicit override
+	enum haveZlib = true;
+else
+version (ae_without_zlib) // Explicit override
+	enum haveZlib = false;
+else
+version (Have_ae) // Building with Dub
+{
+	version (Have_ae_zlib) // Using ae:zlib
+		enum haveZlib = true;
+	else
+		enum haveZlib = false;
+}
+else // Not building with Dub
+	enum haveZlib = true; // Pull in zlib by default
+
 import core.time : Duration, minutes, seconds;
 
 import std.conv : to;
@@ -27,6 +43,19 @@ import ae.sys.osrng : genRandom;
 import ae.sys.timing : TimerTask, mainTimer, Timer;
 import ae.utils.array : as, asBytes, asStaticBytes, asSlice;
 import ae.utils.bitmanip : NetworkByteOrder;
+
+static if (haveZlib)
+{
+	import zlib = ae.utils.zlib;
+}
+
+/// Compression mode for WebSocket permessage-deflate (RFC 7692).
+enum PerMessageDeflate
+{
+	disable,   /// Never use compression, even if built with zlib.
+	negotiate, /// Use compression if peer supports it.
+	force,     /// Require compression; fail if peer does not support it.
+}
 
 /// Adapter which decodes/encodes WebSocket frames.
 class WebSocketAdapter : ConnectionAdapter
@@ -64,12 +93,23 @@ class WebSocketAdapter : ConnectionAdapter
 
 	Duration idleTimeout;
 
+	/// Whether permessage-deflate compression is active on this connection.
+	@property bool deflateEnabled() const
+	{
+		static if (haveZlib)
+			return useDeflate_;
+		else
+			return false;
+	}
+
 	this(
 		IConnection next,
 		bool useMask = false,
 		bool requireMask = false,
 		bool sendBinary = true,
 		Duration idleTimeout = 1.minutes,
+		bool useDeflate = false,
+		int compressionLevel = -1,
 	)
 	{
 		super(next);
@@ -88,6 +128,21 @@ class WebSocketAdapter : ConnectionAdapter
 		idleTask = new TimerTask();
 		idleTask.handleTask = &onIdle;
 		mainTimer.add(idleTask, now + idleTimeout);
+
+		static if (haveZlib)
+		{
+			this.useDeflate_ = useDeflate;
+			if (useDeflate)
+			{
+				deflater.init(zlib.ZlibOptions(compressionLevel, 15, zlib.ZlibMode.raw));
+				inflater.init(zlib.ZlibOptions(zlib.ZlibOptions.init.deflateLevel, 15, zlib.ZlibMode.raw));
+			}
+		}
+		else
+		{
+			if (useDeflate)
+				throw new Exception("WebSocket compression not available (built without zlib)");
+		}
 	}
 
 	final void send(Data message)
@@ -99,6 +154,23 @@ class WebSocketAdapter : ConnectionAdapter
 
 	override void send(scope Data[] message, int priority)
 	{
+		static if (haveZlib)
+		{
+			if (useDeflate_)
+			{
+				auto compressed = compressMessage(message);
+				sendFrame(
+					cast(Flags)(
+						(sendBinary ? Flags.opBinaryFrame : Flags.opTextFrame) |
+						Flags.rsv1 |
+						Flags.fin
+					),
+					compressed,
+				);
+				return;
+			}
+		}
+
 		foreach (fragmentIndex, fragment; message)
 		{
 			Flags flags;
@@ -125,6 +197,40 @@ private:
 	/// Timeout handling.
 	TimerTask idleTask;
 	bool pingSent; /// ditto
+
+	static if (haveZlib)
+	{
+		bool useDeflate_;
+		bool messageCompressed_;
+		zlib.ZlibProcess!true deflater;
+		zlib.ZlibProcess!false inflater;
+
+		Data compressMessage(scope Data[] message)
+		{
+			foreach (ref chunk; message)
+				deflater.processChunk(chunk);
+			auto compressed = deflater.syncFlush().joinData;
+			// Strip trailing 0x00 0x00 0xFF 0xFF (sync flush marker)
+			// per RFC 7692 Section 7.2.1.
+			// The tail is absent when there is nothing new to flush
+			// (e.g. empty message after a prior flush).
+			if (compressed.length == 0)
+				return Data.init;
+			assert(compressed.length >= 4);
+			return compressed[0 .. $ - 4];
+		}
+
+		Data decompressMessage(Data compressed)
+		{
+			if (compressed.length == 0)
+				return Data.init;
+			// Append 0x00 0x00 0xFF 0xFF per RFC 7692 Section 7.2.1
+			inflater.processChunk(compressed);
+			auto tail = Data(cast(ubyte[])[0x00, 0x00, 0xFF, 0xFF]);
+			inflater.processChunk(tail);
+			return inflater.syncFlush().joinData;
+		}
+	}
 
 	void sendFrame(Flags flags, Data payload)
 	{
@@ -289,6 +395,11 @@ protected:
 					case Flags.opTextFrame:
 					case Flags.opBinaryFrame:
 						enforce(outBuffer.length == 0, "Unexpected non-continuation frame");
+						static if (haveZlib)
+						{
+							if (useDeflate_)
+								messageCompressed_ = cast(bool)(flags & Flags.rsv1);
+						}
 						goto dataFrame;
 
 					dataFrame:
@@ -297,6 +408,14 @@ protected:
 						{
 							auto m = outBuffer.joinData;
 							outBuffer = null;
+							static if (haveZlib)
+							{
+								if (messageCompressed_)
+								{
+									m = decompressMessage(m);
+									messageCompressed_ = false;
+								}
+							}
 							super.onReadData(m);
 						}
 						break;
@@ -339,6 +458,10 @@ protected:
 		outBuffer = null;
 		idleTask.cancel();
 		idleTask = null;
+		static if (haveZlib)
+		{
+			useDeflate_ = false;
+		}
 	}
 }
 
@@ -350,7 +473,12 @@ import std.digest.sha : sha1Of;
 private enum wsGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
 /// Accept a WebSocket upgrade request on the server side.
-WebSocketAdapter accept(HttpRequest request, HttpServerConnection conn)
+WebSocketAdapter accept(
+	HttpRequest request,
+	HttpServerConnection conn,
+	PerMessageDeflate deflateMode = PerMessageDeflate.negotiate,
+	int compressionLevel = -1,
+)
 {
 	enforce(
 		request.method == "GET" &&
@@ -369,6 +497,37 @@ WebSocketAdapter accept(HttpRequest request, HttpServerConnection conn)
 	response.headers["Sec-WebSocket-Accept"] = Base64.encode(sha1Of(
 		request.headers["Sec-WebSocket-Key"] ~ wsGUID
 	));
+
+	bool useDeflate = false;
+	static if (haveZlib)
+	{
+		if (deflateMode != PerMessageDeflate.disable)
+		{
+			auto exts = request.headers.get("Sec-WebSocket-Extensions", null);
+			if (exts !is null)
+			{
+				import std.algorithm.iteration : splitter;
+				import std.string : strip;
+				foreach (ext; exts.splitter(','))
+				{
+					if (ext.splitter(';').front.strip == "permessage-deflate")
+					{
+						useDeflate = true;
+						response.headers["Sec-WebSocket-Extensions"] = "permessage-deflate";
+						break;
+					}
+				}
+			}
+			if (deflateMode == PerMessageDeflate.force)
+				enforce(useDeflate, "Client did not offer permessage-deflate");
+		}
+	}
+	else
+	{
+		if (deflateMode == PerMessageDeflate.force)
+			throw new Exception("WebSocket compression not available (built without zlib)");
+	}
+
 	auto upgrade = conn.upgrade(response);
 	enforce(upgrade.initialData.bytes.length == 0, "WebSocket data before handshake");
 
@@ -376,6 +535,10 @@ WebSocketAdapter accept(HttpRequest request, HttpServerConnection conn)
 		upgrade.conn,
 		false, // useMask
 		true, // requireMask
+		true, // sendBinary
+		1.minutes, // idleTimeout
+		useDeflate,
+		compressionLevel,
 	);
 }
 
@@ -395,6 +558,8 @@ void connectWebSocket(
 	string url,
 	void delegate(WebSocketAdapter) handler,
 	void delegate(string) errorHandler,
+	PerMessageDeflate deflateMode = PerMessageDeflate.negotiate,
+	int compressionLevel = -1,
 )
 {
 	auto resource = url;
@@ -425,7 +590,7 @@ void connectWebSocket(
 	};
 
 	auto req = new HttpRequest(resource);
-	client.upgradeRequest(req);
+	client.upgradeRequest(req, deflateMode, compressionLevel);
 }
 
 /// WebSocket client that performs the HTTP upgrade handshake.
@@ -477,7 +642,11 @@ class WebSocketClient : HttpClient
 	/// Adds required headers (`Upgrade`, `Connection`, `Sec-WebSocket-Key`,
 	/// `Sec-WebSocket-Version`). Custom headers should be set on the
 	/// request before calling this method.
-	void upgradeRequest(HttpRequest req)
+	void upgradeRequest(
+		HttpRequest req,
+		PerMessageDeflate deflateMode = PerMessageDeflate.negotiate,
+		int compressionLevel = -1,
+	)
 	{
 		ubyte[16] keyBytes;
 		genRandom(keyBytes);
@@ -488,6 +657,20 @@ class WebSocketClient : HttpClient
 		req.headers["Sec-WebSocket-Key"] = wsKey;
 		req.headers["Sec-WebSocket-Version"] = "13";
 
+		static if (haveZlib)
+		{
+			if (deflateMode != PerMessageDeflate.disable)
+				req.headers["Sec-WebSocket-Extensions"] = "permessage-deflate; client_max_window_bits";
+		}
+		else
+		{
+			if (deflateMode == PerMessageDeflate.force)
+				throw new Exception("WebSocket compression not available (built without zlib)");
+		}
+
+		deflateMode_ = deflateMode;
+		compressionLevel_ = compressionLevel;
+
 		this.request(req, false);
 	}
 
@@ -495,6 +678,8 @@ private:
 	string wsKey;
 	SSLContext sslCtx;
 	SSLAdapter sslAdapter;
+	PerMessageDeflate deflateMode_;
+	int compressionLevel_;
 
 protected:
 	override IConnection adaptConnection(IConnection conn)
@@ -551,6 +736,30 @@ protected:
 			"Invalid Sec-WebSocket-Accept in WebSocket handshake response"
 		);
 
+		bool useDeflate = false;
+		static if (haveZlib)
+		{
+			if (deflateMode_ != PerMessageDeflate.disable)
+			{
+				auto exts = currentResponse.headers.get("Sec-WebSocket-Extensions", null);
+				if (exts !is null)
+				{
+					import std.algorithm.iteration : splitter;
+					import std.string : strip;
+					foreach (ext; exts.splitter(','))
+					{
+						if (ext.splitter(';').front.strip == "permessage-deflate")
+						{
+							useDeflate = true;
+							break;
+						}
+					}
+				}
+				if (deflateMode_ == PerMessageDeflate.force)
+					enforce(useDeflate, "Server did not accept permessage-deflate");
+			}
+		}
+
 		auto response = currentResponse;
 		auto rest = move(headerBuffer);
 
@@ -572,6 +781,10 @@ protected:
 			baseConn,
 			true,  // useMask (client must mask)
 			false, // requireMask
+			true,  // sendBinary
+			1.minutes, // idleTimeout
+			useDeflate,
+			compressionLevel_,
 		);
 
 		if (handleWebSocketConnect)
@@ -607,6 +820,44 @@ debug(ae_unittest) unittest
 				s.close();
 			};
 			ws.send(Data("Hello WebSocket".asBytes));
+		},
+		(string error) {
+			assert(false, "WebSocket connection failed: " ~ error);
+		},
+	);
+
+	socketManager.loop();
+	assert(ok);
+}
+
+static if (haveZlib)
+debug(ae_unittest) unittest
+{
+	import ae.net.http.server : HttpServer, HttpServerConnection;
+	import ae.net.asockets : socketManager;
+
+	auto s = new HttpServer;
+	s.handleRequest = (HttpRequest request, HttpServerConnection serverConn) {
+		auto ws = accept(request, serverConn);
+		assert(ws.deflateEnabled, "Server: permessage-deflate was not negotiated");
+		ws.handleReadData = (Data data) {
+			ws.send(data); // echo
+		};
+	};
+	auto port = s.listen(0, "127.0.0.1");
+
+	bool ok;
+	connectWebSocket(
+		"ws://127.0.0.1:" ~ port.to!string ~ "/",
+		(WebSocketAdapter ws) {
+			assert(ws.deflateEnabled, "Client: permessage-deflate was not negotiated");
+			ws.handleReadData = (Data data) {
+				assert(data.toGC() == "Hello Compressed WebSocket");
+				ok = true;
+				ws.disconnect("Test complete");
+				s.close();
+			};
+			ws.send(Data("Hello Compressed WebSocket".asBytes));
 		},
 		(string error) {
 			assert(false, "WebSocket connection failed: " ~ error);
