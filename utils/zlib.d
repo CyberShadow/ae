@@ -173,6 +173,17 @@ struct ZlibProcess(bool COMPRESSING)
 		return move(outputChunks);
 	}
 
+	/// Reset the stream to its initial state without deallocating.
+	/// This is used for "no context takeover" in WebSocket permessage-deflate,
+	/// where each message must be compressed/decompressed independently.
+	void reset()
+	{
+		saveChunk();
+		outputChunks = DataVec.init;
+		zs.avail_out = 0;
+		zenforce(resetFunc(&zs));
+	}
+
 	/// Process all input.
 	static DataVec process(scope const(Data)[] input, ZlibOptions options = ZlibOptions.init)
 	{
@@ -205,6 +216,7 @@ private:
 	{
 		alias deflate processFunc;
 		alias deflateEnd endFunc;
+		alias deflateReset resetFunc;
 
 		size_t adjustSize(size_t sz) { return sz / 4 + 1; }
 	}
@@ -212,6 +224,7 @@ private:
 	{
 		alias inflate processFunc;
 		alias inflateEnd endFunc;
+		alias inflateReset resetFunc;
 
 		size_t adjustSize(size_t sz) { return sz * 4 + 1; }
 	}
