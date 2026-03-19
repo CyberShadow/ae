@@ -467,8 +467,11 @@ protected:
 
 import ae.net.http.common : HttpRequest, HttpResponse, HttpStatusCode;
 import ae.net.http.server : HttpServerConnection;
+import std.algorithm.iteration : splitter;
+import std.algorithm.searching : any;
 import std.base64 : Base64;
 import std.digest.sha : sha1Of;
+import std.string : strip;
 
 private enum wsGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
@@ -484,7 +487,7 @@ WebSocketAdapter accept(
 		request.method == "GET" &&
 		request.protocolVersion >= "1.1" &&
 		request.headers.get("Upgrade", null).icmp("websocket") == 0 &&
-		request.headers.get("Connection", null).icmp("Upgrade") == 0 &&
+		request.headers.get("Connection", null).splitter(",").any!(t => t.strip.icmp("Upgrade") == 0) &&
 		"Sec-WebSocket-Key" in request.headers &&
 		request.headers.get("Sec-WebSocket-Version", null) == "13",
 		"Invalid WebSockets request"
