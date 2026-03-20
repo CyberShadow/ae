@@ -44,6 +44,12 @@ struct RPCName
 /// UDA to mark a method as a notification (no response expected).
 struct RPCNotification {}
 
+/// UDA to make the client serialize params as a named JSON object
+/// instead of a positional array. Can be applied to individual methods
+/// or to the interface (applies to all methods).
+/// On the server side, both formats are always accepted regardless of this UDA.
+struct RPCNamedParams {}
+
 // ************************************************************************
 
 /// Get the RPC method name for a given method.
@@ -60,6 +66,14 @@ template getRpcMethodName(alias method, string defaultName)
 template isRpcNotification(alias method)
 {
 	enum isRpcNotification = hasAttribute!(RPCNotification, method);
+}
+
+/// Check if named params should be used for a method.
+/// Checks the method first, falls back to the interface.
+template isRpcNamedParams(I, alias method)
+{
+	enum isRpcNamedParams = hasAttribute!(RPCNamedParams, method)
+		|| hasAttribute!(RPCNamedParams, I);
 }
 
 // ************************************************************************
@@ -344,14 +358,31 @@ class JsonRpcClient(I) : I if (is(I == interface))
 
 		static if (Params.length > 0)
 		{
-			code ~= "\t\treq.params = JSONFragment([";
-			static foreach (i, P; Params)
+			enum useNamedParams = isRpcNamedParams!(I, method);
+
+			static if (useNamedParams)
 			{
-				static if (i > 0)
-					code ~= ", ";
-				code ~= "JSONFragment(" ~ ParamNames[i] ~ ".toJson())";
+				// @RPCNamedParams: build JSON object with param names as keys
+				code ~= "\t\tJSONFragment[string] __jsonrpc_params;\n";
+				static foreach (i, P; Params)
+				{
+					code ~= "\t\t__jsonrpc_params[\"" ~ ParamNames[i]
+						~ "\"] = JSONFragment(" ~ ParamNames[i] ~ ".toJson());\n";
+				}
+				code ~= "\t\treq.params = JSONFragment(__jsonrpc_params.toJson());\n";
 			}
-			code ~= "].toJson());\n";
+			else
+			{
+				// Default: positional array (existing behavior)
+				code ~= "\t\treq.params = JSONFragment([";
+				static foreach (i, P; Params)
+				{
+					static if (i > 0)
+						code ~= ", ";
+					code ~= "JSONFragment(" ~ ParamNames[i] ~ ".toJson())";
+				}
+				code ~= "].toJson());\n";
+			}
 		}
 
 		static if (isNotification)
@@ -546,4 +577,162 @@ debug(ae_unittest) unittest
 
 	socketManager.loop();
 	assert(done, "Named params test did not complete");
+}
+
+// Test @RPCNamedParams on interface
+debug(ae_unittest) unittest
+{
+	import ae.net.asockets : socketManager;
+
+	@RPCNamedParams
+	interface NamedApi
+	{
+		Promise!int add(int a, int b);
+	}
+
+	static class NamedApiImpl : NamedApi
+	{
+		Promise!int add(int a, int b) { return resolve(a + b); }
+	}
+
+	auto impl = new NamedApiImpl();
+	auto dispatcher = jsonRpcDispatcher!NamedApi(impl);
+
+	bool done;
+
+	// Server accepts object params
+	auto req = JsonRpcRequest();
+	req.method = "add";
+	req.params = JSONFragment(`{"a": 7, "b": 3}`);
+	req.id = JSONFragment(`1`);
+
+	dispatcher.dispatch(req).then((JsonRpcResponse resp) {
+		assert(!resp.isError, resp.error.get.message);
+		assert(resp.getResult!int == 10);
+
+		// Server still accepts array params too
+		auto req2 = JsonRpcRequest();
+		req2.method = "add";
+		req2.params = JSONFragment(`[7, 3]`);
+		req2.id = JSONFragment(`2`);
+
+		dispatcher.dispatch(req2).then((JsonRpcResponse resp2) {
+			assert(!resp2.isError, resp2.error.get.message);
+			assert(resp2.getResult!int == 10);
+			done = true;
+		});
+	});
+
+	socketManager.loop();
+	assert(done, "Named params interface test did not complete");
+}
+
+// Test per-method @RPCNamedParams in a mixed interface
+debug(ae_unittest) unittest
+{
+	import ae.net.asockets : socketManager;
+
+	interface MixedApi
+	{
+		Promise!int positional(int a, int b);
+
+		@RPCNamedParams
+		Promise!int named(int a, int b);
+	}
+
+	static class MixedApiImpl : MixedApi
+	{
+		Promise!int positional(int a, int b) { return resolve(a + b); }
+		Promise!int named(int a, int b) { return resolve(a * b); }
+	}
+
+	auto impl = new MixedApiImpl();
+	auto dispatcher = jsonRpcDispatcher!MixedApi(impl);
+
+	bool done;
+
+	// positional method with array params
+	auto req1 = JsonRpcRequest();
+	req1.method = "positional";
+	req1.params = JSONFragment(`[3, 4]`);
+	req1.id = JSONFragment(`1`);
+
+	dispatcher.dispatch(req1).then((JsonRpcResponse resp1) {
+		assert(!resp1.isError, resp1.error.get.message);
+		assert(resp1.getResult!int == 7);
+
+		// named method with object params
+		auto req2 = JsonRpcRequest();
+		req2.method = "named";
+		req2.params = JSONFragment(`{"a": 3, "b": 4}`);
+		req2.id = JSONFragment(`2`);
+
+		dispatcher.dispatch(req2).then((JsonRpcResponse resp2) {
+			assert(!resp2.isError, resp2.error.get.message);
+			assert(resp2.getResult!int == 12);
+
+			// named method also accepts array params (server accepts both)
+			auto req3 = JsonRpcRequest();
+			req3.method = "named";
+			req3.params = JSONFragment(`[5, 6]`);
+			req3.id = JSONFragment(`3`);
+
+			dispatcher.dispatch(req3).then((JsonRpcResponse resp3) {
+				assert(!resp3.isError, resp3.error.get.message);
+				assert(resp3.getResult!int == 30);
+				done = true;
+			});
+		});
+	});
+
+	socketManager.loop();
+	assert(done, "Mixed API test did not complete");
+}
+
+// Round-trip test: client with @RPCNamedParams serializes object params,
+// server deserializes by name, verifying the __jsonrpc_params code path.
+debug(ae_unittest) unittest
+{
+	import ae.net.asockets : socketManager, TcpConnection, TcpServer;
+	import ae.net.jsonrpc.codec : JsonRpcServerCodec;
+	import ae.net.jsonrpc.ndjson : lineDelimitedJsonRpcConnection;
+
+	@RPCNamedParams
+	interface NamedRoundTripApi
+	{
+		Promise!int subtract(int a, int b);
+	}
+
+	static class NamedRoundTripImpl : NamedRoundTripApi
+	{
+		Promise!int subtract(int a, int b) { return resolve(a - b); }
+	}
+
+	auto dispatcher = jsonRpcDispatcher!NamedRoundTripApi(new NamedRoundTripImpl());
+	auto tcpServer = new TcpServer();
+	tcpServer.handleAccept = (TcpConnection conn) {
+		auto codec = new JsonRpcServerCodec(lineDelimitedJsonRpcConnection(conn));
+		codec.handleRequest = &dispatcher.dispatch;
+	};
+	auto port = tcpServer.listen(0, "127.0.0.1");
+
+	auto clientConn = new TcpConnection();
+	bool done;
+
+	clientConn.handleConnect = {
+		auto conn = lineDelimitedJsonRpcConnection(clientConn);
+		auto client = new JsonRpcClient!NamedRoundTripApi(conn);
+
+		// Client sends {"a": 10, "b": 3} — server looks up by name
+		client.subtract(10, 3).then((int r) {
+			assert(r == 7);
+			done = true;
+			conn.disconnect();
+			tcpServer.close();
+		});
+	};
+
+	clientConn.connect("127.0.0.1", port);
+	socketManager.loop();
+	assert(done, "Named params round-trip test did not complete");
 }
