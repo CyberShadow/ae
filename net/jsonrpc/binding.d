@@ -44,16 +44,16 @@ struct RPCName
 /// UDA to mark a method as a notification (no response expected).
 struct RPCNotification {}
 
-/// UDA to apply to a struct type. When a method has exactly one parameter
-/// of a struct type with this UDA, the struct's fields become the top-level
-/// params keys instead of being nested under the parameter name.
-struct RPCFlatten {}
-
 /// UDA to make the client serialize params as a named JSON object
 /// instead of a positional array. Can be applied to individual methods
 /// or to the interface (applies to all methods).
 /// On the server side, both formats are always accepted regardless of this UDA.
 struct RPCNamedParams {}
+
+/// UDA to apply to a struct type. When a method has exactly one parameter
+/// of a struct type with this UDA, the struct's fields become the top-level
+/// params keys instead of being nested under the parameter name.
+struct RPCFlatten {}
 
 // ************************************************************************
 
@@ -712,6 +712,115 @@ debug(ae_unittest) unittest
 	assert(done, "Named params interface test did not complete");
 }
 
+// Test @RPCFlatten with named params
+debug(ae_unittest) unittest
+{
+	import ae.net.asockets : socketManager;
+
+	@RPCFlatten
+	static struct Point
+	{
+		int x;
+		int y;
+	}
+
+	@RPCNamedParams
+	interface GeometryApi
+	{
+		Promise!int manhattan(Point p);
+	}
+
+	static class GeometryApiImpl : GeometryApi
+	{
+		Promise!int manhattan(Point p) { return resolve(p.x + p.y); }
+	}
+
+	auto impl = new GeometryApiImpl();
+	auto dispatcher = jsonRpcDispatcher!GeometryApi(impl);
+
+	bool done;
+
+	// Object params with flattened struct — fields are top-level keys
+	auto req = JsonRpcRequest();
+	req.method = "manhattan";
+	req.params = JSONFragment(`{"x": 3, "y": 4}`);
+	req.id = JSONFragment(`1`);
+
+	dispatcher.dispatch(req).then((JsonRpcResponse resp) {
+		assert(!resp.isError, resp.error.get.message);
+		assert(resp.getResult!int == 7);
+
+		// Array params still work with flatten (positional tupleof)
+		auto req2 = JsonRpcRequest();
+		req2.method = "manhattan";
+		req2.params = JSONFragment(`[5, 6]`);
+		req2.id = JSONFragment(`2`);
+
+		dispatcher.dispatch(req2).then((JsonRpcResponse resp2) {
+			assert(!resp2.isError, resp2.error.get.message);
+			assert(resp2.getResult!int == 11);
+			done = true;
+		});
+	});
+
+	socketManager.loop();
+	assert(done, "RPCFlatten test did not complete");
+}
+
+// Test @RPCFlatten with positional (array) params — no @RPCNamedParams
+debug(ae_unittest) unittest
+{
+	import ae.net.asockets : socketManager;
+
+	@RPCFlatten
+	static struct Point
+	{
+		int x;
+		int y;
+	}
+
+	interface FlatPosApi
+	{
+		Promise!int manhattan(Point p);
+	}
+
+	static class FlatPosApiImpl : FlatPosApi
+	{
+		Promise!int manhattan(Point p) { return resolve(p.x + p.y); }
+	}
+
+	auto impl = new FlatPosApiImpl();
+	auto dispatcher = jsonRpcDispatcher!FlatPosApi(impl);
+
+	bool done;
+
+	// Flat positional: array elements map to struct fields
+	auto req = JsonRpcRequest();
+	req.method = "manhattan";
+	req.params = JSONFragment(`[10, 20]`);
+	req.id = JSONFragment(`1`);
+
+	dispatcher.dispatch(req).then((JsonRpcResponse resp) {
+		assert(!resp.isError, resp.error.get.message);
+		assert(resp.getResult!int == 30);
+
+		// Object params also work (server always accepts both)
+		auto req2 = JsonRpcRequest();
+		req2.method = "manhattan";
+		req2.params = JSONFragment(`{"x": 1, "y": 2}`);
+		req2.id = JSONFragment(`2`);
+
+		dispatcher.dispatch(req2).then((JsonRpcResponse resp2) {
+			assert(!resp2.isError, resp2.error.get.message);
+			assert(resp2.getResult!int == 3);
+			done = true;
+		});
+	});
+
+	socketManager.loop();
+	assert(done, "RPCFlatten positional test did not complete");
+}
+
 // Test per-method @RPCNamedParams in a mixed interface
 debug(ae_unittest) unittest
 {
@@ -822,111 +931,83 @@ debug(ae_unittest) unittest
 	assert(done, "Named params round-trip test did not complete");
 }
 
-// Test @RPCFlatten with named params
+// ************************************************************************
+
+version (HAVE_JSONRPC_PEER)
 debug(ae_unittest) unittest
 {
+	// Integration test, Phase 1: D acts as HTTP JSON-RPC server.
+	// Validates that the D server correctly handles both positional and named
+	// params, and @RPCFlatten struct params from an external Python peer
+	// (jsonrpclib-pelix).
+	import std.process : environment;
+	if (environment.get("JSONRPC_TEST_MODE", "") != "server") return;
+
 	import ae.net.asockets : socketManager;
+	import ae.net.http.common : HttpRequest;
+	import ae.net.http.server : HttpServer, HttpServerConnection;
+	import ae.net.jsonrpc.codec : JsonRpcServerCodec;
+	import ae.net.jsonrpc.http : HttpServerJsonRpcConnection;
+	import std.file : fileWrite = write;
 
-	@RPCFlatten
-	static struct Point
+	@RPCFlatten struct Vec2 { int x; int y; }
+
+	interface CalcApi
 	{
-		int x;
-		int y;
+		Promise!int add(int a, int b);
+		Promise!int addVec(Vec2 v);
 	}
 
-	@RPCNamedParams
-	interface GeometryApi
+	static class CalcImpl : CalcApi
 	{
-		Promise!int manhattan(Point p);
+		Promise!int add(int a, int b) { return resolve(a + b); }
+		Promise!int addVec(Vec2 v)    { return resolve(v.x + v.y); }
 	}
 
-	static class GeometryApiImpl : GeometryApi
-	{
-		Promise!int manhattan(Point p) { return resolve(p.x + p.y); }
-	}
+	auto dispatcher = jsonRpcDispatcher!CalcApi(new CalcImpl());
+	auto server = new HttpServer();
+	server.handleRequest = (HttpRequest request, HttpServerConnection conn) {
+		auto rpcConn = new HttpServerJsonRpcConnection(request, conn);
+		auto codec = new JsonRpcServerCodec(rpcConn);
+		codec.handleRequest = &dispatcher.dispatch;
+	};
+	auto port = server.listen(0, "127.0.0.1");
 
-	auto impl = new GeometryApiImpl();
-	auto dispatcher = jsonRpcDispatcher!GeometryApi(impl);
-
-	bool done;
-
-	// Object params with flattened struct — fields are top-level keys
-	auto req = JsonRpcRequest();
-	req.method = "manhattan";
-	req.params = JSONFragment(`{"x": 3, "y": 4}`);
-	req.id = JSONFragment(`1`);
-
-	dispatcher.dispatch(req).then((JsonRpcResponse resp) {
-		assert(!resp.isError, resp.error.get.message);
-		assert(resp.getResult!int == 7);
-
-		// Array params still work with flatten (positional tupleof)
-		auto req2 = JsonRpcRequest();
-		req2.method = "manhattan";
-		req2.params = JSONFragment(`[5, 6]`);
-		req2.id = JSONFragment(`2`);
-
-		dispatcher.dispatch(req2).then((JsonRpcResponse resp2) {
-			assert(!resp2.isError, resp2.error.get.message);
-			assert(resp2.getResult!int == 11);
-			done = true;
-		});
-	});
+	fileWrite(environment.get("JSONRPC_READY_FILE", "/tmp/jsonrpc_ready"), port.to!string);
 
 	socketManager.loop();
-	assert(done, "RPCFlatten test did not complete");
 }
 
-// Test @RPCFlatten with positional (array) params — no @RPCNamedParams
+version (HAVE_JSONRPC_PEER)
 debug(ae_unittest) unittest
 {
+	// Integration test, Phase 2: D acts as HTTP JSON-RPC client.
+	// Validates that the D client with @RPCNamedParams sends correct wire
+	// format understood by an external Python peer (jsonrpclib-pelix).
+	import std.process : environment;
+	if (environment.get("JSONRPC_TEST_MODE", "") != "client") return;
+
 	import ae.net.asockets : socketManager;
+	import ae.net.jsonrpc.http : HttpJsonRpcConnection;
 
-	@RPCFlatten
-	static struct Point
+	auto port = environment.get("JSONRPC_SERVER_PORT", "8080");
+
+	@RPCNamedParams
+	interface CalcClient
 	{
-		int x;
-		int y;
+		Promise!int add(int a, int b);
 	}
-
-	interface FlatPosApi
-	{
-		Promise!int manhattan(Point p);
-	}
-
-	static class FlatPosApiImpl : FlatPosApi
-	{
-		Promise!int manhattan(Point p) { return resolve(p.x + p.y); }
-	}
-
-	auto impl = new FlatPosApiImpl();
-	auto dispatcher = jsonRpcDispatcher!FlatPosApi(impl);
 
 	bool done;
+	auto conn = new HttpJsonRpcConnection("http://127.0.0.1:" ~ port);
+	auto client = new JsonRpcClient!CalcClient(conn);
 
-	// Flat positional: array elements map to struct fields
-	auto req = JsonRpcRequest();
-	req.method = "manhattan";
-	req.params = JSONFragment(`[10, 20]`);
-	req.id = JSONFragment(`1`);
-
-	dispatcher.dispatch(req).then((JsonRpcResponse resp) {
-		assert(!resp.isError, resp.error.get.message);
-		assert(resp.getResult!int == 30);
-
-		// Object params also work (server always accepts both)
-		auto req2 = JsonRpcRequest();
-		req2.method = "manhattan";
-		req2.params = JSONFragment(`{"x": 1, "y": 2}`);
-		req2.id = JSONFragment(`2`);
-
-		dispatcher.dispatch(req2).then((JsonRpcResponse resp2) {
-			assert(!resp2.isError, resp2.error.get.message);
-			assert(resp2.getResult!int == 3);
-			done = true;
-		});
+	client.add(10, 7).then((int result) {
+		assert(result == 17, "Expected 17 for add(10, 7) with named params, got " ~ result.to!string);
+		done = true;
+		conn.disconnect();
 	});
 
 	socketManager.loop();
-	assert(done, "RPCFlatten positional test did not complete");
+	assert(done, "D client integration test did not complete");
 }

@@ -151,9 +151,43 @@
           '';
         };
 
+        # JSON-RPC integration test binary - needs HAVE_JSONRPC_PEER version flag
+        jsonrpc-test-bin = pkgs.stdenv.mkDerivation {
+          name = "ae-jsonrpc-test-bin";
+
+          nativeBuildInputs = [ pkgs.ldc ];
+          dontStrip = true;
+
+          unpackPhase = ''
+            cp -a ${self} ae
+          '';
+
+          buildPhase = ''
+            echo "Compiling JSON-RPC integration tests..."
+
+            # ASOCKETS_DEBUG_IDLE: DO NOT REMOVE - essential for detecting stuck event loops
+            ldc2 \
+              -i \
+              -I. \
+              -g \
+              -d-debug=ae_unittest \
+              -d-debug=ASOCKETS_DEBUG_IDLE \
+              -d-version=HAVE_JSONRPC_PEER \
+              -unittest \
+              --main \
+              -of=jsonrpc_test \
+              ae/net/jsonrpc/binding.d
+          '';
+
+          installPhase = ''
+            mkdir -p $out/bin
+            cp jsonrpc_test $out/bin/
+          '';
+        };
+
       in {
         packages = {
-          inherit mysql-test-bin psql-test-bin websocket-test-bin;
+          inherit mysql-test-bin psql-test-bin websocket-test-bin jsonrpc-test-bin;
         };
 
         checks = {
@@ -377,6 +411,79 @@ PYEOF
               # Wait for D server to exit (closes after client disconnects)
               wait $D_PID
               echo "All WebSocket integration tests passed!"
+            '';
+
+            installPhase = ''
+              touch $out
+            '';
+          };
+
+          # JSON-RPC integration tests (with Python jsonrpclib-pelix peer)
+          jsonrpc = pkgs.stdenv.mkDerivation {
+            name = "ae-jsonrpc-test";
+            src = self;
+
+            nativeBuildInputs = [
+              jsonrpc-test-bin
+              (pkgs.python3.withPackages (ps: [ ps.jsonrpclib-pelix ]))
+            ];
+
+            buildPhase = ''
+              export HOME="$TMPDIR"
+
+              echo "=== Phase 1: D server with Python client ==="
+
+              # Start D JSON-RPC server; it writes port to ready file when listening
+              JSONRPC_TEST_MODE=server JSONRPC_READY_FILE="$TMPDIR/jsonrpc_ready" jsonrpc_test &
+              D_PID=$!
+
+              # Wait for D server to signal readiness (port written to file)
+              for i in $(seq 1 30); do
+                [ -f "$TMPDIR/jsonrpc_ready" ] && break; sleep 0.5
+              done
+
+              PORT=$(cat "$TMPDIR/jsonrpc_ready")
+
+              python3 << PYEOF
+import jsonrpclib
+proxy = jsonrpclib.Server("http://127.0.0.1:$PORT")
+result = proxy.add(2, 3)
+assert result == 5, "positional add(2,3) failed: " + str(result)
+result = proxy.add(a=10, b=7)
+assert result == 17, "named add(a=10,b=7) failed: " + str(result)
+result = proxy.addVec(x=3, y=4)
+assert result == 7, "addVec(x=3,y=4) failed: " + str(result)
+print("Phase 1: all assertions passed!")
+PYEOF
+
+              kill $D_PID || true
+              wait $D_PID 2>/dev/null || true
+
+              echo "=== Phase 2: Python server with D client ==="
+
+              # Start Python JSON-RPC server; capture its port from stdout
+              python3 << 'PYEOF' > "$TMPDIR/py_server_port" &
+from jsonrpclib.SimpleJSONRPCServer import SimpleJSONRPCServer
+server = SimpleJSONRPCServer(("127.0.0.1", 0), logRequests=False)
+server.register_function(lambda a, b: a + b, "add")
+print(server.server_address[1], flush=True)
+server.serve_forever()
+PYEOF
+              PY_PID=$!
+
+              # Wait for Python server to print its port
+              for i in $(seq 1 30); do
+                [ -s "$TMPDIR/py_server_port" ] && break; sleep 0.5
+              done
+
+              PY_PORT=$(cat "$TMPDIR/py_server_port")
+
+              JSONRPC_TEST_MODE=client JSONRPC_SERVER_PORT="$PY_PORT" jsonrpc_test
+
+              kill $PY_PID || true
+              wait $PY_PID 2>/dev/null || true
+
+              echo "All JSON-RPC integration tests passed!"
             '';
 
             installPhase = ''
