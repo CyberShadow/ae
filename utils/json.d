@@ -600,6 +600,7 @@ private struct JsonParser(C, JsonOptions options = JsonOptions.init)
 		else
 		static if (is(T==JSONFragment))
 		{
+			skipWhitespace();
 			auto start = p;
 			skipValue();
 			value = JSONFragment(s[start..p]);
@@ -922,6 +923,7 @@ private struct JsonParser(C, JsonOptions options = JsonOptions.init)
 				{
 					static if (is(typeof(extField) == JSONExtras))
 					{
+						skipWhitespace();
 						auto start = p;
 						skipValue();
 						extField[cast(string)jsonField] = JSONFragment(s[start..p]);
