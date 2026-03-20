@@ -130,6 +130,7 @@ struct JsonRpcDispatcher(I) if (is(I == interface))
 	{
 		alias method = __traits(getMember, I, memberName);
 		alias Params = Parameters!method;
+		alias ParamNames = ParameterIdentifierTuple!method;
 		alias Return = ReturnType!method;
 
 		// Verify return type is a Promise
@@ -146,25 +147,42 @@ struct JsonRpcDispatcher(I) if (is(I == interface))
 		}
 		else
 		{
-			// Parse params from JSON array
 			if (!request.params)
 				return resolve(JsonRpcResponse.failure(id, JsonRpcErrorCode.invalidParams,
 					"Missing required parameters"));
 
 			auto paramsJson = request.params.json;
 
-			// Try to parse as array
 			Params args;
 			try
 			{
-				auto paramsArray = paramsJson.jsonParse!(JSONFragment[]);
-				if (paramsArray.length < Params.length)
-					return resolve(JsonRpcResponse.failure(id, JsonRpcErrorCode.invalidParams,
-						"Expected " ~ Params.length.to!string ~ " parameters, got " ~
-						paramsArray.length.to!string));
+				if (isJsonObject(paramsJson))
+				{
+					// Named params (JSON object) — look up each parameter by name
+					auto paramsObj = paramsJson.jsonParse!(JSONFragment[string]);
+					static foreach (i, P; Params)
+					{{
+						enum paramName = ParamNames[i];
+						auto val = paramName in paramsObj;
+						if (val is null)
+							return resolve(JsonRpcResponse.failure(id,
+								JsonRpcErrorCode.invalidParams,
+								"Missing required parameter: " ~ paramName));
+						args[i] = (*val).json.jsonParse!P;
+					}}
+				}
+				else
+				{
+					// Positional params (JSON array) — existing behavior
+					auto paramsArray = paramsJson.jsonParse!(JSONFragment[]);
+					if (paramsArray.length < Params.length)
+						return resolve(JsonRpcResponse.failure(id, JsonRpcErrorCode.invalidParams,
+							"Expected " ~ Params.length.to!string ~ " parameters, got " ~
+							paramsArray.length.to!string));
 
-				static foreach (i, P; Params)
-					args[i] = paramsArray[i].json.jsonParse!P;
+					static foreach (i, P; Params)
+						args[i] = paramsArray[i].json.jsonParse!P;
+				}
 			}
 			catch (Exception e)
 				return resolve(JsonRpcResponse.failure(id, JsonRpcErrorCode.invalidParams, e.msg));
@@ -215,6 +233,23 @@ private template isCallableMember(I, string memberName)
 	}
 	else
 		enum isCallableMember = false;
+}
+
+/// Check if a JSON string represents an object (starts with '{').
+/// Used by the server to accept both array and object params.
+private bool isJsonObject(string json) pure nothrow @nogc
+{
+	foreach (c; json)
+	{
+		switch (c)
+		{
+			case '{': return true;
+			case '[': return false;
+			case ' ', '\t', '\n', '\r': continue;
+			default: return false;
+		}
+	}
+	return false;
 }
 
 /// Create a JSON-RPC dispatcher for an interface implementation.
@@ -453,4 +488,62 @@ debug(ae_unittest) unittest
 
 	socketManager.loop();
 	assert(done, "Test did not complete");
+}
+
+// Test named params (object) — server accepts both formats for all methods
+debug(ae_unittest) unittest
+{
+	import ae.net.asockets : socketManager;
+
+	interface Calculator
+	{
+		Promise!int add(int a, int b);
+	}
+
+	static class CalculatorImpl : Calculator
+	{
+		Promise!int add(int a, int b) { return resolve(a + b); }
+	}
+
+	auto impl = new CalculatorImpl();
+	auto dispatcher = jsonRpcDispatcher!Calculator(impl);
+
+	bool done;
+
+	// Named params (object)
+	auto req1 = JsonRpcRequest();
+	req1.method = "add";
+	req1.params = JSONFragment(`{"a": 10, "b": 20}`);
+	req1.id = JSONFragment(`1`);
+
+	dispatcher.dispatch(req1).then((JsonRpcResponse resp1) {
+		assert(!resp1.isError, resp1.error.get.message);
+		assert(resp1.getResult!int == 30);
+
+		// Missing named param should error
+		auto req2 = JsonRpcRequest();
+		req2.method = "add";
+		req2.params = JSONFragment(`{"a": 1, "x": 2}`);
+		req2.id = JSONFragment(`2`);
+
+		dispatcher.dispatch(req2).then((JsonRpcResponse resp2) {
+			assert(resp2.isError);
+			assert(resp2.error.get.code == JsonRpcErrorCode.invalidParams);
+
+			// Array params still work (existing behavior)
+			auto req3 = JsonRpcRequest();
+			req3.method = "add";
+			req3.params = JSONFragment(`[5, 6]`);
+			req3.id = JSONFragment(`3`);
+
+			dispatcher.dispatch(req3).then((JsonRpcResponse resp3) {
+				assert(!resp3.isError, resp3.error.get.message);
+				assert(resp3.getResult!int == 11);
+				done = true;
+			});
+		});
+	});
+
+	socketManager.loop();
+	assert(done, "Named params test did not complete");
 }
