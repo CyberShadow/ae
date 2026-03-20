@@ -44,6 +44,11 @@ struct RPCName
 /// UDA to mark a method as a notification (no response expected).
 struct RPCNotification {}
 
+/// UDA to apply to a struct type. When a method has exactly one parameter
+/// of a struct type with this UDA, the struct's fields become the top-level
+/// params keys instead of being nested under the parameter name.
+struct RPCFlatten {}
+
 /// UDA to make the client serialize params as a named JSON object
 /// instead of a positional array. Can be applied to individual methods
 /// or to the interface (applies to all methods).
@@ -172,30 +177,56 @@ struct JsonRpcDispatcher(I) if (is(I == interface))
 			{
 				if (isJsonObject(paramsJson))
 				{
-					// Named params (JSON object) — look up each parameter by name
-					auto paramsObj = paramsJson.jsonParse!(JSONFragment[string]);
-					static foreach (i, P; Params)
-					{{
-						enum paramName = ParamNames[i];
-						auto val = paramName in paramsObj;
-						if (val is null)
-							return resolve(JsonRpcResponse.failure(id,
-								JsonRpcErrorCode.invalidParams,
-								"Missing required parameter: " ~ paramName));
-						args[i] = (*val).json.jsonParse!P;
-					}}
+					// Named params (JSON object)
+					static if (Params.length == 1
+						&& is(Params[0] == struct)
+						&& hasAttribute!(RPCFlatten, Params[0]))
+					{
+						// @RPCFlatten: parse entire object as the struct
+						args[0] = paramsJson.jsonParse!(Params[0]);
+					}
+					else
+					{
+						// Look up each parameter by name
+						auto paramsObj = paramsJson.jsonParse!(JSONFragment[string]);
+						static foreach (i, P; Params)
+						{{
+							enum paramName = ParamNames[i];
+							auto val = paramName in paramsObj;
+							if (val is null)
+								return resolve(JsonRpcResponse.failure(id,
+									JsonRpcErrorCode.invalidParams,
+									"Missing required parameter: " ~ paramName));
+							args[i] = (*val).json.jsonParse!P;
+						}}
+					}
 				}
 				else
 				{
-					// Positional params (JSON array) — existing behavior
-					auto paramsArray = paramsJson.jsonParse!(JSONFragment[]);
-					if (paramsArray.length < Params.length)
-						return resolve(JsonRpcResponse.failure(id, JsonRpcErrorCode.invalidParams,
-							"Expected " ~ Params.length.to!string ~ " parameters, got " ~
-							paramsArray.length.to!string));
+					// Positional params (JSON array)
+					static if (Params.length == 1
+						&& is(Params[0] == struct)
+						&& hasAttribute!(RPCFlatten, Params[0]))
+					{
+						// @RPCFlatten: parse array elements into struct fields via .tupleof
+						auto paramsArray = paramsJson.jsonParse!(JSONFragment[]);
+						if (paramsArray.length < Params[0].tupleof.length)
+							return resolve(JsonRpcResponse.failure(id, JsonRpcErrorCode.invalidParams,
+								"Expected " ~ Params[0].tupleof.length.to!string ~ " parameters, got " ~
+								paramsArray.length.to!string));
+						args[0] = rpcFlattenFromArray!(Params[0])(paramsArray);
+					}
+					else
+					{
+						auto paramsArray = paramsJson.jsonParse!(JSONFragment[]);
+						if (paramsArray.length < Params.length)
+							return resolve(JsonRpcResponse.failure(id, JsonRpcErrorCode.invalidParams,
+								"Expected " ~ Params.length.to!string ~ " parameters, got " ~
+								paramsArray.length.to!string));
 
-					static foreach (i, P; Params)
-						args[i] = paramsArray[i].json.jsonParse!P;
+						static foreach (i, P; Params)
+							args[i] = paramsArray[i].json.jsonParse!P;
+					}
 				}
 			}
 			catch (Exception e)
@@ -264,6 +295,47 @@ private bool isJsonObject(string json) pure nothrow @nogc
 		}
 	}
 	return false;
+}
+
+/// Validate at compile time that an @RPCFlatten struct has no NonSerialized or JSONExtras fields.
+private template validateRpcFlatten(S)
+{
+	static foreach (i; 0 .. S.tupleof.length)
+	{
+		static assert(!__traits(hasMember, S, __traits(identifier, S.tupleof[i]) ~ "_nonSerialized"),
+			"@RPCFlatten struct " ~ S.stringof ~ " must not have NonSerialized field '"
+			~ __traits(identifier, S.tupleof[i]) ~ "'");
+		static assert(!is(typeof(S.tupleof[i]) == JSONExtras),
+			"@RPCFlatten struct " ~ S.stringof ~ " must not have JSONExtras field");
+	}
+	enum validateRpcFlatten = true;
+}
+
+/// Serialize a struct's fields as a flat JSON array (one element per field).
+/// Used by @RPCFlatten in positional (array) mode.
+private JSONFragment rpcFlattenToArray(S)(auto ref S s)
+{
+	enum _ = validateRpcFlatten!S;
+
+	JSONFragment[] result;
+	foreach (i, ref field; s.tupleof)
+		result ~= JSONFragment(field.toJson());
+	return JSONFragment(result.toJson());
+}
+
+/// Deserialize a flat JSON array into a struct's fields (one element per field).
+/// Used by @RPCFlatten in positional (array) mode on the server side.
+private S rpcFlattenFromArray(S)(JSONFragment[] arr)
+{
+	enum _ = validateRpcFlatten!S;
+
+	S result;
+	foreach (i, ref field; result.tupleof)
+	{
+		if (i < arr.length)
+			field = arr[i].json.jsonParse!(typeof(field));
+	}
+	return result;
 }
 
 /// Create a JSON-RPC dispatcher for an interface implementation.
@@ -359,8 +431,21 @@ class JsonRpcClient(I) : I if (is(I == interface))
 		static if (Params.length > 0)
 		{
 			enum useNamedParams = isRpcNamedParams!(I, method);
+			enum useFlatten = Params.length == 1
+				&& is(Params[0] == struct)
+				&& hasAttribute!(RPCFlatten, Params[0]);
 
-			static if (useNamedParams)
+			static if (useFlatten && useNamedParams)
+			{
+				// @RPCNamedParams + @RPCFlatten: serialize struct directly as params object
+				code ~= "\t\treq.params = JSONFragment(" ~ ParamNames[0] ~ ".toJson());\n";
+			}
+			else static if (useFlatten)
+			{
+				// @RPCFlatten only: serialize struct fields as flat positional array
+				code ~= "\t\treq.params = rpcFlattenToArray(" ~ ParamNames[0] ~ ");\n";
+			}
+			else static if (useNamedParams)
 			{
 				// @RPCNamedParams: build JSON object with param names as keys
 				code ~= "\t\tJSONFragment[string] __jsonrpc_params;\n";
@@ -735,4 +820,113 @@ debug(ae_unittest) unittest
 	clientConn.connect("127.0.0.1", port);
 	socketManager.loop();
 	assert(done, "Named params round-trip test did not complete");
+}
+
+// Test @RPCFlatten with named params
+debug(ae_unittest) unittest
+{
+	import ae.net.asockets : socketManager;
+
+	@RPCFlatten
+	static struct Point
+	{
+		int x;
+		int y;
+	}
+
+	@RPCNamedParams
+	interface GeometryApi
+	{
+		Promise!int manhattan(Point p);
+	}
+
+	static class GeometryApiImpl : GeometryApi
+	{
+		Promise!int manhattan(Point p) { return resolve(p.x + p.y); }
+	}
+
+	auto impl = new GeometryApiImpl();
+	auto dispatcher = jsonRpcDispatcher!GeometryApi(impl);
+
+	bool done;
+
+	// Object params with flattened struct — fields are top-level keys
+	auto req = JsonRpcRequest();
+	req.method = "manhattan";
+	req.params = JSONFragment(`{"x": 3, "y": 4}`);
+	req.id = JSONFragment(`1`);
+
+	dispatcher.dispatch(req).then((JsonRpcResponse resp) {
+		assert(!resp.isError, resp.error.get.message);
+		assert(resp.getResult!int == 7);
+
+		// Array params still work with flatten (positional tupleof)
+		auto req2 = JsonRpcRequest();
+		req2.method = "manhattan";
+		req2.params = JSONFragment(`[5, 6]`);
+		req2.id = JSONFragment(`2`);
+
+		dispatcher.dispatch(req2).then((JsonRpcResponse resp2) {
+			assert(!resp2.isError, resp2.error.get.message);
+			assert(resp2.getResult!int == 11);
+			done = true;
+		});
+	});
+
+	socketManager.loop();
+	assert(done, "RPCFlatten test did not complete");
+}
+
+// Test @RPCFlatten with positional (array) params — no @RPCNamedParams
+debug(ae_unittest) unittest
+{
+	import ae.net.asockets : socketManager;
+
+	@RPCFlatten
+	static struct Point
+	{
+		int x;
+		int y;
+	}
+
+	interface FlatPosApi
+	{
+		Promise!int manhattan(Point p);
+	}
+
+	static class FlatPosApiImpl : FlatPosApi
+	{
+		Promise!int manhattan(Point p) { return resolve(p.x + p.y); }
+	}
+
+	auto impl = new FlatPosApiImpl();
+	auto dispatcher = jsonRpcDispatcher!FlatPosApi(impl);
+
+	bool done;
+
+	// Flat positional: array elements map to struct fields
+	auto req = JsonRpcRequest();
+	req.method = "manhattan";
+	req.params = JSONFragment(`[10, 20]`);
+	req.id = JSONFragment(`1`);
+
+	dispatcher.dispatch(req).then((JsonRpcResponse resp) {
+		assert(!resp.isError, resp.error.get.message);
+		assert(resp.getResult!int == 30);
+
+		// Object params also work (server always accepts both)
+		auto req2 = JsonRpcRequest();
+		req2.method = "manhattan";
+		req2.params = JSONFragment(`{"x": 1, "y": 2}`);
+		req2.id = JSONFragment(`2`);
+
+		dispatcher.dispatch(req2).then((JsonRpcResponse resp2) {
+			assert(!resp2.isError, resp2.error.get.message);
+			assert(resp2.getResult!int == 3);
+			done = true;
+		});
+	});
+
+	socketManager.loop();
+	assert(done, "RPCFlatten positional test did not complete");
 }
