@@ -27,6 +27,36 @@ import ae.utils.jsonrpc;
 import ae.utils.promise : Promise, all;
 import ae.utils.text : asText;
 
+/// Normalize a JSON-RPC ID value to a canonical form for use as an
+/// associative array key. This handles differences in whitespace,
+/// number formatting (1 vs 1.0), and string encoding ("A" vs "\u0041")
+/// by parsing and re-serializing through a canonical JSON encoder.
+private JSONFragment normalizeJsonId(scope const(char)[] raw)
+{
+	if (raw.length == 0)
+		return JSONFragment.init;
+
+	// Skip leading whitespace
+	size_t i = 0;
+	while (i < raw.length && (raw[i] == ' ' || raw[i] == '\t' ||
+			raw[i] == '\n' || raw[i] == '\r'))
+		i++;
+
+	if (i >= raw.length)
+		return JSONFragment.init;
+
+	switch (raw[i])
+	{
+	case '"':
+		return JSONFragment(raw.jsonParse!string.toJson());
+	case 'n':
+		return JSONFragment("null");
+	default:
+		// Number: parse as long to normalize formatting
+		return JSONFragment(raw.jsonParse!long.toJson());
+	}
+}
+
 // ************************************************************************
 
 /// Bidirectional JSON-RPC codec.
@@ -59,7 +89,7 @@ import ae.utils.text : asText;
 class JsonRpcCodec
 {
 	private IConnection conn;
-	private Promise!JsonRpcResponse[string] pendingRequests;
+	private Promise!JsonRpcResponse[JSONFragment] pendingRequests;
 	private uint nextId = 1;
 
 	/// Handler for incoming requests.
@@ -79,11 +109,11 @@ class JsonRpcCodec
 	Promise!JsonRpcResponse sendRequest(JsonRpcRequest request)
 	{
 		auto id = nextId++;
-		auto idJson = id.toJson();
-		request.id = JSONFragment(idJson);
+		auto idFrag = JSONFragment(id.toJson());
+		request.id = idFrag;
 
 		auto responsePromise = new Promise!JsonRpcResponse;
-		pendingRequests[idJson] = responsePromise;
+		pendingRequests[idFrag] = responsePromise;
 		conn.send(Data(request.toJson().asBytes));
 
 		return responsePromise;
@@ -209,15 +239,15 @@ private:
 			return doDisconnect(reason);
 		}
 
-		auto idJson = response.id.json;
+		auto idKey = normalizeJsonId(response.id.json);
 
-		if (auto pending = idJson in pendingRequests)
+		if (auto pending = idKey in pendingRequests)
 		{
 			pending.fulfill(response);
-			pendingRequests.remove(idJson);
+			pendingRequests.remove(idKey);
 		}
 		else
-			return doDisconnect("Unexpected response ID: " ~ idJson);
+			return doDisconnect("Unexpected response ID: " ~ response.id.json);
 	}
 
 	void doDisconnect(string reason) nothrow
