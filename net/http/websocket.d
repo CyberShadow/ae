@@ -189,6 +189,13 @@ class WebSocketAdapter : ConnectionAdapter
 		}
 	}
 
+	override void disconnect(string reason = defaultDisconnectReason, DisconnectType type = DisconnectType.requested)
+	{
+		if (next.state == ConnectionState.connected)
+			sendFrame(cast(Flags)(Flags.opClose | Flags.fin), Data.init);
+		super.disconnect(reason, type);
+	}
+
 private:
 	Mt19937_64 maskRNG;
 
@@ -436,7 +443,7 @@ protected:
 						if (next.state == ConnectionState.connected)
 						{
 							sendFrame(flags, fragment);
-							disconnect("Received close frame");
+							super.disconnect("Received close frame");
 						}
 						stop = true;
 						return;
