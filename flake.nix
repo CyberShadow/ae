@@ -351,23 +351,22 @@
               echo "=== Phase 1: D client with Python server ==="
 
               # Start Python WebSocket echo server (permessage-deflate enabled by default)
+              export WS_READY_FILE="$TMPDIR/py_ws1_ready"
               python3 << 'PYEOF' &
-import asyncio, websockets
+import asyncio, websockets, pathlib, os
 async def echo(ws):
     async for msg in ws:
         await ws.send(msg)
 async def main():
     async with websockets.serve(echo, "127.0.0.1", 18765):
+        pathlib.Path(os.environ["WS_READY_FILE"]).write_text("ready")
         await asyncio.Future()
 asyncio.run(main())
 PYEOF
               PY_PID=$!
 
-              # Wait for Python server to be ready
               for i in $(seq 1 30); do
-                if python3 -c "import socket; s = socket.create_connection(('127.0.0.1', 18765), timeout=1); s.close()" 2>/dev/null; then
-                  break
-                fi
+                if [ -f "$WS_READY_FILE" ]; then break; fi
                 sleep 0.5
               done
 
@@ -375,7 +374,11 @@ PYEOF
               WS_TEST_MODE=client WS_SERVER_PORT=18765 ws_test
               echo "D client test passed!"
 
-              kill $PY_PID || true
+              if ! kill $PY_PID 2>/dev/null; then
+                wait $PY_PID
+                echo "FAIL: Python WebSocket server (phase 1) exited prematurely (exit code: $?)"
+                exit 1
+              fi
               wait $PY_PID 2>/dev/null || true
 
               echo "=== Phase 2: D server with Python client ==="
@@ -414,8 +417,9 @@ PYEOF
               echo "=== Phase 3: D client with Python server (no_context_takeover) ==="
 
               # Start Python echo server with no_context_takeover
+              export WS_READY_FILE="$TMPDIR/py_ws3_ready"
               python3 << 'PYEOF' &
-import asyncio, websockets
+import asyncio, websockets, pathlib, os
 from websockets.extensions.permessage_deflate import ServerPerMessageDeflateFactory
 async def echo(ws):
     async for msg in ws:
@@ -428,15 +432,14 @@ async def main():
             client_no_context_takeover=True,
         )],
     ):
+        pathlib.Path(os.environ["WS_READY_FILE"]).write_text("ready")
         await asyncio.Future()
 asyncio.run(main())
 PYEOF
               PY_PID=$!
 
               for i in $(seq 1 30); do
-                if python3 -c "import socket; s = socket.create_connection(('127.0.0.1', 18768), timeout=1); s.close()" 2>/dev/null; then
-                  break
-                fi
+                if [ -f "$WS_READY_FILE" ]; then break; fi
                 sleep 0.5
               done
 
@@ -444,7 +447,11 @@ PYEOF
               WS_TEST_MODE=client_nctx WS_SERVER_PORT=18768 ws_test
               echo "D client no_context_takeover test passed!"
 
-              kill $PY_PID || true
+              if ! kill $PY_PID 2>/dev/null; then
+                wait $PY_PID
+                echo "FAIL: Python WebSocket server (phase 3) exited prematurely (exit code: $?)"
+                exit 1
+              fi
               wait $PY_PID 2>/dev/null || true
 
               echo "=== Phase 4: D server with Python client (no_context_takeover) ==="
