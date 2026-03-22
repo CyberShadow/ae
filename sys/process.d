@@ -77,6 +77,7 @@ void asyncWait(Pid pid, void delegate(int status) dg)
 					removed = true;
 					removeSignalHandler(SIGCHLD, &handler);
 					dg(result.status);
+					anchor.close();
 				}
 			});
 	}
