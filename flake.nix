@@ -185,9 +185,43 @@
           '';
         };
 
+        # Content-Length framing integration test binary - needs HAVE_CONTENTLENGTH_PEER version flag
+        contentlength-test-bin = pkgs.stdenv.mkDerivation {
+          name = "ae-contentlength-test-bin";
+
+          nativeBuildInputs = [ pkgs.ldc ];
+          dontStrip = true;
+
+          unpackPhase = ''
+            cp -a ${self} ae
+          '';
+
+          buildPhase = ''
+            echo "Compiling Content-Length framing integration tests..."
+
+            # ASOCKETS_DEBUG_IDLE: DO NOT REMOVE - essential for detecting stuck event loops
+            ldc2 \
+              -i \
+              -I. \
+              -g \
+              -d-debug=ae_unittest \
+              -d-debug=ASOCKETS_DEBUG_IDLE \
+              -d-version=HAVE_CONTENTLENGTH_PEER \
+              -unittest \
+              --main \
+              -of=contentlength_test \
+              ae/net/jsonrpc/contentlength.d
+          '';
+
+          installPhase = ''
+            mkdir -p $out/bin
+            cp contentlength_test $out/bin/
+          '';
+        };
+
       in {
         packages = {
-          inherit mysql-test-bin psql-test-bin websocket-test-bin jsonrpc-test-bin;
+          inherit mysql-test-bin psql-test-bin websocket-test-bin jsonrpc-test-bin contentlength-test-bin;
         };
 
         checks = {
@@ -565,6 +599,111 @@ PYEOF
               wait $PY_PID 2>/dev/null || true
 
               echo "All JSON-RPC integration tests passed!"
+            '';
+
+            installPhase = ''
+              touch $out
+            '';
+          };
+
+          # Content-Length framing integration tests (with Python python-lsp-jsonrpc peer)
+          contentlength = pkgs.stdenv.mkDerivation {
+            name = "ae-contentlength-test";
+            src = self;
+
+            nativeBuildInputs = [
+              contentlength-test-bin
+              (pkgs.python3.withPackages (ps: [ ps.python-lsp-jsonrpc ]))
+            ];
+
+            buildPhase = ''
+              export HOME="$TMPDIR"
+
+              echo "=== Phase 1: D server with Python client ==="
+
+              # Start D JSON-RPC server with Content-Length framing over TCP
+              CL_TEST_MODE=server CL_READY_FILE="$TMPDIR/cl_ready" contentlength_test &
+              D_PID=$!
+
+              # Wait for D server to signal readiness (port written to file)
+              for i in $(seq 1 30); do
+                [ -f "$TMPDIR/cl_ready" ] && break; sleep 0.5
+              done
+
+              PORT=$(cat "$TMPDIR/cl_ready")
+
+              python3 << PYEOF
+import socket, threading
+from pylsp_jsonrpc.streams import JsonRpcStreamReader, JsonRpcStreamWriter
+from pylsp_jsonrpc.endpoint import Endpoint
+
+sock = socket.socket()
+sock.connect(("127.0.0.1", $PORT))
+rfile = sock.makefile("rb")
+wfile = sock.makefile("wb")
+
+writer = JsonRpcStreamWriter(wfile)
+endpoint = Endpoint({}, writer.write)
+
+reader = JsonRpcStreamReader(rfile)
+t = threading.Thread(target=reader.listen, args=(endpoint.consume,), daemon=True)
+t.start()
+
+f1 = endpoint.request("add", [2, 3])
+assert f1.result(timeout=5) == 5, f"Expected 5, got {f1.result()}"
+
+f2 = endpoint.request("add", [10, 7])
+assert f2.result(timeout=5) == 17, f"Expected 17, got {f2.result()}"
+
+print("Phase 1: all assertions passed!")
+sock.close()
+PYEOF
+
+              kill $D_PID || true
+              wait $D_PID 2>/dev/null || true
+
+              echo "=== Phase 2: Python server with D client ==="
+
+              # Start Python JSON-RPC server with Content-Length framing over TCP
+              python3 << 'PYEOF' > "$TMPDIR/py_server_port" &
+import socket, threading
+from pylsp_jsonrpc.streams import JsonRpcStreamReader, JsonRpcStreamWriter
+from pylsp_jsonrpc.endpoint import Endpoint
+
+sock = socket.socket()
+sock.bind(("127.0.0.1", 0))
+sock.listen(1)
+print(sock.getsockname()[1], flush=True)
+
+conn, _ = sock.accept()
+rfile = conn.makefile("rb")
+wfile = conn.makefile("wb")
+
+writer = JsonRpcStreamWriter(wfile)
+
+def add_handler(params):
+    return params[0] + params[1]
+
+endpoint = Endpoint({"add": add_handler}, writer.write)
+
+reader = JsonRpcStreamReader(rfile)
+reader.listen(endpoint.consume)
+PYEOF
+              PY_PID=$!
+
+              # Wait for Python server to print its port
+              for i in $(seq 1 30); do
+                [ -s "$TMPDIR/py_server_port" ] && break; sleep 0.5
+              done
+
+              PY_PORT=$(cat "$TMPDIR/py_server_port")
+
+              CL_TEST_MODE=client CL_SERVER_PORT="$PY_PORT" contentlength_test
+
+              kill $PY_PID || true
+              wait $PY_PID 2>/dev/null || true
+
+              echo "All Content-Length framing integration tests passed!"
             '';
 
             installPhase = ''

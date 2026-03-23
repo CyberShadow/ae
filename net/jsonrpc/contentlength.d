@@ -126,3 +126,87 @@ private:
 		}
 	}
 }
+
+// ************************************************************************
+
+version (HAVE_CONTENTLENGTH_PEER)
+debug(ae_unittest) unittest
+{
+	// Integration test, Phase 1: D acts as TCP JSON-RPC server with
+	// Content-Length framing. Validates that an external Python peer
+	// (python-lsp-jsonrpc) can exchange messages over this transport.
+	// The Python writer sends both Content-Length and Content-Type headers,
+	// which exercises multi-header parsing.
+	import std.process : environment;
+	if (environment.get("CL_TEST_MODE", "") != "server") return;
+
+	import ae.net.asockets : socketManager, TcpServer, TcpConnection;
+	import ae.net.jsonrpc.codec : JsonRpcServerCodec;
+	import ae.net.jsonrpc.binding : jsonRpcDispatcher;
+	import ae.utils.promise : Promise, resolve;
+	import std.file : fileWrite = write;
+
+	interface CalcApi
+	{
+		Promise!int add(int a, int b);
+	}
+
+	static class CalcImpl : CalcApi
+	{
+		Promise!int add(int a, int b) { return resolve(a + b); }
+	}
+
+	auto dispatcher = jsonRpcDispatcher!CalcApi(new CalcImpl());
+	auto server = new TcpServer();
+	server.handleAccept = (TcpConnection conn) {
+		auto cl = new ContentLengthAdapter(conn);
+		auto codec = new JsonRpcServerCodec(cl);
+		codec.handleRequest = &dispatcher.dispatch;
+	};
+	auto port = server.listen(0, "127.0.0.1");
+
+	fileWrite(environment.get("CL_READY_FILE", "/tmp/cl_ready"), port.to!string);
+
+	socketManager.loop();
+}
+
+version (HAVE_CONTENTLENGTH_PEER)
+debug(ae_unittest) unittest
+{
+	// Integration test, Phase 2: D acts as TCP JSON-RPC client with
+	// Content-Length framing. Validates that D's ContentLengthAdapter
+	// wire format is understood by an external Python peer
+	// (python-lsp-jsonrpc).
+	import std.process : environment;
+	if (environment.get("CL_TEST_MODE", "") != "client") return;
+
+	import ae.net.asockets : socketManager, TcpConnection;
+	import ae.net.jsonrpc.binding : jsonRpcClient;
+	import ae.utils.promise : Promise;
+
+	auto port = environment.get("CL_SERVER_PORT", "8080").to!ushort;
+
+	interface CalcClient
+	{
+		Promise!int add(int a, int b);
+	}
+
+	bool done;
+	auto tcpConn = new TcpConnection();
+
+	tcpConn.handleConnect = {
+		auto cl = new ContentLengthAdapter(tcpConn);
+		auto client = jsonRpcClient!CalcClient(cl);
+
+		client.add(10, 7).then((int result) {
+			assert(result == 17, "Expected 17, got " ~ result.to!string);
+			done = true;
+			cl.disconnect();
+		});
+	};
+
+	tcpConn.connect("127.0.0.1", port);
+
+	socketManager.loop();
+	assert(done, "D client Content-Length test did not complete");
+}
