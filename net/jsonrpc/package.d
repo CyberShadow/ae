@@ -64,6 +64,7 @@ module ae.net.jsonrpc;
 public import ae.utils.jsonrpc;
 
 // Transport/framing
+public import ae.net.jsonrpc.contentlength;
 public import ae.net.jsonrpc.ndjson;
 public import ae.net.jsonrpc.http;
 
