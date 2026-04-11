@@ -55,7 +55,8 @@ import std.process;
 /// Asynchronously wait for a process to terminate.
 void asyncWait(Pid pid, void delegate(int status) dg)
 {
-	auto anchor = new ThreadAnchor;
+	import std.typecons : No;
+	auto anchor = new ThreadAnchor(No.daemon);
 	bool removed;
 
 	void handler() nothrow @nogc
