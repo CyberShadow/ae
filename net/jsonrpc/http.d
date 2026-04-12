@@ -389,7 +389,9 @@ debug(ae_unittest) unittest
 			assert(false, "Transport error: " ~ reason);
 	};
 
-	auto req = JsonRpcRequest.create("add", JSONFragment(`1`), 2, 3);
+	import ae.utils.serialization.store : SerializedObject;
+	alias SO = SerializedObject!(immutable(char));
+	auto req = JsonRpcRequest.create("add", SO(1), 2, 3);
 	conn.send(Data(req.toJson().asBytes));
 
 	socketManager.loop();

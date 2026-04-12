@@ -115,7 +115,9 @@ debug(ae_unittest) unittest
 debug(ae_unittest) unittest
 {
 	import ae.net.jsonrpc.binding : jsonRpcDispatcher;
+	import ae.utils.serialization.store : SerializedObject;
 	import ae.utils.promise : Promise, resolve;
+	alias SO = SerializedObject!(immutable(char));
 
 	interface Calculator
 	{
@@ -170,8 +172,8 @@ debug(ae_unittest) unittest
 
 		// Send batch request
 		JsonRpcRequest[] batch = [
-			JsonRpcRequest.create("add", JSONFragment(`1`), 1, 2),
-			JsonRpcRequest.create("add", JSONFragment(`2`), 3, 4),
+			JsonRpcRequest.create("add", SO(1), 1, 2),
+			JsonRpcRequest.create("add", SO(2), 3, 4),
 		];
 		conn.send(Data(formatBatch(batch).asBytes));
 	};

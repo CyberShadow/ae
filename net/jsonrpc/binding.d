@@ -28,9 +28,12 @@ import std.typecons : Nullable;
 import ae.net.asockets : IConnection;
 import ae.net.jsonrpc.codec;
 import ae.utils.serialization.json;
+import ae.utils.serialization.store : SerializedObject;
 import ae.utils.jsonrpc;
 import ae.utils.meta : hasAttribute, getAttribute;
 import ae.utils.promise : Promise, PromiseValue, resolve;
+
+private alias SO = SerializedObject!(immutable(char));
 
 // ************************************************************************
 
@@ -126,7 +129,7 @@ struct JsonRpcDispatcher(I) if (is(I == interface))
 	/// For notifications, the promise resolves to a response with null id.
 	Promise!JsonRpcResponse dispatch(JsonRpcRequest request)
 	{
-		auto id = request.id ? request.id : JSONFragment(`null`);
+		auto id = request.id ? request.id : SO(null);
 
 		switch (request.method)
 		{
@@ -145,7 +148,7 @@ struct JsonRpcDispatcher(I) if (is(I == interface))
 		}
 	}
 
-	private Promise!JsonRpcResponse callMethod(string memberName)(JsonRpcRequest request, JSONFragment id)
+	private Promise!JsonRpcResponse callMethod(string memberName)(JsonRpcRequest request, SO id)
 	{
 		alias method = __traits(getMember, I, memberName);
 		alias Params = Parameters!method;
@@ -170,34 +173,30 @@ struct JsonRpcDispatcher(I) if (is(I == interface))
 				return resolve(JsonRpcResponse.failure(id, JsonRpcErrorCode.invalidParams,
 					"Missing required parameters"));
 
-			auto paramsJson = request.params.json;
-
 			Params args;
 			try
 			{
-				if (isJsonObject(paramsJson))
+				if (request.params.type == SO.Type.object)
 				{
 					// Named params (JSON object)
 					static if (Params.length == 1
 						&& is(Params[0] == struct)
 						&& hasAttribute!(RPCFlatten, Params[0]))
 					{
-						// @RPCFlatten: parse entire object as the struct
-						args[0] = paramsJson.jsonParse!(Params[0]);
+						// @RPCFlatten: deserialize entire object as the struct
+						args[0] = request.params.deserializeTo!(Params[0]);
 					}
 					else
 					{
 						// Look up each parameter by name
-						auto paramsObj = paramsJson.jsonParse!(JSONFragment[string]);
 						static foreach (i, P; Params)
 						{{
 							enum paramName = ParamNames[i];
-							auto val = paramName in paramsObj;
-							if (val is null)
+							if (!(paramName in request.params))
 								return resolve(JsonRpcResponse.failure(id,
 									JsonRpcErrorCode.invalidParams,
 									"Missing required parameter: " ~ paramName));
-							args[i] = (*val).json.jsonParse!P;
+							args[i] = request.params[paramName].deserializeTo!P;
 						}}
 					}
 				}
@@ -208,24 +207,22 @@ struct JsonRpcDispatcher(I) if (is(I == interface))
 						&& is(Params[0] == struct)
 						&& hasAttribute!(RPCFlatten, Params[0]))
 					{
-						// @RPCFlatten: parse array elements into struct fields via .tupleof
-						auto paramsArray = paramsJson.jsonParse!(JSONFragment[]);
-						if (paramsArray.length < Params[0].tupleof.length)
+						// @RPCFlatten: deserialize array elements into struct fields via .tupleof
+						if (request.params.length < Params[0].tupleof.length)
 							return resolve(JsonRpcResponse.failure(id, JsonRpcErrorCode.invalidParams,
 								"Expected " ~ Params[0].tupleof.length.to!string ~ " parameters, got " ~
-								paramsArray.length.to!string));
-						args[0] = rpcFlattenFromArray!(Params[0])(paramsArray);
+								request.params.length.to!string));
+						args[0] = rpcFlattenFromArray!(Params[0])(request.params);
 					}
 					else
 					{
-						auto paramsArray = paramsJson.jsonParse!(JSONFragment[]);
-						if (paramsArray.length < Params.length)
+						if (request.params.length < Params.length)
 							return resolve(JsonRpcResponse.failure(id, JsonRpcErrorCode.invalidParams,
 								"Expected " ~ Params.length.to!string ~ " parameters, got " ~
-								paramsArray.length.to!string));
+								request.params.length.to!string));
 
 						static foreach (i, P; Params)
-							args[i] = paramsArray[i].json.jsonParse!P;
+							args[i] = request.params[i].deserializeTo!P;
 					}
 				}
 			}
@@ -238,7 +235,7 @@ struct JsonRpcDispatcher(I) if (is(I == interface))
 
 	/// Call the method and wrap its result in a JsonRpcResponse promise
 	private Promise!JsonRpcResponse callAndWrapResult(ValueType)(
-		JSONFragment id, scope Promise!ValueType delegate() callMethod)
+		SO id, scope Promise!ValueType delegate() callMethod)
 	{
 		Promise!ValueType resultPromise;
 		try
@@ -280,23 +277,6 @@ private template isCallableMember(I, string memberName)
 		enum isCallableMember = false;
 }
 
-/// Check if a JSON string represents an object (starts with '{').
-/// Used by the server to accept both array and object params.
-private bool isJsonObject(string json) pure nothrow @nogc
-{
-	foreach (c; json)
-	{
-		switch (c)
-		{
-			case '{': return true;
-			case '[': return false;
-			case ' ', '\t', '\n', '\r': continue;
-			default: return false;
-		}
-	}
-	return false;
-}
-
 /// Validate at compile time that an @RPCFlatten struct has no NonSerialized or JSONExtras fields.
 private template validateRpcFlatten(S)
 {
@@ -311,29 +291,29 @@ private template validateRpcFlatten(S)
 	enum validateRpcFlatten = true;
 }
 
-/// Serialize a struct's fields as a flat JSON array (one element per field).
+/// Serialize a struct's fields as a flat array SerializedObject (one element per field).
 /// Used by @RPCFlatten in positional (array) mode.
-private JSONFragment rpcFlattenToArray(S)(auto ref S s)
+private SO rpcFlattenToArray(S)(auto ref S s)
 {
 	enum _ = validateRpcFlatten!S;
 
-	JSONFragment[] result;
+	SO[] elements;
 	foreach (i, ref field; s.tupleof)
-		result ~= JSONFragment(field.toJson());
-	return JSONFragment(result.toJson());
+		elements ~= SO.from(field);
+	return SO(elements);
 }
 
-/// Deserialize a flat JSON array into a struct's fields (one element per field).
+/// Deserialize a flat array SerializedObject into a struct's fields (one element per field).
 /// Used by @RPCFlatten in positional (array) mode on the server side.
-private S rpcFlattenFromArray(S)(JSONFragment[] arr)
+private S rpcFlattenFromArray(S)(ref SO params)
 {
 	enum _ = validateRpcFlatten!S;
 
 	S result;
 	foreach (i, ref field; result.tupleof)
 	{
-		if (i < arr.length)
-			field = arr[i].json.jsonParse!(typeof(field));
+		if (i < params.length)
+			field = params[i].deserializeTo!(typeof(field));
 	}
 	return result;
 }
@@ -438,7 +418,7 @@ class JsonRpcClient(I) : I if (is(I == interface))
 			static if (useFlatten && useNamedParams)
 			{
 				// @RPCNamedParams + @RPCFlatten: serialize struct directly as params object
-				code ~= "\t\treq.params = JSONFragment(" ~ ParamNames[0] ~ ".toJson());\n";
+				code ~= "\t\treq.params = SO.from(" ~ ParamNames[0] ~ ");\n";
 			}
 			else static if (useFlatten)
 			{
@@ -447,26 +427,26 @@ class JsonRpcClient(I) : I if (is(I == interface))
 			}
 			else static if (useNamedParams)
 			{
-				// @RPCNamedParams: build JSON object with param names as keys
-				code ~= "\t\tJSONFragment[string] __jsonrpc_params;\n";
+				// @RPCNamedParams: build SO object with param names as keys
+				code ~= "\t\tSO[string] __jsonrpc_params;\n";
 				static foreach (i, P; Params)
 				{
 					code ~= "\t\t__jsonrpc_params[\"" ~ ParamNames[i]
-						~ "\"] = JSONFragment(" ~ ParamNames[i] ~ ".toJson());\n";
+						~ "\"] = SO.from(" ~ ParamNames[i] ~ ");\n";
 				}
-				code ~= "\t\treq.params = JSONFragment(__jsonrpc_params.toJson());\n";
+				code ~= "\t\treq.params = SO.from(__jsonrpc_params);\n";
 			}
 			else
 			{
-				// Default: positional array (existing behavior)
-				code ~= "\t\treq.params = JSONFragment([";
+				// Default: positional array
+				code ~= "\t\treq.params = SO([";
 				static foreach (i, P; Params)
 				{
 					static if (i > 0)
 						code ~= ", ";
-					code ~= "JSONFragment(" ~ ParamNames[i] ~ ".toJson())";
+					code ~= "SO.from(" ~ ParamNames[i] ~ ")";
 				}
-				code ~= "].toJson());\n";
+				code ~= "]);\n";
 			}
 		}
 
@@ -561,8 +541,8 @@ debug(ae_unittest) unittest
 	// Test add method
 	auto req1 = JsonRpcRequest();
 	req1.method = "add";
-	req1.params = JSONFragment(`[2, 3]`);
-	req1.id = JSONFragment(`1`);
+	req1.params = jsonParse!SO(`[2, 3]`);
+	req1.id = SO(1);
 
 	dispatcher.dispatch(req1).then((JsonRpcResponse resp1) {
 		assert(!resp1.isError);
@@ -571,8 +551,8 @@ debug(ae_unittest) unittest
 		// Test RPCName attribute
 		auto req2 = JsonRpcRequest();
 		req2.method = "math.subtract";
-		req2.params = JSONFragment(`[10, 4]`);
-		req2.id = JSONFragment(`2`);
+		req2.params = jsonParse!SO(`[10, 4]`);
+		req2.id = SO(2);
 
 		dispatcher.dispatch(req2).then((JsonRpcResponse resp2) {
 			assert(!resp2.isError);
@@ -581,8 +561,8 @@ debug(ae_unittest) unittest
 			// Test void method
 			auto req3 = JsonRpcRequest();
 			req3.method = "logMessage";
-			req3.params = JSONFragment(`["hello"]`);
-			req3.id = JSONFragment(`3`);
+			req3.params = jsonParse!SO(`["hello"]`);
+			req3.id = SO(3);
 
 			dispatcher.dispatch(req3).then((JsonRpcResponse resp3) {
 				assert(!resp3.isError);
@@ -591,7 +571,7 @@ debug(ae_unittest) unittest
 				// Test method not found
 				auto req4 = JsonRpcRequest();
 				req4.method = "unknown";
-				req4.id = JSONFragment(`4`);
+				req4.id = SO(4);
 
 				dispatcher.dispatch(req4).then((JsonRpcResponse resp4) {
 					assert(resp4.isError);
@@ -629,8 +609,8 @@ debug(ae_unittest) unittest
 	// Named params (object)
 	auto req1 = JsonRpcRequest();
 	req1.method = "add";
-	req1.params = JSONFragment(`{"a": 10, "b": 20}`);
-	req1.id = JSONFragment(`1`);
+	req1.params = jsonParse!SO(`{"a": 10, "b": 20}`);
+	req1.id = SO(1);
 
 	dispatcher.dispatch(req1).then((JsonRpcResponse resp1) {
 		assert(!resp1.isError, resp1.error.get.message);
@@ -639,8 +619,8 @@ debug(ae_unittest) unittest
 		// Missing named param should error
 		auto req2 = JsonRpcRequest();
 		req2.method = "add";
-		req2.params = JSONFragment(`{"a": 1, "x": 2}`);
-		req2.id = JSONFragment(`2`);
+		req2.params = jsonParse!SO(`{"a": 1, "x": 2}`);
+		req2.id = SO(2);
 
 		dispatcher.dispatch(req2).then((JsonRpcResponse resp2) {
 			assert(resp2.isError);
@@ -649,8 +629,8 @@ debug(ae_unittest) unittest
 			// Array params still work (existing behavior)
 			auto req3 = JsonRpcRequest();
 			req3.method = "add";
-			req3.params = JSONFragment(`[5, 6]`);
-			req3.id = JSONFragment(`3`);
+			req3.params = jsonParse!SO(`[5, 6]`);
+			req3.id = SO(3);
 
 			dispatcher.dispatch(req3).then((JsonRpcResponse resp3) {
 				assert(!resp3.isError, resp3.error.get.message);
@@ -688,8 +668,8 @@ debug(ae_unittest) unittest
 	// Server accepts object params
 	auto req = JsonRpcRequest();
 	req.method = "add";
-	req.params = JSONFragment(`{"a": 7, "b": 3}`);
-	req.id = JSONFragment(`1`);
+	req.params = jsonParse!SO(`{"a": 7, "b": 3}`);
+	req.id = SO(1);
 
 	dispatcher.dispatch(req).then((JsonRpcResponse resp) {
 		assert(!resp.isError, resp.error.get.message);
@@ -698,8 +678,8 @@ debug(ae_unittest) unittest
 		// Server still accepts array params too
 		auto req2 = JsonRpcRequest();
 		req2.method = "add";
-		req2.params = JSONFragment(`[7, 3]`);
-		req2.id = JSONFragment(`2`);
+		req2.params = jsonParse!SO(`[7, 3]`);
+		req2.id = SO(2);
 
 		dispatcher.dispatch(req2).then((JsonRpcResponse resp2) {
 			assert(!resp2.isError, resp2.error.get.message);
@@ -743,8 +723,8 @@ debug(ae_unittest) unittest
 	// Object params with flattened struct — fields are top-level keys
 	auto req = JsonRpcRequest();
 	req.method = "manhattan";
-	req.params = JSONFragment(`{"x": 3, "y": 4}`);
-	req.id = JSONFragment(`1`);
+	req.params = jsonParse!SO(`{"x": 3, "y": 4}`);
+	req.id = SO(1);
 
 	dispatcher.dispatch(req).then((JsonRpcResponse resp) {
 		assert(!resp.isError, resp.error.get.message);
@@ -753,8 +733,8 @@ debug(ae_unittest) unittest
 		// Array params still work with flatten (positional tupleof)
 		auto req2 = JsonRpcRequest();
 		req2.method = "manhattan";
-		req2.params = JSONFragment(`[5, 6]`);
-		req2.id = JSONFragment(`2`);
+		req2.params = jsonParse!SO(`[5, 6]`);
+		req2.id = SO(2);
 
 		dispatcher.dispatch(req2).then((JsonRpcResponse resp2) {
 			assert(!resp2.isError, resp2.error.get.message);
@@ -797,8 +777,8 @@ debug(ae_unittest) unittest
 	// Flat positional: array elements map to struct fields
 	auto req = JsonRpcRequest();
 	req.method = "manhattan";
-	req.params = JSONFragment(`[10, 20]`);
-	req.id = JSONFragment(`1`);
+	req.params = jsonParse!SO(`[10, 20]`);
+	req.id = SO(1);
 
 	dispatcher.dispatch(req).then((JsonRpcResponse resp) {
 		assert(!resp.isError, resp.error.get.message);
@@ -807,8 +787,8 @@ debug(ae_unittest) unittest
 		// Object params also work (server always accepts both)
 		auto req2 = JsonRpcRequest();
 		req2.method = "manhattan";
-		req2.params = JSONFragment(`{"x": 1, "y": 2}`);
-		req2.id = JSONFragment(`2`);
+		req2.params = jsonParse!SO(`{"x": 1, "y": 2}`);
+		req2.id = SO(2);
 
 		dispatcher.dispatch(req2).then((JsonRpcResponse resp2) {
 			assert(!resp2.isError, resp2.error.get.message);
@@ -848,8 +828,8 @@ debug(ae_unittest) unittest
 	// positional method with array params
 	auto req1 = JsonRpcRequest();
 	req1.method = "positional";
-	req1.params = JSONFragment(`[3, 4]`);
-	req1.id = JSONFragment(`1`);
+	req1.params = jsonParse!SO(`[3, 4]`);
+	req1.id = SO(1);
 
 	dispatcher.dispatch(req1).then((JsonRpcResponse resp1) {
 		assert(!resp1.isError, resp1.error.get.message);
@@ -858,8 +838,8 @@ debug(ae_unittest) unittest
 		// named method with object params
 		auto req2 = JsonRpcRequest();
 		req2.method = "named";
-		req2.params = JSONFragment(`{"a": 3, "b": 4}`);
-		req2.id = JSONFragment(`2`);
+		req2.params = jsonParse!SO(`{"a": 3, "b": 4}`);
+		req2.id = SO(2);
 
 		dispatcher.dispatch(req2).then((JsonRpcResponse resp2) {
 			assert(!resp2.isError, resp2.error.get.message);
@@ -868,8 +848,8 @@ debug(ae_unittest) unittest
 			// named method also accepts array params (server accepts both)
 			auto req3 = JsonRpcRequest();
 			req3.method = "named";
-			req3.params = JSONFragment(`[5, 6]`);
-			req3.id = JSONFragment(`3`);
+			req3.params = jsonParse!SO(`[5, 6]`);
+			req3.id = SO(3);
 
 			dispatcher.dispatch(req3).then((JsonRpcResponse resp3) {
 				assert(!resp3.isError, resp3.error.get.message);

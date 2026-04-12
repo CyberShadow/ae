@@ -23,38 +23,20 @@ import ae.net.asockets : IConnection, DisconnectType;
 import ae.sys.data : Data;
 import ae.utils.array : asBytes;
 import ae.utils.serialization.json;
+import ae.utils.serialization.store : SerializedObject;
 import ae.utils.jsonrpc;
 import ae.utils.promise : Promise, all;
 import ae.utils.text : asText;
 
-/// Normalize a JSON-RPC ID value to a canonical form for use as an
-/// associative array key. This handles differences in whitespace,
-/// number formatting (1 vs 1.0), and string encoding ("A" vs "\u0041")
-/// by parsing and re-serializing through a canonical JSON encoder.
-private JSONFragment normalizeJsonId(scope const(char)[] raw)
+private alias SO = SerializedObject!(immutable(char));
+
+/// Normalize a JSON-RPC ID value to a canonical JSON string for use as
+/// an associative array key. Handles differences in number formatting
+/// (1 vs 1.0) and string encoding ("A" vs "\u0041").
+private string normalizeJsonId(ref SO id)
 {
-	if (raw.length == 0)
-		return JSONFragment.init;
-
-	// Skip leading whitespace
-	size_t i = 0;
-	while (i < raw.length && (raw[i] == ' ' || raw[i] == '\t' ||
-			raw[i] == '\n' || raw[i] == '\r'))
-		i++;
-
-	if (i >= raw.length)
-		return JSONFragment.init;
-
-	switch (raw[i])
-	{
-	case '"':
-		return JSONFragment(raw.jsonParse!string.toJson());
-	case 'n':
-		return JSONFragment("null");
-	default:
-		// Number: parse as long to normalize formatting
-		return JSONFragment(raw.jsonParse!long.toJson());
-	}
+	if (!id) return null;
+	return toJson(id);
 }
 
 // ************************************************************************
@@ -89,7 +71,7 @@ private JSONFragment normalizeJsonId(scope const(char)[] raw)
 class JsonRpcCodec
 {
 	private IConnection conn;
-	private Promise!JsonRpcResponse[JSONFragment] pendingRequests;
+	private Promise!JsonRpcResponse[string] pendingRequests;
 	private uint nextId = 1;
 
 	/// Handler for incoming requests.
@@ -109,11 +91,10 @@ class JsonRpcCodec
 	Promise!JsonRpcResponse sendRequest(JsonRpcRequest request)
 	{
 		auto id = nextId++;
-		auto idFrag = JSONFragment(id.toJson());
-		request.id = idFrag;
+		request.id = SO(id);
 
 		auto responsePromise = new Promise!JsonRpcResponse;
-		pendingRequests[idFrag] = responsePromise;
+		pendingRequests[toJson(request.id)] = responsePromise;
 		conn.send(Data(request.toJson().asBytes));
 
 		return responsePromise;
@@ -176,8 +157,8 @@ private:
 		// Parse as object and check for "method" key
 		if (i < message.length && message[i] == '{')
 		{
-			auto obj = message[i .. $].jsonParse!(JSONFragment[string]);
-			return "method" in obj ? true : false;
+			auto obj = message[i .. $].jsonParse!SO;
+			return obj.type == SO.Type.object && ("method" in obj);
 		}
 
 		return false;
@@ -239,7 +220,7 @@ private:
 			return doDisconnect(reason);
 		}
 
-		auto idKey = normalizeJsonId(response.id.json);
+		auto idKey = normalizeJsonId(response.id);
 
 		if (auto pending = idKey in pendingRequests)
 		{
@@ -247,7 +228,7 @@ private:
 			pendingRequests.remove(idKey);
 		}
 		else
-			return doDisconnect("Unexpected response ID: " ~ response.id.json);
+			return doDisconnect("Unexpected response ID: " ~ toJson(response.id));
 	}
 
 	void doDisconnect(string reason) nothrow

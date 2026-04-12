@@ -20,6 +20,9 @@ import std.conv : to;
 import std.typecons : Nullable;
 
 import ae.utils.serialization.json;
+import ae.utils.serialization.store : SerializedObject;
+
+alias SO = SerializedObject!(immutable(char));
 
 // ************************************************************************
 
@@ -77,7 +80,7 @@ struct JsonRpcError
 
 	/// Additional error data (optional)
 	@JSONOptional
-	JSONFragment data;
+	SO data;
 
 	/// Create an error with a standard error code
 	static JsonRpcError fromCode(JsonRpcErrorCode code, string message = null)
@@ -94,7 +97,7 @@ struct JsonRpcError
 		JsonRpcError err;
 		err.code = code;
 		err.message = message.length ? message : getDefaultErrorMessage(code);
-		err.data = JSONFragment(data.toJson());
+		err.data = SO.from(data);
 		return err;
 	}
 }
@@ -134,11 +137,11 @@ struct JsonRpcRequest
 
 	/// Parameters - can be array (positional) or object (named)
 	@JSONOptional
-	JSONFragment params;
+	SO params;
 
 	/// Request ID - omit for notifications
 	@JSONOptional
-	JSONFragment id;
+	SO id;
 
 	/// Returns true if this is a notification (no response expected)
 	@property bool isNotification() const
@@ -147,13 +150,13 @@ struct JsonRpcRequest
 	}
 
 	/// Create a request with positional parameters
-	static JsonRpcRequest create(T...)(string method, JSONFragment id, T params)
+	static JsonRpcRequest create(T...)(string method, SO id, T params)
 	{
 		JsonRpcRequest req;
 		req.method = method;
 		req.id = id;
 		static if (T.length > 0)
-			req.params = JSONFragment([params].toJson());
+			req.params = SO.from([params]);
 		return req;
 	}
 
@@ -163,7 +166,7 @@ struct JsonRpcRequest
 		JsonRpcRequest req;
 		req.method = method;
 		static if (T.length > 0)
-			req.params = JSONFragment([params].toJson());
+			req.params = SO.from([params]);
 		return req;
 	}
 }
@@ -176,7 +179,7 @@ struct JsonRpcResponse
 
 	/// Result on success (mutually exclusive with error)
 	@JSONOptional
-	JSONFragment result;
+	SO result;
 
 	/// Error on failure (mutually exclusive with result)
 	@JSONOptional
@@ -184,28 +187,28 @@ struct JsonRpcResponse
 
 	/// Request ID this response corresponds to
 	@JSONOptional
-	JSONFragment id;
+	SO id;
 
 	/// Create a success response
-	static JsonRpcResponse success(T)(JSONFragment id, T result)
+	static JsonRpcResponse success(T)(SO id, T result)
 	{
 		JsonRpcResponse r;
 		r.id = id;
-		r.result = JSONFragment(result.toJson());
+		r.result = SO.from(result);
 		return r;
 	}
 
 	/// Create a success response with no result (for void methods)
-	static JsonRpcResponse success(JSONFragment id)
+	static JsonRpcResponse success(SO id)
 	{
 		JsonRpcResponse r;
 		r.id = id;
-		r.result = JSONFragment("null");
+		r.result = SO(null);
 		return r;
 	}
 
 	/// Create an error response
-	static JsonRpcResponse failure(JSONFragment id, JsonRpcError error)
+	static JsonRpcResponse failure(SO id, JsonRpcError error)
 	{
 		JsonRpcResponse r;
 		r.id = id;
@@ -214,7 +217,7 @@ struct JsonRpcResponse
 	}
 
 	/// Create an error response with a standard error code
-	static JsonRpcResponse failure(JSONFragment id, JsonRpcErrorCode code, string message = null)
+	static JsonRpcResponse failure(SO id, JsonRpcErrorCode code, string message = null)
 	{
 		return failure(id, JsonRpcError.fromCode(code, message));
 	}
@@ -227,11 +230,11 @@ struct JsonRpcResponse
 
 	/// Get the result deserialized to type T
 	/// Throws JsonRpcException if this is an error response
-	T getResult(T)() const
+	T getResult(T)()
 	{
 		if (isError)
 			throw new JsonRpcException(error.get);
-		return result.json.jsonParse!T;
+		return result.deserializeTo!T;
 	}
 }
 
@@ -330,7 +333,7 @@ string formatBatch(T)(T[] items) if (is(T == JsonRpcRequest) || is(T == JsonRpcR
 debug(ae_unittest) unittest
 {
 	// Test request creation and serialization
-	auto req = JsonRpcRequest.create("add", JSONFragment(`1`), 2, 3);
+	auto req = JsonRpcRequest.create("add", SO(1), 2, 3);
 	assert(req.method == "add");
 	assert(!req.isNotification);
 	auto json = req.toJson();
@@ -348,7 +351,7 @@ debug(ae_unittest) unittest
 	auto req = `{"jsonrpc":"2.0","method":"subtract","params":[42,23],"id":1}`.parseRequest();
 	assert(req.method == "subtract");
 	assert(!req.isNotification);
-	assert(req.params.json == "[42,23]");
+	assert(req.params.toJson() == "[42,23]");
 
 	// Test notification parsing
 	auto notif = `{"jsonrpc":"2.0","method":"update","params":[1,2,3]}`.parseRequest();
@@ -382,11 +385,11 @@ debug(ae_unittest) unittest
 debug(ae_unittest) unittest
 {
 	// Test response creation
-	auto resp = JsonRpcResponse.success(JSONFragment(`1`), 42);
+	auto resp = JsonRpcResponse.success(SO(1), 42);
 	assert(!resp.isError);
-	assert(resp.result.json == "42");
+	assert(resp.result.toJson() == "42");
 
-	auto errResp = JsonRpcResponse.failure(JSONFragment(`1`), JsonRpcErrorCode.methodNotFound);
+	auto errResp = JsonRpcResponse.failure(SO(1), JsonRpcErrorCode.methodNotFound);
 	assert(errResp.isError);
 	assert(errResp.error.get.code == JsonRpcErrorCode.methodNotFound);
 }
