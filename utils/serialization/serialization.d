@@ -50,6 +50,17 @@ enum IgnoreUnknown;
 /// Exclude this field from serialization entirely.
 enum Exclude;
 
+/// Mark a struct field to receive positional (unnamed) values.
+/// During deserialization from a Map, the empty-string key ("") is
+/// routed to this field. Formats like SDL and XML use positional values
+/// for tag values / text content.
+enum Positional;
+
+/// Additional name accepted during deserialization (not used for serialization).
+/// Allows a single struct field to match multiple source names — e.g.,
+/// "dependencies" from JSON and "dependency" from SDL.
+struct SerializedAlias { string name; }
+
 /// Mark a `SerializedObject[string]` field to collect unknown fields during
 /// deserialization. During serialization, entries are emitted as top-level
 /// fields alongside regular struct fields.
@@ -130,6 +141,178 @@ template getSerializedName(T, string dFieldName)
 }
 
 // ---------------------------------------------------------------------------
+// Protocol value types
+// ---------------------------------------------------------------------------
+
+/// Protocol value types for the unified `handle(V)` sink method.
+/// Every sink implements a single `void handle(V)(V v)` and dispatches
+/// on V using `static if`. Sources emit these types via `sink.handle(...)`.
+
+struct Null {}
+struct Boolean { bool value; }
+struct Numeric(S) { S text; }
+struct String(S) { S text; }
+struct Array(Reader) { Reader reader; }
+struct Map(Reader) { Reader reader; }
+struct Field(NR, VR) { NR nameReader; VR valueReader; }
+
+// ---------------------------------------------------------------------------
+// Protocol concept templates (Design by Introspection)
+// ---------------------------------------------------------------------------
+
+/// True if V is a null protocol value.
+enum bool isProtocolNull(V) = is(V == Null);
+
+/// True if V is a boolean protocol value.
+/// Required: `.value` of type `bool`.
+enum bool isProtocolBoolean(V) = is(V == Boolean) || isCustomProtocolBoolean!V;
+
+private template isCustomProtocolBoolean(V)
+{
+	static if (is(typeof(V.init.value) : bool) && __traits(hasMember, V, "isProtocolBoolean"))
+		enum bool isCustomProtocolBoolean = V.isProtocolBoolean;
+	else
+		enum bool isCustomProtocolBoolean = false;
+}
+
+/// True if V is a numeric protocol value.
+/// Required: `.text` convertible to `const(char)[]`.
+enum bool isProtocolNumeric(V) = is(V : Numeric!S, S) || isCustomProtocolNumeric!V;
+
+private template isCustomProtocolNumeric(V)
+{
+	static if (is(typeof(V.init.text) : const(char)[]) && __traits(hasMember, V, "isProtocolNumeric"))
+		enum bool isCustomProtocolNumeric = V.isProtocolNumeric;
+	else
+		enum bool isCustomProtocolNumeric = false;
+}
+
+/// True if V is a string protocol value.
+/// Required: `.text` that is some char array.
+enum bool isProtocolString(V) = is(V : String!S, S) || isCustomProtocolString!V;
+
+private template isCustomProtocolString(V)
+{
+	static if (is(typeof(V.init.text) : const(char)[]) && __traits(hasMember, V, "isProtocolString"))
+		enum bool isCustomProtocolString = V.isProtocolString;
+	else
+		enum bool isCustomProtocolString = false;
+}
+
+/// True if V is an array protocol value.
+/// Required: `.reader` callable as `v.reader(&sink)`.
+enum bool isProtocolArray(V) = is(V : Array!R, R) || isCustomProtocolArray!V;
+
+private template isCustomProtocolArray(V)
+{
+	static if (__traits(hasMember, V, "reader") && __traits(hasMember, V, "isProtocolArray"))
+		enum bool isCustomProtocolArray = V.isProtocolArray;
+	else
+		enum bool isCustomProtocolArray = false;
+}
+
+/// True if V is a map protocol value.
+/// Required: `.reader` callable as `v.reader(&sink)`.
+/// Optional properties (checked via mapAllowRepeatedKeys, mapAllowBlankKeys):
+///   - `allowRepeatedKeys` (default: false)
+///   - `allowBlankKeys` (default: false)
+enum bool isProtocolMap(V) = is(V : Map!R, R) || isCustomProtocolMap!V;
+
+private template isCustomProtocolMap(V)
+{
+	static if (__traits(hasMember, V, "reader") && __traits(hasMember, V, "isProtocolMap"))
+		enum bool isCustomProtocolMap = V.isProtocolMap;
+	else
+		enum bool isCustomProtocolMap = false;
+}
+
+/// True if V is a field protocol value.
+/// Required: `.nameReader`, `.valueReader` callables.
+enum bool isProtocolField(V) = is(V : Field!(NR, VR), NR, VR) || isCustomProtocolField!V;
+
+private template isCustomProtocolField(V)
+{
+	static if (__traits(hasMember, V, "nameReader") && __traits(hasMember, V, "valueReader")
+		&& __traits(hasMember, V, "isProtocolField"))
+		enum bool isCustomProtocolField = V.isProtocolField;
+	else
+		enum bool isCustomProtocolField = false;
+}
+
+// ---------------------------------------------------------------------------
+// Property accessor templates
+// ---------------------------------------------------------------------------
+
+/// Whether a map protocol value allows repeated keys (e.g., SDL repeated tags).
+template mapAllowRepeatedKeys(V)
+{
+	static if (__traits(hasMember, V, "allowRepeatedKeys"))
+		enum bool mapAllowRepeatedKeys = V.allowRepeatedKeys;
+	else
+		enum bool mapAllowRepeatedKeys = false;
+}
+
+/// Whether a map protocol value allows blank (empty-string) keys for positional values.
+template mapAllowBlankKeys(V)
+{
+	static if (__traits(hasMember, V, "allowBlankKeys"))
+		enum bool mapAllowBlankKeys = V.allowBlankKeys;
+	else
+		enum bool mapAllowBlankKeys = false;
+}
+
+/// Extract the text type from a Numeric or String protocol value.
+template ProtocolTextType(V)
+{
+	static if (is(V : Numeric!S, S) || is(V : String!S, S))
+		alias ProtocolTextType = S;
+	else
+		alias ProtocolTextType = typeof(V.init.text);
+}
+
+// ---------------------------------------------------------------------------
+// Rewrap helpers for filters
+// ---------------------------------------------------------------------------
+
+/// Construct an array protocol value with the same properties as the original,
+/// but with a different reader.
+auto rewrapArray(OrigArray, NewReader)(OrigArray orig, NewReader newReader)
+{
+	static if (is(OrigArray : Array!R, R))
+		return Array!NewReader(newReader);
+	else
+	{
+		static struct RewrappedArray
+		{
+			enum isProtocolArray = true;
+			NewReader reader;
+		}
+		return RewrappedArray(newReader);
+	}
+}
+
+/// Construct a map protocol value with the same properties as the original,
+/// but with a different reader.
+auto rewrapMap(OrigMap, NewReader)(OrigMap orig, NewReader newReader)
+{
+	static if (is(OrigMap : Map!R, R))
+		return Map!NewReader(newReader);
+	else
+	{
+		static struct RewrappedMap
+		{
+			enum isProtocolMap = true;
+			static if (__traits(hasMember, OrigMap, "allowRepeatedKeys"))
+				enum allowRepeatedKeys = OrigMap.allowRepeatedKeys;
+			static if (__traits(hasMember, OrigMap, "allowBlankKeys"))
+				enum allowBlankKeys = OrigMap.allowBlankKeys;
+			NewReader reader;
+		}
+		return RewrappedMap(newReader);
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Functor helpers
 // ---------------------------------------------------------------------------
 
@@ -171,6 +354,26 @@ template NoDeserializeTransform(T)
 	enum hasTransform = false;
 }
 
+/// Options controlling serialization behavior.
+struct SerializerOptions
+{
+	/// How to serialize null D values (null strings, null AAs).
+	/// Dynamic arrays (non-string) always serialize as empty arrays
+	/// regardless of this setting, since null and empty arrays are
+	/// semantically equivalent in D.
+	enum NullHandling
+	{
+		/// Serialize null strings/AAs as null. This is the default
+		/// and matches the old `ae.utils.json` behavior.
+		asNull,
+		/// Serialize null strings as `""` and null AAs as `{}`.
+		/// Useful when targeting consumers where null and empty are
+		/// incompatible types (e.g., JavaScript).
+		asEmpty,
+	}
+	NullHandling nullHandling = NullHandling.asNull; /// ditto
+}
+
 /// Serialization source which walks a D value and pushes events into a sink.
 ///
 /// Parameterized on a `Transform` template for format-specific type hooks
@@ -180,7 +383,7 @@ template NoDeserializeTransform(T)
 ///   - `static void serialize(Sink)(Sink sink, auto ref T v)` — serialize the value
 /// The `read` alias lets the transform call back into the same serializer
 /// for replacement values.
-struct CustomSerializer(alias Transform = NoSerializeTransform)
+struct CustomSerializer(alias Transform = NoSerializeTransform, SerializerOptions options = SerializerOptions.init)
 {
 	static template Impl(alias anchor)
 	{
@@ -194,35 +397,37 @@ struct CustomSerializer(alias Transform = NoSerializeTransform)
 			else
 			static if (is(T == typeof(null)))
 			{
-				sink.handleNull();
+				sink.handle(Null());
 			}
 			else
 			static if (is(T X == Nullable!X))
 			{
 				if (v.isNull)
-					sink.handleNull();
+					sink.handle(Null());
 				else
 					read(sink, v.get);
 			}
 			else
 			static if (is(T == enum))
-				sink.handleString(to!string(v));
+				sink.handle(String!string(to!string(v)));
 			else
 			static if (is(T : bool))
-				sink.handleBoolean(v);
+				sink.handle(Boolean(v));
 			else
 			static if (isSomeChar!T)
 			{
 				char[4] buf = void;
 				import std.utf : encode;
 				auto n = encode(buf, v);
-				sink.handleString(buf[0 .. n]);
+				auto s = buf[0 .. n];
+				sink.handle(String!(typeof(s))(s));
 			}
 			else
 			static if (is(T : ulong))
 			{
 				char[decimalSize!T] buf = void;
-				sink.handleNumeric(toDec(v, buf));
+				auto s = toDec(v, buf);
+				sink.handle(Numeric!(typeof(s))(s));
 			}
 			else
 			static if (isNumeric!T) // floating point
@@ -230,21 +435,37 @@ struct CustomSerializer(alias Transform = NoSerializeTransform)
 				import std.math : isFinite;
 				if (v.isFinite)
 				{
-					import ae.utils.textout;
-
-					static char[64] arr;
-					auto buf = StringBuffer(arr);
-					formattedWrite(&buf, "%s", v);
-					sink.handleNumeric(buf.get());
+					import ae.utils.text : putFP;
+					import ae.utils.textout : StaticBuf;
+					StaticBuf!(char, 66) buf;
+					putFP(buf, v);
+					auto s = buf.data();
+					// Ensure float values are distinguishable from integers
+					// by always including a '.' or 'e' in the representation.
+					bool hasMarker = false;
+					foreach (c; s)
+						if (c == '.' || c == 'e' || c == 'E')
+						{
+							hasMarker = true;
+							break;
+						}
+					if (hasMarker)
+						sink.handle(Numeric!(typeof(s))(s));
+					else
+					{
+						buf.put('.');
+						buf.put('0');
+						sink.handle(Numeric!(typeof(buf.data()))(buf.data()));
+					}
 				}
 				else
-					sink.handleString(to!string(v));
+					sink.handle(String!string(to!string(v)));
 			}
 			else
 			static if (is(T U : U*))
 			{
 				if (v is null)
-					sink.handleNull();
+					sink.handle(Null());
 				else
 					read(sink, *v);
 			}
@@ -261,7 +482,8 @@ struct CustomSerializer(alias Transform = NoSerializeTransform)
 				{
 					alias Reader = TupleReader!T;
 					auto reader = Reader(&v);
-					sink.handleArray(bound!(Reader.readArray)(&reader));
+					auto b = bound!(Reader.readArray)(&reader);
+					sink.handle(Array!(typeof(b))(b));
 				}
 			}
 			else
@@ -276,13 +498,15 @@ struct CustomSerializer(alias Transform = NoSerializeTransform)
 				alias V = typeof(T.init.values[0]);
 				alias Reader = MapLikeReader!(T, K, V);
 				auto reader = Reader(&v);
-				sink.handleObject(bound!(Reader.read)(&reader));
+				auto b = bound!(Reader.read)(&reader);
+				sink.handle(Map!(typeof(b))(b));
 			}
 			else
 			static if (is(T == struct))
 			{
 				auto reader = StructReader!T(&v);
-				sink.handleObject(bound!(StructReader!T.read)(&reader));
+				auto b = bound!(StructReader!T.read)(&reader);
+				sink.handle(Map!(typeof(b))(b));
 			}
 			else
 			static if (is(T V : V[K], K))
@@ -290,20 +514,34 @@ struct CustomSerializer(alias Transform = NoSerializeTransform)
 				static if (is(typeof(v is null)))
 					if (v is null)
 					{
-						sink.handleNull();
+						static if (options.nullHandling == SerializerOptions.NullHandling.asEmpty)
+						{
+							alias Reader2 = AAReader!(T, K, V);
+							auto reader2 = Reader2(v);
+							auto b2 = bound!(Reader2.read)(&reader2);
+							sink.handle(Map!(typeof(b2))(b2));
+						}
+						else
+							sink.handle(Null());
 						return;
 					}
 				alias Reader = AAReader!(T, K, V);
 				auto reader = Reader(v);
-				sink.handleObject(bound!(Reader.read)(&reader));
+				auto b = bound!(Reader.read)(&reader);
+				sink.handle(Map!(typeof(b))(b));
 			}
 			else
 			static if (isSomeString!T)
 			{
 				if (v is null)
-					sink.handleNull();
+				{
+					static if (options.nullHandling == SerializerOptions.NullHandling.asEmpty)
+						sink.handle(String!(immutable(char)[])(""));
+					else
+						sink.handle(Null());
+				}
 				else
-					sink.handleString(v);
+					sink.handle(String!T(v));
 			}
 			else
 			static if (is(T U : U[]))
@@ -311,7 +549,8 @@ struct CustomSerializer(alias Transform = NoSerializeTransform)
 				// Non-string dynamic arrays: null serializes as empty array
 				alias Reader = ArrayReader!T;
 				auto reader = Reader(v);
-				sink.handleArray(bound!(Reader.readArray)(&reader));
+				auto b = bound!(Reader.readArray)(&reader);
+				sink.handle(Array!(typeof(b))(b));
 			}
 			else
 				static assert(false, "Don't know how to serialize " ~ T.stringof);
@@ -347,7 +586,9 @@ struct CustomSerializer(alias Transform = NoSerializeTransform)
 
 						alias ValueReader = Reader!(typeof(field));
 						auto reader = ValueReader(&field);
-						sink.handleField(Unbound!(stringReader!sName).init, bound!(ValueReader.readValue)(&reader));
+						auto nr = Unbound!(stringReader!sName).init;
+						auto vr = bound!(ValueReader.readValue)(&reader);
+						sink.handle(Field!(typeof(nr), typeof(vr))(nr, vr));
 					}
 				}
 
@@ -366,11 +607,12 @@ struct CustomSerializer(alias Transform = NoSerializeTransform)
 								string key;
 								void opCall(KSink)(KSink ksink)
 								{
-									ksink.handleString(key);
+									ksink.handle(String!string(key));
 								}
 							}
 							KeyReader!i kr = { key: key };
-							sink.handleField(kr, bound!(VR.readValue)(&vr));
+							auto vrb = bound!(VR.readValue)(&vr);
+							sink.handle(Field!(KeyReader!i, typeof(vrb))(kr, vrb));
 						}
 					}
 				}
@@ -399,10 +641,9 @@ struct CustomSerializer(alias Transform = NoSerializeTransform)
 					}
 					alias ValueReader = Reader!V;
 					auto valueReader = ValueReader(&v);
-					sink.handleField(
-						bound!(KeyReader  .readValue)(&keyReader  ),
-						bound!(ValueReader.readValue)(&valueReader),
-					);
+					auto knr = bound!(KeyReader  .readValue)(&keyReader  );
+					auto vnr = bound!(ValueReader.readValue)(&valueReader);
+					sink.handle(Field!(typeof(knr), typeof(vnr))(knr, vnr));
 				}
 			}
 		}
@@ -430,10 +671,9 @@ struct CustomSerializer(alias Transform = NoSerializeTransform)
 					auto v = value;
 					alias ValueReader = Reader!(typeof(v));
 					auto valueReader = ValueReader(&v);
-					sink.handleField(
-						bound!(KeyReader  .readValue)(&keyReader  ),
-						bound!(ValueReader.readValue)(&valueReader),
-					);
+					auto knr = bound!(KeyReader  .readValue)(&keyReader  );
+					auto vnr = bound!(ValueReader.readValue)(&valueReader);
+					sink.handle(Field!(typeof(knr), typeof(vnr))(knr, vnr));
 				}
 			}
 		}
@@ -462,7 +702,7 @@ struct CustomSerializer(alias Transform = NoSerializeTransform)
 		{
 			static void stringReader(Sink)(Sink sink)
 			{
-				sink.handleString(name);
+				sink.handle(String!string(name));
 			}
 		}
 
@@ -487,34 +727,11 @@ alias Serializer = CustomSerializer!NoSerializeTransform;
 
 private struct DrainSink
 {
-	void handleNull() {}
-	void handleBoolean(bool v) {}
-	void handleNumeric(CC)(CC[] v) {}
-	void handleString(S)(S s) {}
-	void handleStringFragments(Reader)(Reader reader)
+	void handle(V)(V v)
 	{
-		static struct FragSink { void handleStringFragment(CC)(CC[] s) {} }
-		FragSink fs;
-		reader(&fs);
-	}
-	void handleArray(Reader)(Reader reader)
-	{
-		DrainSink ds;
-		reader(&ds);
-	}
-	void handleObject(Reader)(Reader reader)
-	{
-		static struct FieldDrainSink
-		{
-			void handleField(NR, VR)(NR nameReader, VR valueReader)
-			{
-				DrainSink ds;
-				nameReader(&ds);
-				valueReader(&ds);
-			}
-		}
-		FieldDrainSink fs;
-		reader(&fs);
+		static if (isProtocolArray!V) v.reader(&this);
+		else static if (isProtocolMap!V) v.reader(&this);
+		else static if (isProtocolField!V) { v.nameReader(&this); v.valueReader(&this); }
 	}
 }
 
@@ -539,237 +756,255 @@ template CustomDeserializer(alias Transform, alias anchor)
 		// temporary T instance, then pass it to handleValue.
 		static if (is(typeof(T.isSerializationSink)))
 		{
-			private void sinkForward(string method, Args...)(auto ref Args args)
+			void handle(V)(V v)
 			{
-				T v;
-				mixin("v." ~ method ~ "(args);");
-				handleValue(v);
+				T tv;
+				tv.handle(v);
+				handleValue(tv);
 			}
-
-			void handleString(S)(S s) { sinkForward!"handleString"(s); }
-			void handleStringFragments(Reader)(Reader r) { sinkForward!"handleStringFragments"(r); }
-			void handleArray(Reader)(Reader r) { sinkForward!"handleArray"(r); }
-			void handleObject(Reader)(Reader r) { sinkForward!"handleObject"(r); }
-			void handleNull() { T v; v.handleNull(); handleValue(v); }
-			void handleBoolean(bool b) { sinkForward!"handleBoolean"(b); }
-			void handleNumeric(CC)(CC[] s) { sinkForward!"handleNumeric"(s); }
 		}
 		else
 		static if (Transform!T.hasTransform)
 		{
 			// Transform handles this type — forward all events through
 			// the transform's makeSink, which deserializes into T.
-			private void transformForward(string method, Args...)(auto ref Args args)
+			void handle(V)(V v)
 			{
-				T v;
-				auto s = Transform!T.makeSink(&v);
-				mixin("s." ~ method ~ "(args);");
-				handleValue(v);
+				T tv;
+				auto s = Transform!T.makeSink(&tv);
+				s.handle(v);
+				handleValue(tv);
 			}
-
-			void handleString(S)(S s) { transformForward!"handleString"(s); }
-			void handleStringFragments(Reader)(Reader r) { transformForward!"handleStringFragments"(r); }
-			void handleArray(Reader)(Reader r) { transformForward!"handleArray"(r); }
-			void handleObject(Reader)(Reader r) { transformForward!"handleObject"(r); }
-			void handleNull() { transformForward!"handleNull"(); }
-			void handleBoolean(bool b) { transformForward!"handleBoolean"(b); }
-			void handleNumeric(CC)(CC[] s) { transformForward!"handleNumeric"(s); }
 		}
 		else
 		{
-		template unparseable(string inputType)
-		{
-			void unparseable(Reader)(Reader reader)
-			{
-				throw new Exception("Can't parse %s from %s".format(T.stringof, inputType));
-			}
-		}
 
-		void handleString(S)(S s)
+		void handle(V)(V v)
 		{
-			static if (is(typeof(s.to!T)))
+			static if (isProtocolNull!V)
 			{
-				T v = to!T(s);
-				handleValue(v);
+				static if (is(T X == Nullable!X))
+				{
+					T tv;  // Nullable.init is null
+					handleValue(tv);
+				}
+				else
+				static if (is(T U : U*))
+				{
+					T tv = null;
+					handleValue(tv);
+				}
+				else
+				static if (is(typeof({T tv = null;})))
+				{
+					T tv = null;
+					handleValue(tv);
+				}
+				else
+					throw new Exception("Can't parse %s from %s".format(T.stringof, "null"));
 			}
 			else
-				throw new Exception("Can't parse %s from %s".format(T.stringof, S.stringof));
-		}
-
-		static if (is(T : C[]))
-			void handleStringFragments(Reader)(Reader reader)
+			static if (isProtocolBoolean!V)
 			{
-				static struct FragmentSink
+				static if (is(T : bool))
 				{
-					C[] buf;
-
-					void handleStringFragment(CC)(CC[] s)
+					auto bv = v.value;
+					handleValue(bv);
+				}
+				else
+					throw new Exception("Can't parse %s from %s".format(T.stringof, "boolean"));
+			}
+			else
+			static if (isProtocolNumeric!V)
+			{
+				static if (is(typeof(to!T(v.text))))
+				{
+					T t = to!T(v.text);
+					handleValue(t);
+				}
+				else
+					throw new Exception("Can't parse %s from %s".format(T.stringof, "numeric"));
+			}
+			else
+			static if (isProtocolString!V)
+			{
+				alias S = ProtocolTextType!V;
+				static if (is(typeof(v.text.to!T)))
+				{
+					T t = to!T(v.text);
+					handleValue(t);
+				}
+				else
+					throw new Exception("Can't parse %s from %s".format(T.stringof, S.stringof));
+			}
+			else
+			static if (isProtocolArray!V)
+			{
+				static if (is(T U : U[]) && !isStaticArray!T)
+				{
+					ArraySink!U sink;
+					v.reader(&sink);
+					handleValue(sink.arr);
+				}
+				else
+				static if (isStaticArray!T)
+				{
+					StaticArraySink!T sink;
+					v.reader(&sink);
+					handleValue(sink.arr);
+				}
+				else
+				static if (isTuple!T)
+				{
+					TupleSink!T sink;
+					v.reader(&sink);
+					handleValue(sink.tup);
+				}
+				else
+					throw new Exception("Can't parse %s from %s".format(T.stringof, "array"));
+			}
+			else
+			static if (isProtocolMap!V)
+			{
+				static if (is(T VV : VV[K], K) || isMapLike!T)
+				{
+					static if (isMapLike!T)
 					{
-						buf ~= s;
+						alias K = typeof(T.init.keys[0]);
+						alias VV = typeof(T.init.values[0]);
 					}
-				}
-				FragmentSink sink;
-				reader(&sink);
-				handleValue(sink.buf);
-			}
-		else
-			alias handleStringFragments = unparseable!"string fragments";
-
-		static if (is(T U : U[]) && !isStaticArray!T)
-			void handleArray(Reader)(Reader reader)
-			{
-				ArraySink!U sink;
-				reader(&sink);
-				handleValue(sink.arr);
-			}
-		else
-		static if (isStaticArray!T)
-			void handleArray(Reader)(Reader reader)
-			{
-				StaticArraySink!T sink;
-				reader(&sink);
-				handleValue(sink.arr);
-			}
-		else
-		static if (isTuple!T)
-			void handleArray(Reader)(Reader reader)
-			{
-				TupleSink!T sink;
-				reader(&sink);
-				handleValue(sink.tup);
-			}
-		else
-			alias handleArray = unparseable!"array";
-
-		static if (is(T V : V[K], K) || isMapLike!T)
-			void handleObject(Reader)(Reader reader)
-			{
-				static if (isMapLike!T)
-				{
-					alias K = typeof(T.init.keys[0]);
-					alias V = typeof(T.init.values[0]);
-				}
-				static struct FieldSink
-				{
-					T aa;
-
-					void handleField(NameReader, ValueReader)(NameReader nameReader, ValueReader valueReader)
+					static struct AAFieldSink
 					{
-						K k;
-						V v;
-						nameReader (makeSink!K(&k));
-						valueReader(makeSink!V(&v));
-						aa[k] = v;
-					}
-				}
+						T aa;
 
-				FieldSink sink;
-				reader(&sink);
-				handleValue(sink.aa);
-			}
-		else
-		static if (is(T == struct) && !isTuple!T && !is(T X == Nullable!X))
-		{
-			void handleObject(Reader)(Reader reader)
-			{
-				static struct FieldSink
-				{
-					T s;
-
-					void handleField(NameReader, ValueReader)(NameReader nameReader, ValueReader valueReader)
-					{
-						alias N = const(C)[];
-						N name;
-						nameReader(makeSink!N(&name));
-
-						// TODO: generate switch
-						foreach (i, field; s.tupleof)
+						void handle(FV)(FV fv)
 						{
-							// Skip @Exclude, @Extras, NonSerialized, and JSONExtras-type fields during matching
-							static if (!hasUDA!(Exclude, T.tupleof[i]) && !hasUDA!(Extras, T.tupleof[i])
-								&& !isNonSerialized!(T, __traits(identifier, T.tupleof[i]))
-								&& !isExtrasType!(typeof(T.tupleof[i])))
+							static if (isProtocolField!FV)
 							{
-								enum fieldName = to!N(getSerializedName!(T, __traits(identifier, T.tupleof[i])));
-								if (name == fieldName)
-								{
-									alias V = typeof(field);
-									valueReader(makeSink!V(&s.tupleof[i]));
-									return;
-								}
+								K k;
+								VV fvv;
+								fv.nameReader (makeSink!K(&k));
+								fv.valueReader(makeSink!VV(&fvv));
+								aa[k] = fvv;
 							}
 						}
-						// @Extras: store unknown fields
-						enum extrasFieldIndex = extrasIndex!T;
-						static if (extrasFieldIndex != -1)
-						{
-							alias EV = typeof(s.tupleof[extrasFieldIndex].init[""]);
-							EV val;
-							valueReader(makeSink!EV(&val));
-							s.tupleof[extrasFieldIndex][name] = val;
-						}
-						else
-						// @IgnoreUnknown: silently drain unknown fields (any value type)
-						static if (hasUDA!(IgnoreUnknown, T))
-						{
-							DrainSink ds;
-							valueReader(&ds);
-						}
-						else
-							throw new Exception("Unknown field %s".format(name));
 					}
+
+					AAFieldSink sink;
+					v.reader(&sink);
+					handleValue(sink.aa);
 				}
+				else
+				static if (is(T == struct) && !isTuple!T && !is(T X == Nullable!X))
+				{
+					static struct StructFieldSink
+					{
+						T s;
 
-				FieldSink sink;
-				static if (is(typeof(p) == T*))
-					sink.s = *p;
-				reader(&sink);
-				handleValue(sink.s);
-			}
-		}
-		else
-			alias handleObject = unparseable!"object";
+						void handle(FV)(FV fv)
+						{
+							static if (isProtocolField!FV)
+							{
+								alias N = const(C)[];
+								N name;
+								fv.nameReader(makeSink!N(&name));
 
-		void handleNull()
-		{
-			static if (is(T X == Nullable!X))
-			{
-				T v;  // Nullable.init is null
-				handleValue(v);
-			}
-			else
-			static if (is(T U : U*))
-			{
-				T v = null;
-				handleValue(v);
-			}
-			else
-			static if (is(typeof({T v = null;})))
-			{
-				T v = null;
-				handleValue(v);
-			}
-			else
-				throw new Exception("Can't parse %s from %s".format(T.stringof, "null"));
-		}
+								// Blank key → @Positional field (SDL/XML positional values)
+								if (name.length == 0)
+								{
+									foreach (i, field; s.tupleof)
+									{
+										static if (hasUDA!(Positional, T.tupleof[i]))
+										{
+											alias FVT = typeof(field);
+											fv.valueReader(makeSink!FVT(&s.tupleof[i]));
+											return;
+										}
+									}
+									// No @Positional — fall through to @Extras / @IgnoreUnknown
+								}
+								else
+								{
+									// Named field lookup
+									foreach (i, field; s.tupleof)
+									{
+										// Skip @Exclude, @Extras, NonSerialized, @Positional, and JSONExtras-type fields during matching
+										static if (!hasUDA!(Exclude, T.tupleof[i]) && !hasUDA!(Extras, T.tupleof[i])
+											&& !hasUDA!(Positional, T.tupleof[i])
+											&& !isNonSerialized!(T, __traits(identifier, T.tupleof[i]))
+											&& !isExtrasType!(typeof(T.tupleof[i])))
+										{
+											enum fieldName = to!N(getSerializedName!(T, __traits(identifier, T.tupleof[i])));
+											if (name == fieldName)
+											{
+												alias FVT = typeof(field);
+												// allowRepeatedKeys: append to array fields instead of overwriting
+												static if (mapAllowRepeatedKeys!V
+													&& is(FVT : E[], E) && !isSomeString!FVT)
+												{
+													E elem;
+													fv.valueReader(makeSink!E(&elem));
+													s.tupleof[i] ~= elem;
+												}
+												else
+													fv.valueReader(makeSink!FVT(&s.tupleof[i]));
+												return;
+											}
+											// Check @SerializedAlias
+											static if (hasUDA!(SerializedAlias, T.tupleof[i]))
+											{
+												enum aliasName = to!N(getUDA!(SerializedAlias, T.tupleof[i]).name);
+												if (name == aliasName)
+												{
+													alias FVT2 = typeof(field);
+													static if (mapAllowRepeatedKeys!V
+														&& is(FVT2 : E2[], E2) && !isSomeString!FVT2)
+													{
+														E2 elem;
+														fv.valueReader(makeSink!E2(&elem));
+														s.tupleof[i] ~= elem;
+													}
+													else
+														fv.valueReader(makeSink!FVT2(&s.tupleof[i]));
+													return;
+												}
+											}
+										}
+									}
+								}
+								// @Extras: store unknown fields
+								enum extrasFieldIndex = extrasIndex!T;
+								static if (extrasFieldIndex != -1)
+								{
+									alias EV = typeof(s.tupleof[extrasFieldIndex].init[""]);
+									EV val;
+									fv.valueReader(makeSink!EV(&val));
+									s.tupleof[extrasFieldIndex][name] = val;
+								}
+								else
+								// @IgnoreUnknown: silently drain unknown fields (any value type)
+								static if (hasUDA!(IgnoreUnknown, T))
+								{
+									DrainSink ds;
+									fv.valueReader(&ds);
+								}
+								else
+									throw new Exception("Unknown field %s".format(name));
+							}
+						}
+					}
 
-		void handleBoolean(bool v)
-		{
-			static if (is(T : bool))
-				handleValue(v);
-			else
-				throw new Exception("Can't parse %s from %s".format(T.stringof, "boolean"));
-		}
-
-		void handleNumeric(CC)(CC[] v)
-		{
-			static if (is(typeof(to!T(v))))
-			{
-				T t = to!T(v);
-				handleValue(t);
+					StructFieldSink sink;
+					static if (is(typeof(p) == T*))
+						sink.s = *p;
+					v.reader(&sink);
+					handleValue(sink.s);
+				}
+				else
+					throw new Exception("Can't parse %s from %s".format(T.stringof, "object"));
 			}
 			else
-				throw new Exception("Can't parse %s from %s".format(T.stringof, "numeric"));
+				static assert(false, "Unhandled protocol type " ~ V.stringof);
 		}
 
 		} // end else (non-sink T)
@@ -809,9 +1044,7 @@ template CustomDeserializer(alias Transform, alias anchor)
 		T tup;
 		size_t idx;
 
-		// Dispatch a handler call to the correct tuple element by runtime index.
-		// Creates a makeSink for the element at each possible index and forwards.
-		private void dispatch(string handler, Args...)(Args args)
+		void handle(V)(V v)
 		{
 			foreach (n; rangeTuple!N)
 			{
@@ -819,20 +1052,13 @@ template CustomDeserializer(alias Transform, alias anchor)
 				{
 					alias E = typeof(T.expand[n]);
 					auto s = makeSink!E(&tup.expand[n]);
-					__traits(getMember, s, handler)(args);
+					s.handle(v);
 					idx++;
 					return;
 				}
 			}
 			throw new Exception("Too many elements for tuple of length %d".format(N));
 		}
-
-		void handleNull() { dispatch!"handleNull"(); }
-		void handleBoolean(bool v) { dispatch!"handleBoolean"(v); }
-		void handleNumeric(CC)(CC[] v) { dispatch!"handleNumeric"(v); }
-		void handleString(S)(S s) { dispatch!"handleString"(s); }
-		void handleArray(Reader)(Reader r) { dispatch!"handleArray"(r); }
-		void handleObject(Reader)(Reader r) { dispatch!"handleObject"(r); }
 	}
 
 	static auto makeSink(T)(T* p)
@@ -842,16 +1068,24 @@ template CustomDeserializer(alias Transform, alias anchor)
 		else
 		static if (is(T X == Nullable!X))
 		{
-			// Special sink for Nullable: intercepts handleNull, delegates rest to inner type
+			// Special sink for Nullable: intercepts Null, delegates rest to inner type
 			static struct NullableSink
 			{
 				T* p;
 
-				void handleValue(ref X v) { *p = T(v); }
-				void handleNull() { *p = T.init; }
-
-				// Delegate all other handlers to an inner sink for X
-				mixin SinkHandlers!X;
+				void handle(V)(V v)
+				{
+					static if (isProtocolNull!V)
+						*p = T.init;
+					else
+					{
+						// Forward to inner sink for X
+						X xv;
+						auto inner = makeSink!X(&xv);
+						inner.handle(v);
+						*p = T(xv);
+					}
+				}
 			}
 
 			return NullableSink(p);
@@ -867,12 +1101,7 @@ template CustomDeserializer(alias Transform, alias anchor)
 				{
 					T* p;
 					void handleValue(ref T v) { *p = v; }
-					void handleNull() {}
-					void handleBoolean(bool) {}
-					void handleNumeric(scope const(char)[]) {}
-					void handleString(S)(S) {}
-					void handleArray(Reader)(Reader) {}
-					void handleObject(Reader)(Reader) {}
+					void handle(V)(V v) {}
 				}
 				return EmptyTupleSink(p);
 			}
@@ -894,49 +1123,23 @@ template CustomDeserializer(alias Transform, alias anchor)
 			}
 			else
 			{
-				// N >= 2: serialized as array, use TupleSink via handleArray in SinkHandlers
+				// N >= 2: serialized as array, use TupleSink via handle in SinkHandlers
 				static struct MultiTupleSink
 				{
 					T* p;
 
 					void handleValue(ref T v) { *p = v; }
 
-					void handleArray(Reader)(Reader reader)
+					void handle(V)(V v)
 					{
-						TupleSink!T sink;
-						reader(&sink);
-						*p = sink.tup;
-					}
-
-					template unparseable(string inputType)
-					{
-						void unparseable(Reader)(Reader reader)
+						static if (isProtocolArray!V)
 						{
-							throw new Exception("Can't parse %s from %s".format(T.stringof, inputType));
+							TupleSink!T sink;
+							v.reader(&sink);
+							*p = sink.tup;
 						}
-					}
-
-					alias handleObject = unparseable!"object";
-					alias handleStringFragments = unparseable!"string fragments";
-
-					void handleNull()
-					{
-						throw new Exception("Can't parse %s from null".format(T.stringof));
-					}
-
-					void handleBoolean(bool v)
-					{
-						throw new Exception("Can't parse %s from boolean".format(T.stringof));
-					}
-
-					void handleNumeric(CC)(CC[] v)
-					{
-						throw new Exception("Can't parse %s from numeric".format(T.stringof));
-					}
-
-					void handleString(S)(S s)
-					{
-						throw new Exception("Can't parse %s from string".format(T.stringof));
+						else
+							throw new Exception("Can't parse %s from %s".format(T.stringof, V.stringof));
 					}
 				}
 
@@ -949,20 +1152,19 @@ template CustomDeserializer(alias Transform, alias anchor)
 			static struct NullTypeSink
 			{
 				T* p;
-				void handleNull() { *p = null; }
 				void handleValue(ref T v) { *p = v; }
-				void handleBoolean(bool) {}
-				void handleNumeric(CC)(CC[]) {}
-				void handleString(S)(S) {}
-				void handleArray(Reader)(Reader) {}
-				void handleObject(Reader)(Reader) {}
+				void handle(V)(V v)
+				{
+					static if (isProtocolNull!V)
+						*p = null;
+				}
 			}
 			return NullTypeSink(p);
 		}
 		else
 		static if (is(T U : U*))
 		{
-			// Pointer sink: handleNull -> leave null, others -> allocate and deserialize
+			// Pointer sink: Null -> leave null, others -> allocate and deserialize
 			static struct PointerSink
 			{
 				T* p;
@@ -973,9 +1175,19 @@ template CustomDeserializer(alias Transform, alias anchor)
 					**p = v;
 				}
 
-				void handleNull() { *p = null; }
-
-				mixin SinkHandlers!U;
+				void handle(V)(V v)
+				{
+					static if (isProtocolNull!V)
+						*p = null;
+					else
+					{
+						U uv;
+						auto inner = makeSink!U(&uv);
+						inner.handle(v);
+						*p = new U;
+						**p = uv;
+					}
+				}
 			}
 
 			return PointerSink(p);

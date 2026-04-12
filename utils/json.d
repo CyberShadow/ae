@@ -1,6 +1,11 @@
 /**
  * JSON encoding.
  *
+ * A self-contained JSON serializer/deserializer. For a more general framework
+ * supporting multiple formats (JSON, XML, CSV, bencode, etc.), composable
+ * filters, and streaming, see `ae.utils.serialization.json` and the
+ * `ae.utils.serialization` package.
+ *
  * License:
  *   This Source Code Form is subject to the terms of
  *   the Mozilla Public License, v. 2.0. If a copy of

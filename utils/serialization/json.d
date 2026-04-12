@@ -203,24 +203,28 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 	/// Reads a JSON value and pushes events to a sink.
 	void read(Sink)(Sink sink)
 	{
+		import ae.utils.serialization.serialization : Null, Boolean, Numeric,
+			String, Array, Map;
+
 		skipWhitespace();
 		switch (peek())
 		{
 		case '[':
 			skip();
 			ArrayReader ar = {parser: &this};
-			sink.handleArray(ar);
+			sink.handle(Array!(typeof(ar))(ar));
 			break;
 		case '"':
 			skip();
-			sink.handleString(readWholeString());
+			auto str = readWholeString();
+			sink.handle(String!(typeof(str))(str));
 			break;
 		case 't':
 			skip();
 			expect('r');
 			expect('u');
 			expect('e');
-			sink.handleBoolean(true);
+			sink.handle(Boolean(true));
 			break;
 		case 'f':
 			skip();
@@ -228,23 +232,24 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 			expect('l');
 			expect('s');
 			expect('e');
-			sink.handleBoolean(false);
+			sink.handle(Boolean(false));
 			break;
 		case 'n':
 			skip();
 			expect('u');
 			expect('l');
 			expect('l');
-			sink.handleNull();
+			sink.handle(Null());
 			break;
 		case '-':
 		case '0': .. case '9':
-			sink.handleNumeric(readNumeric());
+			auto num = readNumeric();
+			sink.handle(Numeric!(typeof(num))(num));
 			break;
 		case '{':
 			skip();
 			ObjectReader or_ = {parser: &this};
-			sink.handleObject(or_);
+			sink.handle(Map!(typeof(or_))(or_));
 			break;
 		default:
 			throw new Exception("Unknown JSON symbol: %s".format(peek()));
@@ -283,6 +288,8 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 
 		void opCall(Sink)(Sink sink)
 		{
+			import ae.utils.serialization.serialization : Field;
+
 			parser.skipWhitespace();
 			if (parser.peek() == '}')
 			{
@@ -301,7 +308,7 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 				else
 					StringReader nr = {parser: parser};
 				ObjectValueReader vr = {parser: parser};
-				sink.handleField(nr, vr);
+				sink.handle(Field!(typeof(nr), typeof(vr))(nr, vr));
 
 				parser.skipWhitespace();
 				if (parser.peek() == '}')
@@ -328,16 +335,18 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 
 	/// Reads a JSON string value. Used for object field names, which in
 	/// standard JSON are always strings. Using this instead of ValueReader
-	/// avoids instantiating non-string sink methods (handleArray, etc.).
+	/// avoids instantiating non-string sink methods.
 	static struct StringReader
 	{
 		JsonParser* parser;
 
 		void opCall(Sink)(Sink sink)
 		{
+			import ae.utils.serialization.serialization : String;
 			parser.skipWhitespace();
 			parser.expect('"');
-			sink.handleString(parser.readWholeString());
+			auto str = parser.readWholeString();
+			sink.handle(String!(typeof(str))(str));
 		}
 	}
 
@@ -475,12 +484,44 @@ struct JsonWriter(Output = StringBuilder, JsonOptions options = JsonOptions.init
 	Output output;
 	bool needComma;
 
-	void handleNumeric(CC)(CC[] str)
+	void handle(V)(V v)
 	{
-		output.put(str);
+		import ae.utils.serialization.serialization : isProtocolNull, isProtocolBoolean,
+			isProtocolNumeric, isProtocolString, isProtocolArray, isProtocolMap;
+
+		static if (isProtocolNull!V)
+			output.put("null");
+		else static if (isProtocolBoolean!V)
+			output.put(v.value ? "true" : "false");
+		else static if (isProtocolNumeric!V)
+			output.put(v.text);
+		else static if (isProtocolString!V)
+			writeString(v.text);
+		else static if (isProtocolArray!V)
+		{
+			auto outerComma = needComma;
+			needComma = false;
+			output.put('[');
+			ArrayElementSink as = {writer: &this};
+			v.reader(&as);
+			output.put(']');
+			needComma = outerComma;
+		}
+		else static if (isProtocolMap!V)
+		{
+			auto outerComma = needComma;
+			needComma = false;
+			output.put('{');
+			ObjectFieldSink os = {writer: &this};
+			v.reader(&os);
+			output.put('}');
+			needComma = outerComma;
+		}
+		else
+			static assert(false, "JsonWriter: unsupported type " ~ V.stringof);
 	}
 
-	void handleString(CC)(CC[] str)
+	private void writeString(CC)(CC[] str)
 	{
 		import std.utf : byChar;
 		output.put('"');
@@ -488,7 +529,6 @@ struct JsonWriter(Output = StringBuilder, JsonOptions options = JsonOptions.init
 			writeStringFragment(str);
 		else
 		{
-			// Convert wide string to char-by-char output
 			foreach (char c; str.byChar)
 			{
 				if (escapes.escaped[c])
@@ -498,16 +538,6 @@ struct JsonWriter(Output = StringBuilder, JsonOptions options = JsonOptions.init
 			}
 		}
 		output.put('"');
-	}
-
-	void handleNull()
-	{
-		output.put("null");
-	}
-
-	void handleBoolean(bool v)
-	{
-		output.put(v ? "true" : "false");
 	}
 
 	private void writeStringFragment(CC)(CC[] s)
@@ -525,71 +555,17 @@ struct JsonWriter(Output = StringBuilder, JsonOptions options = JsonOptions.init
 		output.put(start[0 .. p_ - start]);
 	}
 
-	void handleStringFragments(Reader)(Reader reader)
-	{
-		output.put('"');
-		FragmentSink fs = {writer: &this};
-		reader(&fs);
-		output.put('"');
-	}
-
-	void handleArray(Reader)(Reader reader)
-	{
-		auto outerComma = needComma;
-		needComma = false;
-		output.put('[');
-		ArrayElementSink as = {writer: &this};
-		reader(&as);
-		output.put(']');
-		needComma = outerComma;
-	}
-
-	void handleObject(Reader)(Reader reader)
-	{
-		auto outerComma = needComma;
-		needComma = false;
-		output.put('{');
-		ObjectFieldSink os = {writer: &this};
-		reader(&os);
-		output.put('}');
-		needComma = outerComma;
-	}
-
-	// -- Inner sink structs --
-
-	static struct FragmentSink
-	{
-		JsonWriter* writer;
-
-		void handleStringFragment(CC)(CC[] s)
-		{
-			writer.writeStringFragment(s);
-		}
-	}
-
 	/// Sink for array elements -- inserts commas between elements.
 	static struct ArrayElementSink
 	{
 		JsonWriter* writer;
 
-		alias handleObject = opDispatch!"handleObject";
-		alias handleStringFragments = opDispatch!"handleStringFragments";
-		alias handleBoolean = opDispatch!"handleBoolean";
-		alias handleNull = opDispatch!"handleNull";
-		alias handleNumeric = opDispatch!"handleNumeric";
-		alias handleString = opDispatch!"handleString";
-		alias handleArray = opDispatch!"handleArray";
-
-		template opDispatch(string name)
+		void handle(V)(V v)
 		{
-			void opDispatch(Args...)(auto ref Args args)
-			{
-				if (writer.needComma)
-					writer.output.put(',');
-
-				mixin("writer." ~ name ~ "(args);");
-				writer.needComma = true;
-			}
+			if (writer.needComma)
+				writer.output.put(',');
+			writer.handle(v);
+			writer.needComma = true;
 		}
 	}
 
@@ -598,14 +574,33 @@ struct JsonWriter(Output = StringBuilder, JsonOptions options = JsonOptions.init
 	{
 		JsonWriter* writer;
 
-		void handleField(NameReader, ValueReader)(NameReader nameReader, ValueReader valueReader)
+		void handle(V)(V v)
+		{
+			import ae.utils.serialization.serialization : isProtocolField;
+
+			static if (isProtocolField!V)
+				handleFieldImpl(v.nameReader, v.valueReader);
+			else
+				static assert(false, "ObjectFieldSink: expected Field, got " ~ V.stringof);
+		}
+
+		void handleFieldImpl(NameReader, ValueReader)(NameReader nameReader, ValueReader valueReader)
 		{
 			if (writer.needComma)
 				writer.output.put(',');
 
 			writeName(nameReader);
 			writer.output.put(':');
-			writeValue(valueReader);
+
+			// Wrap the writer pointer in a fresh struct to break the forward
+			// reference cycle between ObjectFieldSink and JsonWriter.handle.
+			static struct ValueSink
+			{
+				typeof(writer) w;
+				void handle(VV)(VV vv) { w.handle(vv); }
+			}
+			ValueSink vs = {w: writer};
+			valueReader(&vs);
 
 			writer.needComma = true;
 		}
@@ -617,8 +612,16 @@ struct JsonWriter(Output = StringBuilder, JsonOptions options = JsonOptions.init
 				static struct KeySink
 				{
 					JsonWriter* writer;
-					void handleString(CC)(CC[] str) { writer.handleString(str); }
-					void handleNull() { writer.handleString(""); }
+					void handle(V)(V v)
+					{
+						import ae.utils.serialization.serialization : isProtocolNull, isProtocolString;
+						static if (isProtocolString!V)
+							writer.writeString(v.text);
+						else static if (isProtocolNull!V)
+							writer.writeString("");
+						else
+							static assert(false, "Non-string key type not supported (use JsonOptions.NonStringKeys)");
+					}
 				}
 				KeySink ks = { writer: writer };
 				nameReader(&ks);
@@ -630,32 +633,31 @@ struct JsonWriter(Output = StringBuilder, JsonOptions options = JsonOptions.init
 				static struct StringifyKeySink
 				{
 					JsonWriter* writer;
-					void handleString(CC)(CC[] str) { writer.handleString(str); }
-					void handleNumeric(CC)(CC[] str)
+					void handle(V)(V v)
 					{
-						writer.output.put('"');
-						writer.output.put(str);
-						writer.output.put('"');
-					}
-					void handleBoolean(bool v)
-					{
-						writer.output.put('"');
-						writer.output.put(v ? "true" : "false");
-						writer.output.put('"');
-					}
-					void handleNull()
-					{
-						writer.output.put(`"null"`);
+						import ae.utils.serialization.serialization : isProtocolNull,
+							isProtocolBoolean, isProtocolNumeric, isProtocolString;
+						static if (isProtocolString!V)
+							writer.writeString(v.text);
+						else static if (isProtocolNumeric!V)
+						{
+							writer.output.put('"');
+							writer.output.put(v.text);
+							writer.output.put('"');
+						}
+						else static if (isProtocolBoolean!V)
+						{
+							writer.output.put('"');
+							writer.output.put(v.value ? "true" : "false");
+							writer.output.put('"');
+						}
+						else static if (isProtocolNull!V)
+							writer.output.put(`"null"`);
 					}
 				}
 				StringifyKeySink ks = { writer: writer };
 				nameReader(&ks);
 			}
-		}
-
-		private void writeValue(ValueReader)(ValueReader valueReader)
-		{
-			valueReader(writer);
 		}
 	}
 
@@ -694,30 +696,67 @@ struct PrettyJsonWriter(Output = StringBuilder, char indent = '\t', string newLi
 		}
 	}
 
-	void handleNumeric(CC)(CC[] str)
+	void handle(V)(V v)
 	{
-		putIndent();
-		output.put(str);
-	}
+		import ae.utils.serialization.serialization : isProtocolNull, isProtocolBoolean,
+			isProtocolNumeric, isProtocolString, isProtocolArray, isProtocolMap;
 
-	void handleString(CC)(CC[] str)
-	{
-		putIndent();
-		output.put('"');
-		writeStringFragment(str);
-		output.put('"');
-	}
-
-	void handleNull()
-	{
-		putIndent();
-		output.put("null");
-	}
-
-	void handleBoolean(bool v)
-	{
-		putIndent();
-		output.put(v ? "true" : "false");
+		static if (isProtocolNull!V)
+		{
+			putIndent();
+			output.put("null");
+		}
+		else static if (isProtocolBoolean!V)
+		{
+			putIndent();
+			output.put(v.value ? "true" : "false");
+		}
+		else static if (isProtocolNumeric!V)
+		{
+			putIndent();
+			output.put(v.text);
+		}
+		else static if (isProtocolString!V)
+		{
+			putIndent();
+			output.put('"');
+			writeStringFragment(v.text);
+			output.put('"');
+		}
+		else static if (isProtocolArray!V)
+		{
+			auto outerComma = needComma;
+			needComma = false;
+			putIndent();
+			output.put('[');
+			indentLevel++;
+			putNewline();
+			ArrayElementSink as = {writer: &this};
+			v.reader(&as);
+			indentLevel--;
+			putNewline();
+			putIndent();
+			output.put(']');
+			needComma = outerComma;
+		}
+		else static if (isProtocolMap!V)
+		{
+			auto outerComma = needComma;
+			needComma = false;
+			putIndent();
+			output.put('{');
+			indentLevel++;
+			putNewline();
+			ObjectFieldSink os = {writer: &this};
+			v.reader(&os);
+			indentLevel--;
+			putNewline();
+			putIndent();
+			output.put('}');
+			needComma = outerComma;
+		}
+		else
+			static assert(false, "PrettyJsonWriter: unsupported type " ~ V.stringof);
 	}
 
 	private void writeStringFragment(CC)(CC[] s)
@@ -733,72 +772,11 @@ struct PrettyJsonWriter(Output = StringBuilder, char indent = '\t', string newLi
 		output.put(start[0 .. p_ - start]);
 	}
 
-	void handleArray(Reader)(Reader reader)
-	{
-		auto outerComma = needComma;
-		needComma = false;
-		putIndent();
-		output.put('[');
-		indentLevel++;
-		putNewline();
-		ArrayElementSink as = {writer: &this};
-		reader(&as);
-		indentLevel--;
-		putNewline();
-		putIndent();
-		output.put(']');
-		needComma = outerComma;
-	}
-
-	void handleObject(Reader)(Reader reader)
-	{
-		auto outerComma = needComma;
-		needComma = false;
-		putIndent();
-		output.put('{');
-		indentLevel++;
-		putNewline();
-		ObjectFieldSink os = {writer: &this};
-		reader(&os);
-		indentLevel--;
-		putNewline();
-		putIndent();
-		output.put('}');
-		needComma = outerComma;
-	}
-
 	static struct ArrayElementSink
 	{
 		PrettyJsonWriter* writer;
 
-		alias handleObject = opDispatch!"handleObject";
-		alias handleBoolean = opDispatch!"handleBoolean";
-		alias handleNull = opDispatch!"handleNull";
-		alias handleNumeric = opDispatch!"handleNumeric";
-		alias handleString = opDispatch!"handleString";
-		alias handleArray = opDispatch!"handleArray";
-
-		template opDispatch(string name)
-		{
-			void opDispatch(Args...)(auto ref Args args)
-			{
-				if (writer.needComma)
-				{
-					writer.output.put(',');
-					writer.putNewline();
-				}
-
-				mixin("writer." ~ name ~ "(args);");
-				writer.needComma = true;
-			}
-		}
-	}
-
-	static struct ObjectFieldSink
-	{
-		PrettyJsonWriter* writer;
-
-		void handleField(NameReader, ValueReader)(NameReader nameReader, ValueReader valueReader)
+		void handle(V)(V v)
 		{
 			if (writer.needComma)
 			{
@@ -806,15 +784,39 @@ struct PrettyJsonWriter(Output = StringBuilder, char indent = '\t', string newLi
 				writer.putNewline();
 			}
 
-			nameReader(writer);
-			writer.output.put(preColon);
-			writer.output.put(':');
-			writer.output.put(postColon);
-			// Value should not add its own indent (it follows the key on the same line)
-			writer.indentPending = false;
-			valueReader(writer);
-
+			writer.handle(v);
 			writer.needComma = true;
+		}
+	}
+
+	static struct ObjectFieldSink
+	{
+		PrettyJsonWriter* writer;
+
+		void handle(V)(V v)
+		{
+			import ae.utils.serialization.serialization : isProtocolField;
+
+			static if (isProtocolField!V)
+			{
+				if (writer.needComma)
+				{
+					writer.output.put(',');
+					writer.putNewline();
+				}
+
+				v.nameReader(writer);
+				writer.output.put(preColon);
+				writer.output.put(':');
+				writer.output.put(postColon);
+				// Value should not add its own indent (it follows the key on the same line)
+				writer.indentPending = false;
+				v.valueReader(writer);
+
+				writer.needComma = true;
+			}
+			else
+				static assert(false, "ObjectFieldSink: expected Field, got " ~ V.stringof);
 		}
 	}
 
@@ -918,16 +920,9 @@ template JsonDeserializeTransform(T)
 				T* target;
 				SO temp;
 
-				// Forward all events to the SO (which implements the sink protocol)
-				void handleString(S)(S s) { temp.handleString(s); done(); }
-				void handleNumeric(CC)(CC[] s) { temp.handleNumeric(s); done(); }
-				void handleBoolean(bool v) { temp.handleBoolean(v); done(); }
-				void handleNull() { temp.handleNull(); done(); }
-				void handleArray(Reader)(Reader r) { temp.handleArray(r); done(); }
-				void handleObject(Reader)(Reader r) { temp.handleObject(r); done(); }
-
-				private void done()
+				void handle(V)(V v)
 				{
+					temp.handle(v);
 					// Re-serialize SO to JSON string
 					JsonWriter!StringBuilder writer;
 					temp.read(&writer);
@@ -953,23 +948,10 @@ template JsonDeserializeTransform(T)
 				T* target;
 				Q temp;
 
-				// Create the inner sink that deserializes into temp
-				auto innerSink()
+				void handle(V)(V v)
 				{
-					return Deserializer!Object.makeSink!Q(&temp);
-				}
-
-				// Forward all sink events to the inner sink for Q
-				void handleString(S)(S s) { auto s_ = innerSink(); s_.handleString(s); done(); }
-				void handleStringFragments(Reader)(Reader r) { auto s_ = innerSink(); s_.handleStringFragments(r); done(); }
-				void handleNumeric(CC)(CC[] s) { auto s_ = innerSink(); s_.handleNumeric(s); done(); }
-				void handleBoolean(bool v) { auto s_ = innerSink(); s_.handleBoolean(v); done(); }
-				void handleNull() { auto s_ = innerSink(); s_.handleNull(); done(); }
-				void handleArray(Reader)(Reader r) { auto s_ = innerSink(); s_.handleArray(r); done(); }
-				void handleObject(Reader)(Reader r) { auto s_ = innerSink(); s_.handleObject(r); done(); }
-
-				private void done()
-				{
+					auto s_ = Deserializer!Object.makeSink!Q(&temp);
+					s_.handle(v);
 					static if (is(typeof(*target = T.fromJSON(temp))))
 						*target = T.fromJSON(temp);
 					else
@@ -1021,10 +1003,10 @@ template jsonParse(T, JsonOptions options = JsonOptions.init)
 }
 
 /// Serialize a D value to a JSON string.
-string toJson(JsonOptions options = JsonOptions.init, T)(auto ref T v)
+string toJson(JsonOptions options = JsonOptions.init, SerializerOptions serOptions = SerializerOptions.init, T)(auto ref T v)
 {
 	JsonWriter!(StringBuilder, options) writer;
-	JsonCustomSerializer.Impl!Object.read(&writer, v);
+	CustomSerializer!(JsonSerializeTransform, serOptions).Impl!Object.read(&writer, v);
 	return writer.get();
 }
 
@@ -1032,7 +1014,6 @@ string toJson(JsonOptions options = JsonOptions.init, T)(auto ref T v)
 // Unit tests
 // ---------------------------------------------------------------------------
 
-debug(ae_unittest):
 
 private struct Inner
 {
@@ -1063,7 +1044,7 @@ private TestStruct testValue()
 }
 
 // JSON string -> D struct
-unittest
+debug(ae_unittest) unittest
 {
 	auto result = jsonParse!Inner(`{"x":7,"s":"world"}`);
 	assert(result.x == 7);
@@ -1071,14 +1052,14 @@ unittest
 }
 
 // D struct -> JSON string
-unittest
+debug(ae_unittest) unittest
 {
 	auto json = toJson(Inner(7, "world"));
 	assert(json == `{"x":7,"s":"world"}`, json);
 }
 
 // Round-trip
-unittest
+debug(ae_unittest) unittest
 {
 	struct S
 	{
@@ -1095,7 +1076,7 @@ unittest
 }
 
 // Basic JSON values
-unittest
+debug(ae_unittest) unittest
 {
 	assert(toJson("Hello \"world\"") == `"Hello \"world\""`, toJson("Hello \"world\""));
 	assert(toJson(["Hello", "world"]) == `["Hello","world"]`);
@@ -1105,7 +1086,7 @@ unittest
 }
 
 // Parse basic values
-unittest
+debug(ae_unittest) unittest
 {
 	assert(jsonParse!(int[])(`[4,2]`) == [4, 2]);
 	assert(jsonParse!(string[])(`["Hello","world"]`) == ["Hello", "world"]);
@@ -1116,7 +1097,7 @@ unittest
 }
 
 // AA serialization/parse
-unittest
+debug(ae_unittest) unittest
 {
 	auto json = toJson(["a": 1, "b": 2]);
 	auto parsed = jsonParse!(int[string])(json);
@@ -1125,7 +1106,7 @@ unittest
 }
 
 // Null handling
-unittest
+debug(ae_unittest) unittest
 {
 	struct S
 	{
@@ -1137,7 +1118,7 @@ unittest
 }
 
 // SerializedObject integration -- all 6 composition paths
-unittest
+debug(ae_unittest) unittest
 {
 	import ae.utils.serialization.store;
 	alias SO = SerializedObject!(immutable(char));
@@ -1182,7 +1163,7 @@ unittest
 }
 
 // JSON -> SerializedObject -> D struct (no string round-trip)
-unittest
+debug(ae_unittest) unittest
 {
 	import ae.utils.serialization.store;
 	alias SO = SerializedObject!(immutable(char));
@@ -1206,7 +1187,7 @@ unittest
 }
 
 // D struct -> SerializedObject -> JSON string
-unittest
+debug(ae_unittest) unittest
 {
 	import ae.utils.serialization.store;
 	alias SO = SerializedObject!(immutable(char));
@@ -1230,7 +1211,7 @@ unittest
 }
 
 // JSON-to-JSON round-trip (parser -> writer)
-unittest
+debug(ae_unittest) unittest
 {
 	auto input = `{"i":42,"s":"foo"}`;
 	auto parser = JsonParser!(immutable(char))(input, 0);
@@ -1240,14 +1221,14 @@ unittest
 }
 
 // Float handling
-unittest
+debug(ae_unittest) unittest
 {
 	assert(toJson(4.5) == `4.5`);
 	assert(jsonParse!double(`4.5`) == 4.5);
 }
 
 // SerializedObject as a field type (JSONFragment replacement)
-unittest
+debug(ae_unittest) unittest
 {
 	import ae.utils.serialization.store;
 	alias SO = SerializedObject!(immutable(char));
@@ -1325,7 +1306,7 @@ unittest
 }
 
 // toJSON / fromJSON hooks via JsonSerializeTransform / JsonDeserializeTransform
-unittest
+debug(ae_unittest) unittest
 {
 	import std.conv : to;
 
@@ -1350,7 +1331,7 @@ unittest
 }
 
 // Callback form of toJSON
-unittest
+debug(ae_unittest) unittest
 {
 	static struct CallbackWrapper
 	{
@@ -1362,7 +1343,7 @@ unittest
 }
 
 // Nested struct with toJSON fields
-unittest
+debug(ae_unittest) unittest
 {
 	import std.conv : to;
 
@@ -1388,7 +1369,7 @@ unittest
 }
 
 // Verify plain Serializer does NOT invoke toJSON (layering test)
-unittest
+debug(ae_unittest) unittest
 {
 	import std.conv : to;
 
@@ -1405,7 +1386,7 @@ unittest
 }
 
 // JSONFragment support
-unittest
+debug(ae_unittest) unittest
 {
 	// Define a JSONFragment-compatible struct (same layout as ae.utils.json.JSONFragment)
 	static struct JSONFragment
@@ -1463,7 +1444,7 @@ unittest
 }
 
 // JsonOptions: non-string keys
-unittest
+debug(ae_unittest) unittest
 {
 	// stringify mode: int keys become quoted strings
 	{
@@ -1499,7 +1480,7 @@ unittest
 }
 
 // Pretty printing
-unittest
+debug(ae_unittest) unittest
 {
 	static struct X { int a; string b; int[] c; }
 	X x = {17, "aoeu", [1, 2, 3]};
@@ -1515,7 +1496,7 @@ unittest
 }`, toPrettyJson(x));
 }
 
-unittest
+debug(ae_unittest) unittest
 {
 	// Nested objects
 	static struct Inner { int x; }
@@ -1530,10 +1511,36 @@ unittest
 }`, json);
 }
 
-unittest
+debug(ae_unittest) unittest
 {
 	// Simple values
 	assert(toPrettyJson(42) == `42`);
 	assert(toPrettyJson("hello") == `"hello"`);
 	assert(toPrettyJson(true) == `true`);
+}
+
+// SerializerOptions: null handling
+debug(ae_unittest) unittest
+{
+	static struct S
+	{
+		string name;
+		int[] arr;
+		string[string] map;
+	}
+
+	// Default: null string -> null, null AA -> null
+	{
+		S s;
+		auto json = toJson(s);
+		assert(json == `{"name":null,"arr":[],"map":null}`, json);
+	}
+
+	// asEmpty: null string -> "", null AA -> {}
+	{
+		enum serOpts = SerializerOptions(SerializerOptions.NullHandling.asEmpty);
+		S s;
+		auto json = toJson!(JsonOptions.init, serOpts)(s);
+		assert(json == `{"name":"","arr":[],"map":{}}`, json);
+	}
 }

@@ -23,6 +23,7 @@ import std.exception;
 import std.format;
 import std.traits;
 
+
 // -----------------------------------------------------------------------
 // Reader helpers for the source interface (module-level to avoid
 // nested-struct context pointer issues with DMD templates)
@@ -45,11 +46,12 @@ private struct SOObjectReader(SO)
 
 	void opCall(Sink)(Sink sink)
 	{
-		foreach (name, ref value; self._object)
+		import ae.utils.serialization.serialization : Field;
+		foreach (name; self._object.keyOrder)
 		{
 			SOStringReader!(SO.S) nr = {s: name};
-			SOValueReader!SO vr = {p: &value};
-			sink.handleField(nr, vr);
+			SOValueReader!SO vr = {p: &self._object.aa[name]};
+			sink.handle(Field!(typeof(nr), typeof(vr))(nr, vr));
 		}
 	}
 }
@@ -59,7 +61,8 @@ private struct SOStringReader(S)
 	S s;
 	void opCall(Sink)(Sink sink)
 	{
-		sink.handleString(s);
+		import ae.utils.serialization.serialization : String;
+		sink.handle(String!(typeof(s))(s));
 	}
 }
 
@@ -100,7 +103,76 @@ struct SerializedObject(C = immutable(char))
 	private S _numeric;
 	private S _string;
 	package SerializedObject[] _array;
-	package SerializedObject[S] _object;
+	package OrderedAA _object;
+
+	/// An AA that also remembers insertion order.
+	///
+	/// TODO: Replace with `OrderedMap!(S, SerializedObject)` from `ae.utils.aa`.
+	/// Currently blocked by a DMD bug: `OrderedMap` is a template
+	/// (`HashCollection!(S, SerializedObject, ...)`), and DMD tries to resolve
+	/// all its template methods at instantiation time. Since `SerializedObject`
+	/// contains the `OrderedMap` which contains `SerializedObject`, this creates
+	/// a recursive template expansion cycle that triggers an internal compiler
+	/// error. This non-template wrapper sidesteps the issue because its fields
+	/// are concrete types (a built-in AA, which is an opaque pointer, and a
+	/// dynamic array slice) with no template methods to eagerly expand.
+	package struct OrderedAA
+	{
+		SerializedObject[S] aa;
+		S[] keyOrder;
+
+		ref SerializedObject opIndex(K)(K key)
+			if (is(typeof(aa[key])))
+		{
+			return aa[key];
+		}
+
+		void opIndexAssign(SerializedObject value, S key)
+		{
+			if (key !in aa)
+				keyOrder ~= key;
+			aa[key] = value;
+		}
+
+		inout(SerializedObject)* opBinaryRight(string op : "in", K)(K key) inout
+			if (op == "in")
+		{
+			return key in aa;
+		}
+
+		bool remove(S key)
+		{
+			auto removed = aa.remove(key);
+			if (removed)
+			{
+				import std.algorithm : remove;
+				keyOrder = keyOrder.remove!(k => k == key);
+			}
+			return removed;
+		}
+
+		void opAssign(typeof(null) _)
+		{
+			aa = null;
+			keyOrder = null;
+		}
+
+		@property size_t length() const
+		{
+			return aa.length;
+		}
+
+		/// Iterate in insertion order.
+		int opApply(scope int delegate(S key, ref SerializedObject value) dg)
+		{
+			foreach (key; keyOrder)
+			{
+				if (auto r = dg(key, aa[key]))
+					return r;
+			}
+			return 0;
+		}
+	}
 
 	// ===== Convenience constructors / assignment =====
 
@@ -221,104 +293,97 @@ struct SerializedObject(C = immutable(char))
 	enum isSerializationSink = true;
 	enum isSerializationSource = true;
 
-	void handleNumeric(CC)(CC[] s)
+	void handle(V)(V v)
 	{
-		assert(type == Type.none);
-		type = Type.numeric;
-		_numeric = s.to!S;
-	}
+		import ae.utils.serialization.serialization : isProtocolNull, isProtocolBoolean,
+			isProtocolNumeric, isProtocolString, isProtocolArray, isProtocolMap,
+			isProtocolField, ProtocolTextType;
 
-	void handleString(CC)(CC[] s)
-	{
-		assert(type == Type.none);
-		type = Type.string_;
-		_string = s.to!S;
-	}
-
-	void handleNull()
-	{
-		assert(type == Type.none);
-		type = Type.null_;
-	}
-
-	void handleBoolean(bool value)
-	{
-		assert(type == Type.none);
-		type = Type.boolean;
-		_boolean = value;
-	}
-
-	void handleArray(Reader)(Reader reader)
-	{
-		static struct ArraySink
+		static if (isProtocolNull!V)
 		{
-			SerializedObject[]* arr;
-
-			alias handleObject = opDispatch!"handleObject";
-
-			template opDispatch(string name)
+			assert(type == Type.none);
+			type = Type.null_;
+		}
+		else static if (isProtocolBoolean!V)
+		{
+			assert(type == Type.none);
+			type = Type.boolean;
+			_boolean = v.value;
+		}
+		else static if (isProtocolNumeric!V)
+		{
+			assert(type == Type.none);
+			type = Type.numeric;
+			_numeric = v.text.to!S;
+		}
+		else static if (isProtocolString!V)
+		{
+			assert(type == Type.none);
+			type = Type.string_;
+			_string = v.text.to!S;
+		}
+		else static if (isProtocolArray!V)
+		{
+			static struct ArraySink
 			{
-				void opDispatch(Args...)(auto ref Args args)
+				SerializedObject[]* arr;
+
+				void handle(U)(U u)
 				{
 					SerializedObject obj;
-					mixin("obj." ~ name ~ "(args);");
+					obj.handle(u);
 					*arr ~= obj;
 				}
 			}
+
+			assert(type == Type.none);
+			type = Type.array;
+			v.reader(ArraySink(&_array));
 		}
-
-		assert(type == Type.none);
-		type = Type.array;
-		reader(ArraySink(&_array));
-	}
-
-	void handleObject(Reader)(Reader reader)
-	{
-		static struct ObjectSink
+		else static if (isProtocolMap!V)
 		{
-			SerializedObject[S]* aa;
-
-			void handleField(NameReader, ValueReader)(NameReader nameReader, ValueReader valueReader)
+			static struct ObjectSink
 			{
-				static struct StringSink
+				OrderedAA* obj;
+
+				void handle(U)(U u)
 				{
-					S s;
+					import ae.utils.serialization.serialization : isProtocolField;
 
-					void handleString(CC)(CC[] s)
+					static if (isProtocolField!U)
 					{
-						this.s = s.to!S;
+						static struct StringSink
+						{
+							S s;
+
+							void handle(W)(W w)
+							{
+								import ae.utils.serialization.serialization : isProtocolString;
+
+								static if (isProtocolString!W)
+									this.s = w.text.to!S;
+								else
+									throw new Exception("String expected");
+							}
+						}
+
+						StringSink nameSink;
+						u.nameReader(&nameSink);
+						SerializedObject value;
+						u.valueReader(&value);
+						(*obj)[nameSink.s] = value;
 					}
-
-					void handleStringFragments(Reader2)(Reader2 reader)
-					{
-						reader(&this);
-					}
-
-					void handleStringFragment(CC)(CC[] fragment)
-					{
-						s ~= fragment.to!S;
-					}
-
-					void bad() { throw new Exception("String expected"); }
-
-					void handleNumeric(CC)(CC[] s) { bad(); }
-					void handleNull() { bad(); }
-					void handleBoolean(bool value) { bad(); }
-					void handleArray(Reader2)(Reader2 reader) { bad(); }
-					void handleObject(Reader2)(Reader2 reader) { bad(); }
+					else
+						static assert(false, "ObjectSink expects Field, got " ~ U.stringof);
 				}
-
-				StringSink nameSink;
-				nameReader(&nameSink);
-				SerializedObject value;
-				valueReader(&value);
-				(*aa)[nameSink.s] = value;
 			}
-		}
 
-		assert(type == Type.none);
-		type = Type.object;
-		reader(ObjectSink(&_object));
+			assert(type == Type.none);
+			type = Type.object;
+			v.reader(ObjectSink(&_object));
+		}
+		else
+			static assert(false, "SerializedObject.handle: unsupported type " ~ V.stringof);
 	}
 
 	// ===== Source interface =====
@@ -330,29 +395,32 @@ struct SerializedObject(C = immutable(char))
 
 	static void readImpl(Sink)(SerializedObject* self, Sink sink)
 	{
+		import ae.utils.serialization.serialization : Null, Boolean, Numeric,
+			String, Array, Map;
+
 		final switch (self.type)
 		{
 			case Type.none:
 				assert(false, "Uninitialized SerializedObject");
 			case Type.numeric:
-				sink.handleNumeric(self._numeric);
+				sink.handle(Numeric!(typeof(self._numeric))(self._numeric));
 				break;
 			case Type.string_:
-				sink.handleString(self._string);
+				sink.handle(String!(typeof(self._string))(self._string));
 				break;
 			case Type.null_:
-				sink.handleNull();
+				sink.handle(Null());
 				break;
 			case Type.boolean:
-				sink.handleBoolean(self._boolean);
+				sink.handle(Boolean(self._boolean));
 				break;
 			case Type.array:
 				SOArrayReader!(SerializedObject) ar = {self: self};
-				sink.handleArray(ar);
+				sink.handle(Array!(typeof(ar))(ar));
 				break;
 			case Type.object:
 				SOObjectReader!(SerializedObject) or_ = {self: self};
-				sink.handleObject(or_);
+				sink.handle(Map!(typeof(or_))(or_));
 				break;
 		}
 	}
@@ -362,9 +430,8 @@ struct SerializedObject(C = immutable(char))
 // Unit tests
 // ==========================================================================
 
-debug(ae_unittest):
 
-unittest
+debug(ae_unittest) unittest
 {
 	SerializedObject!(immutable(char)) s1, s2;
 	s1 = "aoeu";
@@ -373,7 +440,7 @@ unittest
 	assert(s2._string == "aoeu");
 }
 
-unittest
+debug(ae_unittest) unittest
 {
 	alias SO = SerializedObject!(immutable(char));
 
@@ -406,7 +473,7 @@ unittest
 }
 
 // Full round-trip: D struct -> Serializer -> SerializedObject -> Deserializer -> D struct
-unittest
+debug(ae_unittest) unittest
 {
 	import ae.utils.serialization.serialization;
 
@@ -444,7 +511,7 @@ unittest
 	assert(result.inner.s == "world");
 }
 
-unittest
+debug(ae_unittest) unittest
 {
 	import ae.utils.serialization.serialization;
 
@@ -464,7 +531,7 @@ unittest
 	assert(result.arr == [1, 2, 3]);
 }
 
-unittest
+debug(ae_unittest) unittest
 {
 	import ae.utils.serialization.serialization;
 
@@ -484,7 +551,7 @@ unittest
 	assert(result.map == ["key1": "val1", "key2": "val2"]);
 }
 
-unittest
+debug(ae_unittest) unittest
 {
 	import ae.utils.serialization.serialization;
 

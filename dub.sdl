@@ -59,6 +59,15 @@ excludedSourceFiles "sys/benchmark.d"
 excludedSourceFiles "sys/vfs_curl.d"
 excludedSourceFiles "utils/meta/misc.d"
 
+# In ae:dyaml
+excludedSourceFiles "utils/serialization/dyaml.d"
+
+# In ae:sdlang
+excludedSourceFiles "utils/serialization/sdlang.d"
+
+# In ae:toml
+excludedSourceFiles "utils/serialization/toml.d"
+
 # In ae:fdtrack
 excludedSourceFiles "sys/fdtrack.d"
 
@@ -275,6 +284,39 @@ subPackage {
 	sourceFiles "ui/app/main.d"
 	sourceFiles "ui/app/windows/main.d" platform="windows"
 	sourceFiles "ui/app/posix/main.d" platform="posix"
+}
+
+---------------------------
+
+subPackage {
+	name "dyaml"
+	targetType "library"
+	dependency "ae" version="*" path="."
+	dependency "dyaml" version="~>0.10.0"
+	sourceFiles \
+		"utils/serialization/dyaml.d"
+}
+
+---------------------------
+
+subPackage {
+	name "sdlang"
+	targetType "library"
+	dependency "ae" version="*" path="."
+	dependency "sdlang-d" version="~>0.10.0"
+	sourceFiles \
+		"utils/serialization/sdlang.d"
+}
+
+---------------------------
+
+subPackage {
+	name "toml"
+	targetType "library"
+	dependency "ae" version="*" path="."
+	dependency "toml" version="~>2.0.0"
+	sourceFiles \
+		"utils/serialization/toml.d"
 }
 
 ---------------------------
