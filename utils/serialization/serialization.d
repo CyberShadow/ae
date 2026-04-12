@@ -70,14 +70,15 @@ enum Extras;
 template hasUDA(Attr, alias D)
 {
 	enum bool hasUDA = {
+		bool result = false;
 		foreach (a; __traits(getAttributes, D))
 		{
 			static if (is(typeof(a) == Attr))
-				return true;
+				result = true;
 			else static if (is(a == Attr))
-				return true;
+				result = true;
 		}
-		return false;
+		return result;
 	}();
 }
 
@@ -110,10 +111,11 @@ template extrasIndex(T)
 	enum int extrasIndex = compute();
 	static int compute()
 	{
+		int result = -1;
 		static foreach (i; 0 .. T.tupleof.length)
 			static if (hasUDA!(Extras, T.tupleof[i]) || isExtrasType!(typeof(T.tupleof[i])))
-				return cast(int) i;
-		return -1;
+				result = cast(int) i;
+		return result;
 	}
 }
 
