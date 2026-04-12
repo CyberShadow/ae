@@ -124,61 +124,45 @@ private:
 	{
 		try
 		{
-			if (isRequest(message))
-				processRequests(message);
+			auto so = message.jsonParse!SO;
+			bool isBatch = so.type == SO.Type.array;
+
+			// Peek at the first element to distinguish request from response
+			SO* first = isBatch
+				? (so.length > 0 ? &so[0] : null)
+				: (so.type == SO.Type.object ? &so : null);
+
+			if (first is null)
+				return;
+
+			if (first.type == SO.Type.object && ("method" in *first))
+				processRequests(so, isBatch);
 			else
-				processResponse(message);
+				processResponse(so, isBatch);
 		}
 		catch (Exception e)
 			return doDisconnect("Malformed message: " ~ e.msg);
 	}
 
-	// Check if message is a request (has "method" field) or response
-	static bool isRequest(string message)
-	{
-		// Skip whitespace
-		size_t i = 0;
-		while (i < message.length && (message[i] == ' ' || message[i] == '\t' ||
-				message[i] == '\n' || message[i] == '\r'))
-			i++;
-
-		if (i >= message.length)
-			return false;
-
-		// For batches, check first element
-		if (message[i] == '[')
-		{
-			i++;
-			while (i < message.length && (message[i] == ' ' || message[i] == '\t' ||
-					message[i] == '\n' || message[i] == '\r'))
-				i++;
-		}
-
-		// Parse as object and check for "method" key
-		if (i < message.length && message[i] == '{')
-		{
-			auto obj = message[i .. $].jsonParse!SO;
-			return obj.type == SO.Type.object && ("method" in obj);
-		}
-
-		return false;
-	}
-
-	void processRequests(string message) nothrow
+	void processRequests(ref SO so, bool isBatch) nothrow
 	{
 		try
 		{
-			auto parsed = parseRequests(message);
-
-			if (parsed.requests.length == 0)
-				return;
-
 			if (handleRequest is null)
 				return;
 
+			JsonRpcRequest[] requests;
+			if (isBatch)
+			{
+				foreach (i; 0 .. so.length)
+					requests ~= so[i].deserializeTo!JsonRpcRequest;
+			}
+			else
+				requests ~= so.deserializeTo!JsonRpcRequest;
+
 			// Dispatch all requests
 			Promise!JsonRpcResponse[] responsePromises;
-			foreach (request; parsed.requests)
+			foreach (request; requests)
 				responsePromises ~= handleRequest(request);
 
 			// Wait for all responses, then send
@@ -186,13 +170,13 @@ private:
 				// Filter out notification responses
 				JsonRpcResponse[] actualResponses;
 				foreach (i, response; responses)
-					if (!parsed.requests[i].isNotification)
+					if (!requests[i].isNotification)
 						actualResponses ~= response;
 
 				if (actualResponses.length > 0)
 				{
 					string responseJson;
-					if (parsed.isBatch)
+					if (isBatch)
 						responseJson = actualResponses.toJson();
 					else
 					{
@@ -207,9 +191,9 @@ private:
 			assert(false, "Unexpected exception in processRequests: " ~ e.msg);
 	}
 
-	void processResponse(string message)
+	void processResponse(ref SO so, bool isBatch)
 	{
-		auto response = message.parseResponse();
+		auto response = so.deserializeTo!JsonRpcResponse;
 
 		if (!response.id)
 		{
