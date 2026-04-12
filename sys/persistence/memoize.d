@@ -18,12 +18,12 @@ import std.typecons;
 
 import ae.sys.persistence.core;
 import ae.sys.persistence.json;
-import ae.utils.json;
+import ae.utils.serialization.json;
 
 // ****************************************************************************
 
 // https://issues.dlang.org/show_bug.cgi?id=7016
-static import ae.utils.json;
+static import ae.utils.serialization.json;
 
 /// std.functional.memoize variant with automatic persistence
 struct PersistentMemoized(alias fun, FlushPolicy flushPolicy = FlushPolicy.atThreadExit)

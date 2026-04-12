@@ -34,7 +34,7 @@ import ae.sys.file;
 import ae.sys.net;
 import ae.utils.array;
 import ae.utils.digest;
-import ae.utils.json;
+import ae.utils.serialization.json;
 import ae.utils.time;
 
 /// libcurl-based implementation of `Network` which caches responses.

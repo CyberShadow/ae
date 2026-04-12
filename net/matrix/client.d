@@ -26,7 +26,7 @@ import ae.sys.dataset;
 import ae.sys.log;
 import ae.sys.timing;
 import ae.utils.array;
-import ae.utils.json : JSONFragment;
+import ae.utils.serialization.json : JSONFragment;
 import ae.utils.promise;
 import ae.utils.text : randomString;
 

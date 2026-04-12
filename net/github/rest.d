@@ -26,7 +26,7 @@ import ae.sys.dataset : DataVec, joinToGC;
 import ae.sys.log;
 import ae.sys.net;
 import ae.utils.array : as, fromBytes;
-import ae.utils.json;
+import ae.utils.serialization.json;
 import ae.utils.meta;
 
 struct GitHub

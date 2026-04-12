@@ -22,7 +22,7 @@ import ae.sys.persistence.core;
 template JsonFileCache(T, FlushPolicy flushPolicy = FlushPolicy.none)
 {
 	import std.file;
-	import ae.utils.json;
+	import ae.utils.serialization.json;
 
 	static T getJson(T)(string fileName)
 	{

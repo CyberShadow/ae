@@ -19,7 +19,7 @@ import std.traits;
 import ae.sys.persistence.core;
 import ae.sys.sqlite3;
 import ae.utils.array : nonNull;
-import ae.utils.json;
+import ae.utils.serialization.json;
 
 // ****************************************************************************
 

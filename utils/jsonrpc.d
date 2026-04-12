@@ -19,7 +19,7 @@ module ae.utils.jsonrpc;
 import std.conv : to;
 import std.typecons : Nullable;
 
-import ae.utils.json;
+import ae.utils.serialization.json;
 
 // ************************************************************************
 

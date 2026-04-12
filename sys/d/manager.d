@@ -35,7 +35,7 @@ import ae.sys.git;
 import ae.utils.aa;
 import ae.utils.array;
 import ae.utils.digest;
-import ae.utils.json;
+import ae.utils.serialization.json;
 import ae.utils.meta;
 import ae.utils.path : findExecutable, pathDirs;
 import ae.utils.regex;

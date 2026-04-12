@@ -13,7 +13,7 @@
 
 module ae.net.matrix.common;
 
-import ae.utils.json;
+import ae.utils.serialization.json;
 
 struct RoomId { string value; }
 struct EventId { string value; }

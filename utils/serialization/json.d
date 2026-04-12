@@ -52,6 +52,39 @@ struct JSONFragment
 	bool opCast(T)() const if (is(T == bool)) { return !!json; } ///
 }
 
+/// Type for a field that collects unknown fields during deserialization.
+/// During deserialization, any JSON key not matching another struct field is stored here.
+/// During serialization, each entry in the map is emitted as a top-level key-value pair.
+struct JSONExtras
+{
+	JSONFragment[string] _data;
+
+	alias _data this;
+}
+
+/**
+ * A template that designates fields which should not be serialized.
+ *
+ * Example:
+ * ---
+ * struct Point { int x, y, z; mixin NonSerialized!(x, z); }
+ * assert(jsonParse!Point(toJson(Point(1, 2, 3))) == Point(0, 2, 0));
+ * ---
+ */
+template NonSerialized(fields...)
+{
+	import ae.utils.meta : stringofArray;
+	mixin(mixNonSerializedFields(stringofArray!fields()));
+}
+
+private string mixNonSerializedFields(string[] fields)
+{
+	string result;
+	foreach (field; fields)
+		result ~= "enum bool " ~ field ~ "_nonSerialized = 1;";
+	return result;
+}
+
 // ---------------------------------------------------------------------------
 // Escapes table
 // ---------------------------------------------------------------------------

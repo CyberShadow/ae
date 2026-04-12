@@ -22,7 +22,7 @@ import ae.net.asockets;
 import ae.net.jsonrpc.codec : JsonRpcServerCodec;
 import ae.sys.data : Data;
 import ae.utils.array : asBytes;
-import ae.utils.json;
+import ae.utils.serialization.json;
 import ae.utils.jsonrpc;
 import ae.utils.text : asText;
 

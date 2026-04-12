@@ -30,7 +30,7 @@ import ae.sys.dataio;
 import ae.sys.datamm;
 import ae.sys.dataset : DataVec;
 import ae.utils.array;
-import ae.utils.json;
+import ae.utils.serialization.json;
 import ae.utils.xml;
 import ae.utils.text;
 import ae.utils.mime;

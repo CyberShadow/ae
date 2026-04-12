@@ -26,7 +26,7 @@ import ae.sys.archive;
 import ae.sys.file;
 import ae.sys.install.wix;
 import ae.sys.net;
-import ae.utils.json;
+import ae.utils.serialization.json;
 import ae.utils.meta : singleton, I;
 import ae.utils.xmllite;
 

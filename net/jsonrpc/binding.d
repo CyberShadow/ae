@@ -27,7 +27,7 @@ import std.typecons : Nullable;
 
 import ae.net.asockets : IConnection;
 import ae.net.jsonrpc.codec;
-import ae.utils.json;
+import ae.utils.serialization.json;
 import ae.utils.jsonrpc;
 import ae.utils.meta : hasAttribute, getAttribute;
 import ae.utils.promise : Promise, PromiseValue, resolve;
