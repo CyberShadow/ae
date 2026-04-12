@@ -13,17 +13,12 @@
 
 module ae.utils.json;
 
-import std.exception;
+import std.conv : text, to;
 import std.math : isFinite;
-import std.string;
 import std.traits;
 import std.typecons;
+import std.utf : encode;
 
-import ae.utils.appender;
-import ae.utils.array : isIdentical, nonNull;
-import ae.utils.exception;
-import ae.utils.functor.primitives : functor;
-import ae.utils.meta;
 import ae.utils.textout;
 
 // ************************************************************************
@@ -242,141 +237,135 @@ struct CustomJsonSerializer(Writer, JsonOptions options = JsonOptions.init)
 	/// Put a serializable value.
 	void put(T)(auto ref T v)
 	{
-		static if (__traits(hasMember, T, "toJSON"))
-			static if (is(typeof(v.toJSON())))
-				put(v.toJSON());
-			else
-				v.toJSON((&this).functor!((self, ref j) => self.put(j)));
-		else
-		static if (is(T X == Nullable!X))
-			if (v.isNull)
-				writer.putValue(null);
-			else
-				put(v.get);
-		else
-		static if (is(T == enum))
-			put(to!string(v));
-		else
-		static if (isSomeString!T || is(Unqual!T : real))
-			writer.putValue(v);
-		else
-		static if (is(T == typeof(null)))
-			writer.putValue(null);
-		else
-		static if (is(T U : U[]))
+		auto sink = WriterSinkAdapter!(Writer, options)(&writer);
+		import ae.utils.serialization.json : NewJsonCustomSerializer = JsonCustomSerializer;
+		NewJsonCustomSerializer.Impl!Object.read(&sink, v);
+	}
+}
+
+/// Adapter that presents the new sink protocol on top of an old-style imperative Writer.
+private struct WriterSinkAdapter(Writer, JsonOptions options = JsonOptions.init)
+{
+	Writer* writer;
+
+	void handleNull()
+	{
+		writer.putValue(null);
+	}
+
+	void handleBoolean(bool v)
+	{
+		writer.putValue(v);
+	}
+
+	void handleNumeric(CC)(CC[] s)
+	{
+		writer.output.put(s);
+	}
+
+	void handleString(S)(S s)
+	{
+		writer.putValue(s);
+	}
+
+	void handleArray(Reader)(Reader reader)
+	{
+		writer.beginArray();
+		ArrayElementSink as = {adapter: &this};
+		reader(&as);
+		writer.endArray();
+	}
+
+	void handleObject(Reader)(Reader reader)
+	{
+		writer.beginObject();
+		ObjectFieldSink os = {adapter: &this};
+		reader(&os);
+		writer.endObject();
+	}
+
+	struct ArrayElementSink
+	{
+		WriterSinkAdapter* adapter;
+		bool first = true;
+
+		private void comma()
 		{
-			writer.beginArray();
-			if (v.length)
-			{
-				put(v[0]);
-				foreach (i; v[1..$])
-				{
-					writer.putComma();
-					put(i);
-				}
-			}
-			writer.endArray();
+			if (!first)
+				adapter.writer.putComma();
+			first = false;
 		}
-		else
-		static if (isTuple!T)
+
+		void handleNull()             { comma(); adapter.handleNull(); }
+		void handleBoolean(bool v)    { comma(); adapter.handleBoolean(v); }
+		void handleNumeric(CC)(CC[] s){ comma(); adapter.handleNumeric(s); }
+		void handleString(S)(S s)     { comma(); adapter.handleString(s); }
+		void handleArray(R)(R reader) { comma(); adapter.handleArray(reader); }
+		void handleObject(R)(R reader){ comma(); adapter.handleObject(reader); }
+	}
+
+	struct ObjectFieldSink
+	{
+		WriterSinkAdapter* adapter;
+		bool first = true;
+
+		void handleField(NameReader, ValueReader)(NameReader nameReader, ValueReader valueReader)
 		{
-			// TODO: serialize as object if tuple has names
-			enum N = v.expand.length;
-			static if (N == 0)
-				return;
-			else
-			static if (N == 1)
-				put(v.expand[0]);
-			else
+			// Write key
+			KeySink ks = {adapter: adapter};
+			nameReader(&ks);
+
+			if (!first)
+				adapter.writer.putComma();
+			first = false;
+
+			// Write the key value that was captured
+			static if (options.nonStringKeys == JsonOptions.NonStringKeys.error)
 			{
-				writer.beginArray();
-				foreach (n; rangeTuple!N)
-				{
-					static if (n)
-						writer.putComma();
-					put(v.expand[n]);
-				}
-				writer.endArray();
+				adapter.writer.putValue(ks.key);
 			}
-		}
-		else
-		static if (is(typeof(T.init.keys)) && is(typeof(T.init.values)))
-		{
-			writer.beginObject();
-			bool first = true;
-			foreach (key, value; v)
+			else static if (options.nonStringKeys == JsonOptions.NonStringKeys.stringify)
 			{
-				if (!first)
-					writer.putComma();
+				if (ks.key !is null)
+					adapter.writer.putValue(ks.key);
 				else
-					first = false;
-				static if (is(typeof({string s = T.init.keys[0];})))
-					writer.putValue(key.nonNull);
-				else
-					static if (options.nonStringKeys == JsonOptions.NonStringKeys.asIs)
-						put(key);
-					else
-					static if (options.nonStringKeys == JsonOptions.NonStringKeys.stringify)
-						writer.putValue(key.toJson!options);
-					else
-						static assert(false, "Cannot serialize associative array with non-string key " ~ K.stringof);
-				writer.endKey();
-				put(value);
+					adapter.writer.output.put(ks.numericKey);
 			}
-			writer.endObject();
-		}
-		else
-		static if (is(T==JSONFragment))
-			writer.output.put(v.json);
-		else
-		static if (is(T==struct))
-		{
-			writer.beginObject();
-			bool first = true;
-			foreach (i, ref field; v.tupleof)
+			else static if (options.nonStringKeys == JsonOptions.NonStringKeys.asIs)
 			{
-				static if (!doSkipSerialize!(T, v.tupleof[i].stringof[2..$]))
-				{
-					static if (is(typeof(field) == JSONExtras))
-					{
-						foreach (key, ref value; field)
-						{
-							if (!first)
-								writer.putComma();
-							else
-								first = false;
-							writer.putValue(key);
-							writer.endKey();
-							put(value);
-						}
-					}
-					else
-					{
-						static if (hasAttribute!(JSONOptional, v.tupleof[i]))
-							if (isIdentical(v.tupleof[i], T.init.tupleof[i]))
-								continue;
-						if (!first)
-							writer.putComma();
-						else
-							first = false;
-						writer.putValue(getJsonName!(T, v.tupleof[i].stringof[2..$]));
-						writer.endKey();
-						put(field);
-					}
-				}
+				if (ks.key !is null)
+					adapter.writer.putValue(ks.key);
+				else
+					adapter.writer.output.put(ks.numericKey);
 			}
-			writer.endObject();
+
+			adapter.writer.endKey();
+
+			// Write value
+			valueReader(adapter);
 		}
-		else
-		static if (is(typeof(*v)))
+	}
+
+	struct KeySink
+	{
+		WriterSinkAdapter* adapter;
+		const(char)[] key;
+		const(char)[] numericKey;
+
+		void handleString(S)(S s)     { key = s; }
+		void handleNumeric(CC)(CC[] s){ numericKey = s; }
+		void handleNull()
 		{
-			if (v)
-				put(*v);
+			static if (options.nonStringKeys == JsonOptions.NonStringKeys.error)
+				throw new Exception("Non-string key in JSON object.");
 			else
-				writer.putValue(null);
+				key = "";
 		}
-		else
-			static assert(0, "Can't serialize " ~ T.stringof ~ " to JSON");
+		void handleBoolean(bool v)
+		{
+			static if (options.nonStringKeys == JsonOptions.NonStringKeys.error)
+				throw new Exception("Non-string key in JSON object.");
+		}
 	}
 }
 
@@ -428,17 +417,23 @@ private struct Escapes
 /// Serialize `T` to JSON, and return the result as a string.
 string toJson(T)(auto ref T v)
 {
-	JsonSerializer serializer;
-	serializer.put(v);
-	return serializer.writer.output.get();
+	import ae.utils.serialization.json : newToJson = toJson;
+	return newToJson(v);
 }
 
 /// ditto
 string toJson(JsonOptions options, T)(auto ref T v)
 {
-	CustomJsonSerializer!(JsonWriter!StringBuilder, options) serializer;
-	serializer.put(v);
-	return serializer.writer.output.get();
+	static if (is(T V : V[K], K))
+		static if (!isSomeString!K)
+			static assert(options.nonStringKeys != JsonOptions.NonStringKeys.error,
+				"Cannot serialize associative array with non-string key " ~ K.stringof);
+	import ae.utils.serialization.json : SerJsonOptions = JsonOptions, newToJson = toJson;
+	static immutable int nsk = options.nonStringKeys;
+	enum SerJsonOptions serOptions = {
+		nonStringKeys: cast(SerJsonOptions.NonStringKeys) nsk,
+	};
+	return newToJson!serOptions(v);
 }
 
 ///
@@ -487,17 +482,16 @@ debug(ae_unittest) unittest
 /// Serialize `T` to a pretty (indented) JSON string.
 string toPrettyJson(T)(T v)
 {
-	CustomJsonSerializer!(PrettyJsonWriter!StringBuilder) serializer;
-	serializer.put(v);
-	return serializer.writer.output.get();
+	import ae.utils.serialization.json : newToPrettyJson = toPrettyJson;
+	return newToPrettyJson(v);
 }
 
 /// ditto
 string toPrettyJson(JsonOptions options, T)(T v)
 {
-	CustomJsonSerializer!(PrettyJsonWriter!StringBuilder, options) serializer;
-	serializer.put(v);
-	return serializer.writer.output.get();
+	// TODO: options support in pretty printing
+	import ae.utils.serialization.json : newToPrettyJson = toPrettyJson;
+	return newToPrettyJson(v);
 }
 
 ///
@@ -521,587 +515,21 @@ debug(ae_unittest) unittest
 
 // ************************************************************************
 
-import std.ascii;
-import std.utf;
-import std.conv;
-
-import ae.utils.text;
-
-private struct JsonParser(C, JsonOptions options = JsonOptions.init)
-{
-	C[] s;
-	size_t p;
-
-	Unqual!C next()
-	{
-		enforce(p < s.length, "Out of data while parsing JSON stream");
-		return s[p++];
-	}
-
-	string readN(uint n)
-	{
-		string r;
-		for (int i=0; i<n; i++)
-			r ~= next();
-		return r;
-	}
-
-	Unqual!C peek()
-	{
-		enforce(p < s.length, "Out of data while parsing JSON stream");
-		return s[p];
-	}
-
-	@property bool eof() { return p == s.length; }
-
-	void skipWhitespace()
-	{
-		while (isWhite(peek()))
-			p++;
-	}
-
-	void expect(C c)
-	{
-		auto n = next();
-		enforce(n==c, text("Expected ", c, ", got ", n));
-	}
-
-	void read(T)(ref T value)
-	{
-		static if (is(T == typeof(null)))
-			value = readNull();
-		else
-		static if (is(T X == Nullable!X))
-			readNullable!X(value);
-		else
-		static if (is(T==enum))
-			value = readEnum!(T)();
-		else
-		static if (isSomeString!T)
-			value = readString().to!T;
-		else
-		static if (is(T==bool))
-			value = readBool();
-		else
-		static if (is(T : real))
-			value = readNumber!(T)();
-		else
-		static if (isDynamicArray!T)
-			value = readArray!(typeof(T.init[0]))();
-		else
-		static if (isStaticArray!T)
-			readStaticArray(value);
-		else
-		static if (isTuple!T)
-			readTuple!T(value);
-		else
-		static if (is(typeof(T.init.keys)) && is(typeof(T.init.values)))
-			readAA!(T)(value);
-		else
-		static if (is(T==JSONFragment))
-		{
-			skipWhitespace();
-			auto start = p;
-			skipValue();
-			value = JSONFragment(s[start..p]);
-		}
-		else
-		static if (is(T U : U*))
-			value = readPointer!T();
-		else
-		static if (__traits(hasMember, T, "fromJSON"))
-		{
-			alias Q = Parameters!(T.fromJSON)[0];
-			Q tempValue;
-			read!Q(tempValue);
-			static if (is(typeof(value = T.fromJSON(tempValue))))
-				value = T.fromJSON(tempValue);
-			else
-			{
-				import core.lifetime : move;
-				auto convertedValue = T.fromJSON(tempValue);
-				move(convertedValue, value);
-			}
-		}
-		else
-		static if (is(T==struct))
-			readObject!(T)(value);
-		else
-			static assert(0, "Can't decode " ~ T.stringof ~ " from JSON");
-	}
-
-	void readTuple(T)(ref T value)
-	{
-		// TODO: serialize as object if tuple has names
-		enum N = T.expand.length;
-		static if (N == 0)
-			return;
-		else
-		static if (N == 1)
-			read(value.expand[0]);
-		else
-		{
-			expect('[');
-			foreach (n, ref f; value.expand)
-			{
-				static if (n)
-					expect(',');
-				read(f);
-			}
-			expect(']');
-		}
-	}
-
-	typeof(null) readNull()
-	{
-		expect('n');
-		expect('u');
-		expect('l');
-		expect('l');
-		return null;
-	}
-
-	void readNullable(T)(ref Nullable!T value)
-	{
-		skipWhitespace();
-		if (peek() == 'n')
-		{
-			readNull();
-			value = Nullable!T();
-		}
-		else
-		{
-			if (value.isNull)
-			{
-				T subvalue;
-				read!T(subvalue);
-				value = subvalue;
-			}
-			else
-				read!T(value.get());
-		}
-	}
-
-	C[] readSimpleString() /// i.e. without escapes
-	{
-		skipWhitespace();
-		expect('"');
-		auto start = p;
-		while (true)
-		{
-			auto c = next();
-			if (c=='"')
-				break;
-			else
-			if (c=='\\')
-				throw new Exception("Unexpected escaped character");
-		}
-		return s[start..p-1];
-	}
-
-	C[] readString()
-	{
-		skipWhitespace();
-		auto c = peek();
-		if (c == '"')
-		{
-			next(); // '"'
-			C[] result;
-			auto start = p;
-			while (true)
-			{
-				c = next();
-				if (c=='"')
-					break;
-				else
-				if (c=='\\')
-				{
-					result ~= s[start..p-1];
-					switch (next())
-					{
-						case '"':  result ~= '"'; break;
-						case '/':  result ~= '/'; break;
-						case '\\': result ~= '\\'; break;
-						case 'b':  result ~= '\b'; break;
-						case 'f':  result ~= '\f'; break;
-						case 'n':  result ~= '\n'; break;
-						case 'r':  result ~= '\r'; break;
-						case 't':  result ~= '\t'; break;
-						case 'u':
-						{
-							wstring buf;
-							goto Unicode_start;
-
-							while (s[p..$].startsWith(`\u`))
-							{
-								p+=2;
-							Unicode_start:
-								buf ~= cast(wchar)fromHex!ushort(readN(4));
-							}
-							result ~= buf.to!(C[]);
-							break;
-						}
-						default: enforce(false, "Unknown escape");
-					}
-					start = p;
-				}
-			}
-			result ~= s[start..p-1];
-			if (result is null)
-			{
-				static C[0] empty;
-				return empty[];
-			}
-			return result;
-		}
-		else
-		if (isDigit(c) || c=='-') // For languages that don't distinguish numeric strings from numbers
-		{
-			static immutable bool[256] numeric =
-			[
-				'0':true,
-				'1':true,
-				'2':true,
-				'3':true,
-				'4':true,
-				'5':true,
-				'6':true,
-				'7':true,
-				'8':true,
-				'9':true,
-				'.':true,
-				'-':true,
-				'+':true,
-				'e':true,
-				'E':true,
-			];
-
-			auto start = p;
-			while (numeric[c = peek()])
-				p++;
-			return s[start..p].dup;
-		}
-		else
-		{
-			foreach (n; "null")
-				expect(n);
-			return null;
-		}
-	}
-
-	bool readBool()
-	{
-		skipWhitespace();
-		if (peek()=='t')
-		{
-			enforce(readN(4) == "true", "Bad boolean");
-			return true;
-		}
-		else
-		if (peek()=='f')
-		{
-			enforce(readN(5) == "false", "Bad boolean");
-			return false;
-		}
-		else
-		{
-			ubyte i = readNumber!ubyte();
-			enforce(i < 2, "Bad digit for implicit number-to-bool conversion");
-			return !!i;
-		}
-	}
-
-	T readNumber(T)()
-	{
-		skipWhitespace();
-		const(C)[] n;
-		auto start = p;
-		Unqual!C c = peek();
-		if (c == '"') // TODO: implicit type conversion should be optional
-			n = readSimpleString();
-		else
-		{
-			while (c=='+' || c=='-' || (c>='0' && c<='9') || c=='e' || c=='E' || c=='.')
-			{
-				p++;
-				if (eof) break;
-				c = peek();
-			}
-			n = s[start..p];
-		}
-		static if (is(T : long))
-			return to!T(n);
-		else
-		static if (is(T : real))
-			return fpParse!T(n);
-		else
-			static assert(0, "Don't know how to parse numerical type " ~ T.stringof);
-	}
-
-	T[] readArray(T)()
-	{
-		skipWhitespace();
-		expect('[');
-		skipWhitespace();
-		T[] result;
-		if (peek()==']')
-		{
-			p++;
-			return result;
-		}
-		while(true)
-		{
-			T subvalue;
-			read!T(subvalue);
-			result ~= subvalue;
-
-			skipWhitespace();
-			if (peek()==']')
-			{
-				p++;
-				return result;
-			}
-			else
-				expect(',');
-		}
-	}
-
-	void readStaticArray(T, size_t n)(ref T[n] value)
-	{
-		skipWhitespace();
-		expect('[');
-		skipWhitespace();
-		foreach (i, ref subvalue; value)
-		{
-			if (i)
-			{
-				expect(',');
-				skipWhitespace();
-			}
-			read(subvalue);
-			skipWhitespace();
-		}
-		expect(']');
-	}
-
-	void readObject(T)(ref T v)
-	{
-		skipWhitespace();
-		expect('{');
-		skipWhitespace();
-		if (peek()=='}')
-		{
-			p++;
-			return;
-		}
-
-		while (true)
-		{
-			auto jsonField = readSimpleString();
-			mixin(exceptionContext(q{"Error with field " ~ to!string(jsonField)}));
-			skipWhitespace();
-			expect(':');
-
-			bool found;
-			foreach (i, ref field; v.tupleof)
-			{
-				static if (!is(typeof(field) == JSONExtras))
-				{
-					enum name = getJsonName!(T, v.tupleof[i].stringof[2..$]);
-					if (name == jsonField)
-					{
-						read(field);
-						found = true;
-						break;
-					}
-				}
-			}
-
-			if (!found)
-			{
-				foreach (j, ref extField; v.tupleof)
-				{
-					static if (is(typeof(extField) == JSONExtras))
-					{
-						skipWhitespace();
-						auto start = p;
-						skipValue();
-						extField[cast(string)jsonField] = JSONFragment(s[start..p]);
-						found = true;
-						break;
-					}
-				}
-			}
-			if (!found)
-			{
-				static if (hasAttribute!(JSONPartial, T))
-					skipValue();
-				else
-					throw new Exception(cast(string)("Unknown field " ~ jsonField));
-			}
-
-			skipWhitespace();
-			if (peek()=='}')
-			{
-				p++;
-				return;
-			}
-			else
-				expect(',');
-		}
-	}
-
-	void readAA(T)(ref T v)
-	{
-		skipWhitespace();
-		static if (is(typeof(T.init is null)))
-			if (peek() == 'n')
-			{
-				v = readNull();
-				return;
-			}
-		expect('{');
-		skipWhitespace();
-		if (peek()=='}')
-		{
-			p++;
-			return;
-		}
-		alias K = typeof(v.keys[0]);
-
-		while (true)
-		{
-			K jsonField;
-			static if (is(K == string))
-				jsonField = readString().to!K;
-			else
-			{
-				static if (options.nonStringKeys == JsonOptions.NonStringKeys.asIs)
-					read(jsonField);
-				else
-				static if (options.nonStringKeys == JsonOptions.NonStringKeys.stringify)
-					jsonField = readString().jsonParse!(K, options);
-				else
-					static assert(false, "Cannot parse associative array with non-string key " ~ K.stringof);
-			}
-
-			skipWhitespace();
-			expect(':');
-
-			// TODO: elide copy
-			typeof(v.values[0]) subvalue;
-			read(subvalue);
-			v[jsonField] = subvalue;
-
-			skipWhitespace();
-			if (peek()=='}')
-			{
-				p++;
-				return;
-			}
-			else
-				expect(',');
-		}
-	}
-
-	T readEnum(T)()
-	{
-		return to!T(readSimpleString());
-	}
-
-	T readPointer(T)()
-	{
-		skipWhitespace();
-		if (peek()=='n')
-		{
-			enforce(readN(4) == "null", "Null expected");
-			return null;
-		}
-		alias S = typeof(*T.init);
-		T v = new S;
-		read!S(*v);
-		return v;
-	}
-
-	void skipValue()
-	{
-		skipWhitespace();
-		Unqual!C c = peek();
-		switch (c)
-		{
-			case '"':
-				readString(); // TODO: Optimize
-				break;
-			case '0': .. case '9':
-			case '-':
-				while (c=='+' || c=='-' || (c>='0' && c<='9') || c=='e' || c=='E' || c=='.')
-				{
-					p++;
-					if (eof) break;
-					c = peek();
-				}
-				break;
-			case '{':
-				next();
-				skipWhitespace();
-				bool first = true;
-				while (peek() != '}')
-				{
-					if (first)
-						first = false;
-					else
-						expect(',');
-					skipValue(); // key
-					skipWhitespace();
-					expect(':');
-					skipValue(); // value
-					skipWhitespace();
-				}
-				expect('}');
-				break;
-			case '[':
-				next();
-				skipWhitespace();
-				bool first = true;
-				while (peek() != ']')
-				{
-					if (first)
-						first = false;
-					else
-						expect(',');
-					skipValue();
-					skipWhitespace();
-				}
-				expect(']');
-				break;
-			case 't':
-				foreach (l; "true")
-					expect(l);
-				break;
-			case 'f':
-				foreach (l; "false")
-					expect(l);
-				break;
-			case 'n':
-				foreach (l; "null")
-					expect(l);
-				break;
-			default:
-				throw new Exception(text("Can't parse: ", c));
-		}
-	}
-}
-
 /// Parse the JSON in string `s` and deserialize it into an instance of `T`.
 template jsonParse(T, JsonOptions options = JsonOptions.init)
 {
 	T jsonParse(C)(C[] s)
 	{
-		auto parser = JsonParser!(C, options)(s);
-		mixin(exceptionContext(q{format("Error at position %d", parser.p)}));
-		T result;
-		parser.read!T(result);
-		return result;
+		static if (is(T V : V[K], K))
+			static if (!isSomeString!K)
+				static assert(options.nonStringKeys != JsonOptions.NonStringKeys.error,
+					"Cannot parse associative array with non-string key " ~ K.stringof);
+		import ae.utils.serialization.json : SerJsonOptions = JsonOptions, newJsonParse = jsonParse;
+		static immutable int nsk = options.nonStringKeys;
+		enum SerJsonOptions serOptions = {
+			nonStringKeys: cast(SerJsonOptions.NonStringKeys) nsk,
+		};
+		return newJsonParse!(T, serOptions)(s);
 	}
 }
 
@@ -1162,9 +590,12 @@ debug(ae_unittest) unittest
 /// Parse the JSON in string `s` and deserialize it into `T`.
 void jsonParse(T, C)(C[] s, ref T result)
 {
-	auto parser = JsonParser!C(s);
-	mixin(exceptionContext(q{format("Error at position %d", parser.p)}));
-	parser.read!T(result);
+	import ae.utils.serialization.json : JsonParser, jsonCustomDeserializer;
+	auto parser = JsonParser!C(s, 0);
+	auto sink = jsonCustomDeserializer(&result);
+	parser.skipWhitespace();
+	if (!parser.eof)
+		parser.read(sink);
 }
 
 debug(ae_unittest) unittest
@@ -1201,11 +632,6 @@ private string mixNonSerializedFields(string[] fields)
 	foreach (field; fields)
 		result ~= "enum bool " ~ field ~ "_nonSerialized = 1;";
 	return result;
-}
-
-private template doSkipSerialize(T, string member)
-{
-	enum bool doSkipSerialize = __traits(hasMember, T, member ~ "_nonSerialized");
 }
 
 debug(ae_unittest) unittest
@@ -1352,18 +778,10 @@ debug(ae_unittest) unittest
 /// Useful when a JSON object may contain fields, the name of which are not valid D identifiers.
 struct JSONName { string name; /***/ }
 
-private template getJsonName(S, string FIELD)
-{
-	static if (hasAttribute!(JSONName, __traits(getMember, S, FIELD)))
-		enum getJsonName = getAttribute!(JSONName, __traits(getMember, S, FIELD)).name;
-	else
-		enum getJsonName = FIELD;
-}
-
 // ************************************************************************
 
 /// User-defined attribute - only serialize this field if its value is different from its .init value.
-struct JSONOptional {}
+public import ae.utils.serialization.serialization : JSONOptional = Optional;
 
 debug(ae_unittest) unittest
 {
@@ -1387,7 +805,7 @@ debug(ae_unittest) unittest
 // ************************************************************************
 
 /// User-defined attribute - skip unknown fields when deserializing.
-struct JSONPartial {}
+public import ae.utils.serialization.serialization : JSONPartial = IgnoreUnknown;
 
 debug(ae_unittest) unittest
 {
