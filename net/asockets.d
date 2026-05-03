@@ -993,12 +993,6 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 	import ae.sys.windows.iocp;
 	private void _wsaSetLastError(int e) nothrow @nogc { WSASetLastError(e); }
 
-	// AcceptEx constants
-	private enum WSA_FLAG_OVERLAPPED       = 0x01;
-	private enum SO_UPDATE_ACCEPT_CONTEXT  = 0x700B;
-	// Each AcceptEx address slot must be sizeof(SOCKADDR_STORAGE)+16.
-	// SOCKADDR_STORAGE is 128 bytes on Windows, so each slot is 144 bytes.
-	private enum ACCEPT_ADDR_SIZE          = 128 + 16;
 
 	// ---- The dispatcher kind --------------------------------------------
 
@@ -1270,7 +1264,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 						{
 							// User-posted completion with no OVERLAPPED.
 							// Dispatch via completion key (the participant).
-							auto p = cast(IocpParticipant)cast(void*)entry.lpCompletionKey;
+							auto p = cast(IocpParticipant)cast(Object)cast(void*)entry.lpCompletionKey;
 							if (p)
 								runUserEventHandler({
 									p.iocpUserPost(entry.dwNumberOfBytesTransferred);
@@ -1979,6 +1973,74 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 
 			if (callHandler && _disconnectHandler)
 				_disconnectHandler(reason, type);
+		}
+	}
+
+	// -----------------------------------------------------------------------
+	// WindowsProcessExitWaiter
+	// -----------------------------------------------------------------------
+
+	/// Watches a Windows process handle for exit and delivers the exit code
+	/// to a user callback on the IOCP event-loop thread.
+	public class WindowsProcessExitWaiter : IocpParticipant
+	{
+		private HANDLE _processHandle;  // owned copy; closed after callback fires
+		private HANDLE _waitHandle;
+		private HANDLE _iocpPort;
+		private void delegate(int) _callback;
+
+		this(HANDLE processHandle, void delegate(int) callback)
+		{
+			BOOL ok = DuplicateHandle(
+				GetCurrentProcess(), processHandle,
+				GetCurrentProcess(), &_processHandle,
+				SYNCHRONIZE | PROCESS_QUERY_INFORMATION, FALSE, 0);
+			assert(ok, "DuplicateHandle failed");
+
+			_iocpPort = socketManager.getIocpPort();
+			_callback  = callback;
+
+			// Add to participants before registering the wait so the GC
+			// root exists before the thread-pool thread can use the pointer.
+			socketManager.addParticipant(this);
+
+			ok = RegisterWaitForSingleObject(
+				&_waitHandle, _processHandle,
+				cast(WAITORTIMERCALLBACK)&_exitCallback,
+				cast(void*)this,
+				INFINITE,
+				WT_EXECUTEONLYONCE);
+			assert(ok, "RegisterWaitForSingleObject failed");
+		}
+
+		// Runs on a Win32 thread-pool thread; must not touch GC-managed heap.
+		// Just signals the loop thread; exit code is retrieved on the loop thread.
+		private static extern(Windows) void _exitCallback(void* ctx, bool) nothrow @nogc
+		{
+			auto self = cast(WindowsProcessExitWaiter)ctx;
+			PostQueuedCompletionStatus(self._iocpPort, 0,
+				cast(ULONG_PTR)cast(void*)cast(Object)self, null);
+		}
+
+		override bool iocpHasNonDaemonWork() { return _callback !is null; }
+		override void iocpOnComplete(IocpOp*, DWORD, uint) { assert(false); }
+
+		override void iocpUserPost(DWORD)
+		{
+			DWORD code = 0;
+			GetExitCodeProcess(_processHandle, &code);
+
+			auto cb = _callback;
+			_callback = null;
+
+			socketManager.removeParticipant(this);
+			UnregisterWaitEx(_waitHandle, null);  // null = don't wait for in-flight callbacks
+			_waitHandle = null;
+			CloseHandle(_processHandle);
+			_processHandle = null;
+
+			if (cb)
+				cb(cast(int)code);
 		}
 	}
 
