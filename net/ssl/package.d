@@ -72,7 +72,8 @@ abstract class SSLContext
 	void setCipherList(string[] ciphers) { assert(false, "setCipherList is not implemented by this SSL provider"); } /// Configure OpenSSL-like cipher list.
 	deprecated("enableDH is OpenSSL-specific; cast to OpenSSLContext and call enableDH there")
 	void enableDH(int bits) { assert(false, "enableDH is not implemented by this SSL provider"); } /// Enable Diffie-Hellman key exchange with the specified key size.
-	abstract void enableECDH();                                   /// Enable elliptic-curve DH key exchange.
+	deprecated("enableECDH is OpenSSL-specific; cast to OpenSSLContext and call enableECDH there")
+	void enableECDH() { assert(false, "enableECDH is not implemented by this SSL provider"); } /// Enable elliptic-curve DH key exchange.
 	abstract void setCertificate(string path);                    /// Load and use a local certificate from the given file.
 	abstract void setPrivateKey(string path);                     /// Load and use the certificate private key from the given file.
 	abstract void setPreSharedKey(string id, const(ubyte)[] key); /// Use a pre-shared key instead of using certificate-based peer verification.
