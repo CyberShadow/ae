@@ -591,8 +591,9 @@ protected:
    Example:
    ---
    auto s = new HttpsServer();
-   s.ctx.enableDH(4096);
-   s.ctx.enableECDH();
+   // OpenSSL-specific options (cast ctx to OpenSSLContext if needed):
+   // (cast(OpenSSLContext)s.ctx).enableDH(4096);
+   // (cast(OpenSSLContext)s.ctx).enableECDH();
    s.ctx.setCertificate("server.crt");
    s.ctx.setPrivateKey("server.key");
    ---
