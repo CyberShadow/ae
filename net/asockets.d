@@ -1685,39 +1685,52 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 	}
 
 	// -----------------------------------------------------------------------
-	// WindowsPipeConnection: a minimal IOCP-driven wrapper around a Windows
+	// WindowsPipeConnection: full IConnection implementation over a Windows
 	// pipe HANDLE (named pipe or anonymous, opened with FILE_FLAG_OVERLAPPED).
-	//
-	// Not a full IConnection — exposes a small handleReadData /
-	// handleDisconnect / send / disconnect surface that's enough for the
-	// spike's smoke tests. Promoting this to full IConnection compliance
-	// (priority queues, buffer-flushed callback, partialSent tracking, etc.)
-	// is left as follow-up.
 	// -----------------------------------------------------------------------
 
-	/// Minimal IOCP-driven async wrapper for Windows pipe HANDLEs.
+	/// Full IConnection implementation for Windows pipe HANDLEs.
 	/// The caller is responsible for opening the HANDLE with
 	/// FILE_FLAG_OVERLAPPED (e.g. via CreateNamedPipeW + CreateFileW).
-	public class WindowsPipeConnection : IocpParticipant
+	public class WindowsPipeConnection : IocpParticipant, IConnection
 	{
-		alias ReadDataHandler   = void delegate(Data data);
-		alias DisconnectHandler = void delegate(string reason, DisconnectType type);
-		alias BufferFlushedHandler = void delegate();
+		// --- State machine ---------------------------------------------------
+
+		private ConnectionState _state = ConnectionState.connected;
+
+		override @property ConnectionState state() { return _state; }
+
+		// --- Send queue (mirrors Connection) ---------------------------------
+
+		private DataVec[IConnection.MAX_PRIORITY+1] _outQueue;
+		private ubyte[] _writeBuf;       // in-flight bytes (stable for WriteFile duration)
+		private bool    _writePending;
+		private bool    _drainScheduled; // onNextTick drain is pending
+
+		// Saved reason/type for a deferred disconnect(requested) while writing.
+		private string         _pendingDisconnectReason;
+		private DisconnectType _pendingDisconnectType;
+
+		// --- HANDLE & IOCP ops -----------------------------------------------
 
 		private HANDLE _handle;
 		private bool   _ownHandle;
 		private IocpOp _readOp;
 		private IocpOp _writeOp;
-		private ubyte[4096] _readBuf;
-		private ubyte[]     _writeBuf; // outstanding bytes (kept alive)
-		private bool _readPending, _writePending;
-		private bool _disconnected;
-		private bool _readArmed; // user has set handleReadData
-		private string _disconnectReason;
 
-		ReadDataHandler        handleReadData;
-		DisconnectHandler      handleDisconnect;
-		BufferFlushedHandler   handleBufferFlushed;
+		// --- Read buffer -----------------------------------------------------
+
+		private ubyte[4096] _readBuf;
+		private bool        _readPending;
+
+		// --- Callbacks -------------------------------------------------------
+
+		private ConnectHandler       _connectHandler;
+		private ReadDataHandler      _readDataHandler;
+		private DisconnectHandler    _disconnectHandler;
+		private BufferFlushedHandler _bufferFlushedHandler;
+
+		// --- Construction ----------------------------------------------------
 
 		this(HANDLE h, bool ownHandle = true)
 		{
@@ -1727,7 +1740,6 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			_readOp.kind = IocpOpKind.pipeRead;
 			_writeOp.owner = this;
 			_writeOp.kind = IocpOpKind.pipeWrite;
-			// Associate with the IOCP port using `this` as completion key.
 			auto port = socketManager.getIocpPort();
 			auto rc = CreateIoCompletionPort(h, port, cast(ULONG_PTR)cast(void*)this, 0);
 			assert(rc == port, "CreateIoCompletionPort(pipe) failed");
@@ -1736,51 +1748,90 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 
 		final HANDLE handle() pure nothrow @nogc { return _handle; }
 
-		/// Begin reading. Calls to `handleReadData` will be dispatched as
-		/// data arrives. Call before entering the event loop.
+		/// Kept for backward compatibility; setting handleReadData now starts
+		/// reading automatically.
 		final void startReading()
 		{
-			_readArmed = true;
-			if (!_readPending && !_disconnected)
+			if (_readDataHandler && _state == ConnectionState.connected && !_readPending)
 				_armRead();
 		}
 
-		/// Send data over the pipe. Currently rejects a second send while
-		/// one is in flight (same constraint as the IOCP socket path).
-		final void send(Data data)
+		// --- IConnection -----------------------------------------------------
+
+		override void send(scope Data[] data, int priority = IConnection.DEFAULT_PRIORITY)
 		{
-			assert(!_disconnected, "send() on disconnected pipe");
-			assert(_writeBuf is null, "send() while another send in flight");
-			_writeBuf = data.unsafeContents.dup;
-			_writeOp.overlapped = OVERLAPPED.init;
-			DWORD written = 0;
-			BOOL ok = WriteFile(_handle, _writeBuf.ptr, cast(DWORD)_writeBuf.length,
-				&written, &_writeOp.overlapped);
-			if (ok || GetLastError() == ERROR_IO_PENDING)
+			assert(_state == ConnectionState.connected,
+			       "send on a " ~ _state.to!string ~ " pipe");
+			_outQueue[priority] ~= data;
+			if (!_writePending && !_drainScheduled)
 			{
-				_writePending = true;
+				// Defer drain to next tick so all sends in the same handler
+				// are queued before we pick the highest-priority chunk.
+				_drainScheduled = true;
+				onNextTick(socketManager, () {
+					_drainScheduled = false;
+					if (!_writePending && _state != ConnectionState.disconnected)
+						_drainQueue();
+				});
+			}
+		}
+
+		alias send = IConnection.send;
+
+		override void disconnect(
+			string reason = IConnection.defaultDisconnectReason,
+			DisconnectType type = DisconnectType.requested)
+		{
+			assert(_state.disconnectable,
+			       "disconnect on a " ~ _state.to!string ~ " pipe");
+			if ((_writePending || _drainScheduled) && type == DisconnectType.requested)
+			{
+				// Flush in-flight write and any queued sends, then close.
+				_state = ConnectionState.disconnecting;
+				_pendingDisconnectReason = reason;
+				_pendingDisconnectType   = type;
+				if (_disconnectHandler)
+					_disconnectHandler(reason, type);
 				return;
 			}
-			// Synchronous failure.
-			auto err = GetLastError();
-			_writeBuf = null;
-			_finishDisconnect("WriteFile failed", DisconnectType.error);
+			// Drop remaining queue and close immediately.
+			_discardQueues();
+			_drainScheduled = false;
+			_doClose(reason, type);
 		}
 
-		/// Initiate disconnect. Cancels any in-flight ops (CloseHandle does
-		/// this) and dispatches handleDisconnect once outstanding completions
-		/// drain.
-		final void disconnect(string reason = "Software closed the pipe",
-		                       DisconnectType type = DisconnectType.requested)
+		@property override void handleConnect(ConnectHandler value)
 		{
-			_finishDisconnect(reason, type);
+			_connectHandler = value;
 		}
 
-		// IocpParticipant ----------------------------------------------------
+		@property override void handleReadData(ReadDataHandler value)
+		{
+			_readDataHandler = value;
+			if (value && _state == ConnectionState.connected && !_readPending)
+				_armRead();
+		}
+
+		@property override void handleDisconnect(DisconnectHandler value)
+		{
+			_disconnectHandler = value;
+		}
+
+		@property override void handleBufferFlushed(BufferFlushedHandler value)
+		{
+			_bufferFlushedHandler = value;
+		}
+
+		// --- IocpParticipant -------------------------------------------------
 
 		override bool iocpHasNonDaemonWork()
 		{
-			return !_disconnected && (_readArmed || _writePending);
+			if (_state == ConnectionState.disconnected) return false;
+			if (_readDataHandler !is null) return true;
+			if (_writePending || _drainScheduled) return true;
+			foreach (ref q; _outQueue)
+				if (q.length) return true;
+			return false;
 		}
 
 		override void iocpOnComplete(IocpOp* op, DWORD bytes, uint status)
@@ -1788,43 +1839,53 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			if (op is &_readOp)
 			{
 				_readPending = false;
-				if (status == ERROR_OPERATION_ABORTED || _disconnected)
+				if (status == ERROR_OPERATION_ABORTED || _state == ConnectionState.disconnected)
 					return;
 				if (status == ERROR_BROKEN_PIPE || status == ERROR_HANDLE_EOF
 				    || status == ERROR_PIPE_NOT_CONNECTED || bytes == 0)
 				{
-					_finishDisconnect("EOF", DisconnectType.graceful);
+					_doClose("EOF", DisconnectType.graceful);
 					return;
 				}
 				if (status != 0)
 				{
-					_finishDisconnect("ReadFile failed", DisconnectType.error);
+					_doClose("ReadFile failed", DisconnectType.error);
 					return;
 				}
-				if (handleReadData)
-					handleReadData(Data(_readBuf[0 .. bytes].idup));
-				if (_readArmed && !_disconnected && !_readPending)
+				if (_readDataHandler)
+					_readDataHandler(Data(_readBuf[0 .. bytes].idup));
+				if (_readDataHandler && _state == ConnectionState.connected && !_readPending)
 					_armRead();
 			}
 			else if (op is &_writeOp)
 			{
 				_writePending = false;
-				_writeBuf = null;
-				if (status == ERROR_OPERATION_ABORTED || _disconnected)
-					return;
-				if (status != 0)
+				if (status == ERROR_OPERATION_ABORTED || _state == ConnectionState.disconnected)
 				{
-					_finishDisconnect("WriteFile failed", DisconnectType.error);
+					_writeBuf = null;
 					return;
 				}
-				if (handleBufferFlushed)
-					handleBufferFlushed();
+				if (status != 0)
+				{
+					_writeBuf = null;
+					_doClose("WriteFile failed", DisconnectType.error);
+					return;
+				}
+				if (bytes < _writeBuf.length)
+				{
+					// Partial write — retry the remainder in-place.
+					_writeBuf = _writeBuf[bytes .. $];
+					_postWrite(_writeBuf);
+					return;
+				}
+				_writeBuf = null;
+				_drainQueue();
 			}
 		}
 
 		override void iocpUserPost(DWORD bytes) {}
 
-		// Internals ----------------------------------------------------------
+		// --- Internals -------------------------------------------------------
 
 		private void _armRead()
 		{
@@ -1841,17 +1902,72 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			if (err == ERROR_BROKEN_PIPE || err == ERROR_HANDLE_EOF
 			    || err == ERROR_PIPE_NOT_CONNECTED)
 			{
-				_finishDisconnect("EOF", DisconnectType.graceful);
+				_doClose("EOF", DisconnectType.graceful);
 				return;
 			}
-			_finishDisconnect("ReadFile failed", DisconnectType.error);
+			_doClose("ReadFile failed", DisconnectType.error);
 		}
 
-		private void _finishDisconnect(string reason, DisconnectType type)
+		private void _drainQueue()
 		{
-			if (_disconnected) return;
-			_disconnected = true;
-			_disconnectReason = reason;
+			assert(!_writePending);
+			if (_state == ConnectionState.disconnected) return;
+
+			foreach (ref queue; _outQueue)
+			{
+				while (queue.length)
+				{
+					if (queue.front.empty)
+					{
+						queue.popFront();
+						if (queue.length == 0) queue = null;
+						continue;
+					}
+					_writeBuf = cast(ubyte[])queue.front.unsafeContents.dup;
+					queue.popFront();
+					if (queue.length == 0) queue = null;
+					_postWrite(_writeBuf);
+					return;
+				}
+			}
+
+			// All queues empty.
+			if (_bufferFlushedHandler)
+				_bufferFlushedHandler();
+			if (_state == ConnectionState.disconnecting)
+				_doClose(_pendingDisconnectReason, _pendingDisconnectType);
+		}
+
+		private void _postWrite(ubyte[] buf)
+		{
+			_writeOp.overlapped = OVERLAPPED.init;
+			DWORD written = 0;
+			BOOL ok = WriteFile(_handle, buf.ptr, cast(DWORD)buf.length,
+				&written, &_writeOp.overlapped);
+			if (ok || GetLastError() == ERROR_IO_PENDING)
+			{
+				_writePending = true;
+				return;
+			}
+			_writeBuf = null;
+			_doClose("WriteFile failed", DisconnectType.error);
+		}
+
+		private void _discardQueues()
+		{
+			foreach (ref q; _outQueue)
+				q = DataVec.init;
+		}
+
+		private void _doClose(string reason, DisconnectType type)
+		{
+			if (_state == ConnectionState.disconnected) return;
+			// If we were already disconnecting (deferred flush path), the
+			// handler was already called when disconnect() set the state;
+			// don't call it a second time (matches Connection semantics).
+			bool callHandler = _state != ConnectionState.disconnecting;
+			_state = ConnectionState.disconnected;
+			_discardQueues();
 
 			if (_handle !is null && _ownHandle)
 			{
@@ -1861,8 +1977,152 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 
 			socketManager.removeParticipant(this);
 
-			if (handleDisconnect)
-				handleDisconnect(reason, type);
+			if (callHandler && _disconnectHandler)
+				_disconnectHandler(reason, type);
+		}
+	}
+
+	// -----------------------------------------------------------------------
+	// WindowsPipeConnection unittests
+	// -----------------------------------------------------------------------
+
+	debug(ae_unittest) unittest
+	{
+		// Named-pipe pair helper used by all three subtests below.
+		import std.utf    : toUTF16z;
+		import std.format : format;
+
+		enum DWORD PIPE_ACCESS_DUPLEX_         = 0x00000003;
+		enum DWORD FILE_FLAG_OVERLAPPED_       = 0x40000000;
+		enum DWORD PIPE_TYPE_BYTE_             = 0x00000000;
+		enum DWORD PIPE_READMODE_BYTE_         = 0x00000000;
+		enum DWORD PIPE_WAIT_                  = 0x00000000;
+		enum DWORD PIPE_REJECT_REMOTE_CLIENTS_ = 0x00000008;
+		enum DWORD PIPE_UNLIMITED_INSTANCES_   = 255;
+
+		int pipeSeq;
+
+		// Returns the server HANDLE; fills `clientOut` with the client HANDLE.
+		HANDLE makePipePair(out HANDLE clientOut)
+		{
+			auto name = format(`\\.\pipe\ae-iocp-wpc-%s-%s`,
+			                   GetCurrentProcessId(), pipeSeq++).toUTF16z;
+			auto srv = CreateNamedPipeW(name,
+				PIPE_ACCESS_DUPLEX_ | FILE_FLAG_OVERLAPPED_,
+				PIPE_TYPE_BYTE_ | PIPE_READMODE_BYTE_ | PIPE_WAIT_
+				    | PIPE_REJECT_REMOTE_CLIENTS_,
+				PIPE_UNLIMITED_INSTANCES_, 65536, 65536, 0, null);
+			assert(srv != INVALID_HANDLE_VALUE, "CreateNamedPipeW failed");
+			auto cli = CreateFileW(name,
+				GENERIC_READ | GENERIC_WRITE, 0, null,
+				OPEN_EXISTING, FILE_FLAG_OVERLAPPED_, null);
+			assert(cli != INVALID_HANDLE_VALUE, "CreateFileW failed");
+			clientOut = cli;
+			return srv;
+		}
+
+		// --- Test 1: priority-queue ordering ---------------------------------
+		// Queue sends at priorities 3, 1, 2 before entering the loop;
+		// verify the receiver sees them in priority order: 1, 2, 3.
+		{
+			HANDLE cli;
+			auto srv = makePipePair(cli);
+			auto sender   = new WindowsPipeConnection(cli);
+			auto receiver = new WindowsPipeConnection(srv);
+
+			string received;
+			bool senderDone, receiverDone;
+
+			receiver.handleReadData = (Data data) {
+				received ~= cast(string)data.unsafeContents.idup;
+			};
+			receiver.handleDisconnect = (string, DisconnectType) {
+				receiverDone = true;
+			};
+			sender.handleDisconnect = (string, DisconnectType) {
+				senderDone = true;
+			};
+			sender.handleBufferFlushed = () { sender.disconnect("done"); };
+
+			sender.send(Data(cast(immutable ubyte[])"low"),    3);
+			sender.send(Data(cast(immutable ubyte[])"high"),   1);
+			sender.send(Data(cast(immutable ubyte[])"medium"), 2);
+
+			socketManager.loop();
+
+			assert(received == "highmediumlow",
+			       "priority ordering wrong: got `" ~ received ~ "`");
+			assert(senderDone,   "sender never disconnected");
+			assert(receiverDone, "receiver never disconnected");
+		}
+
+		// --- Test 2: multiple queued sends arrive in order -------------------
+		{
+			HANDLE cli;
+			auto srv = makePipePair(cli);
+			auto sender   = new WindowsPipeConnection(cli);
+			auto receiver = new WindowsPipeConnection(srv);
+
+			string received;
+			bool receiverDone;
+
+			receiver.handleReadData = (Data data) {
+				received ~= cast(string)data.unsafeContents.idup;
+			};
+			receiver.handleDisconnect = (string, DisconnectType) {
+				receiverDone = true;
+			};
+			sender.handleDisconnect = (string, DisconnectType) {};
+			sender.handleBufferFlushed = () { sender.disconnect("done"); };
+
+			sender.send(Data(cast(immutable ubyte[])"aaa"));
+			sender.send(Data(cast(immutable ubyte[])"bbb"));
+			sender.send(Data(cast(immutable ubyte[])"ccc"));
+
+			socketManager.loop();
+
+			assert(received == "aaabbbccc",
+			       "queued-sends ordering wrong: got `" ~ received ~ "`");
+			assert(receiverDone, "receiver never disconnected");
+		}
+
+		// --- Test 3: disconnect(requested) while writes are queued -----------
+		// All queued data must be flushed to the receiver before the sender
+		// closes, and both sides must reach the disconnected state.
+		{
+			HANDLE cli;
+			auto srv = makePipePair(cli);
+			auto sender   = new WindowsPipeConnection(cli);
+			auto receiver = new WindowsPipeConnection(srv);
+
+			string received;
+			bool senderDone, receiverDone;
+
+			receiver.handleReadData = (Data data) {
+				received ~= cast(string)data.unsafeContents.idup;
+			};
+			receiver.handleDisconnect = (string, DisconnectType) {
+				receiverDone = true;
+			};
+			sender.handleDisconnect = (string, DisconnectType) {
+				senderDone = true;
+			};
+
+			sender.send(Data(cast(immutable ubyte[])"x"));
+			sender.send(Data(cast(immutable ubyte[])"y"));
+			sender.send(Data(cast(immutable ubyte[])"z"));
+			// disconnect(requested) while drain is scheduled but not yet started.
+			sender.disconnect("flush-test", DisconnectType.requested);
+			assert(sender.state == ConnectionState.disconnecting
+			    || sender.state == ConnectionState.disconnected,
+			       "expected disconnecting or disconnected after flush-disconnect");
+
+			socketManager.loop();
+
+			assert(received == "xyz",
+			       "mid-send disconnect did not flush data: got `" ~ received ~ "`");
+			assert(senderDone,   "sender never disconnected");
+			assert(receiverDone, "receiver never disconnected");
 		}
 	}
 }
