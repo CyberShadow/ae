@@ -201,7 +201,7 @@ class OpenSSLContext : SSLContext
 				break;
 		}
 		sslCtx = SSL_CTX_new(method).sslEnforce();
-		setCipherList(["ALL", "!MEDIUM", "!LOW", "!aNULL", "!eNULL", "!SSLv2", "!DH", "!TLSv1"]);
+		setOpenSSLCipherList(["ALL", "!MEDIUM", "!LOW", "!aNULL", "!eNULL", "!SSLv2", "!DH", "!TLSv1"]);
 		SSL_CTX_set_min_proto_version(sslCtx, TLS1_2_VERSION);
 
 		SSL_CTX_set_default_verify_paths(sslCtx);
@@ -220,14 +220,16 @@ class OpenSSLContext : SSLContext
 
 	/// OpenSSL uses different APIs to specify the cipher list for
 	/// TLSv1.2 and below and to specify the ciphersuites for TLSv1.3.
-	/// When calling `setCipherList`, use this value to delimit them:
+	/// When calling `setOpenSSLCipherList`, use this value to delimit them:
 	/// values before `cipherListTLS13Delimiter` will be specified via
 	/// SSL_CTX_set_cipher_list (for TLSv1.2 and older), and those
 	/// after `cipherListTLS13Delimiter` will be specified via
 	/// `SSL_CTX_set_ciphersuites` (for TLSv1.3).
 	static immutable cipherListTLS13Delimiter = "\0ae-net-ssl-openssl-cipher-list-tls-1.3-delimiter";
 
-	override void setCipherList(string[] ciphers)
+	/// Configure the OpenSSL-format cipher list.
+	/// Use `cipherListTLS13Delimiter` to separate TLS 1.2 and TLS 1.3 entries.
+	void setOpenSSLCipherList(string[] ciphers)
 	{
 		assert(ciphers.length, "Empty cipher list");
 		import std.algorithm.searching : findSplit;
@@ -243,7 +245,9 @@ class OpenSSLContext : SSLContext
 			else
 				assert(false, "Not built against OpenSSL version with TLSv1.3 support.");
 		}
-	} /// `SSLContext` method implementation.
+	}
+
+	override void setCipherList(string[] ciphers) { setOpenSSLCipherList(ciphers); } /// ditto
 
 	override void enableDH(int bits)
 	{
