@@ -993,6 +993,13 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 	import ae.sys.windows.iocp;
 	private void _wsaSetLastError(int e) nothrow @nogc { WSASetLastError(e); }
 
+	// AcceptEx constants
+	private enum WSA_FLAG_OVERLAPPED       = 0x01;
+	private enum SO_UPDATE_ACCEPT_CONTEXT  = 0x700B;
+	// Each AcceptEx address slot must be sizeof(SOCKADDR_STORAGE)+16.
+	// SOCKADDR_STORAGE is 128 bytes on Windows, so each slot is 144 bytes.
+	private enum ACCEPT_ADDR_SIZE          = 128 + 16;
+
 	// ---- The dispatcher kind --------------------------------------------
 
 	/// Discriminator for what to do when a completion arrives, stored
@@ -1001,6 +1008,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 	{
 		socketRecv,
 		socketSend,
+		socketAccept, // AcceptEx completion on a listening socket
 		pipeRead,
 		pipeWrite,
 		processExit,
@@ -1308,6 +1316,13 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 					iocpOnSendComplete(conn, bytes, status);
 					break;
 				}
+				case IocpOpKind.socketAccept:
+				{
+					auto conn = cast(GenericSocket)op.owner;
+					if (conn is null || conn.socket is null) return;
+					iocpOnAcceptComplete(conn, bytes, status);
+					break;
+				}
 				case IocpOpKind.pipeRead:
 				case IocpOpKind.pipeWrite:
 				case IocpOpKind.processExit:
@@ -1401,6 +1416,72 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		}
 	}
 
+	private void iocpOnAcceptComplete(GenericSocket conn, DWORD bytes, uint status)
+	{
+		debug (ASOCKETS) stderr.writefln("[iocp] accept complete: %s status=0x%X", conn, status);
+
+		conn._iocpAcceptOp.inFlight = false;
+
+		if (status == ERROR_OPERATION_ABORTED || conn.socket is null)
+		{
+			// Listener closed; discard the candidate socket.
+			if (conn._iocpCandidateSocket != c_socks.INVALID_SOCKET)
+			{
+				c_socks.closesocket(conn._iocpCandidateSocket);
+				conn._iocpCandidateSocket = c_socks.INVALID_SOCKET;
+			}
+			return;
+		}
+
+		if (status != 0)
+		{
+			// Accept failed (e.g. peer reset before accept completed).
+			if (conn._iocpCandidateSocket != c_socks.INVALID_SOCKET)
+			{
+				c_socks.closesocket(conn._iocpCandidateSocket);
+				conn._iocpCandidateSocket = c_socks.INVALID_SOCKET;
+			}
+			// Re-arm so the listener keeps working.
+			if (conn.socket !is null && conn.notifyRead)
+				conn._iocpArmAccept();
+			return;
+		}
+
+		// SO_UPDATE_ACCEPT_CONTEXT lets the accepted socket inherit the
+		// listener's properties (required for getpeername, shutdown, etc.).
+		auto listenHandle = cast(size_t)conn.socket.handle;
+		c_socks.setsockopt(conn._iocpCandidateSocket,
+			c_socks.SOL_SOCKET,
+			SO_UPDATE_ACCEPT_CONTEXT,
+			cast(const(void)*)&listenHandle, cast(c_socks.socklen_t)listenHandle.sizeof);
+
+		// Extract the remote address from the AcceptEx output buffer.
+		c_socks.sockaddr* localAddr, remoteAddr;
+		int localLen = 0, remoteLen = 0;
+		GetAcceptExSockaddrs(
+			conn._iocpAcceptBuf.ptr,
+			0,
+			ACCEPT_ADDR_SIZE,
+			ACCEPT_ADDR_SIZE,
+			&localAddr, &localLen,
+			&remoteAddr, &remoteLen);
+
+		auto peerAddress = new UnknownAddressReference(
+			cast(const(c_socks.sockaddr)*)remoteAddr, remoteLen);
+
+		// Hand off to Listener.onReadable() via the IOCP accept-ready flag.
+		conn._iocpAcceptedFd     = cast(socket_t)conn._iocpCandidateSocket;
+		conn._iocpAcceptedPeer   = peerAddress;
+		conn._iocpAcceptReady    = true;
+		conn._iocpCandidateSocket = c_socks.INVALID_SOCKET;
+
+		conn.onReadable();
+
+		// Re-arm for the next incoming connection.
+		if (conn.socket !is null && conn.notifyRead && !conn._iocpAcceptOp.inFlight)
+			conn._iocpArmAccept();
+	}
+
 	// Use UFCS for idle handlers (same shape as select/epoll).
 	void addIdleHandler(ref SocketManager socketManager, void delegate() handler)
 	{
@@ -1436,6 +1517,21 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		bool _iocpRecvPending;
 		bool _notifyRead, _notifyWrite;
 
+		// ---- AcceptEx state (listener sockets only) -------------------
+		// Set to true in Listener constructor so notifyRead arms AcceptEx
+		// instead of WSARecv.
+		bool     _iocpIsListener;
+		IocpOp   _iocpAcceptOp;
+		size_t   _iocpCandidateSocket = c_socks.INVALID_SOCKET;
+		// AcceptEx output buffer: 2 * (sizeof(SOCKADDR_STORAGE)+16) = 288 bytes.
+		ubyte[ACCEPT_ADDR_SIZE * 2] _iocpAcceptBuf;
+		// Set by iocpOnAcceptComplete before calling onReadable(), cleared by
+		// Listener.onReadable() after consuming.
+		socket_t _iocpAcceptedFd;
+		Address  _iocpAcceptedPeer;
+		bool     _iocpAcceptReady;
+		// ---------------------------------------------------------------
+
 		@property final bool notifyRead() const pure nothrow @nogc { return _notifyRead; }
 		@property final bool notifyWrite() const pure nothrow @nogc { return _notifyWrite; }
 
@@ -1443,8 +1539,16 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		{
 			bool was = _notifyRead;
 			_notifyRead = value;
-			if (value && !was && conn !is null && !_iocpRecvPending)
-				_iocpArmRecv();
+			if (value && !was && conn !is null)
+			{
+				if (_iocpIsListener)
+				{
+					if (!_iocpAcceptOp.inFlight)
+						_iocpArmAccept();
+				}
+				else if (!_iocpRecvPending)
+					_iocpArmRecv();
+			}
 			// If turned off, the in-flight WSARecv will eventually
 			// complete (with ERROR_OPERATION_ABORTED if socket closed,
 			// or just naturally with bytes — we ignore in onRecvComplete).
@@ -1497,6 +1601,53 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			_iocpRecvPending = false;
 			// Pretend readable so the connection sees the error.
 			socketManager.kickWritable(this); // TODO: kickReadable would be cleaner
+		}
+
+		/// Post AcceptEx against a pre-created candidate socket so the IOCP
+		/// port delivers a completion when a client connects.
+		final void _iocpArmAccept()
+		{
+			assert(conn !is null);
+			assert(_iocpIsListener);
+
+			// Create the candidate socket with the same family/type/protocol
+			// as the listener, with WSA_FLAG_OVERLAPPED.
+			_iocpCandidateSocket = WSASocketW(
+				cast(int)conn.addressFamily,
+				cast(int)SocketType.STREAM,
+				cast(int)ProtocolType.TCP,
+				null, 0, WSA_FLAG_OVERLAPPED);
+			if (_iocpCandidateSocket == c_socks.INVALID_SOCKET)
+			{
+				debug (ASOCKETS) stderr.writefln("[iocp] WSASocketW for AcceptEx failed: %d",
+					WSAGetLastError());
+				return;
+			}
+
+			_iocpAcceptOp.kind       = IocpOpKind.socketAccept;
+			_iocpAcceptOp.owner      = this;
+			_iocpAcceptOp.overlapped = OVERLAPPED.init;
+			_iocpAcceptOp.inFlight   = true;
+
+			DWORD bytesReceived = 0;
+			BOOL ok = AcceptEx(
+				cast(size_t)conn.handle,
+				_iocpCandidateSocket,
+				_iocpAcceptBuf.ptr,
+				0,                 // dwReceiveDataLength = 0: no initial data
+				ACCEPT_ADDR_SIZE,  // dwLocalAddressLength
+				ACCEPT_ADDR_SIZE,  // dwRemoteAddressLength
+				&bytesReceived,
+				&_iocpAcceptOp.overlapped);
+
+			if (ok || WSAGetLastError() == WSA_IO_PENDING)
+				return;
+
+			// Immediate error — clean up and bail.
+			_iocpAcceptOp.inFlight = false;
+			c_socks.closesocket(_iocpCandidateSocket);
+			_iocpCandidateSocket = c_socks.INVALID_SOCKET;
+			debug (ASOCKETS) stderr.writefln("[iocp] AcceptEx failed: %d", WSAGetLastError());
 		}
 
 		/// Override Connection.doSend hook for IOCP: post overlapped WSASend.
@@ -3229,6 +3380,8 @@ protected:
 		{
 			debug (ASOCKETS) stderr.writefln("New Listener @ %s", cast(void*)this);
 			this.conn = conn;
+			static if (eventLoopMechanism == EventLoopMechanism.iocp)
+				_iocpIsListener = true;
 			socketManager.register(this);
 		}
 
@@ -3236,6 +3389,29 @@ protected:
 		override void onReadable()
 		{
 			debug (ASOCKETS) stderr.writefln("Accepting connection from listener @ %s", cast(void*)this);
+
+			static if (eventLoopMechanism == EventLoopMechanism.iocp)
+			{
+				// AcceptEx path: iocpOnAcceptComplete() already created the
+				// socket and stored the peer address for us.
+				if (_iocpAcceptReady)
+				{
+					_iocpAcceptReady = false;
+					auto acceptSocket = new Socket(_iocpAcceptedFd, conn.addressFamily);
+					acceptSocket.blocking = false;
+					if (handleAccept)
+					{
+						auto connection = createConnection(acceptSocket, _iocpAcceptedPeer);
+						debug (ASOCKETS) stderr.writefln("\tAccepted connection %s from %s",
+							connection, connection.remoteAddressStr);
+						connection.setKeepAlive();
+						acceptHandler(connection);
+					}
+					else
+						acceptSocket.close();
+					return;
+				}
+			}
 
 			// Use C accept() directly to atomically capture the peer address.
 			// This avoids a race condition where the peer disconnects before
@@ -4061,6 +4237,67 @@ debug(ae_unittest) unittest
 	}
 
 	testTimer();
+}
+
+// ***************************************************************************
+
+/// Test: TcpServer.listen() + TcpConnection.connect() — exercises AcceptEx on
+/// Windows IOCP and the select/epoll accept path on POSIX.  Two sequential
+/// connections verify that AcceptEx re-arming works.
+debug(ae_unittest) unittest
+{
+	import std.conv : to;
+
+	auto server = new TcpServer();
+	ushort port = server.listen(0);
+
+	int accepted, completed;
+	string[2] srvRecv, cliRecv;
+	bool[2] srvDone, cliDone;
+
+	void startClient(int round)
+	{
+		auto client = new TcpConnection();
+		client.handleConnect = () {
+			client.send(Data("ping".asBytes.idup));
+		};
+		client.handleReadData = (Data data) {
+			cliRecv[round] ~= cast(string)data.unsafeContents.idup;
+			if (cliRecv[round] == "pong")
+				client.disconnect("done");
+		};
+		client.handleDisconnect = (string, DisconnectType) {
+			cliDone[round] = true;
+			if (round == 0)
+				onNextTick(socketManager, { startClient(1); });
+			else
+				server.close();
+		};
+		client.connect("127.0.0.1", port);
+	}
+
+	server.handleAccept = (TcpConnection c) {
+		int round = accepted++;
+		c.handleReadData = (Data data) {
+			srvRecv[round] ~= cast(string)data.unsafeContents.idup;
+			if (srvRecv[round] == "ping")
+				c.send(Data("pong".asBytes.idup));
+		};
+		c.handleDisconnect = (string, DisconnectType) { srvDone[round] = true; completed++; };
+	};
+
+	startClient(0);
+	socketManager.loop();
+
+	assert(accepted   == 2, "expected 2 accepted, got " ~ to!string(accepted));
+	assert(completed  == 2, "expected 2 completed, got " ~ to!string(completed));
+	foreach (i; 0..2)
+	{
+		assert(srvRecv[i] == "ping");
+		assert(cliRecv[i] == "pong");
+		assert(srvDone[i]);
+		assert(cliDone[i]);
+	}
 }
 
 // Regression: connectHandler that calls send() then disconnect() must still
