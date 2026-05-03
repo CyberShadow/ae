@@ -1529,17 +1529,52 @@ debug(ae_unittest) unittest
 		string[string] map;
 	}
 
-	// Default: null string -> null, null AA -> null
+	// Default: null string -> null, null array -> [], null AA -> {}
 	{
 		S s;
 		auto json = toJson(s);
-		assert(json == `{"name":null,"arr":[],"map":null}`, json);
+		assert(json == `{"name":null,"arr":[],"map":{}}`, json);
 	}
 
-	// asEmpty: null string -> "", null AA -> {}
+	// All asEmpty: null string -> "", null array -> [], null AA -> {}
 	{
-		enum serOpts = SerializerOptions(SerializerOptions.NullHandling.asEmpty);
+		enum serOpts = SerializerOptions(
+			SerializerOptions.NullHandling.asEmpty,
+			SerializerOptions.NullHandling.asEmpty,
+			SerializerOptions.NullHandling.asEmpty);
 		S s;
+		auto json = toJson!(JsonOptions.init, serOpts)(s);
+		assert(json == `{"name":"","arr":[],"map":{}}`, json);
+	}
+
+	// All asNull: null string -> null, null array -> null, null AA -> null
+	{
+		enum serOpts = SerializerOptions(
+			SerializerOptions.NullHandling.asNull,
+			SerializerOptions.NullHandling.asNull,
+			SerializerOptions.NullHandling.asNull);
+		S s;
+		auto json = toJson!(JsonOptions.init, serOpts)(s);
+		assert(json == `{"name":null,"arr":null,"map":null}`, json);
+	}
+
+	// Empty-but-non-null values are still emitted as empty under asNull.
+	{
+		enum serOpts = SerializerOptions(
+			SerializerOptions.NullHandling.asNull,
+			SerializerOptions.NullHandling.asNull,
+			SerializerOptions.NullHandling.asNull);
+		// Slice into a non-null pointer to get a non-null empty array/string.
+		static immutable char[1] charBuf = "x";
+		static int[1] intBuf = [0];
+		S s;
+		s.name = charBuf[0..0];
+		s.arr  = intBuf[0..0];
+		s.map[""] = "";
+		s.map.remove("");
+		assert(s.name !is null);
+		assert(s.arr  !is null);
+		assert(s.map  !is null);
 		auto json = toJson!(JsonOptions.init, serOpts)(s);
 		assert(json == `{"name":"","arr":[],"map":{}}`, json);
 	}

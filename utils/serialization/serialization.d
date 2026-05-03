@@ -359,21 +359,29 @@ template NoDeserializeTransform(T)
 /// Options controlling serialization behavior.
 struct SerializerOptions
 {
-	/// How to serialize null D values (null strings, null AAs).
-	/// Dynamic arrays (non-string) always serialize as empty arrays
-	/// regardless of this setting, since null and empty arrays are
-	/// semantically equivalent in D.
+	/// How to serialize a null D value when emitting an event.
 	enum NullHandling
 	{
-		/// Serialize null strings/AAs as null. This is the default
-		/// and matches the old `ae.utils.json` behavior.
+		/// Emit a null event.
 		asNull,
-		/// Serialize null strings as `""` and null AAs as `{}`.
+		/// Emit an empty event of the value's natural shape
+		/// (an empty string for strings, an empty array for arrays,
+		/// an empty map for AAs).
 		/// Useful when targeting consumers where null and empty are
 		/// incompatible types (e.g., JavaScript).
 		asEmpty,
 	}
-	NullHandling nullHandling = NullHandling.asNull; /// ditto
+	/// How to serialize null strings. Defaults to `asNull`,
+	/// matching the old `ae.utils.json` behavior.
+	NullHandling nullStringHandling = NullHandling.asNull;
+	/// How to serialize null non-string arrays. Defaults to `asEmpty`,
+	/// since most JSON consumers treat a missing array and `[]`
+	/// interchangeably but choke on `null`.
+	NullHandling nullArrayHandling = NullHandling.asEmpty;
+	/// How to serialize null associative arrays. Defaults to `asEmpty`,
+	/// since most JSON consumers treat a missing object and `{}`
+	/// interchangeably but choke on `null`.
+	NullHandling nullMapHandling = NullHandling.asEmpty;
 }
 
 /// Serialization source which walks a D value and pushes events into a sink.
@@ -516,7 +524,7 @@ struct CustomSerializer(alias Transform = NoSerializeTransform, SerializerOption
 				static if (is(typeof(v is null)))
 					if (v is null)
 					{
-						static if (options.nullHandling == SerializerOptions.NullHandling.asEmpty)
+						static if (options.nullMapHandling == SerializerOptions.NullHandling.asEmpty)
 						{
 							alias Reader2 = AAReader!(T, K, V);
 							auto reader2 = Reader2(v);
@@ -537,7 +545,7 @@ struct CustomSerializer(alias Transform = NoSerializeTransform, SerializerOption
 			{
 				if (v is null)
 				{
-					static if (options.nullHandling == SerializerOptions.NullHandling.asEmpty)
+					static if (options.nullStringHandling == SerializerOptions.NullHandling.asEmpty)
 						sink.handle(String!(immutable(char)[])(""));
 					else
 						sink.handle(Null());
@@ -548,7 +556,12 @@ struct CustomSerializer(alias Transform = NoSerializeTransform, SerializerOption
 			else
 			static if (is(T U : U[]))
 			{
-				// Non-string dynamic arrays: null serializes as empty array
+				static if (options.nullArrayHandling == SerializerOptions.NullHandling.asNull)
+					if (v is null)
+					{
+						sink.handle(Null());
+						return;
+					}
 				alias Reader = ArrayReader!T;
 				auto reader = Reader(v);
 				auto b = bound!(Reader.readArray)(&reader);
