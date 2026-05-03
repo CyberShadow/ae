@@ -989,9 +989,9 @@ else
 static if (eventLoopMechanism == EventLoopMechanism.iocp)
 {
 	import core.sys.windows.windows;
-	import core.sys.windows.winsock2 : WSAGetLastError, WSAECONNRESET,
-		WSAEDISCON, WSAENOTCONN, WSAESHUTDOWN, WSAECONNABORTED;
+	import core.sys.windows.winsock2 : WSAGetLastError;
 	import ae.sys.windows.iocp;
+	private void _wsaSetLastError(int e) nothrow @nogc { WSASetLastError(e); }
 
 	// ---- The dispatcher kind --------------------------------------------
 
@@ -1145,7 +1145,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 				if (q is p)
 				{
 					import std.algorithm : remove, SwapStrategy;
-					participants = participants.remove!((Object x) => x is p, SwapStrategy.unstable)();
+					participants = participants.remove!(x => x is p, SwapStrategy.unstable)();
 					return;
 				}
 		}
@@ -1343,7 +1343,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		/// Dispatched when a PostQueuedCompletionStatus(port, bytes, key, NULL)
 		/// arrives where `key == cast(ULONG_PTR)cast(void*)this` and
 		/// `lpOverlapped == null`.
-		void iocpUserPost(DWORD bytes) {}
+		void iocpUserPost(DWORD bytes);
 	}
 
 	// ---- Per-socket completion handlers ---------------------------------
@@ -1504,11 +1504,9 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		/// Socket.ERROR with WSAEWOULDBLOCK if a send is already in flight.
 		package final sizediff_t _iocpDoSend(scope const(void)[] buffer)
 		{
-			import core.sys.windows.winsock2 : WSASetLastError, WSAEWOULDBLOCK;
-
 			if (_iocpSendBuffer !is null)
 			{
-				WSASetLastError(WSAEWOULDBLOCK);
+				_wsaSetLastError(WSAEWOULDBLOCK);
 				return Socket.ERROR;
 			}
 
@@ -1532,6 +1530,188 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			// Synchronous failure.
 			_iocpSendBuffer = null;
 			return Socket.ERROR;
+		}
+	}
+
+	// -----------------------------------------------------------------------
+	// WindowsPipeConnection: a minimal IOCP-driven wrapper around a Windows
+	// pipe HANDLE (named pipe or anonymous, opened with FILE_FLAG_OVERLAPPED).
+	//
+	// Not a full IConnection — exposes a small handleReadData /
+	// handleDisconnect / send / disconnect surface that's enough for the
+	// spike's smoke tests. Promoting this to full IConnection compliance
+	// (priority queues, buffer-flushed callback, partialSent tracking, etc.)
+	// is left as follow-up.
+	// -----------------------------------------------------------------------
+
+	/// Minimal IOCP-driven async wrapper for Windows pipe HANDLEs.
+	/// The caller is responsible for opening the HANDLE with
+	/// FILE_FLAG_OVERLAPPED (e.g. via CreateNamedPipeW + CreateFileW).
+	public class WindowsPipeConnection : IocpParticipant
+	{
+		alias ReadDataHandler   = void delegate(Data data);
+		alias DisconnectHandler = void delegate(string reason, DisconnectType type);
+		alias BufferFlushedHandler = void delegate();
+
+		private HANDLE _handle;
+		private bool   _ownHandle;
+		private IocpOp _readOp;
+		private IocpOp _writeOp;
+		private ubyte[4096] _readBuf;
+		private ubyte[]     _writeBuf; // outstanding bytes (kept alive)
+		private bool _readPending, _writePending;
+		private bool _disconnected;
+		private bool _readArmed; // user has set handleReadData
+		private string _disconnectReason;
+
+		ReadDataHandler        handleReadData;
+		DisconnectHandler      handleDisconnect;
+		BufferFlushedHandler   handleBufferFlushed;
+
+		this(HANDLE h, bool ownHandle = true)
+		{
+			_handle = h;
+			_ownHandle = ownHandle;
+			_readOp.owner = this;
+			_readOp.kind = IocpOpKind.pipeRead;
+			_writeOp.owner = this;
+			_writeOp.kind = IocpOpKind.pipeWrite;
+			// Associate with the IOCP port using `this` as completion key.
+			auto port = socketManager.getIocpPort();
+			auto rc = CreateIoCompletionPort(h, port, cast(ULONG_PTR)cast(void*)this, 0);
+			assert(rc == port, "CreateIoCompletionPort(pipe) failed");
+			socketManager.addParticipant(this);
+		}
+
+		final HANDLE handle() pure nothrow @nogc { return _handle; }
+
+		/// Begin reading. Calls to `handleReadData` will be dispatched as
+		/// data arrives. Call before entering the event loop.
+		final void startReading()
+		{
+			_readArmed = true;
+			if (!_readPending && !_disconnected)
+				_armRead();
+		}
+
+		/// Send data over the pipe. Currently rejects a second send while
+		/// one is in flight (same constraint as the IOCP socket path).
+		final void send(Data data)
+		{
+			assert(!_disconnected, "send() on disconnected pipe");
+			assert(_writeBuf is null, "send() while another send in flight");
+			_writeBuf = data.unsafeContents.dup;
+			_writeOp.overlapped = OVERLAPPED.init;
+			DWORD written = 0;
+			BOOL ok = WriteFile(_handle, _writeBuf.ptr, cast(DWORD)_writeBuf.length,
+				&written, &_writeOp.overlapped);
+			if (ok || GetLastError() == ERROR_IO_PENDING)
+			{
+				_writePending = true;
+				return;
+			}
+			// Synchronous failure.
+			auto err = GetLastError();
+			_writeBuf = null;
+			_finishDisconnect("WriteFile failed", DisconnectType.error);
+		}
+
+		/// Initiate disconnect. Cancels any in-flight ops (CloseHandle does
+		/// this) and dispatches handleDisconnect once outstanding completions
+		/// drain.
+		final void disconnect(string reason = "Software closed the pipe",
+		                       DisconnectType type = DisconnectType.requested)
+		{
+			_finishDisconnect(reason, type);
+		}
+
+		// IocpParticipant ----------------------------------------------------
+
+		override bool iocpHasNonDaemonWork()
+		{
+			return !_disconnected && (_readArmed || _writePending);
+		}
+
+		override void iocpOnComplete(IocpOp* op, DWORD bytes, uint status)
+		{
+			if (op is &_readOp)
+			{
+				_readPending = false;
+				if (status == ERROR_OPERATION_ABORTED || _disconnected)
+					return;
+				if (status == ERROR_BROKEN_PIPE || status == ERROR_HANDLE_EOF
+				    || status == ERROR_PIPE_NOT_CONNECTED || bytes == 0)
+				{
+					_finishDisconnect("EOF", DisconnectType.graceful);
+					return;
+				}
+				if (status != 0)
+				{
+					_finishDisconnect("ReadFile failed", DisconnectType.error);
+					return;
+				}
+				if (handleReadData)
+					handleReadData(Data(_readBuf[0 .. bytes].idup));
+				if (_readArmed && !_disconnected && !_readPending)
+					_armRead();
+			}
+			else if (op is &_writeOp)
+			{
+				_writePending = false;
+				_writeBuf = null;
+				if (status == ERROR_OPERATION_ABORTED || _disconnected)
+					return;
+				if (status != 0)
+				{
+					_finishDisconnect("WriteFile failed", DisconnectType.error);
+					return;
+				}
+				if (handleBufferFlushed)
+					handleBufferFlushed();
+			}
+		}
+
+		override void iocpUserPost(DWORD bytes) {}
+
+		// Internals ----------------------------------------------------------
+
+		private void _armRead()
+		{
+			_readOp.overlapped = OVERLAPPED.init;
+			DWORD got = 0;
+			BOOL ok = ReadFile(_handle, _readBuf.ptr, cast(DWORD)_readBuf.length,
+				&got, &_readOp.overlapped);
+			if (ok || GetLastError() == ERROR_IO_PENDING)
+			{
+				_readPending = true;
+				return;
+			}
+			auto err = GetLastError();
+			if (err == ERROR_BROKEN_PIPE || err == ERROR_HANDLE_EOF
+			    || err == ERROR_PIPE_NOT_CONNECTED)
+			{
+				_finishDisconnect("EOF", DisconnectType.graceful);
+				return;
+			}
+			_finishDisconnect("ReadFile failed", DisconnectType.error);
+		}
+
+		private void _finishDisconnect(string reason, DisconnectType type)
+		{
+			if (_disconnected) return;
+			_disconnected = true;
+			_disconnectReason = reason;
+
+			if (_handle !is null && _ownHandle)
+			{
+				CloseHandle(_handle);
+				_handle = null;
+			}
+
+			socketManager.removeParticipant(this);
+
+			if (handleDisconnect)
+				handleDisconnect(reason, type);
 		}
 	}
 }
