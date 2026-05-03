@@ -1001,6 +1001,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 	package enum IocpOpKind : ubyte
 	{
 		socketRecv,
+		socketRecvFrom, // WSARecvFrom completion for datagram sockets
 		socketSend,
 		socketAccept, // AcceptEx completion on a listening socket
 		pipeRead,
@@ -1303,6 +1304,13 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 					iocpOnRecvComplete(conn, bytes, status);
 					break;
 				}
+				case IocpOpKind.socketRecvFrom:
+				{
+					auto conn = cast(GenericSocket)op.owner;
+					if (conn is null || conn.socket is null) return;
+					iocpOnRecvFromComplete(conn, bytes, status);
+					break;
+				}
 				case IocpOpKind.socketSend:
 				{
 					auto conn = cast(GenericSocket)op.owner;
@@ -1381,6 +1389,33 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		// its thing: it will call doReceive() -> recv(), which returns
 		// data already buffered by the kernel.
 		conn.onReadable();
+
+		// Re-arm if still interested.
+		if (conn.socket !is null && conn.notifyRead && !conn._iocpRecvPending)
+			conn._iocpArmRecv();
+	}
+
+	private void iocpOnRecvFromComplete(GenericSocket conn, DWORD bytes, uint status)
+	{
+		debug (ASOCKETS) stderr.writefln("[iocp] recvfrom complete: %s bytes=%d status=0x%X",
+			conn, bytes, status);
+
+		conn._iocpRecvPending = false;
+
+		if (status == ERROR_OPERATION_ABORTED)
+			return;
+
+		if (status == 0)
+		{
+			// Stash the datagram bytes; doReceive will consume them.
+			conn._iocpDgramData = conn._iocpDgramBuf[0 .. bytes];
+		}
+		// On non-zero status: stash stays null; onReadable/doReceive will
+		// call conn.receive() which will surface the error naturally.
+
+		conn.onReadable();
+
+		conn._iocpDgramData = null; // clear stash in case doReceive didn't run
 
 		// Re-arm if still interested.
 		if (conn.socket !is null && conn.notifyRead && !conn._iocpRecvPending)
@@ -1511,6 +1546,20 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		bool _iocpRecvPending;
 		bool _notifyRead, _notifyWrite;
 
+		// ---- Datagram (UDP) recv state ------------------------------------
+		// Set to true for datagram sockets so _iocpArmRecv uses WSARecvFrom
+		// instead of the zero-byte WSARecv trick (unreliable on DGRAM sockets).
+		bool _iocpIsDatagram;
+		// 64 KB recv buffer for WSARecvFrom; allocated lazily on first arm.
+		ubyte[] _iocpDgramBuf;
+		// Stash filled by iocpOnRecvFromComplete before calling onReadable().
+		// Consumed (and cleared) by ConnectionlessSocketConnection.doReceive.
+		ubyte[] _iocpDgramData;
+		// Source-address output for WSARecvFrom — must stay alive until completion.
+		ubyte[128] _iocpFromAddr;  // SOCKADDR_STORAGE is 128 bytes on Windows
+		int        _iocpFromAddrLen;
+		// ------------------------------------------------------------------
+
 		// ---- AcceptEx state (listener sockets only) -------------------
 		// Set to true in Listener constructor so notifyRead arms AcceptEx
 		// instead of WSARecv.
@@ -1557,17 +1606,19 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		}
 
 		// Initialize op headers so `owner` field is set correctly.
+		// Kind is set by the arm methods depending on socket type.
 		private final void _iocpInitOps()
 		{
 			_iocpRecvOp.owner = this;
-			_iocpRecvOp.kind = IocpOpKind.socketRecv;
 			_iocpSendOp.owner = this;
 			_iocpSendOp.kind = IocpOpKind.socketSend;
 		}
 
-		/// Post a zero-byte WSARecv to use IOCP for level-style readability
-		/// notification, while keeping the existing onReadable/doReceive
-		/// flow (which calls recv() against the kernel buffer) intact.
+		/// Arm a recv notification via IOCP.
+		/// For stream sockets: posts a zero-byte WSARecv that completes when the
+		/// kernel has data; the existing onReadable/doReceive/recv() flow is used.
+		/// For datagram sockets: posts a real WSARecvFrom into a 64KB buffer;
+		/// on completion the bytes are stashed for doReceive to return.
 		final void _iocpArmRecv()
 		{
 			assert(conn !is null);
@@ -1575,6 +1626,30 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			_iocpRecvOp.overlapped = OVERLAPPED.init;
 			_iocpRecvPending = true;
 
+			if (_iocpIsDatagram)
+			{
+				if (_iocpDgramBuf is null)
+					_iocpDgramBuf = new ubyte[0x10000]; // 64 KB — max UDP datagram
+				_iocpRecvOp.kind = IocpOpKind.socketRecvFrom;
+
+				WSABUF buf;
+				buf.len = cast(uint)_iocpDgramBuf.length;
+				buf.buf = cast(char*)_iocpDgramBuf.ptr;
+				DWORD flags = 0;
+				DWORD recvd = 0;
+				_iocpFromAddrLen = cast(int)_iocpFromAddr.sizeof;
+				int rc = WSARecvFrom(conn.handle, &buf, 1, &recvd, &flags,
+					cast(c_socks.sockaddr*)_iocpFromAddr.ptr, &_iocpFromAddrLen,
+					&_iocpRecvOp.overlapped, null);
+				if (rc == 0 || (rc == SOCKET_ERROR && WSAGetLastError() == WSA_IO_PENDING))
+					return;
+				_iocpRecvPending = false;
+				socketManager.kickWritable(this); // TODO: kickReadable would be cleaner
+				return;
+			}
+
+			// Stream path: zero-byte WSARecv trick.
+			_iocpRecvOp.kind = IocpOpKind.socketRecv;
 			WSABUF buf;
 			buf.len = 0;
 			buf.buf = null;
@@ -4052,6 +4127,21 @@ protected:
 
 	override sizediff_t doReceive(scope void[] buffer)
 	{
+		static if (eventLoopMechanism == EventLoopMechanism.iocp)
+		{
+			// On IOCP, WSARecvFrom already read the datagram into _iocpDgramBuf.
+			// Return those bytes instead of calling recv() (which would find nothing).
+			// Use ptr != null (not length > 0) to correctly handle zero-byte datagrams.
+			if (_iocpDgramData.ptr !is null)
+			{
+				import std.algorithm.comparison : min;
+				auto n = min(buffer.length, _iocpDgramData.length);
+				if (n > 0)
+					buffer[0 .. n] = _iocpDgramData[0 .. n];
+				_iocpDgramData = null;
+				return cast(sizediff_t)n;
+			}
+		}
 		return conn.receive(buffer);
 	}
 
@@ -4077,6 +4167,8 @@ public:
 
 		conn = new Socket(family, type, protocol);
 		conn.blocking = false;
+		static if (eventLoopMechanism == EventLoopMechanism.iocp)
+			_iocpIsDatagram = (type == SocketType.DGRAM);
 		socketManager.register(this);
 		state = ConnectionState.connected;
 		updateFlags();
@@ -4200,6 +4292,45 @@ debug(ae_unittest) unittest
 	};
 	socketManager.loop();
 	assert(!packets.length);
+}
+
+// Exercises the IOCP WSARecvFrom path for datagram sockets.
+debug(ae_unittest) version (Windows) unittest
+{
+	static if (eventLoopMechanism == EventLoopMechanism.iocp)
+	{
+		import ae.sys.timing : setTimeout;
+		import core.time : seconds;
+
+		enum payload = "iocp-udp-test";
+
+		auto server = new UdpConnection();
+		server.bind("127.0.0.1", 0);
+
+		auto client = new UdpConnection();
+		client.initialize(server.localAddress.addressFamily);
+		client.remoteAddress = server.localAddress;
+
+		bool received;
+		TimerTask t = setTimeout({
+			assert(false, "IOCP UDP test timed out after 10s");
+		}, 10.seconds);
+
+		server.handleReadData = (Data data)
+		{
+			assert(cast(string)data.toGC.idup == payload,
+				"IOCP UDP: unexpected payload: " ~ cast(string)data.toGC.idup);
+			received = true;
+			t.cancel();
+			server.close();
+			client.close();
+		};
+
+		client.send(Data(payload.asBytes));
+
+		socketManager.loop();
+		assert(received, "IOCP UDP: handleReadData was never called");
+	}
 }
 
 // ***************************************************************************
