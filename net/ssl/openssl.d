@@ -250,7 +250,11 @@ class OpenSSLContext : SSLContext
 		}
 	}
 
-	deprecated alias setCipherList = setOpenSSLCipherList; /// ditto
+	deprecated("Use setOpenSSLCipherList directly on OpenSSLContext, or setCipherSuites for a portable alternative")
+	override void setCipherList(string[] ciphers)
+	{
+		setOpenSSLCipherList(ciphers);
+	} /// ditto
 
 	override void enableDH(int bits)
 	{
@@ -941,6 +945,14 @@ debug(ae_unittest) unittest
 {
 	auto ctx = new OpenSSLContext(SSLContext.Kind.client);
 	ctx.setCipherSuites(["TLS_AES_256_GCM_SHA384"]);
+}
+
+// Test that the deprecated setCipherList still works at runtime when called via SSLContext
+// base reference (does not hit the base's "not implemented" assert).
+deprecated debug(ae_unittest) unittest
+{
+	SSLContext ctx = new OpenSSLContext(SSLContext.Kind.client);
+	ctx.setCipherList(["HIGH"]); // virtual dispatch must reach OpenSSL impl
 }
 
 // Test setIdentityFromPKCS12: generate a self-signed cert in-memory and round-trip via PFX.
