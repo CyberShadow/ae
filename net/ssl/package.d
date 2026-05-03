@@ -89,6 +89,20 @@ abstract class SSLContext
 	{
 		throw new Exception("setCipherSuites is not implemented by this SSL provider");
 	}
+
+	/// Load a certificate + private key bundle from a PKCS#12 (PFX) file.
+	/// Use this instead of `setCertificate` + `setPrivateKey` when targeting
+	/// SSL providers that do not natively read PEM (e.g. SChannel).
+	void setIdentityFromPKCS12(string path, string password)
+	{
+		assert(false, "setIdentityFromPKCS12 is not implemented by this SSL provider");
+	}
+
+	/// In-memory variant of `setIdentityFromPKCS12`.
+	void setIdentityFromPKCS12(const(ubyte)[] data, string password)
+	{
+		assert(false, "setIdentityFromPKCS12 is not implemented by this SSL provider");
+	}
 }
 
 /// Base class for a connection adapter with TLS encryption.

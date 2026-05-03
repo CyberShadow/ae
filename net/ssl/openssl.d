@@ -52,6 +52,7 @@ import std.string;
 //import deimos.openssl.rand;
 import deimos.openssl.ssl;
 import deimos.openssl.err;
+import deimos.openssl.pkcs12 : PKCS12;
 import deimos.openssl.x509_vfy;
 import deimos.openssl.x509v3;
 
@@ -146,6 +147,8 @@ private
 	auto SSL_CTX_set_tlsext_servername_callback(SSL_CTX* ctx, SSL_CTX_set_tlsext_servername_callback_fun cb) {
 		return SSL_CTX_callback_ctrl(ctx, SSL_CTRL_SET_TLSEXT_SERVERNAME_CB, cast(SSL_CTX_callback_ctrl_fun)cb);
 	}
+
+	extern(C) void PKCS12_free(PKCS12* a) nothrow;
 }
 
 // ***************************************************************************
@@ -291,6 +294,52 @@ class OpenSSLContext : SSLContext
 	{
 		SSL_CTX_use_PrivateKey_file(sslCtx, toStringz(path), SSL_FILETYPE_PEM)
 			.sslEnforce("Failed to load private key file " ~ path);
+	} /// ditto
+
+	override void setIdentityFromPKCS12(string path, string password)
+	{
+		import std.file : read;
+		setIdentityFromPKCS12(cast(const(ubyte)[]) read(path), password);
+	} /// ditto
+
+	override void setIdentityFromPKCS12(const(ubyte)[] data, string password)
+	{
+		import deimos.openssl.pkcs12 : PKCS12_parse, d2i_PKCS12_bio;
+		import deimos.openssl.bio : BIO_new_mem_buf, BIO_free;
+		import deimos.openssl.evp : EVP_PKEY_free;
+		import deimos.openssl.x509 : X509_free;
+		import deimos.openssl.safestack : STACK_OF;
+		import deimos.openssl.stack : _STACK, OPENSSL_sk_num, OPENSSL_sk_value, OPENSSL_sk_pop_free;
+
+		auto bio = BIO_new_mem_buf(cast(void*) data.ptr, cast(int) data.length)
+			.sslEnforce("BIO_new_mem_buf");
+		scope(exit) BIO_free(bio);
+
+		PKCS12* p12 = d2i_PKCS12_bio(bio, null)
+			.sslEnforce("d2i_PKCS12_bio");
+		scope(exit) PKCS12_free(p12);
+
+		EVP_PKEY* pkey;
+		X509* cert;
+		STACK_OF!(X509)* ca;
+		PKCS12_parse(p12, password.toStringz, &pkey, &cert, &ca)
+			.sslEnforce("PKCS12_parse");
+		scope(exit) { if (pkey) EVP_PKEY_free(pkey); }
+		scope(exit) { if (cert) X509_free(cert); }
+		alias CertFreeFunc = extern(C) void function(void*);
+		auto caRaw = cast(_STACK*) ca;
+		scope(exit) { if (caRaw) OPENSSL_sk_pop_free(caRaw, cast(CertFreeFunc) &X509_free); }
+
+		SSL_CTX_use_certificate(sslCtx, cert).sslEnforce("SSL_CTX_use_certificate");
+		SSL_CTX_use_PrivateKey(sslCtx, pkey).sslEnforce("SSL_CTX_use_PrivateKey");
+		if (caRaw)
+		{
+			foreach (i; 0 .. OPENSSL_sk_num(caRaw))
+			{
+				auto chainCert = cast(X509*) OPENSSL_sk_value(caRaw, i);
+				SSL_CTX_add_extra_chain_cert(sslCtx, chainCert).sslEnforce("SSL_CTX_add_extra_chain_cert");
+			}
+		}
 	} /// ditto
 
 	override void setPreSharedKey(string id, const(ubyte)[] key)
@@ -888,4 +937,58 @@ debug(ae_unittest) unittest
 {
 	auto ctx = new OpenSSLContext(SSLContext.Kind.client);
 	ctx.setCipherSuites(["TLS_AES_256_GCM_SHA384"]);
+}
+
+// Test setIdentityFromPKCS12: generate a self-signed cert in-memory and round-trip via PFX.
+debug(ae_unittest) unittest
+{
+	import deimos.openssl.evp : EVP_PKEY, EVP_PKEY_CTX, EVP_PKEY_CTX_new_id, EVP_PKEY_CTX_free,
+		EVP_PKEY_free, EVP_PKEY_keygen_init, EVP_PKEY_keygen, EVP_PKEY_RSA, EVP_sha256;
+	import deimos.openssl.rsa : EVP_PKEY_CTX_set_rsa_keygen_bits;
+	import deimos.openssl.x509 : X509, X509_new, X509_free, X509_set_version, X509_set_pubkey,
+		X509_set_subject_name, X509_set_issuer_name, X509_get_subject_name, X509_get_serialNumber,
+		X509_sign, X509_getm_notBefore, X509_getm_notAfter, X509_gmtime_adj, X509_NAME_add_entry_by_txt;
+	import deimos.openssl.asn1 : ASN1_INTEGER_set;
+	import deimos.openssl.pkcs12 : PKCS12, PKCS12_create, i2d_PKCS12_bio;
+	import deimos.openssl.bio : BIO, BIO_new, BIO_s_mem, BIO_free, BIO_get_mem_ptr, BUF_MEM;
+
+	// Generate a 2048-bit RSA key.
+	auto pkeyCtx = EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, null);
+	assert(pkeyCtx);
+	scope(exit) EVP_PKEY_CTX_free(pkeyCtx);
+	EVP_PKEY_keygen_init(pkeyCtx).sslEnforce();
+	EVP_PKEY_CTX_set_rsa_keygen_bits(pkeyCtx, 2048).sslEnforce();
+	EVP_PKEY* pkey;
+	EVP_PKEY_keygen(pkeyCtx, &pkey).sslEnforce();
+	scope(exit) EVP_PKEY_free(pkey);
+
+	// Create a self-signed X.509 certificate.
+	auto cert = X509_new().sslEnforce();
+	scope(exit) X509_free(cert);
+	X509_set_version(cert, 2).sslEnforce();
+	ASN1_INTEGER_set(X509_get_serialNumber(cert), 1).sslEnforce();
+	X509_gmtime_adj(X509_getm_notBefore(cert), 0).sslEnforce();
+	X509_gmtime_adj(X509_getm_notAfter(cert), 365 * 24 * 3600).sslEnforce();
+	X509_set_pubkey(cert, pkey).sslEnforce();
+	auto name = X509_get_subject_name(cert);
+	X509_NAME_add_entry_by_txt(name, "CN", 0x1001 /*MBSTRING_UTF8*/, cast(const(ubyte)*)"test", -1, -1, 0).sslEnforce();
+	X509_set_issuer_name(cert, name).sslEnforce();
+	X509_sign(cert, pkey, EVP_sha256()).sslEnforce();
+
+	// Pack into PKCS#12.
+	auto p12 = PKCS12_create(cast(char*)"testpass", cast(char*)"test", pkey, cert, null, 0, 0, 0, 0, 0)
+		.sslEnforce();
+	scope(exit) PKCS12_free(p12);
+
+	// Serialize to DER bytes in a memory BIO.
+	auto bio = BIO_new(BIO_s_mem()).sslEnforce();
+	scope(exit) BIO_free(bio);
+	i2d_PKCS12_bio(bio, p12).sslEnforce();
+	BUF_MEM* bptr;
+	BIO_get_mem_ptr(bio, &bptr);
+	auto pfxBytes = (cast(const(ubyte)*) bptr.data)[0 .. bptr.length].dup;
+
+	// Round-trip: load via setIdentityFromPKCS12.
+	auto serverCtx = new OpenSSLContext(SSLContext.Kind.server);
+	serverCtx.setIdentityFromPKCS12(pfxBytes, "testpass");
 }
