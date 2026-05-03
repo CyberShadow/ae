@@ -410,6 +410,29 @@ class OpenSSLContext : SSLContext
 	{
 		SSL_CTX_set_max_proto_version(sslCtx, sslVersions[v]).sslEnforce();
 	} /// ditto
+
+	override void setCipherSuites(string[] ianaNames)
+	{
+		import std.algorithm.searching : startsWith;
+		string[] tls13Suites;
+		string[] tls12Suites;
+		foreach (name; ianaNames)
+		{
+			if (name.startsWith("TLS_AES_") || name.startsWith("TLS_CHACHA20_"))
+				tls13Suites ~= name;
+			else
+				tls12Suites ~= name;
+		}
+		if (tls12Suites.length)
+			SSL_CTX_set_cipher_list(sslCtx, tls12Suites.join(":").toStringz()).sslEnforce();
+		if (tls13Suites.length)
+		{
+			static if (isOpenSSL11)
+				SSL_CTX_set_ciphersuites(sslCtx, tls13Suites.join(":").toStringz()).sslEnforce();
+			else
+				throw new Exception("TLS 1.3 cipher suite selection requires OpenSSL 1.1+");
+		}
+	} /// ditto
 }
 
 static this()
@@ -854,4 +877,11 @@ debug(ae_unittest) unittest
 	mockConn.state_ = ConnectionState.connected;
 	a.onConnect();
 	assert(a.sslHandle !is null, "sslHandle should be recreated after reconnect");
+}
+
+// Test setCipherSuites: verify the new portable API is reachable and configures the context.
+debug(ae_unittest) unittest
+{
+	auto ctx = new OpenSSLContext(SSLContext.Kind.client);
+	ctx.setCipherSuites(["TLS_AES_256_GCM_SHA384"]);
 }

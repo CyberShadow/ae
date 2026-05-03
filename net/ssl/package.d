@@ -79,6 +79,15 @@ abstract class SSLContext
 	abstract void setFlags(int);                                  /// Configure provider-specific flags.
 	abstract void setMinimumVersion(SSLVersion);                  /// Set the minimum protocol version.
 	abstract void setMaximumVersion(SSLVersion);                  /// Set the maximum protocol version.
+
+	/// Configure the allowed cipher suites by IANA name (RFC 8447).
+	/// Cipher selection is security-relevant; backends that cannot
+	/// meaningfully implement per-suite control must override this method
+	/// and throw a clearer message rather than silently no-op.
+	void setCipherSuites(string[] ianaNames)
+	{
+		throw new Exception("setCipherSuites is not implemented by this SSL provider");
+	}
 }
 
 /// Base class for a connection adapter with TLS encryption.
