@@ -989,7 +989,7 @@ else
 static if (eventLoopMechanism == EventLoopMechanism.iocp)
 {
 	import core.sys.windows.windows;
-	import core.sys.windows.winsock2 : WSAGetLastError;
+	import core.sys.windows.winsock2 : WSAGetLastError, WSAIoctl;
 	import ae.sys.windows.iocp;
 	private void _wsaSetLastError(int e) nothrow @nogc { WSASetLastError(e); }
 
@@ -1003,7 +1003,8 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		socketRecv,
 		socketRecvFrom, // WSARecvFrom completion for datagram sockets
 		socketSend,
-		socketAccept, // AcceptEx completion on a listening socket
+		socketAccept,   // AcceptEx completion on a listening socket
+		socketConnect,  // ConnectEx completion on a client socket
 		pipeRead,
 		pipeWrite,
 		processExit,
@@ -1325,6 +1326,13 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 					iocpOnAcceptComplete(conn, bytes, status);
 					break;
 				}
+				case IocpOpKind.socketConnect:
+				{
+					auto conn = cast(GenericSocket)op.owner;
+					if (conn is null) return;
+					iocpOnConnectComplete(conn, bytes, status);
+					break;
+				}
 				case IocpOpKind.pipeRead:
 				case IocpOpKind.pipeWrite:
 				case IocpOpKind.processExit:
@@ -1511,6 +1519,61 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			conn._iocpArmAccept();
 	}
 
+	private void iocpOnConnectComplete(GenericSocket conn, DWORD bytes, uint status)
+	{
+		debug (ASOCKETS) stderr.writefln("[iocp] connect complete: %s status=0x%X", conn, status);
+
+		conn._iocpConnectOp.inFlight = false;
+
+		// Closed during connect (disconnect()/closesocket cancelled the op).
+		if (status == ERROR_OPERATION_ABORTED || conn.socket is null)
+			return;
+
+		auto sc = cast(StreamConnection)conn;
+		assert(sc !is null, "ConnectEx owner must be a StreamConnection");
+
+		if (status != 0)
+			return sc.disconnect(formatSocketError(status), DisconnectType.error);
+
+		// Make the socket usable for getpeername / shutdown / setsockopt etc.
+		auto handle = cast(size_t)conn.socket.handle;
+		c_socks.setsockopt(handle,
+			c_socks.SOL_SOCKET, SO_UPDATE_CONNECT_CONTEXT,
+			null, 0);
+
+		sc._handleConnectComplete();
+	}
+
+	private void _iocpBindWildcard(Socket sock, AddressFamily family)
+	{
+		if (family == AddressFamily.INET)
+		{
+			c_socks.sockaddr_in addr;
+			addr.sin_family = c_socks.AF_INET;
+			addr.sin_port   = 0;
+			addr.sin_addr.s_addr = 0;  // INADDR_ANY
+			if (c_socks.bind(cast(c_socks.SOCKET)sock.handle,
+					cast(const(c_socks.sockaddr)*)&addr,
+					cast(c_socks.socklen_t)addr.sizeof) != 0)
+				throw new SocketOSException("bind(INADDR_ANY) failed");
+		}
+		else
+		if (family == AddressFamily.INET6)
+		{
+			c_socks.sockaddr_in6 addr;
+			addr.sin6_family = c_socks.AF_INET6;
+			addr.sin6_port   = 0;
+			// sin6_addr is in6addr_any (zero-initialised by D struct init).
+			if (c_socks.bind(cast(c_socks.SOCKET)sock.handle,
+					cast(const(c_socks.sockaddr)*)&addr,
+					cast(c_socks.socklen_t)addr.sizeof) != 0)
+				throw new SocketOSException("bind(in6addr_any) failed");
+		}
+		else
+			throw new SocketException("ConnectEx requires AF_INET or AF_INET6, got "
+				~ family.to!string);
+	}
+
 	// Use UFCS for idle handlers (same shape as select/epoll).
 	void addIdleHandler(ref SocketManager socketManager, void delegate() handler)
 	{
@@ -1575,6 +1638,15 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		bool     _iocpAcceptReady;
 		// ---------------------------------------------------------------
 
+		// ---- ConnectEx state (client TCP sockets only) ----------------
+		IocpOp          _iocpConnectOp;
+		LPFN_CONNECTEX  _iocpConnectExFn;
+		// Stable storage for the target sockaddr; ConnectEx requires the buffer
+		// to remain valid until completion.  SOCKADDR_STORAGE is 128 bytes.
+		ubyte[128] _iocpConnectAddrBuf;
+		int        _iocpConnectAddrLen;
+		// ---------------------------------------------------------------
+
 		@property final bool notifyRead() const pure nothrow @nogc { return _notifyRead; }
 		@property final bool notifyWrite() const pure nothrow @nogc { return _notifyWrite; }
 
@@ -1612,6 +1684,8 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			_iocpRecvOp.owner = this;
 			_iocpSendOp.owner = this;
 			_iocpSendOp.kind = IocpOpKind.socketSend;
+			_iocpConnectOp.owner = this;
+			_iocpConnectOp.kind  = IocpOpKind.socketConnect;
 		}
 
 		/// Arm a recv notification via IOCP.
@@ -1717,6 +1791,73 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			c_socks.closesocket(_iocpCandidateSocket);
 			_iocpCandidateSocket = c_socks.INVALID_SOCKET;
 			debug (ASOCKETS) stderr.writefln("[iocp] AcceptEx failed: %d", WSAGetLastError());
+		}
+
+		/// Post ConnectEx against the already-bound, IOCP-registered socket so the
+		/// IOCP port delivers a completion when the TCP handshake finishes.
+		/// The socket must already be bound (caller's responsibility —
+		/// see SocketConnection.tryNextAddress).
+		final void _iocpArmConnect(Address target)
+		{
+			assert(conn !is null);
+
+			_iocpInitOps();
+			_iocpConnectOp.overlapped = OVERLAPPED.init;
+
+			// Resolve ConnectEx via WSAIoctl on first use for this socket.
+			if (_iocpConnectExFn is null)
+			{
+				GUID guid = WSAID_CONNECTEX;
+				DWORD fnBytes;
+				int rc = WSAIoctl(
+					cast(c_socks.SOCKET)conn.handle,
+					SIO_GET_EXTENSION_FUNCTION_POINTER,
+					&guid, cast(uint)guid.sizeof,
+					&_iocpConnectExFn, cast(uint)_iocpConnectExFn.sizeof,
+					&fnBytes,
+					null, null);
+				if (rc != 0 || _iocpConnectExFn is null)
+				{
+					auto err = WSAGetLastError();
+					debug (ASOCKETS) stderr.writefln(
+						"[iocp] WSAIoctl(ConnectEx fn ptr) failed: %d", err);
+					_iocpConnectExFn = null;
+					(cast(Connection)cast(Object)this).disconnect(
+						formatSocketError(err), DisconnectType.error);
+					return;
+				}
+			}
+
+			// Stash the target sockaddr for the duration of the op.
+			auto nameLen = target.nameLen;
+			assert(nameLen <= _iocpConnectAddrBuf.length, "sockaddr too large");
+			_iocpConnectAddrBuf[0 .. nameLen] = (cast(const(ubyte)*)target.name)[0 .. nameLen];
+			_iocpConnectAddrLen = nameLen;
+			_iocpConnectOp.inFlight = true;
+
+			DWORD sent = 0;
+			BOOL ok = _iocpConnectExFn(
+				cast(size_t)conn.handle,
+				cast(const(sockaddr)*)_iocpConnectAddrBuf.ptr,
+				_iocpConnectAddrLen,
+				null, 0,
+				&sent,
+				&_iocpConnectOp.overlapped);
+
+			if (ok)
+			{
+				// Synchronous success — kernel still delivers IOCP completion.
+				return;
+			}
+
+			auto err = WSAGetLastError();
+			if (err == WSA_IO_PENDING)
+				return;
+
+			_iocpConnectOp.inFlight = false;
+			debug (ASOCKETS) stderr.writefln("[iocp] ConnectEx failed: %d", err);
+			(cast(Connection)cast(Object)this).disconnect(
+				formatSocketError(err), DisconnectType.error);
 		}
 
 		/// Override Connection.doSend hook for IOCP: post overlapped WSASend.
@@ -3058,7 +3199,14 @@ protected:
 	final void updateFlags()
 	{
 		if (state == ConnectionState.connecting)
-			notifyWrite = true;
+		{
+			static if (eventLoopMechanism == EventLoopMechanism.iocp)
+				// ConnectEx delivers the connecting→connected transition via an
+				// IOCP completion, not via a writable-edge.  Suppress the kick.
+				notifyWrite = false;
+			else
+				notifyWrite = true;
+		}
 		else
 			notifyWrite = writePending;
 
@@ -3315,6 +3463,32 @@ protected:
 		updateFlags();
 	}
 
+	// Shared connect-complete logic for POSIX (called from onWritableImpl) and
+	// IOCP (called from iocpOnConnectComplete after SO_UPDATE_CONNECT_CONTEXT).
+	package final void _handleConnectComplete()
+	{
+		state = ConnectionState.connected;
+
+		try
+			setKeepAlive();
+		catch (Exception e)
+			return disconnect(e.msg, DisconnectType.error);
+		if (connectHandler)
+			connectHandler();
+
+		static if (eventLoopMechanism == EventLoopMechanism.iocp)
+		{
+			// Safety net: if data was queued before connect (unusual — public
+			// connect() requires disconnected state so the queue is empty), the
+			// notifyWrite setter was suppressed while in connecting state.
+			// Also handles the case where connectHandler queued a send but the
+			// state has already changed (e.g. to disconnecting).
+			if (writePending && _iocpSendBuffer is null)
+				socketManager.kickWritable(this);
+			updateFlags();
+		}
+	}
+
 	// Work around scope(success) breaking debugger stack traces
 	final private void onWritableImpl()
 	{
@@ -3325,23 +3499,7 @@ protected:
 			conn.getOption(SocketOptionLevel.SOCKET, SocketOption.ERROR, error);
 			if (error)
 				return disconnect(formatSocketError(error), DisconnectType.error);
-
-			state = ConnectionState.connected;
-
-			//debug writefln("[%s] Connected", remoteAddressStr);
-			try
-				setKeepAlive();
-			catch (Exception e)
-				return disconnect(e.msg, DisconnectType.error);
-			if (connectHandler)
-				connectHandler();
-			// On IOCP, notifyWrite was already true when we entered this
-			// branch (connecting state), so the setter won't re-kick even if
-			// connectHandler queued data or transitioned to disconnecting.
-			// Post a send if data is queued and nothing is already in flight.
-			static if (eventLoopMechanism == EventLoopMechanism.iocp)
-				if (writePending && _iocpSendBuffer is null)
-					socketManager.kickWritable(this);
+			_handleConnectComplete();
 			return;
 		}
 		//debug writefln(remoteAddressStr, ": Writable - handler ", handleBufferFlushed?"OK":"not set", ", outBuffer.length=", outBuffer.length);
@@ -3647,13 +3805,39 @@ protected:
 
 		try
 		{
-			conn = new Socket(addressInfo.family, addressInfo.type, addressInfo.protocol);
-			conn.blocking = false;
+			static if (eventLoopMechanism == EventLoopMechanism.iocp)
+			{
+				// Create the socket with WSA_FLAG_OVERLAPPED so it can
+				// participate in IOCP (mirrors the AcceptEx candidate path).
+				auto sock = WSASocketW(
+					cast(int)addressInfo.family,
+					cast(int)addressInfo.type,
+					cast(int)addressInfo.protocol,
+					null, 0, WSA_FLAG_OVERLAPPED);
+				if (sock == c_socks.INVALID_SOCKET)
+					throw new SocketOSException("WSASocketW failed");
+				conn = new Socket(cast(socket_t)sock, addressInfo.family);
+				conn.blocking = false;
 
-			socketManager.register(this);
-			updateFlags();
-			debug (ASOCKETS) stderr.writefln("Attempting connection to %s", addressInfo.address.toString());
-			conn.connect(addressInfo.address);
+				// ConnectEx requires the socket to be bound first.
+				_iocpBindWildcard(conn, addressInfo.family);
+
+				socketManager.register(this);
+				debug (ASOCKETS) stderr.writefln("Attempting connection to %s",
+					addressInfo.address.toString());
+				_iocpArmConnect(addressInfo.address);
+			}
+			else
+			{
+				conn = new Socket(addressInfo.family, addressInfo.type, addressInfo.protocol);
+				conn.blocking = false;
+
+				socketManager.register(this);
+				updateFlags();
+				debug (ASOCKETS) stderr.writefln("Attempting connection to %s",
+					addressInfo.address.toString());
+				conn.connect(addressInfo.address);
+			}
 		}
 		catch (SocketException e)
 			return onError("Connect error: " ~ e.msg);
@@ -4860,5 +5044,78 @@ debug(ae_unittest) version (Windows) unittest
 
 		socketManager.loop();
 		assert(received, "data sent in connectHandler was never delivered (IOCP kick bug)");
+	}
+}
+
+// ConnectEx failure path: connect to a refused port drives onError → tryNextAddress.
+// Verifies iocpOnConnectComplete's status != 0 branch is wired to disconnect(error).
+debug(ae_unittest) version (Windows) unittest
+{
+	static if (eventLoopMechanism == EventLoopMechanism.iocp)
+	{
+		import std.conv : to;
+		import std.socket : InternetAddress;
+
+		// Bind a TcpServer to get an ephemeral port, then close it.
+		// Any connect attempt to that port will be refused (WSAECONNREFUSED).
+		auto srv = new TcpServer;
+		ushort refusedPort = srv.listen(0, "127.0.0.1");
+		srv.close();
+
+		string disconnectReason;
+		DisconnectType disconnectType;
+		bool disconnected;
+
+		auto c = new TcpConnection;
+		c.handleDisconnect = (string reason, DisconnectType type) {
+			disconnectReason = reason;
+			disconnectType   = type;
+			disconnected     = true;
+		};
+
+		auto addr = new InternetAddress("127.0.0.1", refusedPort);
+		c.connect([AddressInfo(addr.addressFamily, SocketType.STREAM,
+			ProtocolType.TCP, addr, "127.0.0.1")]);
+
+		socketManager.loop();
+		assert(disconnected, "handleDisconnect not called after refused connect");
+		assert(disconnectType == DisconnectType.error,
+			"expected error disconnect, got " ~ disconnectType.to!string);
+	}
+}
+
+// ConnectEx cancel path: disconnect() while ConnectEx in flight must not leak
+// the socket and must call handleDisconnect exactly once.
+// Uses AddressInfo[] overload to bypass DNS and arm ConnectEx synchronously.
+debug(ae_unittest) version (Windows) unittest
+{
+	static if (eventLoopMechanism == EventLoopMechanism.iocp)
+	{
+		import std.conv : to;
+		import std.socket : InternetAddress;
+
+		int disconnectCount;
+		DisconnectType disconnectType;
+
+		auto c = new TcpConnection;
+		c.handleDisconnect = (string reason, DisconnectType type) {
+			disconnectCount++;
+			disconnectType = type;
+		};
+
+		// 192.0.2.1 is TEST-NET-1 (RFC 5737) — unreachable, but we cancel
+		// immediately.  Use AddressInfo[] to skip DNS and arm ConnectEx now.
+		auto addr = new InternetAddress("192.0.2.1", 1);
+		c.connect([AddressInfo(addr.addressFamily, SocketType.STREAM,
+			ProtocolType.TCP, addr, "192.0.2.1")]);
+
+		// Cancel the in-flight ConnectEx on the next event-loop tick.
+		onNextTick(socketManager, { c.disconnect(); });
+
+		socketManager.loop();
+		assert(disconnectCount == 1,
+			"handleDisconnect called " ~ disconnectCount.to!string ~ " times (expected 1)");
+		assert(disconnectType == DisconnectType.requested,
+			"expected requested disconnect, got " ~ disconnectType.to!string);
 	}
 }

@@ -16,7 +16,7 @@ module ae.sys.windows.iocp;
 version (Windows):
 
 import core.sys.windows.windows;
-import core.sys.windows.winsock2 : sockaddr;
+import core.sys.windows.winsock2 : sockaddr, WSAIoctl;
 
 extern (Windows) nothrow @nogc
 {
@@ -114,6 +114,17 @@ extern (Windows) nothrow @nogc
 	void WSASetLastError(int);
 }
 
+// ConnectEx is dispatched via a function pointer obtained at runtime through
+// WSAIoctl with SIO_GET_EXTENSION_FUNCTION_POINTER.
+extern (Windows) alias LPFN_CONNECTEX = BOOL function(
+	size_t           s,
+	const(sockaddr)* name,
+	int              namelen,
+	void*            lpSendBuffer,
+	DWORD            dwSendDataLength,
+	DWORD*           lpdwBytesSent,
+	OVERLAPPED*      lpOverlapped) nothrow @nogc;
+
 pragma(lib, "Mswsock");
 
 // Error codes not in druntime
@@ -127,3 +138,16 @@ enum SO_UPDATE_ACCEPT_CONTEXT   = 0x700B;
 // Each AcceptEx address slot must be sizeof(SOCKADDR_STORAGE)+16.
 // SOCKADDR_STORAGE is 128 bytes on Windows, so each slot is 144 bytes.
 enum ACCEPT_ADDR_SIZE           = 128 + 16;
+
+// ConnectEx constants
+// {25A207B9-DDF3-4660-8EE9-76E58C74063E}
+enum GUID WSAID_CONNECTEX = GUID(
+	0x25a207b9, 0xddf3, 0x4660,
+	[0x8e, 0xe9, 0x76, 0xe5, 0x8c, 0x74, 0x06, 0x3e]);
+
+// SIO_GET_EXTENSION_FUNCTION_POINTER == IOC_INOUT | IOC_WS2 | 6 == 0xC8000006
+enum DWORD SIO_GET_EXTENSION_FUNCTION_POINTER = 0xC8000006;
+
+// Must be set on the socket after ConnectEx completes for getpeername /
+// shutdown / etc. to behave correctly.
+enum SO_UPDATE_CONNECT_CONTEXT  = 0x7010;
