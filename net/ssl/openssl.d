@@ -247,7 +247,7 @@ class OpenSSLContext : SSLContext
 		}
 	}
 
-	override void setCipherList(string[] ciphers) { setOpenSSLCipherList(ciphers); } /// ditto
+	deprecated alias setCipherList = setOpenSSLCipherList; /// ditto
 
 	override void enableDH(int bits)
 	{

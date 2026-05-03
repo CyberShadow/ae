@@ -68,7 +68,8 @@ abstract class SSLContext
 		require, /// Require a certificate and verify it.
 	}
 
-	abstract void setCipherList(string[] ciphers);                /// Configure OpenSSL-like cipher list.
+	deprecated("Use setOpenSSLCipherList on OpenSSLContext, or setCipherSuites for a portable alternative")
+	void setCipherList(string[] ciphers) { assert(false, "setCipherList is not implemented by this SSL provider"); } /// Configure OpenSSL-like cipher list.
 	abstract void enableDH(int bits);                             /// Enable Diffie-Hellman key exchange with the specified key size.
 	abstract void enableECDH();                                   /// Enable elliptic-curve DH key exchange.
 	abstract void setCertificate(string path);                    /// Load and use a local certificate from the given file.
