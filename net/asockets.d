@@ -46,7 +46,7 @@ private import std.conv : to;
 // https://issues.dlang.org/show_bug.cgi?id=7016
 static import ae.utils.array;
 
-private enum EventLoopMechanism { select, epoll, libev }
+private enum EventLoopMechanism { select, epoll, libev, iocp }
 
 // Choose a default event loop mechanism
 // If one was explicitly requested, use it:
@@ -54,6 +54,7 @@ private enum eventLoopMechanism = {
 	version (SELECT) return EventLoopMechanism.select; else
 	version (EPOLL) return EventLoopMechanism.epoll; else
 	version (LIBEV) return EventLoopMechanism.libev; else
+	version (IOCP) return EventLoopMechanism.iocp; else
 	// Otherwise, pick a default:
 	{
 		version (linux)
@@ -61,6 +62,9 @@ private enum eventLoopMechanism = {
 		else
 		version (Have_libev)
 			return EventLoopMechanism.libev;
+		else
+		version (Windows)
+			return EventLoopMechanism.iocp;
 		else
 			return EventLoopMechanism.select;
 	}
@@ -979,6 +983,556 @@ static if (eventLoopMechanism == EventLoopMechanism.select)
 		bool notifyRead;
 		/// Interested in write notifications (onWritable)?
 		bool notifyWrite;
+	}
+}
+else
+static if (eventLoopMechanism == EventLoopMechanism.iocp)
+{
+	import core.sys.windows.windows;
+	import core.sys.windows.winsock2 : WSAGetLastError, WSAECONNRESET,
+		WSAEDISCON, WSAENOTCONN, WSAESHUTDOWN, WSAECONNABORTED;
+	import ae.sys.windows.iocp;
+
+	// ---- The dispatcher kind --------------------------------------------
+
+	/// Discriminator for what to do when a completion arrives, stored
+	/// alongside the OVERLAPPED so the dispatcher can route generically.
+	package enum IocpOpKind : ubyte
+	{
+		socketRecv,
+		socketSend,
+		pipeRead,
+		pipeWrite,
+		processExit,
+		userPost,    // PostQueuedCompletionStatus from another thread
+	}
+
+	/// Header that owners embed inside the per-operation buffer struct.
+	/// The OVERLAPPED *must* be the first field so a pointer to it can be
+	/// recovered as a pointer to IocpOp via simple cast (or vice-versa
+	/// using offsetof). Owners pass `&op.overlapped` to WSARecv/WSASend etc.
+	package struct IocpOp
+	{
+		OVERLAPPED   overlapped;       // MUST be first
+		IocpOpKind   kind;
+		bool         inFlight;
+		Object       owner;            // GenericSocket / WindowsPipeConnection / ...
+	}
+
+	private extern(Windows) static IocpOp* opFromOverlapped(OVERLAPPED* ov) @system pure nothrow @nogc
+	{
+		return cast(IocpOp*) ov;
+	}
+
+	// ---- SocketManager ---------------------------------------------------
+
+	/// `IOCP`-based event loop implementation.
+	struct SocketManager
+	{
+	private:
+		HANDLE iocpPort;
+		// Track participants for daemon-state and shutdown.
+		GenericSocket[] sockets;
+		debug GenericSocket[socket_t] socketHandles;
+
+		void delegate()[] nextTickHandlers;
+		IdleHandler[] idleHandlers;
+
+		// Sockets whose notifyWrite became true and need a synthetic
+		// onWritable() call. Processed at the top of each loop iteration.
+		GenericSocket[] pendingWritables;
+
+		// Non-socket participants (e.g. WindowsPipeConnection,
+		// process-exit waiters) that should keep the loop alive.
+		IocpParticipant[] participants;
+
+		void ensurePort()
+		{
+			if (iocpPort is null)
+			{
+				iocpPort = CreateIoCompletionPort(INVALID_HANDLE_VALUE, null, 0, 0);
+				assert(iocpPort !is null, "CreateIoCompletionPort failed");
+			}
+		}
+
+	public:
+		MonoTime now;
+
+		/// Get (creating if necessary) the IOCP port.
+		package HANDLE getIocpPort()
+		{
+			ensurePort();
+			return iocpPort;
+		}
+
+		/// Register a socket. Associates its SOCKET handle with the IOCP
+		/// port. Note: this association is *permanent* for the lifetime of
+		/// the socket — closing the socket releases it.
+		void register(GenericSocket conn)
+		{
+			debug (ASOCKETS) stderr.writefln("Registering %s (%d total)", conn, sockets.length + 1);
+			assert(!conn.socket.blocking, "Trying to register a blocking socket");
+
+			ensurePort();
+
+			auto h = cast(HANDLE)conn.socket.handle;
+			auto port = CreateIoCompletionPort(h, iocpPort, cast(ULONG_PTR)cast(void*)conn, 0);
+			assert(port == iocpPort, "CreateIoCompletionPort association failed");
+
+			sockets ~= conn;
+
+			debug
+			{
+				auto handle = conn.socket.handle;
+				assert(handle != socket_t.init, "Can't register a closed socket");
+				assert(handle !in socketHandles, "This socket handle is already registered");
+				socketHandles[handle] = conn;
+			}
+
+			debug (ASOCKETS_DEBUG_SHUTDOWN) conn.registrationStackTrace = captureStackTrace();
+			else debug (ASOCKETS_DEBUG_IDLE) conn.registrationStackTrace = captureStackTrace();
+		}
+
+		/// Unregister a socket. The IOCP association is permanent — the
+		/// socket must be closed by the caller after this returns.
+		void unregister(GenericSocket conn)
+		{
+			debug (ASOCKETS) stderr.writefln("Unregistering %s (%d total)", conn, sockets.length - 1);
+
+			debug
+			{
+				auto socket = conn.socket;
+				assert(socket, "Trying to unregister an uninitialized socket");
+				auto handle = socket.handle;
+				assert(handle != socket_t.init, "Can't unregister a closed socket");
+				auto pconn = handle in socketHandles;
+				assert(pconn, "This socket handle is not registered");
+				assert(*pconn is conn, "This socket handle is registered but belongs to another GenericSocket");
+				socketHandles.remove(handle);
+			}
+
+			foreach (size_t i, GenericSocket j; sockets)
+				if (j is conn)
+				{
+					sockets = sockets[0 .. i] ~ sockets[i + 1 .. sockets.length];
+					// Drop pending-writable entry too
+					import std.algorithm : remove, SwapStrategy;
+					pendingWritables = pendingWritables.remove!(s => s is conn, SwapStrategy.unstable);
+					return;
+				}
+			assert(false, "Socket not registered");
+		}
+
+		size_t size() { return sockets.length; }
+
+		// Queue this socket for a synthetic onWritable() on the next tick.
+		package void kickWritable(GenericSocket conn)
+		{
+			foreach (s; pendingWritables)
+				if (s is conn)
+					return;
+			pendingWritables ~= conn;
+		}
+
+		// Called by IocpParticipant to register/unregister itself.
+		package void addParticipant(IocpParticipant p)
+		{
+			participants ~= p;
+		}
+		package void removeParticipant(IocpParticipant p)
+		{
+			foreach (i, q; participants)
+				if (q is p)
+				{
+					import std.algorithm : remove, SwapStrategy;
+					participants = participants.remove!((Object x) => x is p, SwapStrategy.unstable)();
+					return;
+				}
+		}
+
+		void loop()
+		{
+			debug (ASOCKETS) stderr.writeln("Starting event loop.");
+			debug (ASOCKETS_DEBUG_SHUTDOWN) ShutdownDebugger.register();
+			debug (ASOCKETS_DEBUG_IDLE) IdleDebugger.register();
+
+			ensurePort();
+
+			OVERLAPPED_ENTRY[64] entries;
+
+			while (true)
+			{
+				// Process nextTick handlers exhaustively first.
+				if (nextTickHandlers.length)
+				{
+					auto thisTickHandlers = nextTickHandlers;
+					nextTickHandlers = null;
+					foreach (handler; thisTickHandlers)
+						handler();
+					continue;
+				}
+
+				// Synthetic onWritable() for sockets whose notifyWrite
+				// just became true. Process these *before* checking
+				// daemon state, since onWritable() may post a WSASend
+				// that starts holding the socket alive.
+				if (pendingWritables.length)
+				{
+					auto pw = pendingWritables;
+					pendingWritables = null;
+					foreach (conn; pw)
+					{
+						if (conn.socket is null) continue;
+						if (!conn.notifyWrite) continue;
+						runUserEventHandler({
+							if (conn.socket !is null && conn.notifyWrite)
+								conn.onWritable();
+						});
+					}
+					continue;
+				}
+
+				// Daemon-state check: if no non-daemon work remains, exit.
+				bool haveActive;
+				foreach (conn; sockets)
+				{
+					if (!conn.socket) continue;
+					if (conn.notifyRead && !conn.daemonRead) { haveActive = true; break; }
+					if (conn.notifyWrite && !conn.daemonWrite) { haveActive = true; break; }
+				}
+				if (!haveActive)
+				{
+					foreach (p; participants)
+						if (p.iocpHasNonDaemonWork())
+						{
+							haveActive = true;
+							break;
+						}
+				}
+
+				if (!haveActive && !mainTimer.hasNonDaemonTasks() && !nextTickHandlers.length)
+				{
+					debug (ASOCKETS) stderr.writeln("No more active work, exiting loop.");
+					break;
+				}
+
+				DWORD timeoutMs;
+				if (mainTimer.isWaiting())
+				{
+					now = MonoTime.currTime();
+					auto remaining = mainTimer.getRemainingTime(now);
+					long msec = (remaining.total!"hnsecs" + 9999) / 10_000;
+					if (msec < 0) msec = 0;
+					if (msec > int.max) msec = int.max;
+					timeoutMs = cast(DWORD)msec;
+				}
+				else
+				{
+					timeoutMs = INFINITE;
+				}
+
+				ULONG removed = 0;
+				BOOL ok = GetQueuedCompletionStatusEx(
+					iocpPort, entries.ptr, cast(ULONG)entries.length,
+					&removed, timeoutMs, FALSE);
+
+				now = MonoTime.currTime();
+
+				if (!ok)
+				{
+					auto err = GetLastError();
+					if (err == WAIT_TIMEOUT)
+					{
+						// Just a timeout; let timer fire below.
+					}
+					else
+					{
+						debug (ASOCKETS) stderr.writefln("GetQueuedCompletionStatusEx error: %d", err);
+						// Continue; nothing dispatchable.
+					}
+				}
+				else
+				{
+					foreach (i; 0 .. removed)
+					{
+						auto entry = &entries[i];
+						auto op = opFromOverlapped(entry.lpOverlapped);
+
+						if (op is null)
+						{
+							// User-posted completion with no OVERLAPPED.
+							// Dispatch via completion key (the participant).
+							auto p = cast(IocpParticipant)cast(void*)entry.lpCompletionKey;
+							if (p)
+								runUserEventHandler({
+									p.iocpUserPost(entry.dwNumberOfBytesTransferred);
+								});
+							continue;
+						}
+
+						op.inFlight = false;
+						auto bytes = entry.dwNumberOfBytesTransferred;
+						// Internal field holds NTSTATUS — translate to Win32 if non-zero.
+						auto status = cast(uint)op.overlapped.Internal;
+
+						runUserEventHandler({
+							dispatchCompletion(op, bytes, status, entry.lpCompletionKey);
+						});
+					}
+				}
+
+				// Timers fire after I/O.
+				runUserEventHandler({
+					mainTimer.prod(now);
+				});
+
+				eventCounter++;
+			}
+		}
+
+		private void dispatchCompletion(IocpOp* op, DWORD bytes, uint status, ULONG_PTR key)
+		{
+			final switch (op.kind)
+			{
+				case IocpOpKind.socketRecv:
+				{
+					auto conn = cast(GenericSocket)op.owner;
+					if (conn is null || conn.socket is null) return;
+					iocpOnRecvComplete(conn, bytes, status);
+					break;
+				}
+				case IocpOpKind.socketSend:
+				{
+					auto conn = cast(GenericSocket)op.owner;
+					if (conn is null || conn.socket is null) return;
+					iocpOnSendComplete(conn, bytes, status);
+					break;
+				}
+				case IocpOpKind.pipeRead:
+				case IocpOpKind.pipeWrite:
+				case IocpOpKind.processExit:
+				{
+					auto p = cast(IocpParticipant)op.owner;
+					if (p is null) return;
+					p.iocpOnComplete(op, bytes, status);
+					break;
+				}
+				case IocpOpKind.userPost:
+				{
+					auto p = cast(IocpParticipant)op.owner;
+					if (p is null) return;
+					p.iocpUserPost(bytes);
+					break;
+				}
+			}
+		}
+	}
+
+	/// Interface for non-socket participants of the IOCP loop
+	/// (pipes, process-exit waiters, future extensions).
+	package interface IocpParticipant
+	{
+		/// Returns true iff this participant has work that should keep
+		/// the event loop alive (i.e. should NOT exit if only daemon
+		/// sockets remain). Same role as `notifyRead && !daemonRead`.
+		bool iocpHasNonDaemonWork();
+
+		/// Dispatched when an OVERLAPPED owned by this participant completes.
+		void iocpOnComplete(IocpOp* op, DWORD bytes, uint status);
+
+		/// Dispatched when a PostQueuedCompletionStatus(port, bytes, key, NULL)
+		/// arrives where `key == cast(ULONG_PTR)cast(void*)this` and
+		/// `lpOverlapped == null`.
+		void iocpUserPost(DWORD bytes) {}
+	}
+
+	// ---- Per-socket completion handlers ---------------------------------
+
+	private void iocpOnRecvComplete(GenericSocket conn, DWORD bytes, uint status)
+	{
+		debug (ASOCKETS) stderr.writefln("[iocp] recv complete: %s bytes=%d status=0x%X",
+			conn, bytes, status);
+
+		// Mark "no recv pending" so notifyRead setter can re-arm if needed.
+		conn._iocpRecvPending = false;
+
+		if (status == ERROR_OPERATION_ABORTED)
+		{
+			// Socket was closed; ignore.
+			return;
+		}
+
+		if (status != 0)
+		{
+			// Some IOCP recv error. Surface as readable so onReadable's
+			// recv() call will see the same error and report.
+		}
+
+		// Pretend the socket is "level-readable" and let onReadable() do
+		// its thing: it will call doReceive() -> recv(), which returns
+		// data already buffered by the kernel.
+		conn.onReadable();
+
+		// Re-arm if still interested.
+		if (conn.socket !is null && conn.notifyRead && !conn._iocpRecvPending)
+			conn._iocpArmRecv();
+	}
+
+	private void iocpOnSendComplete(GenericSocket conn, DWORD bytes, uint status)
+	{
+		debug (ASOCKETS) stderr.writefln("[iocp] send complete: %s bytes=%d status=0x%X",
+			conn, bytes, status);
+
+		// Release our hold on the in-flight buffer.
+		conn._iocpSendBuffer = null;
+
+		if (status == ERROR_OPERATION_ABORTED)
+			return;
+
+		if (conn.socket is null) return;
+
+		// If the user wants more writes and queue has data, drive another
+		// onWritable round.
+		if (conn.notifyWrite)
+		{
+			conn.onWritable();
+			// onWritable will updateFlags() which clears notifyWrite if
+			// queue empty.
+		}
+	}
+
+	// Use UFCS for idle handlers (same shape as select/epoll).
+	void addIdleHandler(ref SocketManager socketManager, void delegate() handler)
+	{
+		foreach (ref idleHandler; socketManager.idleHandlers)
+			assert(handler !is idleHandler.dg);
+		socketManager.idleHandlers ~= IdleHandler(handler);
+	}
+
+	void removeIdleHandler(alias pred=(a, b) => a is b, Args...)(ref SocketManager socketManager, Args args)
+	{
+		foreach (i, ref idleHandler; socketManager.idleHandlers)
+			if (pred(idleHandler.dg, args))
+			{
+				import std.algorithm : remove;
+				socketManager.idleHandlers = socketManager.idleHandlers.remove(i);
+				return;
+			}
+		assert(false, "No such idle handler");
+	}
+
+	// ---- SocketMixin: per-socket IOCP state -----------------------------
+
+	private mixin template SocketMixin()
+	{
+		// Per-direction IocpOps owned by this socket.
+		// They live for the lifetime of the GenericSocket (no per-op alloc).
+		IocpOp _iocpRecvOp;
+		IocpOp _iocpSendOp;
+
+		// In-flight send buffer (kept alive while WSASend pending).
+		ubyte[] _iocpSendBuffer;
+
+		bool _iocpRecvPending;
+		bool _notifyRead, _notifyWrite;
+
+		@property final bool notifyRead() const pure nothrow @nogc { return _notifyRead; }
+		@property final bool notifyWrite() const pure nothrow @nogc { return _notifyWrite; }
+
+		@property final void notifyRead(bool value)
+		{
+			bool was = _notifyRead;
+			_notifyRead = value;
+			if (value && !was && conn !is null && !_iocpRecvPending)
+				_iocpArmRecv();
+			// If turned off, the in-flight WSARecv will eventually
+			// complete (with ERROR_OPERATION_ABORTED if socket closed,
+			// or just naturally with bytes — we ignore in onRecvComplete).
+		}
+
+		@property final void notifyWrite(bool value)
+		{
+			bool was = _notifyWrite;
+			_notifyWrite = value;
+			if (value && !was && conn !is null && _iocpSendBuffer is null)
+				socketManager.kickWritable(this);
+		}
+
+		// Initialize op headers so `owner` field is set correctly.
+		private final void _iocpInitOps()
+		{
+			_iocpRecvOp.owner = this;
+			_iocpRecvOp.kind = IocpOpKind.socketRecv;
+			_iocpSendOp.owner = this;
+			_iocpSendOp.kind = IocpOpKind.socketSend;
+		}
+
+		/// Post a zero-byte WSARecv to use IOCP for level-style readability
+		/// notification, while keeping the existing onReadable/doReceive
+		/// flow (which calls recv() against the kernel buffer) intact.
+		final void _iocpArmRecv()
+		{
+			assert(conn !is null);
+			_iocpInitOps();
+			_iocpRecvOp.overlapped = OVERLAPPED.init;
+			_iocpRecvPending = true;
+
+			WSABUF buf;
+			buf.len = 0;
+			buf.buf = null;
+			DWORD flags = 0;
+			DWORD recvd = 0;
+			int rc = WSARecv(conn.handle, &buf, 1, &recvd, &flags,
+				&_iocpRecvOp.overlapped, null);
+			if (rc == 0)
+			{
+				// Completed inline — completion will still be queued to
+				// the IOCP because we didn't set FILE_SKIP_COMPLETION_PORT_ON_SUCCESS.
+				return;
+			}
+			auto err = WSAGetLastError();
+			if (err == WSA_IO_PENDING)
+				return;
+			// Real error: we'll see it in onReadable when recv() is called.
+			_iocpRecvPending = false;
+			// Pretend readable so the connection sees the error.
+			socketManager.kickWritable(this); // TODO: kickReadable would be cleaner
+		}
+
+		/// Override Connection.doSend hook for IOCP: post overlapped WSASend.
+		/// Returns buffer.length on success (claims all bytes accepted),
+		/// Socket.ERROR with WSAEWOULDBLOCK if a send is already in flight.
+		package final sizediff_t _iocpDoSend(scope const(void)[] buffer)
+		{
+			import core.sys.windows.winsock2 : WSASetLastError, WSAEWOULDBLOCK;
+
+			if (_iocpSendBuffer !is null)
+			{
+				WSASetLastError(WSAEWOULDBLOCK);
+				return Socket.ERROR;
+			}
+
+			_iocpInitOps();
+
+			// Hold a copy of the buffer so it outlives the in-flight op.
+			_iocpSendBuffer = (cast(ubyte*)buffer.ptr)[0 .. buffer.length].dup;
+			_iocpSendOp.overlapped = OVERLAPPED.init;
+
+			WSABUF wb;
+			wb.len = cast(uint)_iocpSendBuffer.length;
+			wb.buf = cast(char*)_iocpSendBuffer.ptr;
+			DWORD sent = 0;
+			int rc = WSASend(conn.handle, &wb, 1, &sent, 0,
+				&_iocpSendOp.overlapped, null);
+			if (rc == 0 || (rc == SOCKET_ERROR && WSAGetLastError() == WSA_IO_PENDING))
+			{
+				return cast(sizediff_t)buffer.length;
+			}
+
+			// Synchronous failure.
+			_iocpSendBuffer = null;
+			return Socket.ERROR;
+		}
 	}
 }
 else
@@ -1959,6 +2513,9 @@ public:
 	@property
 	final bool writePending()
 	{
+		static if (eventLoopMechanism == EventLoopMechanism.iocp)
+			if (_iocpSendBuffer !is null)
+				return true;
 		foreach (ref queue; outQueue)
 			if (queue.length)
 				return true;
@@ -2050,6 +2607,13 @@ protected:
 				return disconnect(e.msg, DisconnectType.error);
 			if (connectHandler)
 				connectHandler();
+			// On IOCP, notifyWrite was already true when we entered this
+			// branch (connecting state), so the setter won't re-kick even if
+			// connectHandler queued data or transitioned to disconnecting.
+			// Post a send if data is queued and nothing is already in flight.
+			static if (eventLoopMechanism == EventLoopMechanism.iocp)
+				if (writePending && _iocpSendBuffer is null)
+					socketManager.kickWritable(this);
 			return;
 		}
 		//debug writefln(remoteAddressStr, ": Writable - handler ", handleBufferFlushed?"OK":"not set", ", outBuffer.length=", outBuffer.length);
@@ -2104,6 +2668,12 @@ protected:
 				}
 
 		// outQueue is now empty
+		// On IOCP, the last WSASend may still be in flight even though the queue is
+		// empty (we dequeue eagerly after posting the overlapped op).  Defer the
+		// flush/close notifications until iocpOnSendComplete clears _iocpSendBuffer.
+		static if (eventLoopMechanism == EventLoopMechanism.iocp)
+			if (_iocpSendBuffer !is null)
+				return;
 		if (bufferFlushedHandler)
 			bufferFlushedHandler();
 		if (state == ConnectionState.disconnecting)
@@ -2325,6 +2895,11 @@ protected:
 
 	override sizediff_t doSend(scope const(void)[] buffer)
 	{
+		static if (eventLoopMechanism == EventLoopMechanism.iocp)
+		{
+			if (!datagram)
+				return _iocpDoSend(buffer);
+		}
 		return conn.send(buffer);
 	}
 
@@ -3306,4 +3881,35 @@ debug(ae_unittest) unittest
 	}
 
 	testTimer();
+}
+
+// Regression: connectHandler that calls send() then disconnect() must still
+// deliver the data on the IOCP backend. Without the fix the kick is skipped
+// because state has already transitioned to disconnecting by the time the
+// guard runs, leaving outQueue drained never and the event loop wedged.
+debug(ae_unittest) version (Windows) unittest
+{
+	static if (eventLoopMechanism == EventLoopMechanism.iocp)
+	{
+		bool received;
+		auto srv = new TcpServer;
+		srv.handleAccept = (TcpConnection s) {
+			s.handleReadData = (Data d) {
+				received = true;
+				s.disconnect();
+				srv.close();
+			};
+		};
+		auto port = srv.listen(0, "127.0.0.1");
+
+		auto c = new TcpConnection;
+		c.handleConnect = {
+			c.send(Data("ping".asBytes));
+			c.disconnect();
+		};
+		c.connect("127.0.0.1", port);
+
+		socketManager.loop();
+		assert(received, "data sent in connectHandler was never delivered (IOCP kick bug)");
+	}
 }
