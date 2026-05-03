@@ -4622,6 +4622,85 @@ debug(ae_unittest) unittest
 	}
 }
 
+// Stress test: 256 concurrent TCP connections, each sending/receiving data.
+// Exercises the IOCP backend under load: many simultaneous WSARecv/WSASend
+// operations, large IOCP completion queue, concurrent accept loop.
+debug(ae_unittest) unittest
+{
+	import std.conv : to;
+	import ae.sys.timing : setTimeout;
+	import core.time : seconds;
+
+	enum N = 256;
+
+	auto server = new TcpServer();
+	ushort port = server.listen(0, "127.0.0.1");
+
+	int serverAccepted;
+	int serverCompleted;
+	int clientCompleted;
+	bool done;
+
+	// Fail fast instead of hanging indefinitely (e.g. on small listen backlog).
+	// Cancelled below on success so it doesn't keep the event loop alive.
+	TimerTask timeoutTimer = setTimeout({
+		import std.stdio : stderr;
+		stderr.writefln("Stress test timed out: serverAccepted=%d serverCompleted=%d clientCompleted=%d",
+			serverAccepted, serverCompleted, clientCompleted);
+		assert(false, "Stress test timed out after 30s");
+	}, 30.seconds);
+
+	server.handleAccept = (TcpConnection c) {
+		serverAccepted++;
+		c.handleReadData = (Data data) {
+			// Echo back whatever we receive
+			c.send(Data(data.toGC.idup));
+		};
+		c.handleDisconnect = (string, DisconnectType) {
+			serverCompleted++;
+			if (serverCompleted == N)
+				server.close();
+		};
+	};
+
+	// Nested function to give each connection its own closure frame,
+	// avoiding the D closure-in-loop variable-capture problem.
+	void setupClient(int idx)
+	{
+		auto client = new TcpConnection();
+		immutable payload = "hello-" ~ idx.to!string;
+		string received;
+		client.handleConnect = () {
+			client.send(Data(cast(immutable ubyte[])payload));
+		};
+		client.handleReadData = (Data data) {
+			received ~= cast(string)data.toGC.idup;
+			if (received == payload)
+				client.disconnect("done");
+		};
+		client.handleDisconnect = (string, DisconnectType) {
+			assert(received == payload, "client " ~ payload ~ " got " ~ received);
+			clientCompleted++;
+			if (clientCompleted == N)
+			{
+				done = true;
+				// Cancel the timeout timer so the event loop can exit now.
+				timeoutTimer.cancel();
+			}
+		};
+		client.connect("127.0.0.1", port);
+	}
+
+	foreach (i; 0 .. N)
+		setupClient(i);
+
+	socketManager.loop();
+	assert(done, "stress test did not complete");
+	assert(serverAccepted  == N, "expected " ~ N.to!string ~ " accepted, got "  ~ serverAccepted.to!string);
+	assert(serverCompleted == N, "expected " ~ N.to!string ~ " srv done, got "  ~ serverCompleted.to!string);
+	assert(clientCompleted == N, "expected " ~ N.to!string ~ " cli done, got "  ~ clientCompleted.to!string);
+}
+
 // Regression: connectHandler that calls send() then disconnect() must still
 // deliver the data on the IOCP backend. Without the fix the kick is skipped
 // because state has already transitioned to disconnecting by the time the
