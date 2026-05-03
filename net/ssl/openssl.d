@@ -849,7 +849,7 @@ T sslEnforce(T)(T v, string message = null)
 debug(ae_unittest) unittest
 {
 	auto p = new OpenSSLProvider;
-	auto sc = p.createContext(SSLContext.Kind.server);
+	auto sc = cast(OpenSSLContext) p.createContext(SSLContext.Kind.server);
 	// Use PSK to avoid needing a certificate
 	sc.setPreSharedKey("test", "hunter2".representation);
 	auto s = new TcpServer;
@@ -865,7 +865,7 @@ debug(ae_unittest) unittest
 		s.close(); // One connection
 	};
 	auto port = s.listen(0, "127.0.0.1");
-	auto cc = p.createContext(SSLContext.Kind.client);
+	auto cc = cast(OpenSSLContext) p.createContext(SSLContext.Kind.client);
 	cc.setPeerVerify(SSLContext.Verify.none);
 	cc.setPreSharedKey("test", "hunter2".representation);
 	auto c = new TcpConnection;

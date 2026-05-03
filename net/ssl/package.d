@@ -76,7 +76,8 @@ abstract class SSLContext
 	void enableECDH() { assert(false, "enableECDH is not implemented by this SSL provider"); } /// Enable elliptic-curve DH key exchange.
 	abstract void setCertificate(string path);                    /// Load and use a local certificate from the given file.
 	abstract void setPrivateKey(string path);                     /// Load and use the certificate private key from the given file.
-	abstract void setPreSharedKey(string id, const(ubyte)[] key); /// Use a pre-shared key instead of using certificate-based peer verification.
+	deprecated("setPreSharedKey is OpenSSL-specific; cast to OpenSSLContext and call setPreSharedKey there")
+	void setPreSharedKey(string id, const(ubyte)[] key) { assert(false, "setPreSharedKey is not implemented by this SSL provider"); } /// Use a pre-shared key instead of using certificate-based peer verification.
 	abstract void setPeerVerify(Verify verify);                   /// Configure peer certificate verification.
 	abstract void setPeerRootCertificate(string path);            /// Require that peer certificates are signed by the specified root certificate.
 	abstract void setFlags(int);                                  /// Configure provider-specific flags.
