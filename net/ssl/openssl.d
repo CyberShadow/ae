@@ -309,7 +309,7 @@ class OpenSSLContext : SSLContext
 		import deimos.openssl.evp : EVP_PKEY_free;
 		import deimos.openssl.x509 : X509_free;
 		import deimos.openssl.safestack : STACK_OF;
-		import deimos.openssl.stack : _STACK, OPENSSL_sk_num, OPENSSL_sk_value, OPENSSL_sk_pop_free;
+		import deimos.openssl.stack : _STACK, OPENSSL_sk_num, OPENSSL_sk_free, OPENSSL_sk_shift, OPENSSL_sk_pop_free;
 
 		auto bio = BIO_new_mem_buf(cast(void*) data.ptr, cast(int) data.length)
 			.sslEnforce("BIO_new_mem_buf");
@@ -328,17 +328,21 @@ class OpenSSLContext : SSLContext
 		scope(exit) { if (cert) X509_free(cert); }
 		alias CertFreeFunc = extern(C) void function(void*);
 		auto caRaw = cast(_STACK*) ca;
+		// Shift each cert out of the stack before transferring to SSL_CTX.
+		// SSL_CTX_add_extra_chain_cert steals ownership; on partial failure
+		// remaining certs are still in caRaw and freed by scope(exit) pop_free.
 		scope(exit) { if (caRaw) OPENSSL_sk_pop_free(caRaw, cast(CertFreeFunc) &X509_free); }
 
 		SSL_CTX_use_certificate(sslCtx, cert).sslEnforce("SSL_CTX_use_certificate");
 		SSL_CTX_use_PrivateKey(sslCtx, pkey).sslEnforce("SSL_CTX_use_PrivateKey");
 		if (caRaw)
 		{
-			foreach (i; 0 .. OPENSSL_sk_num(caRaw))
+			while (OPENSSL_sk_num(caRaw) > 0)
 			{
-				auto chainCert = cast(X509*) OPENSSL_sk_value(caRaw, i);
+				auto chainCert = cast(X509*) OPENSSL_sk_shift(caRaw);
 				SSL_CTX_add_extra_chain_cert(sslCtx, chainCert).sslEnforce("SSL_CTX_add_extra_chain_cert");
 			}
+			// caRaw is now empty; pop_free on empty stack is a no-op.
 		}
 	} /// ditto
 
