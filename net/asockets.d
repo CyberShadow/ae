@@ -25,7 +25,6 @@ public import ae.sys.data;
 import core.stdc.stdint : int32_t;
 
 import std.exception;
-import std.parallelism : totalCPUs;
 import std.socket;
 import std.string : format;
 public import std.socket : Address, AddressInfo, Socket;
@@ -4061,7 +4060,8 @@ protected:
 
 public:
 	/// Start listening on this socket.
-	final void listen(AddressInfo[] addressInfos)
+	/// $(PARAM backlog) is the kernel-side SYN/accept-queue depth passed to $(D listen(2)).
+	final void listen(AddressInfo[] addressInfos, int backlog = 1024)
 	{
 		foreach (ref addressInfo; addressInfos)
 		{
@@ -4074,7 +4074,7 @@ public:
 				conn.setOption(SocketOptionLevel.SOCKET, SocketOption.REUSEADDR, true);
 
 				conn.bind(addressInfo.address);
-				conn.listen(totalCPUs * 2);
+				conn.listen(backlog);
 
 				listeners ~= new Listener(conn);
 			}
@@ -4190,7 +4190,8 @@ public:
 	alias listen = SocketServer.listen; // raise overload
 
 	/// Start listening on this socket.
-	final ushort listen(ushort port, string addr = null)
+	/// $(PARAM backlog) is forwarded to the underlying $(D SocketServer.listen) call.
+	final ushort listen(ushort port, string addr = null, int backlog = 1024)
 	{
 		debug(ASOCKETS) stderr.writefln("Attempting to listen on %s:%d", addr, port);
 		//assert(!listening, "Attempting to listen on a listening socket");
@@ -4212,7 +4213,7 @@ public:
 					addressInfos = addressInfos[0..i] ~ addressInfos[i+1..$];
 		}
 
-		listen(addressInfos);
+		listen(addressInfos, backlog);
 
 		foreach (listener; listeners)
 		{
