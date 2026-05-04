@@ -40,6 +40,7 @@ bad_flags=(
 
 	# Require special dependencies
 	-version=LIBEV
+	-version=IOCP
 
 	# "no longer has any effect"
 	-preview=dip25
