@@ -996,10 +996,12 @@ template JsonDeserializeTransform(T)
 
 				// Fast path: source slice handed directly to the JSONFragment's
 				// .json field. Used by JsonParser when it detects this method.
+				// For immutable input the slice is stored as-is (zero-copy);
+				// for mutable inputs `to!string` performs the necessary idup.
 				void putRawJson(C)(C[] raw)
 				{
-					static if (is(immutable(C) == immutable(char)))
-						target.json = cast(string) raw;
+					static if (is(C == immutable(char)))
+						target.json = raw;
 					else
 						target.json = to!string(raw);
 				}
@@ -1576,6 +1578,18 @@ debug(ae_unittest) unittest
 {
 	static struct JSONFragment { string json; }
 	assert(toJson(JSONFragment(`[1,2,3]`)) == `[1,2,3]`);
+}
+
+// Mutable input: slice must be idup'd into JSONFragment.json (no aliasing).
+debug(ae_unittest) unittest
+{
+	static struct JSONFragment { string json; }
+	char[] buf = `[1,2,3]`.dup;
+	auto frag = jsonParse!JSONFragment(buf);
+	assert(frag.json == "[1,2,3]");
+	// Mutate the original buffer; the captured fragment must be unaffected.
+	buf[1] = '9';
+	assert(frag.json == "[1,2,3]");
 }
 
 // JsonOptions: non-string keys
