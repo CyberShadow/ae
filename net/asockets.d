@@ -4947,6 +4947,12 @@ debug(ae_unittest) unittest
 // Stress test: 256 concurrent TCP connections, each sending/receiving data.
 // Exercises the IOCP backend under load: many simultaneous WSARecv/WSASend
 // operations, large IOCP completion queue, concurrent accept loop.
+// Gated to IOCP because the test was authored against Windows kernel
+// semantics (large default backlog, IOCP completion queue); on POSIX
+// `select`-based loops it is sensitive to the listen-backlog tunable and
+// the kernel phantom-accept behaviour, and historically broke unrelated
+// integration-test binaries that happened to import ae.net.asockets.
+static if (eventLoopMechanism == EventLoopMechanism.iocp)
 debug(ae_unittest) unittest
 {
 	import std.conv : to;
