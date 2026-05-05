@@ -1202,6 +1202,12 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 					if (!conn.socket) continue;
 					if (conn.notifyRead && !conn.daemonRead) { haveActive = true; break; }
 					if (conn.notifyWrite && !conn.daemonWrite) { haveActive = true; break; }
+					// An in-flight ConnectEx keeps a non-daemon client socket
+					// alive even though notifyRead/notifyWrite are both false
+					// during ConnectionState.connecting (the completion arrives
+					// via IOCP, not via select-style readiness flags).
+					if (conn._iocpConnectOp.inFlight && !conn.daemonRead && !conn.daemonWrite)
+					{ haveActive = true; break; }
 				}
 				if (!haveActive)
 				{
