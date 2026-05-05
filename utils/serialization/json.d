@@ -200,6 +200,58 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 	// Reader structs
 	// ------------------------------------------------------------------
 
+	/// Consume one JSON value without emitting any events.
+	/// Used by callers that capture the source slice directly (e.g. raw-text sinks).
+	void skipValue()
+	{
+		skipWhitespace();
+		switch (peek())
+		{
+		case '[':
+			skip();
+			skipWhitespace();
+			if (peek() == ']') { skip(); break; }
+			while (true)
+			{
+				skipValue();
+				skipWhitespace();
+				if (peek() == ']') { skip(); break; }
+				expect(',');
+			}
+			break;
+		case '{':
+			skip();
+			skipWhitespace();
+			if (peek() == '}') { skip(); break; }
+			while (true)
+			{
+				skipWhitespace();
+				expect('"');
+				readWholeString();          // discards
+				skipWhitespace();
+				expect(':');
+				skipValue();
+				skipWhitespace();
+				if (peek() == '}') { skip(); break; }
+				expect(',');
+			}
+			break;
+		case '"':
+			skip();
+			readWholeString();
+			break;
+		case 't': skip(); expect('r'); expect('u'); expect('e'); break;
+		case 'f': skip(); expect('a'); expect('l'); expect('s'); expect('e'); break;
+		case 'n': skip(); expect('u'); expect('l'); expect('l'); break;
+		case '-':
+		case '0': .. case '9':
+			readNumeric();                  // discards
+			break;
+		default:
+			throw new Exception("Unknown JSON symbol: %s".format(peek()));
+		}
+	}
+
 	/// Reads a JSON value and pushes events to a sink.
 	void read(Sink)(Sink sink)
 	{
@@ -207,6 +259,15 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 			String, Array, Map;
 
 		skipWhitespace();
+
+		static if (is(typeof(sink.putRawJson(s[0..0]))))
+		{
+			auto start = mark();
+			skipValue();
+			sink.putRawJson(slice(start, mark()));
+			return;
+		}
+
 		switch (peek())
 		{
 		case '[':
@@ -567,6 +628,13 @@ struct JsonWriter(Output = StringBuilder, JsonOptions options = JsonOptions.init
 			writer.handle(v);
 			writer.needComma = true;
 		}
+
+		void putRawJson(C)(C[] raw)
+		{
+			if (writer.needComma) writer.output.put(',');
+			writer.output.put(raw);
+			writer.needComma = true;
+		}
 	}
 
 	/// Sink for object fields -- handles key:value pairs with commas.
@@ -598,6 +666,7 @@ struct JsonWriter(Output = StringBuilder, JsonOptions options = JsonOptions.init
 			{
 				typeof(writer) w;
 				void handle(VV)(VV vv) { w.handle(vv); }
+				void putRawJson(C)(C[] raw) { w.output.put(raw); }
 			}
 			ValueSink vs = {w: writer};
 			valueReader(&vs);
@@ -666,6 +735,9 @@ struct JsonWriter(Output = StringBuilder, JsonOptions options = JsonOptions.init
 	{
 		return output.get();
 	}
+
+	/// Write a pre-rendered JSON value verbatim (zero-copy raw-text path).
+	void putRawJson(C)(C[] raw) { output.put(raw); }
 }
 
 /// JSON sink with pretty-printing (indentation and newlines).
@@ -858,12 +930,16 @@ template JsonSerializeTransform(alias read, T)
 {
 	static if (isJSONFragment!T)
 	{
-		// JSONFragment: parse the raw JSON string and replay events into the sink
 		enum hasTransform = true;
 		static void serialize(Sink)(Sink sink, auto ref T v)
 		{
-			auto parser = JsonParser!(immutable(char))(v.json, 0);
-			parser.read(sink);
+			static if (is(typeof(sink.putRawJson(v.json))))
+				sink.putRawJson(v.json);
+			else
+			{
+				auto parser = JsonParser!(immutable(char))(v.json, 0);
+				parser.read(sink);
+			}
 		}
 	}
 	else static if (__traits(hasMember, T, "toJSON") && is(typeof(T.init.toJSON())))
@@ -908,7 +984,6 @@ template JsonDeserializeTransform(T)
 {
 	static if (isJSONFragment!T)
 	{
-		// JSONFragment: buffer into SerializedObject, then re-serialize to JSON string
 		enum hasTransform = true;
 
 		alias SO = SerializedObject!(immutable(char));
@@ -918,12 +993,24 @@ template JsonDeserializeTransform(T)
 			static struct FragmentSink
 			{
 				T* target;
-				SO temp;
 
+				// Fast path: source slice handed directly to the JSONFragment's
+				// .json field. Used by JsonParser when it detects this method.
+				void putRawJson(C)(C[] raw)
+				{
+					static if (is(immutable(C) == immutable(char)))
+						target.json = cast(string) raw;
+					else
+						target.json = to!string(raw);
+				}
+
+				// Fallback path: capture protocol events into SO and re-stringify.
+				// Used when the source is not a JsonParser (e.g., SO.read driving
+				// the standard deserializer).
 				void handle(V)(V v)
 				{
+					SO temp;
 					temp.handle(v);
-					// Re-serialize SO to JSON string
 					JsonWriter!StringBuilder writer;
 					temp.read(&writer);
 					target.json = writer.get();
@@ -1441,6 +1528,54 @@ debug(ae_unittest) unittest
 	assert(msg.method == "add");
 	assert(msg.params.json == `[2,3]`, msg.params.json);
 	assert(toJson(msg) == `{"method":"add","params":[2,3]}`, toJson(msg));
+}
+
+// JSONFragment zero-copy fast path
+debug(ae_unittest) unittest
+{
+	static struct JSONFragment { string json; }
+
+	// Slice into source: captured .json must point into the original buffer
+	string src = `[1,2,3]`;
+	auto frag = jsonParse!JSONFragment(src);
+	assert(frag.json == src);
+	assert(frag.json.ptr == src.ptr);     // zero-copy
+}
+
+debug(ae_unittest) unittest
+{
+	static struct JSONFragment { string json; }
+	static struct S { int n; JSONFragment f; }
+	auto s = jsonParse!S(`{"n":7,"f":{"a":[1,2],"b":"hi"}}`);
+	assert(s.n == 7);
+	assert(s.f.json == `{"a":[1,2],"b":"hi"}`);
+}
+
+debug(ae_unittest) unittest
+{
+	static struct JSONFragment { string json; }
+	auto f = jsonParse!JSONFragment(` { "a" : 1 } `);
+	assert(f.json == `{ "a" : 1 }`);     // leading/trailing trimmed by skipWhitespace
+}
+
+debug(ae_unittest) unittest
+{
+	static struct JSONFragment { string json; }
+	JSONFragment[] arr = [JSONFragment(`{"a":1}`), JSONFragment(`[2,3]`), JSONFragment(`"x"`)];
+	assert(toJson(arr) == `[{"a":1},[2,3],"x"]`);
+}
+
+debug(ae_unittest) unittest
+{
+	static struct JSONFragment { string json; }
+	static struct S { JSONFragment f; }
+	assert(toJson(S(JSONFragment(`{"x":1}`))) == `{"f":{"x":1}}`);
+}
+
+debug(ae_unittest) unittest
+{
+	static struct JSONFragment { string json; }
+	assert(toJson(JSONFragment(`[1,2,3]`)) == `[1,2,3]`);
 }
 
 // JsonOptions: non-string keys
