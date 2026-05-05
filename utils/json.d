@@ -781,7 +781,16 @@ debug(ae_unittest) unittest
 
 /// User-defined attribute - specify name for JSON object field.
 /// Useful when a JSON object may contain fields, the name of which are not valid D identifiers.
-struct JSONName { string name; /***/ }
+public import ae.utils.serialization.json : JSONName;
+
+debug(ae_unittest) unittest
+{
+	static struct S { @JSONName("renamed") int x; }
+	auto s = S(42);
+	auto j = s.toJson;
+	assert(j == `{"renamed":42}`, j);
+	assert(jsonParse!S(j) == s);
+}
 
 // ************************************************************************
 
