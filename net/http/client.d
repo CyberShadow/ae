@@ -72,7 +72,7 @@ protected:
 			connector.connect(request.proxyHost, request.proxyPort);
 		else
 			connector.connect(request.host, request.port);
-		assert(conn.state.among(ConnectionState.resolving, ConnectionState.connecting, ConnectionState.disconnected));
+		assert(conn.state.among(ConnectionState.resolving, ConnectionState.connecting, ConnectionState.connected, ConnectionState.disconnected));
 	}
 
 	/// Pop off a request from the queue and return it, while incrementing `sentRequests`.
@@ -520,7 +520,7 @@ class HttpsClient : HttpClient
 	protected override void connect(HttpRequest request)
 	{
 		super.connect(request);
-		if (conn.state != ConnectionState.connecting)
+		if (conn.state != ConnectionState.connecting && conn.state != ConnectionState.connected)
 		{
 			assert(conn.state == ConnectionState.disconnected);
 			return; // synchronous connection error
@@ -584,6 +584,35 @@ class UnixConnector : SocketConnector!SocketConnection
 		import std.socket;
 		auto addr = new UnixAddress(path);
 		conn.connect([AddressInfo(AddressFamily.UNIX, SocketType.STREAM, cast(ProtocolType)0, addr, path)]);
+	}
+}
+
+/// Named-pipe connector (Windows only).
+/// `connect()` ignores its host/port arguments — the pipe name is set at
+/// connector construction (matching the `UnixConnector` precedent above).
+version (Windows)
+class NamedPipeConnector : Connector
+{
+	/// Pipe path (e.g. `\\.\pipe\foo`).
+	string pipeName;
+
+	/// Optional security attributes, forwarded to `CreateFileW`.
+	SECURITY_ATTRIBUTES* securityAttributes;
+
+	private WindowsPipeConnection conn;
+
+	this(string pipeName, SECURITY_ATTRIBUTES* sa = null)
+	{
+		this.pipeName = pipeName;
+		this.securityAttributes = sa;
+		this.conn = new WindowsPipeConnection();   // deferred-handle ctor
+	}
+
+	override IConnection getConnection() { return conn; }
+
+	override void connect(string /*host*/, ushort /*port*/)
+	{
+		conn.connect(pipeName, securityAttributes);
 	}
 }
 
