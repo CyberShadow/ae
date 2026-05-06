@@ -1008,6 +1008,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		socketConnect,  // ConnectEx completion on a client socket
 		pipeRead,
 		pipeWrite,
+		pipeConnect,           // ConnectNamedPipe completion (NamedPipeServer)
 		processExit,
 		dirChange,   // ReadDirectoryChangesW completion
 		userPost,    // PostQueuedCompletionStatus from another thread
@@ -1343,6 +1344,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 				}
 				case IocpOpKind.pipeRead:
 				case IocpOpKind.pipeWrite:
+				case IocpOpKind.pipeConnect:
 				case IocpOpKind.processExit:
 				case IocpOpKind.dirChange:
 				{
@@ -1915,7 +1917,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 	{
 		// --- State machine ---------------------------------------------------
 
-		private ConnectionState _state = ConnectionState.connected;
+		private ConnectionState _state = ConnectionState.disconnected;
 
 		override @property ConnectionState state() { return _state; }
 
@@ -1963,6 +1965,66 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			auto rc = CreateIoCompletionPort(h, port, cast(ULONG_PTR)cast(void*)this, 0);
 			assert(rc == port, "CreateIoCompletionPort(pipe) failed");
 			socketManager.addParticipant(this);
+			_state = ConnectionState.connected;
+		}
+
+		/// Create a WindowsPipeConnection without a HANDLE. Starts in
+		/// `disconnected` state. Use `connect(pipeName)` to open a
+		/// named-pipe client connection.
+		this()
+		{
+			_readOp.owner = this;
+			_readOp.kind = IocpOpKind.pipeRead;
+			_writeOp.owner = this;
+			_writeOp.kind = IocpOpKind.pipeWrite;
+		}
+
+		/// Open a named-pipe client connection. Must be called on a
+		/// WindowsPipeConnection constructed with the no-arg ctor.
+		void connect(string pipeName, SECURITY_ATTRIBUTES* sa = null)
+		{
+			import std.utf : toUTF16z;
+			import std.conv : to;
+
+			assert(_state == ConnectionState.disconnected,
+			       "connect on a " ~ _state.to!string ~ " pipe");
+			_state = ConnectionState.connecting;
+
+			auto h = CreateFileW(pipeName.toUTF16z,
+				GENERIC_READ | GENERIC_WRITE,
+				0,                  // dwShareMode
+				sa,                 // lpSecurityAttributes
+				OPEN_EXISTING,
+				FILE_FLAG_OVERLAPPED,
+				null);              // hTemplateFile
+			if (h == INVALID_HANDLE_VALUE)
+			{
+				auto err = GetLastError();
+				onNextTick(socketManager, {
+					_state = ConnectionState.disconnected;
+					if (_disconnectHandler)
+						_disconnectHandler(
+							"CreateFileW(" ~ pipeName ~ ") failed: " ~ err.to!string,
+							DisconnectType.error);
+				});
+				return;
+			}
+
+			_handle = h;
+			_ownHandle = true;
+			auto port = socketManager.getIocpPort();
+			auto rc = CreateIoCompletionPort(h, port, cast(ULONG_PTR)cast(void*)this, 0);
+			assert(rc == port, "CreateIoCompletionPort(pipe) failed");
+			socketManager.addParticipant(this);
+			_state = ConnectionState.connected;
+
+			onNextTick(socketManager, {
+				if (_connectHandler)
+					_connectHandler();
+				if (_readDataHandler && _state == ConnectionState.connected
+					&& !_readPending)
+					_armRead();
+			});
 		}
 
 		final HANDLE handle() pure nothrow @nogc { return _handle; }
@@ -2284,7 +2346,6 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		enum DWORD PIPE_TYPE_BYTE_             = 0x00000000;
 		enum DWORD PIPE_READMODE_BYTE_         = 0x00000000;
 		enum DWORD PIPE_WAIT_                  = 0x00000000;
-		enum DWORD PIPE_REJECT_REMOTE_CLIENTS_ = 0x00000008;
 		enum DWORD PIPE_UNLIMITED_INSTANCES_   = 255;
 
 		int pipeSeq;
@@ -2297,7 +2358,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			auto srv = CreateNamedPipeW(name,
 				PIPE_ACCESS_DUPLEX_ | FILE_FLAG_OVERLAPPED_,
 				PIPE_TYPE_BYTE_ | PIPE_READMODE_BYTE_ | PIPE_WAIT_
-				    | PIPE_REJECT_REMOTE_CLIENTS_,
+				    | PIPE_REJECT_REMOTE_CLIENTS,
 				PIPE_UNLIMITED_INSTANCES_, 65536, 65536, 0, null);
 			assert(srv != INVALID_HANDLE_VALUE, "CreateNamedPipeW failed");
 			auto cli = CreateFileW(name,
