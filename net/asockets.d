@@ -1953,7 +1953,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 
 		// --- Construction ----------------------------------------------------
 
-		this(HANDLE h, bool ownHandle = true)
+		this(HANDLE h, bool ownHandle = true, bool iocpAlreadyRegistered = false)
 		{
 			_handle = h;
 			_ownHandle = ownHandle;
@@ -1961,9 +1961,12 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			_readOp.kind = IocpOpKind.pipeRead;
 			_writeOp.owner = this;
 			_writeOp.kind = IocpOpKind.pipeWrite;
-			auto port = socketManager.getIocpPort();
-			auto rc = CreateIoCompletionPort(h, port, cast(ULONG_PTR)cast(void*)this, 0);
-			assert(rc == port, "CreateIoCompletionPort(pipe) failed");
+			if (!iocpAlreadyRegistered)
+			{
+				auto port = socketManager.getIocpPort();
+				auto rc = CreateIoCompletionPort(h, port, cast(ULONG_PTR)cast(void*)this, 0);
+				assert(rc == port, "CreateIoCompletionPort(pipe) failed");
+			}
 			socketManager.addParticipant(this);
 			_state = ConnectionState.connected;
 		}
@@ -2332,6 +2335,202 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 	}
 
 	// -----------------------------------------------------------------------
+	// NamedPipeServer
+	// -----------------------------------------------------------------------
+
+	/// Listening side of a Windows named-pipe server. Produces fresh
+	/// WindowsPipeConnection instances on each accept.
+	///
+	/// v1 keeps one unconnected pipe instance armed at a time. Between
+	/// _onConnected() firing handleAccept and the next _armConnect(), the
+	/// server is briefly un-listening (clients get ERROR_PIPE_BUSY and
+	/// must retry). Pre-arming N instances is a future-work item.
+	public class NamedPipeServer : IocpParticipant
+	{
+		string pipeName;
+		SECURITY_ATTRIBUTES* securityAttributes;
+		DWORD outBufferSize = 65536;
+		DWORD inBufferSize  = 65536;
+
+		void delegate(WindowsPipeConnection incoming) handleAccept;
+		void delegate() handleClose;
+
+		private HANDLE _pendingHandle;
+		private IocpOp _connectOp;
+		private bool   _pending;
+		private bool   _listening;
+
+		this(string pipeName)
+		{
+			this.pipeName = pipeName;
+			_connectOp.owner = this;
+			_connectOp.kind  = IocpOpKind.pipeConnect;
+		}
+
+		@property bool isListening() { return _listening; }
+
+		void listen()
+		{
+			import std.utf : toUTF16z;
+			import std.conv : to;
+
+			assert(!_listening, "NamedPipeServer.listen called twice");
+
+			_pendingHandle = CreateNamedPipeW(pipeName.toUTF16z,
+				PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
+				PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT
+				    | PIPE_REJECT_REMOTE_CLIENTS,
+				PIPE_UNLIMITED_INSTANCES,
+				outBufferSize, inBufferSize, 0,
+				securityAttributes);
+			if (_pendingHandle == INVALID_HANDLE_VALUE)
+				throw new Exception(
+					"CreateNamedPipeW(" ~ pipeName ~ ") failed: "
+					~ GetLastError().to!string);
+
+			auto port = socketManager.getIocpPort();
+			auto rc = CreateIoCompletionPort(_pendingHandle, port,
+				cast(ULONG_PTR)cast(void*)this, 0);
+			assert(rc == port, "CreateIoCompletionPort(pipe-server) failed");
+
+			socketManager.addParticipant(this);
+			_listening = true;
+			_armConnect();
+		}
+
+		void close()
+		{
+			if (!_listening) return;
+			_listening = false;
+
+			if (_pending)
+			{
+				// Don't removeParticipant here — wait for the abort to
+				// complete in iocpOnComplete to ensure the HANDLE is
+				// closed and the loop drains.
+				CancelIoEx(_pendingHandle, &_connectOp.overlapped);
+				return;
+			}
+
+			if (_pendingHandle !is null
+			    && _pendingHandle != INVALID_HANDLE_VALUE)
+			{
+				CloseHandle(_pendingHandle);
+				_pendingHandle = null;
+			}
+			socketManager.removeParticipant(this);
+			if (handleClose) handleClose();
+		}
+
+		private void _armConnect()
+		{
+			import std.conv : to;
+			_connectOp.overlapped = OVERLAPPED.init;
+			_pending = true;
+			BOOL ok = ConnectNamedPipe(_pendingHandle, &_connectOp.overlapped);
+			if (ok)
+			{
+				_pending = false;
+				onNextTick(socketManager, &_onConnected);
+				return;
+			}
+			auto err = GetLastError();
+			switch (err)
+			{
+				case ERROR_IO_PENDING:
+					return;
+				case ERROR_PIPE_CONNECTED:
+					_pending = false;
+					onNextTick(socketManager, &_onConnected);
+					return;
+				default:
+					_pending = false;
+					throw new Exception(
+						"ConnectNamedPipe failed on " ~ pipeName
+						~ ": " ~ err.to!string);
+			}
+		}
+
+		private void _onConnected()
+		{
+			import std.utf : toUTF16z;
+			import std.conv : to;
+
+			auto h = _pendingHandle;
+			_pendingHandle = null;
+
+			// The handle is already associated with the IOCP port (done in
+			// listen()/_onConnected's re-arm). Skip re-registration.
+			auto conn = new WindowsPipeConnection(h, true, true);
+
+			if (handleAccept)
+				handleAccept(conn);
+			else
+				conn.disconnect();
+
+			if (_listening)
+			{
+				_pendingHandle = CreateNamedPipeW(pipeName.toUTF16z,
+					PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
+					PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT
+					    | PIPE_REJECT_REMOTE_CLIENTS,
+					PIPE_UNLIMITED_INSTANCES,
+					outBufferSize, inBufferSize, 0,
+					securityAttributes);
+				if (_pendingHandle == INVALID_HANDLE_VALUE)
+				{
+					_listening = false;
+					throw new Exception(
+						"CreateNamedPipeW(" ~ pipeName ~ ") failed: "
+						~ GetLastError().to!string);
+				}
+				auto port = socketManager.getIocpPort();
+				auto rc = CreateIoCompletionPort(_pendingHandle, port,
+					cast(ULONG_PTR)cast(void*)this, 0);
+				assert(rc == port, "CreateIoCompletionPort(pipe-server) failed");
+
+				_armConnect();
+			}
+		}
+
+		override void iocpOnComplete(IocpOp* op, DWORD bytes, uint status)
+		{
+			assert(op is &_connectOp);
+			_pending = false;
+
+			if (status != 0)
+			{
+				// status is the raw NTSTATUS code. STATUS_CANCELLED (0xC0000120)
+				// arrives when close() triggered CancelIoEx; other non-zero
+				// statuses indicate unexpected errors. Either way, clean up.
+				_listening = false;
+				if (_pendingHandle !is null
+				    && _pendingHandle != INVALID_HANDLE_VALUE)
+				{
+					CloseHandle(_pendingHandle);
+					_pendingHandle = null;
+				}
+				socketManager.removeParticipant(this);
+				if (handleClose) handleClose();
+				return;
+			}
+
+			_onConnected();
+		}
+
+		override bool iocpHasNonDaemonWork()
+		{
+			if (_pending) return true;
+			return _listening && handleAccept !is null;
+		}
+
+		override void iocpUserPost(DWORD)
+		{
+			assert(false, "NamedPipeServer received unexpected userPost");
+		}
+	}
+
+	// -----------------------------------------------------------------------
 	// WindowsPipeConnection unittests
 	// -----------------------------------------------------------------------
 
@@ -2471,6 +2670,95 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			       "mid-send disconnect did not flush data: got `" ~ received ~ "`");
 			assert(senderDone,   "sender never disconnected");
 			assert(receiverDone, "receiver never disconnected");
+		}
+	}
+
+	// -----------------------------------------------------------------------
+	// NamedPipeServer unittests
+	// -----------------------------------------------------------------------
+
+	debug(ae_unittest) version (Windows) unittest
+	{
+		import std.format : format;
+
+		static int seq;
+
+		string makeName()
+		{
+			return format(`\\.\pipe\ae-iocp-nps-%s-%s`,
+			              GetCurrentProcessId(), seq++);
+		}
+
+		// --- Subtest 1: deferred-connect round-trip --------------------------
+		{
+			auto name = makeName();
+			auto server = new NamedPipeServer(name);
+
+			WindowsPipeConnection acceptedConn;
+			bool clientConnectFired, gotByteOnServer, gotByteOnClient;
+			bool clientDisconnected, serverDisconnected;
+
+			server.handleAccept = (WindowsPipeConnection inc) {
+				acceptedConn = inc;
+				inc.handleReadData = (Data data) {
+					gotByteOnServer = true;
+					assert(cast(string)data.unsafeContents.idup == "X");
+					inc.send(Data(cast(immutable ubyte[])"Y"));
+				};
+				inc.handleBufferFlushed = () { inc.disconnect("server-done"); };
+				inc.handleDisconnect = (string, DisconnectType) {
+					serverDisconnected = true;
+					server.close();
+				};
+			};
+			server.listen();
+
+			auto client = new WindowsPipeConnection();
+			assert(client.state == ConnectionState.disconnected,
+			       "no-arg ctor did not start in disconnected state");
+
+			client.handleConnect = () {
+				clientConnectFired = true;
+				client.send(Data(cast(immutable ubyte[])"X"));
+			};
+			client.handleReadData = (Data data) {
+				gotByteOnClient = true;
+				assert(cast(string)data.unsafeContents.idup == "Y");
+				client.disconnect("client-done");
+			};
+			client.handleDisconnect = (string, DisconnectType) {
+				clientDisconnected = true;
+			};
+			client.connect(name);
+
+			socketManager.loop();
+
+			assert(clientConnectFired,  "client handleConnect never fired");
+			assert(gotByteOnServer,     "server never received the byte");
+			assert(gotByteOnClient,     "client never received the byte");
+			assert(clientDisconnected,  "client never disconnected");
+			assert(serverDisconnected,  "server never disconnected");
+		}
+
+		// --- Subtest 2: close() cancels pending ConnectNamedPipe -------------
+		{
+			auto name = makeName();
+			auto server = new NamedPipeServer(name);
+
+			bool handleCloseFired;
+			server.handleAccept = (WindowsPipeConnection /*inc*/) {
+				assert(false, "no client should connect in this subtest");
+			};
+			server.handleClose = () { handleCloseFired = true; };
+
+			server.listen();
+			assert(server.isListening);
+			server.close();
+			assert(!server.isListening);
+
+			socketManager.loop();
+
+			assert(handleCloseFired, "handleClose never fired");
 		}
 	}
 }
