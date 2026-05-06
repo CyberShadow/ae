@@ -50,6 +50,32 @@ struct JSONFragment
 {
 	string json; ///
 	bool opCast(T)() const if (is(T == bool)) { return !!json; } ///
+
+	enum isSerializationSource = true;
+	enum isSerializationSink = true;
+
+	void read(Sink)(Sink sink)
+	{
+		auto parser = JsonParser!(immutable(char))(json, 0);
+		parser.read(sink);
+	}
+
+	void putRawJson(C)(C[] raw)
+	{
+		static if (is(C == immutable(char)))
+			json = raw;
+		else
+			json = to!string(raw);
+	}
+
+	void handle(V)(V v)
+	{
+		SerializedObject!(immutable(char)) temp;
+		temp.handle(v);
+		JsonWriter!StringBuilder writer;
+		temp.read(&writer);
+		json = writer.get();
+	}
 }
 
 /// Type for a field that collects unknown fields during deserialization.
@@ -1477,12 +1503,6 @@ debug(ae_unittest) unittest
 // JSONFragment support
 debug(ae_unittest) unittest
 {
-	// Define a JSONFragment-compatible struct (same layout as ae.utils.json.JSONFragment)
-	static struct JSONFragment
-	{
-		string json;
-	}
-
 	// Serialize: emits raw JSON verbatim
 	assert(toJson(JSONFragment(`42`)) == `42`);
 	assert(toJson(JSONFragment(`"hello"`)) == `"hello"`);
@@ -1532,11 +1552,50 @@ debug(ae_unittest) unittest
 	assert(toJson(msg) == `{"method":"add","params":[2,3]}`, toJson(msg));
 }
 
+debug(ae_unittest) unittest
+{
+	alias SO = SerializedObject!(immutable(char));
+
+	auto f1 = jsonParse!SO(`"hello"`).deserializeTo!JSONFragment;
+	assert(f1 == JSONFragment(`"hello"`), f1.json);
+
+	auto f2 = jsonParse!SO(`42`).deserializeTo!JSONFragment;
+	assert(f2 == JSONFragment(`42`), f2.json);
+
+	auto f3 = jsonParse!SO(`true`).deserializeTo!JSONFragment;
+	assert(f3 == JSONFragment(`true`), f3.json);
+
+	auto f4 = jsonParse!SO(`null`).deserializeTo!JSONFragment;
+	assert(f4 == JSONFragment(`null`), f4.json);
+
+	auto f5 = jsonParse!SO(`[1, 2]`).deserializeTo!JSONFragment;
+	assert(f5 == JSONFragment(`[1,2]`), f5.json);
+
+	auto f6 = jsonParse!SO(`{"a" : 1}`).deserializeTo!JSONFragment;
+	assert(f6 == JSONFragment(`{"a":1}`), f6.json);
+}
+
+debug(ae_unittest) unittest
+{
+	alias SO = SerializedObject!(immutable(char));
+
+	auto so = SO.from(JSONFragment(`{"a" : 1}`));
+	assert(so.type == SO.Type.object);
+	assert(toJson(so) == `{"a":1}`, toJson(so));
+}
+
+debug(ae_unittest) unittest
+{
+	alias SO = SerializedObject!(immutable(char));
+
+	auto so = SO.from(JSONFragment(`"hello"`));
+	assert(so.type == SO.Type.string_);
+	assert(toJson(so) == `"hello"`, toJson(so));
+}
+
 // JSONFragment zero-copy fast path
 debug(ae_unittest) unittest
 {
-	static struct JSONFragment { string json; }
-
 	// Slice into source: captured .json must point into the original buffer
 	string src = `[1,2,3]`;
 	auto frag = jsonParse!JSONFragment(src);
@@ -1546,7 +1605,6 @@ debug(ae_unittest) unittest
 
 debug(ae_unittest) unittest
 {
-	static struct JSONFragment { string json; }
 	static struct S { int n; JSONFragment f; }
 	auto s = jsonParse!S(`{"n":7,"f":{"a":[1,2],"b":"hi"}}`);
 	assert(s.n == 7);
@@ -1555,35 +1613,30 @@ debug(ae_unittest) unittest
 
 debug(ae_unittest) unittest
 {
-	static struct JSONFragment { string json; }
 	auto f = jsonParse!JSONFragment(` { "a" : 1 } `);
 	assert(f.json == `{ "a" : 1 }`);     // leading/trailing trimmed by skipWhitespace
 }
 
 debug(ae_unittest) unittest
 {
-	static struct JSONFragment { string json; }
 	JSONFragment[] arr = [JSONFragment(`{"a":1}`), JSONFragment(`[2,3]`), JSONFragment(`"x"`)];
 	assert(toJson(arr) == `[{"a":1},[2,3],"x"]`);
 }
 
 debug(ae_unittest) unittest
 {
-	static struct JSONFragment { string json; }
 	static struct S { JSONFragment f; }
 	assert(toJson(S(JSONFragment(`{"x":1}`))) == `{"f":{"x":1}}`);
 }
 
 debug(ae_unittest) unittest
 {
-	static struct JSONFragment { string json; }
 	assert(toJson(JSONFragment(`[1,2,3]`)) == `[1,2,3]`);
 }
 
 // Mutable input: slice must be idup'd into JSONFragment.json (no aliasing).
 debug(ae_unittest) unittest
 {
-	static struct JSONFragment { string json; }
 	char[] buf = `[1,2,3]`.dup;
 	auto frag = jsonParse!JSONFragment(buf);
 	assert(frag.json == "[1,2,3]");

@@ -911,6 +911,41 @@ debug(ae_unittest) unittest
 	assert(done, "Named params round-trip test did not complete");
 }
 
+debug(ae_unittest) unittest
+{
+	import ae.utils.json : JSONExtras, JSONFragment, toJson;
+	import ae.utils.jsonrpc : JsonRpcRequest;
+	import ae.utils.serialization.json : jsonParse;
+
+	static struct Item
+	{
+		string id;
+		JSONExtras extras;
+	}
+
+	static struct Params
+	{
+		Item item;
+	}
+
+	auto req = `{
+		"jsonrpc":"2.0",
+		"method":"item/started",
+		"params":{
+			"item":{
+				"id":"call_1",
+				"source":"unifiedExecStartup"
+			}
+		}
+	}`.jsonParse!JsonRpcRequest;
+
+	auto params = req.params.deserializeTo!Params;
+	assert(params.item.extras["source"] == JSONFragment(`"unifiedExecStartup"`),
+		params.item.extras["source"].json);
+	assert(toJson(params.item.extras._data) == `{"source":"unifiedExecStartup"}`,
+		toJson(params.item.extras._data));
+}
+
 // ************************************************************************
 
 version (HAVE_JSONRPC_PEER)
