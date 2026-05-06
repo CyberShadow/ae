@@ -16,6 +16,7 @@
 module ae.net.http.server;
 
 import std.algorithm.mutation : move;
+import std.algorithm.searching : canFind;
 import std.conv;
 import std.datetime;
 import std.exception;
@@ -39,7 +40,7 @@ import ae.utils.text;
 import ae.utils.textout;
 
 public import ae.net.http.common;
-public import ae.net.endpoint : Endpoint, SocketEndpoint, HostnameEndpoint, formatAddress;
+public import ae.net.endpoint : Endpoint, SocketEndpoint;
 version (Windows) public import ae.net.endpoint : NamedPipeEndpoint;
 
 debug(HTTP) import std.stdio : stderr;
@@ -55,6 +56,138 @@ debug(HTTP) import std.stdio : stderr;
 //   so combinations such as UNIX TLS HTTP server are difficult to represent.
 //   Refactor to fix this.
 // - HTTP bodies have stream semantics, and should be represented as such.
+
+/// Abstract acceptor for use with `HttpServer`.
+/// Implementations produce `IConnection` instances on accept and pass
+/// `Endpoint` objects describing the local bind point and the remote
+/// peer alongside each connection. (Mirrors `ae.net.http.client.Connector`
+/// for the server side.)
+interface Acceptor
+{
+	alias AcceptHandler = void delegate(
+		IConnection incoming, Endpoint local, Endpoint remote);
+	@property AcceptHandler handleAccept();
+	@property void handleAccept(AcceptHandler value);
+
+	alias CloseHandler = void delegate();
+	@property void handleClose(CloseHandler value);
+
+	@property bool isListening();
+	void close();
+
+	/// Returns one Endpoint per bound address/path. Used by callers
+	/// that want to log a listening banner or introspect where the
+	/// server is bound.
+	Endpoint[] localEndpoints();
+}
+
+/// Acceptor backed by a `TcpServer`.
+class TcpAcceptor : Acceptor
+{
+	TcpServer server;
+	private AcceptHandler _onAccept;
+
+	this()                  { server = new TcpServer(); }
+	this(TcpServer server)  { this.server = server; }
+
+	/// Bind to the given port and address. Forwards to
+	/// `TcpServer.listen(port, addr)`. Returns the actual port bound
+	/// (useful when port == 0).
+	ushort listen(ushort port, string addr = null)
+	{
+		return server.listen(port, addr);
+	}
+
+	/// Bind to the given address-info entries. Forwards to
+	/// `TcpServer.listen(AddressInfo[])`.
+	void listen(AddressInfo[] addresses)
+	{
+		server.listen(addresses);
+	}
+
+	@property AcceptHandler handleAccept() { return _onAccept; }
+
+	@property void handleAccept(AcceptHandler value)
+	{
+		_onAccept = value;
+		// TcpServer.handleAccept hides SocketServer.handleAccept; cast to
+		// reach the base-class setter that accepts void delegate(SocketConnection).
+		auto ss = cast(SocketServer) server;
+		if (value)
+			ss.handleAccept = (SocketConnection inc) {
+				value(inc,
+				      new SocketEndpoint(inc.localAddress),
+				      new SocketEndpoint(inc.remoteAddress));
+			};
+		else
+			ss.handleAccept = null;
+	}
+
+	@property void handleClose(CloseHandler value)
+	{
+		server.handleClose = value;
+	}
+
+	@property bool isListening() { return server.isListening; }
+	void close()                 { server.close(); }
+
+	Endpoint[] localEndpoints()
+	{
+		Endpoint[] r;
+		foreach (a; server.localAddresses)
+			r ~= new SocketEndpoint(a);
+		return r;
+	}
+}
+
+/// Acceptor backed by a `NamedPipeServer` (Windows-only).
+version (Windows)
+class NamedPipeAcceptor : Acceptor
+{
+	NamedPipeServer server;
+	private AcceptHandler _onAccept;
+
+	this(string pipeName, SECURITY_ATTRIBUTES* sa = null)
+	{
+		server = new NamedPipeServer(pipeName);
+		server.securityAttributes = sa;
+	}
+
+	this(NamedPipeServer server) { this.server = server; }
+
+	/// Start accepting. Forwards to `NamedPipeServer.listen()`.
+	/// (No port/address args — the pipe name was set at construction.)
+	void listen() { server.listen(); }
+
+	@property AcceptHandler handleAccept() { return _onAccept; }
+
+	@property void handleAccept(AcceptHandler value)
+	{
+		_onAccept = value;
+		if (value)
+			server.handleAccept = (WindowsPipeConnection inc) {
+				// Named pipes have no separate local/remote identity at
+				// the OS level; pass the same Endpoint for both.
+				auto ep = new NamedPipeEndpoint(server.pipeName);
+				value(inc, ep, ep);
+			};
+		else
+			server.handleAccept = null;
+	}
+
+	@property void handleClose(CloseHandler value)
+	{
+		server.handleClose = value;
+	}
+
+	@property bool isListening() { return server.isListening; }
+	void close()                 { server.close(); }
+
+	Endpoint[] localEndpoints()
+	{
+		return [ cast(Endpoint) new NamedPipeEndpoint(server.pipeName) ];
+	}
+}
 
 /// The base class for an incoming connection to a HTTP server,
 /// unassuming of transport.
@@ -490,44 +623,67 @@ class HttpServer
 // public:
 	this(Duration timeout = defaultTimeout)
 	{
-		assert(timeout > Duration.zero);
-		this.timeout = timeout;
-
-		conn = new TcpServer();
-		conn.handleClose = &onClose;
-		conn.handleAccept = &onAccept;
+		this(new TcpAcceptor(), timeout);
 	} ///
 
-	/// Listen on the given TCP address and port.
+	this(Acceptor acceptor, Duration timeout = defaultTimeout)
+	{
+		assert(timeout > Duration.zero);
+		this.timeout = timeout;
+		this.acceptor = acceptor;
+		acceptor.handleClose = &onClose;
+		acceptor.handleAccept = &onAccept;
+	} ///
+
+	/// Listen on the given TCP address and port (convenience for the
+	/// common case). Requires the default `TcpAcceptor`; for non-TCP
+	/// transports, construct an `Acceptor` explicitly and pass it to
+	/// the `HttpServer(Acceptor, ...)` constructor.
 	/// If port is 0, listen on a random available port.
 	/// Returns the port that the server is actually listening on.
 	ushort listen(ushort port, string addr = null)
 	{
-		port = conn.listen(port, addr);
-		if (log)
-			foreach (address; conn.localAddresses)
-				log("Listening on " ~ formatAddress(protocol, address) ~ " [" ~ to!string(address.addressFamily) ~ "]");
+		auto tcp = cast(TcpAcceptor) acceptor;
+		assert(tcp, "HttpServer.listen(port, addr) requires a TcpAcceptor");
+		port = tcp.listen(port, addr);
+		logListening();
 		return port;
 	}
 
-	/// Listen on the given addresses.
+	/// ditto
 	void listen(AddressInfo[] addresses)
 	{
-		conn.listen(addresses);
-		if (log)
-			foreach (address; conn.localAddresses)
-				log("Listening on " ~ formatAddress(protocol, address) ~ " [" ~ to!string(address.addressFamily) ~ "]");
+		auto tcp = cast(TcpAcceptor) acceptor;
+		assert(tcp, "HttpServer.listen(addresses) requires a TcpAcceptor");
+		tcp.listen(addresses);
+		logListening();
 	}
 
-	/// Get listen addresses.
-	@property Address[] localAddresses() { return conn.localAddresses; }
+	deprecated("Use HttpServer.localEndpoints (or your TcpAcceptor's "
+	         ~ "server.localAddresses) directly. This accessor is "
+	         ~ "TCP-specific and will be removed.")
+	@property Address[] localAddresses()
+	{
+		Address[] r;
+		foreach (ep; acceptor.localEndpoints())
+			if (auto se = cast(SocketEndpoint) ep)
+				r ~= se.address;
+		return r;
+	}
+
+	/// Returns the endpoints this server's acceptor is bound to.
+	/// Replaces the deprecated localAddresses for non-socket transports.
+	@property Endpoint[] localEndpoints()
+	{
+		return acceptor.localEndpoints();
+	}
 
 	/// Stop listening, and close idle client connections.
 	void close()
 	{
 		debug(HTTP) stderr.writeln("Shutting down");
 		if (log) log("Shutting down.");
-		conn.close();
+		acceptor.close();
 
 		debug(HTTP) stderr.writefln("There still are %d active connections", connections.iterator.walkLength);
 
@@ -557,8 +713,15 @@ class HttpServer
 	string remoteIPHeader;
 
 protected:
-	TcpServer conn;
+	Acceptor acceptor;
 	Duration timeout;
+
+	private void logListening()
+	{
+		if (log)
+			foreach (ep; acceptor.localEndpoints())
+				log("Listening on " ~ protocol ~ "://" ~ ep.toString());
+	}
 
 	void onClose()
 	{
@@ -573,10 +736,11 @@ protected:
 
 	@property string protocol() { return "http"; }
 
-	void onAccept(TcpConnection incoming)
+	void onAccept(IConnection incoming, Endpoint local, Endpoint remote)
 	{
 		try
-			new HttpServerConnection(this, incoming, adaptConnection(incoming), protocol);
+			new HttpServerConnection(this, incoming, local, remote,
+			                         adaptConnection(incoming), protocol);
 		catch (Exception e)
 		{
 			if (log)
@@ -618,15 +782,43 @@ protected:
 	}
 }
 
-/// Standard socket-based HTTP server connection.
+/// Standard HTTP server connection, supporting any transport via `IConnection`.
 final class HttpServerConnection : BaseHttpServerConnection
 {
-	SocketConnection socket; /// The socket transport.
+	/// The underlying transport (any IConnection — socket or pipe).
+	/// Equivalent to the `c` constructor argument before any adapter
+	/// wrapping by `HttpServer.adaptConnection`.
+	IConnection transport;
+
 	HttpServer server; /// `HttpServer` owning this connection.
-	/// Cached local and remote addresses.
-	Address localAddress, remoteAddress;
+
+	/// Endpoints describing the connection. Populated for all
+	/// transports (socket and named-pipe).
+	Endpoint localEndpoint, remoteEndpoint;
 
 	mixin DListLink;
+
+	deprecated("Cast HttpServerConnection.transport to SocketConnection if "
+	         ~ "needed; will be removed.")
+	@property SocketConnection socket()
+	{
+		return cast(SocketConnection) transport;
+	}
+
+	deprecated("Use localEndpoint / remoteEndpoint. These accessors return "
+	         ~ "null for non-socket transports.")
+	@property Address localAddress()
+	{
+		if (auto se = cast(SocketEndpoint) localEndpoint) return se.address;
+		return null;
+	}
+
+	deprecated("Use localEndpoint / remoteEndpoint.")
+	@property Address remoteAddress()
+	{
+		if (auto se = cast(SocketEndpoint) remoteEndpoint) return se.address;
+		return null;
+	}
 
 	/// Retrieves the remote peer address, honoring `remoteIPHeader` if set.
 	override @property string remoteAddressStr(HttpRequest r)
@@ -637,24 +829,31 @@ final class HttpServerConnection : BaseHttpServerConnection
 				if (auto p = server.remoteIPHeader in r.headers)
 					return (*p).split(",")[$ - 1];
 
-			return "[local:" ~ remoteAddress.toAddrString() ~ "]";
+			if (auto se = cast(SocketEndpoint) remoteEndpoint)
+				return "[local:" ~ se.address.toAddrString() ~ "]";
+			return "[local:" ~ remoteEndpoint.toString() ~ "]";
 		}
 
-		return remoteAddress.toAddrString();
+		if (auto se = cast(SocketEndpoint) remoteEndpoint)
+			return se.address.toAddrString();
+		// Non-socket transport (e.g. named pipe): show the URL form.
+		return remoteEndpoint.toString();
 	}
 
 protected:
-	this(HttpServer server, SocketConnection socket, IConnection c, string protocol = "http")
+	this(HttpServer server, IConnection transport,
+	     Endpoint local, Endpoint remote,
+	     IConnection c, string protocol = "http")
 	{
 		this.server = server;
-		this.socket = socket;
+		this.transport = transport;
+		this.localEndpoint = local;
+		this.remoteEndpoint = remote;
 		this.log = server.log;
 		this.protocol = protocol;
 		this.banner = server.banner;
 		this.timeout = server.timeout;
 		this.handleRequest = (HttpRequest r) => server.handleRequest(r, this);
-		this.localAddress = socket.localAddress;
-		this.remoteAddress = socket.remoteAddress;
 
 		super(c);
 
@@ -667,8 +866,36 @@ protected:
 		server.connections.remove(this);
 	}
 
-	override bool acceptMore() { return server.conn.isListening; }
-	override string formatLocalAddress(HttpRequest r) { return formatAddress(protocol, localAddress, r.host, r.port); }
+	override bool acceptMore() { return server.acceptor.isListening; }
+
+	override string formatLocalAddress(HttpRequest r)
+	{
+		// For socket transports, preserve the existing vhost+port-aware
+		// formatting (request "Host:" header → vhost, request "port" → port).
+		if (auto se = cast(SocketEndpoint) localEndpoint)
+			return formatAddress(protocol, se.address, r.host, r.port);
+		// For non-socket transports, just show the URL form.
+		return protocol ~ "://" ~ localEndpoint.toString();
+	}
+}
+
+/// Format a socket address as an HTTP-flavoured URL: applies vhost / log-port
+/// overrides, default-port elision, and IPv6 bracketing. Used for the
+/// listening banner and for "you reached me at" URLs in HTTP responses.
+string formatAddress(string protocol, Address address,
+	string vhost = null, ushort logPort = 0)
+{
+	string addr = address.toAddrString();
+	string port =
+		address.addressFamily == AddressFamily.UNIX ? null :
+		logPort ? text(logPort) :
+		address.toPortString();
+	return protocol ~ "://" ~
+		(vhost ? vhost
+		      : addr == "0.0.0.0" || addr == "::" ? "*"
+		      : addr.canFind(":") ? "[" ~ addr ~ "]"
+		      : addr) ~
+		(port is null || port == "80" ? "" : ":" ~ port);
 }
 
 /// `BaseHttpServerConnection` implementation with files, allowing to
