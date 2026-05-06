@@ -829,6 +829,19 @@ debug(ae_unittest) unittest
 
 // ************************************************************************
 
+public import ae.utils.serialization.json : JSONFragment;
+
+debug(ae_unittest) unittest
+{
+	import ae.utils.json : LegacyJSONFragment = JSONFragment, JSONExtras;
+	import ae.utils.serialization.json : SerializationJSONFragment = JSONFragment;
+
+	static assert(is(LegacyJSONFragment == SerializationJSONFragment));
+	static assert(is(typeof(JSONExtras.init[""]) == SerializationJSONFragment));
+}
+
+// ************************************************************************
+
 /// Type for a field that collects unknown fields during deserialization.
 /// During deserialization, any JSON key not matching another struct field is stored here.
 /// During serialization, each entry in the map is emitted as a top-level key-value pair.
@@ -889,17 +902,6 @@ debug(ae_unittest) unittest
 }
 
 // ************************************************************************
-
-/// Fragment of raw JSON.
-/// When serialized, the .json field is inserted into the resulting
-/// string verbatim, without any validation.
-/// When deserialized, will contain the raw JSON of one JSON object of
-/// any type.
-struct JSONFragment
-{
-	string json; ///
-	bool opCast(T)() const if (is(T==bool)) { return !!json; } ///
-}
 
 debug(ae_unittest) unittest
 {
