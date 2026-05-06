@@ -57,33 +57,8 @@ else version (Windows)
 else
 	static assert(0, "ae.sys.fswatch is not yet supported on this platform. Add a backend here (kqueue / FSEvents / FEN / polling).");
 
-// ---- Internal data model ------------------------------------------------
-
-private final class ParentWatch
-{
-	string parentPath;
-
-	// Maps leaf name to registered descriptor IDs.
-	// Empty-string key = directory-mode (match any event on this watch).
-	size_t[][string] idsByLeaf;
-
-	version (linux)
-		INotify.WatchDescriptor inotifyWd;
-	else version (Windows)
-	{
-		static if (isIocpEventLoop)
-			DirWatch dirWatch;
-	}
-}
-
-private struct WatchEntry
-{
-	ParentWatch parent;
-	string leaf;
-	void delegate() handler;
-}
-
 // ---- Windows IocpParticipant --------------------------------------------
+// (Defined before ParentWatch so the field declaration resolves without a forward reference.)
 
 version (Windows) static if (isIocpEventLoop)
 {
@@ -274,6 +249,32 @@ version (Windows) static if (isIocpEventLoop)
 				h();
 		}
 	}
+}
+
+// ---- Internal data model ------------------------------------------------
+
+private final class ParentWatch
+{
+	string parentPath;
+
+	// Maps leaf name to registered descriptor IDs.
+	// Empty-string key = directory-mode (match any event on this watch).
+	size_t[][string] idsByLeaf;
+
+	version (linux)
+		INotify.WatchDescriptor inotifyWd;
+	else version (Windows)
+	{
+		static if (isIocpEventLoop)
+			DirWatch dirWatch;
+	}
+}
+
+private struct WatchEntry
+{
+	ParentWatch parent;
+	string leaf;
+	void delegate() handler;
 }
 
 // ---- Public API ---------------------------------------------------------
