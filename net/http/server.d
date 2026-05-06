@@ -39,6 +39,8 @@ import ae.utils.text;
 import ae.utils.textout;
 
 public import ae.net.http.common;
+public import ae.net.endpoint : Endpoint, SocketEndpoint, HostnameEndpoint, formatAddress;
+version (Windows) public import ae.net.endpoint : NamedPipeEndpoint;
 
 debug(HTTP) import std.stdio : stderr;
 
@@ -695,19 +697,6 @@ protected:
 	string protocol;
 
 	override string formatLocalAddress(HttpRequest r) { return protocol ~ "://"; }
-}
-
-/// Formats a remote address for logging.
-string formatAddress(string protocol, Address address, string vhost = null, ushort logPort = 0)
-{
-	string addr = address.toAddrString();
-	string port =
-		address.addressFamily == AddressFamily.UNIX ? null :
-		logPort ? text(logPort) :
-		address.toPortString();
-	return protocol ~ "://" ~
-		(vhost ? vhost : addr == "0.0.0.0" || addr == "::" ? "*" : addr.contains(":") ? "[" ~ addr ~ "]" : addr) ~
-		(port is null || port == "80" ? "" : ":" ~ port);
 }
 
 debug (ae_unittest) import ae.net.http.client;
