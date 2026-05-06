@@ -210,7 +210,7 @@ version (Windows) static if (isIocpEventLoop)
 		private void _fireAllHandlers()
 		{
 			if (_parent is null) return;
-			foreach (ids; _parent.idsByLeaf)
+			foreach (ids; _parent.idsByLeaf.values)
 				foreach (id; ids.dup)
 					if (auto pe = id in fsWatcher.entries)
 						pe.handler();
@@ -419,7 +419,7 @@ private:
 		// Overflow: fire all handlers for this parent.
 		if (mask & INotify.Mask.qOverflow)
 		{
-			foreach (ids; parent.idsByLeaf)
+			foreach (ids; parent.idsByLeaf.values)
 				foreach (id; ids.dup)
 					if (auto pe = id in entries)
 						pe.handler();
