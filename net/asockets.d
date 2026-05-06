@@ -69,6 +69,8 @@ private enum eventLoopMechanism = {
 	}
 }();
 
+package(ae) enum bool isIocpEventLoop = (eventLoopMechanism == EventLoopMechanism.iocp);
+
 static if (eventLoopMechanism == EventLoopMechanism.epoll)
 {
 	import core.sys.linux.epoll;
@@ -997,7 +999,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 
 	/// Discriminator for what to do when a completion arrives, stored
 	/// alongside the OVERLAPPED so the dispatcher can route generically.
-	package enum IocpOpKind : ubyte
+	package(ae) enum IocpOpKind : ubyte
 	{
 		socketRecv,
 		socketRecvFrom, // WSARecvFrom completion for datagram sockets
@@ -1007,6 +1009,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		pipeRead,
 		pipeWrite,
 		processExit,
+		dirChange,   // ReadDirectoryChangesW completion
 		userPost,    // PostQueuedCompletionStatus from another thread
 	}
 
@@ -1014,7 +1017,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 	/// The OVERLAPPED *must* be the first field so a pointer to it can be
 	/// recovered as a pointer to IocpOp via simple cast (or vice-versa
 	/// using offsetof). Owners pass `&op.overlapped` to WSARecv/WSASend etc.
-	package struct IocpOp
+	package(ae) struct IocpOp
 	{
 		OVERLAPPED   overlapped;       // MUST be first
 		IocpOpKind   kind;
@@ -1062,7 +1065,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		MonoTime now;
 
 		/// Get (creating if necessary) the IOCP port.
-		package HANDLE getIocpPort()
+		package(ae) HANDLE getIocpPort()
 		{
 			ensurePort();
 			return iocpPort;
@@ -1129,7 +1132,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		size_t size() { return sockets.length; }
 
 		// Queue this socket for a synthetic onWritable() on the next tick.
-		package void kickWritable(GenericSocket conn)
+		package(ae) void kickWritable(GenericSocket conn)
 		{
 			foreach (s; pendingWritables)
 				if (s is conn)
@@ -1138,11 +1141,11 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		}
 
 		// Called by IocpParticipant to register/unregister itself.
-		package void addParticipant(IocpParticipant p)
+		package(ae) void addParticipant(IocpParticipant p)
 		{
 			participants ~= p;
 		}
-		package void removeParticipant(IocpParticipant p)
+		package(ae) void removeParticipant(IocpParticipant p)
 		{
 			foreach (i, q; participants)
 				if (q is p)
@@ -1341,6 +1344,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 				case IocpOpKind.pipeRead:
 				case IocpOpKind.pipeWrite:
 				case IocpOpKind.processExit:
+				case IocpOpKind.dirChange:
 				{
 					auto p = cast(IocpParticipant)op.owner;
 					if (p is null) return;
@@ -1360,7 +1364,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 
 	/// Interface for non-socket participants of the IOCP loop
 	/// (pipes, process-exit waiters, future extensions).
-	package interface IocpParticipant
+	package(ae) interface IocpParticipant
 	{
 		/// Returns true iff this participant has work that should keep
 		/// the event loop alive (i.e. should NOT exit if only daemon
