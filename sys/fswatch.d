@@ -117,7 +117,11 @@ version (Windows) static if (isIocpEventLoop)
 			assert(rc == port, "CreateIoCompletionPort failed for directory watch");
 
 			socketManager.addParticipant(this);
-			_armRead();
+			if (!_armRead())
+			{
+				_doTeardown();
+				throw new Exception("ReadDirectoryChangesW failed for directory: " ~ path);
+			}
 		}
 
 		// Initiates cancellation. The ABORTED completion will arrive asynchronously
@@ -140,13 +144,7 @@ version (Windows) static if (isIocpEventLoop)
 			if (status == ERROR_OPERATION_ABORTED || _cancelling)
 			{
 				// Normal teardown after cancel(): close handle, leave registry.
-				if (_dirHandle)
-				{
-					CloseHandle(_dirHandle);
-					_dirHandle = null;
-				}
-				_parent = null;
-				socketManager.removeParticipant(this);
+				_doTeardown();
 				return;
 			}
 
@@ -164,7 +162,8 @@ version (Windows) static if (isIocpEventLoop)
 			{
 				// Kernel buffer overflow: fire all handlers, then re-arm.
 				_fireAllHandlers();
-				_armRead();
+				if (!_armRead())
+					_handleWatchDeath();
 				return;
 			}
 
@@ -181,13 +180,24 @@ version (Windows) static if (isIocpEventLoop)
 					break;
 				offset += info.NextEntryOffset;
 			}
-			_armRead();
+			if (!_armRead())
+				_handleWatchDeath();
 		}
 
 		override void iocpUserPost(DWORD bytes) { assert(false); }
 
-		private void _armRead()
+		// Returns true if the read was successfully posted (or cancel is in progress),
+		// false if ReadDirectoryChangesW failed synchronously (caller must handle error).
+		private bool _armRead()
 		{
+			if (_cancelling)
+			{
+				// cancel() was called while a completion was being dispatched,
+				// so CancelIoEx had no in-flight op to abort. Tear down now.
+				_doTeardown();
+				return true;
+			}
+
 			enum DWORD filter =
 				FILE_NOTIFY_CHANGE_FILE_NAME
 				| FILE_NOTIFY_CHANGE_DIR_NAME
@@ -203,8 +213,14 @@ version (Windows) static if (isIocpEventLoop)
 				_dirHandle, _buf.ptr, cast(DWORD)_buf.length,
 				FALSE, filter, &got, &_op.overlapped, null);
 
-			if (!ok && GetLastError() != ERROR_IO_PENDING)
-				_handleWatchDeath();
+			return ok || GetLastError() == ERROR_IO_PENDING;
+		}
+
+		private void _doTeardown()
+		{
+			if (_dirHandle) { CloseHandle(_dirHandle); _dirHandle = null; }
+			_parent = null;
+			socketManager.removeParticipant(this);
 		}
 
 		private void _fireAllHandlers()
@@ -326,13 +342,14 @@ struct FsWatcher
 		return WatchDescriptor(id);
 	}
 
-	/// Stop watching. Passing an already-removed descriptor is a
-	/// programming error (asserts). Idempotent only in the sense that a
-	/// handler may call `unwatch(wd)` exactly once during dispatch.
+	/// Stop watching. Idempotent: calling `unwatch` on a descriptor that has
+	/// already been removed (e.g. because the watched directory was deleted and
+	/// the watch-death teardown already cleared it before firing the handler)
+	/// is a no-op. The handler may call `unwatch(wd)` re-entrantly.
 	void unwatch(WatchDescriptor wd)
 	{
 		auto pe = wd.id in entries;
-		assert(pe !is null, "unwatch: descriptor not registered");
+		if (pe is null) return;  // already removed (watch-death path, double-unwatch)
 
 		auto parent = pe.parent;
 		auto leaf   = pe.leaf;
