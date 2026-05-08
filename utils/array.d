@@ -93,7 +93,7 @@ debug(ae_unittest) unittest
 
 /// ditto
 @property inout(ubyte)[] asBytes(T)(inout(T) value)
-	if (is(T U : U[]) && !hasIndirections!U)
+	if (is(T U : U[]) && (!hasIndirections!U || is(Unqual!U == void)))
 {
 	return cast(inout(ubyte)[])value;
 }
