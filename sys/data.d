@@ -67,7 +67,7 @@ static if (useGC)
  *      will not be default-initialized.
  */
 struct TData(T)
-if (!hasIndirections!T || is(T == void))
+if (!hasIndirections!T || is(Unqual!T == void))
 {
 private:
 	// https://issues.dlang.org/show_bug.cgi?id=23961
