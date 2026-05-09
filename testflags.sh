@@ -19,6 +19,7 @@ bad_flags=(
 	-version=Darwin
 	-version=DigitalMars
 	-version=D_LP64
+	-version=D_TypeInfo
 	-version=FreeBSD
 	-version=GNU
 	-version=iOS
