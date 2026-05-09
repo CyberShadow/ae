@@ -123,11 +123,46 @@ struct Vec(T)
 			// Use exponential growth to amortize reallocation cost
 			import std.algorithm.comparison : max;
 			auto growCapacity = max(requiredCapacity, cap + (cap >> 1)); // 1.5x growth
-			T[] newData;
-			newData.reserve(growCapacity);
-			cap = newData.capacity;
+
+			// Use the GC primitives directly. We don't go through
+			// `.reserve` / `.capacity` because they instantiate
+			// `_d_arraysetcapacity`, which unconditionally instantiates
+			// `__doPostblit!T` and therefore fails to compile for types
+			// with `@disable this(this)`. We also don't want APPENDABLE
+			// since `Vec` tracks length/capacity itself.
+			import core.memory : GC;
+			import std.traits : hasIndirections;
+			version (D_TypeInfo)
+				const(TypeInfo) ti = typeid(T);
+			else
+				const(TypeInfo) ti = null;
+
+			// First, try to grow the existing block in place. This avoids
+			// the move loop and is what GC.extend / .reserve used to do.
+			// Only attempt this when `data.ptr` is at the base of its
+			// block (i.e., `popFront` hasn't advanced it).
+			if (data.ptr !is null && GC.addrOf(data.ptr) is data.ptr)
+			{
+				auto extraMin = (requiredCapacity - cap) * T.sizeof;
+				auto extraDesired = (growCapacity - cap) * T.sizeof;
+				auto newBlockBytes = GC.extend(data.ptr, extraMin, extraDesired, ti);
+				if (newBlockBytes != 0)
+				{
+					cap = newBlockBytes / T.sizeof;
+					assert(cap >= requiredCapacity);
+					return;
+				}
+			}
+
+			// Otherwise, allocate a new block. Claim all the bytes the GC
+			// actually gave us (block sizes are rounded up).
+			uint attrs = 0;
+			static if (!hasIndirections!T)
+				attrs |= GC.BlkAttr.NO_SCAN;
+			auto blk = GC.qalloc(growCapacity * T.sizeof, attrs, ti);
+			cap = blk.size / T.sizeof;
 			assert(cap >= requiredCapacity);
-			newData = newData.ptr[0 .. data.length];
+			T[] newData = (cast(T*) blk.base)[0 .. data.length];
 			foreach (i; 0 .. data.length)
 				moveEmplace(data[i], newData[i]);
 			data = newData;
@@ -324,4 +359,28 @@ debug(ae_unittest) unittest
 	v ~= 42;
 	assert(v.length == 6);
 	assert(v[5] == 42);
+}
+
+// Test that the GC's overallocation is captured into `cap`.
+// The smallest GC bin is large enough to hold several `int`s, so a
+// one-element append must report a capacity strictly greater than 1.
+debug(ae_unittest) unittest
+{
+	Vec!int v;
+	v ~= 1;
+	assert(v.cap > v.length, "Vec did not claim the GC block's overallocated capacity");
+}
+
+// Test in-place growth via GC.extend. We allocate a "large" block (well
+// above the GC's small-object size classes) so that the large-object
+// pool has room to extend it in place. The pointer should be stable.
+debug(ae_unittest) unittest
+{
+	Vec!int v;
+	v.length = 64 * 1024; // 256 KiB — large object pool
+	auto oldPtr = &v[0];
+	auto oldCap = v.cap;
+	v.length = oldCap + 1; // force an ensureCapacity call
+	assert(&v[0] is oldPtr, "Vec did not grow in place when the GC could");
+	assert(v.cap > oldCap);
 }
