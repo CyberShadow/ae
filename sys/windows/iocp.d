@@ -151,3 +151,17 @@ enum DWORD SIO_GET_EXTENSION_FUNCTION_POINTER = 0xC8000006;
 // Must be set on the socket after ConnectEx completes for getpeername /
 // shutdown / etc. to behave correctly.
 enum SO_UPDATE_CONNECT_CONTEXT  = 0x7010;
+
+// Named pipe constants
+// PIPE_REJECT_REMOTE_CLIENTS is missing from druntime as of 2.107.
+enum DWORD PIPE_REJECT_REMOTE_CLIENTS = 0x00000008;
+
+// CancelIoEx is gated behind `static if (_WIN32_WINNT >= 0x600)` in druntime's
+// core.sys.windows.winbase. Re-export druntime's symbol when present, otherwise
+// declare our own. Callers `import ae.sys.windows.iocp : CancelIoEx;` to get a
+// toolchain-agnostic binding without introducing a duplicate-declaration
+// conflict on toolchains where druntime does declare it.
+static if (__traits(compiles, &CancelIoEx))
+    public import core.sys.windows.windows : CancelIoEx;
+else
+    extern (Windows) BOOL CancelIoEx(HANDLE, LPOVERLAPPED) nothrow @nogc;

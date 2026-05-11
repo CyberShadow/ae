@@ -87,11 +87,7 @@ else static if (backend == Backend.iocp)
 	import ae.net.asockets : IocpParticipant, IocpOp, IocpOpKind;
 	import core.sys.windows.windows;
 	import ae.sys.windows.text : fromWString;
-
-	// CancelIoEx is gated behind static if (_WIN32_WINNT >= 0x600) in druntime's
-	// core.sys.windows.winbase. Declare the binding manually so we don't depend
-	// on the build's _WIN32_WINNT value.
-	extern (Windows) BOOL CancelIoEx(HANDLE, LPOVERLAPPED) nothrow @nogc;
+	import ae.sys.windows.iocp : CancelIoEx;
 }
 else static if (backend == Backend.polling)
 {
