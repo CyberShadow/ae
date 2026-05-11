@@ -3,6 +3,11 @@
  *
  * Minimal path-based file system change notification facade.
  *
+ * Supported backends: inotify (Linux), ReadDirectoryChangesW (Windows).
+ * On other platforms a polling fallback is used: it detects changes by
+ * comparing stat snapshots on a timer (default 1 s), trading latency
+ * for portability. Native backends should be added later.
+ *
  * Watches a path (file or directory) and invokes a handler whenever
  * the file system entry at that path, or an entry inside it if it is
  * a directory, may have changed. The handler carries no payload; the
@@ -60,7 +65,12 @@ else version (Windows)
 		static assert(0, "ae.sys.fswatch on Windows requires the IOCP event loop (version=IOCP, the default).");
 }
 else
-	static assert(0, "ae.sys.fswatch is not yet supported on this platform. Add a backend here (kqueue / FSEvents / FEN / polling).");
+{
+	// Polling fallback for platforms without a native backend.
+	import core.time : Duration, msecs, seconds;
+	import ae.sys.timing : TimerTask, setInterval, clearTimeout;
+	import std.file : timeLastModified, getSize, dirEntries, SpanMode;
+}
 
 // ---- Windows IocpParticipant --------------------------------------------
 // (Defined before ParentWatch so the field declaration resolves without a forward reference.)
@@ -280,6 +290,15 @@ private struct WatchEntry
 	ParentWatch parent;
 	string leaf;
 	void delegate() handler;
+
+	version (linux) {} else version (Windows) {} else
+	{
+		// Polling snapshot: filled at watch time, compared each tick.
+		bool snapExists;
+		long snapMtime;    // SysTime.stdTime
+		ulong snapSize;
+		size_t snapDirHash;
+	}
 }
 
 // ---- Public API ---------------------------------------------------------
@@ -345,6 +364,8 @@ struct FsWatcher
 		auto id = nextId++;
 		entries[id] = WatchEntry(parent, leaf, handler);
 		parent.idsByLeaf[leaf] ~= id;
+		version (linux) {} else version (Windows) {} else
+			_pollSnap(&entries[id]);
 		return WatchDescriptor(id);
 	}
 
@@ -471,6 +492,117 @@ private:
 		void _teardownOsWatch(ParentWatch parent)
 		{
 			parent.dirWatch.cancel();
+		}
+	}
+
+	// ---- Polling fallback backend ----------------------------------------
+
+	version (linux) {} else version (Windows) {} else
+	{
+		debug(ae_unittest)
+			private Duration _pollInterval = 50.msecs;
+		else
+			private Duration _pollInterval = 1.seconds;
+
+		private TimerTask _pollTimer;
+
+		void _installOsWatch(ParentWatch parent, string parentPath)
+		{
+			if (_pollTimer is null)
+				_pollTimer = setInterval(&_pollTick, _pollInterval);
+		}
+
+		void _teardownOsWatch(ParentWatch parent)
+		{
+			// parents still contains the current parent at this point.
+			if (parents.length <= 1 && _pollTimer !is null)
+			{
+				clearTimeout(_pollTimer);
+				_pollTimer = null;
+			}
+		}
+
+		void _pollTick()
+		{
+			// Iterate in id (registration) order so handlers fire in the same
+			// order as on inotify / IOCP (where idsByLeaf preserves append order).
+			import std.algorithm.sorting : sort;
+			auto ids = entries.keys.dup;
+			ids.sort();
+			foreach (id; ids)
+			{
+				auto pe = id in entries;
+				if (pe is null) continue;
+				if (!_pollChanged(pe)) continue;
+				_pollSnap(pe);
+				pe.handler();
+			}
+		}
+
+		bool _pollChanged(WatchEntry* pe)
+		{
+			string path = pe.leaf.length
+				? pe.parent.parentPath ~ "/" ~ pe.leaf
+				: pe.parent.parentPath;
+			bool nowExists = path.exists;
+			if (nowExists != pe.snapExists) return true;
+			if (!nowExists) return false;
+			try { if (timeLastModified(path).stdTime != pe.snapMtime) return true; }
+			catch (Exception) {}
+			if (path.isDir)
+			{
+				if (_pollHashDir(path) != pe.snapDirHash) return true;
+			}
+			else
+			{
+				try { if (getSize(path) != pe.snapSize) return true; }
+				catch (Exception) {}
+			}
+			return false;
+		}
+
+		void _pollSnap(WatchEntry* pe)
+		{
+			string path = pe.leaf.length
+				? pe.parent.parentPath ~ "/" ~ pe.leaf
+				: pe.parent.parentPath;
+			pe.snapExists = path.exists;
+			pe.snapMtime = 0;
+			pe.snapSize = 0;
+			pe.snapDirHash = 0;
+			if (pe.snapExists)
+			{
+				try { pe.snapMtime = timeLastModified(path).stdTime; }
+				catch (Exception) {}
+				if (path.isDir)
+					pe.snapDirHash = _pollHashDir(path);
+				else
+				{
+					try { pe.snapSize = getSize(path); }
+					catch (Exception) {}
+				}
+			}
+		}
+
+		static size_t _pollHashDir(string path)
+		{
+			import std.algorithm.sorting : sort;
+			import std.array : array;
+			import std.path : baseName;
+			size_t h = 0;
+			try
+			{
+				auto ents = dirEntries(path, SpanMode.shallow).array;
+				ents.sort!((a, b) => a.name < b.name);
+				foreach (ref e; ents)
+				{
+					string name = baseName(e.name);
+					foreach (c; name) h = h * 31 + c;
+					h ^= cast(size_t)(e.timeLastModified.stdTime);
+				}
+			}
+			catch (Exception) {}
+			return h;
 		}
 	}
 }
