@@ -42,6 +42,8 @@ bad_flags=(
 	# Require special dependencies
 	-version=LIBEV
 	-version=IOCP
+	-version=FsWatchInotify
+	-version=FsWatchIocp
 
 	# "no longer has any effect"
 	-preview=dip25

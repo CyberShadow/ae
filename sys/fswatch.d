@@ -8,6 +8,10 @@
  * comparing stat snapshots on a timer (default 1 s), trading latency
  * for portability. Native backends should be added later.
  *
+ * The backend is picked automatically per platform, but can be overridden
+ * by passing one of `-version=FsWatchInotify`, `-version=FsWatchIocp`, or
+ * `-version=FsWatchPolling` to the compiler.
+ *
  * Watches a path (file or directory) and invokes a handler whenever
  * the file system entry at that path, or an entry inside it if it is
  * a directory, may have changed. The handler carries no payload; the
@@ -40,33 +44,57 @@ import std.exception : enforce;
 
 import ae.net.asockets : socketManager;
 
-version (linux)
+private enum Backend { inotify, iocp, polling }
+
+// Choose the backend.
+// If one was explicitly requested, use it:
+private enum backend = {
+	version (FsWatchInotify) return Backend.inotify; else
+	version (FsWatchIocp)    return Backend.iocp;    else
+	version (FsWatchPolling) return Backend.polling; else
+	// Otherwise, pick a default:
+	{
+		version (linux)
+			return Backend.inotify;
+		else version (Windows)
+			return Backend.iocp;
+		else
+			return Backend.polling;
+	}
+}();
+
+// Backend-specific imports.
+static if (backend == Backend.inotify)
 {
+	version (linux) {}
+	else static assert(0, "ae.sys.fswatch: the inotify backend requires Linux.");
+
 	import ae.sys.inotify;
 	import core.sys.linux.sys.inotify :
 		IN_MODIFY, IN_ATTRIB, IN_CREATE, IN_DELETE,
 		IN_MOVED_FROM, IN_MOVED_TO,
 		IN_DELETE_SELF, IN_MOVE_SELF;
 }
-else version (Windows)
+else static if (backend == Backend.iocp)
 {
-	import ae.net.asockets : IocpParticipant, IocpOp, IocpOpKind, isIocpEventLoop;
-	static if (isIocpEventLoop)
-	{
-		import core.sys.windows.windows;
-		import ae.sys.windows.text : fromWString;
+	version (Windows) {}
+	else static assert(0, "ae.sys.fswatch: the IOCP backend requires Windows.");
 
-		// CancelIoEx is gated behind static if (_WIN32_WINNT >= 0x600) in druntime's
-		// core.sys.windows.winbase. Declare the binding manually so we don't depend
-		// on the build's _WIN32_WINNT value.
-		extern (Windows) BOOL CancelIoEx(HANDLE, LPOVERLAPPED) nothrow @nogc;
-	}
-	else
-		static assert(0, "ae.sys.fswatch on Windows requires the IOCP event loop (version=IOCP, the default).");
+	import ae.net.asockets : isIocpEventLoop;
+	static assert(isIocpEventLoop,
+		"ae.sys.fswatch on Windows requires the IOCP event loop (version=IOCP, the default).");
+
+	import ae.net.asockets : IocpParticipant, IocpOp, IocpOpKind;
+	import core.sys.windows.windows;
+	import ae.sys.windows.text : fromWString;
+
+	// CancelIoEx is gated behind static if (_WIN32_WINNT >= 0x600) in druntime's
+	// core.sys.windows.winbase. Declare the binding manually so we don't depend
+	// on the build's _WIN32_WINNT value.
+	extern (Windows) BOOL CancelIoEx(HANDLE, LPOVERLAPPED) nothrow @nogc;
 }
-else
+else static if (backend == Backend.polling)
 {
-	// Polling fallback for platforms without a native backend.
 	import core.time : Duration, msecs, seconds;
 	import ae.sys.timing : TimerTask, setInterval, clearTimeout;
 	import std.file : timeLastModified, getSize, dirEntries, SpanMode;
@@ -75,7 +103,7 @@ else
 // ---- Windows IocpParticipant --------------------------------------------
 // (Defined before ParentWatch so the field declaration resolves without a forward reference.)
 
-version (Windows) static if (isIocpEventLoop)
+static if (backend == Backend.iocp)
 {
 	private final class DirWatch : IocpParticipant
 	{
@@ -276,13 +304,10 @@ private final class ParentWatch
 	// Empty-string key = directory-mode (match any event on this watch).
 	size_t[][string] idsByLeaf;
 
-	version (linux)
+	static if (backend == Backend.inotify)
 		INotify.WatchDescriptor inotifyWd;
-	else version (Windows)
-	{
-		static if (isIocpEventLoop)
-			DirWatch dirWatch;
-	}
+	else static if (backend == Backend.iocp)
+		DirWatch dirWatch;
 }
 
 private struct WatchEntry
@@ -291,7 +316,7 @@ private struct WatchEntry
 	string leaf;
 	void delegate() handler;
 
-	version (linux) {} else version (Windows) {} else
+	static if (backend == Backend.polling)
 	{
 		// Polling snapshot: filled at watch time, compared each tick.
 		bool snapExists;
@@ -364,8 +389,7 @@ struct FsWatcher
 		auto id = nextId++;
 		entries[id] = WatchEntry(parent, leaf, handler);
 		parent.idsByLeaf[leaf] ~= id;
-		version (linux) {} else version (Windows) {} else
-			_pollSnap(&entries[id]);
+		_onWatchAdded(&entries[id]);
 		return WatchDescriptor(id);
 	}
 
@@ -404,86 +428,87 @@ private:
 	ParentWatch[string] parents;  // parentPath -> shared watch
 	size_t nextId = 1;            // 0 is reserved (invalid)
 
-	// ---- Linux backend --------------------------------------------------
+	// ---- Backend implementations ----------------------------------------
 
-	version (linux)
-	void _installOsWatch(ParentWatch parent, string parentPath)
+	static if (backend == Backend.inotify)
 	{
-		auto mask = cast(INotify.Mask)(
-			IN_MODIFY | IN_ATTRIB | IN_CREATE | IN_DELETE
-			| IN_MOVED_FROM | IN_MOVED_TO
-			| IN_DELETE_SELF | IN_MOVE_SELF);
+		void _onWatchAdded(WatchEntry*) {}
 
-		parent.inotifyWd = iNotify.add(parentPath, mask,
-			(in char[] name, INotify.Mask evMask, uint cookie)
-			{
-				_inotifyCallback(parent, name, evMask);
-			});
-	}
-
-	version (linux)
-	void _teardownOsWatch(ParentWatch parent)
-	{
-		iNotify.remove(parent.inotifyWd);
-	}
-
-	version (linux)
-	void _inotifyCallback(ParentWatch parent, in char[] name, INotify.Mask mask)
-	{
-		// Self-event: the watched directory itself is going away.
-		if (mask & (INotify.Mask.removeSelf | INotify.Mask.moveSelf
-		            | INotify.Mask.unmount   | INotify.Mask.ignored))
+		void _installOsWatch(ParentWatch parent, string parentPath)
 		{
-			// Guard against double-entry (e.g. IN_DELETE_SELF then IN_IGNORED).
-			if (!(parent.parentPath in parents))
-				return;
+			auto mask = cast(INotify.Mask)(
+				IN_MODIFY | IN_ATTRIB | IN_CREATE | IN_DELETE
+				| IN_MOVED_FROM | IN_MOVED_TO
+				| IN_DELETE_SELF | IN_MOVE_SELF);
 
-			// Collect handlers before mutating the registry.
-			void delegate()[] allHandlers;
-			foreach (ids; parent.idsByLeaf)
-				foreach (id; ids)
-					if (auto pe = id in entries)
-						allHandlers ~= pe.handler;
+			parent.inotifyWd = iNotify.add(parentPath, mask,
+				(in char[] name, INotify.Mask evMask, uint cookie)
+				{
+					_inotifyCallback(parent, name, evMask);
+				});
+		}
 
-			// Tear down registry entries.
-			foreach (ids; parent.idsByLeaf)
-				foreach (id; ids)
-					entries.remove(id);
-			parent.idsByLeaf = null;
-			parents.remove(parent.parentPath);
-
-			// Remove from inotify (tolerates EINVAL if kernel already dropped it).
+		void _teardownOsWatch(ParentWatch parent)
+		{
 			iNotify.remove(parent.inotifyWd);
-
-			foreach (h; allHandlers)
-				h();
-			return;
 		}
 
-		// Overflow: fire all handlers for this parent.
-		if (mask & INotify.Mask.qOverflow)
+		void _inotifyCallback(ParentWatch parent, in char[] name, INotify.Mask mask)
 		{
-			foreach (ids; parent.idsByLeaf.values)
-				foreach (id; ids.dup)
-					if (auto pe = id in entries)
-						pe.handler();
-			return;
+			// Self-event: the watched directory itself is going away.
+			if (mask & (INotify.Mask.removeSelf | INotify.Mask.moveSelf
+			            | INotify.Mask.unmount   | INotify.Mask.ignored))
+			{
+				// Guard against double-entry (e.g. IN_DELETE_SELF then IN_IGNORED).
+				if (!(parent.parentPath in parents))
+					return;
+
+				// Collect handlers before mutating the registry.
+				void delegate()[] allHandlers;
+				foreach (ids; parent.idsByLeaf)
+					foreach (id; ids)
+						if (auto pe = id in entries)
+							allHandlers ~= pe.handler;
+
+				// Tear down registry entries.
+				foreach (ids; parent.idsByLeaf)
+					foreach (id; ids)
+						entries.remove(id);
+				parent.idsByLeaf = null;
+				parents.remove(parent.parentPath);
+
+				// Remove from inotify (tolerates EINVAL if kernel already dropped it).
+				iNotify.remove(parent.inotifyWd);
+
+				foreach (h; allHandlers)
+					h();
+				return;
+			}
+
+			// Overflow: fire all handlers for this parent.
+			if (mask & INotify.Mask.qOverflow)
+			{
+				foreach (ids; parent.idsByLeaf.values)
+					foreach (id; ids.dup)
+						if (auto pe = id in entries)
+							pe.handler();
+				return;
+			}
+
+			// Normal event: fire handlers for the specific leaf and directory-mode.
+			auto leafStr = name.idup;
+			foreach (id; parent.idsByLeaf.get(leafStr, []).dup)
+				if (auto pe = id in entries)
+					pe.handler();
+			foreach (id; parent.idsByLeaf.get("", []).dup)
+				if (auto pe = id in entries)
+					pe.handler();
 		}
-
-		// Normal event: fire handlers for the specific leaf and directory-mode.
-		auto leafStr = name.idup;
-		foreach (id; parent.idsByLeaf.get(leafStr, []).dup)
-			if (auto pe = id in entries)
-				pe.handler();
-		foreach (id; parent.idsByLeaf.get("", []).dup)
-			if (auto pe = id in entries)
-				pe.handler();
 	}
-
-	// ---- Windows backend ------------------------------------------------
-
-	version (Windows) static if (isIocpEventLoop)
+	else static if (backend == Backend.iocp)
 	{
+		void _onWatchAdded(WatchEntry*) {}
+
 		void _installOsWatch(ParentWatch parent, string parentPath)
 		{
 			parent.dirWatch = new DirWatch(parent, parentPath);
@@ -494,10 +519,7 @@ private:
 			parent.dirWatch.cancel();
 		}
 	}
-
-	// ---- Polling fallback backend ----------------------------------------
-
-	version (linux) {} else version (Windows) {} else
+	else static if (backend == Backend.polling)
 	{
 		debug(ae_unittest)
 			private Duration _pollInterval = 50.msecs;
@@ -505,6 +527,8 @@ private:
 			private Duration _pollInterval = 1.seconds;
 
 		private TimerTask _pollTimer;
+
+		void _onWatchAdded(WatchEntry* pe) { _pollSnap(pe); }
 
 		void _installOsWatch(ParentWatch parent, string parentPath)
 		{
