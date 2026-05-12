@@ -270,13 +270,23 @@ private: // (This is an eponymous template, so this is to aid documentation gene
 				static if (is(typeof(O_DIRECTORY)))
 					flags |= O_DIRECTORY;
 				auto fd = openat(dirFD, *name ? name : ".", flags);
-				errnoEnforce(fd >= 0,
-					"Failed to open %s as subdirectory of directory %s"
-					.format(this.baseNameFS, this.parent.fullName));
+				if (this.parent)
+					errnoEnforce(fd >= 0,
+						"Failed to open %s as subdirectory of directory %s"
+						.format(this.baseNameFS, this.parent.fullName));
+				else
+					errnoEnforce(fd >= 0,
+						"Failed to open directory %s"
+						.format(this.fullNameFS));
 				auto subdir = fdopendir(fd);
-				errnoEnforce(subdir,
-					"Failed to open subdirectory %s of directory %s as directory"
-					.format(this.baseNameFS, this.parent.fullName));
+				if (this.parent)
+					errnoEnforce(subdir,
+						"Failed to open subdirectory %s of directory %s as directory"
+						.format(this.baseNameFS, this.parent.fullName));
+				else
+					errnoEnforce(subdir,
+						"Failed to open directory %s as directory"
+						.format(this.fullNameFS));
 				scan(subdir, fd, &this, args);
 			}
 		}
@@ -1038,6 +1048,40 @@ debug(ae_unittest) unittest
 			e.recurse(depth + 1);
 	}, Yes.includeRoot)(tmpDir, 0);
 	assert(maxDepth == 2);
+
+	version (Posix)
+	{
+		import core.sys.posix.sys.stat : chmod, S_IRWXU;
+		import core.sys.posix.unistd : geteuid;
+
+		if (geteuid() != 0)
+		{
+			auto noAccessDir = deleteme ~ "-no-access-dir";
+			if (noAccessDir.exists) noAccessDir.removeRecurse();
+			mkdir(noAccessDir);
+			scope(exit)
+			{
+				chmod(noAccessDir.toStringz, S_IRWXU);
+				if (noAccessDir.exists) noAccessDir.removeRecurse();
+			}
+
+			chmod(noAccessDir.toStringz, 0);
+			bool sawRoot;
+			noAccessDir.listDir!((e) {
+				if (e.parent is null)
+				{
+					sawRoot = true;
+					bool recurseThrew;
+					try
+						e.recurse();
+					catch (Exception)
+						recurseThrew = true;
+					assert(recurseThrew);
+				}
+			}, Yes.includeRoot);
+			assert(sawRoot);
+		}
+	}
 
 	// Symlink test
 	(){
