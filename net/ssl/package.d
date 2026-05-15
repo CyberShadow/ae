@@ -68,15 +68,15 @@ abstract class SSLContext
 		require, /// Require a certificate and verify it.
 	}
 
-	deprecated("Use setOpenSSLCipherList on OpenSSLContext, or setCipherSuites for a portable alternative")
+	// deprecated("Use setOpenSSLCipherList on OpenSSLContext, or setCipherSuites for a portable alternative")
 	void setCipherList(string[] ciphers) { assert(false, "setCipherList is not implemented by this SSL provider"); } /// Configure OpenSSL-like cipher list.
-	deprecated("enableDH is OpenSSL-specific; cast to OpenSSLContext and call enableDH there")
+	// deprecated("enableDH is OpenSSL-specific; cast to OpenSSLContext and call enableDH there")
 	void enableDH(int bits) { assert(false, "enableDH is not implemented by this SSL provider"); } /// Enable Diffie-Hellman key exchange with the specified key size.
-	deprecated("enableECDH is OpenSSL-specific; cast to OpenSSLContext and call enableECDH there")
+	// deprecated("enableECDH is OpenSSL-specific; cast to OpenSSLContext and call enableECDH there")
 	void enableECDH() { assert(false, "enableECDH is not implemented by this SSL provider"); } /// Enable elliptic-curve DH key exchange.
 	abstract void setCertificate(string path);                    /// Load and use a local certificate from the given file.
 	abstract void setPrivateKey(string path);                     /// Load and use the certificate private key from the given file.
-	deprecated("setPreSharedKey is OpenSSL-specific; cast to OpenSSLContext and call setPreSharedKey there")
+	// deprecated("setPreSharedKey is OpenSSL-specific; cast to OpenSSLContext and call setPreSharedKey there")
 	void setPreSharedKey(string id, const(ubyte)[] key) { assert(false, "setPreSharedKey is not implemented by this SSL provider"); } /// Use a pre-shared key instead of using certificate-based peer verification.
 	abstract void setPeerVerify(Verify verify);                   /// Configure peer certificate verification.
 	abstract void setPeerRootCertificate(string path);            /// Require that peer certificates are signed by the specified root certificate.
