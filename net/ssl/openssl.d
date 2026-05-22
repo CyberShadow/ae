@@ -74,6 +74,11 @@ static if (is(typeof(OPENSSL_MAKE_VERSION)))
 else
 	enum isOpenSSL11 = false;
 
+static if (is(typeof(OPENSSL_MAKE_VERSION)))
+	enum isOpenSSL30 = OPENSSL_VERSION_NUMBER >= OPENSSL_MAKE_VERSION(3, 0, 0, 0);
+else
+	enum isOpenSSL30 = false;
+
 /// `mixin` this in your program to link to OpenSSL.
 mixin template SSLUseLib()
 {
@@ -133,6 +138,28 @@ private
 		alias get_rfc3526_prime_8192 = BN_get_rfc3526_prime_8192;
 		extern(C) int SSL_in_init(const SSL *s) nothrow;
 		extern(C) int SSL_CTX_set_ciphersuites(SSL_CTX* ctx, const(char)* str);
+		extern(C) void SSL_CTX_set_security_level(SSL_CTX* ctx, int level) nothrow;
+
+		static if (isOpenSSL30)
+		{
+			import deimos.openssl.evp : EVP_PKEY, EVP_PKEY_CTX;
+			import deimos.openssl.types : OSSL_LIB_CTX, OSSL_PARAM;
+
+			struct OSSL_PARAM_BLD;
+
+			enum EVP_PKEY_KEY_PARAMETERS = 0x84;
+			enum OSSL_PKEY_PARAM_GROUP_NAME = "group";
+
+			extern(C) EVP_PKEY_CTX* EVP_PKEY_CTX_new_from_name(OSSL_LIB_CTX* libctx, const(char)* name, const(char)* propquery) nothrow;
+			extern(C) int EVP_PKEY_fromdata_init(EVP_PKEY_CTX* ctx) nothrow;
+			extern(C) int EVP_PKEY_fromdata(EVP_PKEY_CTX* ctx, EVP_PKEY** ppkey, int selection, OSSL_PARAM* params) nothrow;
+			extern(C) OSSL_PARAM_BLD* OSSL_PARAM_BLD_new() nothrow;
+			extern(C) int OSSL_PARAM_BLD_push_utf8_string(OSSL_PARAM_BLD* bld, const(char)* key, const(char)* buf, size_t bsize) nothrow;
+			extern(C) OSSL_PARAM* OSSL_PARAM_BLD_to_param(OSSL_PARAM_BLD* bld) nothrow;
+			extern(C) void OSSL_PARAM_BLD_free(OSSL_PARAM_BLD* bld) nothrow;
+			extern(C) void OSSL_PARAM_free(OSSL_PARAM* params) nothrow;
+			extern(C) int SSL_CTX_set0_tmp_dh_pkey(SSL_CTX* ctx, EVP_PKEY* dhpkey) nothrow;
+		}
 	}
 	else
 	{
@@ -259,26 +286,51 @@ class OpenSSLContext : SSLContext
 	override void enableDH(int bits)
 	{
 		typeof(&get_rfc3526_prime_2048) func;
+		string groupName;
 
 		switch (bits)
 		{
-			case 1536: func = &get_rfc3526_prime_1536; break;
-			case 2048: func = &get_rfc3526_prime_2048; break;
-			case 3072: func = &get_rfc3526_prime_3072; break;
-			case 4096: func = &get_rfc3526_prime_4096; break;
-			case 6144: func = &get_rfc3526_prime_6144; break;
-			case 8192: func = &get_rfc3526_prime_8192; break;
+			case 1536: func = &get_rfc3526_prime_1536; groupName = "modp_1536"; break;
+			case 2048: func = &get_rfc3526_prime_2048; groupName = "modp_2048"; break;
+			case 3072: func = &get_rfc3526_prime_3072; groupName = "modp_3072"; break;
+			case 4096: func = &get_rfc3526_prime_4096; groupName = "modp_4096"; break;
+			case 6144: func = &get_rfc3526_prime_6144; groupName = "modp_6144"; break;
+			case 8192: func = &get_rfc3526_prime_8192; groupName = "modp_8192"; break;
 			default: assert(false, "No RFC3526 prime available for %d bits".format(bits));
 		}
 
-		DH* dh;
-		scope(exit) DH_free(dh);
+		static if (isOpenSSL30)
+		{
+			import deimos.openssl.evp : EVP_PKEY, EVP_PKEY_CTX_free, EVP_PKEY_free;
 
-		dh = DH_new().sslEnforce();
-		dh.p = func(null).sslEnforce();
-		ubyte gen = 2;
-		dh.g = BN_bin2bn(&gen, gen.sizeof, null);
-		SSL_CTX_set_tmp_dh(sslCtx, dh).sslEnforce();
+			auto pkeyCtx = EVP_PKEY_CTX_new_from_name(null, "DH", null).sslEnforce();
+			scope(exit) EVP_PKEY_CTX_free(pkeyCtx);
+			EVP_PKEY_fromdata_init(pkeyCtx).sslEnforce();
+
+			auto paramsBuilder = OSSL_PARAM_BLD_new().sslEnforce();
+			scope(exit) OSSL_PARAM_BLD_free(paramsBuilder);
+			OSSL_PARAM_BLD_push_utf8_string(paramsBuilder, OSSL_PKEY_PARAM_GROUP_NAME, groupName.toStringz(), 0).sslEnforce();
+
+			auto params = OSSL_PARAM_BLD_to_param(paramsBuilder).sslEnforce();
+			scope(exit) OSSL_PARAM_free(params);
+
+			EVP_PKEY* pkey;
+			scope(exit) { if (pkey) EVP_PKEY_free(pkey); }
+			EVP_PKEY_fromdata(pkeyCtx, &pkey, EVP_PKEY_KEY_PARAMETERS, params).sslEnforce();
+			SSL_CTX_set0_tmp_dh_pkey(sslCtx, pkey).sslEnforce();
+			pkey = null;
+		}
+		else
+		{
+			DH* dh;
+			scope(exit) DH_free(dh);
+
+			dh = DH_new().sslEnforce();
+			dh.p = func(null).sslEnforce();
+			ubyte gen = 2;
+			dh.g = BN_bin2bn(&gen, gen.sizeof, null);
+			SSL_CTX_set_tmp_dh(sslCtx, dh).sslEnforce();
+		}
 	} /// ditto
 
 	override void enableECDH()
@@ -953,6 +1005,14 @@ deprecated debug(ae_unittest) unittest
 {
 	SSLContext ctx = new OpenSSLContext(SSLContext.Kind.client);
 	ctx.setCipherList(["HIGH"]); // virtual dispatch must reach OpenSSL impl
+}
+
+deprecated debug(ae_unittest) unittest
+{
+	auto ctx = new OpenSSLContext(SSLContext.Kind.server);
+	static if (isOpenSSL11)
+		SSL_CTX_set_security_level(ctx.sslCtx, 2);
+	ctx.enableDH(4096);
 }
 
 // Test setIdentityFromPKCS12: generate a self-signed cert in-memory and round-trip via PFX.
