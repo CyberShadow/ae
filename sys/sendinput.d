@@ -27,6 +27,12 @@ import ae.utils.geometry : Rect;
 import ae.utils.math;
 import ae.utils.regex : escapeRE;
 
+// https://issues.dlang.org/show_bug.cgi?id=7016
+// `ae.sys.cmd.query` is imported only inside a method body below, which `rdmd`
+// does not detect as a dependency, breaking rdmd-built projects with a link
+// error. Force the dependency with a module-level import.
+static import ae.sys.cmd;
+
 version (linux)
 {
 	/// Are X11 bindings available?

@@ -28,6 +28,12 @@ import ae.utils.array;
 import ae.utils.exception;
 import ae.utils.promise;
 
+// https://issues.dlang.org/show_bug.cgi?id=7016
+// `await`/`async` are imported only inside method bodies below, which `rdmd`
+// does not detect as a dependency, breaking rdmd-built projects with a link
+// error. Force the dependency with a module-level import.
+static import ae.utils.promise.await;
+
 // TODO: SSL/TLS support - wrap connection with OpenSSLAdapter before passing to MySqlConnection
 // TODO: Connection pooling
 // TODO: Unix socket support
