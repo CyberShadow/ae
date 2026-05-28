@@ -52,7 +52,15 @@ struct GitHub
 		string get(string key) { return null; }
 		void put(string key, string value) {}
 	}
-	ICache cache = new NoCache;
+	private ICache _cache;
+	/// Cache implementation. Defaults to a no-op cache.
+	// Note: do not use a `new`-allocated default here. DMD bakes such an
+	// instance into the struct's `.init` image as a file-local symbol, which
+	// the linker cannot resolve when this struct is embedded into another
+	// module compiled as a separate object (e.g. a `targetType "library"`
+	// build): `undefined reference to 'internal'`. Allocate it lazily instead.
+	@property ICache cache() { if (!_cache) _cache = new NoCache; return _cache; }
+	@property void cache(ICache value) { _cache = value; } /// ditto
 
 	struct Result
 	{
