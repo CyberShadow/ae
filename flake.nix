@@ -249,6 +249,93 @@
           };
 
           # ===========================================
+          # rdmd link test (regression guard for D issue 7016)
+          # ===========================================
+
+          # Regression guard for https://issues.dlang.org/show_bug.cgi?id=7016:
+          # rdmd finds a program's dependencies by scanning the compiler's `-v`
+          # output, which omits imports that appear only inside a function body.
+          # So if a module uses non-template symbols (a class, a plain function,
+          # a module ctor) of another module it imports only inside a function,
+          # rdmd never compiles that module and downstream rdmd projects fail to
+          # link.
+          #
+          # We build, with rdmd, a one-line program importing each main-package
+          # module on its own — what a downstream project does — and let the rdmd
+          # exit code decide.  Each module must be imported in isolation:
+          # importing several at once would let one module's top-level import
+          # pull in another module's function-locally-imported victim and mask
+          # the bug, so the builds cannot be collapsed into one.  They instead run
+          # in parallel (NIX_BUILD_CORES), each job in its own temp dir.
+          #
+          # The module list comes from `dub describe`, so the external-dependency
+          # / platform exclusions in dub.sdl (openssl, sqlite, X11, …) are
+          # honoured and the rest link with no external libraries; thus a non-zero
+          # exit is a real failure, not a missing -l flag.  Files whose name
+          # differs from their `module` (e.g. utils/math/comparison_.d) are
+          # skipped: dub compiles them by path, but they cannot be imported alone.
+          #
+          # rdmd is built from the dtools source with ldc, since the nixpkgs `dmd`
+          # package is not always cached and `ldc` ships no `rdmd`; ldc shares
+          # dmd's front end, so it reproduces the bug.
+          rdmd =
+            let
+              # Build one isolated rdmd program (used as an xargs worker).  Its
+              # own temp dir doubles as rdmd's cache dir, so parallel jobs don't
+              # race; a non-zero exit propagates through xargs to fail the build.
+              buildOne = pkgs.writeShellScript "ae-rdmd-build-one" ''
+                set -e
+                mod=$1
+                work="$TMPDIR/by-module/$mod"
+                mkdir -p "$work"
+                export TMPDIR="$work"
+                printf 'import %s;\nvoid main(){}\n' "$mod" > "$work/probe.d"
+                exec "$RDMD" --compiler=ldmd2 -I"$BUILDROOT" \
+                  -od="$work" --build-only -of="$work/bin" "$work/probe.d"
+              '';
+            in pkgs.stdenv.mkDerivation {
+              name = "ae-rdmd-link-test";
+
+              nativeBuildInputs = [ pkgs.ldc pkgs.dub ];
+              dontStrip = true;
+
+              unpackPhase = ''
+                cp -a ${self} ae
+                chmod -R u+w ae
+              '';
+
+              buildPhase = ''
+                export HOME="$TMPDIR"
+
+                echo "Building rdmd with ldc..."
+                ldmd2 -of="$TMPDIR/rdmd" ${pkgs.dtools.src}/rdmd.d
+                export RDMD="$TMPDIR/rdmd"
+                export BUILDROOT="$PWD"   # contains ./ae, the import root
+                cd ae
+
+                # Collect the modules to test, one per line.
+                for f in $(dub describe --compiler=ldc2 --data=source-files --data-list \
+                    | sed "s|^$PWD/||" | grep '\.d$'); do
+                  modpath="ae.''${f%.d}"; modpath="''${modpath//\//.}"; modpath="''${modpath%.package}"
+                  # Module name from the declaration (handles `deprecated module …;`).
+                  moddecl=$(grep -m1 -oE 'module[[:space:]]+[A-Za-z0-9_.]+[[:space:]]*;' "$f" \
+                    | sed -E 's/module[[:space:]]+([A-Za-z0-9_.]+).*/\1/')
+                  [ "$modpath" = "$moddecl" ] && echo "$modpath"
+                done > "$TMPDIR/modules.txt"
+                [ -s "$TMPDIR/modules.txt" ]   # dub describe produced something
+
+                cores=''${NIX_BUILD_CORES:-0}; [ "$cores" -gt 0 ] || cores=$(nproc)
+                echo "Linking $(wc -l < "$TMPDIR/modules.txt") modules with rdmd ($cores in parallel)..."
+                xargs -P "$cores" -n1 ${buildOne} < "$TMPDIR/modules.txt"
+                echo "rdmd link test passed."
+              '';
+
+              installPhase = ''
+                touch $out
+              '';
+            };
+
+          # ===========================================
           # Integration Tests (with database servers)
           # ===========================================
 
