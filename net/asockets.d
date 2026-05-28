@@ -5485,3 +5485,13 @@ debug(ae_unittest) version (Windows) unittest
 			"expected requested disconnect, got " ~ disconnectType.to!string);
 	}
 }
+
+// https://issues.dlang.org/show_bug.cgi?id=7016
+// `resolveHost` above imports `ae.net.sync` only inside the function body,
+// which `rdmd` does not detect as a dependency, breaking rdmd-built projects
+// with a link error. Force the dependency with a module-level import.
+// This must come *after* the definitions above (not next to the
+// `ae.utils.array` workaround at the top of the module): `ae.net.sync`
+// imports `ae.net.asockets` back, so importing it before `GenericSocket` is
+// defined triggers a forward-reference error in `mixin SocketMixin`.
+static import ae.net.sync;
