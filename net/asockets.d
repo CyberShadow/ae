@@ -4079,7 +4079,8 @@ void resolveHost(string host, ushort port,
 	}, 30.seconds);
 
 	debug (ASOCKETS) stderr.writefln("resolveHost: anchor created, spawning thread");
-	new Thread({
+	Thread thread;
+	thread = new Thread({
 		Address[] addresses;
 		string error;
 		debug (ASOCKETS) try stderr.writeln("resolveHost: worker thread started"); catch (Exception) {}
@@ -4099,11 +4100,13 @@ void resolveHost(string host, ushort port,
 			{
 				debug (ASOCKETS) stderr.writeln("resolveHost: already timed out, ignoring");
 				anchor.close();
+				thread.join(false);
 				return;
 			}
 			completed = true;
 			timeoutTask.cancel();
 			anchor.close();
+			thread.join(false);
 			if (error)
 				onError(error);
 			else
@@ -4111,8 +4114,41 @@ void resolveHost(string host, ushort port,
 			debug (ASOCKETS) stderr.writeln("resolveHost: callback done");
 		});
 		debug (ASOCKETS) try stderr.writeln("resolveHost: runAsync returned"); catch (Exception) {}
-	}).start();
+	});
+	thread.start();
 	debug (ASOCKETS) stderr.writefln("resolveHost: thread spawned");
+}
+
+debug(ae_unittest) unittest
+{
+	import ae.sys.timing : TimerTask, setTimeout;
+	import core.time : seconds;
+
+	foreach (i; 0 .. 256)
+	{
+		auto server = new TcpServer();
+		server.listen(0, "localhost");
+		server.handleAccept = (TcpConnection incoming) {};
+
+		bool resolved;
+		TimerTask timeoutTask;
+
+		resolveHost("127.0.0.1", 80, (Address[] addresses) {
+			assert(addresses.length > 0);
+			resolved = true;
+			timeoutTask.cancel();
+			server.close();
+		}, (string error) {
+			assert(false, error);
+		});
+
+		timeoutTask = setTimeout({
+			assert(false, "Timed out waiting for DNS resolution");
+		}, 10.seconds);
+
+		socketManager.loop();
+		assert(resolved, "resolveHost did not complete on iteration " ~ i.to!string);
+	}
 }
 
 // ***************************************************************************
