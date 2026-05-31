@@ -20,6 +20,7 @@ import std.socket;
 debug(ASOCKETS) import std.stdio : stderr;
 
 private import ae.net.sync : ThreadAnchor;
+private import ae.net.shutdown : addShutdownHandler, removeShutdownHandler;
 private import ae.sys.timing : setTimeout, TimerTask;
 private import core.sync.condition : Condition;
 private import core.sync.mutex : Mutex;
@@ -30,6 +31,7 @@ private final class DnsResolver
 {
 private:
 	alias LookupFn = Address[] delegate(string host, ushort port);
+	enum string shutdownError = "Lookup error: DNS resolver shut down";
 
 	final class Operation
 	{
@@ -44,6 +46,7 @@ private:
 	final class Worker
 	{
 		Thread thread;
+		bool inLookup;
 		bool exited;
 	}
 
@@ -81,6 +84,7 @@ private:
 	Mutex mutex;
 	Condition cond;
 	Operation[] jobs;
+	Operation[] operations;
 	Worker[] workers;
 	size_t idleWorkers;
 	size_t busyWorkers;
@@ -88,12 +92,17 @@ private:
 	LookupFn lookup;
 	Duration operationTimeout;
 	Duration idleTimeout;
+	bool shutdownStarted;
+	bool anchorClosed;
+	bool shuttingDown;
+	void delegate(scope const(char)[] reason) shutdownHandler;
 
 	debug(ae_unittest)
 	{
 		size_t workerCreations;
 		size_t anchorAllocations;
 		void delegate(string host, ushort port) onWorkerDequeued;
+		bool pauseDequeues;
 	}
 
 	void initialize(LookupFn lookup, Duration operationTimeout, Duration idleTimeout)
@@ -106,6 +115,11 @@ private:
 		mutex = new Mutex(this);
 		cond = new Condition(mutex);
 		debug(ae_unittest) anchorAllocations++;
+
+		shutdownHandler = (scope const(char)[] reason) {
+			shutdown(reason);
+		};
+		addShutdownHandler(shutdownHandler);
 	}
 
 	void spawnWorkerLocked()
@@ -122,20 +136,43 @@ private:
 		thread.start();
 	}
 
-	void reapExitedWorkersLocked()
+	void joinAndRemoveExitedWorkers()
 	{
-		for (size_t i = 0; i < workers.length; )
+		Worker[] exitedWorkers;
+		synchronized (mutex)
 		{
-			auto worker = workers[i];
-			if (!worker.exited)
+			for (size_t i = 0; i < workers.length; )
 			{
-				i++;
-				continue;
-			}
+				auto worker = workers[i];
+				if (!worker.exited)
+				{
+					i++;
+					continue;
+				}
 
-			worker.thread.join(false);
-			workers = workers[0 .. i] ~ workers[i + 1 .. $];
+				exitedWorkers ~= worker;
+				workers = workers[0 .. i] ~ workers[i + 1 .. $];
+			}
 		}
+
+		foreach (worker; exitedWorkers)
+			worker.thread.join(false);
+	}
+
+	void maybeCloseAnchor()
+	{
+		if (!shutdownStarted || anchorClosed)
+			return;
+
+		bool hasWorkers;
+		synchronized (mutex)
+			hasWorkers = workers.length > 0;
+
+		if (hasWorkers)
+			return;
+
+		anchor.close();
+		anchorClosed = true;
 	}
 
 	void workerLoop(Worker worker)
@@ -153,6 +190,13 @@ private:
 				auto deadline = MonoTime.currTime + idleTimeout;
 				while (jobs.length == 0)
 				{
+					if (shuttingDown)
+					{
+						retire = true;
+						worker.exited = true;
+						break;
+					}
+
 					auto remaining = deadline - MonoTime.currTime;
 					if (remaining <= Duration.zero)
 					{
@@ -163,6 +207,21 @@ private:
 					cond.wait(remaining);
 				}
 
+				if (!retire)
+				{
+					debug(ae_unittest)
+						while (pauseDequeues && !shuttingDown)
+							cond.wait();
+
+					if (shuttingDown)
+					{
+						idleWorkers--;
+						retire = true;
+						worker.exited = true;
+						break;
+					}
+				}
+
 				idleWorkers--;
 
 				if (!retire)
@@ -170,6 +229,7 @@ private:
 					op = jobs[0];
 					jobs = jobs[1 .. $];
 					busyWorkers++;
+					worker.inLookup = true;
 					debug(ae_unittest) notifyDequeued = onWorkerDequeued !is null;
 				}
 			}
@@ -189,7 +249,10 @@ private:
 				error = "Lookup error: " ~ e.msg;
 
 			synchronized (mutex)
+			{
 				busyWorkers--;
+				worker.inLookup = false;
+			}
 
 			auto delivery = new Delivery();
 			delivery.resolver = this;
@@ -212,19 +275,20 @@ private:
 
 	void handleWorkerExit(Worker worker)
 	{
-		bool needJoin;
-		synchronized (mutex)
-		{
-			foreach (i, candidate; workers)
-				if (candidate is worker)
-				{
-					workers = workers[0 .. i] ~ workers[i + 1 .. $];
-					needJoin = true;
-					break;
-				}
-		}
-		if (needJoin)
-			worker.thread.join(false);
+		joinAndRemoveExitedWorkers();
+		maybeCloseAnchor();
+	}
+
+	void removeOperation(Operation op)
+	{
+		foreach (i, candidate; operations)
+			if (candidate is op)
+			{
+				operations = operations[0 .. i] ~ operations[i + 1 .. $];
+				return;
+			}
+
+		assert(false, "Operation not tracked");
 	}
 
 	void completeOperation(Operation op, bool cancelTimeout, Address[] addresses, string error)
@@ -233,6 +297,7 @@ private:
 			return;
 
 		op.completed = true;
+		removeOperation(op);
 		if (cancelTimeout && op.timeoutTask && op.timeoutTask.isWaiting())
 			op.timeoutTask.cancel();
 
@@ -274,11 +339,20 @@ public:
 		void delegate(string) onError,
 	)
 	{
+		if (shutdownStarted)
+		{
+			onError(shutdownError);
+			return;
+		}
+
+		joinAndRemoveExitedWorkers();
+
 		auto op = new Operation();
 		op.host = host;
 		op.port = port;
 		op.onSuccess = onSuccess;
 		op.onError = onError;
+		operations ~= op;
 
 		if (pendingOperations == 0)
 			anchor.armPending();
@@ -290,7 +364,7 @@ public:
 
 		synchronized (mutex)
 		{
-			reapExitedWorkersLocked();
+			assert(!shuttingDown);
 			jobs ~= op;
 
 			auto requiredWorkers = busyWorkers + jobs.length;
@@ -300,6 +374,29 @@ public:
 			if (idleWorkers > 0)
 				cond.notify();
 		}
+	}
+
+	void shutdown(scope const(char)[] reason)
+	{
+		if (shutdownStarted)
+			return;
+
+		shutdownStarted = true;
+
+		Operation[] operationsToCancel;
+		synchronized (mutex)
+		{
+			shuttingDown = true;
+			jobs = null;
+			cond.notifyAll();
+			operationsToCancel = operations.dup;
+		}
+
+		foreach (op; operationsToCancel)
+			completeOperation(op, true, null, shutdownError);
+
+		joinAndRemoveExitedWorkers();
+		maybeCloseAnchor();
 	}
 
 	debug(ae_unittest) size_t debugWorkerCreationCount() const
@@ -324,22 +421,65 @@ public:
 		return anchorAllocations;
 	}
 
+	debug(ae_unittest) bool debugAnchorClosed() const
+	{
+		return anchorClosed;
+	}
+
+	debug(ae_unittest) size_t debugOutstandingOperationCount() const
+	{
+		return operations.length;
+	}
+
+	debug(ae_unittest) size_t debugQueuedOperationCount()
+	{
+		synchronized (mutex)
+			return jobs.length;
+	}
+
+	debug(ae_unittest) size_t debugWorkersInLookupCount()
+	{
+		size_t count;
+		synchronized (mutex)
+			foreach (worker; workers)
+				if (worker.inLookup)
+					count++;
+		return count;
+	}
+
+	debug(ae_unittest) void debugSetPauseDequeues(bool pause)
+	{
+		synchronized (mutex)
+		{
+			pauseDequeues = pause;
+			if (!pause)
+				cond.notifyAll();
+		}
+	}
+
 	debug(ae_unittest) void debugDispose()
 	{
+		shutdown("debug dispose");
+
 		auto deadline = MonoTime.currTime + 5.seconds;
 		while (debugLiveWorkerCount() > 0)
 		{
 			if (MonoTime.currTime >= deadline)
 				break;
 
-			synchronized (mutex)
-				reapExitedWorkersLocked();
+			joinAndRemoveExitedWorkers();
 			Thread.sleep(10.msecs);
 		}
-		synchronized (mutex)
-			reapExitedWorkersLocked();
+		joinAndRemoveExitedWorkers();
+		maybeCloseAnchor();
 		assert(debugLiveWorkerCount() == 0);
-		anchor.close();
+		assert(anchorClosed);
+
+		if (shutdownHandler !is null)
+		{
+			removeShutdownHandler(shutdownHandler);
+			shutdownHandler = null;
+		}
 	}
 }
 
@@ -793,6 +933,281 @@ debug(ae_unittest) unittest
 
 	assert(succeeded);
 	assert(!errored);
+}
+
+debug(ae_unittest) unittest
+{
+	import ae.net.asockets : socketManager, TcpServer, TcpConnection;
+	auto resolver = new DnsResolver((string host, ushort port) {
+		Address[] result;
+		result ~= new InternetAddress("127.0.0.1", port);
+		return result;
+	}, 2.seconds, 10.seconds);
+
+	bool resolved;
+	auto server = new TcpServer();
+	server.listen(0, "localhost");
+	server.handleAccept = (TcpConnection incoming) {};
+	auto timeoutTask = setTimeout({
+		assert(false, "Timed out waiting for idle resolver shutdown");
+	}, 10.seconds);
+
+	resolver.resolve("idle-shutdown.local", 80, (Address[] addresses) {
+		assert(addresses.length == 1);
+		resolved = true;
+	}, (string error) {
+		assert(false, error);
+	});
+
+	setTimeout({
+		assert(resolved);
+		assert(resolver.debugIdleWorkerCount() == 1);
+		resolver.shutdown("unit test idle shutdown");
+	}, 80.msecs);
+
+	setTimeout({
+		assert(resolver.debugLiveWorkerCount() == 0);
+		assert(resolver.debugOutstandingOperationCount() == 0);
+		assert(resolver.debugAnchorClosed());
+		timeoutTask.cancel();
+		resolver.debugDispose();
+		server.close();
+	}, 300.msecs);
+
+	socketManager.loop();
+}
+
+debug(ae_unittest) unittest
+{
+	import ae.net.asockets : socketManager, TcpServer, TcpConnection;
+	size_t successCount;
+	size_t errorCount;
+	string errorMessage;
+	size_t lookupCalls;
+
+	auto resolver = new DnsResolver((string host, ushort port) {
+		lookupCalls++;
+		Address[] result;
+		result ~= new InternetAddress("127.0.0.1", port);
+		return result;
+	}, 2.seconds, 10.seconds);
+
+	resolver.debugSetPauseDequeues(true);
+
+	auto server = new TcpServer();
+	server.listen(0, "localhost");
+	server.handleAccept = (TcpConnection incoming) {};
+	auto timeoutTask = setTimeout({
+		assert(false, "Timed out waiting for queued shutdown behavior");
+	}, 10.seconds);
+
+	resolver.resolve("queued-shutdown.local", 80, (Address[] addresses) {
+		successCount++;
+	}, (string error) {
+		errorCount++;
+		errorMessage = error;
+	});
+
+	assert(resolver.debugQueuedOperationCount() == 1);
+	resolver.shutdown("unit test queued shutdown");
+	assert(successCount == 0);
+	assert(errorCount == 1);
+	assert(errorMessage == "Lookup error: DNS resolver shut down");
+	assert(lookupCalls == 0);
+	assert(resolver.debugOutstandingOperationCount() == 0);
+	resolver.debugSetPauseDequeues(false);
+
+	setTimeout({
+		assert(resolver.debugLiveWorkerCount() == 0);
+		assert(resolver.debugAnchorClosed());
+		timeoutTask.cancel();
+		resolver.debugDispose();
+		server.close();
+	}, 300.msecs);
+
+	socketManager.loop();
+}
+
+debug(ae_unittest) unittest
+{
+	import ae.net.asockets : socketManager, TcpServer, TcpConnection;
+	import core.sync.condition : Condition;
+	import core.sync.mutex : Mutex;
+
+	auto gateMutex = new Mutex();
+	auto gateCond = new Condition(gateMutex);
+	bool lookupStarted;
+	bool releaseLookup;
+	size_t successCount;
+	size_t errorCount;
+	string errorMessage;
+
+	auto resolver = new DnsResolver((string host, ushort port) {
+		synchronized (gateMutex)
+		{
+			lookupStarted = true;
+			gateCond.notifyAll();
+			while (!releaseLookup)
+				gateCond.wait();
+		}
+		Address[] result;
+		result ~= new InternetAddress("127.0.0.1", port);
+		return result;
+	}, 2.seconds, 10.seconds);
+
+	resolver.resolve("in-flight-shutdown.local", 80, (Address[] addresses) {
+		successCount++;
+	}, (string error) {
+		errorCount++;
+		errorMessage = error;
+	});
+
+	auto lookupStartDeadline = MonoTime.currTime + 10.seconds;
+	synchronized (gateMutex)
+		while (!lookupStarted)
+		{
+			auto remaining = lookupStartDeadline - MonoTime.currTime;
+			assert(remaining > Duration.zero, "Timed out waiting for in-flight lookup to start");
+			gateCond.wait(remaining);
+		}
+
+	auto server = new TcpServer();
+	server.listen(0, "localhost");
+	server.handleAccept = (TcpConnection incoming) {};
+	auto timeoutTask = setTimeout({
+		assert(false, "Timed out waiting for in-flight shutdown behavior");
+	}, 10.seconds);
+
+	resolver.shutdown("unit test in-flight shutdown");
+	assert(successCount == 0);
+	assert(errorCount == 1);
+	assert(errorMessage == "Lookup error: DNS resolver shut down");
+
+	synchronized (gateMutex)
+	{
+		releaseLookup = true;
+		gateCond.notifyAll();
+	}
+
+	setTimeout({
+		assert(successCount == 0);
+		assert(errorCount == 1);
+		assert(resolver.debugLiveWorkerCount() == 0);
+		assert(resolver.debugAnchorClosed());
+		timeoutTask.cancel();
+		resolver.debugDispose();
+		server.close();
+	}, 400.msecs);
+
+	socketManager.loop();
+}
+
+debug(ae_unittest) unittest
+{
+	import ae.net.asockets : socketManager, TcpServer, TcpConnection;
+	import core.sync.condition : Condition;
+	import core.sync.mutex : Mutex;
+
+	auto gateMutex = new Mutex();
+	auto gateCond = new Condition(gateMutex);
+	bool lookupStarted;
+	bool releaseLookup;
+	size_t successCount;
+	size_t errorCount;
+	string errorMessage;
+
+	auto resolver = new DnsResolver((string host, ushort port) {
+		synchronized (gateMutex)
+		{
+			lookupStarted = true;
+			gateCond.notifyAll();
+			while (!releaseLookup)
+				gateCond.wait();
+		}
+		Address[] result;
+		result ~= new InternetAddress("127.0.0.1", port);
+		return result;
+	}, 2.seconds, 10.seconds);
+
+	resolver.resolve("stuck-shutdown.local", 80, (Address[] addresses) {
+		successCount++;
+	}, (string error) {
+		errorCount++;
+		errorMessage = error;
+	});
+
+	auto lookupStartDeadline = MonoTime.currTime + 10.seconds;
+	synchronized (gateMutex)
+		while (!lookupStarted)
+		{
+			auto remaining = lookupStartDeadline - MonoTime.currTime;
+			assert(remaining > Duration.zero, "Timed out waiting for stuck lookup to start");
+			gateCond.wait(remaining);
+		}
+
+	auto server = new TcpServer();
+	server.listen(0, "localhost");
+	server.handleAccept = (TcpConnection incoming) {};
+	auto timeoutTask = setTimeout({
+		assert(false, "Timed out waiting for stuck shutdown behavior");
+	}, 10.seconds);
+
+	resolver.shutdown("unit test stuck shutdown");
+	assert(successCount == 0);
+	assert(errorCount == 1);
+	assert(errorMessage == "Lookup error: DNS resolver shut down");
+	assert(!resolver.debugAnchorClosed());
+	assert(resolver.debugWorkersInLookupCount() == 1);
+
+	setTimeout({
+		assert(!resolver.debugAnchorClosed());
+		assert(resolver.debugLiveWorkerCount() == 1);
+		assert(resolver.debugWorkersInLookupCount() == 1);
+	}, 150.msecs);
+
+	setTimeout({
+		synchronized (gateMutex)
+		{
+			releaseLookup = true;
+			gateCond.notifyAll();
+		}
+	}, 250.msecs);
+
+	setTimeout({
+		assert(successCount == 0);
+		assert(errorCount == 1);
+		assert(resolver.debugLiveWorkerCount() == 0);
+		assert(resolver.debugAnchorClosed());
+		timeoutTask.cancel();
+		resolver.debugDispose();
+		server.close();
+	}, 500.msecs);
+
+	socketManager.loop();
+}
+
+debug(ae_unittest) unittest
+{
+	import ae.net.asockets : socketManager, TcpServer, TcpConnection;
+	resetResolverForThisThreadForTest();
+
+	auto resolver = resolverForThisThread();
+	resolver.shutdown("unit test post-shutdown resolve");
+
+	bool successCalled;
+	string errorMessage;
+	resolveHost("127.0.0.1", 80, (Address[] addresses) {
+		successCalled = true;
+	}, (string error) {
+		errorMessage = error;
+	});
+
+	assert(!successCalled);
+	assert(errorMessage == "Lookup error: DNS resolver shut down");
+	assert(resolverForThisThread() is resolver);
+	assert(debugResolverWorkerCreationCount() == 0);
+
+	resetResolverForThisThreadForTest();
 }
 
 // ***************************************************************************
