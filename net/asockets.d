@@ -359,13 +359,17 @@ static if (eventLoopMechanism == EventLoopMechanism.epoll)
 			}
 
 			// Cleanup
-			if (epollFd >= 0)
+			// Keep the epoll instance alive while sockets remain registered.
+			// Some daemon sockets (e.g. resolver ThreadAnchor) intentionally
+			// outlive individual loop() runs.
+			if (epollFd >= 0 && sockets.length == 0)
 			{
 				close(epollFd);
 				epollFd = -1;
 			}
+
+			}
 		}
-	}
 
 	// Use UFCS to allow addIdleHandler/removeIdleHandler
 	/// Register a function to be called when the event loop is idle.
@@ -4050,108 +4054,8 @@ debug(ae_unittest) unittest { if (false) new Duplex(null, null); }
 
 // ***************************************************************************
 
-/// Perform DNS resolution in a worker thread, delivering the result back
-/// to the event loop thread via a `ThreadAnchor`.
-void resolveHost(string host, ushort port,
-	void delegate(Address[]) onSuccess, void delegate(string) onError)
-{
-	import ae.net.sync : ThreadAnchor;
-	import ae.sys.timing : setTimeout, TimerTask;
-	import core.thread : Thread;
-	import core.time : seconds;
+public import ae.net.dns.resolver : resolveHost;
 
-	debug (ASOCKETS) stderr.writefln("resolveHost: starting for %s:%d", host, port);
-	auto anchor = new ThreadAnchor();
-	anchor.armPending();
-
-	// Both the timer callback and the runAsync callback run on the
-	// event loop thread, so no synchronization is needed.
-	bool completed;
-
-	TimerTask timeoutTask = setTimeout({
-		debug (ASOCKETS) stderr.writeln("resolveHost: timed out");
-		completed = true;
-		// Don't close the anchor — the worker thread will still
-		// call runAsync when getAddress eventually returns.
-		// Just make it daemon so it doesn't block the event loop.
-		anchor.disarmPending();
-		onError("Lookup error: DNS resolution timed out");
-	}, 30.seconds);
-
-	debug (ASOCKETS) stderr.writefln("resolveHost: anchor created, spawning thread");
-	Thread thread;
-	thread = new Thread({
-		Address[] addresses;
-		string error;
-		debug (ASOCKETS) try stderr.writeln("resolveHost: worker thread started"); catch (Exception) {}
-		try
-		{
-			addresses = getAddress(host, port);
-			enforce(addresses.length, "No addresses found");
-			debug (ASOCKETS) try stderr.writefln("resolveHost: resolved to %d addresses", addresses.length); catch (Exception) {}
-		}
-		catch (Exception e)
-			error = "Lookup error: " ~ e.msg;
-
-		debug (ASOCKETS) try stderr.writeln("resolveHost: calling runAsync"); catch (Exception) {}
-		anchor.runAsync({
-			debug (ASOCKETS) stderr.writeln("resolveHost: runAsync callback executing");
-			if (completed)
-			{
-				debug (ASOCKETS) stderr.writeln("resolveHost: already timed out, ignoring");
-				anchor.close();
-				thread.join(false);
-				return;
-			}
-			completed = true;
-			timeoutTask.cancel();
-			anchor.close();
-			thread.join(false);
-			if (error)
-				onError(error);
-			else
-				onSuccess(addresses);
-			debug (ASOCKETS) stderr.writeln("resolveHost: callback done");
-		});
-		debug (ASOCKETS) try stderr.writeln("resolveHost: runAsync returned"); catch (Exception) {}
-	});
-	thread.start();
-	debug (ASOCKETS) stderr.writefln("resolveHost: thread spawned");
-}
-
-debug(ae_unittest) unittest
-{
-	import ae.sys.timing : TimerTask, setTimeout;
-	import core.time : seconds;
-
-	foreach (i; 0 .. 256)
-	{
-		auto server = new TcpServer();
-		server.listen(0, "localhost");
-		server.handleAccept = (TcpConnection incoming) {};
-
-		bool resolved;
-		TimerTask timeoutTask;
-
-		resolveHost("127.0.0.1", 80, (Address[] addresses) {
-			assert(addresses.length > 0);
-			resolved = true;
-			timeoutTask.cancel();
-			server.close();
-		}, (string error) {
-			assert(false, error);
-		});
-
-		timeoutTask = setTimeout({
-			assert(false, "Timed out waiting for DNS resolution");
-		}, 10.seconds);
-
-		socketManager.loop();
-		assert(resolved, "resolveHost did not complete on iteration " ~ i.to!string);
-	}
-}
-
-// ***************************************************************************
 
 /// An asynchronous socket-based connection.
 class SocketConnection : StreamConnection
@@ -5523,9 +5427,10 @@ debug(ae_unittest) version (Windows) unittest
 }
 
 // https://issues.dlang.org/show_bug.cgi?id=7016
-// `resolveHost` above imports `ae.net.sync` only inside the function body,
-// which `rdmd` does not detect as a dependency, breaking rdmd-built projects
-// with a link error. Force the dependency with a module-level import.
+// `resolveHost` is re-exported from `ae.net.dns.resolver`, which imports
+// `ae.net.sync`. `rdmd` does not detect this transitive dependency reliably,
+// which can break rdmd-built projects with a link error. Force it with a
+// module-level import.
 // This must come *after* the definitions above (not next to the
 // `ae.utils.array` workaround at the top of the module): `ae.net.sync`
 // imports `ae.net.asockets` back, so importing it before `GenericSocket` is
