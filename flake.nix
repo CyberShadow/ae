@@ -335,6 +335,37 @@
               '';
             };
 
+          dns-thread-exhaustion = pkgs.stdenv.mkDerivation {
+            name = "ae-dns-thread-exhaustion";
+
+            nativeBuildInputs = [ pkgs.ldc ];
+            dontStrip = true;
+
+            unpackPhase = ''
+              cp -a ${self} ae
+            '';
+
+            buildPhase = ''
+              echo "Compiling DNS thread exhaustion regression test..."
+
+              ldc2 \
+                -i \
+                -I. \
+                -g \
+                -d-debug=ASOCKETS_DEBUG_IDLE \
+                -of=dns_thread_exhaustion \
+                ae/test/dns_thread_exhaustion.d
+
+              echo "Running DNS thread exhaustion regression test under 4 GiB virtual memory limit..."
+              ( ulimit -Sv 4194304; ./dns_thread_exhaustion )
+              echo "DNS thread exhaustion regression test passed!"
+            '';
+
+            installPhase = ''
+              touch $out
+            '';
+          };
+
           # ===========================================
           # Integration Tests (with database servers)
           # ===========================================

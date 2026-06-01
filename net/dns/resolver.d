@@ -535,50 +535,6 @@ void resolveHost(string host, ushort port,
 debug(ae_unittest) unittest
 {
 	import ae.net.asockets : socketManager, TcpServer, TcpConnection;
-	import ae.sys.timing : TimerTask, setTimeout;
-	import core.time : seconds;
-
-	resetResolverForThisThreadForTest();
-
-	auto server = new TcpServer();
-	server.listen(0, "localhost");
-	server.handleAccept = (TcpConnection incoming) {};
-
-	TimerTask timeoutTask;
-	size_t completed;
-
-	void runNext()
-	{
-		if (completed == 256)
-		{
-			timeoutTask.cancel();
-			server.close();
-			return;
-		}
-
-			resolveHost("127.0.0.1", 80, (Address[] addresses) {
-				assert(addresses.length > 0);
-				completed++;
-				setTimeout({
-					runNext();
-				}, 1.msecs);
-			}, (string error) {
-				assert(false, error);
-			});
-		}
-
-	timeoutTask = setTimeout({
-		assert(false, "Timed out waiting for DNS resolution after " ~ completed.to!string ~ " sequential resolutions");
-	}, 10.seconds);
-
-	runNext();
-	socketManager.loop();
-	assert(completed == 256);
-}
-
-debug(ae_unittest) unittest
-{
-	import ae.net.asockets : socketManager, TcpServer, TcpConnection;
 	import core.sync.condition : Condition;
 	import core.sync.mutex : Mutex;
 	import core.thread : Thread;
