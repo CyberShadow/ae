@@ -359,13 +359,17 @@ static if (eventLoopMechanism == EventLoopMechanism.epoll)
 			}
 
 			// Cleanup
-			if (epollFd >= 0)
+			// Keep the epoll instance alive while sockets remain registered.
+			// Some daemon sockets (e.g. resolver ThreadAnchor) intentionally
+			// outlive individual loop() runs.
+			if (epollFd >= 0 && sockets.length == 0)
 			{
 				close(epollFd);
 				epollFd = -1;
 			}
+
+			}
 		}
-	}
 
 	// Use UFCS to allow addIdleHandler/removeIdleHandler
 	/// Register a function to be called when the event loop is idle.
@@ -3443,7 +3447,7 @@ enum ConnectionState
 	/// The initial state, or the state after a disconnect was fully processed.
 	disconnected,
 
-	/// Name resolution. Currently done synchronously.
+	/// Name resolution.
 	resolving,
 
 	/// A connection attempt is in progress.
@@ -4050,6 +4054,9 @@ debug(ae_unittest) unittest { if (false) new Duplex(null, null); }
 
 // ***************************************************************************
 
+public import ae.net.dns.resolver : resolveHost;
+
+
 /// An asynchronous socket-based connection.
 class SocketConnection : StreamConnection
 {
@@ -4208,11 +4215,10 @@ public:
 
 		state = ConnectionState.resolving;
 
-		AddressInfo[] addressInfos;
-		try
-		{
-			auto addresses = getAddress(host, port);
-			enforce(addresses.length, "No addresses found");
+		resolveHost(host, port, (Address[] addresses) {
+			if (state != ConnectionState.resolving)
+				return; // was disconnected/reset while resolving
+
 			debug (ASOCKETS)
 			{
 				stderr.writefln("Resolved to %s addresses:", addresses.length);
@@ -4226,14 +4232,17 @@ public:
 				randomShuffle(addresses);
 			}
 
+			AddressInfo[] addressInfos;
 			foreach (address; addresses)
 				addressInfos ~= AddressInfo(address.addressFamily, SocketType.STREAM, ProtocolType.TCP, address, host);
-		}
-		catch (SocketException e)
-			return onError("Lookup error: " ~ e.msg);
 
-		state = ConnectionState.disconnected;
-		connect(addressInfos);
+			state = ConnectionState.disconnected;
+			connect(addressInfos);
+		}, (string error) {
+			if (state != ConnectionState.resolving)
+				return;
+			onError(error);
+		});
 	}
 }
 
@@ -4700,7 +4709,7 @@ public:
 	{
 		assert(host.length, "Empty host");
 
-		debug (ASOCKETS) stderr.writefln("Connecting to %s:%s", host, port);
+		debug (ASOCKETS) stderr.writefln("Binding to %s:%s", host, port);
 
 		state = ConnectionState.resolving;
 
@@ -5418,9 +5427,10 @@ debug(ae_unittest) version (Windows) unittest
 }
 
 // https://issues.dlang.org/show_bug.cgi?id=7016
-// `resolveHost` above imports `ae.net.sync` only inside the function body,
-// which `rdmd` does not detect as a dependency, breaking rdmd-built projects
-// with a link error. Force the dependency with a module-level import.
+// `resolveHost` is re-exported from `ae.net.dns.resolver`, which imports
+// `ae.net.sync`. `rdmd` does not detect this transitive dependency reliably,
+// which can break rdmd-built projects with a link error. Force it with a
+// module-level import.
 // This must come *after* the definitions above (not next to the
 // `ae.utils.array` workaround at the top of the module): `ae.net.sync`
 // imports `ae.net.asockets` back, so importing it before `GenericSocket` is
