@@ -4124,7 +4124,7 @@ debug(ae_unittest) unittest
 	import ae.sys.timing : TimerTask, setTimeout;
 	import core.time : seconds;
 
-	foreach (i; 0 .. 256)
+	foreach (i; 0 .. 5000)
 	{
 		auto server = new TcpServer();
 		server.listen(0, "localhost");
