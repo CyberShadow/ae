@@ -1,0 +1,35 @@
+# .github/workflows/dbg-wer.yml
+name: dbg-wer
+on: [push]
+jobs:
+  win-wer:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dlang-community/setup-dlang@v1
+        with: { compiler: ldc-1.32.2 }
+      - name: Enable WER full dumps
+        shell: pwsh
+        run: |
+          $k = "HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps"
+          New-Item $k -Force | Out-Null
+          New-ItemProperty $k DumpFolder -Value C:\dumps -PropertyType ExpandString -Force | Out-Null
+          New-ItemProperty $k DumpType   -Value 2        -PropertyType DWord       -Force | Out-Null
+          New-ItemProperty $k DumpCount  -Value 20       -PropertyType DWord       -Force | Out-Null
+          New-Item -ItemType Directory C:\dumps -Force | Out-Null
+      - name: Build then loop unmodified binary until it crashes
+        shell: pwsh
+        run: |
+          dub test --debug=ae_unittest --arch=x86_64 *> $null   # build + warm run
+          $exe = Get-ChildItem -Recurse "$env:LOCALAPPDATA\dub\cache\ae" -Filter ae-test-library*.exe | Select-Object -First 1
+          Copy-Item $exe.FullName,($exe.FullName -replace '\.exe$','.pdb') C:\dumps -EA SilentlyContinue
+          for ($i=0; $i -lt 60; $i++) {
+            if (Test-Path test-cache) { Remove-Item -Recurse -Force test-cache -EA SilentlyContinue }
+            & $exe.FullName *> $null
+            Write-Output "run $i exit=$LASTEXITCODE"
+            if (Get-ChildItem C:\dumps -Filter *.dmp -EA SilentlyContinue) { Write-Output "DUMP at run $i"; break }
+          }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: crashdump, path: "C:\\dumps\\*" }
