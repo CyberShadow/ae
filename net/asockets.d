@@ -3443,7 +3443,7 @@ enum ConnectionState
 	/// The initial state, or the state after a disconnect was fully processed.
 	disconnected,
 
-	/// Name resolution. Currently done synchronously.
+	/// Name resolution.
 	resolving,
 
 	/// A connection attempt is in progress.
@@ -4050,6 +4050,109 @@ debug(ae_unittest) unittest { if (false) new Duplex(null, null); }
 
 // ***************************************************************************
 
+/// Perform DNS resolution in a worker thread, delivering the result back
+/// to the event loop thread via a `ThreadAnchor`.
+void resolveHost(string host, ushort port,
+	void delegate(Address[]) onSuccess, void delegate(string) onError)
+{
+	import ae.net.sync : ThreadAnchor;
+	import ae.sys.timing : setTimeout, TimerTask;
+	import core.thread : Thread;
+	import core.time : seconds;
+
+	debug (ASOCKETS) stderr.writefln("resolveHost: starting for %s:%d", host, port);
+	auto anchor = new ThreadAnchor();
+	anchor.armPending();
+
+	// Both the timer callback and the runAsync callback run on the
+	// event loop thread, so no synchronization is needed.
+	bool completed;
+
+	TimerTask timeoutTask = setTimeout({
+		debug (ASOCKETS) stderr.writeln("resolveHost: timed out");
+		completed = true;
+		// Don't close the anchor — the worker thread will still
+		// call runAsync when getAddress eventually returns.
+		// Just make it daemon so it doesn't block the event loop.
+		anchor.disarmPending();
+		onError("Lookup error: DNS resolution timed out");
+	}, 30.seconds);
+
+	debug (ASOCKETS) stderr.writefln("resolveHost: anchor created, spawning thread");
+	Thread thread;
+	thread = new Thread({
+		Address[] addresses;
+		string error;
+		debug (ASOCKETS) try stderr.writeln("resolveHost: worker thread started"); catch (Exception) {}
+		try
+		{
+			addresses = getAddress(host, port);
+			enforce(addresses.length, "No addresses found");
+			debug (ASOCKETS) try stderr.writefln("resolveHost: resolved to %d addresses", addresses.length); catch (Exception) {}
+		}
+		catch (Exception e)
+			error = "Lookup error: " ~ e.msg;
+
+		debug (ASOCKETS) try stderr.writeln("resolveHost: calling runAsync"); catch (Exception) {}
+		anchor.runAsync({
+			debug (ASOCKETS) stderr.writeln("resolveHost: runAsync callback executing");
+			if (completed)
+			{
+				debug (ASOCKETS) stderr.writeln("resolveHost: already timed out, ignoring");
+				anchor.close();
+				thread.join(false);
+				return;
+			}
+			completed = true;
+			timeoutTask.cancel();
+			anchor.close();
+			thread.join(false);
+			if (error)
+				onError(error);
+			else
+				onSuccess(addresses);
+			debug (ASOCKETS) stderr.writeln("resolveHost: callback done");
+		});
+		debug (ASOCKETS) try stderr.writeln("resolveHost: runAsync returned"); catch (Exception) {}
+	});
+	thread.start();
+	debug (ASOCKETS) stderr.writefln("resolveHost: thread spawned");
+}
+
+debug(ae_unittest) unittest
+{
+	import ae.sys.timing : TimerTask, setTimeout;
+	import core.time : seconds;
+
+	foreach (i; 0 .. 256)
+	{
+		auto server = new TcpServer();
+		server.listen(0, "localhost");
+		server.handleAccept = (TcpConnection incoming) {};
+
+		bool resolved;
+		TimerTask timeoutTask;
+
+		resolveHost("127.0.0.1", 80, (Address[] addresses) {
+			assert(addresses.length > 0);
+			resolved = true;
+			timeoutTask.cancel();
+			server.close();
+		}, (string error) {
+			assert(false, error);
+		});
+
+		timeoutTask = setTimeout({
+			assert(false, "Timed out waiting for DNS resolution");
+		}, 10.seconds);
+
+		socketManager.loop();
+		assert(resolved, "resolveHost did not complete on iteration " ~ i.to!string);
+	}
+}
+
+// ***************************************************************************
+
 /// An asynchronous socket-based connection.
 class SocketConnection : StreamConnection
 {
@@ -4208,11 +4311,10 @@ public:
 
 		state = ConnectionState.resolving;
 
-		AddressInfo[] addressInfos;
-		try
-		{
-			auto addresses = getAddress(host, port);
-			enforce(addresses.length, "No addresses found");
+		resolveHost(host, port, (Address[] addresses) {
+			if (state != ConnectionState.resolving)
+				return; // was disconnected/reset while resolving
+
 			debug (ASOCKETS)
 			{
 				stderr.writefln("Resolved to %s addresses:", addresses.length);
@@ -4226,14 +4328,17 @@ public:
 				randomShuffle(addresses);
 			}
 
+			AddressInfo[] addressInfos;
 			foreach (address; addresses)
 				addressInfos ~= AddressInfo(address.addressFamily, SocketType.STREAM, ProtocolType.TCP, address, host);
-		}
-		catch (SocketException e)
-			return onError("Lookup error: " ~ e.msg);
 
-		state = ConnectionState.disconnected;
-		connect(addressInfos);
+			state = ConnectionState.disconnected;
+			connect(addressInfos);
+		}, (string error) {
+			if (state != ConnectionState.resolving)
+				return;
+			onError(error);
+		});
 	}
 }
 
@@ -4700,7 +4805,7 @@ public:
 	{
 		assert(host.length, "Empty host");
 
-		debug (ASOCKETS) stderr.writefln("Connecting to %s:%s", host, port);
+		debug (ASOCKETS) stderr.writefln("Binding to %s:%s", host, port);
 
 		state = ConnectionState.resolving;
 
