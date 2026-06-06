@@ -4964,7 +4964,7 @@ class LineBufferedAdapter : ConnectionAdapter
 	void send(string line, int priority = DEFAULT_PRIORITY)
 	{
 		auto datum = Data(line.asBytes);
-		super.send(datum.asSlice, priority);
+		this.send(datum.asSlice, priority);
 	}
 
 private:
@@ -5026,6 +5026,43 @@ protected:
 		super.onDisconnect(reason, type);
 		inBuffer.clear();
 	}
+}
+
+debug(ae_unittest) unittest
+{
+	// Regression test: LineBufferedAdapter must append its delimiter to
+	// outgoing data, regardless of which `send` overload is used.
+	static class CaptureConnection : IConnection
+	{
+		ubyte[] sent;
+
+		@property ConnectionState state() { return ConnectionState.connected; }
+
+		void send(scope Data[] data, int priority = DEFAULT_PRIORITY)
+		{
+			foreach (ref d; data)
+				d.enter((contents) { sent ~= cast(ubyte[])contents; });
+		}
+		alias send = IConnection.send;
+
+		void disconnect(string reason = defaultDisconnectReason, DisconnectType type = DisconnectType.requested) {}
+		@property void handleConnect(ConnectHandler value) {}
+		@property void handleReadData(ReadDataHandler value) {}
+		@property void handleDisconnect(DisconnectHandler value) {}
+		@property void handleBufferFlushed(BufferFlushedHandler value) {}
+	}
+
+	auto capture = new CaptureConnection;
+	auto line = new LineBufferedAdapter(capture);
+	line.delimiter = "\n";
+	line.sendDelimiter = "\r\n";
+
+	line.send("hello");
+	assert(cast(string)capture.sent == "hello\r\n", cast(string)capture.sent);
+
+	capture.sent = null;
+	line.send(Data("world".asBytes));
+	assert(cast(string)capture.sent == "world\r\n", cast(string)capture.sent);
 }
 
 // ***************************************************************************
