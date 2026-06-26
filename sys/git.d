@@ -227,17 +227,44 @@ struct Git
 				enforce(false, "Unknown line in git log: " ~ line);
 		}
 
-		if (!history.commits)
-			return history; // show-ref will fail if there are no refs
-
-		foreach (line; query([`show-ref`, `--dereference`]).splitLines())
+		enum refFormat = `%(refname)%00%(if:equals=commit)%(objecttype)%(then)%(objectname)%(else)%(if:equals=commit)%(*objecttype)%(then)%(*objectname)%(end)%(end)`;
+		foreach (line; query([`for-each-ref`, `--format=` ~ refFormat]).splitLines())
 		{
-			auto h = CommitID(line[0..40]);
+			auto parts = line.findSplit("\0");
+			auto refName = parts[0];
+			auto commitText = parts[2];
+			if (!commitText.length)
+				continue;
+			auto h = CommitID(commitText);
 			enforce(h in history.commits, "Ref commit not in log: " ~ line);
-			history.refs[line[41..$]] = h;
+			history.refs[refName] = h;
 		}
 
 		return history;
+	}
+
+	debug(ae_unittest) unittest
+	{
+		auto repoPath = getTempFileName("git");
+		scope(exit) if (repoPath.exists) removeRecurse(repoPath);
+
+		.run(["git", "init", "-q", repoPath]);
+
+		auto git = Git(repoPath);
+		git.run(`config`, `user.name`, `Test User`);
+		git.run(`config`, `user.email`, `test@example.com`);
+
+		write(buildPath(repoPath, "file.txt"), "hello\n");
+		git.run(`add`, `file.txt`);
+		git.run(`commit`, `-q`, `-m`, `initial`);
+		git.run(`tag`, `-a`, `v1`, `-m`, `version 1`);
+
+		auto head = CommitID(git.query(`rev-parse`, `HEAD`));
+		auto history = git.getHistory();
+
+		auto tag = "refs/tags/v1" in history.refs;
+		assert(tag && *tag == head);
+		assert(("refs/tags/v1^{}" in history.refs) is null);
 	}
 
 	// Low-level pipes
