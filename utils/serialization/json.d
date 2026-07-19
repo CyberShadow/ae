@@ -502,16 +502,33 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 				case 't':  buf ~= '\t'; break;
 				case 'u':
 				{
-					auto w = cast(wchar) fromHex!ushort(readN(4));
+					auto d = cast(dchar) fromHex!ushort(readN(4));
+					if (d >= 0xD800 && d <= 0xDBFF)
+					{
+						expect('\\');
+						expect('u');
+						auto low = cast(dchar) fromHex!ushort(readN(4));
+						enforce(low >= 0xDC00 && low <= 0xDFFF, "Expected low surrogate");
+						d = 0x10000 + ((d - 0xD800) << 10) + (low - 0xDC00);
+					}
+					else
+						enforce(d < 0xDC00 || d > 0xDFFF, "Unexpected low surrogate");
+
 					static if (C.sizeof == 1)
 					{
 						char[4] tmpbuf;
-						auto len = encode(tmpbuf, w);
+						auto len = encode(tmpbuf, d);
+						buf ~= cast(C[]) tmpbuf[0 .. len];
+					}
+					else static if (C.sizeof == 2)
+					{
+						wchar[2] tmpbuf;
+						auto len = encode(tmpbuf, d);
 						buf ~= cast(C[]) tmpbuf[0 .. len];
 					}
 					else
 					{
-						buf ~= cast(C) w;
+						buf ~= cast(C) d;
 					}
 					break;
 				}
@@ -1209,6 +1226,33 @@ debug(ae_unittest) unittest
 	assert(jsonParse!bool(`false`) == false);
 	assert(jsonParse!int(`42`) == 42);
 	assert(jsonParse!string(`"hello"`) == "hello");
+}
+
+debug(ae_unittest) unittest
+{
+	auto stringJson = `"\uD83E\uDD40"`;
+	auto wstringJson = stringJson.to!wstring;
+	auto dstringJson = stringJson.to!dstring;
+
+	assert(jsonParse!string(stringJson) == "🥀");
+	assert(jsonParse!wstring(stringJson) == "🥀"w);
+	assert(jsonParse!dstring(stringJson) == "🥀"d);
+
+	assert(jsonParse!string(wstringJson) == "🥀");
+	assert(jsonParse!wstring(wstringJson) == "🥀"w);
+	assert(jsonParse!dstring(wstringJson) == "🥀"d);
+
+	assert(jsonParse!string(dstringJson) == "🥀");
+	assert(jsonParse!wstring(dstringJson) == "🥀"w);
+	assert(jsonParse!dstring(dstringJson) == "🥀"d);
+}
+
+debug(ae_unittest) unittest
+{
+	assertThrown!Exception(jsonParse!string(`"\uD83E"`));
+	assertThrown!Exception(jsonParse!string(`"\uDD40"`));
+	assertThrown!Exception(jsonParse!string(`"\uD83E\n"`));
+	assertThrown!Exception(jsonParse!string(`"\uD83E\u0041"`));
 }
 
 // AA serialization/parse

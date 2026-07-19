@@ -556,6 +556,11 @@ debug(ae_unittest) unittest
 
 debug(ae_unittest) unittest
 {
+	assert(jsonParse!string(`"\uD83E\uDD40"`) == "🥀");
+}
+
+debug(ae_unittest) unittest
+{
 	struct T { string s; wstring w; dstring d; }
 	T t;
 	auto s = t.toJson;
