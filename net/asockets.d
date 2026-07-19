@@ -128,11 +128,8 @@ static if (eventLoopMechanism == EventLoopMechanism.epoll)
 				assert(epollFd >= 0, "epoll_create1 failed");
 			}
 
-			epoll_event ev;
-			ev.data.ptr = cast(void*)conn;
-			// Don't set any events yet - will be updated when notifyRead/notifyWrite change
-			int ret = epoll_ctl(epollFd, EPOLL_CTL_ADD, conn.socket.handle, &ev);
-			assert(ret == 0, "epoll_ctl ADD failed");
+			assert(!conn._epollRegistered);
+			assert(conn._epollEvents == 0);
 
 			sockets ~= conn;
 
@@ -146,6 +143,8 @@ static if (eventLoopMechanism == EventLoopMechanism.epoll)
 
 			debug (ASOCKETS_DEBUG_SHUTDOWN) conn.registrationStackTrace = captureStackTrace();
 			else debug (ASOCKETS_DEBUG_IDLE) conn.registrationStackTrace = captureStackTrace();
+
+			conn.updateEpoll();
 		}
 
 		/// Unregister a socket with the manager.
@@ -165,8 +164,13 @@ static if (eventLoopMechanism == EventLoopMechanism.epoll)
 				socketHandles.remove(handle);
 			}
 
-			int ret = epoll_ctl(epollFd, EPOLL_CTL_DEL, conn.socket.handle, null);
-			assert(ret == 0, "epoll_ctl DEL failed");
+			assert(conn._epollRegistered == (conn._epollEvents != 0));
+			if (conn._epollRegistered)
+			{
+				int ret = epoll_ctl(epollFd, EPOLL_CTL_DEL, conn.socket.handle, null);
+				assert(ret == 0, "epoll_ctl DEL failed");
+				conn._epollRegistered = false;
+			}
 
 			conn._epollEvents = 0;
 
@@ -319,13 +323,13 @@ static if (eventLoopMechanism == EventLoopMechanism.epoll)
 							}
 
 							// Write takes priority (like in select version)
-							if (ev.events & EPOLLOUT)
+							if ((ev.events & EPOLLOUT) && conn.notifyWrite)
 							{
 								debug (ASOCKETS) stderr.writefln("\t%s - calling onWritable", conn);
 								conn.onWritable();
 							}
 							// Then read (EPOLLHUP also triggers read so recv() returns 0 for EOF)
-							else if (ev.events & (EPOLLIN | EPOLLHUP))
+							else if ((ev.events & (EPOLLIN | EPOLLHUP)) && conn.notifyRead)
 							{
 								debug (ASOCKETS) stderr.writefln("\t%s - calling onReadable", conn);
 								conn.onReadable();
@@ -393,27 +397,48 @@ static if (eventLoopMechanism == EventLoopMechanism.epoll)
 	private mixin template SocketMixin()
 	{
 		private uint _epollEvents; // Current epoll event mask
+		private bool _epollRegistered; // True iff this socket is in the epoll set
 
 		private final void updateEpoll()
 		{
 			if (!conn)
 				return; // Not connected yet
+			assert(_epollRegistered == (_epollEvents != 0));
 
 			uint newEvents = 0;
 			if (_notifyRead) newEvents |= EPOLLIN;
 			if (_notifyWrite) newEvents |= EPOLLOUT;
 
-			if (newEvents != _epollEvents)
+			if (newEvents == _epollEvents)
+				return;
+
+			if (newEvents == 0)
 			{
-				_epollEvents = newEvents;
+				assert(_epollRegistered);
+				int ret = epoll_ctl(socketManager.epollFd, EPOLL_CTL_DEL, conn.handle, null);
+				assert(ret == 0, "epoll_ctl DEL failed");
+				_epollRegistered = false;
+			}
+			else
+			{
 				epoll_event ev;
 				ev.events = newEvents;
 				ev.data.ptr = cast(void*)this;
-				int ret = epoll_ctl(socketManager.epollFd, EPOLL_CTL_MOD, conn.handle, &ev);
-				// May fail if socket not yet registered, which is fine
-				debug (ASOCKETS) if (ret != 0)
-					stderr.writefln("epoll_ctl MOD failed for %s", this);
+				if (_epollRegistered)
+				{
+					int ret = epoll_ctl(socketManager.epollFd, EPOLL_CTL_MOD, conn.handle, &ev);
+					assert(ret == 0, "epoll_ctl MOD failed");
+				}
+				else
+				{
+					assert(_epollEvents == 0);
+					int ret = epoll_ctl(socketManager.epollFd, EPOLL_CTL_ADD, conn.handle, &ev);
+					assert(ret == 0, "epoll_ctl ADD failed");
+					_epollRegistered = true;
+				}
 			}
+
+			_epollEvents = newEvents;
 		}
 
 		private bool _notifyRead, _notifyWrite;
@@ -5202,6 +5227,102 @@ debug(ae_unittest) unittest
 	}
 
 	testTimer();
+}
+
+// ***************************************************************************
+
+// Regression: epoll_wait can return two readable sockets in one batch.  If
+// handling the first event disables the second one's reader, dispatching the
+// already-queued second event must not consume its data without a handler.
+static if (eventLoopMechanism == EventLoopMechanism.epoll)
+debug(ae_unittest) unittest
+{
+	import core.time : seconds;
+	import std.algorithm.searching : canFind;
+
+	// Daemon sockets (e.g. ae.net.shutdown's signal self-pipe) may already be
+	// registered, so this test's sockets are not necessarily alone in the
+	// event buffer; the same-batch assertions below scan for the sibling
+	// rather than assume its index.
+	socketManager.events[] = epoll_event.init;
+
+	auto firstPair = socketPair();
+	auto secondPair = socketPair();
+	firstPair[0].blocking = false;
+	secondPair[0].blocking = false;
+	scope(exit)
+	{
+		firstPair[1].close();
+		secondPair[1].close();
+	}
+
+	auto first = new SocketConnection(firstPair[0]);
+	auto second = new SocketConnection(secondPair[0]);
+
+	string firstReceived, secondReceived;
+	bool timedOut;
+	TimerTask timeout;
+	void delegate(Data) onFirst, onSecond;
+
+	void finish()
+	{
+		if (firstReceived.length && secondReceived.length)
+		{
+			timeout.cancel();
+			first.disconnect();
+			second.disconnect();
+		}
+	}
+
+	onFirst = (Data data) {
+		firstReceived ~= cast(string)data.unsafeContents.idup;
+		if (!secondReceived.length)
+		{
+			// Both descriptors were made readable before entering the loop, so
+			// the other one must already be in this epoll_wait batch.  The
+			// event buffer was cleared before the loop, and an earlier batch
+			// containing the sibling's event would have delivered its data
+			// (its handler was still set), so finding it here proves
+			// same-batch delivery.
+			assert(socketManager.events[].canFind!((ref e) => e.data.ptr is cast(void*)second),
+				"test setup did not put both readable sockets in one epoll_wait batch");
+			second.handleReadData = null;
+			onNextTick(socketManager, { second.handleReadData = onSecond; });
+		}
+		finish();
+	};
+
+	onSecond = (Data data) {
+		secondReceived ~= cast(string)data.unsafeContents.idup;
+		if (!firstReceived.length)
+		{
+			// See the corresponding assertion in onFirst().
+			assert(socketManager.events[].canFind!((ref e) => e.data.ptr is cast(void*)first),
+				"test setup did not put both readable sockets in one epoll_wait batch");
+			first.handleReadData = null;
+			onNextTick(socketManager, { first.handleReadData = onFirst; });
+		}
+		finish();
+	};
+
+	first.handleReadData = onFirst;
+	second.handleReadData = onSecond;
+
+	assert(firstPair[1].send("A") == 1);
+	assert(secondPair[1].send("B") == 1);
+
+	// Keep a failing pre-fix test from blocking the test process forever.
+	timeout = setTimeout({
+		timedOut = true;
+		first.disconnect();
+		second.disconnect();
+	}, 5.seconds);
+
+	socketManager.loop();
+
+	assert(!timedOut, "epoll stale-event regression test timed out");
+	assert(firstReceived == "A", "first connection's original bytes were not delivered intact");
+	assert(secondReceived == "B", "second connection's original bytes were not delivered intact");
 }
 
 // ***************************************************************************
