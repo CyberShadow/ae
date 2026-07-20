@@ -3709,10 +3709,10 @@ public:
 				// queue disconnect after all data is sent
 				debug (ASOCKETS) stderr.writefln("[%s] Queueing disconnect: %s", remoteAddressStr, reason);
 				state = ConnectionState.disconnecting;
+				updateFlags();
 				//setIdleTimeout(30.seconds);
 				if (disconnectHandler)
 					disconnectHandler(reason, type);
-				updateFlags();
 				return;
 			}
 			else
@@ -5249,6 +5249,151 @@ debug(ae_unittest) unittest
 	}
 
 	testTimer();
+}
+
+// ***************************************************************************
+
+// Regression: a requested delayed disconnect must withdraw epoll read
+// interest before its callback can recursively run the manager.
+version (Posix)
+static if (eventLoopMechanism == EventLoopMechanism.epoll)
+debug(ae_unittest) unittest
+{
+	import core.time : Duration;
+	import std.socket : SocketShutdown, socketPair, wouldHaveBlocked;
+
+	class CountingSocketConnection : SocketConnection
+	{
+		int readableEntries;
+
+		this(Socket socket)
+		{
+			super(socket);
+		}
+
+		override void onReadable()
+		{
+			readableEntries++;
+			super.onReadable();
+		}
+	}
+
+	// Another module may retain a daemon anchor socket; preserve that otherwise
+	// idle baseline rather than treating it as part of this regression.
+	auto idleManagerSize = socketManager.size();
+	assert(!mainTimer.hasNonDaemonTasks(),
+		"recursive disconnect regression test requires no pending non-daemon timer");
+
+	auto pair = socketPair();
+	pair[0].blocking = false;
+
+	// Leave the peer's receive side undrained so the tested endpoint's kernel
+	// send buffer becomes full before the library queues its own output.
+	ubyte[64 * 1024] fill = 0x5A;
+	size_t kernelBytesQueued;
+	while (true)
+	{
+		auto sent = pair[0].send(fill[]);
+		if (sent == Socket.ERROR)
+		{
+			assert(wouldHaveBlocked(),
+				"filling the stream pair failed for a reason other than would-block");
+			break;
+		}
+		assert(sent > 0, "nonblocking stream pair send made no progress");
+		kernelBytesQueued += sent;
+	}
+	assert(kernelBytesQueued > 0, "stream pair send buffer did not accept any data");
+
+	auto connection = new CountingSocketConnection(pair[0]);
+	connection.handleReadData = (Data) {
+		assert(false, "EOF must not reach the managed read handler");
+	};
+	connection.send(Data(cast(const(ubyte)[])"library queued output"));
+	assert(connection.writePending,
+		"library output was not queued after the kernel send buffer filled");
+	assert(connection.notifyRead,
+		"installed stream read handler did not enable read interest");
+	assert(connection.notifyWrite,
+		"queued library output did not enable write interest");
+
+	// Make EOF readable without allowing the peer to drain the blocked output.
+	pair[1].shutdown(SocketShutdown.SEND);
+	connection.daemonWrite = true;
+	assert(connection.writePending,
+		"daemonizing the write direction discarded pending output");
+	assert(connection.notifyWrite,
+		"daemonizing the write direction disabled pending write interest");
+
+	TimerTask cleanup;
+	bool cleanupRan;
+	bool nestedLoopReturned;
+	int disconnectCalls;
+	int cleanupCalls;
+	connection.handleDisconnect = (string, DisconnectType type) {
+		disconnectCalls++;
+		assert(type == DisconnectType.requested,
+			"delayed disconnect callback received the wrong disconnect type");
+		assert(connection.state == ConnectionState.disconnecting,
+			"delayed disconnect callback observed the wrong connection state");
+		assert(connection.writePending,
+			"delayed disconnect callback lost pending output");
+		assert(!connection.notifyRead,
+			"delayed disconnect callback observed stale read interest");
+		assert(connection.notifyWrite,
+			"delayed disconnect callback lost pending write interest");
+
+		cleanup = setTimeout({
+			assert(!cleanup.isWaiting(),
+				"recursive cleanup timer was still waiting while it ran");
+			assert(!nestedLoopReturned,
+				"recursive socket-manager loop returned before cleanup");
+			assert(!cleanupRan,
+				"recursive cleanup ran more than once");
+			assert(connection.state == ConnectionState.disconnecting,
+				"recursive cleanup observed the wrong connection state");
+			assert(connection.writePending,
+				"recursive cleanup lost pending output");
+			assert(!connection.notifyRead,
+				"recursive cleanup restored read interest");
+			assert(connection.notifyWrite,
+				"recursive cleanup lost pending write interest");
+			assert(connection.socket !is null,
+				"recursive cleanup observed a closed socket");
+			assert(socketManager.epollFd >= 0,
+				"recursive cleanup observed a closed epoll descriptor");
+			cleanupCalls++;
+			connection.onError("recursive disconnect regression cleanup");
+			cleanupRan = true;
+		}, Duration.zero);
+		assert(!cleanup.daemon,
+			"recursive cleanup timer unexpectedly became daemon work");
+		assert(cleanup.isWaiting(),
+			"recursive cleanup timer was not waiting before loop entry");
+		socketManager.loop();
+		nestedLoopReturned = true;
+	};
+
+	connection.disconnect("recursive disconnect regression", DisconnectType.requested);
+
+	assert(nestedLoopReturned, "recursive socket-manager loop did not return");
+	assert(connection.readableEntries == 0,
+		"recursive socket-manager loop dispatched a stale readable entry");
+	assert(cleanupRan, "recursive cleanup timer did not run");
+	assert(!cleanup.isWaiting(), "recursive cleanup timer remained waiting after the loop");
+	assert(cleanupCalls == 1, "recursive cleanup did not run exactly once");
+	assert(connection.state == ConnectionState.disconnected,
+		"Connection.onError cleanup did not close the delayed connection");
+	assert(connection.socket is null,
+		"Connection.onError cleanup retained the tested socket");
+	assert(disconnectCalls == 1,
+		"recursive cleanup repeated the requested disconnect callback");
+
+	pair[1].close();
+	assert(socketManager.size() == idleManagerSize,
+		"recursive disconnect regression test did not restore the idle socket-manager state");
+	assert(!mainTimer.hasNonDaemonTasks(),
+		"recursive disconnect regression test leaked a non-daemon timer");
 }
 
 // ***************************************************************************
