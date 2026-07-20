@@ -5482,90 +5482,785 @@ debug(ae_unittest) unittest
 
 // ***************************************************************************
 
-// Regression: epoll_wait can return two readable sockets in one batch.  If
-// handling the first event disables the second one's reader, dispatching the
-// already-queued second event must not consume its data without a handler.
-static if (eventLoopMechanism == EventLoopMechanism.epoll)
+// Regression: current stream handler/read interest governs dispatch even for
+// readiness already observed by the event loop.
 debug(ae_unittest) unittest
 {
 	import core.time : seconds;
 
-	assert(socketManager.size() == 0, "epoll regression test requires an idle socket manager");
-	socketManager.events[] = epoll_event.init;
+	// Another module may retain a daemon anchor socket; preserve that otherwise
+	// idle baseline rather than treating it as part of this regression.
+	auto idleManagerSize = socketManager.size();
+	assert(!mainTimer.hasNonDaemonTasks(),
+		"stale sibling interest regression test requires no pending non-daemon timer");
 
-	auto firstPair = socketPair();
-	auto secondPair = socketPair();
-	firstPair[0].blocking = false;
-	secondPair[0].blocking = false;
-	scope(exit)
-	{
-		firstPair[1].close();
-		secondPair[1].close();
-	}
-
-	auto first = new SocketConnection(firstPair[0]);
-	auto second = new SocketConnection(secondPair[0]);
-
-	string firstReceived, secondReceived;
+	auto server = new TcpServer;
+	TcpConnection[2] clients, accepted;
+	void delegate(Data)[2] readHandlers;
+	ubyte[][2] received;
+	int acceptedCount;
+	int connectedCount;
+	int callbackCount;
+	int firstIndex = -1;
+	int restoredIndex = -1;
+	bool siblingRestored;
+	bool startQueued;
+	bool started;
+	bool finished;
 	bool timedOut;
 	TimerTask timeout;
-	void delegate(Data) onFirst, onSecond;
+
+	void cleanupAfterFailure()
+	{
+		foreach (connection; accepted)
+			if (connection !is null && connection.state.disconnectable)
+				connection.disconnect("stale sibling interest regression cleanup");
+		foreach (connection; clients)
+			if (connection !is null && connection.state.disconnectable)
+				connection.disconnect("stale sibling interest regression cleanup");
+		if (server.isListening)
+			server.close();
+	}
 
 	void finish()
 	{
-		if (firstReceived.length && secondReceived.length)
+		assert(!finished);
+		finished = true;
+		timeout.cancel();
+		foreach (connection; accepted)
+			if (connection.state.disconnectable)
+				connection.disconnect("stale sibling interest regression complete");
+		foreach (connection; clients)
+			if (connection.state.disconnectable)
+				connection.disconnect("stale sibling interest regression complete");
+		if (server.isListening)
+			server.close();
+	}
+
+	void maybeFinish()
+	{
+		if (received[0].length == 1 && received[1].length == 1)
+			finish();
+	}
+
+	void onRead(size_t index, Data data)
+	{
+		if (firstIndex >= 0 && index != firstIndex)
 		{
-			timeout.cancel();
-			first.disconnect();
-			second.disconnect();
+			assert(restoredIndex == index && siblingRestored,
+				"sibling delivery ran before its read handler was restored");
+		}
+
+		received[index] ~= data.unsafeContents;
+		callbackCount++;
+		assert(callbackCount <= 2,
+			"stale sibling interest regression delivered too many managed reads");
+		assert(received[index].length == 1,
+			"stale sibling interest regression received unexpected extra bytes");
+
+		if (firstIndex < 0)
+		{
+			firstIndex = cast(int)index;
+			auto sibling = 1 - index;
+			accepted[sibling].handleReadData = null;
+			onNextTick(socketManager, {
+				accepted[sibling].handleReadData = readHandlers[sibling];
+				restoredIndex = cast(int)sibling;
+				siblingRestored = true;
+			});
+		}
+
+		maybeFinish();
+	}
+
+	readHandlers[0] = (Data data) { onRead(0, data); };
+	readHandlers[1] = (Data data) { onRead(1, data); };
+
+	void start()
+	{
+		assert(!started);
+		started = true;
+		assert(acceptedCount == 2 && connectedCount == 2);
+
+		assert(clients[0].socket.send("A") == 1);
+		assert(clients[1].socket.send("B") == 1);
+
+		// Establish public readiness for both accepted streams without consuming
+		// either original byte before ae returns to its event loop.
+		auto readSet = new SocketSet(1024);
+		readSet.add(accepted[0].socket);
+		readSet.add(accepted[1].socket);
+		auto ready = Socket.select(readSet, null, null, 1.seconds);
+		assert(ready == 2 &&
+			readSet.isSet(accepted[0].socket) && readSet.isSet(accepted[1].socket),
+			"could not establish readiness for both accepted loopback streams");
+	}
+
+	void maybeStart()
+	{
+		if (!startQueued && acceptedCount == 2 && connectedCount == 2)
+		{
+			startQueued = true;
+			onNextTick(socketManager, &start);
 		}
 	}
 
-	onFirst = (Data data) {
-		firstReceived ~= cast(string)data.unsafeContents.idup;
-		if (!secondReceived.length)
-		{
-			// Both descriptors were made readable before entering the loop, so
-			// the other one must already be in this epoll_wait batch.
-			assert(socketManager.events[1].data.ptr == cast(void*)second,
-				"test setup did not put both readable sockets in one epoll_wait batch");
-			second.handleReadData = null;
-			onNextTick(socketManager, { second.handleReadData = onSecond; });
-		}
-		finish();
+	server.handleAccept = (TcpConnection connection) {
+		assert(acceptedCount < 2);
+		auto index = acceptedCount++;
+		accepted[index] = connection;
+		connection.handleReadData = readHandlers[index];
+		maybeStart();
 	};
+	auto port = server.listen(0, "127.0.0.1");
 
-	onSecond = (Data data) {
-		secondReceived ~= cast(string)data.unsafeContents.idup;
-		if (!firstReceived.length)
-		{
-			// See the corresponding assertion in onFirst().
-			assert(socketManager.events[1].data.ptr == cast(void*)first,
-				"test setup did not put both readable sockets in one epoll_wait batch");
-			first.handleReadData = null;
-			onNextTick(socketManager, { first.handleReadData = onFirst; });
-		}
-		finish();
-	};
+	foreach (index; 0 .. 2)
+	{
+		clients[index] = new TcpConnection;
+		clients[index].handleConnect = {
+			connectedCount++;
+			maybeStart();
+		};
+		clients[index].connect("127.0.0.1", port);
+	}
 
-	first.handleReadData = onFirst;
-	second.handleReadData = onSecond;
-
-	assert(firstPair[1].send("A") == 1);
-	assert(secondPair[1].send("B") == 1);
-
-	// Keep a failing pre-fix test from blocking the test process forever.
 	timeout = setTimeout({
 		timedOut = true;
-		first.disconnect();
-		second.disconnect();
+		cleanupAfterFailure();
 	}, 5.seconds);
 
 	socketManager.loop();
 
-	assert(!timedOut, "epoll stale-event regression test timed out");
-	assert(firstReceived == "A", "first connection's original bytes were not delivered intact");
-	assert(secondReceived == "B", "second connection's original bytes were not delivered intact");
+	assert(!timedOut, "stale sibling interest regression test timed out");
+	assert(started && finished);
+	assert(callbackCount == 2,
+		"stale sibling interest regression did not deliver exactly two managed reads");
+	assert(firstIndex == 0 || firstIndex == 1);
+	assert(restoredIndex == 1 - firstIndex && siblingRestored);
+	assert(received[0].length == 1 && received[1].length == 1);
+	assert((received[0][0] == 'A' && received[1][0] == 'B') ||
+		(received[0][0] == 'B' && received[1][0] == 'A'),
+		"the two original loopback bytes were not delivered intact");
+	foreach (connection; accepted)
+		assert(connection.state == ConnectionState.disconnected);
+	foreach (connection; clients)
+		assert(connection.state == ConnectionState.disconnected);
+	assert(!server.isListening);
+	assert(!timeout.isWaiting());
+	assert(socketManager.size() == idleManagerSize,
+		"stale sibling interest regression test did not restore the idle socket-manager state");
+	assert(!mainTimer.hasNonDaemonTasks(),
+		"stale sibling interest regression test leaked a non-daemon timer");
+}
+
+// Regression: a peer FIN while a requested disconnect is flushing output must
+// not dispatch a stale read or prevent the queued bytes from reaching the peer.
+debug(ae_unittest) unittest
+{
+	import core.time : msecs, seconds;
+	import std.algorithm.comparison : max;
+	import std.socket : AddressFamily, InternetAddress, Socket, SocketOption,
+		SocketOptionLevel, SocketShutdown, TcpSocket;
+
+	// Another module may retain a daemon anchor socket; preserve that otherwise
+	// idle baseline rather than treating it as part of this regression.
+	auto idleManagerSize = socketManager.size();
+	assert(!mainTimer.hasNonDaemonTasks(),
+		"delayed disconnect FIN regression test requires no pending non-daemon timer");
+
+	int socketBuffer(Socket socket, SocketOption option)
+	{
+		int32_t value;
+		auto length = socket.getOption(SocketOptionLevel.SOCKET, option, value);
+		assert(length == int32_t.sizeof,
+			"integer socket-option read returned an unexpected length");
+		assert(value > 0, "integer socket-option read returned a nonpositive value");
+		return value;
+	}
+
+	enum requestedBuffer = 16 * 1024;
+	enum payloadSize = 4 * 1024 * 1024;
+	enum chunkSize = 16 * 1024;
+	enum chunkCount = payloadSize / chunkSize;
+	ubyte[] payload = new ubyte[payloadSize];
+	foreach (index, ref value; payload)
+		value = cast(ubyte)((index * 31 + 7) & 0xff);
+	auto chunks = new Data[chunkCount];
+	foreach (index, ref chunk; chunks)
+	{
+		auto begin = index * chunkSize;
+		chunk = Data(payload[begin .. begin + chunkSize]);
+	}
+
+	auto listenerSocket = new TcpSocket(AddressFamily.INET);
+	auto listenerDefaultRcvbuf = socketBuffer(listenerSocket, SocketOption.RCVBUF);
+	listenerSocket.setOption(
+		SocketOptionLevel.SOCKET, SocketOption.RCVBUF, requestedBuffer);
+	auto listenerAfterSetRcvbuf = socketBuffer(listenerSocket, SocketOption.RCVBUF);
+	listenerSocket.setOption(SocketOptionLevel.SOCKET, SocketOption.REUSEADDR, true);
+	listenerSocket.blocking = false;
+	listenerSocket.bind(new InternetAddress("127.0.0.1", 0));
+	auto listenerAfterBindRcvbuf = socketBuffer(listenerSocket, SocketOption.RCVBUF);
+	listenerSocket.listen(1);
+	auto listenerAfterListenRcvbuf = socketBuffer(listenerSocket, SocketOption.RCVBUF);
+	auto port = (cast(InternetAddress)listenerSocket.localAddress).port;
+
+	auto server = new TcpServer(listenerSocket);
+	auto listenerAliveAfterConstructor = listenerSocket.isAlive;
+	auto sender = new TcpConnection;
+	TcpConnection peer;
+	ubyte[] received;
+	bool accepted;
+	bool connected;
+	bool startQueued;
+	bool started;
+	bool finished;
+	bool timedOut;
+	bool probeFired;
+	bool releaseFired;
+	bool serverClosed;
+	bool listenerAliveBeforeClose;
+	bool listenerAliveAfterClose;
+	int senderReadCount;
+	int senderDisconnectCount;
+	int peerDisconnectCount;
+	int flushCount;
+	int serverCloseCount;
+	int acceptedInheritedRcvbuf = -1;
+	int acceptedAfterSetRcvbuf = -1;
+	int senderBeforeSetSndbuf = -1;
+	int senderAfterSetSndbuf = -1;
+	int senderAtConnectSndbuf = -1;
+	ConnectionState senderDisconnectState;
+	ConnectionState flushState;
+	DisconnectType senderDisconnectType;
+	DisconnectType peerDisconnectType;
+	TimerTask probeTimer;
+	TimerTask releaseTimer;
+	TimerTask timeout;
+
+	void closeServer()
+	{
+		assert(!serverClosed, "raw listener server was closed more than once");
+		serverClosed = true;
+		listenerAliveBeforeClose = listenerSocket.isAlive;
+		server.close();
+		listenerAliveAfterClose = listenerSocket.isAlive;
+	}
+
+	void cleanupAfterFailure()
+	{
+		if (probeTimer !is null && probeTimer.isWaiting())
+			probeTimer.cancel();
+		if (releaseTimer !is null && releaseTimer.isWaiting())
+			releaseTimer.cancel();
+		// A timeout is not a successful requested disconnect. Detach the test's
+		// success-only callbacks before closing endpoints, because disconnect()
+		// invokes its handler synchronously when there is no pending output.
+		sender.handleConnect = null;
+		sender.handleReadData = null;
+		sender.handleDisconnect = null;
+		sender.handleBufferFlushed = null;
+		if (peer !is null)
+		{
+			peer.handleReadData = null;
+			peer.handleDisconnect = null;
+			peer.handleBufferFlushed = null;
+		}
+		server.handleAccept = null;
+		// The raw listener is owned by this test. Close it before endpoints so
+		// an endpoint callback can never bypass listener ownership cleanup.
+		closeServer();
+		if (sender.state.disconnectable)
+			sender.disconnect("delayed disconnect FIN regression cleanup");
+		if (peer !is null && peer.state.disconnectable)
+			peer.disconnect("delayed disconnect FIN regression cleanup");
+	}
+
+	void finish()
+	{
+		assert(!finished);
+		finished = true;
+		assert(received == payload,
+			"peer payload differs from the bytes queued before disconnect");
+		assert(probeFired && releaseFired,
+			"terminal peer close preceded a required delayed event");
+		assert(flushCount == 1,
+			"terminal peer close preceded the exact sender flush");
+		timeout.cancel();
+		closeServer();
+	}
+
+	void onPeerRead(Data data)
+	{
+		received ~= data.unsafeContents;
+		assert(received.length <= payload.length,
+			"peer received more bytes than the sender queued");
+	}
+
+	sender.handleReadData = (Data) {
+		senderReadCount++;
+	};
+	sender.handleDisconnect = (string, DisconnectType type) {
+		senderDisconnectCount++;
+		senderDisconnectState = sender.state;
+		senderDisconnectType = type;
+		assert(senderDisconnectCount == 1,
+			"requested sender disconnect callback ran more than once");
+		assert(senderDisconnectState == ConnectionState.disconnecting,
+			"requested sender disconnect callback observed the wrong state");
+		assert(type == DisconnectType.requested,
+			"requested sender disconnect callback observed the wrong type");
+	};
+	sender.handleBufferFlushed = {
+		flushCount++;
+		flushState = sender.state;
+		assert(flushCount == 1,
+			"sender buffer-flushed callback ran more than once");
+		assert(flushState == ConnectionState.disconnecting,
+			"sender buffer-flushed callback observed the wrong state");
+		assert(!sender.writePending && sender.bytesQueued == 0 &&
+			sender.packetsQueued == 0,
+			"sender flush callback observed pending application output");
+	};
+
+	void start()
+	{
+		assert(!started);
+		started = true;
+		assert(accepted && connected);
+		assert(listenerDefaultRcvbuf > 0 && listenerAfterSetRcvbuf > 0 &&
+			listenerAfterBindRcvbuf > 0 && listenerAfterListenRcvbuf > 0);
+		assert(acceptedInheritedRcvbuf > 0 && acceptedAfterSetRcvbuf > 0);
+		assert(senderBeforeSetSndbuf > 0 && senderAfterSetSndbuf > 0 &&
+			senderAtConnectSndbuf > 0);
+		auto largestEffectiveBuffer = max(listenerAfterListenRcvbuf,
+			max(acceptedAfterSetRcvbuf, senderAtConnectSndbuf));
+		assert(payloadSize >= 16 * largestEffectiveBuffer,
+			"configured payload lacks diagnostic buffer headroom");
+
+		sender.send(chunks);
+		auto sendPending = sender.writePending;
+		auto sendBytes = sender.bytesQueued;
+		auto sendPackets = sender.packetsQueued;
+		sender.disconnect("requested disconnect with queued output", DisconnectType.requested);
+		auto disconnectPending = sender.writePending;
+		auto disconnectBytes = sender.bytesQueued;
+		auto disconnectPackets = sender.packetsQueued;
+
+		assert(sender.state == ConnectionState.disconnecting,
+			"send plus requested disconnect did not synchronously enter disconnecting");
+		assert(sendPending && sendBytes == payloadSize && sendPackets == chunkCount,
+			"one send(Data[]) call did not synchronously queue the full chunk vector");
+		assert(disconnectPending && disconnectBytes == payloadSize &&
+			disconnectPackets == chunkCount,
+			"requested disconnect did not retain the full queued chunk vector");
+		assert(senderDisconnectCount == 1,
+			"requested sender disconnect callback was not synchronous");
+		assert(senderReadCount == 0 && flushCount == 0,
+			"I/O callback ran synchronously during send/disconnect setup");
+
+		// Half-close only the peer-to-sender direction. The peer remains open to
+		// receive and validate the sender's queued payload.
+		peer.socket.shutdown(SocketShutdown.SEND);
+
+		probeTimer = setTimeout({
+			probeFired = true;
+			assert(!releaseFired,
+				"peer reader was released before the delayed FIN probe");
+			assert(sender.state == ConnectionState.disconnecting,
+				"sender left disconnecting before the delayed FIN probe");
+			assert(sender.writePending && sender.bytesQueued > 0 &&
+				sender.packetsQueued > 0,
+				"sender application queue drained despite receiver backpressure");
+			assert(senderReadCount == 0,
+				"peer FIN reached the sender's managed read handler while disconnecting");
+			assert(senderDisconnectCount == 1 && flushCount == 0 && received.length == 0,
+				"unexpected callback or peer delivery preceded the release timer");
+		}, 20.msecs);
+		releaseTimer = setTimeout({
+			releaseFired = true;
+			peer.handleReadData = &onPeerRead;
+		}, 100.msecs);
+	}
+
+	void maybeStart()
+	{
+		if (!startQueued && accepted && connected)
+		{
+			startQueued = true;
+			onNextTick(socketManager, &start);
+		}
+	}
+
+	server.handleAccept = (TcpConnection connection) {
+		assert(!accepted);
+		accepted = true;
+		peer = connection;
+		acceptedInheritedRcvbuf = socketBuffer(peer.socket, SocketOption.RCVBUF);
+		peer.socket.setOption(
+			SocketOptionLevel.SOCKET, SocketOption.RCVBUF, requestedBuffer);
+		acceptedAfterSetRcvbuf = socketBuffer(peer.socket, SocketOption.RCVBUF);
+		peer.handleDisconnect = (string, DisconnectType type) {
+			peerDisconnectCount++;
+			peerDisconnectType = type;
+			assert(peerDisconnectCount == 1,
+				"peer disconnect callback ran more than once");
+			assert(type == DisconnectType.graceful,
+				"peer did not observe a graceful sender close after the flush");
+			assert(received == payload,
+				"peer payload differs from the bytes queued before disconnect");
+			finish();
+		};
+		maybeStart();
+	};
+	server.handleClose = { serverCloseCount++; };
+
+	sender.handleConnect = {
+		assert(!connected);
+		connected = true;
+		senderAtConnectSndbuf = socketBuffer(sender.socket, SocketOption.SNDBUF);
+		assert(senderAtConnectSndbuf == senderAfterSetSndbuf,
+			"sender buffer changed between earliest public set and connect callback");
+		maybeStart();
+	};
+	sender.connect("127.0.0.1", port);
+	assert(sender.socket !is null,
+		"TcpConnection did not expose its created socket after connect returned");
+	senderBeforeSetSndbuf = socketBuffer(sender.socket, SocketOption.SNDBUF);
+	sender.socket.setOption(
+		SocketOptionLevel.SOCKET, SocketOption.SNDBUF, requestedBuffer);
+	senderAfterSetSndbuf = socketBuffer(sender.socket, SocketOption.SNDBUF);
+
+	timeout = setTimeout({
+		timedOut = true;
+		cleanupAfterFailure();
+	}, 10.seconds);
+
+	socketManager.loop();
+
+	assert(!timedOut, "delayed disconnect FIN regression test timed out");
+	assert(started && probeFired && finished);
+	assert(senderReadCount == 0,
+		"sender managed read handler ran while disconnecting");
+	assert(senderDisconnectCount == 1 &&
+		senderDisconnectType == DisconnectType.requested &&
+		senderDisconnectState == ConnectionState.disconnecting,
+		"requested sender disconnect callback did not run exactly once in disconnecting");
+	assert(flushCount == 1 && flushState == ConnectionState.disconnecting,
+		"sender buffer-flushed callback did not run exactly once in disconnecting");
+	assert(peerDisconnectCount == 1 && peerDisconnectType == DisconnectType.graceful,
+		"peer disconnect callback was not exactly one graceful close");
+	assert(received == payload,
+		"peer payload differs from the bytes queued before disconnect");
+	assert(sender.state == ConnectionState.disconnected);
+	assert(peer.state == ConnectionState.disconnected);
+	assert(!sender.writePending && sender.bytesQueued == 0 &&
+		sender.packetsQueued == 0,
+		"sender queue was not empty after its successful flush");
+	assert(serverClosed && !server.isListening);
+	assert(listenerAliveAfterConstructor && listenerAliveBeforeClose &&
+		!listenerAliveAfterClose,
+		"raw listener did not transition from alive to dead when closed");
+	assert(serverCloseCount == 1,
+		"raw listener server close callback did not run exactly once");
+	assert(!probeTimer.isWaiting());
+	assert(!releaseTimer.isWaiting());
+	assert(!timeout.isWaiting());
+	assert(socketManager.size() == idleManagerSize,
+		"delayed disconnect FIN regression test did not restore the idle socket-manager state");
+	assert(!mainTimer.hasNonDaemonTasks(),
+		"delayed disconnect FIN regression test leaked a non-daemon timer");
+}
+
+// Regression: positive data that becomes readable after requested disconnect
+// must not be dispatched. StreamConnection rejects a stale dispatch before a
+// shared receive could silently discard the late bytes.
+debug(ae_unittest) unittest
+{
+	import core.time : msecs, seconds;
+	import std.algorithm.comparison : max;
+	import std.socket : AddressFamily, InternetAddress, Socket, SocketOption,
+		SocketOptionLevel, TcpSocket;
+
+	// Another module may retain a daemon anchor socket; preserve that otherwise
+	// idle baseline rather than treating it as part of this regression.
+	auto idleManagerSize = socketManager.size();
+	assert(!mainTimer.hasNonDaemonTasks(),
+		"late positive data regression test requires no pending non-daemon timer");
+
+	int socketBuffer(Socket socket, SocketOption option)
+	{
+		int32_t value;
+		auto length = socket.getOption(SocketOptionLevel.SOCKET, option, value);
+		assert(length == int32_t.sizeof,
+			"integer socket-option read returned an unexpected length");
+		assert(value > 0, "integer socket-option read returned a nonpositive value");
+		return value;
+	}
+
+	enum requestedBuffer = 16 * 1024;
+	enum payloadSize = 4 * 1024 * 1024;
+	enum chunkSize = 16 * 1024;
+	enum chunkCount = payloadSize / chunkSize;
+	ubyte[] payload = new ubyte[payloadSize];
+	foreach (index, ref value; payload)
+		value = cast(ubyte)((index * 31 + 7) & 0xff);
+	auto chunks = new Data[chunkCount];
+	foreach (index, ref chunk; chunks)
+	{
+		auto begin = index * chunkSize;
+		chunk = Data(payload[begin .. begin + chunkSize]);
+	}
+	immutable latePayload = "late-positive-data";
+
+	auto listenerSocket = new TcpSocket(AddressFamily.INET);
+	auto listenerDefaultRcvbuf = socketBuffer(listenerSocket, SocketOption.RCVBUF);
+	listenerSocket.setOption(
+		SocketOptionLevel.SOCKET, SocketOption.RCVBUF, requestedBuffer);
+	auto listenerAfterSetRcvbuf = socketBuffer(listenerSocket, SocketOption.RCVBUF);
+	listenerSocket.setOption(SocketOptionLevel.SOCKET, SocketOption.REUSEADDR, true);
+	listenerSocket.blocking = false;
+	listenerSocket.bind(new InternetAddress("127.0.0.1", 0));
+	auto listenerAfterBindRcvbuf = socketBuffer(listenerSocket, SocketOption.RCVBUF);
+	listenerSocket.listen(1);
+	auto listenerAfterListenRcvbuf = socketBuffer(listenerSocket, SocketOption.RCVBUF);
+	auto port = (cast(InternetAddress)listenerSocket.localAddress).port;
+
+	auto server = new TcpServer(listenerSocket);
+	auto listenerAliveAfterConstructor = listenerSocket.isAlive;
+	auto sender = new TcpConnection;
+	TcpConnection peer;
+	bool accepted;
+	bool connected;
+	bool startQueued;
+	bool started;
+	bool probeFired;
+	bool finished;
+	bool timedOut;
+	bool serverClosed;
+	bool listenerAliveBeforeClose;
+	bool listenerAliveAfterClose;
+	int senderReadCount;
+	int senderDisconnectCount;
+	int peerDisconnectCount;
+	int flushCount;
+	int serverCloseCount;
+	int acceptedInheritedRcvbuf = -1;
+	int acceptedAfterSetRcvbuf = -1;
+	int senderBeforeSetSndbuf = -1;
+	int senderAfterSetSndbuf = -1;
+	int senderAtConnectSndbuf = -1;
+	ConnectionState senderDisconnectState;
+	DisconnectType senderDisconnectType;
+	TimerTask probeTimer;
+	TimerTask completionObserver;
+	TimerTask timeout;
+
+	void closeServer()
+	{
+		assert(!serverClosed, "raw listener server was closed more than once");
+		serverClosed = true;
+		listenerAliveBeforeClose = listenerSocket.isAlive;
+		server.close();
+		listenerAliveAfterClose = listenerSocket.isAlive;
+	}
+
+	void cleanupAfterFailure()
+	{
+		if (probeTimer !is null && probeTimer.isWaiting())
+			probeTimer.cancel();
+		if (completionObserver !is null && completionObserver.isWaiting())
+			completionObserver.cancel();
+		// A timeout is not a successful requested disconnect. Detach the test's
+		// success-only callbacks before closing endpoints, because disconnect()
+		// invokes its handler synchronously when there is no pending output.
+		sender.handleConnect = null;
+		sender.handleReadData = null;
+		sender.handleDisconnect = null;
+		sender.handleBufferFlushed = null;
+		if (peer !is null)
+		{
+			peer.handleReadData = null;
+			peer.handleDisconnect = null;
+			peer.handleBufferFlushed = null;
+		}
+		server.handleAccept = null;
+		// The raw listener is owned by this test. Close it before endpoints so
+		// an endpoint callback can never bypass listener ownership cleanup.
+		closeServer();
+		if (sender.state.disconnectable)
+			sender.disconnect("late positive data regression cleanup");
+		if (peer !is null && peer.state.disconnectable)
+			peer.disconnect("late positive data regression cleanup");
+	}
+
+	void finish()
+	{
+		assert(!finished);
+		finished = true;
+		completionObserver.cancel();
+		timeout.cancel();
+		closeServer();
+	}
+
+	sender.handleReadData = (Data) {
+		senderReadCount++;
+	};
+	sender.handleDisconnect = (string, DisconnectType type) {
+		senderDisconnectCount++;
+		senderDisconnectState = sender.state;
+		senderDisconnectType = type;
+		assert(senderDisconnectCount == 1,
+			"requested sender disconnect callback ran more than once");
+		assert(senderDisconnectState == ConnectionState.disconnecting,
+			"requested sender disconnect callback observed the wrong state");
+		assert(type == DisconnectType.requested,
+			"requested sender disconnect callback observed the wrong type");
+	};
+	sender.handleBufferFlushed = { flushCount++; };
+
+	void start()
+	{
+		assert(!started);
+		started = true;
+		assert(accepted && connected);
+		assert(listenerDefaultRcvbuf > 0 && listenerAfterSetRcvbuf > 0 &&
+			listenerAfterBindRcvbuf > 0 && listenerAfterListenRcvbuf > 0);
+		assert(acceptedInheritedRcvbuf > 0 && acceptedAfterSetRcvbuf > 0);
+		assert(senderBeforeSetSndbuf > 0 && senderAfterSetSndbuf > 0 &&
+			senderAtConnectSndbuf > 0);
+		auto largestEffectiveBuffer = max(listenerAfterListenRcvbuf,
+			max(acceptedAfterSetRcvbuf, senderAtConnectSndbuf));
+		assert(payloadSize >= 16 * largestEffectiveBuffer,
+			"configured payload lacks diagnostic buffer headroom");
+
+		sender.send(chunks);
+		auto sendPending = sender.writePending;
+		auto sendBytes = sender.bytesQueued;
+		auto sendPackets = sender.packetsQueued;
+		sender.disconnect("requested disconnect before late positive data", DisconnectType.requested);
+		auto disconnectPending = sender.writePending;
+		auto disconnectBytes = sender.bytesQueued;
+		auto disconnectPackets = sender.packetsQueued;
+
+		assert(sender.state == ConnectionState.disconnecting,
+			"send plus requested disconnect did not synchronously enter disconnecting");
+		assert(sendPending && sendBytes == payloadSize && sendPackets == chunkCount,
+			"one send(Data[]) call did not synchronously queue the full chunk vector");
+		assert(disconnectPending && disconnectBytes == payloadSize &&
+			disconnectPackets == chunkCount,
+			"requested disconnect did not retain the full queued chunk vector");
+		assert(senderDisconnectCount == 1,
+			"requested sender disconnect callback was not synchronous");
+		assert(senderReadCount == 0 && flushCount == 0,
+			"I/O callback ran synchronously during send/disconnect setup");
+
+		assert(peer.socket.send(latePayload) == latePayload.length);
+		auto readSet = new SocketSet(1024);
+		readSet.add(sender.socket);
+		auto ready = Socket.select(readSet, null, null, 1.seconds);
+		assert(ready == 1 && readSet.isSet(sender.socket),
+			"could not establish sender readability for late positive data");
+
+		// A timer, unlike onNextTick, lets the event loop dispatch I/O first.
+		probeTimer = setTimeout({
+			probeFired = true;
+			assert(sender.state == ConnectionState.disconnecting,
+				"sender left disconnecting before the late-data probe");
+			assert(sender.writePending && sender.bytesQueued > 0 &&
+				sender.packetsQueued > 0,
+				"sender application queue drained before the late-data probe");
+			assert(senderReadCount == 0,
+				"late positive data reached the sender's managed read handler");
+			assert(senderDisconnectCount == 1 && flushCount == 0,
+				"unexpected callback preceded late-data cleanup");
+
+			// Closing with unread data may reset the peer. Both the reset close and
+			// a successful drain/close are valid cleanup outcomes for this test.
+			peer.disconnect("late positive data regression cleanup");
+			completionObserver = setInterval({
+				if (sender.state == ConnectionState.disconnected &&
+					peer.state == ConnectionState.disconnected)
+					finish();
+			}, 1.msecs);
+		}, 20.msecs);
+	}
+
+	void maybeStart()
+	{
+		if (!startQueued && accepted && connected)
+		{
+			startQueued = true;
+			onNextTick(socketManager, &start);
+		}
+	}
+
+	server.handleAccept = (TcpConnection connection) {
+		assert(!accepted);
+		accepted = true;
+		peer = connection;
+		acceptedInheritedRcvbuf = socketBuffer(peer.socket, SocketOption.RCVBUF);
+		peer.socket.setOption(
+			SocketOptionLevel.SOCKET, SocketOption.RCVBUF, requestedBuffer);
+		acceptedAfterSetRcvbuf = socketBuffer(peer.socket, SocketOption.RCVBUF);
+		peer.handleDisconnect = (string, DisconnectType) {
+			peerDisconnectCount++;
+			assert(peerDisconnectCount == 1,
+				"peer disconnect callback ran more than once");
+		};
+		maybeStart();
+	};
+	server.handleClose = { serverCloseCount++; };
+
+	sender.handleConnect = {
+		assert(!connected);
+		connected = true;
+		senderAtConnectSndbuf = socketBuffer(sender.socket, SocketOption.SNDBUF);
+		assert(senderAtConnectSndbuf == senderAfterSetSndbuf,
+			"sender buffer changed between earliest public set and connect callback");
+		maybeStart();
+	};
+	sender.connect("127.0.0.1", port);
+	assert(sender.socket !is null,
+		"TcpConnection did not expose its created socket after connect returned");
+	senderBeforeSetSndbuf = socketBuffer(sender.socket, SocketOption.SNDBUF);
+	sender.socket.setOption(
+		SocketOptionLevel.SOCKET, SocketOption.SNDBUF, requestedBuffer);
+	senderAfterSetSndbuf = socketBuffer(sender.socket, SocketOption.SNDBUF);
+
+	timeout = setTimeout({
+		timedOut = true;
+		cleanupAfterFailure();
+	}, 10.seconds);
+
+	socketManager.loop();
+
+	assert(!timedOut, "late positive data regression test timed out");
+	assert(started && probeFired && finished);
+	assert(senderReadCount == 0,
+		"sender managed read handler ran while disconnecting");
+	assert(senderDisconnectCount == 1 &&
+		senderDisconnectType == DisconnectType.requested &&
+		senderDisconnectState == ConnectionState.disconnecting,
+		"requested sender disconnect callback did not run exactly once in disconnecting");
+	assert(peerDisconnectCount == 1,
+		"peer disconnect callback did not run exactly once");
+	assert(sender.state == ConnectionState.disconnected);
+	assert(peer.state == ConnectionState.disconnected);
+	assert(serverClosed && !server.isListening);
+	assert(listenerAliveAfterConstructor && listenerAliveBeforeClose &&
+		!listenerAliveAfterClose,
+		"raw listener did not transition from alive to dead when closed");
+	assert(serverCloseCount == 1,
+		"raw listener server close callback did not run exactly once");
+	assert(!probeTimer.isWaiting());
+	assert(!completionObserver.isWaiting());
+	assert(!timeout.isWaiting());
+	assert(socketManager.size() == idleManagerSize,
+		"late positive data regression test did not restore the idle socket-manager state");
+	assert(!mainTimer.hasNonDaemonTasks(),
+		"late positive data regression test leaked a non-daemon timer");
 }
 
 // ***************************************************************************
