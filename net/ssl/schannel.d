@@ -538,7 +538,7 @@ class SChannelAdapter : SSLAdapter
         this.context = context;
         super(next);
         if (next.state == ConnectionState.connected)
-            onConnect();
+            initialize();
     }
 
     override void onConnect()
@@ -546,18 +546,23 @@ class SChannelAdapter : SSLAdapter
         debug(SCHANNEL) stderr.writeln("SChannel: transport connected, beginning handshake");
         try
         {
-            hCreds = context.acquireCredentials();
-            credsAcquired = true;
-            connectionState = ConnectionState.connecting;
-            if (context.kind == SSLContext.Kind.client)
-                stepClientHandshake();
-            // Server side waits for the first ClientHello via onReadData.
+            initialize();
         }
         catch (Exception e)
         {
             debug(SCHANNEL) stderr.writefln("SChannel: handshake init failed: %s", e.msg);
             disconnect(e.msg.nonNull, DisconnectType.error);
         }
+    }
+
+    private void initialize()
+    {
+        hCreds = context.acquireCredentials();
+        credsAcquired = true;
+        connectionState = ConnectionState.connecting;
+        if (context.kind == SSLContext.Kind.client)
+            stepClientHandshake();
+        // Server side waits for the first ClientHello via onReadData.
     }
 
     override void onReadData(Data data)

@@ -336,6 +336,8 @@ protected:
 	void onDisconnect(string reason, DisconnectType type)
 	{
 		debug (HTTP) debugLog("Disconnect: %s", reason);
+		if (type == DisconnectType.error && log)
+			log("Error disconnect from " ~ remoteAddressStr(null) ~ ": " ~ reason);
 		connected = false;
 	}
 
