@@ -3659,6 +3659,10 @@ protected:
 				stderr.flush();
 			}
 
+			// Repository streams already verify connected state, a consumer, and
+			// current interest. ConnectionlessSocketConnection remains tolerant
+			// because an IOCP WSARecvFrom may have consumed a datagram when state
+			// or the read handler changes.
 			if (state == ConnectionState.disconnecting)
 			{
 				debug (ASOCKETS) stderr.writefln("\t\t%s: Discarding received data because we are disconnecting", this);
@@ -3858,6 +3862,18 @@ protected:
 	this()
 	{
 		super();
+	}
+
+	/// Called when a stream is readable.
+	override void onReadable()
+	{
+		assert(state == ConnectionState.connected,
+			"onReadable called on a %s stream connection".format(state));
+		assert(readDataHandler,
+			"onReadable called with null stream readDataHandler");
+		assert(notifyRead,
+			"onReadable called while stream read notifications are disabled");
+		super.onReadable();
 	}
 
 	/// Called when a socket is writable.
@@ -5394,6 +5410,74 @@ debug(ae_unittest) unittest
 		"recursive disconnect regression test did not restore the idle socket-manager state");
 	assert(!mainTimer.hasNonDaemonTasks(),
 		"recursive disconnect regression test leaked a non-daemon timer");
+}
+
+// ***************************************************************************
+
+// Regression: StreamConnection must reject every invalid readable entry
+// before the shared Connection implementation can call doReceive.
+debug(ae_unittest) unittest
+{
+	import core.exception : AssertError;
+
+	class ReadableInvariantProbe : StreamConnection
+	{
+		int receiveCalls;
+
+		this()
+		{
+			super();
+		}
+
+		override sizediff_t doSend(scope const(void)[] buffer)
+		{
+			return cast(sizediff_t)buffer.length;
+		}
+
+		override sizediff_t doReceive(scope void[])
+		{
+			receiveCalls++;
+			return 0;
+		}
+
+		void enterReadable()
+		{
+			onReadable();
+		}
+	}
+
+	void assertFailsBeforeReceive(ReadableInvariantProbe probe, string expectedDiagnostic)
+	{
+		string actualDiagnostic;
+		try
+			probe.enterReadable();
+		catch (AssertError error)
+			actualDiagnostic = error.msg;
+
+		assert(actualDiagnostic == expectedDiagnostic,
+			"unexpected stream readable invariant diagnostic: " ~ actualDiagnostic);
+		assert(probe.receiveCalls == 0,
+			"stream readable invariant invoked doReceive before failing: " ~ expectedDiagnostic);
+	}
+
+	auto nonconnected = new ReadableInvariantProbe;
+	assertFailsBeforeReceive(nonconnected,
+		"onReadable called on a disconnected stream connection");
+
+	auto handlerless = new ReadableInvariantProbe;
+	handlerless.state = ConnectionState.connected;
+	assertFailsBeforeReceive(handlerless,
+		"onReadable called with null stream readDataHandler");
+
+	auto staleInterest = new ReadableInvariantProbe;
+	staleInterest.state = ConnectionState.connected;
+	// Deliberately bypass handleReadData: the test needs a consumer with stale
+	// backend bookkeeping, which the public setter would immediately repair.
+	staleInterest.readDataHandler = (Data) {};
+	assert(!staleInterest.notifyRead,
+		"direct raw handler assignment unexpectedly enabled read interest");
+	assertFailsBeforeReceive(staleInterest,
+		"onReadable called while stream read notifications are disabled");
 }
 
 // ***************************************************************************
