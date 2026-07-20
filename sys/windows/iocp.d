@@ -17,6 +17,7 @@ version (Windows):
 
 import core.sys.windows.windows;
 import core.sys.windows.winsock2 : sockaddr, WSAIoctl;
+import core.sys.windows.ntdef : NTSTATUS;
 
 extern (Windows) nothrow @nogc
 {
@@ -35,6 +36,8 @@ extern (Windows) nothrow @nogc
 		ULONG*             ulNumEntriesRemoved,
 		DWORD              dwMilliseconds,
 		BOOL               fAlertable);
+
+	ULONG RtlNtStatusToDosError(NTSTATUS Status);
 
 	struct WSABUF
 	{
@@ -126,6 +129,7 @@ extern (Windows) alias LPFN_CONNECTEX = BOOL function(
 	OVERLAPPED*      lpOverlapped) nothrow @nogc;
 
 pragma(lib, "Mswsock");
+pragma(lib, "ntdll");
 
 // Error codes not in druntime
 enum WSA_IO_PENDING             = 997;
