@@ -1016,6 +1016,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 {
 	import core.sys.windows.windows;
 	import core.sys.windows.winsock2 : WSAGetLastError, WSAIoctl;
+	import core.sys.windows.ntdef : NTSTATUS;
 	import ae.sys.windows.iocp;
 	private void _wsaSetLastError(int e) nothrow @nogc { WSASetLastError(e); }
 
@@ -1054,6 +1055,20 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 	private extern(Windows) static IocpOp* opFromOverlapped(OVERLAPPED* ov) @system pure nothrow @nogc
 	{
 		return cast(IocpOp*) ov;
+	}
+
+	private uint normalizeIocpStatus(ULONG_PTR internal) nothrow @nogc
+	{
+		auto rawStatus = cast(uint)internal;
+		if (rawStatus == 0)
+			return 0;
+
+		auto status = RtlNtStatusToDosError(cast(NTSTATUS)rawStatus);
+		debug (ASOCKETS)
+			if (status == ERROR_MR_MID_NOT_FOUND)
+				stderr.writefln(
+					"[iocp] no Win32 mapping for NTSTATUS 0x%08X", rawStatus);
+		return status;
 	}
 
 	// ---- SocketManager ---------------------------------------------------
@@ -1310,8 +1325,12 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 
 						op.inFlight = false;
 						auto bytes = entry.dwNumberOfBytesTransferred;
-						// Internal field holds NTSTATUS — translate to Win32 if non-zero.
-						auto status = cast(uint)op.overlapped.Internal;
+						auto rawStatus = op.overlapped.Internal;
+						auto status = normalizeIocpStatus(rawStatus);
+						debug (ASOCKETS)
+							if (rawStatus != 0)
+								stderr.writefln("[iocp] completion status: NTSTATUS=0x%08X Win32=%d",
+									cast(uint)rawStatus, status);
 
 						runUserEventHandler({
 							dispatchCompletion(op, bytes, status, entry.lpCompletionKey);
@@ -2525,7 +2544,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 
 			if (status != 0)
 			{
-				// status is the raw NTSTATUS code. STATUS_CANCELLED (0xC0000120)
+				// status is a normalized Win32 error. ERROR_OPERATION_ABORTED
 				// arrives when close() triggered CancelIoEx; other non-zero
 				// statuses indicate unexpected errors. Either way, clean up.
 				_listening = false;
@@ -5461,6 +5480,25 @@ debug(ae_unittest) unittest
 	assert(serverAccepted  == N, "expected " ~ N.to!string ~ " accepted, got "  ~ serverAccepted.to!string);
 	assert(serverCompleted == N, "expected " ~ N.to!string ~ " srv done, got "  ~ serverCompleted.to!string);
 	assert(clientCompleted == N, "expected " ~ N.to!string ~ " cli done, got "  ~ clientCompleted.to!string);
+}
+
+// Regression: IOCP completion status values are NTSTATUS codes and must be
+// normalized before they are passed to socket completion handlers.
+debug(ae_unittest) version (Windows) unittest
+{
+	static if (eventLoopMechanism == EventLoopMechanism.iocp)
+	{
+		import std.format : format;
+
+		enum ULONG_PTR success = 0;
+		enum ULONG_PTR cancelled = 0xC0000120;
+		enum ULONG_PTR unmapped = 0xDEADBEEF;
+
+		assert(normalizeIocpStatus(success) == 0);
+		assert(normalizeIocpStatus(cancelled) == ERROR_OPERATION_ABORTED);
+		assert(normalizeIocpStatus(unmapped) == ERROR_MR_MID_NOT_FOUND,
+			format("unmapped raw IOCP status 0x%08X", unmapped));
+	}
 }
 
 // Regression: connectHandler that calls send() then disconnect() must still
