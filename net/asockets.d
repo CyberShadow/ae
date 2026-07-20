@@ -1496,10 +1496,10 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		}
 
 		if (status != 0)
-		{
-			// Some IOCP recv error. Surface as readable so onReadable's
-			// recv() call will see the same error and report.
-		}
+			return conn.onError("recv() error: " ~ formatSocketError(cast(int)status));
+
+		if (bytes == 0 && !conn.notifyRead)
+			return;
 
 		// Pretend the socket is "level-readable" and let onReadable() do
 		// its thing: it will call doReceive() -> recv(), which returns
@@ -5774,6 +5774,7 @@ debug(ae_unittest) version (Windows) unittest
 
 // Regression: a failed IOCP send completion must report the send error rather
 // than continue the writable path or repeat a requested disconnect callback.
+// The same handle-free fixture covers the corresponding recv completion paths.
 debug(ae_unittest) version (Windows) unittest
 {
 	static if (eventLoopMechanism == EventLoopMechanism.iocp)
@@ -5805,6 +5806,9 @@ debug(ae_unittest) version (Windows) unittest
 			override void onReadable()
 			{
 				readableCalls++;
+				// Use the raw field so this handle-free fixture cannot try to
+				// arm WSARecv after the successful completion callback.
+				_notifyRead = false;
 			}
 
 			override void onWritable()
@@ -5832,6 +5836,72 @@ debug(ae_unittest) version (Windows) unittest
 		};
 		c.conn = placeholder;
 		c.state = ConnectionState.connected;
+		auto initialManagerSize = socketManager.size();
+
+		void assertHandleFreePlaceholder()
+		{
+			assert(c.socket is placeholder,
+				"direct IOCP completion replaced the placeholder socket");
+			assert(placeholder.handle == socket_t.init,
+				"direct IOCP completion used a real socket handle");
+			assert(socketManager.size() == initialManagerSize,
+				"direct IOCP completion registered a socket with the manager");
+		}
+
+		// Completion status has already been normalized at the IOCP dequeue
+		// boundary.  These direct calls avoid a real socket and event loop.
+		c._iocpRecvPending = true;
+		c._notifyRead = false;
+		iocpOnRecvComplete(c, 0, ERROR_OPERATION_ABORTED);
+		assert(!c._iocpRecvPending,
+			"aborted recv completion retained its pending flag");
+		assert(c.readableCalls == 0,
+			"aborted recv completion entered onReadable");
+		assert(c.errorReasons.length == 0,
+			"aborted recv completion reported an error");
+		assertHandleFreePlaceholder();
+
+		auto recvStatus = cast(uint)c_socks.WSAECONNRESET;
+		c._iocpRecvPending = true;
+		c._notifyRead = false;
+		iocpOnRecvComplete(c, 0, recvStatus);
+		assert(!c._iocpRecvPending,
+			"failed recv completion retained its pending flag");
+		assert(c.readableCalls == 0,
+			"failed recv completion entered onReadable");
+		assert(c.errorReasons.length == 1,
+			"failed recv completion did not report exactly one error");
+		assert(c.errorReasons[0] == "recv() error: " ~ formatSocketError(cast(int)recvStatus));
+		assertHandleFreePlaceholder();
+
+		c.errorReasons = null;
+		c.readableCalls = 0;
+		c._iocpRecvPending = true;
+		c._notifyRead = false;
+		iocpOnRecvComplete(c, 0, 0);
+		assert(!c._iocpRecvPending,
+			"uninterested successful recv completion retained its pending flag");
+		assert(c.readableCalls == 0,
+			"uninterested successful recv completion entered onReadable");
+		assert(c.errorReasons.length == 0,
+			"uninterested successful recv completion reported an error");
+		assertHandleFreePlaceholder();
+
+		c._iocpRecvPending = true;
+		c._notifyRead = true;
+		iocpOnRecvComplete(c, 0, 0);
+		assert(!c._iocpRecvPending,
+			"interested successful recv completion retained its pending flag");
+		assert(c.readableCalls == 1,
+			"interested successful recv completion did not enter onReadable");
+		assert(c.errorReasons.length == 0,
+			"interested successful recv completion reported an error");
+		assert(!c._notifyRead,
+			"readable callback did not withdraw raw read interest");
+		assertHandleFreePlaceholder();
+
+		c.errorReasons = null;
+		c.readableCalls = 0;
 		c._iocpSendBuffer = [cast(ubyte) 0];
 		c._notifyWrite = true;
 		c.bufferFlushedHandler = { bufferFlushedCalls++; };
@@ -5856,6 +5926,120 @@ debug(ae_unittest) version (Windows) unittest
 			"failed send completion called bufferFlushedHandler");
 		assert(requestedDisconnects == 1,
 			"failed send completion repeated the requested disconnect callback");
+		assertHandleFreePlaceholder();
+	}
+}
+
+// Regression: a successful stale stream probe must not consume data after
+// public read interest was removed.  Restoring that interest must post a fresh
+// probe and deliver the original byte once.
+debug(ae_unittest) version (Windows) unittest
+{
+	static if (eventLoopMechanism == EventLoopMechanism.iocp)
+	{
+		import ae.sys.timing : setInterval, setTimeout, TimerTask;
+		import core.time : msecs, seconds;
+
+		enum payload = "R";
+
+		// `socketManager.loop()` returns only while idle.  Preserve that idle
+		// baseline, which may include a daemon socket owned by another unittest.
+		auto idleManagerSize = socketManager.size();
+		auto server = new TcpServer;
+		auto client = new TcpConnection;
+		TcpConnection receiver;
+		bool clientConnected;
+		bool serverAccepted;
+		bool setupScheduled;
+		bool staleCompletionObserved;
+		int delivered;
+		string received;
+		TimerTask staleCompletionObserver;
+		TimerTask timeout;
+
+		void finish()
+		{
+			assert(staleCompletionObserved,
+				"stream byte was delivered before the stale probe completed");
+			assert(delivered == 1,
+				"restored stream read handler did not receive exactly one delivery");
+			assert(received == payload,
+				"restored stream read handler did not receive the original byte");
+			timeout.cancel();
+			receiver.disconnect();
+			client.disconnect();
+			server.close();
+		}
+
+		void scheduleStaleProbe()
+		{
+			if (!clientConnected || !serverAccepted || setupScheduled)
+				return;
+			setupScheduled = true;
+
+			// The callbacks above may have run in either completion order.  Move
+			// one tick forward so the accepted stream's initial zero-byte probe
+			// has been posted before public read interest is removed.
+			onNextTick(socketManager, {
+				assert(receiver._iocpRecvPending,
+					"accepted stream did not have an initial IOCP recv probe pending");
+				receiver.handleReadData = null;
+				client.send(Data(payload.asBytes.idup));
+
+				staleCompletionObserver = setInterval({
+					if (receiver._iocpRecvPending)
+						return;
+
+					staleCompletionObserver.cancel();
+					assert(!receiver._iocpRecvPending,
+						"stale successful recv completion did not clear pending state");
+					assert(delivered == 0,
+						"stale successful recv completion delivered data without read interest");
+					staleCompletionObserved = true;
+
+					receiver.handleReadData = (Data data) {
+						delivered++;
+						received ~= cast(string)data.unsafeContents.idup;
+						finish();
+					};
+					assert(receiver._iocpRecvPending,
+						"restoring public read interest did not post a fresh recv probe");
+				}, 1.msecs);
+			});
+		}
+
+		server.handleAccept = (TcpConnection c) {
+			assert(!serverAccepted, "loopback test accepted more than one connection");
+			receiver = c;
+			receiver.handleReadData = (Data data) {
+				assert(false, "initial read handler received data before interest was removed");
+			};
+			serverAccepted = true;
+			scheduleStaleProbe();
+		};
+
+		auto port = server.listen(0, "127.0.0.1");
+		client.handleConnect = {
+			assert(!clientConnected, "loopback test connected more than once");
+			clientConnected = true;
+			scheduleStaleProbe();
+		};
+		client.connect("127.0.0.1", port);
+
+		// Fail fast instead of letting a pre-fix stale-read regression hang.
+		timeout = setTimeout({
+			assert(false, "IOCP stale stream probe regression test timed out after 5s");
+		}, 5.seconds);
+
+		socketManager.loop();
+		assert(staleCompletionObserved,
+			"IOCP stale stream probe completion was never observed");
+		assert(delivered == 1,
+			"restored stream read handler did not receive exactly one delivery");
+		assert(received == payload,
+			"restored stream read handler did not receive the original byte");
+		assert(socketManager.size() == idleManagerSize,
+			"IOCP stale stream probe test did not restore the idle socket-manager state");
 	}
 }
 
