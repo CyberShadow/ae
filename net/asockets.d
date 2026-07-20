@@ -1498,6 +1498,9 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 
 		if (conn.socket is null) return;
 
+		if (status != 0)
+			return conn.onError("send() error: " ~ formatSocketError(cast(int)status));
+
 		// If the user wants more writes and queue has data, drive another
 		// onWritable round.
 		if (conn.notifyWrite)
@@ -5498,6 +5501,93 @@ debug(ae_unittest) version (Windows) unittest
 		assert(normalizeIocpStatus(cancelled) == ERROR_OPERATION_ABORTED);
 		assert(normalizeIocpStatus(unmapped) == ERROR_MR_MID_NOT_FOUND,
 			format("unmapped raw IOCP status 0x%08X", unmapped));
+	}
+}
+
+// Regression: a failed IOCP send completion must report the send error rather
+// than continue the writable path or repeat a requested disconnect callback.
+debug(ae_unittest) version (Windows) unittest
+{
+	static if (eventLoopMechanism == EventLoopMechanism.iocp)
+	{
+		class PlaceholderSocket : Socket
+		{
+			this()
+			{
+				super();
+			}
+
+			override void close() scope @trusted nothrow @nogc
+			{
+			}
+		}
+
+		class RecordingTcpConnection : TcpConnection
+		{
+			string[] errorReasons;
+			int readableCalls;
+			int writableCalls;
+
+		protected:
+			override void onError(string reason)
+			{
+				errorReasons ~= reason;
+			}
+
+			override void onReadable()
+			{
+				readableCalls++;
+			}
+
+			override void onWritable()
+			{
+				writableCalls++;
+				auto previousState = state;
+				state = ConnectionState.connected;
+				super.onWritable();
+				state = previousState;
+			}
+		}
+
+		int requestedDisconnects;
+		int bufferFlushedCalls;
+		auto placeholder = new PlaceholderSocket;
+		auto c = new RecordingTcpConnection;
+		scope(exit)
+		{
+			c.conn = null;
+			destroy(placeholder);
+		}
+		c.handleDisconnect = (string reason, DisconnectType type) {
+			assert(type == DisconnectType.requested);
+			requestedDisconnects++;
+		};
+		c.conn = placeholder;
+		c.state = ConnectionState.connected;
+		c._iocpSendBuffer = [cast(ubyte) 0];
+		c._notifyWrite = true;
+		c.bufferFlushedHandler = { bufferFlushedCalls++; };
+
+		// The outstanding send makes this callback synchronous, without
+		// registering a socket or driving the event loop.
+		c.disconnect();
+		assert(requestedDisconnects == 1,
+			"requested disconnect callback was not delivered exactly once");
+
+		auto status = cast(uint)c_socks.WSAECONNRESET;
+		iocpOnSendComplete(c, 0, status);
+
+		assert(c._iocpSendBuffer is null,
+			"failed send completion retained its in-flight buffer");
+		assert(c.errorReasons.length == 1,
+			"failed send completion did not report exactly one error");
+		assert(c.errorReasons[0] == "send() error: " ~ formatSocketError(cast(int)status));
+		assert(c.readableCalls == 0, "failed send completion entered onReadable");
+		assert(c.writableCalls == 0, "failed send completion continued writing");
+		assert(bufferFlushedCalls == 0,
+			"failed send completion called bufferFlushedHandler");
+		assert(requestedDisconnects == 1,
+			"failed send completion repeated the requested disconnect callback");
 	}
 }
 
