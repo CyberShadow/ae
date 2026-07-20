@@ -133,6 +133,8 @@ extern(Windows) nothrow @nogc
     PCCERT_CONTEXT CertEnumCertificatesInStore(HCERTSTORE, PCCERT_CONTEXT);
     PCCERT_CONTEXT CertDuplicateCertificateContext(PCCERT_CONTEXT);
     BOOL          CertGetCertificateContextProperty(PCCERT_CONTEXT, DWORD, void*, DWORD*);
+    BOOL          CryptAcquireCertificatePrivateKey(PCCERT_CONTEXT, DWORD, void*,
+        ULONG_PTR*, DWORD*, BOOL*);
     // PEM/base64 → DER decoder (for setPeerRootCertificate PEM support).
     BOOL          CryptStringToBinaryA(const(char)*, DWORD, DWORD, BYTE*, DWORD*, DWORD*, DWORD*);
 }
@@ -140,6 +142,7 @@ extern(Windows) nothrow @nogc
 // CERT_KEY_PROV_INFO_PROP_ID property: stores the name of the key container
 // (set by PFXImportCertStore without PKCS12_NO_PERSIST_KEY, readable by LSASS).
 enum DWORD CERT_KEY_PROV_INFO_PROP_ID = 2;
+enum DWORD CERT_NCRYPT_KEY_SPEC = 0xFFFFFFFF;
 
 // Key provider info structure returned by CertGetCertificateContextProperty for
 // CERT_KEY_PROV_INFO_PROP_ID.  dwProvType == 0 ⇒ CNG key; != 0 ⇒ legacy CSP.
@@ -271,11 +274,12 @@ class SChannelContext : SSLContext
         setIdentityFromPKCS12(cast(const(ubyte)[]) read(path), password);
     }
 
-    /// Load identity from in-memory PFX bytes using the .NET-style "perphemeral"
-    /// pattern: import with dwFlags=0 (key persists in the user CNG/CSP store),
-    /// then delete the key container on teardown.  This is the only reliable path
-    /// for SChannel server credentials — PKCS12_NO_PERSIST_KEY stores the key as
-    /// an in-process NCRYPT_KEY_HANDLE that LSASS cannot dereference.
+    /// Load identity from in-memory PFX bytes using the .NET-style transient
+    /// persisted-key pattern, then delete the key container on teardown. Server
+    /// keys use the machine keyset because credential-less logons, such as
+    /// key-authenticated OpenSSH, cannot reopen current-user keys. Client keys
+    /// remain user-scoped. PKCS12_NO_PERSIST_KEY stores the key as an in-process
+    /// NCRYPT_KEY_HANDLE that LSASS cannot dereference.
     /// See .cydo/tasks/17811/output.md for the full analysis.
     override void setIdentityFromPKCS12(const(ubyte)[] data, string password)
     {
@@ -285,9 +289,12 @@ class SChannelContext : SSLContext
 
         const(wchar)* pwz = password.length ? password.toUTF16z() : null;
 
-        // dwFlags=0: key is written to the user CNG/CSP store (required for
-        // LSASS-side credential acquisition in server mode).
-        HCERTSTORE store = PFXImportCertStore(&blob, pwz, 0);
+        // SChannel server credentials must survive LSASS-side acquisition. Use
+        // the machine keyset for servers: credential-less logons cannot reopen
+        // a persisted user key. A non-admin CNG import can report success while
+        // leaving an unreopenable key, so validate the selected key below.
+        DWORD importFlags = kind == Kind.server ? CRYPT_MACHINE_KEYSET : 0;
+        HCERTSTORE store = PFXImportCertStore(&blob, pwz, importFlags);
         sspiEnforce(store !is null, "PFXImportCertStore");
         scope(exit) CertCloseStore(store, 0);
 
@@ -323,6 +330,21 @@ class SChannelContext : SSLContext
 
         if (!chosen)
             throw new Exception("setIdentityFromPKCS12: PFX contains no certificates");
+        scope(failure) CertFreeCertificateContext(chosen);
+
+        ULONG_PTR hKey;
+        DWORD keySpec;
+        BOOL callerFree;
+        sspiEnforce(CryptAcquireCertificatePrivateKey(
+            chosen, 0, null, &hKey, &keySpec, &callerFree) != 0,
+            "CryptAcquireCertificatePrivateKey", cast(SECURITY_STATUS) GetLastError());
+        if (callerFree)
+        {
+            if (keySpec == CERT_NCRYPT_KEY_SPEC)
+                NCryptFreeObject(cast(NCRYPT_HANDLE) hKey);
+            else
+                CryptReleaseContext(cast(HCRYPTPROV) hKey, 0);
+        }
 
         // Replace any existing identity.
         if (certContext)
@@ -1130,8 +1152,11 @@ private void sspiEnforce(bool ok, string what,
     throw new Exception(msg, file, line);
 }
 
-/// Delete the CNG or legacy-CSP key container that PFXImportCertStore (dwFlags=0)
-/// created for this certificate.  Mirrors .NET's
+/// Delete the CNG or legacy-CSP key container that PFXImportCertStore created
+/// for this certificate. Server keys are machine-scoped so credential-less
+/// logons can reopen them; CNG machine imports by non-admins can be immediately
+/// unreopenable, which setIdentityFromPKCS12 detects before this cleanup path.
+/// Mirrors .NET's
 /// SafeCertContextHandleWithKeyContainerDeletion.DeleteKeyContainer.
 /// Failures are silently swallowed — we log but do not throw, exactly as .NET does.
 private void deleteKeyContainerSilent(PCCERT_CONTEXT cert) nothrow
