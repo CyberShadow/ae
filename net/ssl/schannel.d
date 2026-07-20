@@ -143,6 +143,7 @@ extern(Windows) nothrow @nogc
 // (set by PFXImportCertStore without PKCS12_NO_PERSIST_KEY, readable by LSASS).
 enum DWORD CERT_KEY_PROV_INFO_PROP_ID = 2;
 enum DWORD CERT_NCRYPT_KEY_SPEC = 0xFFFFFFFF;
+enum DWORD CRYPT_ACQUIRE_ALLOW_NCRYPT_KEY_FLAG = 0x00010000;
 
 // Key provider info structure returned by CertGetCertificateContextProperty for
 // CERT_KEY_PROV_INFO_PROP_ID.  dwProvType == 0 ⇒ CNG key; != 0 ⇒ legacy CSP.
@@ -330,13 +331,19 @@ class SChannelContext : SSLContext
 
         if (!chosen)
             throw new Exception("setIdentityFromPKCS12: PFX contains no certificates");
-        scope(failure) CertFreeCertificateContext(chosen);
+        scope(failure)
+        {
+            if (chosenHasKey)
+                deleteKeyContainerSilent(chosen);
+            CertFreeCertificateContext(chosen);
+        }
 
         ULONG_PTR hKey;
         DWORD keySpec;
         BOOL callerFree;
         sspiEnforce(CryptAcquireCertificatePrivateKey(
-            chosen, 0, null, &hKey, &keySpec, &callerFree) != 0,
+            chosen, CRYPT_ACQUIRE_ALLOW_NCRYPT_KEY_FLAG, null,
+            &hKey, &keySpec, &callerFree) != 0,
             "CryptAcquireCertificatePrivateKey", cast(SECURITY_STATUS) GetLastError());
         if (callerFree)
         {
@@ -538,7 +545,10 @@ class SChannelAdapter : SSLAdapter
         this.context = context;
         super(next);
         if (next.state == ConnectionState.connected)
+        {
+            scope(failure) cleanupContext();
             initialize();
+        }
     }
 
     override void onConnect()
@@ -1062,11 +1072,11 @@ protected:
                 serverReqFlags(), 0, &hCtxt, &outDesc, &attr, &ts);
         }
 
+        scope(exit)
+            if (outBuf.pvBuffer)
+                FreeContextBuffer(outBuf.pvBuffer);
         if (outBuf.cbBuffer && outBuf.pvBuffer)
-        {
             next.send(Data((cast(ubyte*) outBuf.pvBuffer)[0 .. outBuf.cbBuffer]));
-            FreeContextBuffer(outBuf.pvBuffer);
-        }
     }
 
     private void cleanupContext()
@@ -1095,16 +1105,17 @@ protected:
 
     private void sendAndFreeOutputBuffers(SecBuffer[] bufs)
     {
+        scope(exit)
+            foreach (ref b; bufs)
+                if (b.pvBuffer)
+                {
+                    FreeContextBuffer(b.pvBuffer);
+                    b.pvBuffer = null;
+                    b.cbBuffer = 0;
+                }
         foreach (ref b; bufs)
-        {
             if (b.cbBuffer && b.pvBuffer)
-            {
                 next.send(Data((cast(ubyte*) b.pvBuffer)[0 .. b.cbBuffer]));
-                FreeContextBuffer(b.pvBuffer);
-                b.pvBuffer = null;
-                b.cbBuffer = 0;
-            }
-        }
     }
 }
 
