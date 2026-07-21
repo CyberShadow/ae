@@ -1049,7 +1049,12 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		OVERLAPPED   overlapped;       // MUST be first
 		IocpOpKind   kind;
 		bool         inFlight;
-		Object       owner;            // GenericSocket / WindowsPipeConnection / ...
+	}
+
+	private struct IocpRetention
+	{
+		Object owner;
+		bool draining;
 	}
 
 	private extern(Windows) static IocpOp* opFromOverlapped(OVERLAPPED* ov) @system pure nothrow @nogc
@@ -1093,6 +1098,8 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		// process-exit waiters) that should keep the loop alive.
 		IocpParticipant[] participants;
 
+		IocpRetention[OVERLAPPED*] iocpRetentions;
+
 		void ensurePort()
 		{
 			if (iocpPort is null)
@@ -1110,6 +1117,62 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		{
 			ensurePort();
 			return iocpPort;
+		}
+
+		package(ae) void retainIocpOp(IocpOp* op, Object owner)
+		{
+			enforce(op !is null, "null IOCP operation");
+			enforce(owner !is null, "null IOCP operation owner");
+			auto overlapped = &op.overlapped;
+			enforce(overlapped !in iocpRetentions,
+				"OVERLAPPED reused before its prior completion was dequeued");
+			iocpRetentions[overlapped] = IocpRetention(owner, false);
+		}
+
+		package(ae) void rollbackIocpSubmission(IocpOp* op, Object owner)
+		{
+			takeIocpRetention(&op.overlapped, owner);
+		}
+
+		package(ae) void retireIocpOps(Object owner)
+		{
+			enforce(owner !is null, "null IOCP retirement owner");
+			foreach (overlapped, ref retention; iocpRetentions)
+				if (retention.owner is owner)
+					retention.draining = true;
+		}
+
+		package(ae) bool hasIocpOps(Object owner)
+		{
+			enforce(owner !is null, "null IOCP operation owner");
+			foreach (ref retention; iocpRetentions)
+				if (retention.owner is owner)
+					return true;
+			return false;
+		}
+
+		private IocpRetention takeIocpRetention(
+			OVERLAPPED* overlapped, Object expectedOwner = null)
+		{
+			enforce(overlapped !is null, "null IOCP completion");
+			auto stored = overlapped in iocpRetentions;
+			enforce(stored !is null, "unknown non-null IOCP completion");
+			auto retention = *stored;
+			enforce(retention.owner !is null, "null retained IOCP owner");
+			if (expectedOwner !is null)
+				enforce(retention.owner is expectedOwner && !retention.draining,
+					"IOCP operation owner mismatch");
+			enforce(iocpRetentions.remove(overlapped),
+				"could not remove retained IOCP operation");
+			return retention;
+		}
+
+		private bool hasDrainingIocpOps()
+		{
+			foreach (ref retention; iocpRetentions)
+				if (retention.draining)
+					return true;
+			return false;
 		}
 
 		/// Register a socket. Associates its SOCKET handle with the IOCP
@@ -1161,6 +1224,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			foreach (size_t i, GenericSocket j; sockets)
 				if (j is conn)
 				{
+					retireIocpOps(conn);
 					sockets = sockets[0 .. i] ~ sockets[i + 1 .. sockets.length];
 					// Drop pending-writable entry too
 					import std.algorithm : remove, SwapStrategy;
@@ -1262,6 +1326,8 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 							break;
 						}
 				}
+				if (!haveActive && hasDrainingIocpOps())
+					haveActive = true;
 
 				if (!haveActive && !mainTimer.hasNonDaemonTasks() && !nextTickHandlers.length)
 				{
@@ -1309,9 +1375,9 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 					foreach (i; 0 .. removed)
 					{
 						auto entry = &entries[i];
-						auto op = opFromOverlapped(entry.lpOverlapped);
+						auto overlapped = entry.lpOverlapped;
 
-						if (op is null)
+						if (overlapped is null)
 						{
 							// User-posted completion with no OVERLAPPED.
 							// Dispatch via completion key (the participant).
@@ -1323,17 +1389,21 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 							continue;
 						}
 
+						auto retention = takeIocpRetention(overlapped);
+						auto op = opFromOverlapped(overlapped);
 						op.inFlight = false;
 						auto bytes = entry.dwNumberOfBytesTransferred;
 						auto rawStatus = op.overlapped.Internal;
-						auto status = normalizeIocpStatus(rawStatus);
+						auto nativeStatus = normalizeIocpStatus(rawStatus);
 						debug (ASOCKETS)
 							if (rawStatus != 0)
 								stderr.writefln("[iocp] completion status: NTSTATUS=0x%08X Win32=%d",
-									cast(uint)rawStatus, status);
+									cast(uint)rawStatus, nativeStatus);
+						auto status = retention.draining
+							? ERROR_OPERATION_ABORTED : nativeStatus;
 
 						runUserEventHandler({
-							dispatchCompletion(op, bytes, status, entry.lpCompletionKey);
+							dispatchCompletion(retention, op, bytes, status);
 						});
 					}
 				}
@@ -1347,61 +1417,60 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			}
 		}
 
-		private void dispatchCompletion(IocpOp* op, DWORD bytes, uint status, ULONG_PTR key)
+		private void dispatchCompletion(IocpRetention retention, IocpOp* op,
+			DWORD bytes, uint status)
 		{
 			final switch (op.kind)
 			{
 				case IocpOpKind.socketRecv:
 				{
-					auto conn = cast(GenericSocket)op.owner;
-					if (conn is null || conn.socket is null) return;
+					auto conn = cast(GenericSocket)retention.owner;
+					enforce(conn !is null, "IOCP socket completion owner mismatch");
 					iocpOnRecvComplete(conn, bytes, status);
 					break;
 				}
 				case IocpOpKind.socketRecvFrom:
 				{
-					auto conn = cast(GenericSocket)op.owner;
-					if (conn is null || conn.socket is null) return;
+					auto conn = cast(GenericSocket)retention.owner;
+					enforce(conn !is null, "IOCP datagram completion owner mismatch");
 					iocpOnRecvFromComplete(conn, bytes, status);
 					break;
 				}
 				case IocpOpKind.socketSend:
 				{
-					auto conn = cast(GenericSocket)op.owner;
-					if (conn is null || conn.socket is null) return;
+					auto conn = cast(GenericSocket)retention.owner;
+					enforce(conn !is null, "IOCP send completion owner mismatch");
 					iocpOnSendComplete(conn, bytes, status);
 					break;
 				}
 				case IocpOpKind.socketAccept:
 				{
-					auto conn = cast(GenericSocket)op.owner;
-					if (conn is null || conn.socket is null) return;
+					auto conn = cast(GenericSocket)retention.owner;
+					enforce(conn !is null, "IOCP accept completion owner mismatch");
 					iocpOnAcceptComplete(conn, bytes, status);
 					break;
 				}
 				case IocpOpKind.socketConnect:
 				{
-					auto conn = cast(GenericSocket)op.owner;
-					if (conn is null) return;
+					auto conn = cast(GenericSocket)retention.owner;
+					enforce(conn !is null, "IOCP connect completion owner mismatch");
 					iocpOnConnectComplete(conn, bytes, status);
 					break;
 				}
 				case IocpOpKind.pipeRead:
 				case IocpOpKind.pipeWrite:
 				case IocpOpKind.pipeConnect:
-				case IocpOpKind.processExit:
 				case IocpOpKind.dirChange:
 				{
-					auto p = cast(IocpParticipant)op.owner;
-					if (p is null) return;
+					auto p = cast(IocpParticipant)retention.owner;
+					enforce(p !is null, "IOCP participant completion owner mismatch");
 					p.iocpOnComplete(op, bytes, status);
 					break;
 				}
+				case IocpOpKind.processExit:
 				case IocpOpKind.userPost:
 				{
-					auto p = cast(IocpParticipant)op.owner;
-					if (p is null) return;
-					p.iocpUserPost(bytes);
+					enforce(false, "non-null IOCP completion used a null-post operation kind");
 					break;
 				}
 			}
@@ -1436,7 +1505,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		// Mark "no recv pending" so notifyRead setter can re-arm if needed.
 		conn._iocpRecvPending = false;
 
-		if (status == ERROR_OPERATION_ABORTED)
+		if (status == ERROR_OPERATION_ABORTED || conn.socket is null)
 		{
 			// Socket was closed; ignore.
 			return;
@@ -1735,14 +1804,10 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 				socketManager.kickWritable(this);
 		}
 
-		// Initialize op headers so `owner` field is set correctly.
 		// Kind is set by the arm methods depending on socket type.
 		private final void _iocpInitOps()
 		{
-			_iocpRecvOp.owner = this;
-			_iocpSendOp.owner = this;
 			_iocpSendOp.kind = IocpOpKind.socketSend;
-			_iocpConnectOp.owner = this;
 			_iocpConnectOp.kind  = IocpOpKind.socketConnect;
 		}
 
@@ -1755,14 +1820,15 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		{
 			assert(conn !is null);
 			_iocpInitOps();
-			_iocpRecvOp.overlapped = OVERLAPPED.init;
-			_iocpRecvPending = true;
 
 			if (_iocpIsDatagram)
 			{
 				if (_iocpDgramBuf is null)
 					_iocpDgramBuf = new ubyte[0x10000]; // 64 KB — max UDP datagram
+				_iocpRecvOp.overlapped = OVERLAPPED.init;
 				_iocpRecvOp.kind = IocpOpKind.socketRecvFrom;
+				_iocpRecvPending = true;
+				socketManager.retainIocpOp(&_iocpRecvOp, this);
 
 				WSABUF buf;
 				buf.len = cast(uint)_iocpDgramBuf.length;
@@ -1773,15 +1839,22 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 				int rc = WSARecvFrom(conn.handle, &buf, 1, &recvd, &flags,
 					cast(c_socks.sockaddr*)_iocpFromAddr.ptr, &_iocpFromAddrLen,
 					&_iocpRecvOp.overlapped, null);
-				if (rc == 0 || (rc == SOCKET_ERROR && WSAGetLastError() == WSA_IO_PENDING))
+				if (rc == 0)
 					return;
+				auto err = WSAGetLastError();
+				if (err == WSA_IO_PENDING)
+					return;
+				socketManager.rollbackIocpSubmission(&_iocpRecvOp, this);
 				_iocpRecvPending = false;
 				socketManager.kickWritable(this); // TODO: kickReadable would be cleaner
 				return;
 			}
 
 			// Stream path: zero-byte WSARecv trick.
+			_iocpRecvOp.overlapped = OVERLAPPED.init;
 			_iocpRecvOp.kind = IocpOpKind.socketRecv;
+			_iocpRecvPending = true;
+			socketManager.retainIocpOp(&_iocpRecvOp, this);
 			WSABUF buf;
 			buf.len = 0;
 			buf.buf = null;
@@ -1799,6 +1872,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			if (err == WSA_IO_PENDING)
 				return;
 			// Real error: we'll see it in onReadable when recv() is called.
+			socketManager.rollbackIocpSubmission(&_iocpRecvOp, this);
 			_iocpRecvPending = false;
 			// Pretend readable so the connection sees the error.
 			socketManager.kickWritable(this); // TODO: kickReadable would be cleaner
@@ -1826,9 +1900,9 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			}
 
 			_iocpAcceptOp.kind       = IocpOpKind.socketAccept;
-			_iocpAcceptOp.owner      = this;
 			_iocpAcceptOp.overlapped = OVERLAPPED.init;
 			_iocpAcceptOp.inFlight   = true;
+			socketManager.retainIocpOp(&_iocpAcceptOp, this);
 
 			DWORD bytesReceived = 0;
 			BOOL ok = AcceptEx(
@@ -1841,14 +1915,18 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 				&bytesReceived,
 				&_iocpAcceptOp.overlapped);
 
-			if (ok || WSAGetLastError() == WSA_IO_PENDING)
+			if (ok)
+				return;
+			auto err = WSAGetLastError();
+			if (err == WSA_IO_PENDING)
 				return;
 
 			// Immediate error — clean up and bail.
+			socketManager.rollbackIocpSubmission(&_iocpAcceptOp, this);
 			_iocpAcceptOp.inFlight = false;
 			c_socks.closesocket(_iocpCandidateSocket);
 			_iocpCandidateSocket = c_socks.INVALID_SOCKET;
-			debug (ASOCKETS) stderr.writefln("[iocp] AcceptEx failed: %d", WSAGetLastError());
+			debug (ASOCKETS) stderr.writefln("[iocp] AcceptEx failed: %d", err);
 		}
 
 		/// Post ConnectEx against the already-bound, IOCP-registered socket so the
@@ -1892,6 +1970,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			_iocpConnectAddrBuf[0 .. nameLen] = (cast(const(ubyte)*)target.name)[0 .. nameLen];
 			_iocpConnectAddrLen = nameLen;
 			_iocpConnectOp.inFlight = true;
+			socketManager.retainIocpOp(&_iocpConnectOp, this);
 
 			DWORD sent = 0;
 			BOOL ok = _iocpConnectExFn(
@@ -1912,6 +1991,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			if (err == WSA_IO_PENDING)
 				return;
 
+			socketManager.rollbackIocpSubmission(&_iocpConnectOp, this);
 			_iocpConnectOp.inFlight = false;
 			debug (ASOCKETS) stderr.writefln("[iocp] ConnectEx failed: %d", err);
 			(cast(Connection)cast(Object)this).disconnect(
@@ -1934,6 +2014,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			// Hold a copy of the buffer so it outlives the in-flight op.
 			_iocpSendBuffer = (cast(ubyte*)buffer.ptr)[0 .. buffer.length].dup;
 			_iocpSendOp.overlapped = OVERLAPPED.init;
+			socketManager.retainIocpOp(&_iocpSendOp, this);
 
 			WSABUF wb;
 			wb.len = cast(uint)_iocpSendBuffer.length;
@@ -1941,13 +2022,18 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			DWORD sent = 0;
 			int rc = WSASend(conn.handle, &wb, 1, &sent, 0,
 				&_iocpSendOp.overlapped, null);
-			if (rc == 0 || (rc == SOCKET_ERROR && WSAGetLastError() == WSA_IO_PENDING))
+			if (rc == 0)
 			{
 				return cast(sizediff_t)buffer.length;
 			}
+			auto err = WSAGetLastError();
+			if (err == WSA_IO_PENDING)
+				return cast(sizediff_t)buffer.length;
 
 			// Synchronous failure.
+			socketManager.rollbackIocpSubmission(&_iocpSendOp, this);
 			_iocpSendBuffer = null;
+			_wsaSetLastError(err);
 			return Socket.ERROR;
 		}
 	}
@@ -2004,9 +2090,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		{
 			_handle = h;
 			_ownHandle = ownHandle;
-			_readOp.owner = this;
 			_readOp.kind = IocpOpKind.pipeRead;
-			_writeOp.owner = this;
 			_writeOp.kind = IocpOpKind.pipeWrite;
 			if (!iocpAlreadyRegistered)
 			{
@@ -2023,9 +2107,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		/// named-pipe client connection.
 		this()
 		{
-			_readOp.owner = this;
 			_readOp.kind = IocpOpKind.pipeRead;
-			_writeOp.owner = this;
 			_writeOp.kind = IocpOpKind.pipeWrite;
 		}
 
@@ -2038,6 +2120,8 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 
 			assert(_state == ConnectionState.disconnected,
 			       "connect on a " ~ _state.to!string ~ " pipe");
+			assert(!socketManager.hasIocpOps(this),
+				"previous IOCP generation has not drained");
 			_state = ConnectionState.connecting;
 
 			auto h = CreateFileW(pipeName.toUTF16z,
@@ -2221,15 +2305,19 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		private void _armRead()
 		{
 			_readOp.overlapped = OVERLAPPED.init;
+			_readOp.kind = IocpOpKind.pipeRead;
+			_readPending = true;
+			socketManager.retainIocpOp(&_readOp, this);
 			DWORD got = 0;
 			BOOL ok = ReadFile(_handle, _readBuf.ptr, cast(DWORD)_readBuf.length,
 				&got, &_readOp.overlapped);
-			if (ok || GetLastError() == ERROR_IO_PENDING)
-			{
-				_readPending = true;
+			if (ok)
 				return;
-			}
 			auto err = GetLastError();
+			if (err == ERROR_IO_PENDING)
+				return;
+			socketManager.rollbackIocpSubmission(&_readOp, this);
+			_readPending = false;
 			if (err == ERROR_BROKEN_PIPE || err == ERROR_HANDLE_EOF
 			    || err == ERROR_PIPE_NOT_CONNECTED)
 			{
@@ -2272,14 +2360,19 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		private void _postWrite(ubyte[] buf)
 		{
 			_writeOp.overlapped = OVERLAPPED.init;
+			_writeOp.kind = IocpOpKind.pipeWrite;
+			_writePending = true;
+			socketManager.retainIocpOp(&_writeOp, this);
 			DWORD written = 0;
 			BOOL ok = WriteFile(_handle, buf.ptr, cast(DWORD)buf.length,
 				&written, &_writeOp.overlapped);
-			if (ok || GetLastError() == ERROR_IO_PENDING)
-			{
-				_writePending = true;
+			if (ok)
 				return;
-			}
+			auto err = GetLastError();
+			if (err == ERROR_IO_PENDING)
+				return;
+			socketManager.rollbackIocpSubmission(&_writeOp, this);
+			_writePending = false;
 			_writeBuf = null;
 			_doClose("WriteFile failed", DisconnectType.error);
 		}
@@ -2300,10 +2393,30 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			_state = ConnectionState.disconnected;
 			_discardQueues();
 
-			if (_handle !is null && _ownHandle)
+			socketManager.retireIocpOps(this);
+			if (_handle !is null)
 			{
-				CloseHandle(_handle);
-				_handle = null;
+				if (_readPending)
+				{
+					if (!CancelIoEx(_handle, &_readOp.overlapped))
+					{
+						auto err = GetLastError();
+						enforce(err == ERROR_NOT_FOUND, "CancelIoEx(read) failed");
+					}
+				}
+				if (_writePending)
+				{
+					if (!CancelIoEx(_handle, &_writeOp.overlapped))
+					{
+						auto err = GetLastError();
+						enforce(err == ERROR_NOT_FOUND, "CancelIoEx(write) failed");
+					}
+				}
+				if (_ownHandle)
+				{
+					CloseHandle(_handle);
+					_handle = null;
+				}
 			}
 
 			socketManager.removeParticipant(this);
@@ -2410,7 +2523,6 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		this(string pipeName)
 		{
 			this.pipeName = pipeName;
-			_connectOp.owner = this;
 			_connectOp.kind  = IocpOpKind.pipeConnect;
 		}
 
@@ -2422,6 +2534,8 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			import std.conv : to;
 
 			assert(!_listening, "NamedPipeServer.listen called twice");
+			assert(!socketManager.hasIocpOps(this),
+				"previous IOCP generation has not drained");
 
 			_pendingHandle = CreateNamedPipeW(pipeName.toUTF16z,
 				PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
@@ -2455,7 +2569,12 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 				// Don't removeParticipant here — wait for the abort to
 				// complete in iocpOnComplete to ensure the HANDLE is
 				// closed and the loop drains.
-				CancelIoEx(_pendingHandle, &_connectOp.overlapped);
+				socketManager.retireIocpOps(this);
+				if (!CancelIoEx(_pendingHandle, &_connectOp.overlapped))
+				{
+					auto err = GetLastError();
+					enforce(err == ERROR_NOT_FOUND, "CancelIoEx(pipe connect) failed");
+				}
 				return;
 			}
 
@@ -2473,24 +2592,32 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		{
 			import std.conv : to;
 			_connectOp.overlapped = OVERLAPPED.init;
+			_connectOp.kind = IocpOpKind.pipeConnect;
 			_pending = true;
+			socketManager.retainIocpOp(&_connectOp, this);
 			BOOL ok = ConnectNamedPipe(_pendingHandle, &_connectOp.overlapped);
 			if (ok)
-			{
-				_pending = false;
-				onNextTick(socketManager, &_onConnected);
 				return;
-			}
 			auto err = GetLastError();
 			switch (err)
 			{
 				case ERROR_IO_PENDING:
 					return;
 				case ERROR_PIPE_CONNECTED:
-					_pending = false;
-					onNextTick(socketManager, &_onConnected);
+					_connectOp.overlapped = OVERLAPPED.init;
+					if (!PostQueuedCompletionStatus(socketManager.getIocpPort(), 0,
+						cast(ULONG_PTR)cast(void*)this, &_connectOp.overlapped))
+					{
+						auto postErr = GetLastError();
+						socketManager.rollbackIocpSubmission(&_connectOp, this);
+						_pending = false;
+						throw new Exception(
+							"ConnectNamedPipe failed on " ~ pipeName
+							~ ": " ~ postErr.to!string);
+					}
 					return;
 				default:
+					socketManager.rollbackIocpSubmission(&_connectOp, this);
 					_pending = false;
 					throw new Exception(
 						"ConnectNamedPipe failed on " ~ pipeName
@@ -2515,7 +2642,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			else
 				conn.disconnect();
 
-			if (_listening)
+			if (_listening && _pendingHandle is null)
 			{
 				_pendingHandle = CreateNamedPipeW(pipeName.toUTF16z,
 					PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
@@ -2806,6 +2933,487 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			socketManager.loop();
 
 			assert(handleCloseFired, "handleClose never fired");
+		}
+	}
+
+	// Regression: every submitted OVERLAPPED has exactly one manager-owned
+	// retention.  In particular, a duplicate must not overwrite the first
+	// owner, submission rollback must restore the exact baseline, and an
+	// unknown raw pointer must be rejected before it can be dereferenced.
+	debug(ae_unittest) version (Windows) unittest
+	{
+		static if (eventLoopMechanism == EventLoopMechanism.iocp)
+		{
+			import core.exception : AssertError;
+
+			void assertRejected(void delegate() action, string description)
+			{
+				bool rejected;
+				try
+					action();
+				catch (Exception)
+					rejected = true;
+				catch (AssertError)
+					rejected = true;
+				assert(rejected, description);
+			}
+
+			auto baseline = socketManager.iocpRetentions.length;
+			auto owner = new Object;
+			IocpOp op;
+
+			socketManager.retainIocpOp(&op, owner);
+			assert(socketManager.iocpRetentions.length == baseline + 1,
+				"initial IOCP retention was not recorded");
+			auto retained = &op.overlapped in socketManager.iocpRetentions;
+			assert(retained !is null && retained.owner is owner && !retained.draining,
+				"initial IOCP retention did not retain the expected active owner");
+
+			assertRejected({ socketManager.retainIocpOp(&op, owner); },
+				"duplicate IOCP retention did not fail");
+			assert(socketManager.iocpRetentions.length == baseline + 1,
+				"duplicate IOCP retention changed the registry");
+			retained = &op.overlapped in socketManager.iocpRetentions;
+			assert(retained !is null && retained.owner is owner,
+				"duplicate IOCP retention replaced the original owner");
+
+			socketManager.rollbackIocpSubmission(&op, owner);
+			assert(socketManager.iocpRetentions.length == baseline,
+				"immediate IOCP submission rollback did not restore the registry baseline");
+
+			// Address 1 is deliberately non-null and non-dereferenceable.  The
+			// registry lookup must reject it by value, before any IocpOp field is
+			// read or dynamically cast.
+			auto unknown = cast(OVERLAPPED*)cast(void*)1;
+			assertRejected({ socketManager.takeIocpRetention(unknown); },
+				"unknown non-null IOCP completion was not rejected before dereference");
+			assert(socketManager.iocpRetentions.length == baseline,
+				"unknown IOCP completion changed the registry");
+		}
+	}
+
+	// Regression: dequeue takes the old retention before dispatch, so a
+	// completion may legitimately re-retain the same embedded OVERLAPPED
+	// address for its next generation.
+	debug(ae_unittest) version (Windows) unittest
+	{
+		static if (eventLoopMechanism == EventLoopMechanism.iocp)
+		{
+			class RearmProbe : IocpParticipant
+			{
+				IocpOp op;
+				bool completed;
+
+				this()
+				{
+					op.kind = IocpOpKind.pipeRead;
+					op.inFlight = true;
+				}
+
+				override bool iocpHasNonDaemonWork() { return false; }
+
+				override void iocpOnComplete(IocpOp* completedOp, DWORD, uint status)
+				{
+					assert(completedOp is &op,
+						"same-address IOCP re-arm dispatched the wrong operation");
+					assert(status == ERROR_OPERATION_ABORTED,
+						"same-address IOCP re-arm did not receive draining cleanup");
+					socketManager.retainIocpOp(&op, this);
+					completed = true;
+				}
+
+				override void iocpUserPost(DWORD)
+				{
+					assert(false, "same-address IOCP re-arm received an unexpected user post");
+				}
+			}
+
+			auto baseline = socketManager.iocpRetentions.length;
+			auto probe = new RearmProbe;
+			socketManager.retainIocpOp(&probe.op, probe);
+			socketManager.retireIocpOps(probe);
+			assert(PostQueuedCompletionStatus(socketManager.getIocpPort(), 0, 0,
+				&probe.op.overlapped),
+				"could not post same-address IOCP re-arm completion");
+
+			socketManager.loop();
+			assert(probe.completed,
+				"same-address IOCP re-arm completion was not dispatched");
+			auto newRetention = &probe.op.overlapped in socketManager.iocpRetentions;
+			assert(newRetention !is null && newRetention.owner is probe
+				&& !newRetention.draining,
+				"dispatch cleanup removed the same-address re-arm retention");
+
+			socketManager.rollbackIocpSubmission(&probe.op, probe);
+			assert(socketManager.iocpRetentions.length == baseline,
+				"same-address IOCP re-arm test did not restore the registry baseline");
+		}
+	}
+
+	// Regression: an ordinary retained operation has no independent liveness
+	// meaning (it may belong to a daemon endpoint), whereas retirement after
+	// close/cancel must keep the loop alive until its exact completion drains.
+	debug(ae_unittest) version (Windows) unittest
+	{
+		static if (eventLoopMechanism == EventLoopMechanism.iocp)
+		{
+			import ae.sys.timing : setTimeout, TimerTask;
+			import core.time : msecs;
+
+			class RetentionProbe : IocpParticipant
+			{
+				IocpOp op;
+				int completionCalls;
+
+				this()
+				{
+					op.kind = IocpOpKind.pipeRead;
+					op.inFlight = true;
+				}
+
+				override bool iocpHasNonDaemonWork() { return false; }
+
+				override void iocpOnComplete(IocpOp* completed, DWORD, uint status)
+				{
+					assert(completed is &op,
+						"retired IOCP completion used the wrong embedded operation");
+					assert(status == ERROR_OPERATION_ABORTED,
+						"retired IOCP completion was not converted to aborted cleanup");
+					completionCalls++;
+				}
+
+				override void iocpUserPost(DWORD)
+				{
+					assert(false, "retention probe received an unexpected user post");
+				}
+			}
+
+			assert(!mainTimer.hasNonDaemonTasks(),
+				"IOCP retention liveness test requires no pending non-daemon timer");
+			auto baseline = socketManager.iocpRetentions.length;
+			auto probe = new RetentionProbe;
+			socketManager.retainIocpOp(&probe.op, probe);
+
+			// A daemon timer turns an accidental wait into a bounded assertion while
+			// remaining invisible to the normal loop-liveness decision.
+			TimerTask watchdog = setTimeout({
+				assert(false, "ordinary retained IOCP work kept the loop alive");
+			}, 100.msecs);
+			watchdog.daemon = true;
+			socketManager.loop();
+			assert(watchdog.isWaiting(),
+				"ordinary retained IOCP work did not leave the loop immediately idle");
+			watchdog.cancel();
+			assert(probe.completionCalls == 0,
+				"ordinary retained IOCP work was dispatched without a completion");
+
+			socketManager.retireIocpOps(probe);
+			auto retained = &probe.op.overlapped in socketManager.iocpRetentions;
+			assert(retained !is null && retained.owner is probe && retained.draining,
+				"retiring an IOCP operation did not mark its retention draining");
+			assert(socketManager.hasDrainingIocpOps(),
+				"retired IOCP work was not visible to loop liveness");
+			assert(PostQueuedCompletionStatus(socketManager.getIocpPort(), 0, 0,
+				&probe.op.overlapped),
+				"could not post the retained IOCP completion");
+
+			socketManager.loop();
+			assert(probe.completionCalls == 1,
+				"retired IOCP work did not keep the loop alive through its drain");
+			assert(!probe.op.inFlight,
+				"drained IOCP operation retained its in-flight state");
+			assert(socketManager.iocpRetentions.length == baseline,
+				"retired IOCP work did not restore the registry baseline");
+		}
+	}
+
+	// Regression: closing a listener with a real in-flight AcceptEx must move
+	// its embedded operation into the draining registry.  No ordinary test
+	// reference survives the helper scope; collection and allocation pressure
+	// therefore exercise the registry's owner root before the abort packet is
+	// dequeued.
+	debug(ae_unittest) version (Windows) unittest
+	{
+		static if (eventLoopMechanism == EventLoopMechanism.iocp)
+		{
+			import ae.sys.timing : setTimeout, TimerTask;
+			import core.memory : GC;
+			import core.time : seconds;
+
+			auto managerBaseline = socketManager.size();
+			auto retentionBaseline = socketManager.iocpRetentions.length;
+			size_t candidate;
+
+			void armAndRetireListener()
+			{
+				auto server = new TcpServer;
+				server.handleAccept = (TcpConnection) {
+					assert(false, "closed listener accepted a connection");
+				};
+				server.listen(0, "127.0.0.1");
+				assert(server.listeners.length == 1,
+					"AcceptEx retention test did not create exactly one listener");
+
+				auto listener = server.listeners[0];
+				assert(listener._iocpAcceptOp.inFlight,
+					"listener did not submit its initial AcceptEx");
+				auto active = &listener._iocpAcceptOp.overlapped in socketManager.iocpRetentions;
+				assert(active !is null && active.owner is listener && !active.draining,
+					"in-flight AcceptEx was not actively retained by the registry");
+				candidate = listener._iocpCandidateSocket;
+				assert(candidate != c_socks.INVALID_SOCKET,
+					"in-flight AcceptEx did not retain its candidate socket");
+
+				server.close();
+				assert(socketManager.size() == managerBaseline,
+					"closed listener remained registered with the socket manager");
+				auto draining = &listener._iocpAcceptOp.overlapped in socketManager.iocpRetentions;
+				assert(draining !is null && draining.owner is listener && draining.draining,
+					"closed listener's AcceptEx was not retained as draining work");
+
+				// The registry is deliberately the only owner retained beyond this
+				// helper.  Clearing locals makes that contract explicit to readers;
+				// the subsequent full collections and allocation churn make a stale
+				// self-reference insufficient in practice as well.
+				listener = null;
+				server = null;
+			}
+
+			TimerTask timeout = setTimeout({
+				assert(false, "retired AcceptEx completion did not drain within 5 seconds");
+			}, 5.seconds);
+			timeout.daemon = true;
+
+			armAndRetireListener();
+			assert(socketManager.iocpRetentions.length == retentionBaseline + 1,
+				"closed listener did not leave exactly one retained AcceptEx operation");
+
+			GC.collect();
+			ubyte[][] pressure;
+			foreach (index; 0 .. 256)
+			{
+				auto block = new ubyte[64 * 1024];
+				block[0] = cast(ubyte)index;
+				pressure ~= block;
+			}
+			assert(pressure.length == 256,
+				"AcceptEx retention test did not allocate the requested GC pressure");
+			pressure = null;
+			GC.collect();
+
+			socketManager.loop();
+			assert(timeout.isWaiting(),
+				"retired AcceptEx drain exceeded its watchdog deadline");
+			timeout.cancel();
+			assert(socketManager.size() == managerBaseline,
+				"AcceptEx drain did not restore the socket-manager baseline");
+			assert(socketManager.iocpRetentions.length == retentionBaseline,
+				"AcceptEx drain did not restore the registry baseline");
+
+			// The numeric SOCKET value is not a GC root.  A second close must fail,
+			// proving the cancellation path disposed of the AcceptEx candidate.
+			assert(c_socks.closesocket(cast(c_socks.SOCKET)candidate) == Socket.ERROR
+				&& WSAGetLastError() == c_socks.WSAENOTSOCK,
+				"retired AcceptEx completion leaked its candidate socket");
+		}
+	}
+
+	// Regression: ERROR_PIPE_CONNECTED owns no kernel packet, so the server
+	// must synthesize one retained zero-status completion.  It must reach the
+	// normal server-success path once, rather than dispatching directly or
+	// leaving a stale retained operation behind.
+	debug(ae_unittest) version (Windows) unittest
+	{
+		static if (eventLoopMechanism == EventLoopMechanism.iocp)
+		{
+			import ae.sys.timing : setTimeout, TimerTask;
+			import core.time : seconds;
+			import std.format : format;
+			import std.utf : toUTF16z;
+
+			enum DWORD PIPE_ACCESS_DUPLEX_       = 0x00000003;
+			enum DWORD FILE_FLAG_OVERLAPPED_     = 0x40000000;
+			enum DWORD PIPE_TYPE_BYTE_           = 0x00000000;
+			enum DWORD PIPE_READMODE_BYTE_       = 0x00000000;
+			enum DWORD PIPE_WAIT_                = 0x00000000;
+			enum DWORD PIPE_UNLIMITED_INSTANCES_ = 255;
+
+			static int sequence;
+			HANDLE makePreconnectedPipe(out HANDLE client)
+			{
+				auto name = format(`\\.\pipe\ae-iocp-synthetic-%s-%s`,
+					GetCurrentProcessId(), sequence++);
+				auto serverHandle = CreateNamedPipeW(name.toUTF16z,
+					PIPE_ACCESS_DUPLEX_ | FILE_FLAG_OVERLAPPED_,
+					PIPE_TYPE_BYTE_ | PIPE_READMODE_BYTE_ | PIPE_WAIT_
+						| PIPE_REJECT_REMOTE_CLIENTS,
+					PIPE_UNLIMITED_INSTANCES_, 65536, 65536, 0, null);
+				assert(serverHandle != INVALID_HANDLE_VALUE,
+					"CreateNamedPipeW failed for ERROR_PIPE_CONNECTED regression");
+
+				client = CreateFileW(name.toUTF16z,
+					GENERIC_READ | GENERIC_WRITE, 0, null,
+					OPEN_EXISTING, FILE_FLAG_OVERLAPPED_, null);
+				assert(client != INVALID_HANDLE_VALUE,
+					"CreateFileW failed for ERROR_PIPE_CONNECTED regression");
+				return serverHandle;
+			}
+
+			auto retentionBaseline = socketManager.iocpRetentions.length;
+			HANDLE client;
+			auto pendingHandle = makePreconnectedPipe(client);
+			auto server = new NamedPipeServer("unused-test-name");
+			auto port = socketManager.getIocpPort();
+			assert(CreateIoCompletionPort(pendingHandle, port,
+				cast(ULONG_PTR)cast(void*)server, 0) == port,
+				"CreateIoCompletionPort failed for preconnected named pipe");
+			server._pendingHandle = pendingHandle;
+			server._listening = true;
+			socketManager.addParticipant(server);
+
+			int accepted, closed;
+			WindowsPipeConnection acceptedConnection;
+			TimerTask timeout = setTimeout({
+				assert(false, "ERROR_PIPE_CONNECTED synthetic completion did not arrive");
+			}, 5.seconds);
+			timeout.daemon = true;
+			server.handleClose = { closed++; };
+			server.handleAccept = (WindowsPipeConnection incoming) {
+				accepted++;
+				assert(accepted == 1,
+					"ERROR_PIPE_CONNECTED reached server success more than once");
+				assert(server._connectOp.overlapped.Internal == 0,
+					"synthetic ERROR_PIPE_CONNECTED completion did not carry success status");
+				acceptedConnection = incoming;
+				timeout.cancel();
+				incoming.disconnect("synthetic-connect test complete");
+				server.close();
+			};
+
+			// The client already connected before ConnectNamedPipe, forcing the
+			// documented ERROR_PIPE_CONNECTED branch without relying on a race.
+			server._armConnect();
+			assert(server._pending,
+				"ERROR_PIPE_CONNECTED did not preserve its pending synthetic operation");
+			auto retained = &server._connectOp.overlapped in socketManager.iocpRetentions;
+			assert(retained !is null && retained.owner is server && !retained.draining,
+				"ERROR_PIPE_CONNECTED synthetic completion was not retained before post");
+
+			socketManager.loop();
+			assert(!timeout.isWaiting(),
+				"ERROR_PIPE_CONNECTED success path did not cancel its watchdog");
+			assert(accepted == 1 && closed == 1,
+				"ERROR_PIPE_CONNECTED did not complete and close exactly once");
+			assert(acceptedConnection.state == ConnectionState.disconnected,
+				"accepted synthetic named-pipe connection was not cleaned up");
+			assert(socketManager.iocpRetentions.length == retentionBaseline,
+				"ERROR_PIPE_CONNECTED synthetic completion did not restore the registry baseline");
+			assert(CloseHandle(client),
+				"CloseHandle failed for ERROR_PIPE_CONNECTED test client");
+		}
+	}
+
+	// Regression: a forced WindowsPipeConnection close must retire and drain
+	// both its outstanding ReadFile and WriteFile, preserving their owner-held
+	// buffers until the two abort completions have cleared all pending state.
+	debug(ae_unittest) version (Windows) unittest
+	{
+		static if (eventLoopMechanism == EventLoopMechanism.iocp)
+		{
+			import ae.sys.timing : setTimeout, TimerTask;
+			import core.time : seconds;
+			import std.format : format;
+			import std.utf : toUTF16z;
+
+			enum DWORD PIPE_ACCESS_DUPLEX_       = 0x00000003;
+			enum DWORD FILE_FLAG_OVERLAPPED_     = 0x40000000;
+			enum DWORD PIPE_TYPE_BYTE_           = 0x00000000;
+			enum DWORD PIPE_READMODE_BYTE_       = 0x00000000;
+			enum DWORD PIPE_WAIT_                = 0x00000000;
+			enum DWORD PIPE_UNLIMITED_INSTANCES_ = 255;
+
+			static int sequence;
+			HANDLE makePipePair(out HANDLE client)
+			{
+				auto name = format(`\\.\pipe\ae-iocp-close-drain-%s-%s`,
+					GetCurrentProcessId(), sequence++);
+				auto serverHandle = CreateNamedPipeW(name.toUTF16z,
+					PIPE_ACCESS_DUPLEX_ | FILE_FLAG_OVERLAPPED_,
+					PIPE_TYPE_BYTE_ | PIPE_READMODE_BYTE_ | PIPE_WAIT_
+						| PIPE_REJECT_REMOTE_CLIENTS,
+					PIPE_UNLIMITED_INSTANCES_, 65536, 65536, 0, null);
+				assert(serverHandle != INVALID_HANDLE_VALUE,
+					"CreateNamedPipeW failed for pipe close-drain regression");
+
+				client = CreateFileW(name.toUTF16z,
+					GENERIC_READ | GENERIC_WRITE, 0, null,
+					OPEN_EXISTING, FILE_FLAG_OVERLAPPED_, null);
+				assert(client != INVALID_HANDLE_VALUE,
+					"CreateFileW failed for pipe close-drain regression");
+				return serverHandle;
+			}
+
+			auto retentionBaseline = socketManager.iocpRetentions.length;
+			HANDLE client;
+			auto serverHandle = makePipePair(client);
+			auto connection = new WindowsPipeConnection(client);
+			auto peer = new WindowsPipeConnection(serverHandle);
+			connection.handleReadData = (Data) {
+				assert(false, "close-drain pipe read delivered data unexpectedly");
+			};
+			assert(connection._readPending,
+				"pipe close-drain test did not submit its ReadFile operation");
+			connection.send(Data(cast(immutable ubyte[])"pending write"));
+
+			bool closedWhileBothPending;
+			TimerTask timeout = setTimeout({
+				assert(false, "WindowsPipeConnection close did not drain both operations");
+			}, 5.seconds);
+			timeout.daemon = true;
+			onNextTick(socketManager, {
+				// send() queues its drain first, so this test callback runs after
+				// WriteFile has been posted but before the loop dequeues either I/O.
+				assert(connection._readPending && connection._writePending,
+					"pipe close did not begin with both ReadFile and WriteFile pending");
+				assert(connection._writeBuf !is null,
+					"pipe close did not retain the in-flight WriteFile buffer");
+				assert(socketManager.iocpRetentions.length == retentionBaseline + 2,
+					"pipe close did not retain both submitted operations");
+
+				connection.disconnect("forced pipe close", DisconnectType.error);
+				closedWhileBothPending = true;
+				assert(connection.state == ConnectionState.disconnected,
+					"forced pipe close did not synchronously enter disconnected state");
+				assert(connection._readPending && connection._writePending
+					&& connection._writeBuf !is null,
+					"forced pipe close released operation state before completion drain");
+				auto readRetention = &connection._readOp.overlapped in socketManager.iocpRetentions;
+				auto writeRetention = &connection._writeOp.overlapped in socketManager.iocpRetentions;
+				assert(readRetention !is null && readRetention.owner is connection
+					&& readRetention.draining,
+					"forced pipe close did not retire its pending read");
+				assert(writeRetention !is null && writeRetention.owner is connection
+					&& writeRetention.draining,
+					"forced pipe close did not retire its pending write");
+			});
+
+			socketManager.loop();
+			assert(timeout.isWaiting(),
+				"WindowsPipeConnection close-drain exceeded its watchdog deadline");
+			timeout.cancel();
+			assert(closedWhileBothPending,
+				"pipe close-drain test never observed its two pending operations");
+			assert(!connection._readPending && !connection._writePending,
+				"drained WindowsPipeConnection retained pending read/write state");
+			assert(connection._writeBuf is null && !connection._drainScheduled,
+				"drained WindowsPipeConnection retained write buffer or scheduled drain");
+			foreach (ref queue; connection._outQueue)
+				assert(queue.length == 0,
+					"drained WindowsPipeConnection retained queued output");
+			assert(socketManager.iocpRetentions.length == retentionBaseline,
+				"WindowsPipeConnection close-drain did not restore the registry baseline");
+
+			peer.disconnect("pipe close-drain peer cleanup");
 		}
 	}
 }
@@ -4229,6 +4837,9 @@ public:
 
 		assert(state == ConnectionState.disconnected, "Attempting to connect on a %s socket".format(state));
 		assert(!conn);
+		static if (eventLoopMechanism == EventLoopMechanism.iocp)
+			assert(!socketManager.hasIocpOps(this),
+				"previous IOCP generation has not drained");
 
 		addressQueue = addresses;
 		state = ConnectionState.connecting;
