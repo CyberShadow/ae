@@ -123,7 +123,6 @@ static if (backend == Backend.iocp)
 				null);
 			enforce(_dirHandle != INVALID_HANDLE_VALUE, "CreateFileW failed for directory: " ~ path);
 
-			_op.owner = this;
 			_op.kind = IocpOpKind.dirChange;
 
 			auto port = socketManager.getIocpPort();
@@ -144,7 +143,12 @@ static if (backend == Backend.iocp)
 		void cancel()
 		{
 			_cancelling = true;
-			CancelIoEx(_dirHandle, &_op.overlapped);
+			socketManager.retireIocpOps(this);
+			if (!CancelIoEx(_dirHandle, &_op.overlapped))
+			{
+				auto err = GetLastError();
+				enforce(err == ERROR_NOT_FOUND, "CancelIoEx(directory watch) failed");
+			}
 		}
 
 		override bool iocpHasNonDaemonWork()
@@ -222,12 +226,20 @@ static if (backend == Backend.iocp)
 				| FILE_NOTIFY_CHANGE_SECURITY;
 
 			_op.overlapped = OVERLAPPED.init;
+			_op.kind = IocpOpKind.dirChange;
+			socketManager.retainIocpOp(&_op, this);
 			DWORD got = 0;
 			BOOL ok = ReadDirectoryChangesW(
 				_dirHandle, _buf.ptr, cast(DWORD)_buf.length,
 				FALSE, filter, &got, &_op.overlapped, null);
 
-			return ok || GetLastError() == ERROR_IO_PENDING;
+			if (ok)
+				return true;
+			auto err = GetLastError();
+			if (err == ERROR_IO_PENDING)
+				return true;
+			socketManager.rollbackIocpSubmission(&_op, this);
+			return false;
 		}
 
 		private void _doTeardown()
