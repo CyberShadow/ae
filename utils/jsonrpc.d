@@ -70,6 +70,7 @@ string getDefaultErrorMessage(int code)
 // ************************************************************************
 
 /// JSON-RPC 2.0 Error object
+@JSONPartial
 struct JsonRpcError
 {
 	/// Error code
@@ -127,6 +128,7 @@ class JsonRpcException : Exception
 // ************************************************************************
 
 /// JSON-RPC 2.0 Request object
+@JSONPartial
 struct JsonRpcRequest
 {
 	/// Protocol version (always "2.0")
@@ -172,6 +174,7 @@ struct JsonRpcRequest
 }
 
 /// JSON-RPC 2.0 Response object
+@JSONPartial
 struct JsonRpcResponse
 {
 	/// Protocol version (always "2.0")

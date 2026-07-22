@@ -20,6 +20,7 @@ module ae.net.jsonrpc.codec;
 import std.exception : assumeUnique;
 
 import ae.net.asockets : IConnection, DisconnectType;
+version(unittest) import ae.net.asockets : ConnectionState;
 import ae.sys.data : Data;
 import ae.utils.array : asBytes;
 import ae.utils.serialization.json;
@@ -222,6 +223,58 @@ private:
 		catch (Exception e)
 			assert(false, e.msg);
 	}
+}
+
+debug(ae_unittest) unittest
+{
+	import ae.utils.promise : resolve;
+
+	// A peer may add members to the request object as its protocol
+	// evolves. JSON-RPC 2.0 specifies the member set but does not oblige
+	// implementations to reject extra members, and a codec that fails on
+	// them cannot interoperate across peer versions.
+	static class MockConnection : IConnection
+	{
+		ReadDataHandler readHandler;
+		string disconnectReason;
+		bool disconnected;
+
+		@property ConnectionState state() { return ConnectionState.connected; }
+
+		void send(scope Data[] data, int priority = DEFAULT_PRIORITY) {}
+		alias send = IConnection.send;
+
+		void disconnect(string reason = defaultDisconnectReason, DisconnectType type = DisconnectType.requested)
+		{
+			disconnected = true;
+			disconnectReason = reason;
+		}
+		@property void handleConnect(ConnectHandler value) {}
+		@property void handleReadData(ReadDataHandler value) { readHandler = value; }
+		@property void handleDisconnect(DisconnectHandler value) {}
+		@property void handleBufferFlushed(BufferFlushedHandler value) {}
+	}
+
+	string[] dispatched;
+	auto conn = new MockConnection;
+	auto codec = new JsonRpcCodec(conn);
+	codec.handleRequest = (JsonRpcRequest request) {
+		dispatched ~= request.method;
+		return resolve(JsonRpcResponse.success(request.id, 0));
+	};
+
+	// Unknown top-level member, and no "jsonrpc" member at all.
+	conn.readHandler(Data(
+		`{"method":"peer/notify","params":{},"emittedAtMs":1}`.asBytes));
+	assert(dispatched == ["peer/notify"], dispatched.length ? dispatched[0] : "(none)");
+	assert(!conn.disconnected, conn.disconnectReason);
+
+	// Same, in a batch.
+	dispatched = null;
+	conn.readHandler(Data(
+		`[{"method":"a","extra":1},{"method":"b","extra":2}]`.asBytes));
+	assert(dispatched == ["a", "b"]);
+	assert(!conn.disconnected, conn.disconnectReason);
 }
 
 /// Convenience alias for server-only usage.
