@@ -3671,31 +3671,39 @@ static if (haveEventLoopDebug)
 	void printEventLoopSockets(bool onlyBlocking)
 	{
 		import std.stdio : stderr;
-		size_t count;
 
-		foreach (sock; socketManager.sockets)
+		static if (eventLoopMechanism == EventLoopMechanism.libev)
 		{
-			if (sock is null || sock.socket is null)
-				continue;
-			if (onlyBlocking && !(sock.notifyRead && !sock.daemonRead || sock.notifyWrite && !sock.daemonWrite))
-				continue;
-
-			stderr.writefln("SOCKET: %s", sock);
-			stderr.writefln("  notifyRead=%s (daemon=%s), notifyWrite=%s (daemon=%s)",
-				sock.notifyRead, sock.daemonRead, sock.notifyWrite, sock.daemonWrite);
-			if (sock.registrationStackTrace !is null)
-			{
-				stderr.writeln("  Registered at:");
-				printCapturedStackTrace(sock.registrationStackTrace);
-			}
-			stderr.writeln();
-			count++;
+			stderr.writeln("SOCKETS: Not tracked with LIBEV\n");
 		}
-
-		if (count == 0)
-			stderr.writeln(onlyBlocking ? "SOCKETS: None blocking\n" : "SOCKETS: None registered\n");
 		else
-			stderr.writefln("SOCKETS: %d %s\n", count, onlyBlocking ? "blocking" : "registered");
+		{
+			size_t count;
+
+			foreach (sock; socketManager.sockets)
+			{
+				if (sock is null || sock.socket is null)
+					continue;
+				if (onlyBlocking && !(sock.notifyRead && !sock.daemonRead || sock.notifyWrite && !sock.daemonWrite))
+					continue;
+
+				stderr.writefln("SOCKET: %s", sock);
+				stderr.writefln("  notifyRead=%s (daemon=%s), notifyWrite=%s (daemon=%s)",
+					sock.notifyRead, sock.daemonRead, sock.notifyWrite, sock.daemonWrite);
+				if (sock.registrationStackTrace !is null)
+				{
+					stderr.writeln("  Registered at:");
+					printCapturedStackTrace(sock.registrationStackTrace);
+				}
+				stderr.writeln();
+				count++;
+			}
+
+			if (count == 0)
+				stderr.writeln(onlyBlocking ? "SOCKETS: None blocking\n" : "SOCKETS: None registered\n");
+			else
+				stderr.writefln("SOCKETS: %d %s\n", count, onlyBlocking ? "blocking" : "registered");
+		}
 	}
 
 	void printEventLoopTimerTasks(TimerTask skipTask, string skipTaskLabel)
