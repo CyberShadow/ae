@@ -22,6 +22,7 @@ import ae.utils.array : asSlice, asBytes, queuePush, queuePop;
 import ae.utils.math;
 public import ae.sys.data;
 
+import core.atomic : atomicLoad, atomicOp;
 import core.stdc.stdint : int32_t;
 
 import std.exception;
@@ -71,6 +72,10 @@ private enum eventLoopMechanism = {
 
 package(ae) enum bool isIocpEventLoop = (eventLoopMechanism == EventLoopMechanism.iocp);
 
+debug (ae_unittest)
+package(ae) enum bool isLibevEventLoop =
+	(eventLoopMechanism == EventLoopMechanism.libev);
+
 static if (eventLoopMechanism == EventLoopMechanism.epoll)
 {
 	import core.sys.linux.epoll;
@@ -110,6 +115,7 @@ static if (eventLoopMechanism == EventLoopMechanism.epoll)
 		/// Debug AA to check for dangling socket references.
 		debug GenericSocket[socket_t] socketHandles;
 
+		shared size_t submittedCommands;
 		void delegate()[] nextTickHandlers;
 		IdleHandler[] idleHandlers;
 
@@ -231,7 +237,8 @@ static if (eventLoopMechanism == EventLoopMechanism.epoll)
 					idleHandlers.length,
 				);
 
-				if (!haveActive && !mainTimer.hasNonDaemonTasks() && !nextTickHandlers.length)
+				if (!haveActive && !mainTimer.hasNonDaemonTasks() && !nextTickHandlers.length
+					&& atomicLoad(submittedCommands) == 0)
 				{
 					debug (ASOCKETS) stderr.writeln("No more active sockets or timer events, exiting loop.");
 					break;
@@ -477,7 +484,15 @@ static if (eventLoopMechanism == EventLoopMechanism.libev)
 	private:
 		size_t count;
 
+		shared size_t submittedCommands;
 		void delegate()[] nextTickHandlers;
+
+		debug (ae_unittest)
+		{
+			static void delegate() beforeSubmittedCommandRecoveryReference;
+			static void delegate() beforeSubmittedCommandRecoveryRun;
+			static void delegate() afterSubmittedCommandRecoveryUnreference;
+		}
 
 		extern(C)
 		static void ioCallback(ev_loop_t* l, ev_io* w, int revents)
@@ -674,7 +689,29 @@ static if (eventLoopMechanism == EventLoopMechanism.libev)
 
 			updateTimer(true);
 			debug (ASOCKETS) stderr.writeln("ev_run");
-			ev_run(ev_default_loop(0), 0);
+			while (true)
+			{
+				ev_run(evLoop, 0);
+				if (atomicLoad(submittedCommands) == 0)
+					break;
+
+				debug (ae_unittest)
+					if (beforeSubmittedCommandRecoveryReference)
+						beforeSubmittedCommandRecoveryReference();
+				ev_ref(evLoop);
+				do
+				{
+					debug (ae_unittest)
+						if (beforeSubmittedCommandRecoveryRun)
+							beforeSubmittedCommandRecoveryRun();
+					ev_run(evLoop, EVRUN_ONCE);
+				}
+				while (atomicLoad(submittedCommands) != 0);
+				ev_unref(evLoop);
+				debug (ae_unittest)
+					if (afterSubmittedCommandRecoveryUnreference)
+						afterSubmittedCommandRecoveryUnreference();
+			}
 		}
 	}
 
@@ -769,6 +806,7 @@ static if (eventLoopMechanism == EventLoopMechanism.select)
 		/// Debug AA to check for dangling socket references.
 		debug GenericSocket[socket_t] socketHandles;
 
+		shared size_t submittedCommands;
 		void delegate()[] nextTickHandlers;
 		IdleHandler[] idleHandlers;
 
@@ -919,7 +957,8 @@ static if (eventLoopMechanism == EventLoopMechanism.select)
 					mainTimer.isWaiting() ? "with" : "no",
 					idleHandlers.length,
 				);
-				if (!haveActive && !mainTimer.hasNonDaemonTasks() && !nextTickHandlers.length)
+				if (!haveActive && !mainTimer.hasNonDaemonTasks() && !nextTickHandlers.length
+					&& atomicLoad(submittedCommands) == 0)
 				{
 					debug (ASOCKETS) stderr.writeln("No more sockets or timer events, exiting loop.");
 					break;
@@ -1168,6 +1207,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		GenericSocket[] sockets;
 		debug GenericSocket[socket_t] socketHandles;
 
+		shared size_t submittedCommands;
 		void delegate()[] nextTickHandlers;
 		IdleHandler[] idleHandlers;
 
@@ -1317,6 +1357,12 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 
 		size_t size() { return sockets.length; }
 
+		debug (ae_unittest)
+		package(ae) size_t testIocpRetentionCount()
+		{
+			return iocpRetentions.length;
+		}
+
 		// Queue this socket for a synthetic onWritable() on the next tick.
 		package(ae) void kickWritable(GenericSocket conn)
 		{
@@ -1410,7 +1456,8 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 				if (!haveActive && hasDrainingIocpOps())
 					haveActive = true;
 
-				if (!haveActive && !mainTimer.hasNonDaemonTasks() && !nextTickHandlers.length)
+				if (!haveActive && !mainTimer.hasNonDaemonTasks() && !nextTickHandlers.length
+					&& atomicLoad(submittedCommands) == 0)
 				{
 					debug (ASOCKETS) stderr.writeln("No more active work, exiting loop.");
 					break;
@@ -3504,6 +3551,27 @@ else
 /// The default socket manager.
 SocketManager socketManager;
 
+package(ae) shared(size_t)* currentSubmittedCommandCount() nothrow @nogc
+{
+	return &socketManager.submittedCommands;
+}
+
+package(ae) void incrementSubmittedCommands(shared(size_t)* target)
+	nothrow @nogc
+{
+	assert(target !is null);
+	atomicOp!"+="(*target, 1);
+}
+
+package(ae) void decrementSubmittedCommands(
+	shared(size_t)* target, size_t count) nothrow @nogc
+{
+	assert(target !is null);
+	assert(count != 0);
+	assert(atomicLoad(*target) >= count);
+	atomicOp!"-="(*target, count);
+}
+
 /// Schedule a function to run on the next event loop iteration.
 /// Can be used to queue logic to run once all current execution frames exit.
 /// Similar to e.g. process.nextTick in Node.
@@ -4599,6 +4667,275 @@ debug (ae_unittest)
 	unittest
 	{
 		testLibevWatcherOwners();
+	}
+}
+
+// ***************************************************************************
+
+static if (eventLoopMechanism == EventLoopMechanism.libev)
+version (Posix)
+debug (ae_unittest)
+{
+	import core.sys.posix.time : CLOCK_THREAD_CPUTIME_ID, clock_gettime, timespec;
+	import core.thread : Thread;
+	import core.time : MonoTime, msecs;
+	import std.conv : to;
+	import std.socket : socketPair;
+	import std.stdio : writeln;
+
+	private final class LibevSubmittedCommandState
+	{
+		Socket receiver;
+		Socket sender;
+		shared(size_t)* target;
+		Thread loopThread;
+		long pauseMsecs;
+		bool createTimer;
+		bool command;
+		bool timerFired;
+		bool watcherStopped;
+		TimerTask timer;
+		shared size_t released;
+		shared size_t paused;
+		shared size_t sent;
+	}
+
+	private extern (C) void libevSubmittedCommandCallback(
+		ev_loop_t* loop, ev_io* watcher, int revents)
+	{
+		auto state = cast(LibevSubmittedCommandState)watcher.data;
+		assert(state !is null, "submitted-command watcher has no test state");
+		assert(Thread.getThis() is state.loopThread,
+			"submitted-command watcher did not run on the loop thread");
+		assert(revents & EV_READ,
+			"submitted-command watcher received a non-read event");
+
+		ubyte[1] received;
+		assert(state.receiver.receive(received[]) == received.length,
+			"submitted-command watcher did not receive its pinger byte");
+		assert(received[0] == 0xA5,
+			"submitted-command watcher received an unexpected pinger byte");
+		assert(!state.command, "submitted-command watcher dispatched twice");
+
+		socketManager.preEvent();
+		state.command = true;
+		if (state.createTimer)
+		{
+			state.timer = setTimeout({
+				assert(Thread.getThis() is state.loopThread,
+					"recovered timer did not run on the loop thread");
+				state.timerFired = true;
+			}, 20.msecs);
+		}
+
+		assert(atomicLoad(*state.target) == 1,
+			"submitted-command watcher saw the wrong target count");
+		// The watcher is deliberately unreferenced. Re-reference it before
+		// stopping so its own native reference balance remains exact.
+		ev_ref(loop);
+		ev_io_stop(loop, watcher);
+		watcher.data = null;
+		state.watcherStopped = true;
+		decrementSubmittedCommands(state.target, 1);
+		socketManager.postEvent(false);
+	}
+
+	/// Exercise LIBEV submitted-command recovery with an unreferenced native
+	/// watcher, rather than a default ThreadAnchor watcher whose daemon direction
+	/// is not yet represented natively.
+	package(ae) void testLibevSubmittedCommandLiveness()
+	{
+		long threadCpuNsecs()
+		{
+			timespec value;
+			assert(clock_gettime(CLOCK_THREAD_CPUTIME_ID, &value) == 0,
+				"clock_gettime(CLOCK_THREAD_CPUTIME_ID) failed");
+			return cast(long)value.tv_sec * 1_000_000_000L + value.tv_nsec;
+		}
+
+		void waitFor(ref shared size_t value, size_t expected)
+		{
+			while (atomicLoad(value) != expected)
+				Thread.yield();
+		}
+
+		auto managerBaseline = socketManager.size();
+		auto target = currentSubmittedCommandCount();
+		auto loopThread = Thread.getThis();
+		assert(target !is null, "LIBEV helper did not obtain a target counter");
+		assert(atomicLoad(*target) == 0,
+			"LIBEV helper started with a nonzero target counter");
+		assert(!mainTimer.hasNonDaemonTasks(),
+			"LIBEV helper requires no pending non-daemon timer");
+
+		LibevSubmittedCommandState activeState;
+		size_t activeCase;
+		size_t[2] recoveryReferences;
+		size_t[2] recoveryRuns;
+		size_t[2] recoveryUnreferences;
+		MonoTime[2] recoveryStarts;
+		long[2] recoveryCpuStarts;
+		long[2] recoveryWallMsecs;
+		long[2] recoveryCpuNsecs;
+
+		SocketManager.beforeSubmittedCommandRecoveryReference = {
+			assert(activeState !is null,
+				"LIBEV recovery reference had no active test case");
+			assert(Thread.getThis() is loopThread,
+				"LIBEV recovery reference ran off the loop thread");
+			assert(atomicLoad(activeState.paused) == 1 && !activeState.command,
+				"LIBEV normal phase did not return while the sender was paused");
+			assert(atomicLoad(*target) == 1,
+				"LIBEV recovery reference saw the wrong submitted count");
+			assert(recoveryReferences[activeCase] == 0,
+				"LIBEV test case entered recovery more than once");
+			recoveryStarts[activeCase] = MonoTime.currTime();
+			recoveryCpuStarts[activeCase] = threadCpuNsecs();
+			recoveryReferences[activeCase]++;
+		};
+		SocketManager.beforeSubmittedCommandRecoveryRun = {
+			assert(activeState !is null,
+				"LIBEV recovery run had no active test case");
+			assert(Thread.getThis() is loopThread,
+				"LIBEV recovery run ran off the loop thread");
+			assert(atomicLoad(*target) == 1,
+				"LIBEV recovery run did not block with the submitted command live");
+			recoveryRuns[activeCase]++;
+		};
+		SocketManager.afterSubmittedCommandRecoveryUnreference = {
+			assert(activeState !is null,
+				"LIBEV recovery unreference had no active test case");
+			assert(Thread.getThis() is loopThread,
+				"LIBEV recovery unreference ran off the loop thread");
+			assert(activeState.command && atomicLoad(*target) == 0,
+				"LIBEV recovery unreferenced before command acknowledgement");
+			assert(recoveryUnreferences[activeCase] == 0,
+				"LIBEV test case unreferenced recovery more than once");
+			recoveryWallMsecs[activeCase] =
+				(MonoTime.currTime() - recoveryStarts[activeCase]).total!"msecs";
+			recoveryCpuNsecs[activeCase] =
+				threadCpuNsecs() - recoveryCpuStarts[activeCase];
+			recoveryUnreferences[activeCase]++;
+		};
+		scope (exit)
+		{
+			SocketManager.beforeSubmittedCommandRecoveryReference = null;
+			SocketManager.beforeSubmittedCommandRecoveryRun = null;
+			SocketManager.afterSubmittedCommandRecoveryUnreference = null;
+		}
+
+		LibevSubmittedCommandState runCase(
+			size_t index, bool createTimer, long pauseMsecs)
+		{
+			auto state = new LibevSubmittedCommandState;
+			state.target = target;
+			state.loopThread = loopThread;
+			state.pauseMsecs = pauseMsecs;
+			state.createTimer = createTimer;
+			auto pair = socketPair();
+			pair[0].blocking = false;
+			state.receiver = pair[0];
+			state.sender = pair[1];
+
+			ev_io watcher;
+			auto evLoop = ev_default_loop(0);
+			ev_io_init(&watcher, &libevSubmittedCommandCallback,
+				cast(int)state.receiver.handle, EV_READ);
+			watcher.data = cast(void*)state;
+			ev_io_start(evLoop, &watcher);
+			assert(ev_is_active(&watcher),
+				"LIBEV test watcher did not start");
+			ev_unref(evLoop);
+
+			activeState = state;
+			activeCase = index;
+			auto sender = new Thread({
+				waitFor(state.released, 1);
+				incrementSubmittedCommands(state.target);
+				atomicOp!"+="(state.paused, 1);
+				Thread.sleep(state.pauseMsecs.msecs);
+				ubyte[1] ping = [0xA5];
+				assert(state.sender.send(ping[]) == ping.length,
+					"LIBEV paused sender did not write a full pinger byte");
+				atomicOp!"+="(state.sent, 1);
+			}).start();
+			auto releaseTimer = setTimeout({
+				assert(Thread.getThis() is loopThread,
+					"LIBEV release timer ran off the loop thread");
+				atomicOp!"+="(state.released, 1);
+				waitFor(state.paused, 1);
+				assert(!state.command,
+					"LIBEV command ran before the last ordinary reference disappeared");
+			}, 1.msecs);
+
+			socketManager.loop();
+			sender.join();
+			assert(!releaseTimer.isWaiting(),
+				"LIBEV release timer remained active after recovery");
+			assert(atomicLoad(state.paused) == 1 && atomicLoad(state.sent) == 1,
+				"LIBEV sender did not pause and return from its pinger send");
+			assert(state.command,
+				"LIBEV recovery did not dispatch the submitted command");
+			assert(state.watcherStopped && !ev_is_active(&watcher) && watcher.data is null,
+				"LIBEV test watcher did not stop and balance its native reference");
+			assert(atomicLoad(*target) == 0,
+				"LIBEV recovery did not acknowledge the target count");
+			assert(recoveryReferences[index] == 1 && recoveryRuns[index] == 1
+				&& recoveryUnreferences[index] == 1,
+				"LIBEV recovery did not perform one target-thread ref/run/unref phase");
+			assert(recoveryWallMsecs[index] >= 40,
+				"LIBEV recovery did not block through the sender pause");
+			assert(recoveryCpuNsecs[index] < 10_000_000,
+				"LIBEV recovery busy-spun while waiting for the pinger");
+			if (createTimer)
+			{
+				assert(state.timer !is null && state.timerFired && !state.timer.isWaiting(),
+					"LIBEV recovered callback's timer did not fire in the same loop call");
+			}
+			else
+			{
+				assert(state.timer is null,
+					"LIBEV clean recovery unexpectedly created timer work");
+			}
+
+			state.receiver.close();
+			state.sender.close();
+			activeState = null;
+			return state;
+		}
+
+		auto timerCase = runCase(0, true, 80);
+		auto cleanCase = runCase(1, false, 60);
+		assert(timerCase.timerFired,
+			"LIBEV recovered callback did not complete its new timer work");
+		assert(cleanCase.command && cleanCase.timer is null,
+			"LIBEV clean recovery did not terminate without new work");
+		assert(!mainTimer.hasNonDaemonTasks(),
+			"LIBEV submitted-command helper leaked non-daemon timer work");
+		assert(socketManager.size() == managerBaseline,
+			"LIBEV submitted-command helper changed manager registrations");
+
+		auto idleStart = MonoTime.currTime();
+		socketManager.loop();
+		auto idleMsecs = (MonoTime.currTime() - idleStart).total!"msecs";
+		assert(idleMsecs < 100,
+			"LIBEV idle loop entry retained a temporary recovery reference");
+
+		auto recoveryWall = recoveryWallMsecs[0] + recoveryWallMsecs[1];
+		auto recoveryCpu = recoveryCpuNsecs[0] + recoveryCpuNsecs[1];
+		assert(recoveryCpu < 10_000_000,
+			"LIBEV recovery phases exceeded the CPU-spin bound");
+		writeln(
+			"paused=1 command=1 timer_fired=1 clean_return=1 count=0 "
+			~ "watcher_active=0 idle_return=1 loop_thread=1 "
+			~ "recovery_wall_ms=" ~ recoveryWall.to!string
+			~ " recovery_cpu_ns=" ~ recoveryCpu.to!string,
+		);
+	}
+
+	unittest
+	{
+		testLibevSubmittedCommandLiveness();
 	}
 }
 
