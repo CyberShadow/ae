@@ -77,6 +77,7 @@ static if (eventLoopMechanism == EventLoopMechanism.epoll)
 }
 static if (eventLoopMechanism == EventLoopMechanism.libev)
 {
+	import core.memory : GC;
 	import deimos.ev;
 	pragma(lib, "ev");
 }
@@ -586,7 +587,9 @@ static if (eventLoopMechanism == EventLoopMechanism.libev)
 		void register(GenericSocket socket)
 		{
 			debug (ASOCKETS) stderr.writefln("Registering %s", socket);
-			debug assert(socket.evRead.data is null && socket.evWrite.data is null, "Re-registering a started socket");
+			assert(socket.evRead.data is null && socket.evWrite.data is null,
+				"Re-registering a started libev socket");
+			assert(!socket.evRooted, "Re-registering a GC-rooted or pinned libev socket");
 			auto fd = socket.conn.handle;
 			assert(fd, "Must have fd before socket registration");
 			ev_io_init(&socket.evRead , &ioCallback, fd, EV_READ );
@@ -602,6 +605,9 @@ static if (eventLoopMechanism == EventLoopMechanism.libev)
 			debug (ASOCKETS) stderr.writefln("Unregistering %s", socket);
 			socket.notifyRead  = false;
 			socket.notifyWrite = false;
+			assert(socket.evRead.data is null && socket.evWrite.data is null,
+				"Unregistering a libev socket with active watchers");
+			assert(!socket.evRooted, "Unregistering a GC-rooted or pinned libev socket");
 			count--;
 		}
 
@@ -629,6 +635,28 @@ static if (eventLoopMechanism == EventLoopMechanism.libev)
 	private mixin template SocketMixin()
 	{
 		private ev_io evRead, evWrite;
+		private bool evRooted;
+
+		private final void retainWatcherOwner()
+		{
+			assert(!evRooted, "Retaining an already rooted libev watcher owner");
+			assert(evRead.data is null && evWrite.data is null,
+				"Retaining a libev watcher owner after publication");
+			GC.addRoot(cast(void*)this);
+			GC.setAttr(cast(void*)this, GC.BlkAttr.NO_MOVE);
+			evRooted = true;
+		}
+
+		private final void releaseWatcherOwner()
+		{
+			assert(evRooted, "Releasing an unrooted libev watcher owner");
+			assert(evRead.data is null && evWrite.data is null,
+				"Releasing a libev watcher owner before the final native stop");
+			auto owner = this;
+			GC.removeRoot(cast(void*)owner);
+			GC.clrAttr(cast(void*)owner, GC.BlkAttr.NO_MOVE);
+			evRooted = false;
+		}
 
 		private final void setWatcherState(ref ev_io ev, bool newValue, int /*event*/)
 		{
@@ -638,9 +666,15 @@ static if (eventLoopMechanism == EventLoopMechanism.libev)
 				return;
 			}
 
+			auto hasActiveWatcher = evRead.data !is null || evWrite.data !is null;
+			assert(evRooted == hasActiveWatcher, "Incoherent libev watcher owner root balance");
+
 			if (newValue && !ev.data)
 			{
 				// Start
+				assert(ev.data is null, "Starting an active libev watcher");
+				if (!evRooted)
+					retainWatcherOwner();
 				ev.data = cast(void*)this;
 				ev_io_start(ev_default_loop(0), &ev);
 			}
@@ -649,8 +683,10 @@ static if (eventLoopMechanism == EventLoopMechanism.libev)
 			{
 				// Stop
 				assert(ev.data is cast(void*)this);
-				ev.data = null;
 				ev_io_stop(ev_default_loop(0), &ev);
+				ev.data = null;
+				if (evRead.data is null && evWrite.data is null)
+					releaseWatcherOwner();
 			}
 		}
 
@@ -667,9 +703,8 @@ static if (eventLoopMechanism == EventLoopMechanism.libev)
 
 		debug ~this() @nogc
 		{
-			// The LIBEV SocketManager holds no references to registered sockets.
-			// TODO: Add a doubly-linked list?
-			assert(evRead.data is null && evWrite.data is null, "Destroying a registered socket");
+			assert(evRead.data is null && evWrite.data is null, "Destroying an active libev socket");
+			assert(!evRooted, "Destroying a GC-rooted or pinned libev socket");
 		}
 	}
 }
@@ -4113,6 +4148,265 @@ public:
 	{
 		import std.string : format, split;
 		return "%s {this=%s, fd=%s}".format(this.classinfo.name.split(".")[$-1], cast(void*)this, conn ? conn.handle : -1);
+	}
+}
+
+// ***************************************************************************
+
+static if (eventLoopMechanism == EventLoopMechanism.libev)
+version (Posix)
+debug (ae_unittest)
+{
+	// This state is intentionally kept separate from the probe: the forced-GC
+	// test may retain it to observe dispatch, but it never retains the owner.
+	private final class LibevWatcherDispatchState
+	{
+		TimerTask watchdog;
+		int callbacks;
+		bool ownerBalanceHeldDuringDispatch;
+		bool ownerBalanceReleasedAfterNativeStop;
+		bool unregistered;
+		bool closed;
+	}
+
+	/// Small registered GenericSocket used to exercise the LIBEV-only watcher
+	/// fields directly from this module.
+	private final class LibevWatcherProbe : GenericSocket
+	{
+		private LibevWatcherDispatchState dispatchState;
+
+		this(Socket socket, LibevWatcherDispatchState dispatchState = null)
+		{
+			conn = socket;
+			this.dispatchState = dispatchState;
+			socketManager.register(this);
+		}
+
+		override void onReadable()
+		{
+			assert(dispatchState !is null, "unexpected libev watcher probe dispatch");
+			assert(dispatchState.callbacks == 0,
+				"libev watcher probe dispatched more than once");
+
+			ubyte[1] received;
+			assert(conn.receive(received[]) == received.length,
+				"libev watcher probe did not receive its readable byte");
+			assert(received[0] == 0xA5,
+				"libev watcher probe received an unexpected byte");
+
+			dispatchState.callbacks++;
+			dispatchState.ownerBalanceHeldDuringDispatch = evRooted;
+			assert(dispatchState.ownerBalanceHeldDuringDispatch,
+				"libev watcher owner balance was not held during dispatch");
+			if (libevNoMoveIsObservable())
+				assert(libevWatcherProbePinned(this),
+					"libev watcher owner was not pinned during dispatch");
+
+			// `notifyRead = false` synchronously calls ev_io_stop. Only after it
+			// returns may the shared owner balance be released.
+			notifyRead = false;
+			dispatchState.ownerBalanceReleasedAfterNativeStop = evRead.data is null
+				&& evWrite.data is null
+				&& !evRooted;
+			assert(dispatchState.ownerBalanceReleasedAfterNativeStop,
+				"libev watcher owner balance survived native watcher stop");
+			if (libevNoMoveIsObservable())
+				assert(!libevWatcherProbePinned(this),
+					"libev watcher owner pin survived native watcher stop");
+
+			socketManager.unregister(this);
+			dispatchState.unregistered = true;
+			conn.close();
+			conn = null;
+			dispatchState.closed = true;
+			assert(dispatchState.watchdog.isWaiting(),
+				"libev watcher probe dispatch reached an inactive watchdog");
+			dispatchState.watchdog.cancel();
+		}
+
+		final void close()
+		{
+			assert(conn !is null, "closing an already closed libev watcher probe");
+			socketManager.unregister(this);
+			conn.close();
+			conn = null;
+		}
+	}
+
+	private bool libevWatcherProbePinned(GenericSocket socket)
+	{
+		return (GC.getAttr(cast(void*)socket) & GC.BlkAttr.NO_MOVE) != 0;
+	}
+
+	// The conservative collector accepts NO_MOVE but deliberately does not
+	// retain it in getAttr. Check the active bit whenever the runtime exposes
+	// it, while evRooted remains the portable balance authority for root/pin.
+	private bool libevNoMoveIsObservable()
+	{
+		static bool initialized;
+		static bool observable;
+		if (!initialized)
+		{
+			auto block = new ubyte[1];
+			auto pointer = cast(void*)block.ptr;
+			GC.setAttr(pointer, GC.BlkAttr.NO_MOVE);
+			observable = (GC.getAttr(pointer) & GC.BlkAttr.NO_MOVE) != 0;
+			GC.clrAttr(pointer, GC.BlkAttr.NO_MOVE);
+			initialized = true;
+		}
+		return observable;
+	}
+
+	private void assertLibevWatcherProbeState(
+		LibevWatcherProbe probe,
+		bool readActive,
+		bool writeActive,
+		bool rooted,
+		string stage)
+	{
+		assert(probe.notifyRead == readActive,
+			stage ~ ": unexpected read watcher state");
+		assert(probe.notifyWrite == writeActive,
+			stage ~ ": unexpected write watcher state");
+		assert((probe.evRead.data !is null) == readActive,
+			stage ~ ": unexpected read watcher publication");
+		assert((probe.evWrite.data !is null) == writeActive,
+			stage ~ ": unexpected write watcher publication");
+		assert(!!ev_is_active(&probe.evRead) == readActive,
+			stage ~ ": unexpected native read watcher state");
+		assert(!!ev_is_active(&probe.evWrite) == writeActive,
+			stage ~ ": unexpected native write watcher state");
+		if (readActive)
+			assert(probe.evRead.data is cast(void*)probe,
+				stage ~ ": read watcher has the wrong owner");
+		if (writeActive)
+			assert(probe.evWrite.data is cast(void*)probe,
+				stage ~ ": write watcher has the wrong owner");
+		assert(probe.evRooted == rooted,
+			stage ~ ": unexpected shared root state");
+		if (libevNoMoveIsObservable())
+			assert(libevWatcherProbePinned(probe) == rooted,
+				stage ~ ": unexpected NO_MOVE state");
+	}
+
+	/// Exercise the focused LIBEV owner-retention tests from either the module
+	/// unittest runner or a package-scoped disposable runner.
+	package(ae) void testLibevWatcherOwners()
+	{
+		import core.time : seconds;
+		import std.socket : socketPair;
+
+		// The two embedded watcher directions must share one root/pin pair,
+		// while registration itself must retain neither.
+		{
+			auto managerBaseline = socketManager.size();
+			auto pair = socketPair();
+			pair[0].blocking = false;
+			auto probe = new LibevWatcherProbe(pair[0]);
+
+			assert(socketManager.size() == managerBaseline + 1,
+				"registered libev watcher probe did not increment the manager size");
+			assertLibevWatcherProbeState(probe, false, false, false,
+				"registration alone");
+
+			probe.notifyRead = true;
+			assertLibevWatcherProbeState(probe, true, false, true, "after starting read");
+			probe.notifyWrite = true;
+			assertLibevWatcherProbeState(probe, true, true, true, "after starting write");
+
+			probe.notifyRead = false;
+			assertLibevWatcherProbeState(probe, false, true, true, "after stopping read");
+			probe.notifyWrite = false;
+			assertLibevWatcherProbeState(probe, false, false, false, "after stopping write");
+
+			probe.notifyRead = true;
+			probe.notifyWrite = true;
+			assertLibevWatcherProbeState(probe, true, true, true, "after restarting both");
+			probe.notifyWrite = false;
+			assertLibevWatcherProbeState(probe, true, false, true, "after stopping write");
+			probe.notifyRead = false;
+			assertLibevWatcherProbeState(probe, false, false, false, "after stopping read");
+
+			probe.close();
+			pair[1].close();
+			assert(socketManager.size() == managerBaseline,
+				"libev watcher probe did not restore the socket-manager baseline");
+		}
+
+		// Native libev only sees raw pointers to embedded watchers. Verify that
+		// its callback reaches an owner retained solely by the active watcher root.
+		{
+			auto managerBaseline = socketManager.size();
+			assert(!mainTimer.hasNonDaemonTasks(),
+				"libev forced-GC watcher test requires no pending non-daemon timer");
+
+			auto pair = socketPair();
+			pair[0].blocking = false;
+			auto peer = pair[1];
+			auto state = new LibevWatcherDispatchState;
+
+			void armWatcher(Socket socket, LibevWatcherDispatchState dispatchState)
+			{
+				auto probe = new LibevWatcherProbe(socket, dispatchState);
+				assertLibevWatcherProbeState(probe, false, false, false,
+					"forced-GC registration alone");
+				probe.notifyRead = true;
+				assertLibevWatcherProbeState(probe, true, false, true,
+					"forced-GC active read watcher");
+				probe = null;
+			}
+
+			armWatcher(pair[0], state);
+			pair = typeof(pair).init;
+
+			ubyte[][] pressure;
+			foreach (i; 0 .. 256)
+			{
+				auto block = new ubyte[64 * 1024];
+				block[0] = cast(ubyte)i;
+				pressure ~= block;
+			}
+			assert(pressure.length == 256,
+				"libev forced-GC watcher test did not allocate pressure");
+			pressure = null;
+			GC.collect();
+			GC.minimize();
+
+			ubyte[1] ping = [0xA5];
+			assert(peer.send(ping[]) == ping.length,
+				"libev forced-GC watcher test could not make the peer readable");
+
+			TimerTask watchdog = setTimeout({
+				assert(false, "libev rooted watcher was not dispatched within one second");
+			}, 1.seconds);
+			assert(!watchdog.daemon,
+				"libev forced-GC watcher watchdog unexpectedly became daemon work");
+			state.watchdog = watchdog;
+
+			socketManager.loop();
+
+			assert(state.callbacks == 1,
+				"libev forced-GC watcher callback did not execute exactly once");
+			assert(state.ownerBalanceHeldDuringDispatch,
+				"libev forced-GC watcher lost its owner balance before callback dispatch");
+			assert(state.ownerBalanceReleasedAfterNativeStop,
+				"libev forced-GC watcher did not release owner balance after native stop");
+			assert(state.unregistered && state.closed,
+				"libev forced-GC watcher callback did not unregister and close itself");
+			assert(!watchdog.isWaiting(),
+				"libev forced-GC watcher callback did not cancel its watchdog");
+
+			peer.close();
+			assert(socketManager.size() == managerBaseline,
+				"libev forced-GC watcher test did not restore the socket-manager baseline");
+			assert(!mainTimer.hasNonDaemonTasks(),
+				"libev forced-GC watcher test leaked a non-daemon timer");
+		}
+	}
+
+	debug (ae_unittest) unittest
+	{
+		testLibevWatcherOwners();
 	}
 }
 
