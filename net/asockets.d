@@ -503,6 +503,7 @@ static if (eventLoopMechanism == EventLoopMechanism.libev)
 		}
 
 		ev_timer evTimer;
+		bool evTimerUnreferenced;
 		MonoTime lastNextEvent = MonoTime.max;
 
 		extern(C)
@@ -541,8 +542,31 @@ static if (eventLoopMechanism == EventLoopMechanism.libev)
 			socketManager.updateTimer(wokeDueToTimeout);
 		}
 
+		private void setTimerReferenced(ev_loop_t* evLoop, bool referenced)
+		{
+			assert(ev_is_active(&evTimer));
+			if (referenced == !evTimerUnreferenced)
+				return;
+
+			if (referenced)
+			{
+				ev_ref(evLoop);
+				evTimerUnreferenced = false;
+			}
+			else
+			{
+				ev_unref(evLoop);
+				evTimerUnreferenced = true;
+			}
+		}
+
 		void updateTimer(bool force)
 		{
+			auto evLoop = ev_default_loop(0);
+			auto timerActive = !!ev_is_active(&evTimer);
+			assert(!evTimerUnreferenced || timerActive);
+			assert((lastNextEvent == MonoTime.max) == !timerActive);
+
 			auto nextEvent = mainTimer.getNextEvent();
 			if (force || lastNextEvent != nextEvent)
 			{
@@ -550,7 +574,12 @@ static if (eventLoopMechanism == EventLoopMechanism.libev)
 				if (nextEvent == MonoTime.max) // Stopping
 				{
 					if (lastNextEvent != MonoTime.max)
-						ev_timer_stop(ev_default_loop(0), &evTimer);
+					{
+						setTimerReferenced(evLoop, true);
+						assert(!evTimerUnreferenced);
+						ev_timer_stop(evLoop, &evTimer);
+						assert(!ev_is_active(&evTimer));
+					}
 				}
 				else
 				{
@@ -567,17 +596,34 @@ static if (eventLoopMechanism == EventLoopMechanism.libev)
 					debug (ASOCKETS) stderr.writefln("remaining=%s, ev_tstamp=%s", remaining, tstamp);
 					if (lastNextEvent == MonoTime.max) // Starting
 					{
+						assert(!timerActive);
+						assert(!evTimerUnreferenced);
 						ev_timer_init(&evTimer, &timerCallback, 0., tstamp);
-						ev_timer_start(ev_default_loop(0), &evTimer);
+						ev_timer_start(evLoop, &evTimer);
+						assert(ev_is_active(&evTimer));
 					}
 					else // Adjusting
 					{
+						setTimerReferenced(evLoop, true);
+						assert(!evTimerUnreferenced);
 						evTimer.repeat = tstamp;
-						ev_timer_again(ev_default_loop(0), &evTimer);
+						ev_timer_again(evLoop, &evTimer);
+						assert(ev_is_active(&evTimer));
 					}
 				}
 				lastNextEvent = nextEvent;
 			}
+
+			if (ev_is_active(&evTimer))
+				setTimerReferenced(evLoop, mainTimer.hasNonDaemonTasks());
+			else
+				assert(!evTimerUnreferenced);
+
+			timerActive = !!ev_is_active(&evTimer);
+			assert(!evTimerUnreferenced || timerActive);
+			assert((lastNextEvent == MonoTime.max) == !timerActive);
+			if (timerActive)
+				assert(evTimerUnreferenced == !mainTimer.hasNonDaemonTasks());
 		}
 
 	public:
@@ -4148,6 +4194,179 @@ public:
 	{
 		import std.string : format, split;
 		return "%s {this=%s, fd=%s}".format(this.classinfo.name.split(".")[$-1], cast(void*)this, conn ? conn.handle : -1);
+	}
+}
+
+// ***************************************************************************
+
+static if (eventLoopMechanism == EventLoopMechanism.libev)
+version (Posix)
+debug (ae_unittest)
+{
+	/// Exercise the LIBEV timer's daemon/reference balance from either the
+	/// module unittest runner or a package-scoped disposable runner.
+	package(ae) void testLibevDaemonTimers()
+	{
+		import core.time : days, msecs, seconds;
+
+		void updateNativeTimer(bool force)
+		{
+			socketManager.now = MonoTime.currTime();
+			socketManager.updateTimer(force);
+		}
+
+		void assertTimerState(
+			bool active,
+			bool unreferenced,
+			MonoTime nextEvent,
+			string stage)
+		{
+			assert(mainTimer.getNextEvent() == nextEvent,
+				stage ~ ": unexpected logical timer deadline");
+			assert(socketManager.lastNextEvent == nextEvent,
+				stage ~ ": unexpected native timer deadline");
+			assert(!!ev_is_active(&socketManager.evTimer) == active,
+				stage ~ ": unexpected native timer activity");
+			assert(socketManager.evTimerUnreferenced == unreferenced,
+				stage ~ ": unexpected native timer reference balance");
+		}
+
+		// ASOCKETS_DEBUG_IDLE registers one persistent daemon timer only after a
+		// loop has run. It is outside this test's ownership, so accept its normal
+		// unreferenced state after the behavioral phases.
+		void assertClearedOrDaemonIdle(string stage)
+		{
+			assert(!mainTimer.hasNonDaemonTasks(),
+				stage ~ ": unexpected non-daemon timer work");
+			auto nextEvent = mainTimer.getNextEvent();
+			if (nextEvent == MonoTime.max)
+			{
+				assert(!mainTimer.isWaiting(),
+					stage ~ ": empty timer still reports waiting work");
+				assertTimerState(false, false, MonoTime.max, stage);
+			}
+			else
+			{
+				assert(mainTimer.isWaiting(),
+					stage ~ ": daemon timer did not report waiting work");
+				assertTimerState(true, true, nextEvent, stage);
+			}
+		}
+
+		assert(!mainTimer.isWaiting(),
+			"libev daemon-timer test requires an empty timer");
+		assertClearedOrDaemonIdle("initial empty timer");
+
+		auto headDeadline = MonoTime.currTime() + 3.days;
+		auto head = new TimerTask((Timer, TimerTask) {
+			assert(false, "far-future daemon head timer unexpectedly fired");
+		});
+		head.daemon = true;
+		mainTimer.add(head, headDeadline);
+		updateNativeTimer(true);
+		assert(head.isWaiting(), "far-future daemon head timer was not scheduled");
+		assertTimerState(true, true, headDeadline, "initial daemon head");
+
+		// Changing daemon status does not alter the head deadline, so this must
+		// update the native reference balance without rescheduling the timer.
+		head.daemon = false;
+		assert(mainTimer.getNextEvent() == headDeadline,
+			"changing the head daemon state changed its deadline");
+		updateNativeTimer(false);
+		assertTimerState(true, false, headDeadline, "daemon head made non-daemon");
+		head.daemon = true;
+		assert(mainTimer.getNextEvent() == headDeadline,
+			"restoring the head daemon state changed its deadline");
+		updateNativeTimer(false);
+		assertTimerState(true, true, headDeadline, "non-daemon head made daemon");
+
+		auto later = new TimerTask((Timer, TimerTask) {
+			assert(false, "far-future later non-daemon timer unexpectedly fired");
+		});
+		mainTimer.add(later, headDeadline + 1.days);
+		assert(mainTimer.getNextEvent() == headDeadline,
+			"adding later non-daemon work changed the daemon head deadline");
+		updateNativeTimer(false);
+		assert(later.isWaiting(), "later non-daemon timer was not scheduled");
+		assertTimerState(true, false, headDeadline, "later non-daemon work added");
+		later.cancel();
+		assert(mainTimer.getNextEvent() == headDeadline,
+			"removing later non-daemon work changed the daemon head deadline");
+		updateNativeTimer(false);
+		assertTimerState(true, true, headDeadline, "later non-daemon work removed");
+
+		auto earlierDeadline = MonoTime.currTime() + 1.days;
+		auto earlier = new TimerTask((Timer, TimerTask) {
+			assert(false, "far-future earlier daemon timer unexpectedly fired");
+		});
+		earlier.daemon = true;
+		mainTimer.add(earlier, earlierDeadline);
+		updateNativeTimer(false);
+		assert(earlier.isWaiting(), "earlier daemon timer was not scheduled");
+		assertTimerState(true, true, earlierDeadline, "earlier daemon head replaced timer");
+
+		earlier.cancel();
+		head.cancel();
+		updateNativeTimer(false);
+		assert(!mainTimer.isWaiting(), "cancelled daemon timers remained scheduled");
+		assertTimerState(false, false, MonoTime.max, "all daemon timers cancelled");
+
+		auto fresh = new TimerTask((Timer, TimerTask) {
+			assert(false, "fresh far-future daemon timer unexpectedly fired");
+		});
+		fresh.daemon = true;
+		auto freshDeadline = MonoTime.currTime() + 1.days;
+		mainTimer.add(fresh, freshDeadline);
+		updateNativeTimer(false);
+		assertTimerState(true, true, freshDeadline, "fresh daemon timer started");
+		fresh.cancel();
+		updateNativeTimer(false);
+		assertTimerState(false, false, MonoTime.max, "fresh daemon timer stopped");
+
+		bool tenSecondDaemonFired;
+		auto tenSecondDaemon = new TimerTask((Timer, TimerTask) {
+			tenSecondDaemonFired = true;
+			assert(false, "ten-second daemon timer unexpectedly fired");
+		});
+		tenSecondDaemon.daemon = true;
+		mainTimer.add(tenSecondDaemon, MonoTime.currTime() + 10.seconds);
+		socketManager.loop();
+		assert(!tenSecondDaemonFired && tenSecondDaemon.isWaiting(),
+			"first libev loop consumed ten-second daemon work");
+		socketManager.loop();
+		assert(!tenSecondDaemonFired && tenSecondDaemon.isWaiting(),
+			"second libev loop consumed ten-second daemon work");
+		tenSecondDaemon.cancel();
+		updateNativeTimer(false);
+		assertClearedOrDaemonIdle("ten-second daemon timer cleaned up");
+
+		bool daemonRan;
+		bool nonDaemonRan;
+		auto callbackStart = MonoTime.currTime();
+		auto daemonCallback = new TimerTask((Timer, TimerTask) {
+			assert(!daemonRan, "daemon callback ran more than once");
+			assert(!nonDaemonRan, "later non-daemon callback ran before daemon callback");
+			daemonRan = true;
+		});
+		daemonCallback.daemon = true;
+		auto nonDaemonCallback = new TimerTask((Timer, TimerTask) {
+			assert(daemonRan, "later non-daemon callback ran before daemon callback");
+			assert(!nonDaemonRan, "later non-daemon callback ran more than once");
+			nonDaemonRan = true;
+		});
+		mainTimer.add(daemonCallback, callbackStart + 10.msecs);
+		mainTimer.add(nonDaemonCallback, callbackStart + 20.msecs);
+		socketManager.loop();
+		assert(daemonRan, "earlier daemon callback did not run");
+		assert(nonDaemonRan, "later non-daemon callback did not keep libev alive");
+		assert(!daemonCallback.isWaiting() && !nonDaemonCallback.isWaiting(),
+			"timer callbacks remained scheduled after the loop");
+		assertClearedOrDaemonIdle("daemon callback followed by non-daemon callback");
+	}
+
+	debug (ae_unittest) unittest
+	{
+		testLibevDaemonTimers();
 	}
 }
 
