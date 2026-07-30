@@ -248,6 +248,7 @@ public:
 		private const(char)[] sql;
 		private PreparedStatement preparedStatement;
 		private const(char)[][] queryArgs;
+		private bool oneShot;
 		private bool started;
 		private bool completed;
 		private bool consumed;
@@ -429,10 +430,29 @@ public:
 
 	/// Create a lazy query result using Simple Query protocol.
 	/// The query is not sent until you call .array(), .map(), or iterate.
-	/// For parameterized queries, use prepare() instead.
+	/// The SQL string may contain multiple statements.
+	/// For parameterized queries, use extendedQuery() or prepare() instead.
 	Result query(const(char)[] sql)
 	{
 		return new Result(sql);
+	}
+
+	/// Create a lazy one-shot query using the Extended Query protocol
+	/// with the unnamed statement; Parse + Bind + Describe + Execute +
+	/// Sync are sent together in a single server round-trip.
+	/// The query is not sent until you call .array(), .map(), or iterate.
+	/// The SQL string must be a single statement.
+	/// To execute the same statement many times, prepare() is more efficient.
+	/// Example:
+	/// ---
+	/// pg.extendedQuery("SELECT * FROM users WHERE id = $1", 42).array.then((rows) { ... });
+	/// ---
+	Result extendedQuery(Args...)(const(char)[] sql, Args args)
+	{
+		auto result = new Result(sql);
+		result.oneShot = true;
+		result.queryArgs = toQueryArgs(args);
+		return result;
 	}
 
 	/// Prepared statement handle for Extended Query protocol.
@@ -721,6 +741,7 @@ private:
 
 	void processPacket(PacketType type, Data data)
 	{
+		debug (PSQL_TRACE) { import std.stdio : stderr; stderr.writefln("psql: packet '%s' (queue=%d)", cast(char)type, pendingOps.length); }
 		switch (type)
 		{
 			case PacketType.authenticationRequest:
@@ -1144,6 +1165,17 @@ private:
 			sendSync();
 		}
 		else
+		if (result.oneShot)
+		{
+			// One-shot parameterized query: Extended Query protocol with
+			// the unnamed statement, in a single round-trip.
+			sendParse("", result.sql);
+			sendBind("", "", result.queryArgs);
+			sendDescribe('P', "");
+			sendExecute("");
+			sendSync();
+		}
+		else
 		{
 			// Simple Query protocol
 			auto buf = appender!(ubyte[]);
@@ -1551,6 +1583,197 @@ debug(ae_unittest) unittest
 		foreach (row; stmt.query(2, 3))
 			product *= row.column!int("product");
 		assert(product == 6, "Expected 2*3=6");
+	}).awaitSync();
+}
+
+// Test one-shot parameterized queries (unnamed Extended Query operation)
+version (HAVE_PSQL_SERVER)
+debug(ae_unittest) unittest
+{
+	import ae.utils.promise.await : async, await, awaitSync;
+
+	auto pg = new PgSqlConnection();
+
+	async({
+		pg.ready.await;
+		scope(exit) pg.disconnect("Test cleanup");
+
+		// Zero parameters (still Extended Query protocol)
+		auto r0 = pg.extendedQuery("SELECT 42 AS answer").array.await;
+		assert(r0.length == 1 && r0[0].column!int("answer") == 42);
+
+		// One parameter
+		auto r1 = pg.extendedQuery("SELECT $1::int AS v", 7).array.await;
+		assert(r1.length == 1 && r1[0].column!int("v") == 7);
+
+		// Multiple parameters of mixed types
+		auto r2 = pg.extendedQuery("SELECT $1::int + $2::int AS sum, $3::text AS s, $4::bool AS b",
+			10, 20, "hello", true).array.await;
+		assert(r2[0].column!int("sum") == 30);
+		assert(r2[0].column!string("s") == "hello");
+		assert(r2[0].column!bool("b") == true);
+
+		// Multiple result rows
+		auto r3 = pg.extendedQuery("SELECT generate_series($1::int, $2::int) AS n", 1, 4).array.await;
+		assert(r3.length == 4);
+		foreach (i, row; r3)
+			assert(row.column!int("n") == i + 1);
+
+		// NULL parameters (both null literal and empty Nullable)
+		auto r4 = pg.extendedQuery("SELECT $1::int IS NULL AS a, coalesce($2::text, 'dflt') AS b",
+			null, Nullable!string.init).array.await;
+		assert(r4[0].column!bool("a") == true);
+		assert(r4[0].column!string("b") == "dflt");
+
+		// Nullable round-trip
+		auto r5 = pg.extendedQuery("SELECT $1::int AS v", Nullable!int(5)).array.await;
+		assert(r5[0].column!(Nullable!int)("v").get == 5);
+		auto r6 = pg.extendedQuery("SELECT $1::int AS v", Nullable!int.init).array.await;
+		assert(r6[0].isNull("v"));
+		assert(r6[0].column!(Nullable!int)("v").isNull);
+
+		// Empty result set
+		auto r7 = pg.extendedQuery("SELECT 1 AS x WHERE $1::int > $2::int", 1, 2).array.await;
+		assert(r7.length == 0);
+
+		// Statement returning no rows at all (NoData path)
+		pg.query("CREATE TEMP TABLE oneshot_test (a int, b text)").array.await;
+		auto r8 = pg.extendedQuery("INSERT INTO oneshot_test VALUES ($1::int, $2::text)", 1, "one").array.await;
+		assert(r8.length == 0);
+		auto r9 = pg.extendedQuery("SELECT b FROM oneshot_test WHERE a = $1::int", 1).array.await;
+		assert(r9.length == 1 && r9[0].column!string("b") == "one");
+
+		// Lazy foreach iteration
+		int sum = 0;
+		foreach (row; pg.extendedQuery("SELECT generate_series(1, $1::int) AS n", 5))
+			sum += row.column!int("n");
+		assert(sum == 15, "Expected sum 1+2+3+4+5=15");
+	}).awaitSync();
+}
+
+// Test one-shot query errors, recovery, and pipelining
+version (HAVE_PSQL_SERVER)
+debug(ae_unittest) unittest
+{
+	import ae.utils.promise.await : async, await, awaitSync;
+
+	auto pg = new PgSqlConnection();
+
+	async({
+		pg.ready.await;
+		scope(exit) pg.disconnect("Test cleanup");
+
+		// Parse error (syntax error)
+		bool gotError = false;
+		try
+			pg.extendedQuery("SELECT WHERE FROM $1::int", 1).array.await;
+		catch (PgSqlException e)
+		{
+			gotError = true;
+			assert(e.sqlState == "42601", "Expected syntax error, got " ~ e.sqlState.idup);
+		}
+		assert(gotError, "Expected syntax error");
+
+		// Connection recovers after an error
+		auto r1 = pg.extendedQuery("SELECT $1::int AS v", 1).array.await;
+		assert(r1[0].column!int("v") == 1);
+
+		// Runtime error (division by zero, after Parse/Bind succeed)
+		gotError = false;
+		try
+			pg.extendedQuery("SELECT $1::int / $2::int AS q", 1, 0).array.await;
+		catch (PgSqlException e)
+		{
+			gotError = true;
+			assert(e.sqlState == "22012", "Expected division by zero, got " ~ e.sqlState.idup);
+		}
+		assert(gotError, "Expected division by zero error");
+
+		// Recovers again
+		auto r2 = pg.extendedQuery("SELECT $1::int AS v", 2).array.await;
+		assert(r2[0].column!int("v") == 2);
+
+		// Multi-statement SQL is rejected by the Extended Query protocol...
+		gotError = false;
+		try
+			pg.extendedQuery("SELECT 1 AS a; SELECT 2 AS b").array.await;
+		catch (PgSqlException e)
+		{
+			gotError = true;
+			assert(e.sqlState == "42601", "Expected syntax error, got " ~ e.sqlState.idup);
+		}
+		assert(gotError, "Expected multi-statement SQL to be rejected");
+
+		// ...but accepted by the Simple Query protocol
+		auto rm = pg.query("SELECT 1 AS a; SELECT 2 AS b").array.await;
+		assert(rm.length == 2);
+		assert(rm[0].column!int("a") == 1);
+		assert(rm[1].column!int("b") == 2);
+
+		// Sequential one-shot queries
+		foreach (i; 0 .. 5)
+		{
+			auto rows = pg.extendedQuery("SELECT $1::int * 2 AS v", i).array.await;
+			assert(rows[0].column!int("v") == i * 2);
+		}
+
+		// Pipelined one-shot queries (all sent before any completes)
+		Promise!(PgSqlConnection.Row[])[] promises;
+		foreach (i; 0 .. 5)
+			promises ~= pg.extendedQuery("SELECT $1::int * 3 AS v", i).array;
+		foreach (i, p; promises)
+			assert(p.await[0].column!int("v") == i * 3);
+
+		// Pipelined mix of Simple Query and one-shot Extended Query
+		auto q1 = pg.query("SELECT 1 AS v").array;
+		auto q2 = pg.extendedQuery("SELECT $1::int AS v", 2).array;
+		auto q3 = pg.query("SELECT 3 AS v").array;
+		assert(q1.await[0].column!int("v") == 1);
+		assert(q2.await[0].column!int("v") == 2);
+		assert(q3.await[0].column!int("v") == 3);
+
+		// Pipelined queries with an error in the middle:
+		// the error must not affect preceding or following queries
+		auto pa = pg.extendedQuery("SELECT $1::int AS v", 1).array;
+		auto pb = pg.extendedQuery("SELECT $1::int / 0 AS v", 1).array;
+		auto pc = pg.extendedQuery("SELECT $1::int AS v", 3).array;
+		assert(pa.await[0].column!int("v") == 1);
+		gotError = false;
+		try
+			pb.await;
+		catch (PgSqlException e)
+			gotError = true;
+		assert(gotError, "Expected error from pipelined bad query");
+		assert(pc.await[0].column!int("v") == 3);
+	}).awaitSync();
+}
+
+// Test one-shot queries with large SQL and payloads
+version (HAVE_PSQL_SERVER)
+debug(ae_unittest) unittest
+{
+	import ae.utils.promise.await : async, await, awaitSync;
+
+	auto pg = new PgSqlConnection();
+
+	async({
+		pg.ready.await;
+		scope(exit) pg.disconnect("Test cleanup");
+
+		// Large SQL text (packet larger than any single buffer/record)
+		auto bigComment = "x".replicate(512 * 1024);
+		auto r1 = pg.extendedQuery("SELECT $1::int AS v /* " ~ bigComment ~ " */", 11).array.await;
+		assert(r1[0].column!int("v") == 11);
+
+		// Large parameter payload, round-tripped
+		auto bigParam = "y".replicate(1024 * 1024);
+		auto r2 = pg.extendedQuery("SELECT length($1::text) AS len, $1::text AS echo", bigParam).array.await;
+		assert(r2[0].column!int("len") == bigParam.length);
+		assert(r2[0].column!string("echo") == bigParam);
+
+		// Large result payload
+		auto r3 = pg.extendedQuery("SELECT repeat('z', $1::int) AS big", 1024 * 1024).array.await;
+		assert(r3[0].column!string("big").length == 1024 * 1024);
 	}).awaitSync();
 }
 
