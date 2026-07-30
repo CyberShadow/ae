@@ -1250,6 +1250,13 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 
 				if (!haveActive && !mainTimer.hasNonDaemonTasks() && !nextTickHandlers.length)
 				{
+					// Drain any completion packets still queued for cancelled
+					// or already-completed ops (e.g. a WSASend or WSARecv
+					// cancelled by closesocket) before exiting.  Leaving them
+					// queued would hand them to a future loop() invocation,
+					// which would dereference ops of long-dead connections.
+					if (drainCompletions(entries))
+						continue; // dispatch may have created new work
 					debug (ASOCKETS) stderr.writeln("No more active work, exiting loop.");
 					break;
 				}
@@ -1290,34 +1297,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 					}
 				}
 				else
-				{
-					foreach (i; 0 .. removed)
-					{
-						auto entry = &entries[i];
-						auto op = opFromOverlapped(entry.lpOverlapped);
-
-						if (op is null)
-						{
-							// User-posted completion with no OVERLAPPED.
-							// Dispatch via completion key (the participant).
-							auto p = cast(IocpParticipant)cast(Object)cast(void*)entry.lpCompletionKey;
-							if (p)
-								runUserEventHandler({
-									p.iocpUserPost(entry.dwNumberOfBytesTransferred);
-								});
-							continue;
-						}
-
-						op.inFlight = false;
-						auto bytes = entry.dwNumberOfBytesTransferred;
-						// Internal field holds NTSTATUS — translate to Win32 if non-zero.
-						auto status = cast(uint)op.overlapped.Internal;
-
-						runUserEventHandler({
-							dispatchCompletion(op, bytes, status, entry.lpCompletionKey);
-						});
-					}
-				}
+					processCompletionEntries(entries[0 .. removed]);
 
 				// Timers fire after I/O.
 				runUserEventHandler({
@@ -1326,6 +1306,72 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 
 				eventCounter++;
 			}
+		}
+
+		private void processCompletionEntries(scope OVERLAPPED_ENTRY[] entries)
+		{
+			foreach (ref entry; entries)
+			{
+				auto op = opFromOverlapped(entry.lpOverlapped);
+
+				if (op is null)
+				{
+					// User-posted completion with no OVERLAPPED.
+					// Dispatch via completion key (the participant).
+					auto p = cast(IocpParticipant)cast(Object)cast(void*)entry.lpCompletionKey;
+					if (p)
+						runUserEventHandler({
+							p.iocpUserPost(entry.dwNumberOfBytesTransferred);
+						});
+					continue;
+				}
+
+				// The packet has been dequeued; release our hold on the
+				// op's owner (unless a dispatch handler re-posts the op).
+				iocpInFlightOps.remove(op);
+
+				op.inFlight = false;
+				auto bytes = entry.dwNumberOfBytesTransferred;
+				// Internal field holds NTSTATUS — translate to Win32 if non-zero.
+				auto status = cast(uint)op.overlapped.Internal;
+
+				runUserEventHandler({
+					dispatchCompletion(op, bytes, status, entry.lpCompletionKey);
+				});
+			}
+		}
+
+		// Dequeue and dispatch any immediately-available completion packets.
+		// Returns true if any packets were dispatched.
+		private bool drainCompletions(scope OVERLAPPED_ENTRY[] entries)
+		{
+			bool any;
+			while (true)
+			{
+				ULONG removed = 0;
+				BOOL ok = GetQueuedCompletionStatusEx(
+					iocpPort, entries.ptr, cast(ULONG)entries.length,
+					&removed, 0, FALSE);
+				if (!ok || !removed)
+					return any;
+				any = true;
+				processCompletionEntries(entries[0 .. removed]);
+			}
+		}
+
+		/// Objects owning in-flight IOCP ops.  A completion packet
+		/// referencing an op (which lives inside its owner object) can
+		/// remain queued in the completion port after the socket is closed
+		/// and unregistered, and even across loop() invocations.  Until the
+		/// packet is dequeued, the kernel may write to the OVERLAPPED and
+		/// the dispatch loop will dereference the op, so its owner must be
+		/// kept alive.
+		private Object[IocpOp*] iocpInFlightOps;
+
+		/// Called after successfully posting an overlapped operation.
+		package(ae) void iocpOpPosted(IocpOp* op)
+		{
+			iocpInFlightOps[op] = op.owner;
 		}
 
 		private void dispatchCompletion(IocpOp* op, DWORD bytes, uint status, ULONG_PTR key)
@@ -1752,7 +1798,10 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 					cast(c_socks.sockaddr*)_iocpFromAddr.ptr, &_iocpFromAddrLen,
 					&_iocpRecvOp.overlapped, null);
 				if (rc == 0 || (rc == SOCKET_ERROR && WSAGetLastError() == WSA_IO_PENDING))
+				{
+					socketManager.iocpOpPosted(&_iocpRecvOp);
 					return;
+				}
 				_iocpRecvPending = false;
 				socketManager.kickWritable(this); // TODO: kickReadable would be cleaner
 				return;
@@ -1771,11 +1820,15 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			{
 				// Completed inline — completion will still be queued to
 				// the IOCP because we didn't set FILE_SKIP_COMPLETION_PORT_ON_SUCCESS.
+				socketManager.iocpOpPosted(&_iocpRecvOp);
 				return;
 			}
 			auto err = WSAGetLastError();
 			if (err == WSA_IO_PENDING)
+			{
+				socketManager.iocpOpPosted(&_iocpRecvOp);
 				return;
+			}
 			// Real error: we'll see it in onReadable when recv() is called.
 			_iocpRecvPending = false;
 			// Pretend readable so the connection sees the error.
@@ -1820,7 +1873,10 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 				&_iocpAcceptOp.overlapped);
 
 			if (ok || WSAGetLastError() == WSA_IO_PENDING)
+			{
+				socketManager.iocpOpPosted(&_iocpAcceptOp);
 				return;
+			}
 
 			// Immediate error — clean up and bail.
 			_iocpAcceptOp.inFlight = false;
@@ -1883,12 +1939,16 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			if (ok)
 			{
 				// Synchronous success — kernel still delivers IOCP completion.
+				socketManager.iocpOpPosted(&_iocpConnectOp);
 				return;
 			}
 
 			auto err = WSAGetLastError();
 			if (err == WSA_IO_PENDING)
+			{
+				socketManager.iocpOpPosted(&_iocpConnectOp);
 				return;
+			}
 
 			_iocpConnectOp.inFlight = false;
 			debug (ASOCKETS) stderr.writefln("[iocp] ConnectEx failed: %d", err);
@@ -1940,6 +2000,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 				&_iocpSendOp.overlapped, null);
 			if (rc == 0 || (rc == SOCKET_ERROR && WSAGetLastError() == WSA_IO_PENDING))
 			{
+				socketManager.iocpOpPosted(&_iocpSendOp);
 				return cast(sizediff_t)total;
 			}
 
@@ -2224,6 +2285,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			if (ok || GetLastError() == ERROR_IO_PENDING)
 			{
 				_readPending = true;
+				socketManager.iocpOpPosted(&_readOp);
 				return;
 			}
 			auto err = GetLastError();
@@ -2275,6 +2337,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			if (ok || GetLastError() == ERROR_IO_PENDING)
 			{
 				_writePending = true;
+				socketManager.iocpOpPosted(&_writeOp);
 				return;
 			}
 			_writeBuf = null;
@@ -2482,6 +2545,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			switch (err)
 			{
 				case ERROR_IO_PENDING:
+					socketManager.iocpOpPosted(&_connectOp);
 					return;
 				case ERROR_PIPE_CONNECTED:
 					_pending = false;
