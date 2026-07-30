@@ -1675,15 +1675,18 @@ private:
 
     void sendPacket(const(ubyte)[] data)
     {
-        // Header: 3-byte length (little-endian) + 1-byte sequence
-        ubyte[4] header;
-        header[0] = cast(ubyte)(data.length & 0xff);
-        header[1] = cast(ubyte)((data.length >> 8) & 0xff);
-        header[2] = cast(ubyte)((data.length >> 16) & 0xff);
-        header[3] = packetSeq++;
-
-        conn.send(Data(header[]));
-        conn.send(Data(data));
+        // Header: 3-byte length (little-endian) + 1-byte sequence.
+        // Coalesce the packet into one send, so that it forms a single
+        // TLS record when the transport is an SSL adapter.
+        auto packet = Data(4 + data.length);
+        packet.enter((scope contents) {
+            contents[0] = cast(ubyte)(data.length & 0xff);
+            contents[1] = cast(ubyte)((data.length >> 8) & 0xff);
+            contents[2] = cast(ubyte)((data.length >> 16) & 0xff);
+            contents[3] = packetSeq++;
+            contents[4 .. $] = data[];
+        });
+        conn.send(packet);
     }
 
     static void writeLittleEndian(T)(ref Appender!(ubyte[]) buf, T value)
