@@ -4312,7 +4312,7 @@ public:
 			setNoDelay(value);
 	}
 
-	private bool _noDelay = false;
+	private bool _noDelay = true;
 
 	/// Default constructor
 	this()
@@ -4624,7 +4624,7 @@ public:
 	/// ditto
 	@property void noDelay(bool value) { _noDelay = value; }
 
-	private bool _noDelay = false;
+	private bool _noDelay = true;
 
 	/// Callback for when the socket was closed.
 	void delegate() handleClose;
