@@ -27,7 +27,6 @@ import std.bitmanip : nativeToBigEndian, bigEndianToNative;
 import std.digest.md : md5Of, toHexString, LetterCase;
 
 import ae.net.asockets;
-import ae.utils.array;
 import ae.utils.auth.scram : ScramSHA256Client;
 import ae.utils.exception;
 import ae.utils.promise;
@@ -1104,15 +1103,27 @@ private:
 
 		write(buf, "");
 
-		conn.send(Data(nativeToBigEndian(cast(uint)(buf.data.length + uint.sizeof))[]));
-		conn.send(Data(buf.data));
+		// Coalesce the packet into one send, so that it forms a single
+		// TLS record when the transport is an SSL adapter.
+		auto packet = Data(uint.sizeof + buf.data.length);
+		packet.enter((scope contents) {
+			contents[0 .. 4] = nativeToBigEndian(cast(uint)(buf.data.length + uint.sizeof));
+			contents[4 .. $] = buf.data[];
+		});
+		conn.send(packet);
 	}
 
 	void sendPacket(char type, const(ubyte)[] data)
 	{
-		conn.send(Data(type.asBytes));
-		conn.send(Data(nativeToBigEndian(cast(uint)(data.length + uint.sizeof))[]));
-		conn.send(Data(data));
+		// Coalesce the packet into one send, so that it forms a single
+		// TLS record when the transport is an SSL adapter.
+		auto packet = Data(1 + uint.sizeof + data.length);
+		packet.enter((scope contents) {
+			contents[0] = cast(ubyte)type;
+			contents[1 .. 5] = nativeToBigEndian(cast(uint)(data.length + uint.sizeof));
+			contents[5 .. $] = data[];
+		});
+		conn.send(packet);
 	}
 
 	void startQuery(Result result)
