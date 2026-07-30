@@ -3462,6 +3462,14 @@ public:
 			conn.setOption(SocketOptionLevel.SOCKET, SocketOption.KEEPALIVE, false);
 	}
 
+	/// Enable or disable Nagle's algorithm (TCP_NODELAY).
+	/// Only valid for TCP sockets.
+	private final void setNoDelay(bool enabled = true)
+	{
+		assert(conn, "Attempting to set TCP_NODELAY on an uninitialized socket");
+		conn.setOption(SocketOptionLevel.TCP, SocketOption.TCP_NODELAY, enabled);
+	}
+
 	/// Returns a string containing the class name, address, and file descriptor.
 	override string toString() const
 	{
@@ -4231,6 +4239,8 @@ protected:
 					throw new SocketOSException("WSASocketW failed");
 				conn = new Socket(cast(socket_t)sock, addressInfo.family);
 				conn.blocking = false;
+				if (_noDelay && addressInfo.protocol == ProtocolType.TCP)
+					setNoDelay();
 
 				// ConnectEx requires the socket to be bound first.
 				_iocpBindWildcard(conn, addressInfo.family);
@@ -4244,6 +4254,8 @@ protected:
 			{
 				conn = new Socket(addressInfo.family, addressInfo.type, addressInfo.protocol);
 				conn.blocking = false;
+				if (_noDelay && addressInfo.protocol == ProtocolType.TCP)
+					setNoDelay();
 
 				socketManager.register(this);
 				updateFlags();
@@ -4275,6 +4287,33 @@ protected:
 	}
 
 public:
+	/// Whether to disable Nagle's algorithm (TCP_NODELAY) on TCP
+	/// connections.  While a TCP socket exists, this queries and sets
+	/// the socket option directly; otherwise, the stored setting is
+	/// applied when the socket is created.
+	/// Has no effect on non-TCP (e.g. Unix-domain or datagram)
+	/// connections.
+	@property bool noDelay()
+	{
+		if (conn !is null && !datagram && isTcpFamily(conn.addressFamily))
+		{
+			int32_t value;
+			conn.getOption(SocketOptionLevel.TCP, SocketOption.TCP_NODELAY, value);
+			return value != 0;
+		}
+		return _noDelay;
+	}
+
+	/// ditto
+	@property void noDelay(bool value)
+	{
+		_noDelay = value;
+		if (conn !is null && !datagram && isTcpFamily(conn.addressFamily))
+			setNoDelay(value);
+	}
+
+	private bool _noDelay = false;
+
 	/// Default constructor
 	this()
 	{
@@ -4361,6 +4400,13 @@ public:
 
 // ***************************************************************************
 
+// Whether a stream socket of this address family is a TCP socket
+// (and thus accepts TCP-level socket options such as TCP_NODELAY).
+private bool isTcpFamily(AddressFamily family)
+{
+	return family == AddressFamily.INET || family == AddressFamily.INET6;
+}
+
 /// An asynchronous connection server for socket-based connections.
 class SocketServer
 {
@@ -4397,6 +4443,7 @@ protected:
 						debug (ASOCKETS) stderr.writefln("\tAccepted connection %s from %s",
 							connection, connection.remoteAddressStr);
 						connection.setKeepAlive();
+						connection.noDelay = noDelay;
 						acceptHandler(connection);
 					}
 					else
@@ -4425,6 +4472,7 @@ protected:
 				auto connection = createConnection(acceptSocket, peerAddress);
 				debug (ASOCKETS) stderr.writefln("\tAccepted connection %s from %s", connection, connection.remoteAddressStr);
 				connection.setKeepAlive();
+				connection.noDelay = noDelay;
 				//assert(connection.connected);
 				//connection.connected = true;
 				acceptHandler(connection);
@@ -4567,6 +4615,16 @@ public:
 		s.blocking = false;
 		return new SocketServer(s);
 	}
+
+	/// Whether to disable Nagle's algorithm (TCP_NODELAY) on accepted
+	/// TCP connections.  Takes effect for connections accepted after
+	/// the change.
+	@property bool noDelay() { return _noDelay; }
+
+	/// ditto
+	@property void noDelay(bool value) { _noDelay = value; }
+
+	private bool _noDelay = false;
 
 	/// Callback for when the socket was closed.
 	void delegate() handleClose;
@@ -5481,6 +5539,40 @@ debug(ae_unittest) unittest
 		assert(srvDone[i]);
 		assert(cliDone[i]);
 	}
+}
+
+/// Test: the noDelay property reflects and controls the actual socket
+/// option on a live connection, on both ends of the connection.
+debug(ae_unittest) unittest
+{
+	auto server = new TcpServer();
+	server.noDelay = true;
+	ushort port = server.listen(0);
+
+	bool serverChecked, clientChecked;
+
+	server.handleAccept = (TcpConnection c) {
+		assert(c.noDelay, "Accepted connection does not report TCP_NODELAY");
+		serverChecked = true;
+		c.disconnect();
+		server.close();
+	};
+
+	auto client = new TcpConnection();
+	client.noDelay = true;
+	client.handleConnect = () {
+		assert(client.noDelay, "Client does not report TCP_NODELAY");
+		client.noDelay = false;
+		assert(!client.noDelay, "TCP_NODELAY was not cleared");
+		client.noDelay = true;
+		assert(client.noDelay, "TCP_NODELAY was not restored");
+		clientChecked = true;
+		client.disconnect();
+	};
+	client.connect("127.0.0.1", port);
+
+	socketManager.loop();
+	assert(serverChecked && clientChecked);
 }
 
 // Stress test: 256 concurrent TCP connections, each sending/receiving data.
