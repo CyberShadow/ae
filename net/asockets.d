@@ -1901,6 +1901,14 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		/// Socket.ERROR with WSAEWOULDBLOCK if a send is already in flight.
 		package final sizediff_t _iocpDoSend(scope const(void)[] buffer)
 		{
+			return _iocpDoSendVec((&buffer)[0 .. 1]);
+		}
+
+		/// Vectored variant: coalesce the buffers into the single in-flight
+		/// send buffer and post one overlapped WSASend, instead of posting
+		/// one op (and taking one completion round-trip) per buffer.
+		package final sizediff_t _iocpDoSendVec(scope const(void)[][] buffers)
+		{
 			if (_iocpSendBuffer !is null)
 			{
 				_wsaSetLastError(WSAEWOULDBLOCK);
@@ -1909,8 +1917,19 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 
 			_iocpInitOps();
 
-			// Hold a copy of the buffer so it outlives the in-flight op.
-			_iocpSendBuffer = (cast(ubyte*)buffer.ptr)[0 .. buffer.length].dup;
+			size_t total = 0;
+			foreach (buffer; buffers)
+				total += buffer.length;
+
+			// Hold a copy of the data so it outlives the in-flight op.
+			auto sendBuffer = new ubyte[total];
+			size_t pos = 0;
+			foreach (buffer; buffers)
+			{
+				sendBuffer[pos .. pos + buffer.length] = (cast(const(ubyte)*)buffer.ptr)[0 .. buffer.length];
+				pos += buffer.length;
+			}
+			_iocpSendBuffer = sendBuffer;
 			_iocpSendOp.overlapped = OVERLAPPED.init;
 
 			WSABUF wb;
@@ -1921,7 +1940,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 				&_iocpSendOp.overlapped, null);
 			if (rc == 0 || (rc == SOCKET_ERROR && WSAGetLastError() == WSA_IO_PENDING))
 			{
-				return cast(sizediff_t)buffer.length;
+				return cast(sizediff_t)total;
 			}
 
 			// Synchronous failure.
@@ -3838,6 +3857,32 @@ protected:
 		super();
 	}
 
+	/// Maximum number of buffers gathered into one `doSendVec` call.
+	/// Kept well below IOV_MAX (1024 on Linux, 16 on some BSDs was the
+	/// historical minimum; POSIX guarantees at least 16).
+	enum maxSendBuffers = 16;
+
+	/// Send multiple buffers with one operation, if the transport
+	/// supports scatter/gather I/O.
+	/// The fallback implementation sends the buffers one at a time,
+	/// stopping at the first short or failed send.
+	/// Returns the total number of bytes sent, or `Socket.ERROR`
+	/// if nothing was sent and an error occurred.
+	sizediff_t doSendVec(scope const(void)[][] buffers)
+	{
+		sizediff_t total = 0;
+		foreach (buffer; buffers)
+		{
+			auto sent = doSend(buffer);
+			if (sent == Socket.ERROR)
+				return total ? total : Socket.ERROR;
+			total += sent;
+			if (sent < buffer.length)
+				break;
+		}
+		return total;
+	}
+
 	/// Called when a socket is writable.
 	override void onWritable()
 	{
@@ -3893,47 +3938,72 @@ protected:
 				{
 					assert(partiallySent == -1 || partiallySent == priority);
 
-					ptrdiff_t sent = 0;
-					if (!queue.front.empty)
+					// Gather a run of buffers from the head of the queue, so
+					// that transports supporting scatter/gather I/O can send
+					// them with one system call.
+					// In the partial pass, complete the partially-sent Data
+					// alone: the rest of its queue must not jump ahead of
+					// higher-priority queues.
+					const(void)[][maxSendBuffers] buffers;
+					size_t numBuffers, numData;
+					size_t bytesGathered;
+					auto dataLimit = sendPartial ? 1 : queue.length;
+					foreach (ref data; queue[])
 					{
-						queue.front.enter((scope contents) {
-							sent = doSend(contents);
-						});
-						debug (ASOCKETS) stderr.writefln("\t\t%s: sent %d/%d bytes", this, sent, queue.front.length);
-					}
-					else
-					{
-						debug (ASOCKETS) stderr.writefln("\t\t%s: empty Data object", this);
+						if (numData == dataLimit || numBuffers == maxSendBuffers)
+							break;
+						if (!data.empty)
+						{
+							buffers[numBuffers++] = data.unsafeContents;
+							bytesGathered += data.length;
+						}
+						numData++;
 					}
 
-					if (sent == Socket.ERROR)
+					ptrdiff_t sent = 0;
+					if (numBuffers)
 					{
-						if (wouldHaveBlocked())
-							return;
-						else
-							return onError("send() error: " ~ lastSocketError);
-					}
-					else
-					if (sent < queue.front.length)
-					{
-						if (sent > 0)
+						sent = doSendVec(buffers[0 .. numBuffers]);
+						debug (ASOCKETS) stderr.writefln("\t\t%s: sent %d/%d bytes (%d buffers)", this, sent, bytesGathered, numBuffers);
+
+						if (sent == Socket.ERROR)
 						{
-							queue.front = queue.front[sent..queue.front.length];
-							partiallySent = priority;
+							if (wouldHaveBlocked())
+								return;
+							else
+								return onError("send() error: " ~ lastSocketError);
 						}
-						return;
+						assert(sent <= bytesGathered);
 					}
 					else
 					{
-						assert(sent == queue.front.length);
-						//debug writefln("[%s] Sent data:", remoteAddressStr);
-						//debug writefln("%s", hexDump(queue.front.contents[0..sent]));
+						debug (ASOCKETS) stderr.writefln("\t\t%s: %d empty Data objects", this, numData);
+					}
+
+					// Pop whole sent Data items off the queue.
+					size_t remaining = sent;
+					foreach (i; 0 .. numData)
+					{
+						if (remaining < queue.front.length)
+							break;
+						remaining -= queue.front.length;
 						queue.front.clear();
 						queue.popFront();
 						partiallySent = -1;
-						if (queue.length == 0)
-							queue = null;
 					}
+
+					if (remaining)
+					{
+						// The queue front was sent only partially.
+						queue.front = queue.front[remaining..queue.front.length];
+						partiallySent = priority;
+					}
+
+					if (queue.length == 0)
+						queue = null;
+
+					if (sent < bytesGathered)
+						return; // Socket buffer is full
 				}
 
 		// outQueue is now empty
@@ -4103,6 +4173,33 @@ protected:
 				return _iocpDoSend(buffer);
 		}
 		return conn.send(buffer);
+	}
+
+	override sizediff_t doSendVec(scope const(void)[][] buffers)
+	{
+		if (datagram)
+			return super.doSendVec(buffers); // Preserve datagram boundaries
+
+		static if (eventLoopMechanism == EventLoopMechanism.iocp)
+		{
+			return _iocpDoSendVec(buffers);
+		}
+		else
+		version (Posix)
+		{
+			import core.sys.posix.sys.uio : iovec, writev;
+
+			iovec[maxSendBuffers] iov = void;
+			assert(buffers.length <= iov.length);
+			foreach (i, buffer; buffers)
+			{
+				iov[i].iov_base = cast(void*)buffer.ptr;
+				iov[i].iov_len = buffer.length;
+			}
+			return writev(conn.handle, iov.ptr, cast(int)buffers.length);
+		}
+		else
+			return super.doSendVec(buffers);
 	}
 
 	override sizediff_t doReceive(scope void[] buffer)
