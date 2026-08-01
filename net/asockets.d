@@ -199,8 +199,6 @@ static if (eventLoopMechanism == EventLoopMechanism.epoll)
 		/// Loop continuously until no sockets are left.
 		void loop()
 		{
-			import core.sys.posix.unistd : close;
-
 			debug (ASOCKETS) stderr.writeln("Starting event loop.");
 			debug (ASOCKETS_DEBUG_SHUTDOWN) ShutdownDebugger.register();
 			debug (ASOCKETS_DEBUG_IDLE) IdleDebugger.register();
@@ -368,13 +366,6 @@ static if (eventLoopMechanism == EventLoopMechanism.epoll)
 				});
 
 				eventCounter++;
-			}
-
-			// Cleanup
-			if (epollFd >= 0)
-			{
-				close(epollFd);
-				epollFd = -1;
 			}
 		}
 	}
@@ -7063,6 +7054,58 @@ debug(ae_unittest) unittest
 		"recursive disconnect regression test did not restore the idle socket-manager state");
 	assert(!mainTimer.hasNonDaemonTasks(),
 		"recursive disconnect regression test leaked a non-daemon timer");
+}
+
+// ***************************************************************************
+
+// Regression: the epoll descriptor is manager-scoped.  A daemon socket is by
+// definition still registered when socketManager.loop() returns, so loop()
+// must not invalidate the descriptor its registration refers to.
+version (Posix)
+static if (eventLoopMechanism == EventLoopMechanism.epoll)
+debug(ae_unittest) unittest
+{
+	import std.socket : socketPair;
+
+	// Another module may retain a daemon anchor socket; preserve that otherwise
+	// idle baseline rather than treating it as part of this regression.
+	auto idleManagerSize = socketManager.size();
+	assert(!mainTimer.hasNonDaemonTasks(),
+		"epoll descriptor lifetime regression test requires no pending "
+		~ "non-daemon timer");
+
+	auto pair = socketPair();
+	pair[0].blocking = false;
+	auto conn = new SocketConnection(pair[0]);
+	conn.handleReadData = (Data data) { assert(false, "unexpected read"); };
+	conn.daemonRead = true;
+
+	assert(socketManager.epollFd >= 0,
+		"registering a socket did not create the epoll descriptor");
+	assert(socketManager.size() == idleManagerSize + 1);
+
+	socketManager.loop();
+
+	// The daemon socket is still registered, so its epoll registration must
+	// still refer to a live descriptor.
+	assert(socketManager.size() == idleManagerSize + 1,
+		"the daemon socket did not survive socketManager.loop()");
+	assert(socketManager.epollFd >= 0,
+		"socketManager.loop() invalidated the epoll descriptor of a "
+		~ "surviving registered socket");
+
+	// Both paths that a surviving socket reaches next must succeed:
+	// an interest change (updateEpoll) and unregistration.
+	conn.handleReadData = null;
+	assert(!conn.notifyRead,
+		"withdrawing the read handler did not clear read interest");
+	conn.disconnect();
+	pair[1].close();
+
+	assert(socketManager.epollFd >= 0);
+	assert(socketManager.size() == idleManagerSize,
+		"the epoll descriptor lifetime regression test did not restore the "
+		~ "idle socket-manager state");
 }
 
 // ***************************************************************************
