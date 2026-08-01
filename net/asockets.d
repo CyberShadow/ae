@@ -4479,6 +4479,9 @@ debug (ae_unittest)
 {
 	/// Exercise the LIBEV timer's daemon/reference balance from either the
 	/// module unittest runner or a package-scoped disposable runner.
+	/// Requires a `socketManager.loop()` to have already run in this
+	/// process, so that the `ASOCKETS_DEBUG_IDLE` watchdog is armed and can
+	/// be suspended for the test's duration.
 	package(ae) void testLibevDaemonTimers()
 	{
 		import core.time : days, msecs, seconds;
@@ -4505,26 +4508,38 @@ debug (ae_unittest)
 				stage ~ ": unexpected native timer reference balance");
 		}
 
-		// ASOCKETS_DEBUG_IDLE registers one persistent daemon timer only after a
-		// loop has run. It is outside this test's ownership, so accept its normal
-		// unreferenced state after the behavioral phases.
-		void assertClearedOrDaemonIdle(string stage)
+		// ASOCKETS_DEBUG_IDLE's idle watchdog task is suspended for this
+		// test's whole duration (see below), so mainTimer is under this
+		// test's exclusive ownership throughout: it is genuinely empty
+		// between phases, never left with a lingering daemon task.
+		void assertTimerCleared(string stage)
 		{
+			assert(!mainTimer.isWaiting(),
+				stage ~ ": timer unexpectedly still waiting");
+			assertTimerState(false, false, MonoTime.max, stage);
+		}
+
+		// This test verifies the manager's native timer against mainTimer's
+		// head, so it requires exclusive ownership of mainTimer for its
+		// duration.  ASOCKETS_DEBUG_IDLE arms a permanent daemon watchdog
+		// task on the first loop() in the process; this test requires that
+		// loop() to have already run (its wrapper unittest runs one before
+		// calling this function), so the watchdog is already armed here.
+		// Suspend it and restore it to its original absolute deadline on the
+		// way out, even if an assertion below fails.
+		debug (ASOCKETS_DEBUG_IDLE)
+		{
+			auto idleTask = IdleDebugger.periodicTask;
+			assert(idleTask !is null && idleTask.isWaiting(),
+				"testLibevDaemonTimers requires a loop() to have already run "
+				~ "in this process, to arm the ASOCKETS_DEBUG_IDLE watchdog");
 			assert(!mainTimer.hasNonDaemonTasks(),
-				stage ~ ": unexpected non-daemon timer work");
-			auto nextEvent = mainTimer.getNextEvent();
-			if (nextEvent == MonoTime.max)
-			{
-				assert(!mainTimer.isWaiting(),
-					stage ~ ": empty timer still reports waiting work");
-				assertTimerState(false, false, MonoTime.max, stage);
-			}
-			else
-			{
-				assert(mainTimer.isWaiting(),
-					stage ~ ": daemon timer did not report waiting work");
-				assertTimerState(true, true, nextEvent, stage);
-			}
+				"idle watchdog task coexists with non-daemon timer work");
+			auto idleDeadline = idleTask.when;
+			assert(mainTimer.getNextEvent() == idleDeadline,
+				"idle watchdog task is not the timer head");
+			idleTask.cancel();
+			scope(exit) mainTimer.add(idleTask, idleDeadline);
 		}
 
 		assert(!mainTimer.isWaiting(),
@@ -4537,7 +4552,7 @@ debug (ae_unittest)
 		// manager-private, so establishing it is this test's job, exactly as
 		// it is at every other assertTimerState call below.
 		updateNativeTimer(true);
-		assertClearedOrDaemonIdle("initial empty timer");
+		assertTimerCleared("initial empty timer");
 
 		auto headDeadline = MonoTime.currTime() + 3.days;
 		auto head = new TimerTask((Timer, TimerTask) {
@@ -4620,7 +4635,7 @@ debug (ae_unittest)
 			"second libev loop consumed ten-second daemon work");
 		tenSecondDaemon.cancel();
 		updateNativeTimer(false);
-		assertClearedOrDaemonIdle("ten-second daemon timer cleaned up");
+		assertTimerCleared("ten-second daemon timer cleaned up");
 
 		bool daemonRan;
 		bool nonDaemonRan;
@@ -4643,7 +4658,7 @@ debug (ae_unittest)
 		assert(nonDaemonRan, "later non-daemon callback did not keep libev alive");
 		assert(!daemonCallback.isWaiting() && !nonDaemonCallback.isWaiting(),
 			"timer callbacks remained scheduled after the loop");
-		assertClearedOrDaemonIdle("daemon callback followed by non-daemon callback");
+		assertTimerCleared("daemon callback followed by non-daemon callback");
 	}
 
 	debug (ae_unittest) unittest
