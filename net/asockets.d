@@ -4262,6 +4262,14 @@ debug (ae_unittest)
 
 		assert(!mainTimer.isWaiting(),
 			"libev daemon-timer test requires an empty timer");
+		// The manager's ev_timer is reconciled with mainTimer only at loop
+		// entry and after each dispatched event, never at timer-mutation
+		// time.  An earlier test may therefore legitimately have cancelled a
+		// daemon task after its socketManager.loop() returned, leaving the
+		// watcher armed for that cancelled deadline.  That state is
+		// manager-private, so establishing it is this test's job, exactly as
+		// it is at every other assertTimerState call below.
+		updateNativeTimer(true);
 		assertClearedOrDaemonIdle("initial empty timer");
 
 		auto headDeadline = MonoTime.currTime() + 3.days;
@@ -4373,6 +4381,27 @@ debug (ae_unittest)
 
 	debug (ae_unittest) unittest
 	{
+		import core.time : seconds;
+
+		// Regression: cancelling a daemon task after socketManager.loop() has
+		// returned leaves the manager's ev_timer armed for the cancelled
+		// deadline.  That is legal -- the native mirror is reconciled at loop
+		// entry and after each dispatched event, not at mutation time -- so
+		// testLibevDaemonTimers must establish its own native-timer
+		// precondition rather than assume it is the first code in the process
+		// to touch the manager.
+		auto watchdog = setTimeout({
+			assert(false, "daemon watchdog unexpectedly fired");
+		}, 10.seconds);
+		watchdog.daemon = true;
+		socketManager.loop();
+		assert(watchdog.isWaiting(),
+			"socketManager.loop() consumed the daemon watchdog");
+		watchdog.cancel();
+		assert(socketManager.lastNextEvent != MonoTime.max,
+			"cancelling a daemon task outside loop() unexpectedly reconciled "
+			~ "the manager's native timer");
+
 		testLibevDaemonTimers();
 	}
 }
