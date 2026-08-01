@@ -234,6 +234,9 @@ public:
 	}
 
 	/// Return the time until the first scheduled task, or Duration.max if no tasks are scheduled.
+	/// A zero result means that the first task is due now, i.e. that it is
+	/// exactly `prod(now)` which will run it; the result is never zero for a
+	/// task which is still in the future.
 	Duration getRemainingTime(MonoTime now) pure
 	{
 		if (disabled || head is null)
@@ -249,7 +252,15 @@ public:
 		}
 
 		if (now < head.state.when) // "when" is in the future
-			return head.state.when - now;
+		{
+			// `MonoTime` can be finer-grained than `Duration` (nanoseconds
+			// vs. hectonanoseconds on Linux), so this subtraction truncates
+			// a sub-hectonanosecond delay to zero.  Round it up, so that a
+			// zero result keeps meaning "due now" (which is what `prod`
+			// acts upon) instead of also meaning "due very soon".
+			auto remaining = head.state.when - now;
+			return remaining == Duration.zero ? 1.hnsecs : remaining;
+		}
 		else
 			return Duration.zero;
 	}
@@ -300,6 +311,35 @@ public:
 			assert(count == n);
 		}
 	}
+}
+
+debug(ae_unittest) unittest
+{
+	// A zero result from getRemainingTime must mean exactly "prod(now) will
+	// run the head task".  MonoTime can be finer-grained than Duration, so a
+	// task less than one hectonanosecond in the future must not be reported
+	// as due now -- prod would decline to run it and any caller looping on
+	// "remaining <= zero, so prod" would spin forever.
+	auto now = MonoTime.currTime();
+
+	auto future = new Timer;
+	auto futureTask = new TimerTask;
+	future.add(futureTask, MonoTime(now.ticks + 1));
+	assert(future.getNextEvent() > now);
+	assert(!future.prod(now), "a future task was run");
+	assert(future.getRemainingTime(now) > Duration.zero,
+		"a future task was reported as due now");
+	assert(futureTask.isWaiting());
+
+	// The other direction: a task due exactly now reports zero, and prod runs it.
+	auto due = new Timer;
+	auto dueTask = new TimerTask;
+	due.add(dueTask, now);
+	assert(due.getRemainingTime(now) == Duration.zero,
+		"a due task was not reported as due now");
+	assert(due.prod(now), "a due task was not run");
+	assert(!dueTask.isWaiting());
+	assert(due.getRemainingTime(now) == Duration.max);
 }
 
 /// Represents a task that needs to run at some point in the future.
