@@ -457,6 +457,14 @@ static if (eventLoopMechanism == EventLoopMechanism.epoll)
 			updateEpoll();
 		}
 		@property final bool notifyWrite() { return _notifyWrite; } /// ditto
+
+		/// Don't block the process from exiting, even if the socket is ready to receive data.
+		bool daemonRead;
+
+		/// Don't block the process from exiting, even if the socket is ready to send data.
+		bool daemonWrite;
+
+		deprecated alias daemon = daemonRead;
 	}
 }
 else
@@ -709,7 +717,9 @@ static if (eventLoopMechanism == EventLoopMechanism.libev)
 	private mixin template SocketMixin()
 	{
 		private ev_io evRead, evWrite;
+		private bool evReadUnreferenced, evWriteUnreferenced;
 		private bool evRooted;
+		private bool _daemonRead, _daemonWrite;
 
 		private final void retainWatcherOwner()
 		{
@@ -732,13 +742,40 @@ static if (eventLoopMechanism == EventLoopMechanism.libev)
 			evRooted = false;
 		}
 
-		private final void setWatcherState(ref ev_io ev, bool newValue, int /*event*/)
+		private final void setWatcherReferenced(ref ev_io ev, ref bool unreferenced, bool referenced) nothrow @nogc
+		{
+			assert(ev.data, "Reconciling reference state of a stopped libev watcher");
+			if (referenced == !unreferenced)
+				return;
+
+			// The deimos-ev binding declares ev_ref/ev_unref/ev_default_loop as
+			// plain `nothrow extern(C)` (no @nogc); none of them allocate, so
+			// the cast is sound.
+			// https://github.com/dlang/phobos/pull/4273
+			alias EvDefaultLoopNoGC = extern(C) ev_loop_t* function(uint) nothrow @nogc;
+			alias EvRefNoGC = extern(C) void function(ev_loop_t*) nothrow @nogc;
+			auto evLoop = (cast(EvDefaultLoopNoGC)&ev_default_loop)(0);
+			if (referenced)
+			{
+				(cast(EvRefNoGC)&ev_ref)(evLoop);
+				unreferenced = false;
+			}
+			else
+			{
+				(cast(EvRefNoGC)&ev_unref)(evLoop);
+				unreferenced = true;
+			}
+		}
+
+		private final void setWatcherState(ref ev_io ev, bool newValue, ref bool unreferenced, bool daemon)
 		{
 			if (!conn)
 			{
 				// Can happen when setting delegates before connecting.
 				return;
 			}
+
+			assert(ev.data || !unreferenced, "Stale reference bit on an inactive libev watcher");
 
 			auto hasActiveWatcher = evRead.data !is null || evWrite.data !is null;
 			assert(evRooted == hasActiveWatcher, "Incoherent libev watcher owner root balance");
@@ -751,12 +788,16 @@ static if (eventLoopMechanism == EventLoopMechanism.libev)
 					retainWatcherOwner();
 				ev.data = cast(void*)this;
 				ev_io_start(ev_default_loop(0), &ev);
+				setWatcherReferenced(ev, unreferenced, !daemon);
 			}
 			else
 			if (!newValue && ev.data)
 			{
 				// Stop
 				assert(ev.data is cast(void*)this);
+				// Restore the reference before stopping, so libev's own
+				// reference count stays balanced regardless of daemon state.
+				setWatcherReferenced(ev, unreferenced, true);
 				ev_io_stop(ev_default_loop(0), &ev);
 				ev.data = null;
 				if (evRead.data is null && evWrite.data is null)
@@ -769,16 +810,41 @@ static if (eventLoopMechanism == EventLoopMechanism.libev)
 		// Flags that determine socket wake-up events.
 
 		/// Interested in read notifications (onReadable)?
-		@property final void notifyRead (bool value) { setWatcherState(evRead , value, EV_READ ); }
+		@property final void notifyRead (bool value) { setWatcherState(evRead , value, evReadUnreferenced , _daemonRead ); }
 		@property final bool notifyRead () { return getWatcherState(evRead); } /// ditto
 		/// Interested in write notifications (onWritable)?
-		@property final void notifyWrite(bool value) { setWatcherState(evWrite, value, EV_WRITE); }
+		@property final void notifyWrite(bool value) { setWatcherState(evWrite, value, evWriteUnreferenced, _daemonWrite); }
 		@property final bool notifyWrite() { return getWatcherState(evWrite); } /// ditto
+
+		/// Don't block the process from exiting, even if the socket is ready to receive data.
+		@property final void daemonRead(bool value) nothrow @nogc
+		{
+			if (_daemonRead == value)
+				return;
+			_daemonRead = value;
+			if (evRead.data)
+				setWatcherReferenced(evRead, evReadUnreferenced, !value);
+		}
+		@property final bool daemonRead() nothrow @nogc { return _daemonRead; } /// ditto
+
+		/// Don't block the process from exiting, even if the socket is ready to send data.
+		@property final void daemonWrite(bool value) nothrow @nogc
+		{
+			if (_daemonWrite == value)
+				return;
+			_daemonWrite = value;
+			if (evWrite.data)
+				setWatcherReferenced(evWrite, evWriteUnreferenced, !value);
+		}
+		@property final bool daemonWrite() nothrow @nogc { return _daemonWrite; } /// ditto
+
+		deprecated alias daemon = daemonRead;
 
 		debug ~this() @nogc
 		{
 			assert(evRead.data is null && evWrite.data is null, "Destroying an active libev socket");
 			assert(!evRooted, "Destroying a GC-rooted or pinned libev socket");
+			assert(!evReadUnreferenced && !evWriteUnreferenced, "Destroying a libev socket with a stale reference bit");
 		}
 	}
 }
@@ -1120,6 +1186,14 @@ static if (eventLoopMechanism == EventLoopMechanism.select)
 		bool notifyRead;
 		/// Interested in write notifications (onWritable)?
 		bool notifyWrite;
+
+		/// Don't block the process from exiting, even if the socket is ready to receive data.
+		bool daemonRead;
+
+		/// Don't block the process from exiting, even if the socket is ready to send data.
+		bool daemonWrite;
+
+		deprecated alias daemon = daemonRead;
 	}
 }
 else
@@ -1922,6 +1996,14 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 			if (value && !was && conn !is null && _iocpSendBuffer is null)
 				socketManager.kickWritable(this);
 		}
+
+		/// Don't block the process from exiting, even if the socket is ready to receive data.
+		bool daemonRead;
+
+		/// Don't block the process from exiting, even if the socket is ready to send data.
+		bool daemonWrite;
+
+		deprecated alias daemon = daemonRead;
 
 		// Kind is set by the arm methods depending on socket type.
 		private final void _iocpInitOps()
@@ -4196,16 +4278,6 @@ public:
 	alias localAddressStr = _addressStr!true; /// Retrieve this socket's local address, as a string.
 	alias remoteAddressStr = _addressStr!false; /// Retrieve this socket's remote address, as a string.
 
-	/// Don't block the process from exiting, even if the socket is ready to receive data.
-	/// TODO: Not implemented with libev
-	bool daemonRead;
-
-	/// Don't block the process from exiting, even if the socket is ready to send data.
-	/// TODO: Not implemented with libev
-	bool daemonWrite;
-
-	deprecated alias daemon = daemonRead;
-
 	/// Enable TCP keep-alive on the socket with the given settings.
 	final void setKeepAlive(bool enabled=true, int time=10, int interval=5)
 	{
@@ -4227,6 +4299,149 @@ public:
 		import std.string : format, split;
 		return "%s {this=%s, fd=%s}".format(this.classinfo.name.split(".")[$-1], cast(void*)this, conn ? conn.handle : -1);
 	}
+}
+
+// ***************************************************************************
+
+// Regression: daemonRead/daemonWrite must independently determine whether a
+// socket's declared read/write interest keeps socketManager.loop() alive,
+// consistently across every event-loop backend.
+debug (ae_unittest) unittest
+{
+	import core.time : msecs, seconds;
+	import std.socket : socketPair;
+
+	final class DaemonDirectionProbe : GenericSocket
+	{
+		this(Socket socket)
+		{
+			conn = socket;
+			socketManager.register(this);
+		}
+
+		void close()
+		{
+			// Not all backends clear these on unregister(); do it ourselves
+			// so cleanup is correct regardless of backend.
+			notifyRead = false;
+			notifyWrite = false;
+			socketManager.unregister(this);
+			conn.close();
+			conn = null;
+		}
+	}
+
+	auto idleManagerSize = socketManager.size();
+	assert(!mainTimer.hasNonDaemonTasks(),
+		"daemon socket direction regression test requires no pending non-daemon timer");
+
+	// Run `arrange` on a fresh probe, then require socketManager.loop() to
+	// return without ever needing to wait for anything.
+	void assertLoopReturnsPromptly(void delegate(DaemonDirectionProbe probe) arrange)
+	{
+		auto pair = socketPair();
+		pair[0].blocking = false;
+		auto probe = new DaemonDirectionProbe(pair[0]);
+		scope(exit) { probe.close(); pair[1].close(); }
+
+		arrange(probe);
+
+		auto watchdog = setTimeout({
+			assert(false, "a daemon-flagged direction unexpectedly kept socketManager.loop() alive");
+		}, 2.seconds);
+		watchdog.daemon = true;
+
+		socketManager.loop();
+
+		assert(watchdog.isWaiting(),
+			"socketManager.loop() blocked past a daemon-flagged direction's watchdog");
+		watchdog.cancel();
+	}
+
+	// Run `arrange` on a fresh probe, schedule `release` to run shortly
+	// afterwards, and require socketManager.loop() to return only once
+	// `release` has actually run -- i.e. that it genuinely blocked first.
+	void assertLoopBlocksUntilReleased(
+		void delegate(DaemonDirectionProbe probe) arrange,
+		void delegate(DaemonDirectionProbe probe) release)
+	{
+		auto pair = socketPair();
+		pair[0].blocking = false;
+		auto probe = new DaemonDirectionProbe(pair[0]);
+		scope(exit) { probe.close(); pair[1].close(); }
+
+		arrange(probe);
+
+		bool released;
+		auto releaseTask = setTimeout({ released = true; release(probe); }, 20.msecs);
+		releaseTask.daemon = true;
+
+		auto watchdog = setTimeout({
+			assert(false, "a non-daemon direction failed to keep socketManager.loop() alive");
+		}, 2.seconds);
+		watchdog.daemon = true;
+
+		socketManager.loop();
+
+		assert(released,
+			"socketManager.loop() returned before the non-daemon direction was released");
+		watchdog.cancel();
+	}
+
+	// 1. daemonRead=true with declared read interest does not keep the loop
+	// alive.
+	assertLoopReturnsPromptly((probe) {
+		probe.daemonRead = true;
+		probe.notifyRead = true;
+	});
+
+	// 2. The same connection with daemonRead=false does, until read interest
+	// is withdrawn.
+	assertLoopBlocksUntilReleased(
+		(probe) { probe.notifyRead = true; },
+		(probe) { probe.notifyRead = false; });
+
+	// 3. Same, independently, for daemonWrite.
+	assertLoopReturnsPromptly((probe) {
+		probe.daemonWrite = true;
+		probe.notifyWrite = true;
+	});
+	assertLoopBlocksUntilReleased(
+		(probe) { probe.notifyWrite = true; },
+		(probe) { probe.notifyWrite = false; });
+
+	// 4. Independence: daemonizing one direction must not silence the
+	// other's still-non-daemon contribution. A single shared bit would make
+	// these two cases return promptly instead of blocking until released.
+	assertLoopBlocksUntilReleased(
+		(probe) {
+			probe.notifyRead = true;
+			probe.notifyWrite = true;
+			probe.daemonRead = true;
+			assert(!probe.daemonWrite);
+		},
+		(probe) { probe.daemonWrite = true; });
+	assertLoopBlocksUntilReleased(
+		(probe) {
+			probe.notifyRead = true;
+			probe.notifyWrite = true;
+			probe.daemonWrite = true;
+			assert(!probe.daemonRead);
+		},
+		(probe) { probe.daemonRead = true; });
+
+	// 5. The deprecated `daemon` spelling remains a working alias for
+	// daemonRead.
+	assertLoopReturnsPromptly((probe) {
+		probe.daemon = true;
+		assert(probe.daemonRead);
+		probe.notifyRead = true;
+	});
+
+	assert(socketManager.size() == idleManagerSize,
+		"daemon socket direction regression test did not restore the idle socket-manager state");
+	assert(!mainTimer.hasNonDaemonTasks(),
+		"daemon socket direction regression test leaked a non-daemon timer");
 }
 
 // ***************************************************************************
