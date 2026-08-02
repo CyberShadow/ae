@@ -11,6 +11,13 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
 
+        libev-binding = pkgs.fetchFromGitHub {
+          owner = "s-ludwig";
+          repo = "libev";
+          rev = "abe87bdbf776ce890ac485fa2e595727e1c223a8";
+          hash = "sha256-Nc0w4XMENclUt8caK/fIcKAbUM6d4yqp8t4nwHKDDSk=";
+        };
+
         # Common dub test function
         dubTest = { name, subpackage ? null, extraDeps ? [], extraFlags ? [] }:
           pkgs.stdenv.mkDerivation {
@@ -219,12 +226,65 @@
           '';
         };
 
+        libev-test-bin = pkgs.stdenv.mkDerivation {
+          name = "ae-libev-test-bin";
+
+          nativeBuildInputs = [ pkgs.ldc pkgs.libev ];
+          dontStrip = true;
+
+          unpackPhase = ''
+            cp -a ${self} ae
+          '';
+
+          buildPhase = ''
+            echo "Compiling libev backend tests..."
+
+            # ASOCKETS_DEBUG_IDLE: DO NOT REMOVE - essential for detecting stuck event loops
+            ldc2 \
+              -i \
+              -I. \
+              -I${libev-binding} \
+              -g \
+              -d-version=LIBEV \
+              -d-debug=ae_unittest \
+              -d-debug=ASOCKETS_DEBUG_IDLE \
+              -unittest \
+              --main \
+              -L=-lev \
+              -of=libev_test \
+              ae/net/asockets.d
+          '';
+
+          installPhase = ''
+            mkdir -p $out/bin
+            cp libev_test $out/bin/
+          '';
+        };
+
       in {
         packages = {
           inherit mysql-test-bin psql-test-bin websocket-test-bin jsonrpc-test-bin contentlength-test-bin;
         };
 
         checks = {
+          # libev backend runtime tests
+          libev = pkgs.stdenv.mkDerivation {
+            name = "ae-libev-test";
+
+            nativeBuildInputs = [ libev-test-bin ];
+            dontUnpack = true;
+
+            buildPhase = ''
+              export HOME="$TMPDIR"
+
+              libev_test
+            '';
+
+            installPhase = ''
+              touch $out
+            '';
+          };
+
           # ===========================================
           # Unit Tests (using dub test)
           # ===========================================
