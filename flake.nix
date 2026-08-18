@@ -226,6 +226,40 @@
           '';
         };
 
+        # D-Bus test binary - needs HAVE_DBUS_SERVER version flag
+        dbus-test-bin = pkgs.stdenv.mkDerivation {
+          name = "ae-dbus-test-bin";
+
+          nativeBuildInputs = [ pkgs.ldc ];
+          dontStrip = true;
+
+          unpackPhase = ''
+            cp -a ${self} ae
+          '';
+
+          buildPhase = ''
+            echo "Compiling D-Bus client tests..."
+
+            # ASOCKETS_DEBUG_IDLE: DO NOT REMOVE - essential for detecting stuck event loops
+            ldc2 \
+              -i \
+              -I. \
+              -g \
+              -d-debug=ae_unittest \
+              -d-debug=ASOCKETS_DEBUG_IDLE \
+              -d-version=HAVE_DBUS_SERVER \
+              -unittest \
+              --main \
+              -of=dbus_test \
+              ae/net/dbus/package.d
+          '';
+
+          installPhase = ''
+            mkdir -p $out/bin
+            cp dbus_test $out/bin/
+          '';
+        };
+
         libev-test-bin = pkgs.stdenv.mkDerivation {
           name = "ae-libev-test-bin";
 
@@ -264,6 +298,8 @@
       in {
         packages = {
           inherit mysql-test-bin psql-test-bin websocket-test-bin jsonrpc-test-bin contentlength-test-bin;
+        } // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+          inherit dbus-test-bin;
         };
 
         checks = {
@@ -851,6 +887,24 @@ PYEOF
               wait $PY_PID 2>/dev/null || true
 
               echo "All Content-Length framing integration tests passed!"
+            '';
+
+            installPhase = ''
+              touch $out
+            '';
+          };
+        } // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+          # D-Bus integration tests, against an isolated packaged dbus-daemon
+          dbus = pkgs.stdenv.mkDerivation {
+            name = "ae-dbus-test";
+
+            nativeBuildInputs = [ pkgs.dbus dbus-test-bin ];
+            dontUnpack = true;
+
+            buildPhase = ''
+              export HOME="$TMPDIR"
+
+              ${pkgs.dbus}/bin/dbus-run-session --config-file=${pkgs.dbus}/share/dbus-1/session.conf -- dbus_test
             '';
 
             installPhase = ''
