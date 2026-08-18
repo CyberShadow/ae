@@ -20,15 +20,16 @@ import ae.net.asockets : ConnectionState, DisconnectType, IConnection,
 	disconnectable;
 import ae.net.dbus.codec : DbusFrameDecoder;
 import ae.net.dbus.common;
+import ae.net.dbus.match : DbusSignalMatch;
 import ae.net.dbus.marshal : encodeDbusMessage;
-import ae.net.dbus.value : DbusBody, DbusValueKind;
+import ae.net.dbus.value : DbusBody, DbusValue, DbusValueKind;
 
 debug(ae_unittest)
 import ae.net.asockets : SocketServer, socketManager;
 debug(ae_unittest)
 import ae.net.dbus.marshal : decodeDbusMessage;
 debug(ae_unittest)
-import ae.net.dbus.value : DbusValue, dbusTestMalformedBody;
+import ae.net.dbus.value : dbusTestMalformedBody;
 debug(ae_unittest)
 import ae.utils.array : asBytes;
 debug(ae_unittest)
@@ -101,6 +102,113 @@ private struct DbusPendingCall
 	Promise!DbusMessage promise;
 }
 
+private enum DbusRulePhase
+{
+	waitingForOwner,
+	waitingForRemote,
+	active,
+	terminal,
+}
+
+private enum DbusOwnerWatchPhase
+{
+	waitingForRemote,
+	seeding,
+	known,
+	terminal,
+}
+
+private enum DbusRemoteMatchPhase
+{
+	adding,
+	active,
+	removing,
+	failedRemoval,
+	terminal,
+}
+
+private final class DbusRuleState
+{
+	string key;
+	DbusSignalMatch match;
+	ulong[] registrationIds;
+	DbusRulePhase phase;
+	DbusRemoteMatchLease remoteLease;
+	DbusOwnerWatch ownerWatch;
+}
+
+private final class DbusOwnerWatch
+{
+	DbusBusName name;
+	DbusSignalMatch match;
+	DbusRuleState[] dependentRules;
+	DbusOwnerWatchPhase phase;
+	ulong operationGeneration;
+	bool known;
+	bool hasOwner;
+	DbusUniqueName owner;
+	DbusRemoteMatchLease remoteLease;
+}
+
+private final class DbusRemoteMatchLease
+{
+	DbusRemoteMatchState state;
+	DbusRuleState rule;
+	DbusOwnerWatch watch;
+}
+
+private final class DbusRemoteMatchState
+{
+	string key;
+	DbusRemoteMatchPhase phase;
+	ulong operationGeneration;
+	DbusRemoteMatchLease[] leases;
+	Promise!void[] removalPromises;
+	Exception removalFailure;
+}
+
+class DbusSubscription
+{
+private:
+	DbusConnection connection_;
+	ulong registrationId_;
+	bool active_;
+	bool unsubscribeStarted_;
+
+	this(DbusConnection connection, ulong registrationId)
+	{
+		connection_ = connection;
+		registrationId_ = registrationId;
+		active_ = true;
+	}
+
+public:
+	@property bool active() const
+	{
+		return active_;
+	}
+
+	Promise!void unsubscribe()
+	{
+		assert(!unsubscribeStarted_);
+		unsubscribeStarted_ = true;
+		return connection_.unsubscribeRegistration(registrationId_, this);
+	}
+}
+
+private final class DbusSignalRegistration
+{
+	ulong id;
+	DbusRuleState rule;
+	DbusSubscription subscription;
+	void delegate(const ref DbusSignalMessage) handler;
+	bool active;
+	bool dispatchActive;
+	bool hasExpectedBodySignature;
+	DbusSignature expectedBodySignature;
+	Promise!DbusSubscription subscribePromise;
+}
+
 version(Posix)
 private final class DbusCandidateExhaustionContext : Exception
 {
@@ -141,6 +249,13 @@ private:
 
 	uint nextSerial_ = 1;
 	DbusPendingCall[uint] pendingCalls_;
+
+	ulong nextRegistrationId_ = 1;
+	DbusRuleState[string] rules_;
+	DbusOwnerWatch[string] ownerWatches_;
+	DbusRemoteMatchState[string] remoteMatches_;
+	DbusSignalRegistration[ulong] registrations_;
+	ulong[] registrationOrder_;
 
 	version(Posix)
 	{
@@ -262,6 +377,659 @@ private:
 			throw new DbusTypeMismatchException("expected one D-Bus boolean");
 	}
 
+	void requireEmptyReply(const ref DbusMessage reply)
+	{
+		if (reply.body.signature.text != "" || reply.body.values.length != 0)
+			throw new DbusTypeMismatchException("expected an empty D-Bus method return");
+	}
+
+	ulong allocateRegistrationId()
+	{
+		while (true)
+		{
+			auto result = nextRegistrationId_;
+			nextRegistrationId_ = result + 1;
+			if (result != 0 && !(result in registrations_))
+				return result;
+		}
+	}
+
+	static void removeRegistrationId(ref ulong[] ids, ulong id)
+	{
+		foreach (index, candidate; ids)
+			if (candidate == id)
+			{
+				ids = ids[0 .. index] ~ ids[index + 1 .. $];
+				return;
+			}
+		assert(false);
+	}
+
+	static void removeDependentRule(ref DbusRuleState[] rules, DbusRuleState rule)
+	{
+		foreach (index, candidate; rules)
+			if (candidate is rule)
+			{
+				rules = rules[0 .. index] ~ rules[index + 1 .. $];
+				return;
+			}
+		assert(false);
+	}
+
+	static void removeRemoteLease(ref DbusRemoteMatchLease[] leases,
+		DbusRemoteMatchLease lease)
+	{
+		foreach (index, candidate; leases)
+			if (candidate is lease)
+			{
+				leases = leases[0 .. index] ~ leases[index + 1 .. $];
+				return;
+			}
+		assert(false);
+	}
+
+	bool isCurrentRule(DbusRuleState rule)
+	{
+		auto current = rule.key in rules_;
+		return current !is null && *current is rule;
+	}
+
+	bool isCurrentOwnerWatch(DbusOwnerWatch watch)
+	{
+		auto current = watch.name.text in ownerWatches_;
+		return current !is null && *current is watch;
+	}
+
+	bool isCurrentRemoteMatch(DbusRemoteMatchState remote)
+	{
+		auto current = remote.key in remoteMatches_;
+		return current !is null && *current is remote;
+	}
+
+	static bool isRemoteMatchDispatchable(DbusRemoteMatchState remote)
+	{
+		return remote !is null &&
+			(remote.phase == DbusRemoteMatchPhase.adding || remote.phase == DbusRemoteMatchPhase.active);
+	}
+
+	void rejectSubscribe(DbusSignalRegistration registration, Exception cause)
+	{
+		registration.active = false;
+		registration.dispatchActive = false;
+		registration.subscription.active_ = false;
+		if (registration.subscribePromise !is null)
+		{
+			auto promise = registration.subscribePromise;
+			registration.subscribePromise = null;
+			promise.reject(cause);
+		}
+	}
+
+	void fulfillSubscribe(DbusSignalRegistration registration)
+	{
+		if (registration.subscribePromise is null)
+			return;
+		auto promise = registration.subscribePromise;
+		registration.subscribePromise = null;
+		promise.fulfill(registration.subscription);
+	}
+
+	void removeRegistration(DbusSignalRegistration registration)
+	{
+		assert(registration.id in registrations_);
+		registrations_.remove(registration.id);
+		removeRegistrationId(registration.rule.registrationIds, registration.id);
+		removeRegistrationId(registrationOrder_, registration.id);
+	}
+
+	void rejectRuleRegistrations(DbusRuleState rule, Exception cause)
+	{
+		auto registrationIds = rule.registrationIds.dup;
+		foreach (id; registrationIds)
+		{
+			auto current = id in registrations_;
+			if (current is null)
+				continue;
+			auto registration = *current;
+			rejectSubscribe(registration, cause);
+			removeRegistration(registration);
+		}
+	}
+
+	static bool isOrdinaryWellKnownName(DbusBusName name)
+	{
+		return name.text.length && name.text[0] != ':' &&
+			name.text != "org.freedesktop.DBus";
+	}
+
+	static bool isMatchRuleNotFound(Exception exception)
+	{
+		auto remote = cast(DbusRemoteError) exception;
+		return remote !is null &&
+			remote.errorName.text == "org.freedesktop.DBus.Error.MatchRuleNotFound";
+	}
+
+	static bool isNameHasNoOwner(Exception exception)
+	{
+		auto remote = cast(DbusRemoteError) exception;
+		return remote !is null &&
+			remote.errorName.text == "org.freedesktop.DBus.Error.NameHasNoOwner";
+	}
+
+	static bool matchesFields(const ref DbusSignalMatch match,
+		const ref DbusSignalMessage signal, DbusBusName destination,
+		scope const(DbusValue)[] values)
+	{
+		if (match.hasPath && signal.path.text != match.path.text)
+			return false;
+		if (match.hasInterface && signal.interfaceName.text != match.interfaceName.text)
+			return false;
+		if (match.hasMember && signal.member.text != match.member.text)
+			return false;
+		if (match.hasDestination && destination.text != match.destination.text)
+			return false;
+
+		foreach (index; 0 .. 64)
+			if (match.hasArgument(index))
+			{
+				if (index >= values.length || values[index].kind != DbusValueKind.string_ ||
+					values[index].get!string() != match.argument(index))
+					return false;
+			}
+		return true;
+	}
+
+	bool matchesRule(DbusRuleState rule, const ref DbusSignalMessage signal,
+		DbusBusName destination, scope const(DbusValue)[] values,
+		DbusSignalRegistration registration)
+	{
+		if (!matchesFields(rule.match, signal, destination, values))
+			return false;
+		if (rule.match.hasSender)
+		{
+			auto requested = rule.match.sender;
+			if (isOrdinaryWellKnownName(requested))
+			{
+				auto watch = rule.ownerWatch;
+				if (watch is null || !watch.known || !watch.hasOwner ||
+					watch.owner.text != signal.sender.text)
+					return false;
+			}
+			else if (signal.sender.text != requested.text)
+				return false;
+		}
+		return !registration.hasExpectedBodySignature ||
+			signal.body.signature.text == registration.expectedBodySignature.text;
+	}
+
+	static DbusSignalMatch ownerWatchMatch(DbusBusName name)
+	{
+		return DbusSignalMatch.signal()
+			.withSender(DbusBusName.parse("org.freedesktop.DBus"))
+			.withInterface(DbusInterfaceName.parse("org.freedesktop.DBus"))
+			.withMember(DbusMemberName.parse("NameOwnerChanged"))
+			.withPath(DbusObjectPath.parse("/org/freedesktop/DBus"))
+			.withArgument(0, name.text);
+	}
+
+	void releaseOwnerWatch(DbusRuleState rule)
+	{
+		auto watch = rule.ownerWatch;
+		if (watch is null)
+			return;
+		rule.ownerWatch = null;
+		removeDependentRule(watch.dependentRules, rule);
+		if (!watch.dependentRules.length)
+			releaseIdleOwnerWatch(watch);
+	}
+
+	void rejectRuleSetup(DbusRuleState rule, Exception cause)
+	{
+		if (!isCurrentRule(rule))
+			return;
+		rule.phase = DbusRulePhase.terminal;
+		rules_.remove(rule.key);
+		releaseOwnerWatch(rule);
+		rejectRuleRegistrations(rule, cause);
+	}
+
+	void releaseIdleOwnerWatch(DbusOwnerWatch watch)
+	{
+		if (!isCurrentOwnerWatch(watch))
+			return;
+		watch.phase = DbusOwnerWatchPhase.terminal;
+		watch.operationGeneration++;
+		ownerWatches_.remove(watch.name.text);
+		auto lease = watch.remoteLease;
+		watch.remoteLease = null;
+		releaseRemoteMatch(lease);
+	}
+
+	void failOwnerWatchRemote(DbusOwnerWatch watch, Exception cause)
+	{
+		if (!isCurrentOwnerWatch(watch))
+			return;
+		watch.phase = DbusOwnerWatchPhase.terminal;
+		watch.operationGeneration++;
+		ownerWatches_.remove(watch.name.text);
+		watch.remoteLease = null;
+		auto dependentRules = watch.dependentRules.dup;
+		watch.dependentRules = null;
+		foreach (rule; dependentRules)
+			if (isCurrentRule(rule) && rule.ownerWatch is watch)
+			{
+				rule.ownerWatch = null;
+				rejectRuleSetup(rule, cause);
+			}
+	}
+
+	void failOwnerWatchSeed(DbusOwnerWatch watch, Exception cause)
+	{
+		if (!isCurrentOwnerWatch(watch))
+			return;
+		auto dependentRules = watch.dependentRules.dup;
+		watch.dependentRules = null;
+		foreach (rule; dependentRules)
+			if (isCurrentRule(rule) && rule.ownerWatch is watch)
+			{
+				rule.ownerWatch = null;
+				rule.phase = DbusRulePhase.terminal;
+				rules_.remove(rule.key);
+			}
+		watch.phase = DbusOwnerWatchPhase.terminal;
+		watch.operationGeneration++;
+		ownerWatches_.remove(watch.name.text);
+		auto lease = watch.remoteLease;
+		watch.remoteLease = null;
+		releaseRemoteMatch(lease);
+		foreach (rule; dependentRules)
+			rejectRuleRegistrations(rule, cause);
+	}
+
+	void activateOwnerWatchDependents(DbusOwnerWatch watch)
+	{
+		if (!isCurrentOwnerWatch(watch) || !watch.known ||
+			watch.phase != DbusOwnerWatchPhase.known)
+			return;
+		auto dependentRules = watch.dependentRules.dup;
+		foreach (rule; dependentRules)
+			if (isCurrentRule(rule) && rule.ownerWatch is watch &&
+				rule.phase == DbusRulePhase.waitingForOwner)
+				startRuleRemote(rule);
+	}
+
+	void finishOwnerWatchSeed(DbusOwnerWatch watch, ulong operation,
+		DbusUniqueName owner)
+	{
+		if (state_ == DbusConnectionState.terminal || !isCurrentOwnerWatch(watch) ||
+			watch.phase != DbusOwnerWatchPhase.seeding ||
+			watch.operationGeneration != operation)
+			return;
+		// processOwnerWatchSignal always advances phase to known in the
+		// same step as observing a NameOwnerChanged signal, so a watch
+		// still in the seeding phase cannot have observed one since this
+		// seed started.
+		assert(!watch.known);
+		watch.known = true;
+		watch.hasOwner = true;
+		watch.owner = owner;
+		watch.phase = DbusOwnerWatchPhase.known;
+		if (!watch.dependentRules.length)
+			releaseIdleOwnerWatch(watch);
+		else
+			activateOwnerWatchDependents(watch);
+	}
+
+	void finishOwnerWatchNoOwner(DbusOwnerWatch watch, ulong operation,
+		Exception exception)
+	{
+		if (state_ == DbusConnectionState.terminal || !isCurrentOwnerWatch(watch) ||
+			watch.phase != DbusOwnerWatchPhase.seeding ||
+			watch.operationGeneration != operation)
+			return;
+		// processOwnerWatchSignal always advances phase to known in the
+		// same step as observing a NameOwnerChanged signal, so a watch
+		// still in the seeding phase cannot have observed one since this
+		// seed started.
+		assert(!watch.known);
+		if (!isNameHasNoOwner(exception))
+		{
+			failOwnerWatchSeed(watch, exception);
+			return;
+		}
+		watch.known = true;
+		watch.hasOwner = false;
+		watch.owner = DbusUniqueName.init;
+		watch.phase = DbusOwnerWatchPhase.known;
+		if (!watch.dependentRules.length)
+			releaseIdleOwnerWatch(watch);
+		else
+			activateOwnerWatchDependents(watch);
+	}
+
+	void startOwnerWatchSeed(DbusOwnerWatch watch)
+	{
+		assert(isCurrentOwnerWatch(watch));
+		assert(watch.phase == DbusOwnerWatchPhase.seeding);
+		auto operation = ++watch.operationGeneration;
+		auto raw = getNameOwner(watch.name);
+		raw.then((DbusUniqueName owner) {
+			finishOwnerWatchSeed(watch, operation, owner);
+		}, (Exception exception) {
+			finishOwnerWatchNoOwner(watch, operation, exception);
+		}).ignoreResult();
+	}
+
+	void activateOwnerWatchRemote(DbusOwnerWatch watch)
+	{
+		if (state_ == DbusConnectionState.terminal || !isCurrentOwnerWatch(watch) ||
+			watch.phase != DbusOwnerWatchPhase.waitingForRemote)
+			return;
+		watch.phase = DbusOwnerWatchPhase.seeding;
+		startOwnerWatchSeed(watch);
+	}
+
+	void activateRemoteLease(DbusRemoteMatchLease lease)
+	{
+		assert(lease.state !is null);
+		if (lease.rule !is null)
+			activateRuleRemote(lease.rule);
+		else
+		{
+			assert(lease.watch !is null);
+			activateOwnerWatchRemote(lease.watch);
+		}
+	}
+
+	void failRemoteLease(DbusRemoteMatchLease lease, Exception cause)
+	{
+		if (lease.rule !is null)
+		{
+			auto rule = lease.rule;
+			assert(rule.remoteLease is lease);
+			rule.remoteLease = null;
+			rejectRuleSetup(rule, cause);
+			return;
+		}
+		assert(lease.watch !is null);
+		auto watch = lease.watch;
+		assert(watch.remoteLease is lease);
+		watch.remoteLease = null;
+		failOwnerWatchRemote(watch, cause);
+	}
+
+	void fulfillRemoteRemovalPromises(DbusRemoteMatchState remote)
+	{
+		auto promises = remote.removalPromises.dup;
+		remote.removalPromises = null;
+		foreach (promise; promises)
+			promise.fulfill();
+	}
+
+	void rejectRemoteRemovalPromises(DbusRemoteMatchState remote, Exception cause)
+	{
+		auto promises = remote.removalPromises.dup;
+		remote.removalPromises = null;
+		foreach (promise; promises)
+			promise.reject(cause);
+	}
+
+	void failRemoteMatchSetup(DbusRemoteMatchState remote, Exception cause)
+	{
+		if (!isCurrentRemoteMatch(remote))
+			return;
+		remote.phase = DbusRemoteMatchPhase.terminal;
+		remote.operationGeneration++;
+		remoteMatches_.remove(remote.key);
+		auto leases = remote.leases.dup;
+		remote.leases = null;
+		foreach (lease; leases)
+			if (lease.state is remote)
+			{
+				lease.state = null;
+				failRemoteLease(lease, cause);
+			}
+		rejectRemoteRemovalPromises(remote, cause);
+	}
+
+	void failRemoteMatchRemoval(DbusRemoteMatchState remote, Exception cause)
+	{
+		if (!isCurrentRemoteMatch(remote))
+			return;
+		remote.phase = DbusRemoteMatchPhase.failedRemoval;
+		remote.operationGeneration++;
+		remote.removalFailure = cause;
+		auto leases = remote.leases.dup;
+		remote.leases = null;
+		foreach (lease; leases)
+			if (lease.state is remote)
+			{
+				lease.state = null;
+				failRemoteLease(lease, cause);
+			}
+		rejectRemoteRemovalPromises(remote, cause);
+	}
+
+	void startRemoteMatchAdd(DbusRemoteMatchState remote)
+	{
+		assert(isCurrentRemoteMatch(remote));
+		assert(remote.phase == DbusRemoteMatchPhase.adding);
+		auto operation = ++remote.operationGeneration;
+		auto raw = call(standardBusCall("AddMatch", DbusBody.from(remote.key)));
+		raw.then((DbusMessage reply) {
+			if (state_ == DbusConnectionState.terminal || !isCurrentRemoteMatch(remote) ||
+				remote.phase != DbusRemoteMatchPhase.adding ||
+				remote.operationGeneration != operation)
+				return;
+			try
+				requireEmptyReply(reply);
+			catch (DbusTypeMismatchException exception)
+			{
+				failRemoteMatchSetup(remote, exception);
+				return;
+			}
+			remote.phase = DbusRemoteMatchPhase.active;
+			auto leases = remote.leases.dup;
+			foreach (lease; leases)
+				if (lease.state is remote)
+					activateRemoteLease(lease);
+			if (!remote.leases.length)
+				startRemoteMatchRemoval(remote);
+		}, (Exception exception) {
+			if (state_ != DbusConnectionState.terminal && isCurrentRemoteMatch(remote) &&
+				remote.phase == DbusRemoteMatchPhase.adding &&
+				remote.operationGeneration == operation)
+				failRemoteMatchSetup(remote, exception);
+		}).ignoreResult();
+	}
+
+	void finishRemoteMatchRemoval(DbusRemoteMatchState remote, ulong operation)
+	{
+		if (state_ == DbusConnectionState.terminal || !isCurrentRemoteMatch(remote) ||
+			remote.phase != DbusRemoteMatchPhase.removing ||
+			remote.operationGeneration != operation)
+			return;
+		if (!remote.leases.length)
+		{
+			remote.phase = DbusRemoteMatchPhase.terminal;
+			remote.operationGeneration++;
+			remoteMatches_.remove(remote.key);
+			fulfillRemoteRemovalPromises(remote);
+			return;
+		}
+		remote.phase = DbusRemoteMatchPhase.adding;
+		assert(isRemoteMatchDispatchable(remote));
+		foreach (lease; remote.leases)
+			if (lease.rule !is null)
+				activateRuleDispatch(lease.rule);
+		startRemoteMatchAdd(remote);
+		fulfillRemoteRemovalPromises(remote);
+	}
+
+	void startRemoteMatchRemoval(DbusRemoteMatchState remote)
+	{
+		if (state_ == DbusConnectionState.terminal || !isCurrentRemoteMatch(remote) ||
+			remote.leases.length || remote.phase == DbusRemoteMatchPhase.removing ||
+			remote.phase == DbusRemoteMatchPhase.failedRemoval ||
+			remote.phase == DbusRemoteMatchPhase.terminal)
+			return;
+		if (remote.phase == DbusRemoteMatchPhase.adding)
+			return;
+		assert(remote.phase == DbusRemoteMatchPhase.active);
+		remote.phase = DbusRemoteMatchPhase.removing;
+		auto operation = ++remote.operationGeneration;
+		auto raw = call(standardBusCall("RemoveMatch", DbusBody.from(remote.key)));
+		raw.then((DbusMessage reply) {
+			if (state_ == DbusConnectionState.terminal || !isCurrentRemoteMatch(remote) ||
+				remote.phase != DbusRemoteMatchPhase.removing ||
+				remote.operationGeneration != operation)
+				return;
+			try
+				requireEmptyReply(reply);
+			catch (DbusTypeMismatchException exception)
+			{
+				failRemoteMatchRemoval(remote, exception);
+				return;
+			}
+			finishRemoteMatchRemoval(remote, operation);
+		}, (Exception exception) {
+			if (state_ != DbusConnectionState.terminal && isCurrentRemoteMatch(remote) &&
+				remote.phase == DbusRemoteMatchPhase.removing &&
+				remote.operationGeneration == operation)
+			{
+				if (isMatchRuleNotFound(exception))
+					finishRemoteMatchRemoval(remote, operation);
+				else
+					failRemoteMatchRemoval(remote, exception);
+			}
+		}).ignoreResult();
+	}
+
+	void acquireRemoteMatch(DbusRemoteMatchLease lease, string key)
+	{
+		auto current = key in remoteMatches_;
+		DbusRemoteMatchState remote;
+		if (current is null)
+		{
+			remote = new DbusRemoteMatchState;
+			remote.key = key;
+			remote.phase = DbusRemoteMatchPhase.adding;
+			remoteMatches_[key] = remote;
+		}
+		else
+			remote = *current;
+		if (remote.phase == DbusRemoteMatchPhase.failedRemoval)
+		{
+			failRemoteLease(lease, remote.removalFailure);
+			return;
+		}
+		assert(remote.phase != DbusRemoteMatchPhase.terminal);
+		lease.state = remote;
+		remote.leases ~= lease;
+		if (current is null)
+			startRemoteMatchAdd(remote);
+		else if (remote.phase == DbusRemoteMatchPhase.active)
+			activateRemoteLease(lease);
+	}
+
+	void releaseRemoteMatch(DbusRemoteMatchLease lease,
+		Promise!void removalPromise = null)
+	{
+		assert(lease !is null);
+		auto remote = lease.state;
+		assert(remote !is null && isCurrentRemoteMatch(remote));
+		removeRemoteLease(remote.leases, lease);
+		lease.state = null;
+		if (remote.leases.length)
+		{
+			if (removalPromise !is null)
+				removalPromise.fulfill();
+			return;
+		}
+		if (removalPromise !is null)
+			remote.removalPromises ~= removalPromise;
+		if (remote.phase == DbusRemoteMatchPhase.active)
+			startRemoteMatchRemoval(remote);
+		else if (remote.phase == DbusRemoteMatchPhase.adding ||
+			remote.phase == DbusRemoteMatchPhase.removing)
+			return;
+		else
+			assert(false);
+	}
+
+	DbusOwnerWatch acquireOwnerWatch(DbusRuleState rule)
+	{
+		assert(rule.match.hasSender);
+		auto name = rule.match.sender;
+		assert(isOrdinaryWellKnownName(name));
+		auto current = name.text in ownerWatches_;
+		DbusOwnerWatch watch;
+		if (current is null)
+		{
+			watch = new DbusOwnerWatch;
+			watch.name = name;
+			watch.match = ownerWatchMatch(name);
+			watch.phase = DbusOwnerWatchPhase.waitingForRemote;
+			ownerWatches_[name.text] = watch;
+		}
+		else
+			watch = *current;
+		assert(watch.phase != DbusOwnerWatchPhase.terminal);
+		watch.dependentRules ~= rule;
+		rule.ownerWatch = watch;
+		if (current is null)
+		{
+			auto lease = new DbusRemoteMatchLease;
+			lease.watch = watch;
+			watch.remoteLease = lease;
+			acquireRemoteMatch(lease, watch.match.canonicalRule);
+		}
+		else if (watch.phase == DbusOwnerWatchPhase.known)
+			activateOwnerWatchDependents(watch);
+		return watch;
+	}
+
+	void activateRuleDispatch(DbusRuleState rule)
+	{
+		foreach (id; rule.registrationIds)
+		{
+			auto current = id in registrations_;
+			assert(current !is null);
+			(*current).dispatchActive = true;
+		}
+	}
+
+	void activateRuleRemote(DbusRuleState rule)
+	{
+		if (state_ == DbusConnectionState.terminal || !isCurrentRule(rule) ||
+			rule.phase != DbusRulePhase.waitingForRemote)
+			return;
+		activateRuleDispatch(rule);
+		rule.phase = DbusRulePhase.active;
+		auto registrationIds = rule.registrationIds.dup;
+		foreach (id; registrationIds)
+		{
+			auto current = id in registrations_;
+			assert(current !is null && (*current).active);
+			fulfillSubscribe(*current);
+		}
+	}
+
+	void startRuleRemote(DbusRuleState rule)
+	{
+		assert(isCurrentRule(rule));
+		assert(rule.phase == DbusRulePhase.waitingForOwner);
+		assert(rule.registrationIds.length);
+		rule.phase = DbusRulePhase.waitingForRemote;
+		auto lease = new DbusRemoteMatchLease;
+		lease.rule = rule;
+		rule.remoteLease = lease;
+		acquireRemoteMatch(lease, rule.key);
+		auto remote = lease.state;
+		if (isRemoteMatchDispatchable(remote))
+			activateRuleDispatch(rule);
+	}
+
 	void settleHello(DbusMessage reply)
 	{
 		assert(state_ == DbusConnectionState.awaitingHello);
@@ -333,6 +1101,74 @@ private:
 		transport_.send(encodeDbusMessage(reply));
 	}
 
+	void processOwnerWatchSignal(DbusOwnerWatch watch,
+		const ref DbusSignalMessage signal, DbusBusName destination,
+		scope const(DbusValue)[] values)
+	{
+		if (!isCurrentOwnerWatch(watch) ||
+			(watch.phase != DbusOwnerWatchPhase.seeding &&
+			watch.phase != DbusOwnerWatchPhase.known) ||
+			!matchesFields(watch.match, signal, destination, values) ||
+			signal.sender.text != watch.match.sender.text)
+			return;
+		if (signal.body.signature.text != "sss" || values.length != 3 ||
+			values[0].kind != DbusValueKind.string_ ||
+			values[1].kind != DbusValueKind.string_ ||
+			values[2].kind != DbusValueKind.string_)
+			return;
+		auto changedName = values[0].get!string();
+		auto oldOwner = values[1].get!string();
+		auto newOwner = values[2].get!string();
+		if (changedName != watch.name.text)
+			return;
+		try
+		{
+			if (oldOwner.length)
+				DbusUniqueName.parse(oldOwner);
+			if (newOwner.length)
+				DbusUniqueName.parse(newOwner);
+		}
+		catch (DbusException)
+			return;
+
+		watch.known = true;
+		watch.hasOwner = newOwner.length != 0;
+		watch.owner = watch.hasOwner ? DbusUniqueName.parse(newOwner) : DbusUniqueName.init;
+		watch.phase = DbusOwnerWatchPhase.known;
+		activateOwnerWatchDependents(watch);
+	}
+
+	void routeIncomingSignal(const ref DbusMessage message)
+	{
+		DbusSignalMessage signal;
+		signal.path = message.headers.path;
+		signal.interfaceName = message.headers.interfaceName;
+		signal.member = message.headers.member;
+		signal.sender = message.headers.sender;
+		auto values = message.body.values;
+		signal.body = DbusBody.fromValues(values);
+		auto destination = message.headers.destination;
+
+		DbusOwnerWatch[] watches;
+		foreach (watch; ownerWatches_)
+			watches ~= watch;
+		foreach (watch; watches)
+			processOwnerWatchSignal(watch, signal, destination, values);
+
+		auto registrationIds = registrationOrder_.dup;
+		foreach (id; registrationIds)
+		{
+			auto current = id in registrations_;
+			if (current is null)
+				continue;
+			auto registration = *current;
+			if (!registration.active || !registration.dispatchActive ||
+				!matchesRule(registration.rule, signal, destination, values, registration))
+				continue;
+			registration.handler(signal);
+		}
+	}
+
 	void routeIncomingMessage(DbusMessage message)
 	{
 		if (state_ == DbusConnectionState.awaitingHello &&
@@ -362,6 +1198,8 @@ private:
 			return;
 
 		case DbusMessageType.signal:
+			if (state_ == DbusConnectionState.ready)
+				routeIncomingSignal(message);
 			return;
 
 		default:
@@ -378,6 +1216,44 @@ private:
 		foreach (entry; pending)
 			if (entry.kind == DbusPendingKind.ordinary)
 				entry.promise.reject(cause);
+	}
+
+	void rejectSignalState(Exception cause)
+	{
+		foreach (registration; registrations_)
+		{
+			registration.active = false;
+			registration.dispatchActive = false;
+			registration.subscription.active_ = false;
+		}
+		foreach (rule; rules_)
+			rule.phase = DbusRulePhase.terminal;
+		foreach (watch; ownerWatches_)
+		{
+			watch.phase = DbusOwnerWatchPhase.terminal;
+			watch.operationGeneration++;
+		}
+		foreach (remote; remoteMatches_)
+		{
+			remote.phase = DbusRemoteMatchPhase.terminal;
+			remote.operationGeneration++;
+		}
+
+		foreach (registration; registrations_)
+			if (registration.subscribePromise !is null)
+			{
+				auto promise = registration.subscribePromise;
+				registration.subscribePromise = null;
+				promise.reject(cause);
+			}
+		foreach (remote; remoteMatches_)
+			rejectRemoteRemovalPromises(remote, cause);
+
+		registrations_ = null;
+		registrationOrder_ = null;
+		rules_ = null;
+		ownerWatches_ = null;
+		remoteMatches_ = null;
 	}
 
 	void enterTerminal(Exception cause, string disconnectReason,
@@ -403,6 +1279,7 @@ private:
 			readySettled_ = true;
 			readyPromise_.reject(cause);
 		}
+		rejectSignalState(cause);
 		rejectPending(cause);
 		decoder_.reset();
 		serverGuid_ = DbusServerGuid.init;
@@ -680,6 +1557,108 @@ private:
 		}
 	}
 
+	Promise!DbusSubscription subscribeImpl(DbusSignalMatch match,
+		void delegate(const ref DbusSignalMessage) handler,
+		bool hasExpectedBodySignature, DbusSignature expectedBodySignature)
+	{
+		if (handler is null)
+			throw new DbusValidationException("D-Bus signal subscriptions require a handler");
+		auto key = match.canonicalRule;
+		auto result = new Promise!DbusSubscription;
+		if (state_ == DbusConnectionState.terminal)
+		{
+			result.reject(terminalCause_);
+			return result;
+		}
+
+		auto current = key in rules_;
+		DbusRuleState rule;
+		if (current is null)
+		{
+			rule = new DbusRuleState;
+			rule.key = key;
+			rule.match = match;
+			rule.phase = DbusRulePhase.waitingForOwner;
+			rules_[key] = rule;
+		}
+		else
+			rule = *current;
+
+		auto registration = new DbusSignalRegistration;
+		registration.id = allocateRegistrationId();
+		registration.rule = rule;
+		registration.subscription = new DbusSubscription(this, registration.id);
+		registration.handler = handler;
+		registration.active = true;
+		registration.hasExpectedBodySignature = hasExpectedBodySignature;
+		registration.expectedBodySignature = expectedBodySignature;
+		registration.subscribePromise = result;
+		registrations_[registration.id] = registration;
+		registrationOrder_ ~= registration.id;
+		rule.registrationIds ~= registration.id;
+
+		if (current is null)
+		{
+			if (match.hasSender && isOrdinaryWellKnownName(match.sender))
+				acquireOwnerWatch(rule);
+			else
+				startRuleRemote(rule);
+		}
+		else if (rule.phase == DbusRulePhase.active)
+		{
+			registration.dispatchActive = true;
+			fulfillSubscribe(registration);
+		}
+		else if (rule.phase == DbusRulePhase.waitingForRemote)
+		{
+			auto remote = rule.remoteLease.state;
+			if (isRemoteMatchDispatchable(remote))
+				registration.dispatchActive = true;
+		}
+		else
+			assert(rule.phase == DbusRulePhase.waitingForOwner);
+
+		return result;
+	}
+
+	Promise!void unsubscribeRegistration(ulong id, DbusSubscription subscription)
+	{
+		auto result = new Promise!void;
+		if (state_ == DbusConnectionState.terminal)
+		{
+			subscription.active_ = false;
+			result.reject(terminalCause_);
+			return result;
+		}
+		auto current = id in registrations_;
+		assert(current !is null && (*current).subscription is subscription);
+		auto registration = *current;
+		assert(registration.active);
+		registration.active = false;
+		registration.dispatchActive = false;
+		subscription.active_ = false;
+		auto rule = registration.rule;
+		removeRegistration(registration);
+		if (rule.registrationIds.length)
+		{
+			result.fulfill();
+			return result;
+		}
+
+		assert(rule.phase == DbusRulePhase.active);
+		rule.phase = DbusRulePhase.terminal;
+		rules_.remove(rule.key);
+		auto lease = rule.remoteLease;
+		rule.remoteLease = null;
+		releaseRemoteMatch(lease, result);
+		result.then({
+			releaseOwnerWatch(rule);
+		}, (Exception) {
+			releaseOwnerWatch(rule);
+		}).ignoreResult();
+		return result;
+	}
+
 public:
 	@property Promise!DbusUniqueName ready()
 	{
@@ -690,6 +1669,20 @@ public:
 	{
 		assert(readySucceeded_);
 		return uniqueName_;
+	}
+
+	Promise!DbusSubscription subscribe(DbusSignalMatch match,
+		void delegate(const ref DbusSignalMessage) handler)
+	{
+		return subscribeImpl(match, handler, false, DbusSignature.init);
+	}
+
+	package(ae.net.dbus) Promise!DbusSubscription subscribe(DbusSignalMatch match,
+		DbusSignature expectedBodySignature,
+		void delegate(const ref DbusSignalMessage) handler)
+	{
+		return subscribeImpl(match, handler, true,
+			DbusSignature.parse(expectedBodySignature.text));
 	}
 
 	Promise!DbusMessage call(DbusMethodCall request)
@@ -1026,6 +2019,93 @@ private Data dbusClientTestError(uint replySerial, string errorName,
 	message.headers.replySerial = replySerial;
 	message.body = DbusBody.from(errorMessage);
 	return encodeDbusMessage(message);
+}
+
+debug(ae_unittest)
+private Data dbusClientTestSignal(string sender, string destination,
+	DbusBody body, string member = "Changed")
+{
+	DbusMessage message;
+	message.messageType = DbusMessageType.signal;
+	message.serial = 102;
+	message.headers.path = DbusObjectPath.parse("/org/example/Object");
+	message.headers.interfaceName = DbusInterfaceName.parse("org.example.Interface");
+	message.headers.member = DbusMemberName.parse(member);
+	if (sender.length)
+		message.headers.sender = DbusBusName.parse(sender);
+	if (destination.length)
+		message.headers.destination = DbusBusName.parse(destination);
+	message.body = body;
+	return encodeDbusMessage(message);
+}
+
+debug(ae_unittest)
+private Data dbusClientTestOwnerChanged(string name, string oldOwner,
+	string newOwner)
+{
+	DbusMessage message;
+	message.messageType = DbusMessageType.signal;
+	message.serial = 103;
+	message.headers.path = DbusObjectPath.parse("/org/freedesktop/DBus");
+	message.headers.interfaceName = DbusInterfaceName.parse("org.freedesktop.DBus");
+	message.headers.member = DbusMemberName.parse("NameOwnerChanged");
+	message.headers.sender = DbusBusName.parse("org.freedesktop.DBus");
+	message.body = DbusBody.from(name, oldOwner, newOwner);
+	return encodeDbusMessage(message);
+}
+
+debug(ae_unittest)
+private DbusMessage dbusClientTestSentMessage(DbusClientTestConnection transport,
+	size_t index)
+{
+	return decodeDbusMessage(transport.sent[index].toGC);
+}
+
+debug(ae_unittest)
+private uint dbusClientTestMatchSerial(DbusClientTestConnection transport,
+	size_t index, string member)
+{
+	auto request = dbusClientTestSentMessage(transport, index);
+	assert(request.messageType == DbusMessageType.methodCall);
+	assert(request.headers.destination.text == "org.freedesktop.DBus");
+	assert(request.headers.path.text == "/org/freedesktop/DBus");
+	assert(request.headers.interfaceName.text == "org.freedesktop.DBus");
+	assert(request.headers.member.text == member);
+	assert(request.body.signature.text == "s");
+	return request.serial;
+}
+
+debug(ae_unittest)
+private bool dbusClientTestIsMatchCall(DbusMessage message, string member,
+	string rule)
+{
+	return message.messageType == DbusMessageType.methodCall &&
+		message.headers.member.text == member &&
+		message.body.signature.text == "s" && message.body.values.length == 1 &&
+		message.body.values[0].get!string() == rule;
+}
+
+debug(ae_unittest)
+private size_t dbusClientTestMatchCallIndex(DbusClientTestConnection transport,
+	string member, string rule)
+{
+	foreach (index; 4 .. transport.sent.length)
+		if (dbusClientTestIsMatchCall(dbusClientTestSentMessage(transport, index),
+			member, rule))
+			return index;
+	assert(false);
+}
+
+debug(ae_unittest)
+private size_t dbusClientTestMatchCallCount(DbusClientTestConnection transport,
+	string member, string rule)
+{
+	size_t result;
+	foreach (index; 4 .. transport.sent.length)
+		if (dbusClientTestIsMatchCall(dbusClientTestSentMessage(transport, index),
+			member, rule))
+			result++;
+	return result;
 }
 
 debug(ae_unittest)
@@ -2553,5 +3633,1424 @@ debug(ae_unittest) unittest
 	assert(began);
 	assert(sawHello);
 	assert(constructed.length == 2);
+}
+
+debug(ae_unittest) unittest
+{
+	auto script = new DbusClientTestAttemptScript;
+	auto client = dbusClientTestConnect(script);
+	auto transport = script.transports[0];
+	dbusClientTestAuthenticate(transport);
+	dbusClientTestReady(transport);
+
+	auto match = DbusSignalMatch.signal()
+		.withPath(DbusObjectPath.parse("/org/example/Object"))
+		.withInterface(DbusInterfaceName.parse("org.example.Interface"))
+		.withMember(DbusMemberName.parse("Changed"));
+	size_t firstCalls;
+	size_t secondCalls;
+	DbusSubscription firstSubscription;
+	DbusSubscription secondSubscription;
+	bool firstReady;
+	bool secondReady;
+	auto first = client.subscribe(match, (const ref DbusSignalMessage signal) {
+		firstCalls++;
+	});
+	first.then((DbusSubscription subscription) {
+		firstSubscription = subscription;
+		firstReady = true;
+	}, (Exception) {
+		assert(false);
+	}).ignoreResult();
+	auto second = client.subscribe(match, (const ref DbusSignalMessage signal) {
+		secondCalls++;
+	});
+	second.then((DbusSubscription subscription) {
+		secondSubscription = subscription;
+		secondReady = true;
+	}, (Exception) {
+		assert(false);
+	}).ignoreResult();
+
+	assert(transport.sent.length == 5);
+	auto add = dbusClientTestSentMessage(transport, 4);
+	assert(add.headers.member.text == "AddMatch");
+	assert(add.body.values[0].get!string() == match.canonicalRule);
+	transport.receive(dbusClientTestMethodReturn(add.serial, DbusBody.from()));
+	assert(!firstReady);
+	assert(!secondReady);
+	transport.receive(dbusClientTestSignal(":1.7", "", DbusBody.from("before ready")));
+	assert(firstCalls == 1);
+	assert(secondCalls == 1);
+	socketManager.loop();
+	assert(firstReady);
+	assert(secondReady);
+
+	bool firstUnsubscribed;
+	auto firstUnsubscribe = firstSubscription.unsubscribe();
+	firstUnsubscribe.then({
+		firstUnsubscribed = true;
+	}, (Exception) {
+		assert(false);
+	}).ignoreResult();
+	assert(!firstSubscription.active);
+	assert(secondSubscription.active);
+	assert(transport.sent.length == 5);
+	socketManager.loop();
+	assert(firstUnsubscribed);
+	transport.receive(dbusClientTestSignal(":1.7", "", DbusBody.from("after first removal")));
+	assert(firstCalls == 1);
+	assert(secondCalls == 2);
+
+	bool secondUnsubscribed;
+	auto secondUnsubscribe = secondSubscription.unsubscribe();
+	secondUnsubscribe.then({
+		secondUnsubscribed = true;
+	}, (Exception) {
+		assert(false);
+	}).ignoreResult();
+	assert(!secondSubscription.active);
+	assert(transport.sent.length == 6);
+	auto remove = dbusClientTestSentMessage(transport, 5);
+	assert(remove.headers.member.text == "RemoveMatch");
+	assert(remove.body.values[0].get!string() == match.canonicalRule);
+	transport.receive(dbusClientTestError(remove.serial,
+		"org.freedesktop.DBus.Error.MatchRuleNotFound", "already absent"));
+	socketManager.loop();
+	assert(secondUnsubscribed);
+	assert(client.rules_.length == 0);
+
+	bool caught;
+	try
+		secondSubscription.unsubscribe();
+	catch (AssertError)
+		caught = true;
+	assert(caught);
+}
+
+debug(ae_unittest) unittest
+{
+	auto match = DbusSignalMatch.signal()
+		.withInterface(DbusInterfaceName.parse("org.example.Interface"))
+		.withMember(DbusMemberName.parse("Changed"));
+
+	{
+		auto script = new DbusClientTestAttemptScript;
+		auto client = dbusClientTestConnect(script);
+		auto transport = script.transports[0];
+		dbusClientTestAuthenticate(transport);
+		dbusClientTestReady(transport);
+		Exception firstError;
+		Exception secondError;
+		client.subscribe(match, (const ref DbusSignalMessage signal) {})
+			.then((DbusSubscription) {
+				assert(false);
+			}, (Exception exception) {
+				firstError = exception;
+			}).ignoreResult();
+		client.subscribe(match, (const ref DbusSignalMessage signal) {})
+			.then((DbusSubscription) {
+				assert(false);
+			}, (Exception exception) {
+				secondError = exception;
+			}).ignoreResult();
+		assert(transport.sent.length == 5);
+		auto add = dbusClientTestSentMessage(transport, 4);
+		transport.receive(dbusClientTestError(add.serial, "org.example.AddFailure", "rejected"));
+		socketManager.loop();
+		assert(firstError !is null);
+		assert(secondError is firstError);
+		assert(client.registrations_.length == 0);
+		assert(client.rules_.length == 0);
+	}
+
+	{
+		auto script = new DbusClientTestAttemptScript;
+		auto client = dbusClientTestConnect(script);
+		auto transport = script.transports[0];
+		dbusClientTestAuthenticate(transport);
+		dbusClientTestReady(transport);
+		DbusSubscription firstSubscription;
+		client.subscribe(match, (const ref DbusSignalMessage signal) {})
+			.then((DbusSubscription subscription) {
+				firstSubscription = subscription;
+			}, (Exception) {
+				assert(false);
+			}).ignoreResult();
+		auto firstAdd = dbusClientTestSentMessage(transport, 4);
+		transport.receive(dbusClientTestMethodReturn(firstAdd.serial, DbusBody.from()));
+		socketManager.loop();
+		assert(firstSubscription !is null);
+
+		bool firstRemoved;
+		firstSubscription.unsubscribe().then({
+			firstRemoved = true;
+		}, (Exception) {
+			assert(false);
+		}).ignoreResult();
+		auto firstRemove = dbusClientTestSentMessage(transport, 5);
+		DbusSubscription queuedSubscription;
+		client.subscribe(match, (const ref DbusSignalMessage signal) {})
+			.then((DbusSubscription subscription) {
+				queuedSubscription = subscription;
+			}, (Exception) {
+				assert(false);
+			}).ignoreResult();
+		assert(transport.sent.length == 6);
+		transport.receive(dbusClientTestMethodReturn(firstRemove.serial, DbusBody.from()));
+		socketManager.loop();
+		assert(firstRemoved);
+		assert(transport.sent.length == 7);
+		auto secondAdd = dbusClientTestSentMessage(transport, 6);
+		assert(secondAdd.headers.member.text == "AddMatch");
+		assert(secondAdd.body.values[0].get!string() == match.canonicalRule);
+		transport.receive(dbusClientTestMethodReturn(secondAdd.serial, DbusBody.from()));
+		socketManager.loop();
+		assert(queuedSubscription !is null);
+	}
+
+	{
+		auto script = new DbusClientTestAttemptScript;
+		auto client = dbusClientTestConnect(script);
+		auto transport = script.transports[0];
+		dbusClientTestAuthenticate(transport);
+		dbusClientTestReady(transport);
+		DbusSubscription subscription;
+		client.subscribe(match, (const ref DbusSignalMessage signal) {})
+			.then((DbusSubscription value) {
+				subscription = value;
+			}, (Exception) {
+				assert(false);
+			}).ignoreResult();
+		auto add = dbusClientTestSentMessage(transport, 4);
+		assert(add.headers.member.text == "AddMatch");
+		transport.receive(dbusClientTestMethodReturn(add.serial, DbusBody.from()));
+		socketManager.loop();
+		assert(subscription !is null);
+
+		Exception removalError;
+		subscription.unsubscribe().then({
+			assert(false);
+		}, (Exception exception) {
+			removalError = exception;
+		}).ignoreResult();
+		auto remove = dbusClientTestSentMessage(transport, 5);
+		assert(remove.headers.member.text == "RemoveMatch");
+		Exception queuedError;
+		client.subscribe(match, (const ref DbusSignalMessage signal) {})
+			.then((DbusSubscription) {
+				assert(false);
+			}, (Exception exception) {
+				queuedError = exception;
+			}).ignoreResult();
+		assert(transport.sent.length == 6);
+		transport.receive(dbusClientTestError(remove.serial,
+			"org.example.RemoveFailure", "ambiguous"));
+		socketManager.loop();
+		assert(removalError !is null);
+		auto remote = cast(DbusRemoteError) removalError;
+		assert(remote !is null);
+		assert(remote.errorName.text == "org.example.RemoveFailure");
+		assert(queuedError is removalError);
+		assert(client.rules_.length == 0);
+		assert(client.remoteMatches_.length == 1);
+		auto tombstone = match.canonicalRule in client.remoteMatches_;
+		assert(tombstone !is null);
+		assert((*tombstone).phase == DbusRemoteMatchPhase.failedRemoval);
+		assert((*tombstone).removalFailure is removalError);
+		assert(client.registrations_.length == 0);
+
+		Exception laterError;
+		client.subscribe(match, (const ref DbusSignalMessage signal) {})
+			.then((DbusSubscription) {
+				assert(false);
+			}, (Exception exception) {
+				laterError = exception;
+			}).ignoreResult();
+		socketManager.loop();
+		assert(laterError is removalError);
+		assert(transport.sent.length == 6);
+
+		client.disconnect("clear failed application removal");
+		socketManager.loop();
+		assert(client.rules_.length == 0);
+		assert(client.remoteMatches_.length == 0);
+	}
+}
+
+debug(ae_unittest) unittest
+{
+	auto script = new DbusClientTestAttemptScript;
+	auto client = dbusClientTestConnect(script);
+	auto transport = script.transports[0];
+	dbusClientTestAuthenticate(transport);
+	dbusClientTestReady(transport);
+
+	auto base = DbusSignalMatch.signal()
+		.withPath(DbusObjectPath.parse("/org/example/Object"))
+		.withInterface(DbusInterfaceName.parse("org.example.Interface"))
+		.withMember(DbusMemberName.parse("Changed"));
+	auto unique = base.withSender(DbusBusName.parse(":1.7"));
+	auto filtered = base.withDestination(DbusBusName.parse(":1.42"))
+		.withArgument(0, "value");
+	string[] calls;
+	client.subscribe(base, (const ref DbusSignalMessage signal) {
+		calls ~= "base";
+	}).ignoreResult();
+	client.subscribe(unique, (const ref DbusSignalMessage signal) {
+		calls ~= "unique";
+	}).ignoreResult();
+	client.subscribe(filtered, DbusSignature.parse("s"),
+		(const ref DbusSignalMessage signal) {
+			calls ~= "filtered";
+		}).ignoreResult();
+	assert(transport.sent.length == 7);
+	foreach (index; 4 .. 7)
+	{
+		auto add = dbusClientTestSentMessage(transport, index);
+		assert(add.headers.member.text == "AddMatch");
+		transport.receive(dbusClientTestMethodReturn(add.serial, DbusBody.from()));
+	}
+	socketManager.loop();
+
+	transport.receive(dbusClientTestSignal(":1.7", ":1.42", DbusBody.from("value")));
+	assert(calls == ["base", "unique", "filtered"]);
+	calls = null;
+	transport.receive(dbusClientTestSignal(":1.7", ":1.42", DbusBody.from("wrong")));
+	assert(calls == ["base", "unique"]);
+	calls = null;
+	transport.receive(dbusClientTestSignal(":1.7", ":1.42", DbusBody.from(cast(uint) 7)));
+	assert(calls == ["base", "unique"]);
+	calls = null;
+	transport.receive(dbusClientTestSignal(":1.8", ":1.42", DbusBody.from("value")));
+	assert(calls == ["base", "filtered"]);
+	calls = null;
+	transport.receive(dbusClientTestSignal(":1.7", "", DbusBody.from("value")));
+	assert(calls == ["base", "unique"]);
+}
+
+debug(ae_unittest) unittest
+{
+	auto script = new DbusClientTestAttemptScript;
+	auto client = dbusClientTestConnect(script);
+	auto transport = script.transports[0];
+	dbusClientTestAuthenticate(transport);
+	dbusClientTestReady(transport);
+	auto match = DbusSignalMatch.signal()
+		.withInterface(DbusInterfaceName.parse("org.example.Interface"))
+		.withMember(DbusMemberName.parse("Reentrant"));
+	DbusSubscription firstSubscription;
+	DbusSubscription secondSubscription;
+	DbusSubscription thirdSubscription;
+	string[] calls;
+	client.subscribe(match, (const ref DbusSignalMessage signal) {
+		calls ~= "first";
+		firstSubscription.unsubscribe().ignoreResult();
+	}).then((DbusSubscription subscription) {
+		firstSubscription = subscription;
+	}, (Exception) {
+		assert(false);
+	}).ignoreResult();
+	client.subscribe(match, (const ref DbusSignalMessage signal) {
+		calls ~= "second";
+		thirdSubscription.unsubscribe().ignoreResult();
+	}).then((DbusSubscription subscription) {
+		secondSubscription = subscription;
+	}, (Exception) {
+		assert(false);
+	}).ignoreResult();
+	client.subscribe(match, (const ref DbusSignalMessage signal) {
+		calls ~= "third";
+	}).then((DbusSubscription subscription) {
+		thirdSubscription = subscription;
+	}, (Exception) {
+		assert(false);
+	}).ignoreResult();
+	auto add = dbusClientTestSentMessage(transport, 4);
+	transport.receive(dbusClientTestMethodReturn(add.serial, DbusBody.from()));
+	socketManager.loop();
+	assert(firstSubscription !is null);
+	assert(secondSubscription !is null);
+	assert(thirdSubscription !is null);
+	transport.receive(dbusClientTestSignal(":1.7", "", DbusBody.from(), "Reentrant"));
+	assert(calls == ["first", "second"]);
+	assert(!firstSubscription.active);
+	assert(secondSubscription.active);
+	assert(!thirdSubscription.active);
+}
+
+debug(ae_unittest) unittest
+{
+	auto script = new DbusClientTestAttemptScript;
+	auto client = dbusClientTestConnect(script);
+	auto transport = script.transports[0];
+	dbusClientTestAuthenticate(transport);
+	dbusClientTestReady(transport);
+	auto service = DbusBusName.parse("org.example.Service");
+	auto firstMatch = DbusSignalMatch.signal()
+		.withSender(service)
+		.withPath(DbusObjectPath.parse("/org/example/Object"))
+		.withInterface(DbusInterfaceName.parse("org.example.Interface"))
+		.withMember(DbusMemberName.parse("Changed"));
+	auto secondMatch = firstMatch.withMember(DbusMemberName.parse("Other"));
+	size_t firstCalls;
+	size_t secondCalls;
+	DbusSubscription firstSubscription;
+	DbusSubscription secondSubscription;
+	client.subscribe(firstMatch, (const ref DbusSignalMessage signal) {
+		firstCalls++;
+	}).then((DbusSubscription subscription) {
+		firstSubscription = subscription;
+	}, (Exception) {
+		assert(false);
+	}).ignoreResult();
+	client.subscribe(secondMatch, (const ref DbusSignalMessage signal) {
+		secondCalls++;
+	}).then((DbusSubscription subscription) {
+		secondSubscription = subscription;
+	}, (Exception) {
+		assert(false);
+	}).ignoreResult();
+
+	assert(transport.sent.length == 5);
+	auto watchAdd = dbusClientTestSentMessage(transport, 4);
+	assert(watchAdd.headers.member.text == "AddMatch");
+	auto watchRule = DbusSignalMatch.signal()
+		.withSender(DbusBusName.parse("org.freedesktop.DBus"))
+		.withInterface(DbusInterfaceName.parse("org.freedesktop.DBus"))
+		.withMember(DbusMemberName.parse("NameOwnerChanged"))
+		.withPath(DbusObjectPath.parse("/org/freedesktop/DBus"))
+		.withArgument(0, service.text).canonicalRule;
+	assert(watchAdd.body.values[0].get!string() == watchRule);
+	transport.receive(dbusClientTestMethodReturn(watchAdd.serial, DbusBody.from()));
+	socketManager.loop();
+	assert(transport.sent.length == 6);
+	auto seed = dbusClientTestSentMessage(transport, 5);
+	assert(seed.headers.member.text == "GetNameOwner");
+	assert(seed.body.values[0].get!string() == service.text);
+
+	transport.receive(dbusClientTestOwnerChanged(service.text, "", ":1.99"));
+	assert(transport.sent.length == 8);
+	auto firstAdd = dbusClientTestSentMessage(transport, 6);
+	auto secondAdd = dbusClientTestSentMessage(transport, 7);
+	assert(firstAdd.headers.member.text == "AddMatch");
+	assert(secondAdd.headers.member.text == "AddMatch");
+	transport.receive(dbusClientTestMethodReturn(seed.serial, DbusBody.from(":1.77")));
+	socketManager.loop();
+	auto watch = client.ownerWatches_[service.text];
+	assert(watch.known);
+	assert(watch.hasOwner);
+	assert(watch.owner.text == ":1.99");
+	transport.receive(dbusClientTestMethodReturn(firstAdd.serial, DbusBody.from()));
+	transport.receive(dbusClientTestMethodReturn(secondAdd.serial, DbusBody.from()));
+	socketManager.loop();
+	assert(firstSubscription !is null);
+	assert(secondSubscription !is null);
+
+	transport.receive(dbusClientTestSignal(":1.99", "", DbusBody.from()));
+	transport.receive(dbusClientTestSignal(":1.99", "", DbusBody.from(), "Other"));
+	assert(firstCalls == 1);
+	assert(secondCalls == 1);
+	transport.receive(dbusClientTestOwnerChanged(service.text, ":1.99", ":1.100"));
+	transport.receive(dbusClientTestSignal(":1.99", "", DbusBody.from()));
+	transport.receive(dbusClientTestSignal(":1.100", "", DbusBody.from()));
+	assert(firstCalls == 2);
+
+	firstSubscription.unsubscribe().ignoreResult();
+	auto firstRemove = dbusClientTestSentMessage(transport, 8);
+	assert(firstRemove.headers.member.text == "RemoveMatch");
+	transport.receive(dbusClientTestMethodReturn(firstRemove.serial, DbusBody.from()));
+	socketManager.loop();
+	secondSubscription.unsubscribe().ignoreResult();
+	auto secondRemove = dbusClientTestSentMessage(transport, 9);
+	assert(secondRemove.headers.member.text == "RemoveMatch");
+	transport.receive(dbusClientTestMethodReturn(secondRemove.serial, DbusBody.from()));
+	socketManager.loop();
+	assert(transport.sent.length == 11);
+	auto watchRemove = dbusClientTestSentMessage(transport, 10);
+	assert(watchRemove.headers.member.text == "RemoveMatch");
+
+	DbusSubscription restartedSubscription;
+	client.subscribe(firstMatch, (const ref DbusSignalMessage signal) {
+		firstCalls++;
+	}).then((DbusSubscription subscription) {
+		restartedSubscription = subscription;
+	}, (Exception) {
+		assert(false);
+	}).ignoreResult();
+	assert(transport.sent.length == 11);
+	transport.receive(dbusClientTestMethodReturn(watchRemove.serial, DbusBody.from()));
+	socketManager.loop();
+	assert(transport.sent.length == 12);
+	auto restartedWatchAdd = dbusClientTestSentMessage(transport, 11);
+	assert(restartedWatchAdd.headers.member.text == "AddMatch");
+	transport.receive(dbusClientTestMethodReturn(restartedWatchAdd.serial, DbusBody.from()));
+	socketManager.loop();
+	assert(transport.sent.length == 13);
+	auto restartedSeed = dbusClientTestSentMessage(transport, 12);
+	assert(restartedSeed.headers.member.text == "GetNameOwner");
+	transport.receive(dbusClientTestMethodReturn(restartedSeed.serial, DbusBody.from(":1.100")));
+	socketManager.loop();
+	assert(transport.sent.length == 14);
+	auto restartedAdd = dbusClientTestSentMessage(transport, 13);
+	assert(restartedAdd.headers.member.text == "AddMatch");
+	transport.receive(dbusClientTestMethodReturn(restartedAdd.serial, DbusBody.from()));
+	socketManager.loop();
+	assert(restartedSubscription !is null);
+}
+
+debug(ae_unittest) unittest
+{
+	{
+		auto script = new DbusClientTestAttemptScript;
+		auto client = dbusClientTestConnect(script);
+		auto transport = script.transports[0];
+		dbusClientTestAuthenticate(transport);
+		dbusClientTestReady(transport);
+		auto service = DbusBusName.parse("org.example.InternalWatchFirstService");
+		auto serviceMatch = DbusSignalMatch.signal()
+			.withSender(service)
+			.withPath(DbusObjectPath.parse("/org/example/Object"))
+			.withInterface(DbusInterfaceName.parse("org.example.Interface"))
+			.withMember(DbusMemberName.parse("Changed"));
+		auto watchMatch = DbusSignalMatch.signal()
+			.withSender(DbusBusName.parse("org.freedesktop.DBus"))
+			.withInterface(DbusInterfaceName.parse("org.freedesktop.DBus"))
+			.withMember(DbusMemberName.parse("NameOwnerChanged"))
+			.withPath(DbusObjectPath.parse("/org/freedesktop/DBus"))
+			.withArgument(0, service.text);
+		auto watchRule = watchMatch.canonicalRule;
+		DbusSubscription serviceSubscription;
+		DbusSubscription publicSubscription;
+		client.subscribe(serviceMatch, (const ref DbusSignalMessage signal) {})
+			.then((DbusSubscription value) {
+				serviceSubscription = value;
+			}, (Exception) {
+				assert(false);
+			}).ignoreResult();
+		auto watchAdd = dbusClientTestSentMessage(transport, 4);
+		assert(watchAdd.headers.member.text == "AddMatch");
+		assert(watchAdd.body.values[0].get!string() == watchRule);
+
+		client.subscribe(watchMatch, (const ref DbusSignalMessage signal) {})
+			.then((DbusSubscription value) {
+				publicSubscription = value;
+			}, (Exception) {
+				assert(false);
+			}).ignoreResult();
+		assert(transport.sent.length == 5);
+		assert(dbusClientTestMatchCallCount(transport, "AddMatch", watchRule) == 1);
+		transport.receive(dbusClientTestMethodReturn(watchAdd.serial, DbusBody.from()));
+		socketManager.loop();
+		assert(publicSubscription !is null);
+		assert(transport.sent.length == 6);
+		auto seed = dbusClientTestSentMessage(transport, 5);
+		assert(seed.headers.member.text == "GetNameOwner");
+		transport.receive(dbusClientTestMethodReturn(seed.serial, DbusBody.from(":1.201")));
+		socketManager.loop();
+		assert(transport.sent.length == 7);
+		auto serviceAdd = dbusClientTestSentMessage(transport, 6);
+		assert(serviceAdd.headers.member.text == "AddMatch");
+		assert(serviceAdd.body.values[0].get!string() == serviceMatch.canonicalRule);
+		assert(dbusClientTestMatchCallCount(transport, "AddMatch", watchRule) == 1);
+		transport.receive(dbusClientTestMethodReturn(serviceAdd.serial, DbusBody.from()));
+		socketManager.loop();
+		assert(serviceSubscription !is null);
+
+		bool publicUnsubscribed;
+		publicSubscription.unsubscribe().then({
+			publicUnsubscribed = true;
+		}, (Exception) {
+			assert(false);
+		}).ignoreResult();
+		assert(transport.sent.length == 7);
+		assert(dbusClientTestMatchCallCount(transport, "RemoveMatch", watchRule) == 0);
+		socketManager.loop();
+		assert(publicUnsubscribed);
+
+		bool serviceUnsubscribed;
+		serviceSubscription.unsubscribe().then({
+			serviceUnsubscribed = true;
+		}, (Exception) {
+			assert(false);
+		}).ignoreResult();
+		assert(dbusClientTestMatchCallCount(transport, "RemoveMatch",
+			serviceMatch.canonicalRule) == 1);
+		auto serviceRemove = dbusClientTestSentMessage(transport,
+			dbusClientTestMatchCallIndex(transport, "RemoveMatch", serviceMatch.canonicalRule));
+		transport.receive(dbusClientTestMethodReturn(serviceRemove.serial, DbusBody.from()));
+		socketManager.loop();
+		assert(serviceUnsubscribed);
+		assert(dbusClientTestMatchCallCount(transport, "RemoveMatch", watchRule) == 1);
+		auto watchRemove = dbusClientTestSentMessage(transport,
+			dbusClientTestMatchCallIndex(transport, "RemoveMatch", watchRule));
+		transport.receive(dbusClientTestMethodReturn(watchRemove.serial, DbusBody.from()));
+		socketManager.loop();
+		assert(client.remoteMatches_.length == 0);
+	}
+
+	{
+		auto script = new DbusClientTestAttemptScript;
+		auto client = dbusClientTestConnect(script);
+		auto transport = script.transports[0];
+		dbusClientTestAuthenticate(transport);
+		dbusClientTestReady(transport);
+		auto service = DbusBusName.parse("org.example.PublicWatchFirstService");
+		auto serviceMatch = DbusSignalMatch.signal()
+			.withSender(service)
+			.withPath(DbusObjectPath.parse("/org/example/Object"))
+			.withInterface(DbusInterfaceName.parse("org.example.Interface"))
+			.withMember(DbusMemberName.parse("Changed"));
+		auto watchMatch = DbusSignalMatch.signal()
+			.withSender(DbusBusName.parse("org.freedesktop.DBus"))
+			.withInterface(DbusInterfaceName.parse("org.freedesktop.DBus"))
+			.withMember(DbusMemberName.parse("NameOwnerChanged"))
+			.withPath(DbusObjectPath.parse("/org/freedesktop/DBus"))
+			.withArgument(0, service.text);
+		auto watchRule = watchMatch.canonicalRule;
+		DbusSubscription serviceSubscription;
+		DbusSubscription publicSubscription;
+		client.subscribe(watchMatch, (const ref DbusSignalMessage signal) {})
+			.then((DbusSubscription value) {
+				publicSubscription = value;
+			}, (Exception) {
+				assert(false);
+			}).ignoreResult();
+		auto watchAdd = dbusClientTestSentMessage(transport, 4);
+		assert(watchAdd.headers.member.text == "AddMatch");
+		assert(watchAdd.body.values[0].get!string() == watchRule);
+
+		client.subscribe(serviceMatch, (const ref DbusSignalMessage signal) {})
+			.then((DbusSubscription value) {
+				serviceSubscription = value;
+			}, (Exception) {
+				assert(false);
+			}).ignoreResult();
+		assert(transport.sent.length == 5);
+		assert(dbusClientTestMatchCallCount(transport, "AddMatch", watchRule) == 1);
+		transport.receive(dbusClientTestMethodReturn(watchAdd.serial, DbusBody.from()));
+		socketManager.loop();
+		assert(publicSubscription !is null);
+		assert(transport.sent.length == 6);
+		auto seed = dbusClientTestSentMessage(transport, 5);
+		assert(seed.headers.member.text == "GetNameOwner");
+		transport.receive(dbusClientTestMethodReturn(seed.serial, DbusBody.from(":1.202")));
+		socketManager.loop();
+		assert(transport.sent.length == 7);
+		auto serviceAdd = dbusClientTestSentMessage(transport, 6);
+		assert(serviceAdd.headers.member.text == "AddMatch");
+		assert(serviceAdd.body.values[0].get!string() == serviceMatch.canonicalRule);
+		assert(dbusClientTestMatchCallCount(transport, "AddMatch", watchRule) == 1);
+		transport.receive(dbusClientTestMethodReturn(serviceAdd.serial, DbusBody.from()));
+		socketManager.loop();
+		assert(serviceSubscription !is null);
+
+		bool serviceUnsubscribed;
+		serviceSubscription.unsubscribe().then({
+			serviceUnsubscribed = true;
+		}, (Exception) {
+			assert(false);
+		}).ignoreResult();
+		assert(dbusClientTestMatchCallCount(transport, "RemoveMatch", watchRule) == 0);
+		assert(dbusClientTestMatchCallCount(transport, "RemoveMatch",
+			serviceMatch.canonicalRule) == 1);
+		auto serviceRemove = dbusClientTestSentMessage(transport,
+			dbusClientTestMatchCallIndex(transport, "RemoveMatch", serviceMatch.canonicalRule));
+		transport.receive(dbusClientTestMethodReturn(serviceRemove.serial, DbusBody.from()));
+		socketManager.loop();
+		assert(serviceUnsubscribed);
+		assert(dbusClientTestMatchCallCount(transport, "RemoveMatch", watchRule) == 0);
+
+		bool publicUnsubscribed;
+		publicSubscription.unsubscribe().then({
+			publicUnsubscribed = true;
+		}, (Exception) {
+			assert(false);
+		}).ignoreResult();
+		assert(dbusClientTestMatchCallCount(transport, "RemoveMatch", watchRule) == 1);
+		auto watchRemove = dbusClientTestSentMessage(transport,
+			dbusClientTestMatchCallIndex(transport, "RemoveMatch", watchRule));
+		transport.receive(dbusClientTestMethodReturn(watchRemove.serial, DbusBody.from()));
+		socketManager.loop();
+		assert(publicUnsubscribed);
+		assert(client.remoteMatches_.length == 0);
+	}
+}
+
+debug(ae_unittest) unittest
+{
+	auto script = new DbusClientTestAttemptScript;
+	auto client = dbusClientTestConnect(script);
+	auto transport = script.transports[0];
+	dbusClientTestAuthenticate(transport);
+	dbusClientTestReady(transport);
+	auto service = DbusBusName.parse("org.example.FailedWatchRemovalService");
+	auto match = DbusSignalMatch.signal()
+		.withSender(service)
+		.withPath(DbusObjectPath.parse("/org/example/Object"))
+		.withInterface(DbusInterfaceName.parse("org.example.Interface"))
+		.withMember(DbusMemberName.parse("Changed"));
+	auto queuedMatch = match.withMember(DbusMemberName.parse("Queued"));
+	auto laterMatch = match.withMember(DbusMemberName.parse("Later"));
+	DbusSubscription subscription;
+	client.subscribe(match, (const ref DbusSignalMessage signal) {})
+		.then((DbusSubscription value) {
+			subscription = value;
+		}, (Exception) {
+			assert(false);
+		}).ignoreResult();
+	auto watchAdd = dbusClientTestSentMessage(transport, 4);
+	assert(watchAdd.headers.member.text == "AddMatch");
+	transport.receive(dbusClientTestMethodReturn(watchAdd.serial, DbusBody.from()));
+	socketManager.loop();
+	auto seed = dbusClientTestSentMessage(transport, 5);
+	assert(seed.headers.member.text == "GetNameOwner");
+	transport.receive(dbusClientTestMethodReturn(seed.serial, DbusBody.from(":1.130")));
+	socketManager.loop();
+	auto add = dbusClientTestSentMessage(transport, 6);
+	assert(add.headers.member.text == "AddMatch");
+	transport.receive(dbusClientTestMethodReturn(add.serial, DbusBody.from()));
+	socketManager.loop();
+	assert(subscription !is null);
+
+	bool unsubscribed;
+	subscription.unsubscribe().then({
+		unsubscribed = true;
+	}, (Exception) {
+		assert(false);
+	}).ignoreResult();
+	auto remove = dbusClientTestSentMessage(transport, 7);
+	assert(remove.headers.member.text == "RemoveMatch");
+	transport.receive(dbusClientTestMethodReturn(remove.serial, DbusBody.from()));
+	socketManager.loop();
+	assert(unsubscribed);
+	assert(transport.sent.length == 9);
+	auto watchRemove = dbusClientTestSentMessage(transport, 8);
+	assert(watchRemove.headers.member.text == "RemoveMatch");
+
+	Exception queuedError;
+	client.subscribe(queuedMatch, (const ref DbusSignalMessage signal) {})
+		.then((DbusSubscription) {
+			assert(false);
+		}, (Exception exception) {
+			queuedError = exception;
+		}).ignoreResult();
+	assert(transport.sent.length == 9);
+	transport.receive(dbusClientTestError(watchRemove.serial,
+		"org.example.WatchRemovalFailure", "ambiguous"));
+	socketManager.loop();
+	assert(queuedError !is null);
+	auto remote = cast(DbusRemoteError) queuedError;
+	assert(remote !is null);
+	assert(remote.errorName.text == "org.example.WatchRemovalFailure");
+
+	Exception sameError;
+	Exception laterError;
+	client.subscribe(queuedMatch, (const ref DbusSignalMessage signal) {})
+		.then((DbusSubscription) {
+			assert(false);
+		}, (Exception exception) {
+			sameError = exception;
+		}).ignoreResult();
+	client.subscribe(laterMatch, (const ref DbusSignalMessage signal) {})
+		.then((DbusSubscription) {
+			assert(false);
+		}, (Exception exception) {
+			laterError = exception;
+		}).ignoreResult();
+	socketManager.loop();
+	assert(sameError is queuedError);
+	assert(laterError is queuedError);
+	assert(transport.sent.length == 9);
+
+	client.disconnect("clear failed owner-watch removal");
+	socketManager.loop();
+	assert(client.ownerWatches_.length == 0);
+	assert(client.remoteMatches_.length == 0);
+}
+
+debug(ae_unittest) unittest
+{
+	auto script = new DbusClientTestAttemptScript;
+	auto client = dbusClientTestConnect(script);
+	auto transport = script.transports[0];
+	dbusClientTestAuthenticate(transport);
+	dbusClientTestReady(transport);
+	auto service = DbusBusName.parse("org.example.WatchTombstonePublicService");
+	auto serviceMatch = DbusSignalMatch.signal()
+		.withSender(service)
+		.withPath(DbusObjectPath.parse("/org/example/Object"))
+		.withInterface(DbusInterfaceName.parse("org.example.Interface"))
+		.withMember(DbusMemberName.parse("Changed"));
+	auto watchMatch = DbusSignalMatch.signal()
+		.withSender(DbusBusName.parse("org.freedesktop.DBus"))
+		.withInterface(DbusInterfaceName.parse("org.freedesktop.DBus"))
+		.withMember(DbusMemberName.parse("NameOwnerChanged"))
+		.withPath(DbusObjectPath.parse("/org/freedesktop/DBus"))
+		.withArgument(0, service.text);
+	auto watchRule = watchMatch.canonicalRule;
+	DbusSubscription serviceSubscription;
+	client.subscribe(serviceMatch, (const ref DbusSignalMessage signal) {})
+		.then((DbusSubscription value) {
+			serviceSubscription = value;
+		}, (Exception) {
+			assert(false);
+		}).ignoreResult();
+	auto watchAdd = dbusClientTestSentMessage(transport, 4);
+	assert(watchAdd.headers.member.text == "AddMatch");
+	assert(watchAdd.body.values[0].get!string() == watchRule);
+	transport.receive(dbusClientTestMethodReturn(watchAdd.serial, DbusBody.from()));
+	socketManager.loop();
+	auto seed = dbusClientTestSentMessage(transport, 5);
+	assert(seed.headers.member.text == "GetNameOwner");
+	transport.receive(dbusClientTestMethodReturn(seed.serial, DbusBody.from(":1.203")));
+	socketManager.loop();
+	auto serviceAdd = dbusClientTestSentMessage(transport, 6);
+	assert(serviceAdd.headers.member.text == "AddMatch");
+	assert(serviceAdd.body.values[0].get!string() == serviceMatch.canonicalRule);
+	transport.receive(dbusClientTestMethodReturn(serviceAdd.serial, DbusBody.from()));
+	socketManager.loop();
+	assert(serviceSubscription !is null);
+
+	bool serviceUnsubscribed;
+	serviceSubscription.unsubscribe().then({
+		serviceUnsubscribed = true;
+	}, (Exception) {
+		assert(false);
+	}).ignoreResult();
+	assert(dbusClientTestMatchCallCount(transport, "RemoveMatch",
+		serviceMatch.canonicalRule) == 1);
+	auto serviceRemove = dbusClientTestSentMessage(transport,
+		dbusClientTestMatchCallIndex(transport, "RemoveMatch", serviceMatch.canonicalRule));
+	transport.receive(dbusClientTestMethodReturn(serviceRemove.serial, DbusBody.from()));
+	socketManager.loop();
+	assert(serviceUnsubscribed);
+	assert(dbusClientTestMatchCallCount(transport, "RemoveMatch", watchRule) == 1);
+	auto watchRemove = dbusClientTestSentMessage(transport,
+		dbusClientTestMatchCallIndex(transport, "RemoveMatch", watchRule));
+	transport.receive(dbusClientTestError(watchRemove.serial,
+		"org.example.WatchRemovalFailure", "ambiguous"));
+	socketManager.loop();
+	auto remote = watchRule in client.remoteMatches_;
+	assert(remote !is null);
+	assert((*remote).phase == DbusRemoteMatchPhase.failedRemoval);
+	auto watchRemovalFailure = (*remote).removalFailure;
+	auto remoteError = cast(DbusRemoteError) watchRemovalFailure;
+	assert(remoteError !is null);
+	assert(remoteError.errorName.text == "org.example.WatchRemovalFailure");
+
+	Exception publicError;
+	auto sentCount = transport.sent.length;
+	client.subscribe(watchMatch, (const ref DbusSignalMessage signal) {})
+		.then((DbusSubscription) {
+			assert(false);
+		}, (Exception exception) {
+			publicError = exception;
+		}).ignoreResult();
+	socketManager.loop();
+	assert(publicError is watchRemovalFailure);
+	assert(transport.sent.length == sentCount);
+
+	client.disconnect("clear failed owner-watch removal");
+	socketManager.loop();
+	assert(client.rules_.length == 0);
+	assert(client.ownerWatches_.length == 0);
+	assert(client.remoteMatches_.length == 0);
+}
+
+debug(ae_unittest) unittest
+{
+	auto script = new DbusClientTestAttemptScript;
+	auto client = dbusClientTestConnect(script);
+	auto transport = script.transports[0];
+	dbusClientTestAuthenticate(transport);
+	dbusClientTestReady(transport);
+	auto service = DbusBusName.parse("org.example.PublicTombstoneWatchService");
+	auto serviceMatch = DbusSignalMatch.signal()
+		.withSender(service)
+		.withPath(DbusObjectPath.parse("/org/example/Object"))
+		.withInterface(DbusInterfaceName.parse("org.example.Interface"))
+		.withMember(DbusMemberName.parse("Changed"));
+	auto watchMatch = DbusSignalMatch.signal()
+		.withSender(DbusBusName.parse("org.freedesktop.DBus"))
+		.withInterface(DbusInterfaceName.parse("org.freedesktop.DBus"))
+		.withMember(DbusMemberName.parse("NameOwnerChanged"))
+		.withPath(DbusObjectPath.parse("/org/freedesktop/DBus"))
+		.withArgument(0, service.text);
+	auto watchRule = watchMatch.canonicalRule;
+	DbusSubscription publicSubscription;
+	client.subscribe(watchMatch, (const ref DbusSignalMessage signal) {})
+		.then((DbusSubscription value) {
+			publicSubscription = value;
+		}, (Exception) {
+			assert(false);
+		}).ignoreResult();
+	auto watchAdd = dbusClientTestSentMessage(transport, 4);
+	assert(watchAdd.headers.member.text == "AddMatch");
+	assert(watchAdd.body.values[0].get!string() == watchRule);
+	transport.receive(dbusClientTestMethodReturn(watchAdd.serial, DbusBody.from()));
+	socketManager.loop();
+	assert(publicSubscription !is null);
+
+	Exception watchRemovalFailure;
+	publicSubscription.unsubscribe().then({
+		assert(false);
+	}, (Exception exception) {
+		watchRemovalFailure = exception;
+	}).ignoreResult();
+	assert(transport.sent.length == 6);
+	auto watchRemove = dbusClientTestSentMessage(transport, 5);
+	assert(watchRemove.headers.member.text == "RemoveMatch");
+	assert(watchRemove.body.values[0].get!string() == watchRule);
+	transport.receive(dbusClientTestError(watchRemove.serial,
+		"org.example.PublicWatchRemovalFailure", "ambiguous"));
+	socketManager.loop();
+	assert(watchRemovalFailure !is null);
+	auto remoteError = cast(DbusRemoteError) watchRemovalFailure;
+	assert(remoteError !is null);
+	assert(remoteError.errorName.text == "org.example.PublicWatchRemovalFailure");
+
+	Exception serviceError;
+	client.subscribe(serviceMatch, (const ref DbusSignalMessage signal) {})
+		.then((DbusSubscription) {
+			assert(false);
+		}, (Exception exception) {
+			serviceError = exception;
+		}).ignoreResult();
+	socketManager.loop();
+	assert(serviceError is watchRemovalFailure);
+	assert(transport.sent.length == 6);
+}
+
+// A subscription with sender='org.freedesktop.DBus' takes the exact-equality
+// bus-driver sender path in matchesRule directly, without an OwnerWatch, so
+// a signal actually sent by the bus driver must reach its handler.
+debug(ae_unittest) unittest
+{
+	auto script = new DbusClientTestAttemptScript;
+	auto client = dbusClientTestConnect(script);
+	auto transport = script.transports[0];
+	dbusClientTestAuthenticate(transport);
+	dbusClientTestReady(transport);
+
+	auto match = DbusSignalMatch.signal()
+		.withSender(DbusBusName.parse("org.freedesktop.DBus"))
+		.withInterface(DbusInterfaceName.parse("org.freedesktop.DBus"))
+		.withMember(DbusMemberName.parse("NameOwnerChanged"));
+	size_t calls;
+	DbusSubscription subscription;
+	client.subscribe(match, (const ref DbusSignalMessage signal) {
+		assert(signal.sender.text == "org.freedesktop.DBus");
+		calls++;
+	}).then((DbusSubscription value) {
+		subscription = value;
+	}, (Exception) {
+		assert(false);
+	}).ignoreResult();
+
+	assert(transport.sent.length == 5);
+	auto add = dbusClientTestSentMessage(transport, 4);
+	assert(add.headers.member.text == "AddMatch");
+	assert(client.ownerWatches_.length == 0);
+	transport.receive(dbusClientTestMethodReturn(add.serial, DbusBody.from()));
+	socketManager.loop();
+	assert(subscription !is null);
+	assert(client.ownerWatches_.length == 0);
+
+	transport.receive(dbusClientTestOwnerChanged("org.example.SomeService", "", ":1.55"));
+	assert(calls == 1);
+}
+
+debug(ae_unittest) unittest
+{
+	auto script = new DbusClientTestAttemptScript;
+	auto client = dbusClientTestConnect(script);
+	auto transport = script.transports[0];
+	dbusClientTestAuthenticate(transport);
+	dbusClientTestReady(transport);
+	auto service = DbusBusName.parse("org.example.AbsentService");
+	auto match = DbusSignalMatch.signal()
+		.withSender(service)
+		.withPath(DbusObjectPath.parse("/org/example/Object"))
+		.withInterface(DbusInterfaceName.parse("org.example.Interface"))
+		.withMember(DbusMemberName.parse("Changed"));
+	size_t calls;
+	client.subscribe(match, (const ref DbusSignalMessage signal) {
+		calls++;
+	}).ignoreResult();
+	auto watchAdd = dbusClientTestSentMessage(transport, 4);
+	transport.receive(dbusClientTestMethodReturn(watchAdd.serial, DbusBody.from()));
+	socketManager.loop();
+	auto seed = dbusClientTestSentMessage(transport, 5);
+	transport.receive(dbusClientTestError(seed.serial,
+		"org.freedesktop.DBus.Error.NameHasNoOwner", "absent"));
+	socketManager.loop();
+	auto appAdd = dbusClientTestSentMessage(transport, 6);
+	transport.receive(dbusClientTestMethodReturn(appAdd.serial, DbusBody.from()));
+	socketManager.loop();
+	transport.receive(dbusClientTestSignal(":1.101", "", DbusBody.from()));
+	assert(calls == 0);
+	transport.receive(dbusClientTestOwnerChanged(service.text, "", ":1.101"));
+	transport.receive(dbusClientTestSignal(":1.101", "", DbusBody.from()));
+	assert(calls == 1);
+}
+
+debug(ae_unittest) unittest
+{
+	auto script = new DbusClientTestAttemptScript;
+	auto client = dbusClientTestConnect(script);
+	auto transport = script.transports[0];
+	dbusClientTestAuthenticate(transport);
+	dbusClientTestReady(transport);
+	auto service = DbusBusName.parse("org.example.SeedRemoteFailureService");
+	auto firstMatch = DbusSignalMatch.signal()
+		.withSender(service)
+		.withPath(DbusObjectPath.parse("/org/example/Object"))
+		.withInterface(DbusInterfaceName.parse("org.example.Interface"))
+		.withMember(DbusMemberName.parse("Changed"));
+	auto secondMatch = firstMatch.withMember(DbusMemberName.parse("Other"));
+	Exception firstError;
+	Exception secondError;
+	client.subscribe(firstMatch, (const ref DbusSignalMessage signal) {})
+		.then((DbusSubscription) {
+			assert(false);
+		}, (Exception exception) {
+			firstError = exception;
+		}).ignoreResult();
+	client.subscribe(secondMatch, (const ref DbusSignalMessage signal) {})
+		.then((DbusSubscription) {
+			assert(false);
+		}, (Exception exception) {
+			secondError = exception;
+		}).ignoreResult();
+	auto watchAdd = dbusClientTestSentMessage(transport, 4);
+	assert(watchAdd.headers.member.text == "AddMatch");
+	transport.receive(dbusClientTestMethodReturn(watchAdd.serial, DbusBody.from()));
+	socketManager.loop();
+	auto seed = dbusClientTestSentMessage(transport, 5);
+	assert(seed.headers.member.text == "GetNameOwner");
+	transport.receive(dbusClientTestError(seed.serial,
+		"org.example.GetNameOwnerFailure", "rejected"));
+	socketManager.loop();
+	assert(firstError !is null);
+	auto remote = cast(DbusRemoteError) firstError;
+	assert(remote !is null);
+	assert(remote.errorName.text == "org.example.GetNameOwnerFailure");
+	assert(secondError is firstError);
+	assert(transport.sent.length == 7);
+	auto watchRemove = dbusClientTestSentMessage(transport, 6);
+	assert(watchRemove.headers.member.text == "RemoveMatch");
+	assert(watchRemove.body.values[0].get!string() ==
+		watchAdd.body.values[0].get!string());
+
+	DbusSubscription retrySubscription;
+	client.subscribe(firstMatch, (const ref DbusSignalMessage signal) {})
+		.then((DbusSubscription value) {
+			retrySubscription = value;
+		}, (Exception) {
+			assert(false);
+		}).ignoreResult();
+	assert(transport.sent.length == 7);
+	transport.receive(dbusClientTestError(watchRemove.serial,
+		"org.freedesktop.DBus.Error.MatchRuleNotFound", "already absent"));
+	socketManager.loop();
+	assert(transport.sent.length == 8);
+	auto retryWatchAdd = dbusClientTestSentMessage(transport, 7);
+	assert(retryWatchAdd.headers.member.text == "AddMatch");
+	assert(retryWatchAdd.body.values[0].get!string() ==
+		watchAdd.body.values[0].get!string());
+	transport.receive(dbusClientTestMethodReturn(retryWatchAdd.serial, DbusBody.from()));
+	socketManager.loop();
+	assert(transport.sent.length == 9);
+	auto retrySeed = dbusClientTestSentMessage(transport, 8);
+	assert(retrySeed.headers.member.text == "GetNameOwner");
+	transport.receive(dbusClientTestMethodReturn(retrySeed.serial, DbusBody.from(":1.131")));
+	socketManager.loop();
+	assert(transport.sent.length == 10);
+	auto retryAdd = dbusClientTestSentMessage(transport, 9);
+	assert(retryAdd.headers.member.text == "AddMatch");
+	assert(retryAdd.body.values[0].get!string() == firstMatch.canonicalRule);
+	transport.receive(dbusClientTestMethodReturn(retryAdd.serial, DbusBody.from()));
+	socketManager.loop();
+	assert(retrySubscription !is null);
+}
+
+debug(ae_unittest) unittest
+{
+	auto script = new DbusClientTestAttemptScript;
+	auto client = dbusClientTestConnect(script);
+	auto transport = script.transports[0];
+	dbusClientTestAuthenticate(transport);
+	dbusClientTestReady(transport);
+	auto service = DbusBusName.parse("org.example.SeedMalformedFailureService");
+	auto firstMatch = DbusSignalMatch.signal()
+		.withSender(service)
+		.withPath(DbusObjectPath.parse("/org/example/Object"))
+		.withInterface(DbusInterfaceName.parse("org.example.Interface"))
+		.withMember(DbusMemberName.parse("Changed"));
+	auto secondMatch = firstMatch.withMember(DbusMemberName.parse("Other"));
+	Exception firstError;
+	Exception secondError;
+	client.subscribe(firstMatch, (const ref DbusSignalMessage signal) {})
+		.then((DbusSubscription) {
+			assert(false);
+		}, (Exception exception) {
+			firstError = exception;
+		}).ignoreResult();
+	client.subscribe(secondMatch, (const ref DbusSignalMessage signal) {})
+		.then((DbusSubscription) {
+			assert(false);
+		}, (Exception exception) {
+			secondError = exception;
+		}).ignoreResult();
+	auto watchAdd = dbusClientTestSentMessage(transport, 4);
+	assert(watchAdd.headers.member.text == "AddMatch");
+	transport.receive(dbusClientTestMethodReturn(watchAdd.serial, DbusBody.from()));
+	socketManager.loop();
+	auto seed = dbusClientTestSentMessage(transport, 5);
+	assert(seed.headers.member.text == "GetNameOwner");
+	transport.receive(dbusClientTestMethodReturn(seed.serial,
+		DbusBody.from(cast(uint) 1)));
+	socketManager.loop();
+	assert(firstError !is null);
+	assert(cast(DbusTypeMismatchException) firstError !is null);
+	assert(secondError is firstError);
+	assert(transport.sent.length == 7);
+	auto watchRemove = dbusClientTestSentMessage(transport, 6);
+	assert(watchRemove.headers.member.text == "RemoveMatch");
+	assert(watchRemove.body.values[0].get!string() ==
+		watchAdd.body.values[0].get!string());
+
+	DbusSubscription retrySubscription;
+	client.subscribe(firstMatch, (const ref DbusSignalMessage signal) {})
+		.then((DbusSubscription value) {
+			retrySubscription = value;
+		}, (Exception) {
+			assert(false);
+		}).ignoreResult();
+	assert(transport.sent.length == 7);
+	transport.receive(dbusClientTestMethodReturn(watchRemove.serial, DbusBody.from()));
+	socketManager.loop();
+	assert(transport.sent.length == 8);
+	auto retryWatchAdd = dbusClientTestSentMessage(transport, 7);
+	assert(retryWatchAdd.headers.member.text == "AddMatch");
+	assert(retryWatchAdd.body.values[0].get!string() ==
+		watchAdd.body.values[0].get!string());
+	transport.receive(dbusClientTestMethodReturn(retryWatchAdd.serial, DbusBody.from()));
+	socketManager.loop();
+	assert(transport.sent.length == 9);
+	auto retrySeed = dbusClientTestSentMessage(transport, 8);
+	assert(retrySeed.headers.member.text == "GetNameOwner");
+	transport.receive(dbusClientTestMethodReturn(retrySeed.serial, DbusBody.from(":1.132")));
+	socketManager.loop();
+	assert(transport.sent.length == 10);
+	auto retryAdd = dbusClientTestSentMessage(transport, 9);
+	assert(retryAdd.headers.member.text == "AddMatch");
+	assert(retryAdd.body.values[0].get!string() == firstMatch.canonicalRule);
+	transport.receive(dbusClientTestMethodReturn(retryAdd.serial, DbusBody.from()));
+	socketManager.loop();
+	assert(retrySubscription !is null);
+}
+
+debug(ae_unittest) unittest
+{
+	auto script = new DbusClientTestAttemptScript;
+	auto client = dbusClientTestConnect(script);
+	auto transport = script.transports[0];
+	dbusClientTestAuthenticate(transport);
+	dbusClientTestReady(transport);
+	auto service = DbusBusName.parse("org.example.SeedCleanupFailureService");
+	auto firstMatch = DbusSignalMatch.signal()
+		.withSender(service)
+		.withPath(DbusObjectPath.parse("/org/example/Object"))
+		.withInterface(DbusInterfaceName.parse("org.example.Interface"))
+		.withMember(DbusMemberName.parse("Changed"));
+	auto queuedMatch = firstMatch.withMember(DbusMemberName.parse("Queued"));
+	auto laterMatch = firstMatch.withMember(DbusMemberName.parse("Later"));
+	Exception seedError;
+	client.subscribe(firstMatch, (const ref DbusSignalMessage signal) {})
+		.then((DbusSubscription) {
+			assert(false);
+		}, (Exception exception) {
+			seedError = exception;
+		}).ignoreResult();
+	auto watchAdd = dbusClientTestSentMessage(transport, 4);
+	assert(watchAdd.headers.member.text == "AddMatch");
+	transport.receive(dbusClientTestMethodReturn(watchAdd.serial, DbusBody.from()));
+	socketManager.loop();
+	auto seed = dbusClientTestSentMessage(transport, 5);
+	assert(seed.headers.member.text == "GetNameOwner");
+	transport.receive(dbusClientTestError(seed.serial,
+		"org.example.GetNameOwnerFailure", "rejected"));
+	socketManager.loop();
+	assert(seedError !is null);
+	assert(transport.sent.length == 7);
+	auto watchRemove = dbusClientTestSentMessage(transport, 6);
+	assert(watchRemove.headers.member.text == "RemoveMatch");
+
+	Exception queuedError;
+	client.subscribe(queuedMatch, (const ref DbusSignalMessage signal) {})
+		.then((DbusSubscription) {
+			assert(false);
+		}, (Exception exception) {
+			queuedError = exception;
+		}).ignoreResult();
+	assert(transport.sent.length == 7);
+	transport.receive(dbusClientTestError(watchRemove.serial,
+		"org.example.CleanupRemoveFailure", "ambiguous"));
+	socketManager.loop();
+	assert(queuedError !is null);
+	assert(queuedError !is seedError);
+	auto remote = cast(DbusRemoteError) queuedError;
+	assert(remote !is null);
+	assert(remote.errorName.text == "org.example.CleanupRemoveFailure");
+
+	Exception laterError;
+	client.subscribe(laterMatch, (const ref DbusSignalMessage signal) {})
+		.then((DbusSubscription) {
+			assert(false);
+		}, (Exception exception) {
+			laterError = exception;
+		}).ignoreResult();
+	socketManager.loop();
+	assert(laterError is queuedError);
+	assert(transport.sent.length == 7);
+}
+
+debug(ae_unittest) unittest
+{
+	auto match = DbusSignalMatch.signal()
+		.withInterface(DbusInterfaceName.parse("org.example.Interface"))
+		.withMember(DbusMemberName.parse("Changed"));
+
+	{
+		auto script = new DbusClientTestAttemptScript;
+		auto client = dbusClientTestConnect(script);
+		auto transport = script.transports[0];
+		dbusClientTestAuthenticate(transport);
+		dbusClientTestReady(transport);
+		Exception subscribeError;
+		client.subscribe(match, (const ref DbusSignalMessage signal) {})
+			.then((DbusSubscription) {
+				assert(false);
+			}, (Exception exception) {
+				subscribeError = exception;
+			}).ignoreResult();
+		assert(transport.sent.length == 5);
+		client.disconnect("terminal during application add");
+		socketManager.loop();
+		assert(subscribeError is client.terminalCause_);
+		assert(client.registrations_.length == 0);
+		assert(client.rules_.length == 0);
+		assert(client.ownerWatches_.length == 0);
+		assert(client.remoteMatches_.length == 0);
+		assert(transport.sent.length == 5);
+	}
+
+	{
+		auto script = new DbusClientTestAttemptScript;
+		auto client = dbusClientTestConnect(script);
+		auto transport = script.transports[0];
+		dbusClientTestAuthenticate(transport);
+		dbusClientTestReady(transport);
+		DbusSubscription subscription;
+		client.subscribe(match, (const ref DbusSignalMessage signal) {})
+			.then((DbusSubscription value) {
+				subscription = value;
+			}, (Exception) {
+				assert(false);
+			}).ignoreResult();
+		auto add = dbusClientTestSentMessage(transport, 4);
+		transport.receive(dbusClientTestMethodReturn(add.serial, DbusBody.from()));
+		socketManager.loop();
+		Exception removalError;
+		subscription.unsubscribe().then({
+			assert(false);
+		}, (Exception exception) {
+			removalError = exception;
+		}).ignoreResult();
+		assert(transport.sent.length == 6);
+		client.disconnect("terminal during application removal");
+		socketManager.loop();
+		assert(!subscription.active);
+		assert(removalError is client.terminalCause_);
+		assert(client.registrations_.length == 0);
+		assert(client.rules_.length == 0);
+		assert(client.remoteMatches_.length == 0);
+		assert(transport.sent.length == 6);
+	}
+
+	{
+		auto script = new DbusClientTestAttemptScript;
+		auto client = dbusClientTestConnect(script);
+		auto transport = script.transports[0];
+		dbusClientTestAuthenticate(transport);
+		dbusClientTestReady(transport);
+		auto serviceMatch = match.withSender(DbusBusName.parse("org.example.TerminalService"));
+		Exception subscribeError;
+		client.subscribe(serviceMatch, (const ref DbusSignalMessage signal) {})
+			.then((DbusSubscription) {
+				assert(false);
+			}, (Exception exception) {
+				subscribeError = exception;
+			}).ignoreResult();
+		auto watchAdd = dbusClientTestSentMessage(transport, 4);
+		transport.receive(dbusClientTestMethodReturn(watchAdd.serial, DbusBody.from()));
+		socketManager.loop();
+		assert(transport.sent.length == 6);
+		assert(dbusClientTestSentMessage(transport, 5).headers.member.text == "GetNameOwner");
+		client.disconnect("terminal during owner seed");
+		socketManager.loop();
+		assert(subscribeError is client.terminalCause_);
+		assert(client.registrations_.length == 0);
+		assert(client.rules_.length == 0);
+		assert(client.ownerWatches_.length == 0);
+		assert(client.remoteMatches_.length == 0);
+		assert(transport.sent.length == 6);
+	}
+
+	{
+		auto script = new DbusClientTestAttemptScript;
+		auto client = dbusClientTestConnect(script);
+		auto transport = script.transports[0];
+		dbusClientTestAuthenticate(transport);
+		dbusClientTestReady(transport);
+		DbusSubscription firstSubscription;
+		client.subscribe(match, (const ref DbusSignalMessage signal) {})
+			.then((DbusSubscription value) {
+				firstSubscription = value;
+			}, (Exception) {
+				assert(false);
+			}).ignoreResult();
+		auto firstAdd = dbusClientTestSentMessage(transport, 4);
+		transport.receive(dbusClientTestMethodReturn(firstAdd.serial, DbusBody.from()));
+		socketManager.loop();
+		firstSubscription.unsubscribe().ignoreResult();
+		auto remove = dbusClientTestSentMessage(transport, 5);
+		Exception readdError;
+		client.subscribe(match, (const ref DbusSignalMessage signal) {})
+			.then((DbusSubscription) {
+				assert(false);
+			}, (Exception exception) {
+				readdError = exception;
+			}).ignoreResult();
+		transport.receive(dbusClientTestMethodReturn(remove.serial, DbusBody.from()));
+		socketManager.loop();
+		assert(transport.sent.length == 7);
+		assert(dbusClientTestSentMessage(transport, 6).headers.member.text == "AddMatch");
+		client.disconnect("terminal during re-add");
+		socketManager.loop();
+		assert(readdError is client.terminalCause_);
+		assert(client.registrations_.length == 0);
+		assert(client.rules_.length == 0);
+		assert(client.remoteMatches_.length == 0);
+	}
+}
+
+// A signal that arrives in the same read batch as the reply to a re-add
+// AddMatch (queued while a RemoveMatch for the same rule is still pending)
+// must reach the queued subscription's handler without waiting for a
+// socketManager.loop() tick, mirroring the first-acquisition path.
+debug(ae_unittest) unittest
+{
+	auto script = new DbusClientTestAttemptScript;
+	auto client = dbusClientTestConnect(script);
+	auto transport = script.transports[0];
+	dbusClientTestAuthenticate(transport);
+	dbusClientTestReady(transport);
+
+	auto match = DbusSignalMatch.signal()
+		.withInterface(DbusInterfaceName.parse("org.example.Interface"))
+		.withMember(DbusMemberName.parse("Changed"));
+
+	DbusSubscription firstSubscription;
+	client.subscribe(match, (const ref DbusSignalMessage signal) {})
+		.then((DbusSubscription value) {
+			firstSubscription = value;
+		}, (Exception) {
+			assert(false);
+		}).ignoreResult();
+	auto firstAdd = dbusClientTestSentMessage(transport, 4);
+	transport.receive(dbusClientTestMethodReturn(firstAdd.serial, DbusBody.from()));
+	socketManager.loop();
+	assert(firstSubscription !is null);
+
+	firstSubscription.unsubscribe().ignoreResult();
+	auto remove = dbusClientTestSentMessage(transport, 5);
+
+	size_t secondCalls;
+	DbusSubscription secondSubscription;
+	client.subscribe(match, (const ref DbusSignalMessage signal) {
+		secondCalls++;
+	}).then((DbusSubscription value) {
+		secondSubscription = value;
+	}, (Exception) {
+		assert(false);
+	}).ignoreResult();
+
+	// RemoveMatch completes while the re-subscription is queued; this
+	// triggers finishRemoteMatchRemoval, which re-adds the rule.
+	transport.receive(dbusClientTestMethodReturn(remove.serial, DbusBody.from()));
+	socketManager.loop();
+	assert(transport.sent.length == 7);
+	auto secondAdd = dbusClientTestSentMessage(transport, 6);
+	assert(secondAdd.headers.member.text == "AddMatch");
+
+	// Deliver the second AddMatch reply and a matching signal in the same
+	// read batch, before running the event loop.
+	transport.receive(dbusClientTestMethodReturn(secondAdd.serial, DbusBody.from()));
+	transport.receive(dbusClientTestSignal(":1.7", "", DbusBody.from("re-add same batch")));
+	assert(secondCalls == 1);
+	socketManager.loop();
+	assert(secondSubscription !is null);
+}
+
+debug(ae_unittest) unittest
+{
+	auto script = new DbusClientTestAttemptScript;
+	auto client = dbusClientTestConnect(script);
+	auto transport = script.transports[0];
+	dbusClientTestAuthenticate(transport);
+	dbusClientTestReady(transport);
+	auto service = DbusBusName.parse("org.example.FinalWatchService");
+	auto match = DbusSignalMatch.signal()
+		.withSender(service)
+		.withPath(DbusObjectPath.parse("/org/example/Object"))
+		.withInterface(DbusInterfaceName.parse("org.example.Interface"))
+		.withMember(DbusMemberName.parse("Changed"));
+	DbusSubscription subscription;
+	client.subscribe(match, (const ref DbusSignalMessage signal) {})
+		.then((DbusSubscription value) {
+			subscription = value;
+		}, (Exception) {
+			assert(false);
+		}).ignoreResult();
+	auto watchAdd = dbusClientTestSentMessage(transport, 4);
+	transport.receive(dbusClientTestMethodReturn(watchAdd.serial, DbusBody.from()));
+	socketManager.loop();
+	auto seed = dbusClientTestSentMessage(transport, 5);
+	transport.receive(dbusClientTestMethodReturn(seed.serial, DbusBody.from(":1.120")));
+	socketManager.loop();
+	auto add = dbusClientTestSentMessage(transport, 6);
+	transport.receive(dbusClientTestMethodReturn(add.serial, DbusBody.from()));
+	socketManager.loop();
+	assert(subscription !is null);
+	subscription.unsubscribe().ignoreResult();
+	auto remove = dbusClientTestSentMessage(transport, 7);
+	transport.receive(dbusClientTestMethodReturn(remove.serial, DbusBody.from()));
+	socketManager.loop();
+	assert(transport.sent.length == 9);
+	auto watchRemove = dbusClientTestSentMessage(transport, 8);
+	assert(watchRemove.headers.member.text == "RemoveMatch");
+	auto staleCallbacks = dbusClientTestCaptureCallbacks(transport);
+	client.disconnect("terminal during final owner-watch removal");
+	staleCallbacks.readData(dbusClientTestMethodReturn(watchRemove.serial, DbusBody.from()));
+	socketManager.loop();
+	assert(!subscription.active);
+	assert(client.registrations_.length == 0);
+	assert(client.rules_.length == 0);
+	assert(client.ownerWatches_.length == 0);
+	assert(client.remoteMatches_.length == 0);
+	assert(transport.sent.length == 9);
 }
 }
