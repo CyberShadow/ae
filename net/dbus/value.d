@@ -800,6 +800,16 @@ struct DbusBody
 }
 
 debug(ae_unittest)
+package(ae.net.dbus) DbusBody dbusTestMalformedBody(
+	DbusSignature signature, scope const(DbusValue)[] values)
+{
+	DbusBody result;
+	result.bodyValues = copyValues(values);
+	result.bodySignature = signature;
+	return result;
+}
+
+debug(ae_unittest)
 private void expectDbusTypeMismatch(void delegate() action)
 {
 	bool caught;

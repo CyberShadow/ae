@@ -37,19 +37,35 @@ package(ae.net.dbus) final class DbusFrameDecoder
 
 	DbusMessage[] feed(Data fragment)
 	{
+		DbusMessage[] result;
+		feed(fragment, (DbusMessage message) {
+			result ~= message;
+			return true;
+		});
+		return result;
+	}
+
+	/**
+	 * Delivers each complete frame before inspecting the next buffered frame.
+	 * Returning false retains the undecoded suffix for a later call. A
+	 * DbusProtocolException from parsing or the sink resets this decoder and is
+	 * rethrown unchanged.
+	 */
+	void feed(Data fragment, scope bool delegate(DbusMessage message) sink)
+	{
+		assert(sink !is null);
 		try
 		{
 			if (fragment.length)
 				buffered ~= fragment.dup;
 
-			DbusMessage[] result;
 			while (true)
 			{
 				auto available = buffered.bytes;
 				if (expectedFrameLength_ == 0)
 				{
 					if (available.length < 16)
-						return result;
+						return;
 					ubyte[16] fixedHeader;
 					foreach (index; 0 .. fixedHeader.length)
 						fixedHeader[index] = available[index];
@@ -57,15 +73,18 @@ package(ae.net.dbus) final class DbusFrameDecoder
 				}
 
 				if (available.length < expectedFrameLength_)
-					return result;
+					return;
 
 				{
 					auto frame = available[0 .. expectedFrameLength_].joinData();
 					consumeBufferedPrefix(expectedFrameLength_);
 					expectedFrameLength_ = 0;
+					DbusMessage message;
 					frame.enter((scope bytes) {
-						result ~= decodeDbusMessage(bytes);
+						message = decodeDbusMessage(bytes);
 					});
+					if (!sink(message))
+						return;
 				}
 			}
 		}
@@ -303,6 +322,74 @@ debug(ae_unittest) unittest
 	assert(decoder.bufferedLength == 0);
 	assert(decoder.bufferedData.length == 0);
 	assert(decoder.expectedFrameLength == 0);
+}
+
+debug(ae_unittest) unittest
+{
+	auto frame = dbusCodecTestFrame(9, "BeforeInvalid", "first delivery");
+	immutable ubyte[] invalidFixedHeader = [cast(ubyte) 'x', 1, 0, 1,
+		0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0];
+	auto decoder = new DbusFrameDecoder;
+	size_t deliveries;
+	DbusProtocolException caught;
+	try
+		decoder.feed(frame ~ Data(invalidFixedHeader.dup), (DbusMessage message) {
+			deliveries++;
+			assertDbusCodecTestMessage(message, 9, "BeforeInvalid", "first delivery");
+			return true;
+		});
+	catch (DbusProtocolException exception)
+		caught = exception;
+	assert(deliveries == 1);
+	assert(caught !is null);
+	assert(decoder.bufferedLength == 0);
+	assert(decoder.bufferedData.length == 0);
+	assert(decoder.expectedFrameLength == 0);
+	auto fresh = decoder.feed(frame);
+	assert(fresh.length == 1);
+	assertDbusCodecTestMessage(fresh[0], 9, "BeforeInvalid", "first delivery");
+}
+
+debug(ae_unittest) unittest
+{
+	auto first = dbusCodecTestFrame(10, "StopFirst", "first frame");
+	auto second = dbusCodecTestFrame(11, "StopSecond", "second frame");
+	auto decoder = new DbusFrameDecoder;
+	size_t deliveries;
+	decoder.feed(first ~ second, (DbusMessage message) {
+		deliveries++;
+		assertDbusCodecTestMessage(message, 10, "StopFirst", "first frame");
+		return false;
+	});
+	assert(deliveries == 1);
+	assert(decoder.bufferedData == second);
+	auto remaining = decoder.feed(Data.init);
+	assert(remaining.length == 1);
+	assertDbusCodecTestMessage(remaining[0], 11, "StopSecond", "second frame");
+	assert(decoder.bufferedLength == 0);
+	assert(decoder.expectedFrameLength == 0);
+}
+
+debug(ae_unittest) unittest
+{
+	auto frame = dbusCodecTestFrame(12, "SinkFailure", "reset state");
+	auto decoder = new DbusFrameDecoder;
+	auto cause = new DbusProtocolException("sink protocol failure");
+	DbusProtocolException caught;
+	scope bool delegate(DbusMessage) sink = (DbusMessage) {
+		throw cause;
+	};
+	try
+		decoder.feed(frame, sink);
+	catch (DbusProtocolException exception)
+		caught = exception;
+	assert(caught is cause);
+	assert(decoder.bufferedLength == 0);
+	assert(decoder.bufferedData.length == 0);
+	assert(decoder.expectedFrameLength == 0);
+	auto fresh = decoder.feed(frame);
+	assert(fresh.length == 1);
+	assertDbusCodecTestMessage(fresh[0], 12, "SinkFailure", "reset state");
 }
 
 debug(ae_unittest) unittest
