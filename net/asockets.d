@@ -7078,6 +7078,43 @@ debug(ae_unittest) unittest
 
 // ***************************************************************************
 
+/// Block until every one of `sockets` is readable, as a test precondition.
+/// Retries instead of failing when `select` is interrupted by a signal
+/// (`std.socket.Socket.select` reports `EINTR` as a `-1` return value, which is
+/// not a readiness verdict), and accumulates readiness reported across calls.
+debug(ae_unittest)
+private void establishReadability(scope Socket[] sockets, string what)
+{
+	import core.time : MonoTime, seconds;
+
+	// A healthy loopback becomes readable in microseconds; the budget only has
+	// to outlast scheduling hiccups on a loaded machine, and must stay below
+	// the watchdog timeout of the test using this.
+	auto deadline = MonoTime.currTime() + 2.seconds;
+
+	auto pending = sockets.dup;
+	while (pending.length)
+	{
+		auto now = MonoTime.currTime();
+		assert(now < deadline, "could not establish readiness for " ~ what);
+
+		auto readSet = new SocketSet(cast(uint)pending.length);
+		foreach (socket; pending)
+			readSet.add(socket);
+
+		if (Socket.select(readSet, null, null, deadline - now) < 0)
+			continue; // interrupted by a signal - not a readiness verdict
+
+		size_t remaining;
+		foreach (socket; pending)
+			if (!readSet.isSet(socket))
+				pending[remaining++] = socket;
+		pending = pending[0 .. remaining];
+	}
+}
+
+// ***************************************************************************
+
 // Regression: current stream handler/read interest governs dispatch even for
 // readiness already observed by the event loop.
 debug(ae_unittest) unittest
@@ -7183,13 +7220,8 @@ debug(ae_unittest) unittest
 
 		// Establish public readiness for both accepted streams without consuming
 		// either original byte before ae returns to its event loop.
-		auto readSet = new SocketSet(1024);
-		readSet.add(accepted[0].socket);
-		readSet.add(accepted[1].socket);
-		auto ready = Socket.select(readSet, null, null, 1.seconds);
-		assert(ready == 2 &&
-			readSet.isSet(accepted[0].socket) && readSet.isSet(accepted[1].socket),
-			"could not establish readiness for both accepted loopback streams");
+		establishReadability([accepted[0].socket, accepted[1].socket],
+			"both accepted loopback streams");
 	}
 
 	void maybeStart()
@@ -7783,11 +7815,8 @@ debug(ae_unittest) unittest
 			"I/O callback ran synchronously during send/disconnect setup");
 
 		assert(peer.socket.send(latePayload) == latePayload.length);
-		auto readSet = new SocketSet(1024);
-		readSet.add(sender.socket);
-		auto ready = Socket.select(readSet, null, null, 1.seconds);
-		assert(ready == 1 && readSet.isSet(sender.socket),
-			"could not establish sender readability for late positive data");
+		establishReadability([sender.socket],
+			"the sender's late positive data");
 
 		// A timer, unlike onNextTick, lets the event loop dispatch I/O first.
 		probeTimer = setTimeout({
