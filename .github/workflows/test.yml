@@ -8,7 +8,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04, windows-2022, macos-14]
-        dc: [dmd-2.111.0, ldc-1.32.2]
+        dc: [dmd-2.111.0, ldc-1.33.0]
         arch: [x86_64]
         include:
           # also test an older DMD verrsion
@@ -17,7 +17,7 @@ jobs:
             arch: x86_64
           # also test 32-bit (but only on Windows)
           - os: windows-2022
-            dc: ldc-1.32.2
+            dc: ldc-1.33.0
             arch: x86_mscoff # not x86 to avoid OPTLINK deadlock bugs
         exclude:
           # Do not try to use DMD on Windows
@@ -40,9 +40,9 @@ jobs:
 
       # https://github.com/dlang-community/setup-dlang/issues/85
       - name: Set up PATH on Windows/x86 for LDC libcurl.dll
-        if: ${{ matrix.os == 'windows-2022' && matrix.dc == 'ldc-1.32.2' && matrix.arch == 'x86_mscoff' }}
+        if: ${{ matrix.os == 'windows-2022' && matrix.dc == 'ldc-1.33.0' && matrix.arch == 'x86_mscoff' }}
         run: |
-          echo "C:\hostedtoolcache\windows\ldc2\1.32.2\x64\ldc2-1.32.2-windows-multilib\lib32" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo "C:\hostedtoolcache\windows\ldc2\1.33.0\x64\ldc2-1.33.0-windows-multilib\lib32" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - run: dub test --debug=ae_unittest --arch=${{ matrix.arch }}
 
