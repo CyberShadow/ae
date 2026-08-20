@@ -44,15 +44,7 @@ struct Database
 	/// Return an `SQLite.PreparedStatement`, caching it.
 	SQLite.PreparedStatement stmt(string sql)()
 	{
-		debug(DATABASE) stderr.writeln(sql);
-		static SQLite.PreparedStatement statement = null;
-		static Database* statementDatabase; // Ensure the statement belongs to the current database
-		if (statementDatabase !is &this)
-		{
-			statement = db.prepare(sql).enforce("Statement compilation failed: " ~ sql);
-			statementDatabase = &this;
-		}
-		return statement;
+		return stmt(sql);
 	}
 
 	private SQLite.PreparedStatement[const(void)*] cache;
