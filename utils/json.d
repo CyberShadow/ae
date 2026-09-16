@@ -126,6 +126,12 @@ struct JsonWriter(Output)
 			static assert(0, "Don't know how to write " ~ T.stringof);
 	}
 
+	/// Write pre-rendered JSON text verbatim.
+	void putRaw(C)(C[] raw)
+	{
+		output.put(raw);
+	}
+
 	void beginArray()
 	{
 		output.putEx('[');
@@ -191,6 +197,12 @@ struct PrettyJsonWriter(Output, alias indent = '\t', alias newLine = '\n', alias
 		jsonWriter.putValue(v);
 	} ///
 
+	void putRaw(C)(C[] raw)
+	{
+		putIndent();
+		jsonWriter.putRaw(raw);
+	} ///
+
 	void beginArray()
 	{
 		putIndent();
@@ -253,130 +265,264 @@ struct CustomJsonSerializer(Writer, JsonOptions options = JsonOptions.init)
 private struct WriterSinkAdapter(Writer, JsonOptions options = JsonOptions.init)
 {
 	Writer* writer;
+	bool needComma;
 
-	void handleNull()
+	void handle(V)(V v)
 	{
-		writer.putValue(null);
+		import ae.utils.serialization.serialization : isProtocolNull, isProtocolBoolean,
+			isProtocolNumeric, isProtocolString, isProtocolArray, isProtocolMap;
+
+		static if (isProtocolNull!V)
+			writer.putValue(null);
+		else static if (isProtocolBoolean!V)
+			writer.putValue(v.value);
+		else static if (isProtocolNumeric!V)
+			writer.putRaw(v.text);
+		else static if (isProtocolString!V)
+			writer.putValue(v.text);
+		else static if (isProtocolArray!V)
+		{
+			auto outerComma = needComma;
+			needComma = false;
+			writer.beginArray();
+			ArrayElementSink as = {adapter: &this};
+			v.reader(&as);
+			writer.endArray();
+			needComma = outerComma;
+		}
+		else static if (isProtocolMap!V)
+		{
+			auto outerComma = needComma;
+			needComma = false;
+			writer.beginObject();
+			ObjectFieldSink os = {adapter: &this};
+			v.reader(&os);
+			writer.endObject();
+			needComma = outerComma;
+		}
+		else
+			static assert(false, "WriterSinkAdapter: unsupported type " ~ V.stringof);
 	}
 
-	void handleBoolean(bool v)
+	void putRawJson(C)(C[] raw)
 	{
-		writer.putValue(v);
-	}
-
-	void handleNumeric(CC)(CC[] s)
-	{
-		writer.output.put(s);
-	}
-
-	void handleString(S)(S s)
-	{
-		writer.putValue(s);
-	}
-
-	void handleArray(Reader)(Reader reader)
-	{
-		writer.beginArray();
-		ArrayElementSink as = {adapter: &this};
-		reader(&as);
-		writer.endArray();
-	}
-
-	void handleObject(Reader)(Reader reader)
-	{
-		writer.beginObject();
-		ObjectFieldSink os = {adapter: &this};
-		reader(&os);
-		writer.endObject();
+		writer.putRaw(raw);
 	}
 
 	struct ArrayElementSink
 	{
 		WriterSinkAdapter* adapter;
-		bool first = true;
 
-		private void comma()
+		void handle(V)(V v)
 		{
-			if (!first)
+			if (adapter.needComma)
 				adapter.writer.putComma();
-			first = false;
+			adapter.handle(v);
+			adapter.needComma = true;
 		}
 
-		void handleNull()             { comma(); adapter.handleNull(); }
-		void handleBoolean(bool v)    { comma(); adapter.handleBoolean(v); }
-		void handleNumeric(CC)(CC[] s){ comma(); adapter.handleNumeric(s); }
-		void handleString(S)(S s)     { comma(); adapter.handleString(s); }
-		void handleArray(R)(R reader) { comma(); adapter.handleArray(reader); }
-		void handleObject(R)(R reader){ comma(); adapter.handleObject(reader); }
+		void putRawJson(C)(C[] raw)
+		{
+			if (adapter.needComma)
+				adapter.writer.putComma();
+			adapter.putRawJson(raw);
+			adapter.needComma = true;
+		}
 	}
 
 	struct ObjectFieldSink
 	{
 		WriterSinkAdapter* adapter;
-		bool first = true;
 
-		void handleField(NameReader, ValueReader)(NameReader nameReader, ValueReader valueReader)
+		void handle(V)(V v)
 		{
-			// Write key
-			KeySink ks = {adapter: adapter};
-			nameReader(&ks);
+			import ae.utils.serialization.serialization : isProtocolField;
 
-			if (!first)
+			static if (isProtocolField!V)
+				handleFieldImpl(v.nameReader, v.valueReader);
+			else
+				static assert(false, "ObjectFieldSink: expected Field, got " ~ V.stringof);
+		}
+
+		void handleFieldImpl(NameReader, ValueReader)(NameReader nameReader, ValueReader valueReader)
+		{
+			if (adapter.needComma)
 				adapter.writer.putComma();
-			first = false;
 
-			// Write the key value that was captured
-			static if (options.nonStringKeys == JsonOptions.NonStringKeys.error)
-			{
-				adapter.writer.putValue(ks.key);
-			}
-			else static if (options.nonStringKeys == JsonOptions.NonStringKeys.stringify)
-			{
-				if (ks.key !is null)
-					adapter.writer.putValue(ks.key);
-				else
-					adapter.writer.output.put(ks.numericKey);
-			}
-			else static if (options.nonStringKeys == JsonOptions.NonStringKeys.asIs)
-			{
-				if (ks.key !is null)
-					adapter.writer.putValue(ks.key);
-				else
-					adapter.writer.output.put(ks.numericKey);
-			}
-
+			writeName(nameReader);
 			adapter.writer.endKey();
 
-			// Write value
-			valueReader(adapter);
+			static struct ValueSink
+			{
+				typeof(adapter) a;
+				void handle(VV)(VV vv) { a.handle(vv); }
+				void putRawJson(C)(C[] raw) { a.putRawJson(raw); }
+			}
+			ValueSink vs = {a: adapter};
+			valueReader(&vs);
+
+			adapter.needComma = true;
 		}
-	}
 
-	struct KeySink
-	{
-		WriterSinkAdapter* adapter;
-		const(char)[] key;
-		const(char)[] numericKey;
-
-		void handleString(S)(S s)     { key = s; }
-		void handleNumeric(CC)(CC[] s){ numericKey = s; }
-		void handleNull()
+		private void writeName(NameReader)(NameReader nameReader)
 		{
 			static if (options.nonStringKeys == JsonOptions.NonStringKeys.error)
-				throw new Exception("Non-string key in JSON object.");
-			else
-				key = "";
-		}
-		void handleBoolean(bool v)
-		{
-			static if (options.nonStringKeys == JsonOptions.NonStringKeys.error)
-				throw new Exception("Non-string key in JSON object.");
+			{
+				static struct KeySink
+				{
+					Writer* writer;
+					void handle(V)(V v)
+					{
+						import ae.utils.serialization.serialization : isProtocolNull, isProtocolString;
+						static if (isProtocolString!V)
+							writer.putValue(v.text);
+						else static if (isProtocolNull!V)
+							writer.putValue("");
+						else
+							static assert(false, "Non-string key type not supported (use JsonOptions.NonStringKeys)");
+					}
+				}
+				KeySink ks = {writer: adapter.writer};
+				nameReader(&ks);
+			}
+			else static if (options.nonStringKeys == JsonOptions.NonStringKeys.asIs)
+				nameReader(adapter);
+			else static if (options.nonStringKeys == JsonOptions.NonStringKeys.stringify)
+			{
+				static struct StringifyKeySink
+				{
+					Writer* writer;
+					void handle(V)(V v)
+					{
+						import ae.utils.serialization.serialization : isProtocolNull,
+							isProtocolBoolean, isProtocolNumeric, isProtocolString;
+						static if (isProtocolString!V)
+							writer.putValue(v.text);
+						else static if (isProtocolNumeric!V)
+							writer.putValue(v.text);
+						else static if (isProtocolBoolean!V)
+							writer.putValue(v.value ? "true" : "false");
+						else static if (isProtocolNull!V)
+							writer.putValue("null");
+					}
+				}
+				StringifyKeySink ks = {writer: adapter.writer};
+				nameReader(&ks);
+			}
 		}
 	}
 }
 
 /// JSON serializer with `StringBuilder` output.
 alias JsonSerializer = CustomJsonSerializer!(JsonWriter!StringBuilder);
+
+debug(ae_unittest) unittest
+{
+	struct Nested
+	{
+		int value;
+	}
+
+	struct Composite
+	{
+		int integer;
+		string text;
+		bool boolean;
+		double doubleValue;
+		int[] array;
+		int[string] map;
+		Nested nested;
+		int* pointer;
+		int* nullPointer;
+		JSONFragment fragment;
+	}
+
+	int pointerValue = 5;
+	Composite value = {
+		integer: 17,
+		text: "text",
+		boolean: true,
+		doubleValue: 1.5,
+		array: [1, 2],
+		map: ["entry": 3],
+		nested: Nested(4),
+		pointer: &pointerValue,
+		nullPointer: null,
+		fragment: JSONFragment(`{"raw":[6]}`),
+	};
+
+	JsonSerializer serializer;
+	serializer.put(value);
+	assert(serializer.writer.output.get() == toJson(value));
+	assert(serializer.writer.output.get() ==
+		`{"integer":17,"text":"text","boolean":true,"doubleValue":1.5,"array":[1,2],"map":{"entry":3},"nested":{"value":4},"pointer":5,"nullPointer":null,"fragment":{"raw":[6]}}`);
+
+	CustomJsonSerializer!(PrettyJsonWriter!StringBuilder) prettySerializer;
+	prettySerializer.put(value);
+	// CustomJsonSerializer preserves JSONFragment bytes through putRawJson,
+	// while toPrettyJson reparses and formats fragments because its pretty sink
+	// does not expose raw passthrough.
+	assert(prettySerializer.writer.output.get() ==
+`{
+	"integer" : 17,
+	"text" : "text",
+	"boolean" : true,
+	"doubleValue" : 1.5,
+	"array" : [
+		1,
+		2
+	],
+	"map" : {
+		"entry" : 3
+	},
+	"nested" : {
+		"value" : 4
+	},
+	"pointer" : 5,
+	"nullPointer" : null,
+	"fragment" : {"raw":[6]}
+}`);
+
+	int[int] numericKeys = [7: 9];
+	alias StringifySerializer = CustomJsonSerializer!(
+		JsonWriter!StringBuilder,
+		JsonOptions(JsonOptions.NonStringKeys.stringify));
+	StringifySerializer stringifySerializer;
+	stringifySerializer.put(numericKeys);
+	assert(stringifySerializer.writer.output.get() == `{"7":9}`);
+
+	struct LegacyWriter
+	{
+		StringBuilder output;
+
+		void putValue(T)(T value)
+		{
+			static if (isSomeString!T)
+				output.put('"', value, '"');
+			else
+				static assert(false, "Unexpected LegacyWriter value type " ~ T.stringof);
+		}
+
+		void putRaw(C)(C[] raw) { output.put(raw); }
+		void beginArray() { output.put('['); }
+		void endArray() { output.put(']'); }
+		void beginObject() { output.put('{'); }
+		void endObject() { output.put('}'); }
+		void endKey() { output.put(':'); }
+		void putComma() { output.put(','); }
+	}
+
+	struct LegacyValue
+	{
+		int number;
+		JSONFragment fragment;
+	}
+
+	CustomJsonSerializer!LegacyWriter legacySerializer;
+	legacySerializer.put(LegacyValue(7, JSONFragment(`{"raw":[8]}`)));
+	assert(legacySerializer.writer.output.get() ==
+		`{"number":7,"fragment":{"raw":[8]}}`);
+}
 
 debug(ae_unittest) unittest
 {
