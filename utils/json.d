@@ -24,6 +24,7 @@ import std.traits;
 import std.typecons;
 import std.utf : encode;
 
+import ae.utils.appender;
 import ae.utils.textout;
 
 // ************************************************************************
@@ -376,6 +377,45 @@ private struct WriterSinkAdapter(Writer, JsonOptions options = JsonOptions.init)
 
 /// JSON serializer with `StringBuilder` output.
 alias JsonSerializer = CustomJsonSerializer!(JsonWriter!StringBuilder);
+
+debug(ae_unittest) unittest
+{
+	struct Out
+	{
+		string data;
+
+		void put(in char[] s) { data ~= s; }
+		void put(char c) { data ~= c; }
+	}
+
+	JsonWriter!Out writer;
+	writer.beginArray();
+	writer.putValue("one");
+	writer.putComma();
+	writer.beginObject();
+	writer.putValue("key");
+	writer.endKey();
+	writer.putValue("value");
+	writer.endObject();
+	writer.endArray();
+	assert(writer.output.data == `["one",{"key":"value"}]`);
+
+	PrettyJsonWriter!Out prettyWriter;
+	prettyWriter.beginArray();
+	prettyWriter.putValue("one");
+	prettyWriter.putComma();
+	prettyWriter.beginObject();
+	prettyWriter.putValue("key");
+	prettyWriter.endKey();
+	prettyWriter.putValue("value");
+	prettyWriter.endObject();
+	prettyWriter.endArray();
+	assert(prettyWriter.output.data == "[\n\t\"one\",\n\t{\n\t\t\"key\" : \"value\"\n\t}\n]");
+
+	JsonWriter!StringBuilder stringBuilderWriter;
+	stringBuilderWriter.beginArray();
+	assert(stringBuilderWriter.output.get() == "[");
+}
 
 private struct Escapes
 {
