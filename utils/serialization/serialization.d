@@ -31,6 +31,8 @@ import std.format;
 import std.traits;
 import std.typecons;
 
+import core.lifetime : copyEmplace;
+
 import ae.utils.meta : rangeTuple;
 import ae.utils.text;
 
@@ -1187,7 +1189,7 @@ template CustomDeserializer(alias Transform, alias anchor)
 				void handleValue(ref U v)
 				{
 					*p = new U;
-					**p = v;
+					copyEmplace(v, **p);
 				}
 
 				void handle(V)(V v)
@@ -1196,11 +1198,9 @@ template CustomDeserializer(alias Transform, alias anchor)
 						*p = null;
 					else
 					{
-						U uv;
-						auto inner = makeSink!U(&uv);
-						inner.handle(v);
 						*p = new U;
-						**p = uv;
+						auto inner = makeSink!U(*p);
+						inner.handle(v);
 					}
 				}
 			}
@@ -1497,21 +1497,55 @@ debug(ae_unittest) unittest
 	}
 }
 
-// Test pointer to struct
+// Test pointer deserialization
 debug(ae_unittest) unittest
 {
-	static struct Inner
+	import ae.utils.serialization.json : jsonParse;
+
+	static struct S
 	{
-		int x;
+		immutable string name;
+		int value;
+
+		static struct Form
+		{
+			string name;
+			int value;
+		}
+
+		Form toJSON() { return Form(name, value); }
+		static S fromJSON(ref Form f) { return S(f.name, f.value); }
 	}
 
-	Inner val = Inner(7);
-	Inner* original = &val;
-	Inner* result;
-	auto sink = deserializer(&result);
-	Serializer.Impl!Object.read(sink, original);
+	auto result = jsonParse!(S*)(`{"name":"test","value":7}`);
 	assert(result !is null);
-	assert(result.x == 7);
+	assert(result.name == "test");
+	assert(result.value == 7);
+
+	S* nullResult = jsonParse!(S*)(`null`);
+	assert(nullResult is null);
+
+	static struct Plain { int value; }
+	auto plainResult = jsonParse!(Plain*)(`{"value":3}`);
+	assert(plainResult !is null);
+	assert(plainResult.value == 3);
+
+	auto intResult = jsonParse!(int*)(`4`);
+	assert(intResult !is null);
+	assert(*intResult == 4);
+
+	static struct Node
+	{
+		int v;
+		Node* next;
+	}
+
+	auto nodeResult = jsonParse!(Node*)(
+		`{"v":1,"next":{"v":2,"next":null}}`);
+	assert(nodeResult !is null);
+	assert(nodeResult.v == 1);
+	assert(nodeResult.next !is null);
+	assert(nodeResult.next.v == 2);
 }
 
 // Test @SerializedName
