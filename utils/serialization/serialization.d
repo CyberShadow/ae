@@ -781,6 +781,17 @@ template CustomDeserializer(alias Transform, alias anchor)
 			}
 		}
 		else
+		static if (is(T U : U*) || is(T X == Nullable!X))
+		{
+			void handle(V)(V v)
+			{
+				T tv;
+				auto s = makeSink!T(&tv);
+				s.handle(v);
+				handleValue(tv);
+			}
+		}
+		else
 		static if (Transform!T.hasTransform)
 		{
 			// Transform handles this type — forward all events through
@@ -800,18 +811,6 @@ template CustomDeserializer(alias Transform, alias anchor)
 		{
 			static if (isProtocolNull!V)
 			{
-				static if (is(T X == Nullable!X))
-				{
-					T tv;  // Nullable.init is null
-					handleValue(tv);
-				}
-				else
-				static if (is(T U : U*))
-				{
-					T tv = null;
-					handleValue(tv);
-				}
-				else
 				static if (is(typeof({T tv = null;})))
 				{
 					T tv = null;
@@ -1181,6 +1180,7 @@ template CustomDeserializer(alias Transform, alias anchor)
 		else
 		static if (is(T U : U*))
 		{
+			// Keep pointers before Transform: hasMember sees through pointers.
 			// Pointer sink: Null -> leave null, others -> allocate and deserialize
 			static struct PointerSink
 			{
@@ -1546,6 +1546,52 @@ debug(ae_unittest) unittest
 	assert(nodeResult.v == 1);
 	assert(nodeResult.next !is null);
 	assert(nodeResult.next.v == 2);
+}
+
+// Test special types nested in arrays and a single-element tuple
+debug(ae_unittest) unittest
+{
+	import ae.utils.serialization.json : jsonParse;
+	import std.typecons : Nullable, Tuple;
+
+	static struct Inner { int x; }
+	static struct Holder
+	{
+		Inner* single;
+		Inner*[] many;
+		Nullable!Inner[] opt;
+	}
+
+	auto single = jsonParse!Holder(`{"single":{"x":7},"many":[]}`);
+	assert(single.single !is null && single.single.x == 7);
+	assert(single.many.length == 0);
+
+	auto many = jsonParse!Holder(`{"single":null,"many":[{"x":1},{"x":2}],"opt":[]}`);
+	assert(many.single is null);
+	assert(many.many.length == 2);
+	assert(many.many[0] !is null && many.many[0].x == 1);
+	assert(many.many[1] !is null && many.many[1].x == 2);
+	assert(many.opt.length == 0);
+
+	auto opt = jsonParse!Holder(`{"single":null,"many":[],"opt":[{"x":1},null]}`);
+	assert(opt.single is null);
+	assert(opt.many.length == 0);
+	assert(opt.opt.length == 2);
+	assert(!opt.opt[0].isNull && opt.opt[0].get.x == 1);
+	assert(opt.opt[1].isNull);
+
+	auto nestedNull = jsonParse!Holder(`{"single":null,"many":[{"x":3},null,{"x":4}],"opt":[]}`);
+	assert(nestedNull.many.length == 3);
+	assert(nestedNull.many[0] !is null && nestedNull.many[0].x == 3);
+	assert(nestedNull.many[1] is null);
+	assert(nestedNull.many[2] !is null && nestedNull.many[2].x == 4);
+
+	auto fixed = jsonParse!(Inner*[2])(`[{"x":5},{"x":6}]`);
+	assert(fixed[0] !is null && fixed[0].x == 5);
+	assert(fixed[1] !is null && fixed[1].x == 6);
+
+	auto tuple = jsonParse!(Tuple!(Inner*))(`{"x":8}`);
+	assert(tuple[0] !is null && tuple[0].x == 8);
 }
 
 // Test @SerializedName
