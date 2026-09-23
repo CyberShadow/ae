@@ -401,15 +401,27 @@ struct CustomSerializer(alias Transform = NoSerializeTransform, SerializerOption
 	{
 		static void read(Sink, T)(Sink sink, auto ref T v)
 		{
+			// typeof(null) also matches the pointer pattern below, but
+			// dereferencing it yields noreturn, so it must be handled first.
+			static if (is(T == typeof(null)))
+			{
+				sink.handle(Null());
+			}
+			else
+			// Keep pointers before Transform: hasMember sees through pointers,
+			// and the transform must not be invoked on a null pointee.
+			static if (is(T U : U*))
+			{
+				if (v is null)
+					sink.handle(Null());
+				else
+					read(sink, *v);
+			}
+			else
 			// Custom transform hook (format-specific, e.g. toJSON)
 			static if (Transform!(read, T).hasTransform)
 			{
 				Transform!(read, T).serialize(sink, v);
-			}
-			else
-			static if (is(T == typeof(null)))
-			{
-				sink.handle(Null());
 			}
 			else
 			static if (is(T X == Nullable!X))
@@ -472,14 +484,6 @@ struct CustomSerializer(alias Transform = NoSerializeTransform, SerializerOption
 				}
 				else
 					sink.handle(String!string(to!string(v)));
-			}
-			else
-			static if (is(T U : U*))
-			{
-				if (v is null)
-					sink.handle(Null());
-				else
-					read(sink, *v);
 			}
 			else
 			static if (isTuple!T)

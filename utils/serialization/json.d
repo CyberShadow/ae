@@ -1548,6 +1548,35 @@ debug(ae_unittest) unittest
 	assert(toJson(compatRoot) == input);
 }
 
+// A null pointer to a type with toJSON must serialize as null, not call toJSON.
+debug(ae_unittest) unittest
+{
+	static struct Node
+	{
+		int value;
+		Node*[] children;
+
+		struct Form
+		{
+			int value;
+			Node*[] children;
+		}
+
+		Form toJSON() { return Form(value, children); }
+		static Node fromJSON(ref Form form) { return Node(form.value, form.children); }
+	}
+
+	enum input = `{"value":1,"children":[null,{"value":2,"children":[]}]}`;
+	auto root = jsonParse!(Node*)(input);
+	assert(root.children.length == 2);
+	assert(root.children[0] is null);
+	assert(root.children[1].value == 2);
+	assert(toJson(root) == input);
+
+	Node* none = null;
+	assert(toJson(none) == `null`);
+}
+
 // Callback form of toJSON
 debug(ae_unittest) unittest
 {
