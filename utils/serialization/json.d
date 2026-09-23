@@ -1074,7 +1074,7 @@ template JsonDeserializeTransform(T)
 		static auto makeSink(T* p)
 		{
 			// Wrapper sink: deserialize into intermediate type Q using the
-			// standard deserializer, then apply T.fromJSON to produce T.
+			// JSON-aware deserializer, then apply T.fromJSON to produce T.
 			static struct TransformSink
 			{
 				T* target;
@@ -1082,7 +1082,7 @@ template JsonDeserializeTransform(T)
 
 				void handle(V)(V v)
 				{
-					auto s_ = Deserializer!Object.makeSink!Q(&temp);
+					auto s_ = JsonCustomDeserializer!Object.makeSink!Q(&temp);
 					s_.handle(v);
 					static if (is(typeof(*target = T.fromJSON(temp))))
 						*target = T.fromJSON(temp);
@@ -1487,6 +1487,65 @@ debug(ae_unittest) unittest
 	// Round-trip
 	auto json = toJson(Wrapper(99));
 	assert(jsonParse!Wrapper(json).value == 99);
+}
+
+debug(ae_unittest) unittest
+{
+	import ae.utils.json : compatJsonParse = jsonParse;
+
+	static struct Node
+	{
+		immutable string name;
+		JSONFragment extra;
+		Node*[] children;
+		static int fromJSONCalls;
+
+		struct Form
+		{
+			string name;
+			JSONFragment extra;
+			Node*[] children;
+		}
+
+		Form toJSON()
+		{
+			return Form(name, extra, children);
+		}
+
+		static Node fromJSON(ref Form form)
+		{
+			fromJSONCalls++;
+			return Node(form.name, form.extra, form.children);
+		}
+	}
+
+	enum input = `{"name":"root","extra":{"k": [1]},"children":[{"name":"a","extra":0,"children":[]},{"name":"b","extra":0,"children":[{"name":"c","extra":0,"children":[]}]}]}`;
+
+	Node.fromJSONCalls = 0;
+	auto root = jsonParse!(Node*)(input);
+	assert(Node.fromJSONCalls == 4);
+	assert(root.name == "root" && root.children.length == 2);
+	assert(root.children[0].name == "a" && root.children[0].children.length == 0);
+	assert(root.children[1].name == "b" && root.children[1].children.length == 1);
+	assert(root.children[1].children[0].name == "c");
+	assert(root.extra.json == `{"k": [1]}`);
+	assert(root.children[0].extra.json == `0`);
+	assert(root.children[1].extra.json == `0`);
+	assert(root.children[1].children[0].extra.json == `0`);
+	assert(toJson(root) == input);
+
+	Node.fromJSONCalls = 0;
+	auto compatRoot = compatJsonParse!(Node*)(input);
+	assert(Node.fromJSONCalls == 4);
+	assert(compatRoot.name == "root" && compatRoot.children.length == 2);
+	assert(compatRoot.children[0].name == "a");
+	assert(compatRoot.children[1].name == "b");
+	assert(compatRoot.children[1].children[0].name == "c");
+	assert(compatRoot.extra.json == `{"k": [1]}`);
+	assert(compatRoot.children[0].extra.json == `0`);
+	assert(compatRoot.children[1].extra.json == `0`);
+	assert(compatRoot.children[1].children[0].extra.json == `0`);
+	assert(toJson(compatRoot) == input);
 }
 
 // Callback form of toJSON
