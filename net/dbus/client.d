@@ -74,6 +74,12 @@ struct DbusMethodCall
 	DbusCallOptions options;
 }
 
+struct DbusOutgoingCall
+{
+	uint serial;
+	Promise!DbusMessage reply;
+}
+
 private enum DbusConnectionState
 {
 	connecting,
@@ -94,6 +100,7 @@ private enum DbusPendingKind
 {
 	hello,
 	ordinary,
+	becomeMonitor,
 }
 
 private struct DbusPendingCall
@@ -244,6 +251,9 @@ private:
 	ulong generation_;
 	IConnection transport_;
 	DbusFrameDecoder decoder_;
+	void delegate(IConnection, Data, DbusUniqueName) monitorHandoff_;
+	IConnection promotedTransport_;
+	DbusUniqueName promotedName_;
 	DbusServerGuid serverGuid_;
 	Exception terminalCause_;
 
@@ -333,15 +343,38 @@ private:
 		}
 	}
 
-	void sendOrdinaryCall(ref DbusMethodCall request,
-		Promise!DbusMessage promise)
+	uint sendOrdinaryCall(ref DbusMethodCall request,
+		DbusPendingKind kind, Promise!DbusMessage promise)
 	{
 		assert(state_ == DbusConnectionState.ready);
 		auto serial = allocateSerial();
 		auto message = makeMessage(request, serial);
 		auto frame = encodeDbusMessage(message);
-		pendingCalls_[serial] = DbusPendingCall(DbusPendingKind.ordinary, promise);
+		pendingCalls_[serial] = DbusPendingCall(kind, promise);
 		transport_.send(frame);
+		return serial;
+	}
+
+	package(ae.net.dbus) Promise!DbusMessage promoteToMonitor(string[] rules,
+		void delegate(IConnection, Data, DbusUniqueName) onPromoted)
+	{
+		if (state_ == DbusConnectionState.terminal)
+			throw terminalCause_;
+		if (state_ != DbusConnectionState.ready || pendingCalls_.length ||
+			rules_.length || ownerWatches_.length || remoteMatches_.length ||
+			registrations_.length)
+			throw new DbusValidationException("D-Bus monitor promotion requires an idle ready connection");
+		assert(onPromoted !is null);
+		DbusMethodCall request;
+		request.destination = DbusBusName.parse("org.freedesktop.DBus");
+		request.path = DbusObjectPath.parse("/org/freedesktop/DBus");
+		request.interfaceName = DbusInterfaceName.parse("org.freedesktop.DBus.Monitoring");
+		request.member = DbusMemberName.parse("BecomeMonitor");
+		request.body = DbusBody.from(rules, cast(uint) 0);
+		auto promise = new Promise!DbusMessage;
+		monitorHandoff_ = onPromoted;
+		sendOrdinaryCall(request, DbusPendingKind.becomeMonitor, promise);
+		return promise;
 	}
 
 	DbusRemoteError remoteError(DbusMessage reply)
@@ -1078,6 +1111,32 @@ private:
 			return;
 		}
 
+		if (call.kind == DbusPendingKind.becomeMonitor)
+		{
+			if (reply.messageType == DbusMessageType.error)
+			{
+				monitorHandoff_ = null;
+				auto cause = remoteError(reply);
+				call.promise.reject(cause);
+				enterTerminal(cause, cause.msg, DisconnectType.error, true);
+				return;
+			}
+			auto former = uniqueName_;
+			promotedTransport_ = transport_;
+			promotedName_ = former;
+			transport_.handleConnect = null;
+			transport_.handleReadData = null;
+			transport_.handleDisconnect = null;
+			transport_.handleBufferFlushed = null;
+			transport_ = null;
+			terminalCause_ = new DbusPromotedException;
+			state_ = DbusConnectionState.terminal;
+			attemptOutcome_ = DbusAttemptOutcome.terminal;
+			generation_++;
+			call.promise.fulfill(reply);
+			return;
+		}
+
 		if (reply.messageType == DbusMessageType.methodReturn)
 			call.promise.fulfill(reply);
 		else
@@ -1214,7 +1273,8 @@ private:
 			pending ~= entry;
 		pendingCalls_ = null;
 		foreach (entry; pending)
-			if (entry.kind == DbusPendingKind.ordinary)
+			if (entry.kind == DbusPendingKind.ordinary ||
+				entry.kind == DbusPendingKind.becomeMonitor)
 				entry.promise.reject(cause);
 	}
 
@@ -1403,6 +1463,16 @@ private:
 					routeIncomingMessage(message);
 					return isCurrentAttempt(generation, transport);
 				});
+				if (promotedTransport_ !is null)
+				{
+					auto callback = monitorHandoff_;
+					auto handedTransport = promotedTransport_;
+					auto bufferedSuffix = decoder_.bufferedData;
+					auto handedName = promotedName_;
+					promotedTransport_ = null;
+					monitorHandoff_ = null;
+					callback(handedTransport, bufferedSuffix, handedName);
+				}
 			}
 			catch (DbusProtocolException exception)
 			{
@@ -1567,6 +1637,8 @@ private:
 		auto result = new Promise!DbusSubscription;
 		if (state_ == DbusConnectionState.terminal)
 		{
+			if (cast(DbusPromotedException) terminalCause_ !is null)
+				throw terminalCause_;
 			result.reject(terminalCause_);
 			return result;
 		}
@@ -1697,13 +1769,13 @@ public:
 		}
 		if (state_ == DbusConnectionState.ready)
 		{
-			sendOrdinaryCall(request, result);
+			sendOrdinaryCall(request, DbusPendingKind.ordinary, result);
 			return result;
 		}
 
 		readyPromise_.then((DbusUniqueName) {
 			if (state_ == DbusConnectionState.ready)
-				sendOrdinaryCall(request, result);
+				sendOrdinaryCall(request, DbusPendingKind.ordinary, result);
 			else
 			{
 				assert(state_ == DbusConnectionState.terminal);
@@ -1713,6 +1785,18 @@ public:
 			result.reject(exception);
 		}).ignoreResult();
 		return result;
+	}
+
+	DbusOutgoingCall sendCall(DbusMethodCall request)
+	{
+		if (state_ == DbusConnectionState.terminal)
+			throw terminalCause_;
+		if (state_ != DbusConnectionState.ready)
+			throw new DbusValidationException("D-Bus sendCall requires a ready connection");
+		validateCall(request);
+		auto reply = new Promise!DbusMessage;
+		auto serial = sendOrdinaryCall(request, DbusPendingKind.ordinary, reply);
+		return DbusOutgoingCall(serial, reply);
 	}
 
 	Promise!DbusUniqueName getNameOwner(DbusBusName name)
@@ -1760,11 +1844,35 @@ public:
 version(Posix)
 {
 	debug(ae_unittest)
-	private void delegate(SocketConnection) dbusClientTestSocketObserver;
+	package(ae.net.dbus) void delegate(SocketConnection) dbusClientTestSocketObserver;
+
+	debug(ae_unittest)
+	package(ae.net.dbus) class DbusClientTestObservedSocket : SocketConnection
+	{
+		size_t sentBytes;
+		size_t sentBytesAtBecomeMonitor;
+		override void send(scope Data[] data, int priority = DEFAULT_PRIORITY)
+		{
+			foreach (datum; data)
+			{
+				sentBytes += datum.length;
+				if (datum.length >= 16 && datum[0] == 'l')
+				{
+					auto message = decodeDbusMessage(datum.toGC);
+					if (message.headers.member.text == "BecomeMonitor")
+						sentBytesAtBecomeMonitor = sentBytes;
+				}
+			}
+			super.send(data, priority);
+		}
+	}
 
 	private IConnection createDbusSocket(DbusUnixAddressCandidate candidate)
 	{
-		auto transport = new SocketConnection;
+		debug(ae_unittest)
+			auto transport = new DbusClientTestObservedSocket;
+		else
+			auto transport = new SocketConnection;
 		debug(ae_unittest)
 		if (dbusClientTestSocketObserver !is null)
 			dbusClientTestSocketObserver(transport);
@@ -2162,6 +2270,107 @@ private Data dbusClientTestUnixFdsFrame()
 		9, 1, 'u', 0, 1, 0, 0, 0,
 	];
 	return Data(frame);
+}
+
+debug(ae_unittest) unittest
+{
+	auto script = new DbusClientTestAttemptScript;
+	auto client = dbusClientTestConnect(script);
+	auto transport = script.transports[0];
+	dbusClientTestAuthenticate(transport);
+	dbusClientTestReady(transport);
+	auto outgoing = client.sendCall(dbusClientTestCall("SerialProof"));
+	auto sent = decodeDbusMessage(transport.sent[$ - 1].toGC);
+	assert(outgoing.serial == sent.serial);
+	DbusMessage reply;
+	outgoing.reply.then((DbusMessage message) {
+		reply = message;
+	}, (Exception) { assert(false); }).ignoreResult();
+	transport.receive(dbusClientTestMethodReturn(outgoing.serial, DbusBody.from()));
+	socketManager.loop();
+	assert(reply.headers.replySerial == outgoing.serial);
+	client.disconnect();
+}
+
+debug(ae_unittest) unittest
+{
+	auto script = new DbusClientTestAttemptScript;
+	auto client = dbusClientTestConnect(script);
+	auto transport = script.transports[0];
+	dbusClientTestAuthenticate(transport);
+	dbusClientTestReady(transport);
+	IConnection handedTransport;
+	Data handedSuffix;
+	DbusUniqueName handedName;
+	auto promotion = client.promoteToMonitor(["type='signal'"],
+		(IConnection t, Data d, DbusUniqueName n) {
+			handedTransport = t;
+			handedSuffix = d;
+			handedName = n;
+			assert(transport.connectHandler is null);
+			assert(transport.readDataHandler is null);
+			assert(transport.disconnectHandler is null);
+			assert(transport.bufferFlushedHandler is null);
+		});
+	promotion.ignoreResult();
+	auto request = decodeDbusMessage(transport.sent[$ - 1].toGC);
+	assert(request.headers.member.text == "BecomeMonitor");
+	auto signal = dbusClientTestSignal("org.freedesktop.DBus", "",
+		DbusBody.from("payload"));
+	auto sentBefore = transport.sent.length;
+	transport.receive(dbusClientTestMethodReturn(request.serial, DbusBody.from()) ~ signal);
+	assert(handedTransport is transport);
+	assert(handedSuffix == signal);
+	assert(handedName.text == client.uniqueName.text);
+	assert(transport.sent.length == sentBefore);
+	DbusPromotedException caught;
+	try
+		client.sendCall(dbusClientTestCall("AfterPromotion"));
+	catch (DbusPromotedException exception)
+		caught = exception;
+	assert(caught !is null);
+	DbusPromotedException callRejection;
+	client.call(dbusClientTestCall("AfterPromotion")).then((DbusMessage) {
+		assert(false);
+	}, (Exception exception) {
+		callRejection = cast(DbusPromotedException) exception;
+	}).ignoreResult();
+	socketManager.loop();
+	assert(callRejection !is null);
+	DbusPromotedException subscribeFailure;
+	try
+		client.subscribe(DbusSignalMatch.signal()
+			.withInterface(DbusInterfaceName.parse("org.example.Interface"))
+			.withMember(DbusMemberName.parse("Changed")),
+			(const ref DbusSignalMessage) {});
+	catch (DbusPromotedException exception)
+		subscribeFailure = exception;
+	assert(subscribeFailure !is null);
+	transport.disconnect();
+}
+
+debug(ae_unittest) unittest
+{
+	auto script = new DbusClientTestAttemptScript;
+	auto client = dbusClientTestConnect(script);
+	auto transport = script.transports[0];
+	dbusClientTestAuthenticate(transport);
+	dbusClientTestReady(transport);
+	bool promoted;
+	DbusRemoteError rejection;
+	auto promotion = client.promoteToMonitor(["type='signal'"],
+		(IConnection, Data, DbusUniqueName) { promoted = true; });
+	promotion.then((DbusMessage) { assert(false); },
+		(Exception exception) { rejection = cast(DbusRemoteError) exception; }).ignoreResult();
+	auto request = decodeDbusMessage(transport.sent[$ - 1].toGC);
+	transport.receive(dbusClientTestError(request.serial,
+		"org.freedesktop.DBus.Error.AccessDenied", "denied"));
+	socketManager.loop();
+	assert(rejection !is null);
+	assert(rejection.errorName.text == "org.freedesktop.DBus.Error.AccessDenied");
+	assert(client.state_ == DbusConnectionState.terminal);
+	assert(transport.state == ConnectionState.disconnected);
+	assert(!promoted);
 }
 
 debug(ae_unittest)

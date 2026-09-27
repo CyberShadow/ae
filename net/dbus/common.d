@@ -115,6 +115,11 @@ class DbusDisconnectedException : DbusException
 	}
 }
 
+class DbusPromotedException : DbusException
+{
+	this() { super("D-Bus connection was promoted to a monitor and can no longer send"); }
+}
+
 class DbusTypeMismatchException : DbusException
 {
 	this(string message, string file = __FILE__, size_t line = __LINE__)
