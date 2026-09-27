@@ -898,11 +898,12 @@ PYEOF
           dbus = pkgs.stdenv.mkDerivation {
             name = "ae-dbus-test";
 
-            nativeBuildInputs = [ pkgs.dbus dbus-test-bin ];
+            nativeBuildInputs = [ pkgs.dbus pkgs.python3 dbus-test-bin ];
             dontUnpack = true;
 
             buildPhase = ''
               export HOME="$TMPDIR"
+              export AE_DBUS_FD_PEER_HELPER=${self}/net/dbus/fd_peer_test.py
 
               ${pkgs.dbus}/bin/dbus-run-session --config-file=${pkgs.dbus}/share/dbus-1/session.conf -- dbus_test
             '';
