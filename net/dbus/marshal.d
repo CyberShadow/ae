@@ -970,8 +970,6 @@ private void storeHeaderField(ref DbusMessageHeaders headers, ubyte field,
 			return;
 		case DbusHeaderField.unixFds:
 			headers.unixFds = value.uint32Value;
-			if (headers.unixFds != 0)
-				throw new DbusProtocolException("UNIX_FD values are not supported by this transport");
 			return;
 		default:
 			assert(0, "unknown D-Bus header field");
@@ -1009,7 +1007,7 @@ private void requireIncomingMessageHeaders(ubyte messageType,
 	}
 }
 
-private DbusMessage decodeDbusMessageImpl(scope const(ubyte)[] completeFrame)
+private DbusMessageHeaders decodeDbusMessageHeadersImpl(scope const(ubyte)[] completeFrame)
 {
 	auto fixedHeader = validateDbusFixedHeader(completeFrame);
 	if (fixedHeader.completeLength != completeFrame.length)
@@ -1061,6 +1059,25 @@ private DbusMessage decodeDbusMessageImpl(scope const(ubyte)[] completeFrame)
 	}
 	if (headerReader.cursor != headerReader.limit)
 		throw new DbusProtocolException("D-Bus header field array was not consumed exactly");
+	return headers;
+}
+
+package(ae.net.dbus) DbusMessageHeaders decodeDbusMessageHeaders(scope const(ubyte)[] completeFrame)
+{
+	try
+		return decodeDbusMessageHeadersImpl(completeFrame);
+	catch (DbusProtocolException exception)
+		throw exception;
+	catch (DbusException exception)
+		throw new DbusProtocolException(exception.msg);
+}
+
+private DbusMessage decodeDbusMessageBodyImpl(scope const(ubyte)[] completeFrame,
+	DbusMessageHeaders headers)
+{
+	auto fixedHeader = validateDbusFixedHeader(completeFrame);
+	size_t headerEnd = 16 + fixedHeader.headerDataLength;
+	const messageType = completeFrame[1];
 
 	DbusReader bodyReader = DbusReader(completeFrame, headerEnd, completeFrame.length,
 		fixedHeader.order);
@@ -1097,14 +1114,23 @@ private DbusMessage decodeDbusMessageImpl(scope const(ubyte)[] completeFrame)
 	return result;
 }
 
-DbusMessage decodeDbusMessage(scope const(ubyte)[] completeFrame)
+package(ae.net.dbus) DbusMessage decodeDbusMessageBody(scope const(ubyte)[] completeFrame,
+	DbusMessageHeaders headers)
 {
 	try
-		return decodeDbusMessageImpl(completeFrame);
+		return decodeDbusMessageBodyImpl(completeFrame, headers);
 	catch (DbusProtocolException exception)
 		throw exception;
 	catch (DbusException exception)
 		throw new DbusProtocolException(exception.msg);
+}
+
+DbusMessage decodeDbusMessage(scope const(ubyte)[] completeFrame)
+{
+	auto headers = decodeDbusMessageHeaders(completeFrame);
+	if (headers.unixFds != 0)
+		throw new DbusProtocolException("UNIX_FD values are not supported by this transport");
+	return decodeDbusMessageBody(completeFrame, headers);
 }
 
 debug(ae_unittest)

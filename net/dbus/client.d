@@ -18,7 +18,7 @@ import ae.utils.promise : Promise;
 
 import ae.net.asockets : ConnectionState, DisconnectType, IConnection,
 	disconnectable;
-import ae.net.dbus.codec : DbusFrameDecoder;
+import ae.net.dbus.codec : DbusFrameDecoder, DbusFdFramePolicy;
 import ae.net.dbus.common;
 import ae.net.dbus.match : DbusSignalMatch;
 import ae.net.dbus.marshal : encodeDbusMessage;
@@ -274,7 +274,7 @@ private:
 	this()
 	{
 		readyPromise_ = new Promise!DbusUniqueName;
-		decoder_ = new DbusFrameDecoder;
+		decoder_ = new DbusFrameDecoder(DbusFdFramePolicy.reject);
 		state_ = DbusConnectionState.connecting;
 		attemptOutcome_ = DbusAttemptOutcome.active;
 	}
@@ -3525,7 +3525,7 @@ debug(ae_unittest) unittest
 	bool authenticated;
 	bool began;
 	bool sawHello;
-	auto decoder = new DbusFrameDecoder;
+	auto decoder = new DbusFrameDecoder(DbusFdFramePolicy.reject);
 	bool timedOut;
 	TimerTask timeout;
 	DbusConnection client;

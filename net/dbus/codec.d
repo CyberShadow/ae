@@ -17,13 +17,16 @@ import ae.sys.data : Data;
 import ae.sys.dataset : DataVec, bytes, joinData, shift;
 
 import ae.net.dbus.common : DbusMessage, DbusProtocolException;
-import ae.net.dbus.marshal : dbusMessageLengthFromFixedHeader, decodeDbusMessage;
+import ae.net.dbus.marshal : dbusMessageLengthFromFixedHeader, decodeDbusMessageBody,
+	decodeDbusMessageHeaders;
 
 debug(ae_unittest)
 import ae.net.dbus.common : DbusByteOrder, DbusInterfaceName, DbusMemberName,
 	DbusMessageType, DbusObjectPath;
 debug(ae_unittest) import ae.net.dbus.marshal : encodeDbusMessage;
 debug(ae_unittest) import ae.net.dbus.value : DbusBody, DbusVariant;
+
+enum DbusFdFramePolicy { reject, skip }
 
 /**
  * Buffers stream fragments until complete D-Bus frames are available.  The
@@ -34,6 +37,14 @@ package(ae.net.dbus) final class DbusFrameDecoder
 {
 	private DataVec buffered;
 	private size_t expectedFrameLength_;
+	private immutable DbusFdFramePolicy fdFramePolicy_;
+
+	this(DbusFdFramePolicy fdFramePolicy, Data initialBuffer = Data.init)
+	{
+		fdFramePolicy_ = fdFramePolicy;
+		if (initialBuffer.length)
+			buffered ~= initialBuffer.dup;
+	}
 
 	DbusMessage[] feed(Data fragment)
 	{
@@ -52,6 +63,11 @@ package(ae.net.dbus) final class DbusFrameDecoder
 	 * rethrown unchanged.
 	 */
 	void feed(Data fragment, scope bool delegate(DbusMessage message) sink)
+	{
+		feed(fragment, (DbusMessage message, size_t) { return sink(message); });
+	}
+
+	void feed(Data fragment, scope bool delegate(DbusMessage message, size_t frameLength) sink)
 	{
 		assert(sink !is null);
 		try
@@ -77,13 +93,25 @@ package(ae.net.dbus) final class DbusFrameDecoder
 
 				{
 					auto frame = available[0 .. expectedFrameLength_].joinData();
-					consumeBufferedPrefix(expectedFrameLength_);
+					auto frameLength = expectedFrameLength_;
+					consumeBufferedPrefix(frameLength);
 					expectedFrameLength_ = 0;
 					DbusMessage message;
+					bool skipped;
 					frame.enter((scope bytes) {
-						message = decodeDbusMessage(bytes);
+						auto headers = decodeDbusMessageHeaders(bytes);
+						if (headers.unixFds != 0)
+						{
+							if (fdFramePolicy_ == DbusFdFramePolicy.reject)
+								throw new DbusProtocolException("UNIX_FD values are not supported by this transport");
+							skipped = true;
+						}
+						else
+							message = decodeDbusMessageBody(bytes, headers);
 					});
-					if (!sink(message))
+					if (skipped)
+						continue;
+					if (!sink(message, frameLength))
 						return;
 				}
 			}
@@ -213,7 +241,7 @@ private void assertDbusCodecLiteralContainer(const ref DbusMessage message)
 debug(ae_unittest) unittest
 {
 	auto frame = dbusCodecTestFrame(1, "Fragmented", "fragmented body");
-	auto decoder = new DbusFrameDecoder;
+	auto decoder = new DbusFrameDecoder(DbusFdFramePolicy.reject);
 
 	auto firstInput = Data(frame.toGC[0 .. 7]);
 	auto expectedFirstInput = firstInput.toGC;
@@ -257,7 +285,7 @@ debug(ae_unittest) unittest
 	auto frame = dbusCodecTestFrame(6, "EverySplit", "all split points");
 	foreach (split; 0 .. frame.length + 1)
 	{
-		auto decoder = new DbusFrameDecoder;
+		auto decoder = new DbusFrameDecoder(DbusFdFramePolicy.reject);
 		auto first = decoder.feed(frame[0 .. split]);
 		if (split < frame.length)
 			assert(first.length == 0);
@@ -279,7 +307,7 @@ debug(ae_unittest) unittest
 	assert(dbusCodecLiteralContainerFrame.length == 108);
 	foreach (split; 0 .. dbusCodecLiteralContainerFrame.length + 1)
 	{
-		auto decoder = new DbusFrameDecoder;
+		auto decoder = new DbusFrameDecoder(DbusFdFramePolicy.reject);
 		auto first = decoder.feed(Data(dbusCodecLiteralContainerFrame.dup[0 .. split]));
 		if (split < dbusCodecLiteralContainerFrame.length)
 			assert(first.length == 0);
@@ -303,7 +331,7 @@ debug(ae_unittest) unittest
 	auto suffixFrame = dbusCodecTestFrame(4, "Suffix", "incomplete body");
 	assert(suffixFrame.length > 20);
 	auto input = firstFrame ~ secondFrame ~ suffixFrame[0 .. 20];
-	auto decoder = new DbusFrameDecoder;
+	auto decoder = new DbusFrameDecoder(DbusFdFramePolicy.reject);
 
 	auto messages = decoder.feed(input);
 	assert(messages.length == 2);
@@ -329,7 +357,7 @@ debug(ae_unittest) unittest
 	auto frame = dbusCodecTestFrame(9, "BeforeInvalid", "first delivery");
 	immutable ubyte[] invalidFixedHeader = [cast(ubyte) 'x', 1, 0, 1,
 		0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0];
-	auto decoder = new DbusFrameDecoder;
+	auto decoder = new DbusFrameDecoder(DbusFdFramePolicy.reject);
 	size_t deliveries;
 	DbusProtocolException caught;
 	try
@@ -354,7 +382,7 @@ debug(ae_unittest) unittest
 {
 	auto first = dbusCodecTestFrame(10, "StopFirst", "first frame");
 	auto second = dbusCodecTestFrame(11, "StopSecond", "second frame");
-	auto decoder = new DbusFrameDecoder;
+	auto decoder = new DbusFrameDecoder(DbusFdFramePolicy.reject);
 	size_t deliveries;
 	decoder.feed(first ~ second, (DbusMessage message) {
 		deliveries++;
@@ -372,8 +400,44 @@ debug(ae_unittest) unittest
 
 debug(ae_unittest) unittest
 {
+	auto first = dbusCodecTestFrame(20, "BeforeFd", "first");
+	auto last = dbusCodecTestFrame(21, "AfterFd", "last");
+	immutable ubyte[] fdFrame = [
+		'l', 2, 0, 1, 4, 0, 0, 0,
+		22, 0, 0, 0, 23, 0, 0, 0,
+		5, 1, 'u', 0, 1, 0, 0, 0,
+		9, 1, 'u', 0, 1, 0, 0, 0,
+		8, 1, 'g', 0, 1, 'h', 0, 0,
+		0, 0, 0, 0,
+	];
+	auto decoder = new DbusFrameDecoder(DbusFdFramePolicy.skip);
+	uint[] serials;
+	decoder.feed(first ~ Data(fdFrame.dup) ~ last, (DbusMessage message) {
+		serials ~= message.serial;
+		return true;
+	});
+	assert(serials == [20, 21]);
+	assert(decoder.bufferedLength == 0);
+	auto bytewise = new DbusFrameDecoder(DbusFdFramePolicy.skip);
+	uint[] bytewiseSerials;
+	auto stream = first ~ Data(fdFrame.dup) ~ last;
+	foreach (index; 0 .. stream.length)
+		bytewise.feed(stream[index .. index + 1], (DbusMessage message) {
+			bytewiseSerials ~= message.serial;
+			return true;
+		});
+	assert(bytewiseSerials == [20, 21]);
+	assert(bytewise.bufferedLength == 0);
+	auto seeded = new DbusFrameDecoder(DbusFdFramePolicy.skip, first);
+	assert(seeded.feed(Data.init)[0].serial == 20);
+	auto ordinary = new DbusFrameDecoder(DbusFdFramePolicy.reject);
+	expectDbusCodecProtocol({ ordinary.feed(Data(fdFrame.dup)); });
+}
+
+debug(ae_unittest) unittest
+{
 	auto frame = dbusCodecTestFrame(12, "SinkFailure", "reset state");
-	auto decoder = new DbusFrameDecoder;
+	auto decoder = new DbusFrameDecoder(DbusFdFramePolicy.reject);
 	auto cause = new DbusProtocolException("sink protocol failure");
 	DbusProtocolException caught;
 	scope bool delegate(DbusMessage) sink = (DbusMessage) {
@@ -395,7 +459,7 @@ debug(ae_unittest) unittest
 debug(ae_unittest) unittest
 {
 	auto frame = dbusCodecTestFrame(5, "Reset", "discard this partial frame");
-	auto decoder = new DbusFrameDecoder;
+	auto decoder = new DbusFrameDecoder(DbusFdFramePolicy.reject);
 
 	auto messages = decoder.feed(frame[0 .. 16]);
 	assert(messages.length == 0);
@@ -429,7 +493,7 @@ debug(ae_unittest) unittest
 	];
 	foreach (fixedHeader; malformed)
 	{
-		auto decoder = new DbusFrameDecoder;
+		auto decoder = new DbusFrameDecoder(DbusFdFramePolicy.reject);
 		expectDbusCodecProtocol({ decoder.feed(Data(fixedHeader.dup)); });
 		assert(decoder.bufferedLength == 0);
 		assert(decoder.bufferedData.length == 0);
@@ -445,7 +509,7 @@ debug(ae_unittest) unittest
 	auto frame = dbusCodecTestFrame(8, "ResetStates", "discard every partial state");
 	foreach (split; [cast(size_t) 1, 16, 45, frame.length - 1])
 	{
-		auto decoder = new DbusFrameDecoder;
+		auto decoder = new DbusFrameDecoder(DbusFdFramePolicy.reject);
 		auto messages = decoder.feed(frame[0 .. split]);
 		assert(messages.length == 0);
 		decoder.reset();
@@ -463,7 +527,7 @@ debug(ae_unittest) unittest
 {
 	auto suffix = dbusCodecLiteralContainerFrame[0 .. 7].dup;
 	auto inputBytes = dbusCodecLiteralContainerFrame ~ suffix;
-	auto decoder = new DbusFrameDecoder;
+	auto decoder = new DbusFrameDecoder(DbusFdFramePolicy.reject);
 	auto input = Data(inputBytes);
 	auto messages = decoder.feed(input);
 	input = null;
@@ -488,7 +552,7 @@ debug(ae_unittest) unittest
 debug(ae_unittest) unittest
 {
 	immutable ubyte[] suffix = [cast(ubyte) 'l', 1, 0, 1, 0, 0, 0];
-	auto decoder = new DbusFrameDecoder;
+	auto decoder = new DbusFrameDecoder(DbusFdFramePolicy.reject);
 	auto original = Data(dbusCodecLiteralContainerFrame ~ suffix);
 	size_t originalTailAddress;
 	original.enter((scope bytes) {
@@ -515,7 +579,7 @@ debug(ae_unittest) unittest
 debug(ae_unittest) unittest
 {
 	immutable ubyte[] suffix = [cast(ubyte) 'l', 1, 0, 1, 0, 0, 0];
-	auto decoder = new DbusFrameDecoder;
+	auto decoder = new DbusFrameDecoder(DbusFdFramePolicy.reject);
 	auto complete = Data(dbusCodecLiteralContainerFrame);
 	auto separateSuffix = Data(suffix);
 	size_t separateSuffixAddress;
