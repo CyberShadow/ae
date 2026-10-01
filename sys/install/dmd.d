@@ -82,7 +82,7 @@ protected:
 	@property override string subdirectory() { return "dmd-" ~ dmdVersion; }
 
 	@property override string[] requiredExecutables() { return ["dmd"]; }
-	@property override string[] binPaths() { return ["dmd2/" ~ platformDir ~ "/bin" ~ modelString]; }
+	@property override string[] binPaths() { return [buildPath("dmd2", platformDir, "bin", modelString)]; }
 
 	@property string url() { return "http://downloads.dlang.org/releases/%s.x/%s/dmd.%s.%s.zip".format(
 		dmdVersion[0], dmdVersion, dmdVersion, platformSuffix); }
