@@ -14,115 +14,17 @@
 module ae.net.dbus.binding;
 
 import std.conv : to;
-import std.traits : BaseTypeTuple, FunctionAttribute, ParameterDefaults,
-	ParameterStorageClass, ParameterStorageClassTuple, ParameterTypeTuple,
-	ReturnType, Unqual, Variadic, functionAttributes, variadicFunctionStyle;
+import std.traits : ParameterTypeTuple, ReturnType;
 import std.typecons : Tuple;
+
+public import ae.net.dbus.description;
 
 import ae.net.dbus.client : DbusConnection, DbusMethodCall, DbusSubscription;
 import ae.net.dbus.common;
 import ae.net.dbus.match : DbusSignalMatch;
 import ae.net.dbus.signature : DbusOut, dbusSignature;
 import ae.net.dbus.value : DbusBody, DbusValue, DbusVariant;
-import ae.utils.meta : getAttribute, hasAttribute;
-import ae.utils.promise : Promise, PromiseError, PromiseValue, isPromise;
-
-/// Names the D-Bus interface implemented by a `DbusProxy!I`.
-struct DbusInterface
-{
-	string name;
-}
-
-/// Overrides the D-Bus member name of a method, when it must differ from
-/// the D method name (for example, to disambiguate D overloads).
-struct DbusMember
-{
-	string name;
-}
-
-/// Describes a D-Bus signal as metadata on an interface, rather than as a
-/// callable method.
-struct DbusSignal(string memberName, Args...)
-{
-	enum name = memberName;
-	alias Types = Args;
-}
-
-private template dbusAttributeCount(T, alias D)
-{
-	enum dbusAttributeCount = () {
-		size_t count;
-		static foreach (attribute; __traits(getAttributes, D))
-			static if (is(typeof(attribute) == T))
-				count++;
-		return count;
-	}();
-}
-
-private template dbusInterfaceName(I)
-{
-	enum dbusInterfaceName = () {
-		static assert(hasAttribute!(DbusInterface, I),
-			"D-Bus interfaces must be annotated with @DbusInterface");
-		static assert(dbusAttributeCount!(DbusInterface, I) == 1,
-			"D-Bus interfaces must have exactly one @DbusInterface annotation");
-		return getAttribute!(DbusInterface, I).name;
-	}();
-}
-
-private template dbusMemberName(alias Method)
-{
-	static if (hasAttribute!(DbusMember, Method))
-		enum dbusMemberName = getAttribute!(DbusMember, Method).name;
-	else
-		enum dbusMemberName = __traits(identifier, Method);
-}
-
-private template dbusResultIsOut(T)
-{
-	static if (is(T == DbusOut!Types, Types...))
-		enum dbusResultIsOut = true;
-	else
-		enum dbusResultIsOut = false;
-}
-
-private template dbusValuesSignature(Types...)
-{
-	enum dbusValuesSignature = () {
-		string result;
-		static foreach (Type; Types)
-			result ~= dbusSignature!Type;
-		return result;
-	}();
-}
-
-private template dbusWireNamesAreUnique(I)
-{
-	enum dbusWireNamesAreUnique = () {
-		string[] names;
-		foreach (memberName; __traits(allMembers, I))
-			static if (__traits(getOverloads, I, memberName).length)
-				foreach (overload; __traits(getOverloads, I, memberName))
-					names ~= dbusMemberName!overload;
-		foreach (i; 0 .. names.length)
-			foreach (j; i + 1 .. names.length)
-				if (names[i] == names[j])
-					return false;
-		return true;
-	}();
-}
-
-private template dbusOverloadWireNamesAreExplicit(I)
-{
-	enum dbusOverloadWireNamesAreExplicit = () {
-		foreach (memberName; __traits(allMembers, I))
-			static if (__traits(getOverloads, I, memberName).length > 1)
-				foreach (overload; __traits(getOverloads, I, memberName))
-					if (!hasAttribute!(DbusMember, overload))
-						return false;
-		return true;
-	}();
-}
+import ae.utils.promise : Promise, PromiseValue;
 
 private void requireDbusEmptyReply(const ref DbusBody body)
 {
@@ -141,10 +43,10 @@ private T decodeDbusSingleReply(T)(const ref DbusBody body)
 }
 
 private T decodeDbusOutReply(T)(const ref DbusBody body)
-if (dbusResultIsOut!T)
+if (is(T == DbusOut!Types, Types...))
 {
 	alias Types = T.Types;
-	enum expected = dbusValuesSignature!Types;
+	enum expected = dbusTypesSignature!Types;
 	auto values = body.values;
 	if (body.signature.text != expected || values.length != Types.length)
 		throw new DbusTypeMismatchException(
@@ -164,74 +66,25 @@ private void invokeWithDecodedValues(Types...)(void delegate(Types) handler,
 	handler(args.expand);
 }
 
-private string generateDbusProxyMethod(I, size_t memberIndex, size_t overloadIndex,
-	string memberName)()
+private string generateDbusProxyMethod(I, size_t infoIndex)()
 {
-	alias Method = __traits(getOverloads, I, memberName)[overloadIndex];
-	alias Params = ParameterTypeTuple!Method;
-	alias Return = ReturnType!Method;
-
-	static assert(__traits(isVirtualMethod, Method),
-		"D-Bus interface method " ~ memberName ~
-		" must not be final or static; the MVP binding does not support non-virtual interface methods");
-
-	static if (isPromise!Return)
-	{
-		static assert(is(PromiseError!Return == Exception),
-			"D-Bus interface method " ~ memberName ~
-			" must return a Promise with the default Exception error type");
-
-		alias ResultType = PromiseValue!Return;
-		static if (!is(ResultType == void))
-		{
-			static if (dbusResultIsOut!ResultType)
-				enum _ = dbusValuesSignature!(ResultType.Types);
-			else
-				enum _ = dbusSignature!ResultType;
-		}
-	}
-	else
-		static assert(false,
-			"D-Bus interface method " ~ memberName ~ " must return a Promise!T");
-
-	static foreach (Param; Params)
-		static assert(is(Unqual!Param == Param),
-			"D-Bus interface method " ~ memberName ~
-			" must not use qualified (const/immutable/inout/shared) parameter types");
-	static foreach (Param; Params)
-		static assert(__traits(compiles, dbusSignature!Param),
-			"D-Bus interface method " ~ memberName ~
-			" has a parameter type with no D-Bus signature");
-
-	static assert(functionAttributes!Method == FunctionAttribute.system,
-		"D-Bus interface method " ~ memberName ~
-		" must not use qualifiers or non-default function attributes");
-	static assert(variadicFunctionStyle!Method == Variadic.no,
-		"D-Bus interface method " ~ memberName ~ " must not be variadic");
-	static foreach (storage; ParameterStorageClassTuple!Method)
-		static assert(storage == ParameterStorageClass.none,
-			"D-Bus interface method " ~ memberName ~
-			" must not use explicit parameter storage classes");
-	static foreach (default_; ParameterDefaults!Method)
-		static assert(is(default_ == void),
-			"D-Bus interface method " ~ memberName ~ " must not use parameter default values");
+	alias Info = DbusMethodInfos!I[infoIndex];
 
 	// Every generated type position below names a local alias, never a
 	// consumer-owned type's `.stringof` spelling, so that this mixin
 	// compiles regardless of the visibility of I's own dependencies.
-	enum suffix = memberIndex.to!string ~ "_" ~ overloadIndex.to!string;
+	enum suffix = infoIndex.to!string;
 	string code;
 
 	code ~= "alias __dbusMethod_" ~ suffix ~
-		" = __traits(getOverloads, I, \"" ~ memberName ~ "\")[" ~
-		overloadIndex.to!string ~ "];\n";
+		" = DbusMethodInfos!I[" ~ suffix ~ "].Method;\n";
 	code ~= "alias __dbusParams_" ~ suffix ~
 		" = ParameterTypeTuple!__dbusMethod_" ~ suffix ~ ";\n";
 	code ~= "alias __dbusReturn_" ~ suffix ~
 		" = ReturnType!__dbusMethod_" ~ suffix ~ ";\n";
-	code ~= "override __dbusReturn_" ~ suffix ~ " " ~ memberName ~ "(";
+	code ~= "override __dbusReturn_" ~ suffix ~ " " ~ Info.identifier ~ "(";
 
-	static foreach (parameterIndex; 0 .. Params.length)
+	static foreach (parameterIndex; 0 .. Info.Params.length)
 	{
 		static if (parameterIndex > 0)
 			code ~= ", ";
@@ -239,8 +92,8 @@ private string generateDbusProxyMethod(I, size_t memberIndex, size_t overloadInd
 			"] __dbusArg_" ~ suffix ~ "_" ~ parameterIndex.to!string;
 	}
 
-	code ~= ")\n{\n\treturn invoke!__dbusMethod_" ~ suffix ~ "(";
-	static foreach (parameterIndex; 0 .. Params.length)
+	code ~= ")\n{\n\treturn invoke!(DbusMethodInfos!I[" ~ suffix ~ "])(";
+	static foreach (parameterIndex; 0 .. Info.Params.length)
 	{
 		static if (parameterIndex > 0)
 			code ~= ", ";
@@ -256,17 +109,10 @@ private string generateDbusProxyMethod(I, size_t memberIndex, size_t overloadInd
 final class DbusProxy(I) : I
 if (is(I == interface))
 {
-	static assert(BaseTypeTuple!I.length == 0,
-		"D-Bus interfaces must not inherit from other interfaces");
-	static assert(dbusWireNamesAreUnique!I,
-		"D-Bus interface methods must have unique wire names; use @DbusMember to disambiguate overloads");
-	static assert(dbusOverloadWireNamesAreExplicit!I,
-		"D-Bus interface methods with more than one overload must have an explicit, distinct @DbusMember wire name on every overload");
-
 	private DbusConnection __dbusConnection;
 	private DbusBusName __dbusDestination;
 	private DbusObjectPath __dbusPath;
-	private enum __dbusInterfaceName = DbusInterfaceName.parse(dbusInterfaceName!I);
+	private enum __dbusInterfaceName = dbusInterfaceDescription!I.name;
 
 	private this(DbusConnection connection, DbusBusName destination, DbusObjectPath path)
 	{
@@ -275,26 +121,13 @@ if (is(I == interface))
 		__dbusPath = path;
 	}
 
-	// `MemberFunctionsTuple` is keyed by a member name, so an `allMembers`
-	// walk is required regardless; `__traits(getOverloads, I, name)` is the
-	// overload-enumeration form the typed-proxy spike proved.
-	static foreach (memberIndex, memberName; __traits(allMembers, I))
-	{
-		static if (__traits(getOverloads, I, memberName).length)
-		{
-			static foreach (overloadIndex, overload; __traits(getOverloads, I, memberName))
-				mixin(generateDbusProxyMethod!(I, memberIndex, overloadIndex, memberName));
-		}
-		else static if (__traits(compiles, __traits(isTemplate, __traits(getMember, I, memberName))) &&
-			__traits(isTemplate, __traits(getMember, I, memberName)))
-			static assert(false,
-				"D-Bus interface methods must not be templated: " ~ memberName);
-	}
+	static foreach (infoIndex; 0 .. DbusMethodInfos!I.length)
+		mixin(generateDbusProxyMethod!(I, infoIndex));
 
-	private ReturnType!Method invoke(alias Method, Args...)(Args args)
+	private ReturnType!(Info.Method) invoke(alias Info, Args...)(Args args)
 	{
-		alias ResultType = PromiseValue!(ReturnType!Method);
-		enum memberName = DbusMemberName.parse(dbusMemberName!Method);
+		alias ResultType = Info.Result;
+		enum memberName = DbusMemberName.parse(Info.wireName);
 
 		DbusMethodCall request;
 		request.destination = __dbusDestination;
@@ -307,7 +140,7 @@ if (is(I == interface))
 			return __dbusConnection.call(request).then((DbusMessage reply) {
 				requireDbusEmptyReply(reply.body);
 			});
-		else static if (dbusResultIsOut!ResultType)
+		else static if (is(ResultType == DbusOut!Types, Types...))
 			return __dbusConnection.call(request).then((DbusMessage reply) {
 				return decodeDbusOutReply!ResultType(reply.body);
 			});
@@ -408,7 +241,7 @@ Promise!DbusSubscription subscribe(alias Signal, I)(DbusProxy!I proxy,
 		.withInterface(proxy.__dbusInterfaceName)
 		.withMember(memberName);
 
-	enum expectedSignature = dbusValuesSignature!(Signal.Types);
+	enum expectedSignature = dbusTypesSignature!(Signal.Types);
 	return proxy.__dbusConnection.subscribe(match, DbusSignature.parse(expectedSignature),
 		(const ref DbusSignalMessage message) {
 			invokeWithDecodedValues(handler, message.body.values);
