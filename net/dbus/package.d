@@ -77,6 +77,7 @@ public import ae.net.dbus.client;
 public import ae.net.dbus.codec : DbusFdFramePolicy;
 public import ae.net.dbus.common;
 public import ae.net.dbus.description;
+public import ae.net.dbus.exporter;
 public import ae.net.dbus.introspection;
 public import ae.net.dbus.marshal;
 public import ae.net.dbus.match;

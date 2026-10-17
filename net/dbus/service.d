@@ -5,7 +5,9 @@
  * Every `DbusConnection` owns one `DbusObjectRegistry`
  * (`DbusConnection.objects`).  Applications register interface
  * implementations at object paths; each implementation pairs a runtime
- * `DbusInterfaceDescription` with promise-returning handlers.
+ * `DbusInterfaceDescription` with promise-returning handlers.  This is
+ * the untyped layer; `ae.net.dbus.exporter.exportObject` builds such an
+ * implementation from a typed `@DbusInterface` D interface.
  *
  * Handlers reply by settling their promise.  Throwing or rejecting with a
  * `DbusError` sends that error
@@ -517,7 +519,7 @@ private:
 
 enum dbusMachineIdPaths = ["/var/lib/dbus/machine-id", "/etc/machine-id"];
 
-struct DbusErrorNames
+package(ae.net.dbus) struct DbusErrorNames
 {
 	static immutable unknownObject = DbusErrorName.parse("org.freedesktop.DBus.Error.UnknownObject");
 	static immutable unknownInterface = DbusErrorName.parse("org.freedesktop.DBus.Error.UnknownInterface");

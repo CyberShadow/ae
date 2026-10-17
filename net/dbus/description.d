@@ -191,14 +191,16 @@ package(ae.net.dbus) template dbusInterfaceName(I)
 	enum dbusInterfaceName = getAttribute!(DbusInterface, I).name;
 }
 
-/// Reflection of one D-Bus method: overload `overloadIndex` of the
+/// Reflection of one D-Bus method: overload `overload` of the
 /// member `ident` of `I`.
-package(ae.net.dbus) template DbusMethodInfo(I, string ident, size_t overloadIndex)
+package(ae.net.dbus) template DbusMethodInfo(I, string ident, size_t overload)
 {
-	alias Method = __traits(getOverloads, I, ident)[overloadIndex];
+	alias Method = __traits(getOverloads, I, ident)[overload];
 	private enum validated = dbusValidateFunction!(Method, ident)();
 
 	enum identifier = ident;
+	/// The method's index in `__traits(getOverloads, I, ident)`.
+	enum size_t overloadIndex = overload;
 	alias Params = ParameterTypeTuple!Method;
 	enum string[] paramNames = [ParameterIdentifierTuple!Method];
 	static foreach (name; paramNames)

@@ -311,6 +311,35 @@ private interface DbusBindingTestInterface
 	alias Changed = DbusSignal!("Changed", int);
 }
 
+debug(ae_unittest)
+private enum DbusBindingTestMode : int { stopped, playing }
+
+debug(ae_unittest)
+@DbusInterface("org.example.EnumTest")
+private interface DbusBindingEnumTestInterface
+{
+	Promise!DbusBindingTestMode GetMode();
+}
+
+debug(ae_unittest) unittest
+{
+	auto transport = new DbusTestConnection;
+	auto connection = attachDbusConnection(transport);
+	connection.ready.ignoreResult();
+	dbusTestAuthenticate(transport);
+	auto proxy = dbusProxy!DbusBindingEnumTestInterface(connection,
+		DbusBusName.parse(":1.99"), DbusObjectPath.parse("/org/example/Test"));
+
+	Exception rejected;
+	proxy.GetMode().then((DbusBindingTestMode) { assert(false); },
+		(Exception exception) { rejected = exception; }).ignoreResult();
+	auto request = dbusTestSentMessage(transport, 4);
+	transport.receive(dbusTestMethodReturn(request.serial, DbusBody.from(99)));
+	socketManager.loop();
+	assert(cast(DbusTypeMismatchException) rejected !is null);
+	assert(transport.disconnectCount == 0);
+}
+
 debug(ae_unittest) unittest
 {
 	auto transport = new DbusTestConnection;
