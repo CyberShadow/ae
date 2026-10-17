@@ -146,3 +146,19 @@ void dbusTestAuthenticate(DbusTestConnection transport, string uniqueName = ":1.
 	assert(hello.headers.member.text == "Hello");
 	transport.receive(dbusTestMethodReturn(hello.serial, DbusBody.from(uniqueName)));
 }
+
+Data dbusTestMethodCall(uint serial, string sender, DbusObjectPath path,
+	string interfaceName, string member, DbusBody body, ubyte flags = 0)
+{
+	DbusMessage message;
+	message.messageType = DbusMessageType.methodCall;
+	message.serial = serial;
+	message.flags = flags;
+	message.headers.sender = DbusBusName.parse(sender);
+	message.headers.path = path;
+	if (interfaceName.length)
+		message.headers.interfaceName = DbusInterfaceName.parse(interfaceName);
+	message.headers.member = DbusMemberName.parse(member);
+	message.body = body;
+	return encodeDbusMessage(message);
+}

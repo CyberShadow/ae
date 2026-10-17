@@ -81,6 +81,7 @@ public import ae.net.dbus.introspection;
 public import ae.net.dbus.marshal;
 public import ae.net.dbus.match;
 public import ae.net.dbus.monitor;
+public import ae.net.dbus.service;
 public import ae.net.dbus.signature;
 public import ae.net.dbus.standard;
 public import ae.net.dbus.value;

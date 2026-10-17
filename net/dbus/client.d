@@ -22,6 +22,7 @@ import ae.net.dbus.codec : DbusFrameDecoder, DbusFdFramePolicy;
 import ae.net.dbus.common;
 import ae.net.dbus.match : DbusSignalMatch;
 import ae.net.dbus.marshal : encodeDbusMessage;
+import ae.net.dbus.service : DbusObjectRegistry;
 import ae.net.dbus.value : DbusBody, DbusValue, DbusValueKind;
 
 debug(ae_unittest)
@@ -284,6 +285,8 @@ private:
 	void delegate(DbusBusName name) nameAcquiredHandler_;
 	void delegate(DbusBusName name) nameLostHandler_;
 
+	DbusObjectRegistry objects_;
+
 	version(Posix)
 	{
 		DbusUnixAddressCandidate[] candidates_;
@@ -304,6 +307,8 @@ private:
 		decoder_ = new DbusFrameDecoder(DbusFdFramePolicy.reject);
 		state_ = DbusConnectionState.connecting;
 		attemptOutcome_ = DbusAttemptOutcome.active;
+		objects_ = new DbusObjectRegistry(&sendUnsolicited,
+			() => state_ == DbusConnectionState.ready);
 	}
 
 	static DbusMethodCall standardBusCall(string member, DbusBody body = DbusBody.init)
@@ -373,7 +378,7 @@ private:
 	}
 
 	/// Sends a message that expects no reply (a signal, method return or
-	/// error), under the next serial.
+	/// error), under the next serial.  Also used by the object registry.
 	package(ae.net.dbus) void sendUnsolicited(DbusMessage message)
 	{
 		assert(state_ == DbusConnectionState.ready);
@@ -389,7 +394,7 @@ private:
 			throw terminalCause_;
 		if (state_ != DbusConnectionState.ready || pendingCalls_.length ||
 			rules_.length || ownerWatches_.length || remoteMatches_.length ||
-			registrations_.length)
+			registrations_.length || !objects_.empty)
 			throw new DbusValidationException("D-Bus monitor promotion requires an idle ready connection");
 		assert(onPromoted !is null);
 		DbusMethodCall request;
@@ -1207,22 +1212,6 @@ private:
 			call.promise.reject(remoteError(reply));
 	}
 
-	void sendUnknownObject(const ref DbusMessage call)
-	{
-		if (call.flags & DbusMessageFlag.noReplyExpected)
-			return;
-		if (!call.headers.sender.text.length)
-			throw new DbusProtocolException("incoming D-Bus method calls require SENDER for an error reply");
-
-		DbusMessage reply;
-		reply.messageType = DbusMessageType.error;
-		reply.headers.errorName = DbusErrorName.parse("org.freedesktop.DBus.Error.UnknownObject");
-		reply.headers.replySerial = call.serial;
-		reply.headers.destination = call.headers.sender;
-		reply.body = DbusBody.from();
-		sendUnsolicited(reply);
-	}
-
 	void processOwnerWatchSignal(DbusOwnerWatch watch,
 		const ref DbusSignalMessage signal, DbusBusName destination,
 		scope const(DbusValue)[] values)
@@ -1346,7 +1335,7 @@ private:
 
 		case DbusMessageType.methodCall:
 			if (state_ == DbusConnectionState.ready)
-				sendUnknownObject(message);
+				objects_.dispatch(message);
 			return;
 
 		case DbusMessageType.signal:
@@ -1839,6 +1828,14 @@ public:
 	{
 		assert(readySucceeded_);
 		return uniqueName_;
+	}
+
+	/// The objects this connection serves.  Incoming method calls are
+	/// dispatched to them; `org.freedesktop.DBus.Peer` is answered on
+	/// every path.
+	@property DbusObjectRegistry objects()
+	{
+		return objects_;
 	}
 
 	Promise!DbusSubscription subscribe(DbusSignalMatch match,
@@ -2504,6 +2501,39 @@ debug(ae_unittest) unittest
 	catch (DbusPromotedException exception)
 		subscribeFailure = exception;
 	assert(subscribeFailure !is null);
+	transport.disconnect();
+}
+
+// A connection serving objects cannot become a monitor.
+debug(ae_unittest) unittest
+{
+	import ae.net.dbus.service : DbusInterfaceImplementation;
+
+	auto script = new DbusClientTestAttemptScript;
+	auto client = dbusClientTestConnect(script);
+	auto transport = script.transports[0];
+	dbusClientTestAuthenticate(transport);
+	dbusClientTestReady(transport);
+	DbusInterfaceImplementation implementation;
+	implementation.description.name = DbusInterfaceName.parse("org.example.Served");
+	auto registration = client.objects.register(
+		DbusObjectPath.parse("/org/example/served"), implementation);
+	auto sentBefore = transport.sent.length;
+	bool rejected;
+	try
+		client.promoteToMonitor(["type='signal'"], (IConnection, Data, DbusUniqueName) {
+			assert(false);
+		});
+	catch (DbusValidationException)
+		rejected = true;
+	assert(rejected);
+	assert(transport.sent.length == sentBefore);
+
+	registration.unregister();
+	client.promoteToMonitor(["type='signal'"], (IConnection, Data, DbusUniqueName) {
+		assert(false);
+	}).ignoreResult();
+	assert(transport.sent.length == sentBefore + 1);
 	transport.disconnect();
 }
 
@@ -3718,7 +3748,8 @@ debug(ae_unittest) unittest
 		"org.freedesktop.DBus.Error.UnknownObject");
 	assert(reply.headers.replySerial == 77);
 	assert(reply.headers.destination.text == ":1.99");
-	assert(reply.body.signature.text == "");
+	assert(reply.body.signature.text == "s");
+	assert(reply.body.values[0].get!string == "No such object path '/org/example/Unknown'");
 
 	incoming.serial = 78;
 	incoming.flags = DbusMessageFlag.noReplyExpected;

@@ -14,7 +14,7 @@
 module ae.net.dbus.value;
 
 import std.range.primitives : ElementType;
-import std.traits : FieldNameTuple, KeyType, OriginalType, ValueType,
+import std.traits : EnumMembers, FieldNameTuple, KeyType, OriginalType, ValueType,
 	isAssociativeArray, isDynamicArray;
 
 import ae.net.dbus.common;
@@ -450,7 +450,11 @@ struct DbusValue
 		else static if (is(T == enum))
 		{
 			alias Base = OriginalType!T;
-			return cast(T) wrap(node).get!Base;
+			auto value = wrap(node).get!Base;
+			foreach (member; EnumMembers!T)
+				if (value == cast(Base) member)
+					return member;
+			throw new DbusTypeMismatchException("unexpected D-Bus " ~ T.stringof ~ " value");
 		}
 		else static if (isDynamicArray!T)
 		{
@@ -1021,7 +1025,9 @@ debug(ae_unittest) unittest
 	UnnamedDiscriminant enumValue = cast(UnnamedDiscriminant) 37;
 	auto storedEnum = DbusValue.of!UnnamedDiscriminant(enumValue);
 	assert(storedEnum.signature.text == "i");
-	assert(cast(int) storedEnum.get!UnnamedDiscriminant() == 37);
+	expectDbusTypeMismatch({ storedEnum.get!UnnamedDiscriminant(); });
+	assert(DbusValue.of!UnnamedDiscriminant(UnnamedDiscriminant.second)
+		.get!UnnamedDiscriminant() == UnnamedDiscriminant.second);
 
 	uint revision = 3;
 	string mode = "fast";
