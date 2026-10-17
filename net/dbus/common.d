@@ -516,6 +516,30 @@ struct DbusSignalMessage
 	DbusBody body;
 }
 
+/// A D-Bus error reply, identified by its error name.
+///
+/// Method handlers throw (or reject with) a `DbusError` to answer a call
+/// with that error name and message. Received errors are a separate type;
+/// forwarding one requires constructing a `DbusError` explicitly.
+class DbusError : DbusException
+{
+	DbusErrorName errorName;
+	/// The human-readable message, or `null` if the error has none.
+	string errorMessage;
+
+	this(DbusErrorName errorName, string errorMessage,
+		string file = __FILE__, size_t line = __LINE__)
+	{
+		if (!errorName.text.length)
+			throw new DbusValidationException("D-Bus error name must not be empty");
+		this.errorName = errorName;
+		this.errorMessage = errorMessage is null ? null :
+			copyDbusText(errorMessage, "D-Bus error message");
+		super(errorMessage.length ? errorMessage : errorName.text, file, line);
+	}
+}
+
+/// An error reply received in answer to a method call.
 class DbusRemoteError : DbusException
 {
 	DbusErrorName errorName;
@@ -621,4 +645,24 @@ debug(ae_unittest) unittest
 	expectDbusValidation({ DbusServerGuid.parse("0123456789abcdef0123456789abcdeg"); });
 	expectDbusValidation({ DbusServerGuid.parse("0123456789abcdef0123456789abcde"); });
 	expectDbusValidation({ DbusServerGuid.parse("0123456789abcdef0123456789abcdef0"); });
+}
+
+debug(ae_unittest) unittest
+{
+	auto named = new DbusError(DbusErrorName.parse("org.example.Error.Busy"), "try later");
+	assert(named.errorName.text == "org.example.Error.Busy");
+	assert(named.errorMessage == "try later");
+	assert(named.msg == "try later");
+
+	auto unnamed = new DbusError(DbusErrorName.parse("org.example.Error.Busy"), null);
+	assert(unnamed.errorMessage is null);
+	assert(unnamed.msg == "org.example.Error.Busy");
+
+	DbusRemoteError remote = new DbusRemoteError(DbusErrorName.parse("org.example.Error.Busy"),
+		"try later", DbusMessage.init);
+	assert(remote.remoteMessage == "try later");
+	assert(cast(DbusError) remote is null);
+
+	expectDbusValidation({ new DbusError(DbusErrorName.parse("org.example.Error"), "a\0b"); });
+	expectDbusValidation({ new DbusError(DbusErrorName.init, "invalid"); });
 }

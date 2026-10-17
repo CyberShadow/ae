@@ -381,11 +381,11 @@ private:
 	{
 		assert(reply.messageType == DbusMessageType.error);
 		assert(reply.headers.errorName.text.length);
-		string remoteMessage;
+		string errorMessage;
 		auto values = reply.body.values;
 		if (values.length && values[0].kind == DbusValueKind.string_)
-			remoteMessage = values[0].get!string();
-		return new DbusRemoteError(reply.headers.errorName, remoteMessage, reply);
+			errorMessage = values[0].get!string();
+		return new DbusRemoteError(reply.headers.errorName, errorMessage, reply);
 	}
 
 	DbusUniqueName requireUniqueNameReply(const ref DbusMessage reply)
