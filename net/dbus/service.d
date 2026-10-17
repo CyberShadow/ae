@@ -12,6 +12,15 @@
  * name and message; any other `Exception` sends
  * `org.freedesktop.DBus.Error.Failed` with its message.
  *
+ * The registry implements the standard interfaces itself.  `Peer` is
+ * answered on every path.  Registered objects and their ancestors answer
+ * `Introspectable`, with a document listing their interfaces and child
+ * nodes.  Registered objects also answer `Properties`, which calls the
+ * property handlers of their interfaces and checks the declared types
+ * and access in both directions.  Property changes are not announced
+ * automatically; emit `PropertiesChanged` with
+ * `DbusConnection.emitSignal`.
+ *
  * License:
  *   This Source Code Form is subject to the terms of
  *   the Mozilla Public License, v. 2.0. If a copy of
@@ -26,10 +35,11 @@ module ae.net.dbus.service;
 
 import ae.net.dbus.common;
 import ae.net.dbus.description;
+import ae.net.dbus.introspection;
 import ae.net.dbus.signature : parseDbusVariantSignature;
 import ae.net.dbus.standard;
 import ae.net.dbus.value : DbusBody, DbusVariant;
-import ae.utils.promise : Promise, resolve;
+import ae.utils.promise : Promise, all, resolve;
 
 /// Answers one method call.  The reply body must have the method's
 /// declared out-signature. A received `DbusRemoteError` is forwarded only
@@ -117,6 +127,10 @@ package(ae.net.dbus):
 		open_ = open;
 		peer_ = DbusInterfaceEntry(DbusInterfaceImplementation(dbusPeerDescription,
 			[&peerPing, &peerGetMachineId]));
+		introspectable_ = DbusInterfaceEntry(DbusInterfaceImplementation(
+			dbusIntrospectableDescription, [&introspect]));
+		properties_ = DbusInterfaceEntry(DbusInterfaceImplementation(
+			dbusPropertiesDescription, [&propertiesGet, &propertiesSet, &propertiesGetAll]));
 	}
 
 	/// Answers an incoming method call received on a ready connection.
@@ -131,15 +145,15 @@ package(ae.net.dbus):
 		if (interfaceName == dbusPeerDescription.name.text)
 			return dispatchMethod(call, peer_);
 
-		auto registrations = path in objects_;
-		if (registrations is null)
+		auto entries = entries(path);
+		if (!entries.length)
 			return sendError(call, DbusErrorNames.unknownObject,
 				"No such object path '" ~ path ~ "'");
 		if (!interfaceName.length)
-			return dispatchUnqualified(call, *registrations);
-		foreach (registration; *registrations)
-			if (registration.interfaceName.text == interfaceName)
-				return dispatchMethod(call, registration.entry_);
+			return dispatchUnqualified(call, entries);
+		foreach (entry; entries)
+			if (entry.implementation.description.name.text == interfaceName)
+				return dispatchMethod(call, *entry);
 		sendError(call, DbusErrorNames.unknownInterface,
 			"No such interface '" ~ interfaceName ~ "' at object path '" ~ path ~ "'");
 	}
@@ -148,7 +162,37 @@ private:
 	void delegate(DbusMessage) send_;
 	bool delegate() open_;
 	DbusInterfaceRegistration[][string] objects_;
-	DbusInterfaceEntry peer_;
+	DbusInterfaceEntry peer_, introspectable_, properties_;
+
+	/// The interfaces at `path`, standard ones first: those of a
+	/// registered object, `Peer` and `Introspectable` on an ancestor of
+	/// registered objects or at the root, and none elsewhere.
+	const(DbusInterfaceEntry)*[] entries(string path) const
+	{
+		auto registrations = path in objects_;
+		if (registrations is null)
+			return path == "/" || childNames(path).length ?
+				[&peer_, &introspectable_] : null;
+		const(DbusInterfaceEntry)*[] result = [&peer_, &introspectable_, &properties_];
+		foreach (registration; *registrations)
+			result ~= &registration.entry_;
+		return result;
+	}
+
+	/// The distinct first path elements of registered objects below
+	/// `path`, sorted.
+	string[] childNames(string path) const
+	{
+		import std.algorithm.searching : findSplitBefore, startsWith;
+		import std.algorithm.sorting : sort;
+
+		auto prefix = path == "/" ? "/" : path ~ "/";
+		bool[string] names;
+		foreach (objectPath, registrations; objects_)
+			if (objectPath.length > prefix.length && objectPath.startsWith(prefix))
+				names[objectPath[prefix.length .. $].findSplitBefore("/")[0]] = true;
+		return names.keys.sort.release;
+	}
 
 	void unregister(DbusInterfaceRegistration registration)
 	{
@@ -168,28 +212,23 @@ private:
 	/// A call without an interface goes to the only interface on the
 	/// object that has the member; the spec leaves ambiguity to the
 	/// implementation, and it is answered like a missing member.
-	void dispatchUnqualified(DbusMessage call, DbusInterfaceRegistration[] registrations)
+	void dispatchUnqualified(DbusMessage call, const(DbusInterfaceEntry)*[] entries)
 	{
 		auto member = call.headers.member.text;
-		const(DbusInterfaceDescription)[] descriptions = [dbusPeerDescription];
-		foreach (registration; registrations)
-			descriptions ~= registration.entry_.implementation.description;
-
-		const(DbusInterfaceDescription)* match;
+		const(DbusInterfaceEntry)* match;
 		size_t matches;
-		foreach (ref description; descriptions)
-			foreach (method; description.methods)
+		foreach (entry; entries)
+			foreach (method; entry.implementation.description.methods)
 				if (method.name.text == member)
 				{
-					match = &description;
+					match = entry;
 					matches++;
 				}
 		if (matches != 1)
 			return sendError(call, DbusErrorNames.unknownMethod,
 				(matches ? "Ambiguous" : "No such") ~ " method '" ~ member ~
 				"' at object path '" ~ call.headers.path.text ~ "'");
-		call.headers.interfaceName = match.name;
-		dispatch(call);
+		dispatchMethod(call, *match);
 	}
 
 	void dispatchMethod(DbusMessage call, ref const DbusInterfaceEntry entry)
@@ -288,6 +327,133 @@ private:
 	{
 		return resolve(DbusBody.from(readDbusMachineId(dbusMachineIdPaths)));
 	}
+
+	/// The document lists the interfaces at the path, as `entries`
+	/// orders them, and the children.
+	Promise!DbusBody introspect(const ref DbusMessage call)
+	{
+		auto path = call.headers.path.text;
+		string[] fragments;
+		foreach (entry; entries(path))
+			fragments ~= entry.xml;
+		return resolve(DbusBody.from(dbusNodeXml(fragments, childNames(path))));
+	}
+
+	/// A property of the object a `Properties` call was sent to.
+	static struct PropertyTarget
+	{
+		const(DbusInterfaceEntry)* entry;
+		size_t index;
+
+		@property const(DbusPropertyDescription) description() const
+		{
+			return entry.implementation.description.properties[index];
+		}
+
+		@property DbusPropertyHandlers handlers() const
+		{
+			return entry.implementation.properties[index];
+		}
+
+		/// The getter's value, checked against the declared type.
+		Promise!DbusVariant read() const
+		{
+			auto property = description;
+			Promise!DbusVariant value;
+			try
+				value = handlers.get();
+			catch (Exception exception)
+			{
+				value = new Promise!DbusVariant;
+				value.reject(exception);
+			}
+			return value.then((DbusVariant variant) {
+				if (variant.containedSignature.text != property.type.text)
+					throw new DbusError(DbusErrorNames.failed, "Property '" ~
+						property.name.text ~ "' returned type '" ~
+						variant.containedSignature.text ~ "' instead of '" ~
+						property.type.text ~ "'");
+				return variant;
+			});
+		}
+	}
+
+	/// The interfaces a `Properties` call with this interface argument
+	/// addresses: the named one, or all of them if it is empty.
+	const(DbusInterfaceEntry)*[] propertyInterfaces(const ref DbusMessage call,
+		string interfaceName)
+	{
+		auto all = entries(call.headers.path.text);
+		if (!interfaceName.length)
+			return all;
+		foreach (entry; all)
+			if (entry.implementation.description.name.text == interfaceName)
+				return [entry];
+		throw new DbusError(DbusErrorNames.unknownInterface, "No such interface '" ~
+			interfaceName ~ "' at object path '" ~ call.headers.path.text ~ "'");
+	}
+
+	PropertyTarget findProperty(const ref DbusMessage call)
+	{
+		auto values = call.body.values;
+		auto propertyName = values[1].get!string;
+		foreach (entry; propertyInterfaces(call, values[0].get!string))
+			foreach (index, property; entry.implementation.description.properties)
+				if (property.name.text == propertyName)
+					return PropertyTarget(entry, index);
+		throw new DbusError(DbusErrorNames.unknownProperty,
+			"No such property '" ~ propertyName ~ "'");
+	}
+
+	Promise!DbusBody propertiesGet(const ref DbusMessage call)
+	{
+		auto target = findProperty(call);
+		if (target.handlers.get is null)
+			throw new DbusError(DbusErrorNames.invalidArgs,
+				"Property '" ~ target.description.name.text ~ "' is not readable");
+		return target.read().then((DbusVariant value) => DbusBody.from(value));
+	}
+
+	Promise!DbusBody propertiesSet(const ref DbusMessage call)
+	{
+		auto target = findProperty(call);
+		auto property = target.description;
+		if (target.handlers.set is null)
+			throw new DbusError(DbusErrorNames.propertyReadOnly,
+				"Property '" ~ property.name.text ~ "' is read-only");
+		auto value = call.body.values[2].get!DbusVariant;
+		if (value.containedSignature.text != property.type.text)
+			throw new DbusError(DbusErrorNames.invalidArgs, "Property '" ~
+				property.name.text ~ "' has type '" ~ property.type.text ~
+				"', got '" ~ value.containedSignature.text ~ "'");
+		return target.handlers.set(value).then(() => DbusBody.from());
+	}
+
+	/// Collects the readable properties; with an empty interface argument,
+	/// a name shared by several interfaces takes the value of the first.
+	/// If any getter fails, GetAll fails as a whole.
+	Promise!DbusBody propertiesGetAll(const ref DbusMessage call)
+	{
+		string[] names;
+		Promise!DbusVariant[] values;
+		bool[string] seen;
+		foreach (entry; propertyInterfaces(call, call.body.values[0].get!string))
+			foreach (index, property; entry.implementation.description.properties)
+			{
+				auto name = property.name.text;
+				if (property.access == DbusPropertyAccess.write || name in seen)
+					continue;
+				seen[name] = true;
+				names ~= name;
+				values ~= PropertyTarget(entry, index).read();
+			}
+		return all(values).then((DbusVariant[] results) {
+			DbusVariant[string] dictionary;
+			foreach (index, name; names)
+				dictionary[name] = results[index];
+			return DbusBody.from(dictionary);
+		});
+	}
 }
 
 /// One interface registered at one object path.
@@ -357,6 +523,8 @@ struct DbusErrorNames
 	static immutable unknownInterface = DbusErrorName.parse("org.freedesktop.DBus.Error.UnknownInterface");
 	static immutable unknownMethod = DbusErrorName.parse("org.freedesktop.DBus.Error.UnknownMethod");
 	static immutable invalidArgs = DbusErrorName.parse("org.freedesktop.DBus.Error.InvalidArgs");
+	static immutable unknownProperty = DbusErrorName.parse("org.freedesktop.DBus.Error.UnknownProperty");
+	static immutable propertyReadOnly = DbusErrorName.parse("org.freedesktop.DBus.Error.PropertyReadOnly");
 	static immutable failed = DbusErrorName.parse("org.freedesktop.DBus.Error.Failed");
 }
 
@@ -366,6 +534,8 @@ struct DbusInterfaceEntry
 {
 	DbusInterfaceImplementation implementation;
 	string[] inSignatures, outSignatures;
+	/// The `<interface>` introspection fragment.
+	string xml;
 
 	/// Copies the whole description graph and the handler arrays of
 	/// `implementation`, so that the caller cannot change a validated
@@ -393,6 +563,7 @@ struct DbusInterfaceEntry
 			inSignatures ~= dbusArgumentsSignature(method.inArgs).text;
 			outSignatures ~= dbusArgumentsSignature(method.outArgs).text;
 		}
+		xml = dbusInterfaceXml(implementation.description);
 	}
 }
 
@@ -480,6 +651,7 @@ void validateCompleteType(string interfaceName, string member,
 debug(ae_unittest)
 {
 	import ae.net.asockets : socketManager;
+	import std.algorithm.searching : canFind;
 	import ae.utils.promise : Promise;
 
 	@DbusInterface("org.example.Service")
@@ -498,6 +670,8 @@ debug(ae_unittest)
 	interface DbusServiceTestOther
 	{
 		Promise!void Act();
+		@DbusProperty Promise!string Name();
+		@DbusProperty Promise!int Count();
 	}
 
 	/// A registry whose connection records what it sends.
@@ -569,7 +743,10 @@ debug(ae_unittest)
 	{
 		string[] calls;
 		Promise!DbusBody delegate(const ref DbusMessage call)[string] results;
-		double volume = 0.25;
+		/// Property values, keyed by "interface.Property".
+		DbusVariant[string] values;
+		/// When set, getters throw it.
+		Exception getFailure;
 
 		DbusInterfaceImplementation implementation(string interfaceName = null)
 		{
@@ -581,15 +758,26 @@ debug(ae_unittest)
 			foreach (method; description.methods)
 				result.methods ~= handler(method.name.text);
 			foreach (property; description.properties)
-			{
-				DbusPropertyHandlers handlers;
-				if (property.access != DbusPropertyAccess.write)
-					handlers.get = () => resolve(DbusVariant.of(volume));
-				if (property.access != DbusPropertyAccess.read)
-					handlers.set = (DbusVariant value) { volume = value.get!double; return resolve(); };
-				result.properties ~= handlers;
-			}
+				result.properties ~= propertyHandlers(
+					description.name.text ~ "." ~ property.name.text, property.access);
 			return result;
+		}
+
+		DbusPropertyHandlers propertyHandlers(string key, DbusPropertyAccess access)
+		{
+			DbusPropertyHandlers handlers;
+			if (access != DbusPropertyAccess.write)
+				handlers.get = {
+					if (getFailure !is null)
+						throw getFailure;
+					return resolve(values[key]);
+				};
+			if (access != DbusPropertyAccess.read)
+				handlers.set = (DbusVariant value) {
+					values[key] = value;
+					return resolve();
+				};
+			return handlers;
 		}
 
 		DbusMethodHandler handler(string name)
@@ -606,6 +794,10 @@ debug(ae_unittest)
 				call.body.values[0].get!int + call.body.values[1].get!int));
 			results["Act"] = (const ref DbusMessage call) => resolve(DbusBody.from());
 			results["Unique"] = (const ref DbusMessage call) => resolve(DbusBody.from());
+			values["org.example.Service.Volume"] = DbusVariant.of(0.25);
+			values["org.example.Service.Name"] = DbusVariant.of("service");
+			values["org.example.Other.Name"] = DbusVariant.of("other");
+			values["org.example.Other.Count"] = DbusVariant.of(3);
 		}
 	}
 }
@@ -621,8 +813,9 @@ debug(ae_unittest) unittest
 
 	harness.dispatch("/org/example/b", "org.example.Service", "Add", DbusBody.from(1, 2));
 	assert(harness.takeError("UnknownObject") == "No such object path '/org/example/b'");
+	// An ancestor of an object has only the Peer and Introspectable interfaces.
 	harness.dispatch("/org/example", "org.example.Service", "Add", DbusBody.from(1, 2));
-	harness.takeError("UnknownObject");
+	harness.takeError("UnknownInterface");
 
 	harness.dispatch("/org/example/a", "org.example.Missing", "Add", DbusBody.from(1, 2));
 	assert(harness.takeError("UnknownInterface") ==
@@ -1023,6 +1216,207 @@ debug(ae_unittest) unittest
 	}
 	auto complex = DbusSignature.parse("a{s(iv)}");
 	assert(accepted(make(DbusArgumentDescription("a", complex), good, good, complex)));
+}
+
+// Introspection of registered objects and their ancestors.
+debug(ae_unittest) unittest
+{
+	auto harness = new DbusServiceTestHarness;
+	auto object = new DbusServiceTestObject;
+	harness.registry.register(DbusObjectPath.parse("/a/b"), object.implementation);
+	harness.registry.register(DbusObjectPath.parse("/a/b"),
+		object.implementation("org.example.Other"));
+	harness.registry.register(DbusObjectPath.parse("/a/c/d"),
+		object.implementation("org.example.Other"));
+	harness.registry.register(DbusObjectPath.parse("/ab"),
+		object.implementation("org.example.Other"));
+
+	string introspect(string path)
+	{
+		harness.dispatch(path, "org.freedesktop.DBus.Introspectable", "Introspect");
+		socketManager.loop();
+		return harness.takeReturn("s").body.values[0].get!string;
+	}
+
+	assert(introspect("/") ==
+`<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.freedesktop.DBus.Peer">
+    <method name="Ping"/>
+    <method name="GetMachineId">
+      <arg type="s" direction="out"/>
+    </method>
+  </interface>
+  <interface name="org.freedesktop.DBus.Introspectable">
+    <method name="Introspect">
+      <arg type="s" direction="out"/>
+    </method>
+  </interface>
+  <node name="a"/>
+  <node name="ab"/>
+</node>
+`);
+	assert(introspect("/a") == dbusNodeXml([dbusPeerXml, dbusIntrospectableXml], ["b", "c"]));
+	assert(introspect("/a/c") == dbusNodeXml([dbusPeerXml, dbusIntrospectableXml], ["d"]));
+	assert(introspect("/a/b") == dbusNodeXml([dbusPeerXml, dbusIntrospectableXml,
+		dbusPropertiesXml, dbusIntrospectionXml!DbusServiceTestInterface,
+		dbusIntrospectionXml!DbusServiceTestOther], null));
+
+	// Unqualified calls reach the interfaces of objects and ancestors.
+	harness.dispatch("/a/b", null, "Introspect");
+	socketManager.loop();
+	harness.takeReturn("s");
+	harness.dispatch("/a", null, "Introspect");
+	socketManager.loop();
+	harness.takeReturn("s");
+	harness.dispatch("/a", null, "Ping");
+	socketManager.loop();
+	harness.takeReturn("");
+	harness.dispatch("/a", "org.freedesktop.DBus.Properties", "GetAll", DbusBody.from(""));
+	harness.takeError("UnknownInterface");
+	harness.dispatch("/a", null, "GetAll", DbusBody.from(""));
+	harness.takeError("UnknownMethod");
+
+	harness.dispatch("/a/x", "org.freedesktop.DBus.Introspectable", "Introspect");
+	assert(harness.takeError("UnknownObject") == "No such object path '/a/x'");
+	harness.dispatch("/a/b/c", "org.freedesktop.DBus.Introspectable", "Introspect");
+	harness.takeError("UnknownObject");
+	harness.dispatch("/a/b", "org.freedesktop.DBus.Introspectable", "Introspect",
+		DbusBody.from(1));
+	harness.takeError("InvalidArgs");
+
+	auto empty = new DbusServiceTestHarness;
+	empty.dispatch("/", "org.freedesktop.DBus.Introspectable", "Introspect");
+	socketManager.loop();
+	assert(empty.takeReturn("s").body.values[0].get!string ==
+		dbusNodeXml([dbusPeerXml, dbusIntrospectableXml], null));
+}
+
+// Introspection reflects the registered contract, not later changes to the
+// arrays it was registered from.
+debug(ae_unittest) unittest
+{
+	auto harness = new DbusServiceTestHarness;
+	auto implementation = dbusServiceTestMutable();
+	harness.registry.register(DbusObjectPath.parse("/a"), implementation);
+
+	string introspect()
+	{
+		harness.dispatch("/a", "org.freedesktop.DBus.Introspectable", "Introspect");
+		socketManager.loop();
+		return harness.takeReturn("s").body.values[0].get!string;
+	}
+	auto before = introspect();
+	assert(before.canFind(`<arg name="input" type="s" direction="in"/>`));
+	assert(before.canFind(`<arg name="output" type="i" direction="out"/>`));
+	assert(before.canFind(`<arg name="value" type="s"/>`));
+	assert(before.canFind(`<property name="Level" type="i" access="read"/>`));
+
+	dbusServiceTestMutate(implementation);
+	assert(introspect() == before);
+}
+
+// The Properties interface of registered objects.
+debug(ae_unittest) unittest
+{
+	auto harness = new DbusServiceTestHarness;
+	auto object = new DbusServiceTestObject;
+	auto path = DbusObjectPath.parse("/a");
+	harness.registry.register(path, object.implementation);
+	harness.registry.register(path, object.implementation("org.example.Other"));
+
+	enum properties = "org.freedesktop.DBus.Properties";
+	DbusVariant get(string interfaceName, string property)
+	{
+		harness.dispatch("/a", properties, "Get", DbusBody.from(interfaceName, property));
+		socketManager.loop();
+		return harness.takeReturn("v").body.values[0].get!DbusVariant;
+	}
+	string getError(string interfaceName, string property, string errorName)
+	{
+		harness.dispatch("/a", properties, "Get", DbusBody.from(interfaceName, property));
+		socketManager.loop();
+		return harness.takeError(errorName);
+	}
+	string setError(string interfaceName, string property, DbusVariant value,
+		string errorName)
+	{
+		harness.dispatch("/a", properties, "Set",
+			DbusBody.from(interfaceName, property, value));
+		socketManager.loop();
+		return harness.takeError(errorName);
+	}
+	DbusVariant[string] getAll(string interfaceName)
+	{
+		harness.dispatch("/a", properties, "GetAll", DbusBody.from(interfaceName));
+		socketManager.loop();
+		return harness.takeReturn("a{sv}").body.values[0].get!(DbusVariant[string]);
+	}
+
+	assert(get("org.example.Service", "Volume").get!double == 0.25);
+	assert(get("org.example.Other", "Name").get!string == "other");
+	// An empty interface argument takes the first interface that has it.
+	assert(get("", "Name").get!string == "service");
+	assert(get("", "Count").get!int == 3);
+
+	assert(getError("org.example.Service", "Secret", "InvalidArgs") ==
+		"Property 'Secret' is not readable");
+	assert(getError("org.example.Service", "Count", "UnknownProperty") ==
+		"No such property 'Count'");
+	assert(getError("org.example.Missing", "Volume", "UnknownInterface") ==
+		"No such interface 'org.example.Missing' at object path '/a'");
+	getError("org.freedesktop.DBus.Peer", "Volume", "UnknownProperty");
+	harness.dispatch("/a", properties, "Get", DbusBody.from("org.example.Service"));
+	assert(harness.takeError("InvalidArgs") ==
+		"Method 'Get' expects signature 'ss', got 's'");
+
+	object.values["org.example.Service.Name"] = DbusVariant.of(1);
+	assert(getError("org.example.Service", "Name", "Failed") ==
+		"Property 'Name' returned type 'i' instead of 's'");
+	object.values["org.example.Service.Name"] = DbusVariant.of("service");
+	object.getFailure = new DbusError(DbusErrorName.parse("org.example.Error.Busy"), "busy");
+	assert(getError("org.example.Service", "Name", "org.example.Error.Busy") == "busy");
+	object.getFailure = null;
+
+	harness.dispatch("/a", properties, "Set",
+		DbusBody.from("org.example.Service", "Volume", DbusVariant.of(0.5)));
+	socketManager.loop();
+	harness.takeReturn("");
+	assert(object.values["org.example.Service.Volume"].get!double == 0.5);
+	harness.dispatch("/a", null, "Set",
+		DbusBody.from("", "Secret", DbusVariant.of("hidden")));
+	socketManager.loop();
+	harness.takeReturn("");
+	assert(object.values["org.example.Service.Secret"].get!string == "hidden");
+
+	assert(setError("org.example.Service", "Name", DbusVariant.of("x"), "PropertyReadOnly") ==
+		"Property 'Name' is read-only");
+	assert(setError("org.example.Service", "Volume", DbusVariant.of("loud"), "InvalidArgs") ==
+		"Property 'Volume' has type 'd', got 's'");
+	setError("org.example.Service", "Missing", DbusVariant.of(1), "UnknownProperty");
+	setError("org.example.Missing", "Volume", DbusVariant.of(1.0), "UnknownInterface");
+	assert(object.values["org.example.Service.Volume"].get!double == 0.5);
+
+	auto service = getAll("org.example.Service");
+	assert(service.length == 2);
+	assert(service["Volume"].get!double == 0.5);
+	assert(service["Name"].get!string == "service");
+	auto merged = getAll("");
+	assert(merged.length == 3);
+	assert(merged["Name"].get!string == "service");
+	assert(merged["Count"].get!int == 3);
+	assert(getAll("org.freedesktop.DBus.Peer").length == 0);
+	harness.dispatch("/a", properties, "GetAll", DbusBody.from("org.example.Missing"));
+	socketManager.loop();
+	harness.takeError("UnknownInterface");
+	object.values["org.example.Other.Count"] = DbusVariant.of("three");
+	harness.dispatch("/a", properties, "GetAll", DbusBody.from(""));
+	socketManager.loop();
+	harness.takeError("Failed");
+
+	harness.dispatch("/b", properties, "GetAll", DbusBody.from(""));
+	harness.takeError("UnknownObject");
 }
 
 debug(ae_unittest) unittest
