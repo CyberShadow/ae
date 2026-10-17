@@ -27,10 +27,11 @@
  * - structured signal matching, `DbusSignalMatch`, from
  *   `ae.net.dbus.match`;
  * - the compile-time typed D-interface binding layer --
- *   `@DbusInterface`, `@DbusMember`, `DbusSignal`, `dbusProxy`,
- *   `DbusProxy`, `getProperty`, `setProperty`, `getAllProperties`,
- *   `subscribePropertiesChanged`, `subscribe`, `introspect` -- from
- *   `ae.net.dbus.binding`.
+ *   `@DbusInterface`, `@DbusMember`, `@DbusProperty`, `DbusSignal`, and
+ *   the interface descriptions, from `ae.net.dbus.description`;
+ *   `dbusProxy`, `DbusProxy` (whose `@DbusProperty` accessors read and
+ *   write properties), `getAllProperties`, `subscribePropertiesChanged`,
+ *   `subscribe`, `introspect` -- from `ae.net.dbus.binding`.
  *
  * `ae.net.dbus.address`, `ae.net.dbus.auth`, and `ae.net.dbus.codec` are
  * internal implementation modules. The codec's public fd-frame policy is

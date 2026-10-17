@@ -104,8 +104,29 @@ private string generateDbusProxyMethod(I, size_t infoIndex)()
 	return code;
 }
 
+private string generateDbusProxyProperty(I, size_t infoIndex)()
+{
+	alias Info = DbusPropertyInfos!I[infoIndex];
+
+	enum suffix = infoIndex.to!string;
+	enum info = "DbusPropertyInfos!I[" ~ suffix ~ "]";
+	string code;
+
+	static if (Info.hasGetter)
+		code ~= "override ReturnType!(" ~ info ~ ".Getter) " ~ Info.identifier ~ "()\n" ~
+			"{\n\treturn callPropertiesGet!(" ~ info ~ ")();\n}\n";
+	static if (Info.hasSetter)
+		code ~= "override ReturnType!(" ~ info ~ ".Setter) " ~ Info.identifier ~
+			"(ParameterTypeTuple!(" ~ info ~ ".Setter)[0] __dbusValue)\n" ~
+			"{\n\treturn callPropertiesSet!(" ~ info ~ ")(__dbusValue);\n}\n";
+	return code;
+}
+
 /// A generated client-side proxy implementing `I` by dispatching calls
 /// over a `DbusConnection`. Create instances with `dbusProxy`.
+///
+/// Methods are sent as method calls. `@DbusProperty` getters and setters
+/// are sent as `org.freedesktop.DBus.Properties.Get` and `Set` calls.
 final class DbusProxy(I) : I
 if (is(I == interface))
 {
@@ -123,6 +144,8 @@ if (is(I == interface))
 
 	static foreach (infoIndex; 0 .. DbusMethodInfos!I.length)
 		mixin(generateDbusProxyMethod!(I, infoIndex));
+	static foreach (infoIndex; 0 .. DbusPropertyInfos!I.length)
+		mixin(generateDbusProxyProperty!(I, infoIndex));
 
 	private ReturnType!(Info.Method) invoke(alias Info, Args...)(Args args)
 	{
@@ -149,6 +172,33 @@ if (is(I == interface))
 				return decodeDbusSingleReply!ResultType(reply.body);
 			});
 	}
+
+	private Promise!(Info.Type) callPropertiesGet(alias Info)()
+	{
+		DbusMethodCall request;
+		request.destination = __dbusDestination;
+		request.path = __dbusPath;
+		request.interfaceName = dbusPropertiesInterfaceName;
+		request.member = dbusGetMemberName;
+		request.body = DbusBody.from(__dbusInterfaceName.text, Info.wireName);
+		return __dbusConnection.call(request).then((DbusMessage reply) {
+			return decodeDbusSingleReply!DbusVariant(reply.body).get!(Info.Type);
+		});
+	}
+
+	private Promise!void callPropertiesSet(alias Info)(Info.Type value)
+	{
+		DbusMethodCall request;
+		request.destination = __dbusDestination;
+		request.path = __dbusPath;
+		request.interfaceName = dbusPropertiesInterfaceName;
+		request.member = dbusSetMemberName;
+		request.body = DbusBody.from(__dbusInterfaceName.text, Info.wireName,
+			DbusVariant.of!(Info.Type)(value));
+		return __dbusConnection.call(request).then((DbusMessage reply) {
+			requireDbusEmptyReply(reply.body);
+		});
+	}
 }
 
 /// Creates a typed proxy for `I` at the given destination and object path.
@@ -165,34 +215,6 @@ private enum dbusSetMemberName = DbusMemberName.parse("Set");
 private enum dbusGetAllMemberName = DbusMemberName.parse("GetAll");
 private enum dbusPropertiesChangedMemberName = DbusMemberName.parse("PropertiesChanged");
 private enum dbusIntrospectMemberName = DbusMemberName.parse("Introspect");
-
-/// Reads a single property through `org.freedesktop.DBus.Properties.Get`.
-Promise!T getProperty(T, I)(DbusProxy!I proxy, string propertyName)
-{
-	DbusMethodCall request;
-	request.destination = proxy.__dbusDestination;
-	request.path = proxy.__dbusPath;
-	request.interfaceName = dbusPropertiesInterfaceName;
-	request.member = dbusGetMemberName;
-	request.body = DbusBody.from(proxy.__dbusInterfaceName.text, propertyName);
-	return proxy.__dbusConnection.call(request).then((DbusMessage reply) {
-		return decodeDbusSingleReply!DbusVariant(reply.body).get!T;
-	});
-}
-
-/// Writes a single property through `org.freedesktop.DBus.Properties.Set`.
-Promise!void setProperty(T, I)(DbusProxy!I proxy, string propertyName, T value)
-{
-	DbusMethodCall request;
-	request.destination = proxy.__dbusDestination;
-	request.path = proxy.__dbusPath;
-	request.interfaceName = dbusPropertiesInterfaceName;
-	request.member = dbusSetMemberName;
-	request.body = DbusBody.from(proxy.__dbusInterfaceName.text, propertyName, DbusVariant.of!T(value));
-	return proxy.__dbusConnection.call(request).then((DbusMessage reply) {
-		requireDbusEmptyReply(reply.body);
-	});
-}
 
 /// Reads all properties through `org.freedesktop.DBus.Properties.GetAll`.
 Promise!(DbusVariant[string]) getAllProperties(I)(DbusProxy!I proxy)
@@ -283,6 +305,9 @@ private interface DbusBindingTestInterface
 	Promise!void DoSomething(int value);
 	Promise!int GetValue();
 	Promise!(DbusOut!(int, string)) GetPair();
+	@DbusProperty Promise!int Value();
+	@DbusProperty Promise!void Value(int value);
+	@DbusMember("Label") @DbusProperty Promise!void label(string value);
 	alias Changed = DbusSignal!("Changed", int);
 }
 
@@ -385,7 +410,7 @@ debug(ae_unittest) unittest
 	assert(remote.errorName.text == "org.example.Error");
 
 	Exception propertyRejected;
-	getProperty!int(proxy, "Value").then((int) { assert(false); }, (Exception exception) {
+	proxy.Value().then((int) { assert(false); }, (Exception exception) {
 		propertyRejected = exception;
 	}).ignoreResult();
 	auto propertyRequest = dbusTestSentMessage(transport, 5);
@@ -414,7 +439,7 @@ debug(ae_unittest) unittest
 		DbusBusName.parse(":1.99"), DbusObjectPath.parse("/org/example/Test"));
 
 	int gotValue;
-	getProperty!int(proxy, "Value").then((int value) { gotValue = value; }).ignoreResult();
+	proxy.Value().then((int value) { gotValue = value; }).ignoreResult();
 	auto get = dbusTestSentMessage(transport, 4);
 	assert(get.headers.interfaceName.text == "org.freedesktop.DBus.Properties");
 	assert(get.headers.member.text == "Get");
@@ -427,10 +452,14 @@ debug(ae_unittest) unittest
 	assert(gotValue == 7);
 
 	bool setDone;
-	setProperty!int(proxy, "Value", 9).then(() { setDone = true; }).ignoreResult();
+	proxy.Value(9).then(() { setDone = true; }).ignoreResult();
 	auto set = dbusTestSentMessage(transport, 5);
+	assert(set.headers.interfaceName.text == "org.freedesktop.DBus.Properties");
 	assert(set.headers.member.text == "Set");
 	assert(set.body.signature.text == "ssv");
+	assert(set.body.values[0].get!string == "org.example.Test");
+	assert(set.body.values[1].get!string == "Value");
+	assert(set.body.values[2].get!DbusVariant.get!int == 9);
 	transport.receive(dbusTestMethodReturn(set.serial, DbusBody.from()));
 	socketManager.loop();
 	assert(setDone);
@@ -470,7 +499,7 @@ debug(ae_unittest) unittest
 		DbusBusName.parse(":1.99"), DbusObjectPath.parse("/org/example/Test"));
 
 	Exception rejected;
-	getProperty!int(proxy, "Value").then((int) { assert(false); }, (Exception exception) {
+	proxy.Value().then((int) { assert(false); }, (Exception exception) {
 		rejected = exception;
 	}).ignoreResult();
 	auto get = dbusTestSentMessage(transport, 4);
@@ -479,6 +508,37 @@ debug(ae_unittest) unittest
 	socketManager.loop();
 	assert(cast(DbusTypeMismatchException) rejected !is null);
 	assert(transport.disconnectCount == 0);
+
+	int fulfilled;
+	proxy.Value().then((int value) { fulfilled = value; }).ignoreResult();
+	auto retry = dbusTestSentMessage(transport, 5);
+	transport.receive(dbusTestMethodReturn(retry.serial,
+		DbusBody.from(DbusVariant.of!int(3))));
+	socketManager.loop();
+	assert(fulfilled == 3);
+}
+
+debug(ae_unittest) unittest
+{
+	auto transport = new DbusTestConnection;
+	auto connection = attachDbusConnection(transport);
+	connection.ready.ignoreResult();
+	dbusTestAuthenticate(transport);
+
+	auto proxy = dbusProxy!DbusBindingTestInterface(connection,
+		DbusBusName.parse(":1.99"), DbusObjectPath.parse("/org/example/Test"));
+
+	static assert(!__traits(compiles, proxy.label()));
+
+	bool setDone;
+	proxy.label("hello").then(() { setDone = true; }).ignoreResult();
+	auto set = dbusTestSentMessage(transport, 4);
+	assert(set.headers.member.text == "Set");
+	assert(set.body.values[1].get!string == "Label");
+	assert(set.body.values[2].get!DbusVariant.get!string == "hello");
+	transport.receive(dbusTestMethodReturn(set.serial, DbusBody.from()));
+	socketManager.loop();
+	assert(setDone);
 }
 
 debug(ae_unittest) unittest

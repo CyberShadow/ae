@@ -1,6 +1,7 @@
 /**
  * Compile-time proof that ae.net.dbus.binding accepts well-formed
- * D-Bus interface declarations and rejects every disallowed shape.
+ * D-Bus interface declarations, describes them faithfully, and rejects
+ * every disallowed shape.
  *
  * License:
  *   This Source Code Form is subject to the terms of
@@ -46,6 +47,13 @@ private interface DbusBindingTestPlayer
 	@DbusMember("EchoInt")
 	Promise!int echo(int value);
 
+	@DbusProperty Promise!double Volume();
+	@DbusProperty Promise!void Volume(double value);
+	@DbusPropertyAttribute(DbusEmitsChangedSignal.invalidates)
+	Promise!DbusBindingTestTrackInfo Track();
+	@DbusMember("Shuffle") @DbusPropertyAttribute(DbusEmitsChangedSignal.false_)
+	Promise!void shuffle(bool value);
+
 	alias TrackChanged = DbusSignal!("TrackChanged", DbusObjectPath);
 }
 
@@ -66,9 +74,12 @@ debug(ae_unittest) unittest
 
 	static assert(is(typeof(subscribe!(DbusBindingTestPlayer.TrackChanged)(proxy, (DbusObjectPath path) {})) == Promise!DbusSubscription));
 
-	static assert(is(typeof(getProperty!(string, DbusBindingTestPlayer)(proxy, "Foo")) == Promise!string));
-
-	static assert(is(typeof(setProperty!string(proxy, "Foo", "bar")) == Promise!void));
+	static assert(is(typeof(proxy.Volume()) == Promise!double));
+	static assert(is(typeof(proxy.Volume(0.5)) == Promise!void));
+	static assert(is(typeof(proxy.Track()) == Promise!DbusBindingTestTrackInfo));
+	static assert(!__traits(compiles, proxy.Track(DbusBindingTestTrackInfo.init)));
+	static assert(is(typeof(proxy.shuffle(true)) == Promise!void));
+	static assert(!__traits(compiles, proxy.shuffle()));
 
 	static assert(is(typeof(getAllProperties(proxy)) == Promise!(DbusVariant[string])));
 
@@ -76,6 +87,56 @@ debug(ae_unittest) unittest
 	static assert(is(typeof(subscribePropertiesChanged(proxy, changedHandler)) == Promise!DbusSubscription));
 
 	static assert(is(typeof(introspect(proxy)) == Promise!string));
+}
+
+debug(ae_unittest) unittest
+{
+	enum description = dbusInterfaceDescription!DbusBindingTestPlayer;
+	static assert(description.name.text == "com.example.Player1");
+
+	static assert(description.methods.length == 8);
+	static assert(description.methods[1].name.text == "GetTrack");
+	static assert(description.methods[1].outArgs.length == 1);
+	static assert(description.methods[1].outArgs[0].type.text == "(su)");
+	static assert(description.methods[2].name.text == "GetPosition");
+	static assert(dbusArgumentsSignature(description.methods[2].outArgs).text == "us");
+	static assert(description.methods[4].outArgs[0].type.text == "a{si}");
+	static assert(description.methods[5].name.text == "Seek");
+	static assert(description.methods[5].inArgs.length == 3);
+	static assert(description.methods[5].inArgs[0].name == "offset");
+	static assert(description.methods[5].inArgs[1].name == "mode");
+	static assert(description.methods[5].inArgs[2].name == "hint");
+	static assert(dbusArgumentsSignature(description.methods[5].inArgs).text == "xs(su)");
+	static assert(description.methods[6].name.text == "EchoString");
+	static assert(description.methods[7].name.text == "EchoInt");
+
+	static assert(description.properties.length == 3);
+	static assert(description.properties[0].name.text == "Volume");
+	static assert(description.properties[0].type.text == "d");
+	static assert(description.properties[0].access == DbusPropertyAccess.readwrite);
+	static assert(description.properties[0].emitsChangedSignal == DbusEmitsChangedSignal.true_);
+	static assert(description.properties[1].name.text == "Track");
+	static assert(description.properties[1].type.text == "(su)");
+	static assert(description.properties[1].access == DbusPropertyAccess.read);
+	static assert(description.properties[1].emitsChangedSignal == DbusEmitsChangedSignal.invalidates);
+	static assert(description.properties[2].name.text == "Shuffle");
+	static assert(description.properties[2].type.text == "b");
+	static assert(description.properties[2].access == DbusPropertyAccess.write);
+	static assert(description.properties[2].emitsChangedSignal == DbusEmitsChangedSignal.false_);
+
+	static assert(description.signals.length == 1);
+	static assert(description.signals[0].name.text == "TrackChanged");
+	static assert(description.signals[0].args[0].type.text == "o");
+}
+
+// A method and a property may share a wire name: they are separate
+// namespaces on the wire (method calls versus Properties arguments).
+debug(ae_unittest)
+@DbusInterface("com.example.SharedName")
+private interface DbusBindingTestSharedName
+{
+	Promise!int Level();
+	@DbusMember("Level") @DbusProperty Promise!int levelProperty();
 }
 
 debug(ae_unittest)
@@ -227,6 +288,102 @@ private interface DbusBindingTestBadNothrow { Promise!void Foo() nothrow; }
 debug(ae_unittest)
 @DbusInterface("com.example.BadNogc")
 private interface DbusBindingTestBadNogc { Promise!void Foo() @nogc; }
+
+debug(ae_unittest)
+@DbusInterface("com.example.BadMixedAccessor")
+private interface DbusBindingTestBadMixedAccessor
+{
+	@DbusProperty Promise!int Foo();
+	@DbusMember("SetFoo") Promise!void Foo(int value);
+}
+
+debug(ae_unittest)
+@DbusInterface("com.example.BadVoidGetter")
+private interface DbusBindingTestBadVoidGetter { @DbusProperty Promise!void Foo(); }
+
+debug(ae_unittest)
+@DbusInterface("com.example.BadOutGetter")
+private interface DbusBindingTestBadOutGetter { @DbusProperty Promise!(DbusOut!(int, int)) Foo(); }
+
+debug(ae_unittest)
+@DbusInterface("com.example.BadValueSetter")
+private interface DbusBindingTestBadValueSetter { @DbusProperty Promise!int Foo(int value); }
+
+debug(ae_unittest)
+@DbusInterface("com.example.BadTwoArgumentSetter")
+private interface DbusBindingTestBadTwoArgumentSetter { @DbusProperty Promise!void Foo(int a, int b); }
+
+debug(ae_unittest)
+@DbusInterface("com.example.BadTwoSetters")
+private interface DbusBindingTestBadTwoSetters
+{
+	@DbusProperty Promise!void Foo(int value);
+	@DbusProperty Promise!void Foo(string value);
+}
+
+debug(ae_unittest)
+@DbusInterface("com.example.BadAccessorTypes")
+private interface DbusBindingTestBadAccessorTypes
+{
+	@DbusProperty Promise!int Foo();
+	@DbusProperty Promise!void Foo(string value);
+}
+
+debug(ae_unittest)
+@DbusInterface("com.example.BadAccessorAnnotations")
+private interface DbusBindingTestBadAccessorAnnotations
+{
+	@DbusProperty Promise!int Foo();
+	@DbusPropertyAttribute(DbusEmitsChangedSignal.invalidates) Promise!void Foo(int value);
+}
+
+debug(ae_unittest)
+@DbusInterface("com.example.BadAccessorWireNames")
+private interface DbusBindingTestBadAccessorWireNames
+{
+	@DbusMember("Bar") @DbusProperty Promise!int Foo();
+	@DbusProperty Promise!void Foo(int value);
+}
+
+debug(ae_unittest)
+@DbusInterface("com.example.BadDoubleAnnotation")
+private interface DbusBindingTestBadDoubleAnnotation { @DbusProperty @DbusProperty Promise!int Foo(); }
+
+debug(ae_unittest)
+@DbusInterface("com.example.BadPropertyDup")
+private interface DbusBindingTestBadPropertyDup
+{
+	@DbusProperty Promise!int Foo();
+	@DbusMember("Foo") @DbusProperty Promise!int Bar();
+}
+
+debug(ae_unittest)
+@DbusInterface("com.example.BadPropertyType")
+private interface DbusBindingTestBadPropertyType { @DbusProperty Promise!Object Foo(); }
+
+debug(ae_unittest)
+@DbusInterface("com.example.BadPropertyAttributes")
+private interface DbusBindingTestBadPropertyAttributes { @DbusProperty Promise!int Foo() @safe; }
+
+debug(ae_unittest) unittest
+{
+	static assert(__traits(compiles, DbusProxy!DbusBindingTestSharedName));
+
+	static assert(!__traits(compiles, DbusProxy!DbusBindingTestBadMixedAccessor));
+	static assert(!__traits(compiles, DbusProxy!DbusBindingTestBadVoidGetter));
+	static assert(!__traits(compiles, DbusProxy!DbusBindingTestBadOutGetter));
+	static assert(!__traits(compiles, DbusProxy!DbusBindingTestBadValueSetter));
+	static assert(!__traits(compiles, DbusProxy!DbusBindingTestBadTwoArgumentSetter));
+	static assert(!__traits(compiles, DbusProxy!DbusBindingTestBadTwoSetters));
+	static assert(!__traits(compiles, DbusProxy!DbusBindingTestBadAccessorTypes));
+	static assert(!__traits(compiles, DbusProxy!DbusBindingTestBadAccessorAnnotations));
+	static assert(!__traits(compiles, DbusProxy!DbusBindingTestBadAccessorWireNames));
+	static assert(!__traits(compiles, DbusProxy!DbusBindingTestBadDoubleAnnotation));
+	static assert(!__traits(compiles, DbusProxy!DbusBindingTestBadPropertyDup));
+	static assert(!__traits(compiles, DbusProxy!DbusBindingTestBadPropertyType));
+	static assert(!__traits(compiles, DbusProxy!DbusBindingTestBadPropertyAttributes));
+	static assert(!__traits(compiles, dbusInterfaceDescription!DbusBindingTestBadAccessorTypes));
+}
 
 debug(ae_unittest) unittest
 {
