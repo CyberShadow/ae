@@ -56,6 +56,8 @@
  * the connection becomes ready.
  * A handler forwards a received error only explicitly:
  * `catch (DbusRemoteError e) throw new DbusError(e.errorName, e.remoteMessage);`
+ * `DbusConnection.listNames` and `listActivatableNames` return validated
+ * bus names for running and activatable services.
  *
  * `ae.net.dbus.address`, `ae.net.dbus.auth`, and `ae.net.dbus.codec` are
  * internal implementation modules. The codec's public fd-frame policy is
@@ -395,6 +397,18 @@ debug(ae_unittest) unittest
 
 		auto names = await(bus.ListNames());
 		assert(canFind(names, uniqueName.text));
+		assert(canFind(names, "org.freedesktop.DBus"));
+		auto typedNames = await(connection.listNames());
+		bool ownNameListed, busNameListed;
+		foreach (name; typedNames)
+		{
+			if (name.text == uniqueName.text)
+				ownNameListed = true;
+			if (name.text == "org.freedesktop.DBus")
+				busNameListed = true;
+		}
+		assert(ownNameListed && busNameListed);
+
 		string[] namespaceChanges;
 		auto player1Seen = new Promise!void;
 		auto namespaceMatch = DbusSignalMatch.signal()

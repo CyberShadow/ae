@@ -444,6 +444,21 @@ private:
 			throw new DbusTypeMismatchException("expected one D-Bus boolean");
 	}
 
+	DbusBusName[] requireBusNamesReply(const ref DbusMessage reply)
+	{
+		if (reply.body.signature.text != "as" || reply.body.values.length != 1)
+			throw new DbusTypeMismatchException("expected one D-Bus string array");
+		DbusBusName[] names;
+		try
+		{
+			foreach (name; reply.body.values[0].get!(string[])())
+				names ~= DbusBusName.parse(name);
+		}
+		catch (DbusException)
+			throw new DbusTypeMismatchException("expected valid D-Bus bus names");
+		return names;
+	}
+
 	static E requireReplyCode(E)(const ref DbusMessage reply)
 	{
 		import std.traits : EnumMembers;
@@ -2012,6 +2027,31 @@ public:
 		raw.then((DbusMessage reply) {
 			try
 				result.fulfill(requireBooleanReply(reply));
+			catch (DbusTypeMismatchException exception)
+				result.reject(exception);
+		}, (Exception exception) {
+			result.reject(exception);
+		}).ignoreResult();
+		return result;
+	}
+
+	Promise!(DbusBusName[]) listNames()
+	{
+		return busNamesCall("ListNames");
+	}
+
+	Promise!(DbusBusName[]) listActivatableNames()
+	{
+		return busNamesCall("ListActivatableNames");
+	}
+
+	private Promise!(DbusBusName[]) busNamesCall(string member)
+	{
+		auto raw = call(standardBusCall(member, DbusBody.from()));
+		auto result = new Promise!(DbusBusName[]);
+		raw.then((DbusMessage reply) {
+			try
+				result.fulfill(requireBusNamesReply(reply));
 			catch (DbusTypeMismatchException exception)
 				result.reject(exception);
 		}, (Exception exception) {
@@ -5918,4 +5958,55 @@ debug(ae_unittest) unittest
 	client.disconnect();
 }
 
+debug(ae_unittest) unittest
+{
+	auto script = new DbusClientTestAttemptScript;
+	auto client = dbusClientTestConnect(script);
+	auto transport = script.transports[0];
+	dbusClientTestAuthenticate(transport);
+	dbusClientTestReady(transport);
+
+	DbusBusName[] names;
+	client.listNames().then((DbusBusName[] value) { names = value; },
+		(Exception) { assert(false); }).ignoreResult();
+	auto request = dbusClientTestSentMessage(transport, 4);
+	assert(request.headers.member.text == "ListNames");
+	assert(request.headers.destination.text == "org.freedesktop.DBus");
+	assert(request.body.values.length == 0);
+	transport.receive(dbusClientTestMethodReturn(request.serial,
+		DbusBody.from([":1.42", "org.freedesktop.DBus"])));
+	socketManager.loop();
+	assert(names.length == 2 && names[0].text == ":1.42" &&
+		names[1].text == "org.freedesktop.DBus");
+
+	DbusBusName[] activatable;
+	client.listActivatableNames().then((DbusBusName[] value) { activatable = value; },
+		(Exception) { assert(false); }).ignoreResult();
+	request = dbusClientTestSentMessage(transport, 5);
+	assert(request.headers.member.text == "ListActivatableNames");
+	assert(request.headers.destination.text == "org.freedesktop.DBus");
+	assert(request.body.values.length == 0);
+	transport.receive(dbusClientTestMethodReturn(request.serial,
+		DbusBody.from(["org.example.Service"])));
+	socketManager.loop();
+	assert(activatable.length == 1 && activatable[0].text == "org.example.Service");
+
+	Exception wrongShape;
+	client.listNames().then((DbusBusName[]) { assert(false); },
+		(Exception exception) { wrongShape = exception; }).ignoreResult();
+	request = dbusClientTestSentMessage(transport, 6);
+	transport.receive(dbusClientTestMethodReturn(request.serial, DbusBody.from(true)));
+	socketManager.loop();
+	assert(cast(DbusTypeMismatchException) wrongShape !is null);
+
+	Exception malformedName;
+	client.listActivatableNames().then((DbusBusName[]) { assert(false); },
+		(Exception exception) { malformedName = exception; }).ignoreResult();
+	request = dbusClientTestSentMessage(transport, 7);
+	transport.receive(dbusClientTestMethodReturn(request.serial,
+		DbusBody.from(["org.example.Valid", "invalid name"])));
+	socketManager.loop();
+	assert(cast(DbusTypeMismatchException) malformedName !is null);
+	client.disconnect();
+}
 }
