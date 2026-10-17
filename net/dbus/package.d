@@ -76,10 +76,13 @@ public import ae.net.dbus.binding;
 public import ae.net.dbus.client;
 public import ae.net.dbus.codec : DbusFdFramePolicy;
 public import ae.net.dbus.common;
+public import ae.net.dbus.description;
+public import ae.net.dbus.introspection;
 public import ae.net.dbus.marshal;
 public import ae.net.dbus.match;
 public import ae.net.dbus.monitor;
 public import ae.net.dbus.signature;
+public import ae.net.dbus.standard;
 public import ae.net.dbus.value;
 
 version (HAVE_DBUS_SERVER)
