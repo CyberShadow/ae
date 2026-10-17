@@ -435,17 +435,11 @@ version(Posix)
 {
 
 debug(ae_unittest)
-import ae.net.asockets : ConnectionState, DisconnectType, IConnection, socketManager;
+import ae.net.asockets : socketManager;
 debug(ae_unittest)
 import ae.net.dbus.client : attachDbusConnection;
 debug(ae_unittest)
-import ae.net.dbus.marshal : decodeDbusMessage, encodeDbusMessage;
-debug(ae_unittest)
-import ae.sys.data : Data;
-debug(ae_unittest)
-import ae.utils.array : asBytes;
-debug(ae_unittest)
-import core.sys.posix.unistd : getuid;
+import ae.net.dbus.testing;
 debug(ae_unittest)
 import std.string : indexOf;
 
@@ -459,135 +453,12 @@ private interface DbusBindingTestInterface
 	alias Changed = DbusSignal!("Changed", int);
 }
 
-debug(ae_unittest)
-private enum dbusBindingTestServerGuid = "0123456789abcdef0123456789abcdef";
-
-debug(ae_unittest)
-private final class DbusBindingTestConnection : IConnection
-{
-	ConnectionState state_ = ConnectionState.connected;
-	Data[] sent;
-	size_t disconnectCount;
-
-	ConnectHandler connectHandler;
-	ReadDataHandler readDataHandler;
-	DisconnectHandler disconnectHandler;
-	BufferFlushedHandler bufferFlushedHandler;
-
-	@property ConnectionState state()
-	{
-		return state_;
-	}
-
-	void send(scope Data[] data, int priority = DEFAULT_PRIORITY)
-	{
-		assert(state_ == ConnectionState.connected);
-		foreach (datum; data)
-			sent ~= datum.dup;
-	}
-	alias send = IConnection.send;
-
-	void disconnect(string reason = defaultDisconnectReason,
-		DisconnectType type = DisconnectType.requested)
-	{
-		assert(state_ == ConnectionState.connected);
-		disconnectCount++;
-		state_ = ConnectionState.disconnected;
-	}
-
-	@property void handleConnect(ConnectHandler value) { connectHandler = value; }
-	@property void handleReadData(ReadDataHandler value) { readDataHandler = value; }
-	@property void handleDisconnect(DisconnectHandler value) { disconnectHandler = value; }
-	@property void handleBufferFlushed(BufferFlushedHandler value) { bufferFlushedHandler = value; }
-
-	void receive(Data data)
-	{
-		assert(readDataHandler !is null);
-		readDataHandler(data);
-	}
-}
-
-debug(ae_unittest)
-private string dbusBindingTestExternalIdentity()
-{
-	enum hexadecimal = "0123456789abcdef";
-	char[] result;
-	foreach (ubyte octet; cast(const(ubyte)[]) to!string(getuid()))
-	{
-		result ~= hexadecimal[octet >> 4];
-		result ~= hexadecimal[octet & 0x0f];
-	}
-	return result.idup;
-}
-
-debug(ae_unittest)
-private Data dbusBindingTestMethodReturn(uint replySerial, DbusBody body)
-{
-	DbusMessage message;
-	message.messageType = DbusMessageType.methodReturn;
-	message.serial = 900;
-	message.headers.replySerial = replySerial;
-	message.body = body;
-	return encodeDbusMessage(message);
-}
-
-debug(ae_unittest)
-private Data dbusBindingTestError(uint replySerial, string errorName, string errorMessage)
-{
-	DbusMessage message;
-	message.messageType = DbusMessageType.error;
-	message.serial = 901;
-	message.headers.errorName = DbusErrorName.parse(errorName);
-	message.headers.replySerial = replySerial;
-	message.body = DbusBody.from(errorMessage);
-	return encodeDbusMessage(message);
-}
-
-debug(ae_unittest)
-private Data dbusBindingTestSignal(string sender, DbusObjectPath path,
-	DbusInterfaceName interfaceName, string member, DbusBody body)
-{
-	DbusMessage message;
-	message.messageType = DbusMessageType.signal;
-	message.serial = 902;
-	message.headers.sender = DbusBusName.parse(sender);
-	message.headers.path = path;
-	message.headers.interfaceName = interfaceName;
-	message.headers.member = DbusMemberName.parse(member);
-	message.body = body;
-	return encodeDbusMessage(message);
-}
-
-debug(ae_unittest)
-private DbusMessage dbusBindingTestSentMessage(DbusBindingTestConnection transport, size_t index)
-{
-	return decodeDbusMessage(transport.sent[index].toGC);
-}
-
-debug(ae_unittest)
-private void dbusBindingTestAuthenticate(DbusBindingTestConnection transport,
-	string uniqueName = ":1.42")
-{
-	assert(transport.sent.length == 2);
-	assert(transport.sent[0].toGC == [cast(ubyte) 0]);
-	assert(transport.sent[1].toGC == ("AUTH EXTERNAL " ~
-		dbusBindingTestExternalIdentity() ~ "\r\n").asBytes);
-
-	transport.receive(Data(("OK " ~ dbusBindingTestServerGuid ~ "\r\n").asBytes));
-	assert(transport.sent.length == 4);
-	assert(transport.sent[2].toGC == "BEGIN\r\n".asBytes);
-
-	auto hello = decodeDbusMessage(transport.sent[3].toGC);
-	assert(hello.headers.member.text == "Hello");
-	transport.receive(dbusBindingTestMethodReturn(hello.serial, DbusBody.from(uniqueName)));
-}
-
 debug(ae_unittest) unittest
 {
-	auto transport = new DbusBindingTestConnection;
+	auto transport = new DbusTestConnection;
 	auto connection = attachDbusConnection(transport);
 	connection.ready.ignoreResult();
-	dbusBindingTestAuthenticate(transport);
+	dbusTestAuthenticate(transport);
 
 	auto proxy = dbusProxy!DbusBindingTestInterface(connection,
 		DbusBusName.parse(":1.99"), DbusObjectPath.parse("/org/example/Test"));
@@ -596,7 +467,7 @@ debug(ae_unittest) unittest
 	proxy.DoSomething(42).then(() { fulfilled++; }).ignoreResult();
 
 	assert(transport.sent.length == 5);
-	auto request = dbusBindingTestSentMessage(transport, 4);
+	auto request = dbusTestSentMessage(transport, 4);
 	assert(request.messageType == DbusMessageType.methodCall);
 	assert(request.headers.destination.text == ":1.99");
 	assert(request.headers.path.text == "/org/example/Test");
@@ -605,26 +476,26 @@ debug(ae_unittest) unittest
 	assert(request.body.signature.text == "i");
 	assert(request.body.values[0].get!int == 42);
 
-	transport.receive(dbusBindingTestMethodReturn(request.serial, DbusBody.from()));
+	transport.receive(dbusTestMethodReturn(request.serial, DbusBody.from()));
 	socketManager.loop();
 	assert(fulfilled == 1);
 }
 
 debug(ae_unittest) unittest
 {
-	auto transport = new DbusBindingTestConnection;
+	auto transport = new DbusTestConnection;
 	auto connection = attachDbusConnection(transport);
 	connection.ready.ignoreResult();
-	dbusBindingTestAuthenticate(transport);
+	dbusTestAuthenticate(transport);
 
 	auto proxy = dbusProxy!DbusBindingTestInterface(connection,
 		DbusBusName.parse(":1.99"), DbusObjectPath.parse("/org/example/Test"));
 
 	DbusOut!(int, string) decoded;
 	proxy.GetPair().then((DbusOut!(int, string) result) { decoded = result; }).ignoreResult();
-	auto request = dbusBindingTestSentMessage(transport, 4);
+	auto request = dbusTestSentMessage(transport, 4);
 	assert(request.headers.member.text == "GetPair");
-	transport.receive(dbusBindingTestMethodReturn(request.serial, DbusBody.from(7, "seven")));
+	transport.receive(dbusTestMethodReturn(request.serial, DbusBody.from(7, "seven")));
 	socketManager.loop();
 	assert(decoded.values[0] == 7);
 	assert(decoded.values[1] == "seven");
@@ -632,10 +503,10 @@ debug(ae_unittest) unittest
 
 debug(ae_unittest) unittest
 {
-	auto transport = new DbusBindingTestConnection;
+	auto transport = new DbusTestConnection;
 	auto connection = attachDbusConnection(transport);
 	connection.ready.ignoreResult();
-	dbusBindingTestAuthenticate(transport);
+	dbusTestAuthenticate(transport);
 
 	auto proxy = dbusProxy!DbusBindingTestInterface(connection,
 		DbusBusName.parse(":1.99"), DbusObjectPath.parse("/org/example/Test"));
@@ -645,26 +516,26 @@ debug(ae_unittest) unittest
 		rejected = exception;
 	}).ignoreResult();
 
-	auto first = dbusBindingTestSentMessage(transport, 4);
-	transport.receive(dbusBindingTestMethodReturn(first.serial, DbusBody.from("wrong")));
+	auto first = dbusTestSentMessage(transport, 4);
+	transport.receive(dbusTestMethodReturn(first.serial, DbusBody.from("wrong")));
 	socketManager.loop();
 	assert(cast(DbusTypeMismatchException) rejected !is null);
 	assert(transport.disconnectCount == 0);
 
 	int fulfilled;
 	proxy.GetValue().then((int value) { fulfilled = value; }).ignoreResult();
-	auto second = dbusBindingTestSentMessage(transport, 5);
-	transport.receive(dbusBindingTestMethodReturn(second.serial, DbusBody.from(7)));
+	auto second = dbusTestSentMessage(transport, 5);
+	transport.receive(dbusTestMethodReturn(second.serial, DbusBody.from(7)));
 	socketManager.loop();
 	assert(fulfilled == 7);
 }
 
 debug(ae_unittest) unittest
 {
-	auto transport = new DbusBindingTestConnection;
+	auto transport = new DbusTestConnection;
 	auto connection = attachDbusConnection(transport);
 	connection.ready.ignoreResult();
-	dbusBindingTestAuthenticate(transport);
+	dbusTestAuthenticate(transport);
 
 	auto proxy = dbusProxy!DbusBindingTestInterface(connection,
 		DbusBusName.parse(":1.99"), DbusObjectPath.parse("/org/example/Test"));
@@ -673,8 +544,8 @@ debug(ae_unittest) unittest
 	proxy.GetValue().then((int) { assert(false); }, (Exception exception) {
 		rejected = exception;
 	}).ignoreResult();
-	auto request = dbusBindingTestSentMessage(transport, 4);
-	transport.receive(dbusBindingTestError(request.serial, "org.example.Error", "failed"));
+	auto request = dbusTestSentMessage(transport, 4);
+	transport.receive(dbusTestError(request.serial, "org.example.Error", "failed"));
 	socketManager.loop();
 	auto remote = cast(DbusRemoteError) rejected;
 	assert(remote !is null);
@@ -684,8 +555,8 @@ debug(ae_unittest) unittest
 	getProperty!int(proxy, "Value").then((int) { assert(false); }, (Exception exception) {
 		propertyRejected = exception;
 	}).ignoreResult();
-	auto propertyRequest = dbusBindingTestSentMessage(transport, 5);
-	transport.receive(dbusBindingTestError(propertyRequest.serial, "org.example.Error", "failed"));
+	auto propertyRequest = dbusTestSentMessage(transport, 5);
+	transport.receive(dbusTestError(propertyRequest.serial, "org.example.Error", "failed"));
 	socketManager.loop();
 	assert(cast(DbusRemoteError) propertyRejected !is null);
 
@@ -693,41 +564,41 @@ debug(ae_unittest) unittest
 	introspect(proxy).then((string) { assert(false); }, (Exception exception) {
 		introspectRejected = exception;
 	}).ignoreResult();
-	auto introspectRequest = dbusBindingTestSentMessage(transport, 6);
-	transport.receive(dbusBindingTestError(introspectRequest.serial, "org.example.Error", "failed"));
+	auto introspectRequest = dbusTestSentMessage(transport, 6);
+	transport.receive(dbusTestError(introspectRequest.serial, "org.example.Error", "failed"));
 	socketManager.loop();
 	assert(cast(DbusRemoteError) introspectRejected !is null);
 }
 
 debug(ae_unittest) unittest
 {
-	auto transport = new DbusBindingTestConnection;
+	auto transport = new DbusTestConnection;
 	auto connection = attachDbusConnection(transport);
 	connection.ready.ignoreResult();
-	dbusBindingTestAuthenticate(transport);
+	dbusTestAuthenticate(transport);
 
 	auto proxy = dbusProxy!DbusBindingTestInterface(connection,
 		DbusBusName.parse(":1.99"), DbusObjectPath.parse("/org/example/Test"));
 
 	int gotValue;
 	getProperty!int(proxy, "Value").then((int value) { gotValue = value; }).ignoreResult();
-	auto get = dbusBindingTestSentMessage(transport, 4);
+	auto get = dbusTestSentMessage(transport, 4);
 	assert(get.headers.interfaceName.text == "org.freedesktop.DBus.Properties");
 	assert(get.headers.member.text == "Get");
 	assert(get.body.signature.text == "ss");
 	assert(get.body.values[0].get!string == "org.example.Test");
 	assert(get.body.values[1].get!string == "Value");
-	transport.receive(dbusBindingTestMethodReturn(get.serial,
+	transport.receive(dbusTestMethodReturn(get.serial,
 		DbusBody.from(DbusVariant.of!int(7))));
 	socketManager.loop();
 	assert(gotValue == 7);
 
 	bool setDone;
 	setProperty!int(proxy, "Value", 9).then(() { setDone = true; }).ignoreResult();
-	auto set = dbusBindingTestSentMessage(transport, 5);
+	auto set = dbusTestSentMessage(transport, 5);
 	assert(set.headers.member.text == "Set");
 	assert(set.body.signature.text == "ssv");
-	transport.receive(dbusBindingTestMethodReturn(set.serial, DbusBody.from()));
+	transport.receive(dbusTestMethodReturn(set.serial, DbusBody.from()));
 	socketManager.loop();
 	assert(setDone);
 
@@ -735,21 +606,21 @@ debug(ae_unittest) unittest
 	getAllProperties(proxy).then((DbusVariant[string] properties) {
 		allProperties = properties;
 	}).ignoreResult();
-	auto getAll = dbusBindingTestSentMessage(transport, 6);
+	auto getAll = dbusTestSentMessage(transport, 6);
 	assert(getAll.headers.member.text == "GetAll");
 	assert(getAll.body.signature.text == "s");
-	transport.receive(dbusBindingTestMethodReturn(getAll.serial,
+	transport.receive(dbusTestMethodReturn(getAll.serial,
 		DbusBody.from(["Value": DbusVariant.of!int(7)])));
 	socketManager.loop();
 	assert(allProperties["Value"].get!int == 7);
 
 	string document;
 	introspect(proxy).then((string xml) { document = xml; }).ignoreResult();
-	auto introspectRequest = dbusBindingTestSentMessage(transport, 7);
+	auto introspectRequest = dbusTestSentMessage(transport, 7);
 	assert(introspectRequest.headers.interfaceName.text == "org.freedesktop.DBus.Introspectable");
 	assert(introspectRequest.headers.member.text == "Introspect");
 	assert(introspectRequest.body.signature.text == "");
-	transport.receive(dbusBindingTestMethodReturn(introspectRequest.serial,
+	transport.receive(dbusTestMethodReturn(introspectRequest.serial,
 		DbusBody.from("<node/>")));
 	socketManager.loop();
 	assert(document == "<node/>");
@@ -757,10 +628,10 @@ debug(ae_unittest) unittest
 
 debug(ae_unittest) unittest
 {
-	auto transport = new DbusBindingTestConnection;
+	auto transport = new DbusTestConnection;
 	auto connection = attachDbusConnection(transport);
 	connection.ready.ignoreResult();
-	dbusBindingTestAuthenticate(transport);
+	dbusTestAuthenticate(transport);
 
 	auto proxy = dbusProxy!DbusBindingTestInterface(connection,
 		DbusBusName.parse(":1.99"), DbusObjectPath.parse("/org/example/Test"));
@@ -769,8 +640,8 @@ debug(ae_unittest) unittest
 	getProperty!int(proxy, "Value").then((int) { assert(false); }, (Exception exception) {
 		rejected = exception;
 	}).ignoreResult();
-	auto get = dbusBindingTestSentMessage(transport, 4);
-	transport.receive(dbusBindingTestMethodReturn(get.serial,
+	auto get = dbusTestSentMessage(transport, 4);
+	transport.receive(dbusTestMethodReturn(get.serial,
 		DbusBody.from(DbusVariant.of!string("wrong type"))));
 	socketManager.loop();
 	assert(cast(DbusTypeMismatchException) rejected !is null);
@@ -779,10 +650,10 @@ debug(ae_unittest) unittest
 
 debug(ae_unittest) unittest
 {
-	auto transport = new DbusBindingTestConnection;
+	auto transport = new DbusTestConnection;
 	auto connection = attachDbusConnection(transport);
 	connection.ready.ignoreResult();
-	dbusBindingTestAuthenticate(transport);
+	dbusTestAuthenticate(transport);
 
 	auto proxy = dbusProxy!DbusBindingTestInterface(connection,
 		DbusBusName.parse(":1.99"), DbusObjectPath.parse("/org/example/Test"));
@@ -796,18 +667,18 @@ debug(ae_unittest) unittest
 		deliveries++;
 	}).ignoreResult();
 
-	auto addMatch = dbusBindingTestSentMessage(transport, 4);
+	auto addMatch = dbusTestSentMessage(transport, 4);
 	assert(addMatch.headers.member.text == "AddMatch");
 	assert(addMatch.body.signature.text == "s");
 	auto rule = addMatch.body.values[0].get!string;
 	assert(rule == "type='signal',sender=':1.99',interface='org.freedesktop.DBus.Properties'," ~
 		"member='PropertiesChanged',path='/org/example/Test',arg0='org.example.Test'");
-	transport.receive(dbusBindingTestMethodReturn(addMatch.serial, DbusBody.from()));
+	transport.receive(dbusTestMethodReturn(addMatch.serial, DbusBody.from()));
 	socketManager.loop();
 
 	auto changedBody = DbusBody.from("org.example.Test",
 		["Value": DbusVariant.of!int(11)], ["Old"]);
-	transport.receive(dbusBindingTestSignal(":1.99", proxy.__dbusPath,
+	transport.receive(dbusTestSignal(":1.99", proxy.__dbusPath,
 		DbusInterfaceName.parse("org.freedesktop.DBus.Properties"), "PropertiesChanged", changedBody));
 	assert(deliveries == 1);
 	assert(changedProperties["Value"].get!int == 11);
@@ -816,10 +687,10 @@ debug(ae_unittest) unittest
 
 debug(ae_unittest) unittest
 {
-	auto transport = new DbusBindingTestConnection;
+	auto transport = new DbusTestConnection;
 	auto connection = attachDbusConnection(transport);
 	connection.ready.ignoreResult();
-	dbusBindingTestAuthenticate(transport);
+	dbusTestAuthenticate(transport);
 
 	auto proxy = dbusProxy!DbusBindingTestInterface(connection,
 		DbusBusName.parse(":1.99"), DbusObjectPath.parse("/org/example/Test"));
@@ -831,21 +702,21 @@ debug(ae_unittest) unittest
 		deliveries++;
 	}).ignoreResult();
 
-	auto addMatch = dbusBindingTestSentMessage(transport, 4);
+	auto addMatch = dbusTestSentMessage(transport, 4);
 	assert(addMatch.headers.member.text == "AddMatch");
 	auto rule = addMatch.body.values[0].get!string;
 	assert(rule == "type='signal',sender=':1.99',interface='org.example.Test'," ~
 		"member='Changed',path='/org/example/Test'");
 	assert(rule.indexOf("destination=") == -1);
-	transport.receive(dbusBindingTestMethodReturn(addMatch.serial, DbusBody.from()));
+	transport.receive(dbusTestMethodReturn(addMatch.serial, DbusBody.from()));
 	socketManager.loop();
 
-	transport.receive(dbusBindingTestSignal(":1.99", proxy.__dbusPath,
+	transport.receive(dbusTestSignal(":1.99", proxy.__dbusPath,
 		proxy.__dbusInterfaceName, "Changed", DbusBody.from(5)));
 	assert(deliveries == 1);
 	assert(received == 5);
 
-	transport.receive(dbusBindingTestSignal(":1.99", proxy.__dbusPath,
+	transport.receive(dbusTestSignal(":1.99", proxy.__dbusPath,
 		proxy.__dbusInterfaceName, "Changed", DbusBody.from("mismatched")));
 	assert(deliveries == 1);
 }
