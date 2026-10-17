@@ -557,6 +557,32 @@ class DbusRemoteError : DbusException
 	}
 }
 
+/// Flags for `DbusConnection.requestName`.
+enum DbusRequestNameFlags : uint
+{
+	none = 0,
+	allowReplacement = 1, /// Let another connection take the name with `replaceExisting`.
+	replaceExisting = 2, /// Take the name from an owner that allowed replacement.
+	doNotQueue = 4, /// Fail with `exists` instead of waiting in the queue.
+}
+
+/// The outcome of `DbusConnection.requestName`.
+enum DbusRequestNameReply : uint
+{
+	primaryOwner = 1, ///
+	inQueue = 2, ///
+	exists = 3, ///
+	alreadyOwner = 4, ///
+}
+
+/// The outcome of `DbusConnection.releaseName`.
+enum DbusReleaseNameReply : uint
+{
+	released = 1, ///
+	nonExistent = 2, ///
+	notOwner = 3, ///
+}
+
 debug(ae_unittest)
 private void expectDbusValidation(void delegate() action)
 {

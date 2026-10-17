@@ -281,6 +281,9 @@ private:
 	DbusSignalRegistration[ulong] registrations_;
 	ulong[] registrationOrder_;
 
+	void delegate(DbusBusName name) nameAcquiredHandler_;
+	void delegate(DbusBusName name) nameLostHandler_;
+
 	version(Posix)
 	{
 		DbusUnixAddressCandidate[] candidates_;
@@ -433,6 +436,41 @@ private:
 			return values[0].get!bool();
 		catch (DbusException)
 			throw new DbusTypeMismatchException("expected one D-Bus boolean");
+	}
+
+	static E requireReplyCode(E)(const ref DbusMessage reply)
+	{
+		import std.traits : EnumMembers;
+
+		auto values = reply.body.values;
+		if (reply.body.signature.text != "u" || values.length != 1)
+			throw new DbusTypeMismatchException("expected one D-Bus reply code");
+		auto code = values[0].get!uint();
+		foreach (member; EnumMembers!E)
+			if (code == member)
+				return member;
+		throw new DbusTypeMismatchException("unexpected D-Bus " ~ E.stringof ~ " code");
+	}
+
+	static void requireWellKnownName(DbusBusName name)
+	{
+		if (!name.text.length || name.text[0] == ':')
+			throw new DbusValidationException("D-Bus name ownership requires a well-known bus name");
+	}
+
+	Promise!E nameOwnershipCall(E)(string member, DbusBody body)
+	{
+		auto raw = call(standardBusCall(member, body));
+		auto result = new Promise!E;
+		raw.then((DbusMessage reply) {
+			try
+				result.fulfill(requireReplyCode!E(reply));
+			catch (DbusTypeMismatchException exception)
+				result.reject(exception);
+		}, (Exception exception) {
+			result.reject(exception);
+		}).ignoreResult();
+		return result;
 	}
 
 	void requireEmptyReply(const ref DbusMessage reply)
@@ -1222,6 +1260,34 @@ private:
 		activateOwnerWatchDependents(watch);
 	}
 
+	/// Delivers the bus driver's unicast NameAcquired / NameLost signals
+	/// to the name-ownership handlers.  Malformed instances are ignored.
+	void routeNameOwnershipSignal(const ref DbusSignalMessage signal,
+		DbusBusName destination, scope const(DbusValue)[] values)
+	{
+		if (signal.sender.text != "org.freedesktop.DBus" ||
+			signal.path.text != "/org/freedesktop/DBus" ||
+			signal.interfaceName.text != "org.freedesktop.DBus" ||
+			destination.text != uniqueName_.text ||
+			signal.body.signature.text != "s")
+			return;
+		void delegate(DbusBusName) handler;
+		switch (signal.member.text)
+		{
+			case "NameAcquired": handler = nameAcquiredHandler_; break;
+			case "NameLost": handler = nameLostHandler_; break;
+			default: return;
+		}
+		if (handler is null)
+			return;
+		DbusBusName name;
+		try
+			name = DbusBusName.parse(values[0].get!string());
+		catch (DbusException)
+			return;
+		handler(name);
+	}
+
 	void routeIncomingSignal(const ref DbusMessage message)
 	{
 		DbusSignalMessage signal;
@@ -1232,6 +1298,8 @@ private:
 		auto values = message.body.values;
 		signal.body = DbusBody.fromValues(values);
 		auto destination = message.headers.destination;
+
+		routeNameOwnershipSignal(signal, destination, values);
 
 		DbusOwnerWatch[] watches;
 		foreach (watch; ownerWatches_)
@@ -1853,6 +1921,40 @@ public:
 		message.headers.destination = signal.destination;
 		message.body = signal.body;
 		sendUnsolicited(message);
+	}
+
+	/// Asks the bus to assign the well-known `name` to this connection.
+	/// Throws `DbusValidationException` for an empty or unique name; the
+	/// promise rejects with `DbusTypeMismatchException` if the bus replies
+	/// with anything but a known reply code.
+	Promise!DbusRequestNameReply requestName(DbusBusName name,
+		DbusRequestNameFlags flags = DbusRequestNameFlags.none)
+	{
+		requireWellKnownName(name);
+		return nameOwnershipCall!DbusRequestNameReply("RequestName",
+			DbusBody.from(name.text, cast(uint) flags));
+	}
+
+	/// Gives up ownership of (or the queue position for) `name`.
+	Promise!DbusReleaseNameReply releaseName(DbusBusName name)
+	{
+		requireWellKnownName(name);
+		return nameOwnershipCall!DbusReleaseNameReply("ReleaseName",
+			DbusBody.from(name.text));
+	}
+
+	/// Called with each bus name this connection gains (`NameAcquired`).
+	/// The bus also reports the connection's own unique name this way,
+	/// right after the connection becomes ready.
+	@property void handleNameAcquired(void delegate(DbusBusName name) handler)
+	{
+		nameAcquiredHandler_ = handler;
+	}
+
+	/// Called with each bus name this connection loses (`NameLost`).
+	@property void handleNameLost(void delegate(DbusBusName name) handler)
+	{
+		nameLostHandler_ = handler;
 	}
 
 	Promise!DbusUniqueName getNameOwner(DbusBusName name)
@@ -3692,6 +3794,194 @@ debug(ae_unittest) unittest
 		afterDisconnect = exception;
 	assert(afterDisconnect is client.terminalCause_);
 	assert(cast(DbusDisconnectedException) afterDisconnect !is null);
+}
+
+debug(ae_unittest) unittest
+{
+	auto script = new DbusClientTestAttemptScript;
+	auto client = dbusClientTestConnect(script);
+	auto transport = script.transports[0];
+	dbusClientTestAuthenticate(transport);
+	dbusClientTestReady(transport);
+
+	foreach (invalid; [DbusBusName.init, DbusBusName.parse(":1.7")])
+	{
+		bool requestRejected, releaseRejected;
+		try
+			client.requestName(invalid);
+		catch (DbusValidationException)
+			requestRejected = true;
+		try
+			client.releaseName(invalid);
+		catch (DbusValidationException)
+			releaseRejected = true;
+		assert(requestRejected && releaseRejected);
+	}
+	assert(transport.sent.length == 4);
+
+	auto name = DbusBusName.parse("org.example.Service");
+	foreach (code, expected; [
+		1: DbusRequestNameReply.primaryOwner,
+		2: DbusRequestNameReply.inQueue,
+		3: DbusRequestNameReply.exists,
+		4: DbusRequestNameReply.alreadyOwner,
+	])
+	{
+		DbusRequestNameReply reply;
+		client.requestName(name, DbusRequestNameFlags.doNotQueue |
+			DbusRequestNameFlags.allowReplacement).then((DbusRequestNameReply value) {
+			reply = value;
+		}, (Exception) { assert(false); }).ignoreResult();
+		auto request = decodeDbusMessage(transport.sent[$ - 1].toGC);
+		assert(request.headers.destination.text == "org.freedesktop.DBus");
+		assert(request.headers.path.text == "/org/freedesktop/DBus");
+		assert(request.headers.interfaceName.text == "org.freedesktop.DBus");
+		assert(request.headers.member.text == "RequestName");
+		assert(request.body.signature.text == "su");
+		assert(request.body.values[0].get!string == "org.example.Service");
+		assert(request.body.values[1].get!uint == 5);
+		transport.receive(dbusClientTestMethodReturn(request.serial,
+			DbusBody.from(cast(uint) code)));
+		socketManager.loop();
+		assert(reply == expected);
+	}
+
+	foreach (body; [DbusBody.from(cast(uint) 9), DbusBody.from(cast(uint) 0),
+		DbusBody.from("1"), DbusBody.from(cast(uint) 1, cast(uint) 1)])
+	{
+		DbusTypeMismatchException mismatch;
+		client.requestName(name).then((DbusRequestNameReply) {
+			assert(false);
+		}, (Exception exception) {
+			mismatch = cast(DbusTypeMismatchException) exception;
+		}).ignoreResult();
+		auto request = decodeDbusMessage(transport.sent[$ - 1].toGC);
+		assert(request.body.values[1].get!uint == 0);
+		transport.receive(dbusClientTestMethodReturn(request.serial, body));
+		socketManager.loop();
+		assert(mismatch !is null);
+	}
+
+	foreach (code, expected; [
+		1: DbusReleaseNameReply.released,
+		2: DbusReleaseNameReply.nonExistent,
+		3: DbusReleaseNameReply.notOwner,
+	])
+	{
+		DbusReleaseNameReply reply;
+		client.releaseName(name).then((DbusReleaseNameReply value) {
+			reply = value;
+		}, (Exception) { assert(false); }).ignoreResult();
+		auto request = decodeDbusMessage(transport.sent[$ - 1].toGC);
+		assert(request.headers.member.text == "ReleaseName");
+		assert(request.body.signature.text == "s");
+		assert(request.body.values[0].get!string == "org.example.Service");
+		transport.receive(dbusClientTestMethodReturn(request.serial,
+			DbusBody.from(cast(uint) code)));
+		socketManager.loop();
+		assert(reply == expected);
+	}
+
+	DbusTypeMismatchException releaseMismatch;
+	client.releaseName(name).then((DbusReleaseNameReply) {
+		assert(false);
+	}, (Exception exception) {
+		releaseMismatch = cast(DbusTypeMismatchException) exception;
+	}).ignoreResult();
+	transport.receive(dbusClientTestMethodReturn(
+		decodeDbusMessage(transport.sent[$ - 1].toGC).serial,
+		DbusBody.from(cast(uint) 4)));
+	socketManager.loop();
+	assert(releaseMismatch !is null);
+	assert(client.state_ == DbusConnectionState.ready);
+	client.disconnect();
+}
+
+debug(ae_unittest) unittest
+{
+	static Data ownershipSignal(string member, DbusBody body,
+		string sender = "org.freedesktop.DBus", string destination = ":1.42",
+		string path = "/org/freedesktop/DBus", string iface = "org.freedesktop.DBus")
+	{
+		DbusMessage message;
+		message.messageType = DbusMessageType.signal;
+		message.serial = 103;
+		message.headers.path = DbusObjectPath.parse(path);
+		message.headers.interfaceName = DbusInterfaceName.parse(iface);
+		message.headers.member = DbusMemberName.parse(member);
+		message.headers.sender = DbusBusName.parse(sender);
+		message.headers.destination = DbusBusName.parse(destination);
+		message.body = body;
+		return encodeDbusMessage(message);
+	}
+
+	auto script = new DbusClientTestAttemptScript;
+	auto client = dbusClientTestConnect(script);
+	auto transport = script.transports[0];
+	string[] acquired, lost;
+	client.handleNameAcquired = (DbusBusName name) { acquired ~= name.text; };
+	client.handleNameLost = (DbusBusName name) { lost ~= name.text; };
+	dbusClientTestAuthenticate(transport);
+	dbusClientTestReady(transport);
+
+	transport.receive(ownershipSignal("NameAcquired", DbusBody.from(":1.42")));
+	transport.receive(ownershipSignal("NameAcquired", DbusBody.from("org.example.Service")));
+	transport.receive(ownershipSignal("NameLost", DbusBody.from("org.example.Service")));
+	assert(acquired == [":1.42", "org.example.Service"]);
+	assert(lost == ["org.example.Service"]);
+
+	// Ignored: another sender, destination, path or interface; a malformed
+	// body or name; an unrelated bus-driver signal.
+	transport.receive(ownershipSignal("NameAcquired", DbusBody.from("org.example.Other"),
+		":1.5"));
+	transport.receive(ownershipSignal("NameAcquired", DbusBody.from("org.example.Other"),
+		"org.freedesktop.DBus", ":1.43"));
+	transport.receive(ownershipSignal("NameAcquired", DbusBody.from("org.example.Other"),
+		"org.freedesktop.DBus", ":1.42", "/org/example"));
+	transport.receive(ownershipSignal("NameAcquired", DbusBody.from("org.example.Other"),
+		"org.freedesktop.DBus", ":1.42", "/org/freedesktop/DBus", "org.example.Iface"));
+	transport.receive(ownershipSignal("NameLost", DbusBody.from(cast(uint) 1)));
+	transport.receive(ownershipSignal("NameLost", DbusBody.from("org.example.Other", "x")));
+	transport.receive(ownershipSignal("NameLost", DbusBody.from("not a bus name")));
+	transport.receive(ownershipSignal("NameOwnerChanged",
+		DbusBody.from("org.example.Other", "", ":1.42")));
+	assert(acquired == [":1.42", "org.example.Service"]);
+	assert(lost == ["org.example.Service"]);
+	assert(client.state_ == DbusConnectionState.ready);
+
+	client.handleNameLost = null;
+	transport.receive(ownershipSignal("NameLost", DbusBody.from("org.example.Service")));
+	assert(lost == ["org.example.Service"]);
+	client.disconnect();
+}
+
+debug(ae_unittest) unittest
+{
+	auto script = new DbusClientTestAttemptScript;
+	auto client = dbusClientTestConnect(script);
+	auto transport = script.transports[0];
+	string[] lost;
+	client.handleNameLost = (DbusBusName name) { lost ~= name.text; };
+	dbusClientTestAuthenticate(transport);
+	dbusClientTestReady(transport);
+	client.promoteToMonitor(["type='signal'"],
+		(IConnection, Data, DbusUniqueName) {}).ignoreResult();
+	auto sentBefore = transport.sent.length;
+
+	DbusMessage message;
+	message.messageType = DbusMessageType.signal;
+	message.serial = 103;
+	message.headers.path = DbusObjectPath.parse("/org/freedesktop/DBus");
+	message.headers.interfaceName = DbusInterfaceName.parse("org.freedesktop.DBus");
+	message.headers.member = DbusMemberName.parse("NameLost");
+	message.headers.sender = DbusBusName.parse("org.freedesktop.DBus");
+	message.headers.destination = DbusBusName.parse(":1.42");
+	message.body = DbusBody.from("org.example.Owned");
+	transport.receive(encodeDbusMessage(message));
+
+	assert(lost == ["org.example.Owned"]);
+	assert(transport.sent.length == sentBefore);
+	client.disconnect();
 }
 
 debug(ae_unittest) unittest
