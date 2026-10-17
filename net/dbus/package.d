@@ -27,7 +27,10 @@
  *   UNIX_FDS, while monitors skip them. UNIX_FD values remain unsupported
  *   for sending and receiving;
  * - structured signal matching, `DbusSignalMatch`, from
- *   `ae.net.dbus.match`;
+ *   `ae.net.dbus.match`; `withPathNamespace` adds `path_namespace`,
+ *   `withArgumentPath` adds `argNpath`, and `withArgument0Namespace`
+ *   adds `arg0namespace`. Each argument index accepts only one exact,
+ *   path, or namespace constraint;
  * - the compile-time typed D-interface layer -- `@DbusInterface`,
  *   `@DbusMember`, `@DbusProperty`, `DbusSignal`, and the interface
  *   descriptions, from `ae.net.dbus.description`; on the client side,
@@ -392,6 +395,45 @@ debug(ae_unittest) unittest
 
 		auto names = await(bus.ListNames());
 		assert(canFind(names, uniqueName.text));
+		string[] namespaceChanges;
+		auto player1Seen = new Promise!void;
+		auto namespaceMatch = DbusSignalMatch.signal()
+			.withSender(DbusBusName.parse("org.freedesktop.DBus"))
+			.withInterface(DbusInterfaceName.parse("org.freedesktop.DBus"))
+			.withMember(DbusMemberName.parse("NameOwnerChanged"))
+			.withArgument0Namespace("org.ae.TestNs");
+		auto namespaceSubscription = await(connection.subscribe(namespaceMatch,
+			(const ref DbusSignalMessage signal) {
+				auto name = signal.body.values[0].get!string();
+				namespaceChanges ~= name;
+				if (name == "org.ae.TestNs.Player1")
+					player1Seen.fulfill();
+			}));
+		auto named = connectSessionBus();
+		await(named.ready);
+		// Signals from one bus connection arrive in order, even though the
+		// request replies and this subscription use different sockets.
+		await(named.requestName(DbusBusName.parse("org.ae.TestNsOther")));
+		await(named.requestName(DbusBusName.parse("org.ae.TestNs.Player1")));
+		await(player1Seen);
+		assert(namespaceChanges == ["org.ae.TestNs.Player1"]);
+		await(namespaceSubscription.unsubscribe());
+
+		auto pathSignal = new Promise!void;
+		auto pathMatch = DbusSignalMatch.signal()
+			.withInterface(DbusInterfaceName.parse("org.ae.Test.PathNamespace"))
+			.withMember(DbusMemberName.parse("Changed"))
+			.withPathNamespace(DbusObjectPath.parse("/org/ae/Test"));
+		auto pathSubscription = await(connection.subscribe(pathMatch,
+			(const ref DbusSignalMessage signal) { pathSignal.fulfill(); }));
+		DbusSignalEmission emission;
+		emission.path = DbusObjectPath.parse("/org/ae/Test/Child");
+		emission.interfaceName = DbusInterfaceName.parse("org.ae.Test.PathNamespace");
+		emission.member = DbusMemberName.parse("Changed");
+		named.emitSignal(emission);
+		await(pathSignal);
+		await(pathSubscription.unsubscribe());
+		named.disconnect("namespace match test complete");
 
 		bool gotRemoteError;
 		try

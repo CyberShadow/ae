@@ -249,7 +249,8 @@ private void validateInterfaceLikeText(string value, bool rejectLocal)
 		throw new DbusValidationException("D-Bus interface names must contain a dot");
 }
 
-private void validateBusNameText(string value, bool requireUnique)
+private void validateBusNameText(string value, bool requireUnique,
+	bool allowSingleElement = false)
 {
 	if (value.length > 255)
 		throw new DbusValidationException("D-Bus bus names are limited to 255 bytes");
@@ -287,8 +288,13 @@ private void validateBusNameText(string value, bool requireUnique)
 	}
 	if (elementStart == bytes.length)
 		throw new DbusValidationException("D-Bus bus names must not contain empty elements");
-	if (elements == 0)
+	if (!allowSingleElement && elements == 0)
 		throw new DbusValidationException("D-Bus bus names must contain a dot");
+}
+
+package(ae.net.dbus) void validateBusNameNamespaceText(string value)
+{
+	validateBusNameText(value, false, true);
 }
 
 private void validateMemberNameText(string value)

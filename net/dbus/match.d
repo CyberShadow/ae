@@ -30,9 +30,13 @@ private:
 	DbusInterfaceName interface_;
 	DbusMemberName member_;
 	DbusObjectPath path_;
+	DbusObjectPath pathNamespace_;
 	DbusBusName destination_;
 	bool[64] hasArguments_;
 	string[64] arguments_;
+	bool[64] hasArgumentPaths_;
+	string[64] argumentPaths_;
+	string argument0Namespace_;
 
 	static void requireName(string value, string description)
 	{
@@ -54,11 +58,15 @@ private:
 		result.interface_ = interface_;
 		result.member_ = member_;
 		result.path_ = path_;
+		result.pathNamespace_ = pathNamespace_;
 		result.destination_ = destination_;
+		result.argument0Namespace_ = argument0Namespace_;
 		foreach (index; 0 .. arguments_.length)
 		{
 			result.hasArguments_[index] = hasArguments_[index];
 			result.arguments_[index] = arguments_[index];
+			result.hasArgumentPaths_[index] = hasArgumentPaths_[index];
+			result.argumentPaths_[index] = argumentPaths_[index];
 		}
 		return result;
 	}
@@ -126,8 +134,21 @@ public:
 	{
 		requireSignal();
 		requireName(value.text, "D-Bus signal match path");
+		if (hasPathNamespace)
+			throw new DbusValidationException("D-Bus signal match path and path_namespace are mutually exclusive");
 		auto result = copy();
 		result.path_ = value;
+		return result;
+	}
+
+	DbusSignalMatch withPathNamespace(DbusObjectPath value) const
+	{
+		requireSignal();
+		requireName(value.text, "D-Bus signal match path namespace");
+		if (hasPath)
+			throw new DbusValidationException("D-Bus signal match path and path_namespace are mutually exclusive");
+		auto result = copy();
+		result.pathNamespace_ = value;
 		return result;
 	}
 
@@ -145,9 +166,38 @@ public:
 		requireSignal();
 		if (index >= arguments_.length)
 			throw new DbusValidationException("D-Bus signal match arguments are limited to arg0 through arg63");
+		if (hasArguments_[index] || hasArgumentPaths_[index] || (index == 0 && argument0Namespace_.length))
+			throw new DbusValidationException("D-Bus signal match argument already constrained");
 		auto result = copy();
 		result.hasArguments_[index] = true;
 		result.arguments_[index] = copyDbusText(value, "D-Bus signal match argument");
+		return result;
+	}
+
+	DbusSignalMatch withArgumentPath(size_t index, string value) const
+	{
+		requireSignal();
+		if (index >= argumentPaths_.length)
+			throw new DbusValidationException("D-Bus signal match argument paths are limited to arg0 through arg63");
+		if (hasArguments_[index] || hasArgumentPaths_[index] || (index == 0 && argument0Namespace_.length))
+			throw new DbusValidationException("D-Bus signal match argument already constrained");
+		auto result = copy();
+		result.hasArgumentPaths_[index] = true;
+		result.argumentPaths_[index] = copyDbusText(value, "D-Bus signal match argument path");
+		return result;
+	}
+
+	/// Restricts argument zero to a well-known or unique-name namespace.
+	/// Each argument index accepts only one exact, path, or namespace constraint.
+	DbusSignalMatch withArgument0Namespace(string value) const
+	{
+		requireSignal();
+		if (hasArguments_[0] || hasArgumentPaths_[0] || argument0Namespace_.length)
+			throw new DbusValidationException("D-Bus signal match argument already constrained");
+		auto copied = copyDbusText(value, "D-Bus signal match argument namespace");
+		validateBusNameNamespaceText(copied);
+		auto result = copy();
+		result.argument0Namespace_ = copied;
 		return result;
 	}
 
@@ -191,6 +241,16 @@ public:
 		return path_;
 	}
 
+	package(ae.net.dbus) @property bool hasPathNamespace() const
+	{
+		return pathNamespace_.text.length != 0;
+	}
+
+	package(ae.net.dbus) @property DbusObjectPath pathNamespace() const
+	{
+		return pathNamespace_;
+	}
+
 	package(ae.net.dbus) @property bool hasDestination() const
 	{
 		return destination_.text.length != 0;
@@ -214,6 +274,23 @@ public:
 		return arguments_[index];
 	}
 
+	package(ae.net.dbus) bool hasArgumentPath(size_t index) const
+	{
+		assert(index < hasArgumentPaths_.length);
+		return hasArgumentPaths_[index];
+	}
+
+	package(ae.net.dbus) string argumentPath(size_t index) const
+	{
+		assert(index < argumentPaths_.length && hasArgumentPaths_[index]);
+		return argumentPaths_[index];
+	}
+
+	package(ae.net.dbus) @property string argument0Namespace() const
+	{
+		return argument0Namespace_;
+	}
+
 	package(ae.net.dbus) @property string canonicalRule() const
 	{
 		requireSignal();
@@ -227,11 +304,19 @@ public:
 			appendField(result, "member", member_.text);
 		if (hasPath)
 			appendField(result, "path", path_.text);
+		if (hasPathNamespace)
+			appendField(result, "path_namespace", pathNamespace_.text);
 		if (hasDestination)
 			appendField(result, "destination", destination_.text);
 		foreach (index; 0 .. arguments_.length)
+		{
 			if (hasArguments_[index])
 				appendField(result, "arg" ~ to!string(index), arguments_[index]);
+			if (hasArgumentPaths_[index])
+				appendField(result, "arg" ~ to!string(index) ~ "path", argumentPaths_[index]);
+		}
+		if (argument0Namespace_.length)
+			appendField(result, "arg0namespace", argument0Namespace_);
 		return result.idup;
 	}
 }
@@ -360,4 +445,44 @@ debug(ae_unittest) unittest
 	DbusSignalMatch invalid;
 	expectDbusMatchValidation({ auto ignored = invalid.canonicalRule; });
 	expectDbusMatchValidation({ auto ignored = invalid.withArgument(0, "value"); });
+}
+
+debug(ae_unittest) unittest
+{
+	auto base = DbusSignalMatch.signal();
+	auto match = base.withPathNamespace(DbusObjectPath.parse("/org/example"))
+		.withArgumentPath(63, "/org/example/")
+		.withArgumentPath(2, "it's/here")
+		.withArgument0Namespace("org.example")
+		.withArgument(1, "value");
+	assert(match.canonicalRule == "type='signal',path_namespace='/org/example',arg1='value',arg2path='it'\\''s/here',arg63path='/org/example/',arg0namespace='org.example'");
+	assert(base.canonicalRule == "type='signal'");
+	assert(base.withArgument0Namespace("example").canonicalRule ==
+		"type='signal',arg0namespace='example'");
+	assert(base.withArgument0Namespace(":1.2").canonicalRule ==
+		"type='signal',arg0namespace=':1.2'");
+	foreach (valid; [":1", ":1.2", ":1.2.3", ":a-b.c_d"])
+		base.withArgument0Namespace(valid);
+
+	expectDbusMatchValidation({ base.withArgumentPath(64, "invalid"); });
+	expectDbusMatchValidation({ base.withArgument(0, "x").withArgument0Namespace("org.example"); });
+	expectDbusMatchValidation({ base.withArgument0Namespace("org.example").withArgument(0, "x"); });
+	expectDbusMatchValidation({ base.withArgument(1, "x").withArgumentPath(1, "x"); });
+	expectDbusMatchValidation({ base.withArgumentPath(1, "x").withArgument(1, "x"); });
+	expectDbusMatchValidation({ base.withArgumentPath(0, "x").withArgument0Namespace("org.example"); });
+	expectDbusMatchValidation({ base.withArgument0Namespace("org.example").withArgumentPath(0, "x"); });
+	expectDbusMatchValidation({ base.withArgument(0, "x").withArgument(0, "x"); });
+	expectDbusMatchValidation({ base.withArgumentPath(0, "x").withArgumentPath(0, "x"); });
+	expectDbusMatchValidation({ base.withArgument0Namespace("org.example").withArgument0Namespace("org.example"); });
+	expectDbusMatchValidation({ base.withArgumentPath(0, "nul\0value"); });
+	expectDbusMatchValidation({ base.withArgument0Namespace(""); });
+	foreach (invalid; [".org", "org.", "org..example", "1org.example", "org.2example", "org/example", "org'example",
+		":", ":.1", ":1.", ":1..2", ":1/2"])
+		expectDbusMatchValidation({ base.withArgument0Namespace(invalid); });
+	DbusObjectPath missingPath;
+	expectDbusMatchValidation({ base.withPathNamespace(missingPath); });
+	expectDbusMatchValidation({ base.withPath(DbusObjectPath.parse("/a"))
+		.withPathNamespace(DbusObjectPath.parse("/b")); });
+	expectDbusMatchValidation({ base.withPathNamespace(DbusObjectPath.parse("/a"))
+		.withPath(DbusObjectPath.parse("/b")); });
 }

@@ -24,6 +24,7 @@ import ae.net.dbus.match : DbusSignalMatch;
 import ae.net.dbus.marshal : encodeDbusMessage;
 import ae.net.dbus.service : DbusObjectRegistry;
 import ae.net.dbus.value : DbusBody, DbusValue, DbusValueKind;
+import std.algorithm.searching : startsWith;
 
 debug(ae_unittest)
 import ae.net.asockets : SocketServer, socketManager;
@@ -623,6 +624,14 @@ private:
 	{
 		if (match.hasPath && signal.path.text != match.path.text)
 			return false;
+		if (match.hasPathNamespace)
+		{
+			auto namespacePath = match.pathNamespace.text;
+			auto signalPath = signal.path.text;
+			if (namespacePath != "/" && signalPath != namespacePath &&
+				!signalPath.startsWith(namespacePath ~ "/"))
+				return false;
+		}
 		if (match.hasInterface && signal.interfaceName.text != match.interfaceName.text)
 			return false;
 		if (match.hasMember && signal.member.text != match.member.text)
@@ -631,12 +640,35 @@ private:
 			return false;
 
 		foreach (index; 0 .. 64)
+		{
 			if (match.hasArgument(index))
 			{
 				if (index >= values.length || values[index].kind != DbusValueKind.string_ ||
 					values[index].get!string() != match.argument(index))
 					return false;
 			}
+			if (match.hasArgumentPath(index))
+			{
+				if (index >= values.length ||
+					(values[index].kind != DbusValueKind.string_ && values[index].kind != DbusValueKind.objectPath_))
+					return false;
+				auto argument = values[index].textValue;
+				auto path = match.argumentPath(index);
+				if (argument != path &&
+					!(path.length && path[$ - 1] == '/' && argument.startsWith(path)) &&
+					!(argument.length && argument[$ - 1] == '/' && path.startsWith(argument)))
+					return false;
+			}
+		}
+		if (match.argument0Namespace.length)
+		{
+			if (!values.length || values[0].kind != DbusValueKind.string_)
+				return false;
+			auto namespaceName = match.argument0Namespace;
+			auto argument = values[0].get!string();
+			if (argument != namespaceName && !argument.startsWith(namespaceName ~ "."))
+				return false;
+		}
 		return true;
 	}
 
@@ -2286,12 +2318,12 @@ private Data dbusClientTestError(uint replySerial, string errorName,
 
 debug(ae_unittest)
 private Data dbusClientTestSignal(string sender, string destination,
-	DbusBody body, string member = "Changed")
+	DbusBody body, string member = "Changed", string path = "/org/example/Object")
 {
 	DbusMessage message;
 	message.messageType = DbusMessageType.signal;
 	message.serial = 102;
-	message.headers.path = DbusObjectPath.parse("/org/example/Object");
+	message.headers.path = DbusObjectPath.parse(path);
 	message.headers.interfaceName = DbusInterfaceName.parse("org.example.Interface");
 	message.headers.member = DbusMemberName.parse(member);
 	if (sender.length)
@@ -5792,4 +5824,98 @@ debug(ae_unittest) unittest
 	assert(client.remoteMatches_.length == 0);
 	assert(transport.sent.length == 9);
 }
+
+debug(ae_unittest) unittest
+{
+	DbusSignalMessage signal;
+	signal.path = DbusObjectPath.parse("/org/example/Object");
+	auto root = DbusSignalMatch.signal().withPathNamespace(DbusObjectPath.parse("/"));
+	auto parent = DbusSignalMatch.signal().withPathNamespace(DbusObjectPath.parse("/org/example"));
+	auto sibling = DbusSignalMatch.signal().withPathNamespace(DbusObjectPath.parse("/org/ex"));
+	assert(DbusConnection.matchesFields(root, signal, DbusBusName.init, null));
+	assert(DbusConnection.matchesFields(parent, signal, DbusBusName.init, null));
+	assert(!DbusConnection.matchesFields(sibling, signal, DbusBusName.init, null));
+	signal.path = DbusObjectPath.parse("/org/example");
+	assert(DbusConnection.matchesFields(parent, signal, DbusBusName.init, null));
+	signal.path = DbusObjectPath.parse("/org/exampled");
+	assert(!DbusConnection.matchesFields(parent, signal, DbusBusName.init, null));
+
+	auto path = DbusSignalMatch.signal().withArgumentPath(0, "/org/example/");
+	auto exact = DbusSignalMatch.signal().withArgumentPath(0, "/org/example");
+	auto namespaceName = DbusSignalMatch.signal().withArgument0Namespace("org.example");
+	auto uniqueNamespace = DbusSignalMatch.signal().withArgument0Namespace(":1");
+	assert(DbusConnection.matchesFields(path, signal, DbusBusName.init,
+		[DbusValue.of!string("/org/example/Object")]));
+	assert(DbusConnection.matchesFields(exact, signal, DbusBusName.init,
+		[DbusValue.of!string("/org/example")]));
+	assert(!DbusConnection.matchesFields(path, signal, DbusBusName.init,
+		[DbusValue.of!string("/org/examples/Object")]));
+	assert(!DbusConnection.matchesFields(path, signal, DbusBusName.init,
+		[DbusValue.of!uint(7)]));
+	foreach (value; ["/", "/org/", "/org/example/", "/org/example/Child", "/org/example/Child/"])
+		assert(DbusConnection.matchesFields(path, signal, DbusBusName.init,
+			[DbusValue.of!string(value)]));
+	foreach (value; ["/org/ex", "/org/example", "/org/examples/"])
+		assert(!DbusConnection.matchesFields(path, signal, DbusBusName.init,
+			[DbusValue.of!string(value)]));
+	assert(DbusConnection.matchesFields(path, signal, DbusBusName.init,
+		[DbusValue.of!DbusObjectPath(DbusObjectPath.parse("/org/example/Child"))]));
+	assert(DbusConnection.matchesFields(namespaceName, signal, DbusBusName.init,
+		[DbusValue.of!string("org.example")]));
+	assert(DbusConnection.matchesFields(namespaceName, signal, DbusBusName.init,
+		[DbusValue.of!string("org.example.Service")]));
+	assert(!DbusConnection.matchesFields(namespaceName, signal, DbusBusName.init,
+		[DbusValue.of!string("org.examples.Service")]));
+	assert(!DbusConnection.matchesFields(namespaceName, signal, DbusBusName.init, null));
+	assert(!DbusConnection.matchesFields(namespaceName, signal, DbusBusName.init,
+		[DbusValue.of!uint(7)]));
+	assert(DbusConnection.matchesFields(uniqueNamespace, signal, DbusBusName.init,
+		[DbusValue.of!string(":1")]));
+	assert(DbusConnection.matchesFields(uniqueNamespace, signal, DbusBusName.init,
+		[DbusValue.of!string(":1.5")]));
+	assert(!DbusConnection.matchesFields(uniqueNamespace, signal, DbusBusName.init,
+		[DbusValue.of!string(":10")]));
+}
+
+debug(ae_unittest) unittest
+{
+	auto script = new DbusClientTestAttemptScript;
+	auto client = dbusClientTestConnect(script);
+	auto transport = script.transports[0];
+	dbusClientTestAuthenticate(transport);
+	dbusClientTestReady(transport);
+	auto match = DbusSignalMatch.signal()
+		.withPathNamespace(DbusObjectPath.parse("/org/example"))
+		.withArgument0Namespace("org.example");
+	string[] received;
+	client.subscribe(match, (const ref DbusSignalMessage signal) {
+		received ~= signal.body.values[0].get!string();
+	}).ignoreResult();
+	auto add = dbusClientTestSentMessage(transport, 4);
+	assert(add.headers.member.text == "AddMatch");
+	assert(add.body.values[0].get!string() == match.canonicalRule);
+	transport.receive(dbusClientTestMethodReturn(add.serial, DbusBody.from()));
+	socketManager.loop();
+	transport.receive(dbusClientTestSignal(":1.7", "", DbusBody.from("org.example.Service")));
+	transport.receive(dbusClientTestSignal(":1.7", "", DbusBody.from("org.examples.Service")));
+	transport.receive(dbusClientTestSignal(":1.7", "", DbusBody.from(cast(uint) 7)));
+	transport.receive(dbusClientTestSignal(":1.7", "", DbusBody.from("org.example.Other"),
+		"Changed", "/org/examples/Object"));
+	assert(received == ["org.example.Service"]);
+	bool pathReceived;
+	client.subscribe(DbusSignalMatch.signal().withArgumentPath(0, "/org/example/"),
+		(const ref DbusSignalMessage) { pathReceived = true; }).ignoreResult();
+	add = dbusClientTestSentMessage(transport, 5);
+	transport.receive(dbusClientTestMethodReturn(add.serial, DbusBody.from()));
+	socketManager.loop();
+	transport.receive(dbusClientTestSignal(":1.7", "",
+		DbusBody.from(DbusObjectPath.parse("/org/example/Child"))));
+	assert(pathReceived);
+	pathReceived = false;
+	transport.receive(dbusClientTestSignal(":1.7", "",
+		DbusBody.from(DbusObjectPath.parse("/org/examples/Child"))));
+	assert(!pathReceived);
+	client.disconnect();
+}
+
 }
