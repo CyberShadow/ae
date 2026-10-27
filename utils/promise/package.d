@@ -183,6 +183,13 @@ private:
 			if (resultUsed)
 				return; // An earlier `then` call has priority
 			assert(!isUnused);
+			static bool leakCheckRegistered;
+			if (!leakCheckRegistered)
+			{
+				import ae.utils.promise.leakcheck : registerLeakCheck;
+				registerLeakCheck(&checkLeaks);
+				leakCheckRegistered = true;
+			}
 			if (unusedTail)
 			{
 				unusedPrev = unusedTail;
@@ -205,7 +212,8 @@ private:
 			}
 		}
 
-		static ~this()
+		// Called on thread exit (see ae.utils.promise.leakcheck)
+		static void checkLeaks()
 		{
 			for (auto p = unusedHead; p; p = p.unusedNext)
 			{
