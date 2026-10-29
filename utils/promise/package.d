@@ -308,10 +308,12 @@ public:
 			assert(this.state == PromiseState.fulfilled);
 			if (onFulfilled)
 			{
-				try
-					next.resolve(onFulfilled(this.value.tupleof));
-				catch (F e)
-					next.reject(e);
+				rejectingErrors!F({
+					try
+						next.resolve(onFulfilled(this.value.tupleof));
+					catch (F e)
+						next.reject(e);
+				}, (F e) { next.reject(e); });
 			}
 			else
 			{
@@ -332,10 +334,12 @@ public:
 			assert(this.state == PromiseState.rejected);
 			if (onRejected)
 			{
-				try
-					next.resolve(onRejected(this.error));
-				catch (F e)
-					next.reject(e);
+				rejectingErrors!F({
+					try
+						next.resolve(onRejected(this.error));
+					catch (F e)
+						next.reject(e);
+				}, (F e) { next.reject(e); });
 			}
 			else
 				next.reject(this.error);
@@ -386,10 +390,12 @@ public:
 			assert(this.state == PromiseState.rejected);
 			if (onRejected)
 			{
-				try
-					next.resolve(onRejected(this.error));
-				catch (F e)
-					next.reject(e);
+				rejectingErrors!F({
+					try
+						next.resolve(onRejected(this.error));
+					catch (F e)
+						next.reject(e);
+				}, (F e) { next.reject(e); });
 			}
 			else
 				next.reject(this.error);
@@ -435,10 +441,12 @@ public:
 		void handler() /*nothrow*/
 		{
 			assert(this.state == PromiseState.fulfilled || this.state == PromiseState.rejected);
-			try
-				next.resolve(onResolved());
-			catch (F e)
-				next.reject(e);
+			rejectingErrors!F({
+				try
+					next.resolve(onResolved());
+				catch (F e)
+					next.reject(e);
+			}, (F e) { next.reject(e); });
 		}
 
 		final switch (this.state)
@@ -485,6 +493,42 @@ private template Unpromise(P)
 
 // This is the only non-"pure" part of this implementation.
 private void callSoon(void delegate() dg) @safe nothrow { socketManager.onNextTick(dg); }
+
+/**
+   Process-wide policy for `Error`s thrown by the delegates which
+   settle promises whose error type is `Exception`: the handlers of
+   `then`, `except` and `finish`, and the tasks of `toResult` (and so
+   of `tryResolve` and `async`).
+
+   By default (`null`), such an `Error` propagates to the code calling
+   the delegate (for handlers, the event loop), and the promise the
+   delegate would have settled stays pending, as do the promises
+   depending on it. If set, the `Error` is passed to this function
+   instead, and that promise is rejected with the `Exception` it
+   returns (e.g. one wrapping the `Error`, after logging it): for
+   programs which would rather fail the one operation which ran into a
+   bug than leave it pending forever.
+*/
+__gshared Exception function(Error) nothrow errorRejection;
+
+// Call `fun`; if it throws an `Error`, reject with its rejection (see `errorRejection`).
+private void rejectingErrors(E, Fun, Reject)(scope Fun fun, scope Reject reject)
+{
+	static if (is(E == Exception))
+	{
+		try
+			fun();
+		catch (Error e)
+		{
+			auto rejection = errorRejection;
+			if (rejection is null)
+				throw e;
+			reject(rejection(e));
+		}
+	}
+	else
+		fun();
+}
 
 // This is just a simple instantiation test.
 // The full test suite (D translation of the Promises/A+ conformance
@@ -558,6 +602,53 @@ debug(ae_unittest) unittest
     p.fulfill();
     socketManager.loop();
     assert(ok);
+}
+
+// Errors thrown by handlers and tasks reject their promises, with errorRejection
+debug(ae_unittest) unittest
+{
+	auto saved = errorRejection;
+	scope(exit) errorRejection = saved;
+	errorRejection = function Exception(Error e) nothrow { return new Exception("rejected: " ~ e.msg); };
+
+	static void bug(string msg) { throw new Error(msg); }
+
+	string[] got;
+	resolve(1)
+		.then((int i) { bug("in then"); return i; })
+		.then((int i) { got ~= "fulfilled"; }, (Exception e) { got ~= e.msg; });
+	reject!int(new Exception("first"))
+		.then((int i) => i, (Exception e) { bug("in onRejected"); return 0; })
+		.except((Exception e) { got ~= e.msg; });
+	reject!int(new Exception("first"))
+		.except((Exception e) { bug("in except"); return 0; })
+		.except((Exception e) { got ~= e.msg; });
+	resolve()
+		.finish({ bug("in finish"); })
+		.except((Exception e) { got ~= e.msg; });
+	auto result = toResult({ bug("in task"); return 1; });
+	got ~= result.error.msg;
+	socketManager.loop();
+	assert(got == [
+		"rejected: in task",
+		"rejected: in then",
+		"rejected: in onRejected",
+		"rejected: in except",
+		"rejected: in finish",
+	], { import std.array : join; return got.join(", "); }());
+}
+
+// Without errorRejection, they propagate
+debug(ae_unittest) unittest
+{
+	import std.exception : assertThrown;
+
+	static void bug() { throw new Error("bug"); }
+
+	assert(errorRejection is null);
+	assertThrown!Error(toResult({ bug(); }));
+	resolve().then({ bug(); }).ignoreResult();
+	assertThrown!Error(socketManager.loop());
 }
 
 // ****************************************************************************
@@ -646,13 +737,15 @@ struct Result(T, E = Exception)
 Result!(T, E) toResult(E = Exception, T)(scope T delegate() task)
 {
 	Result!(T, E) result;
-	try
-		static if (is(T == void))
-			task();
-		else
-			result.value[0] = task();
-	catch (E e)
-		result.error = e;
+	rejectingErrors!E({
+		try
+			static if (is(T == void))
+				task();
+			else
+				result.value[0] = task();
+		catch (E e)
+			result.error = e;
+	}, (E e) { result.error = e; });
 	return result;
 }
 
