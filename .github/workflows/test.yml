@@ -7,7 +7,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-2022, macos-14]
+        os: [ubuntu-22.04, windows-2022, macos-15]
         dc: [dmd-2.111.0, ldc-1.33.0]
         arch: [x86_64]
         include:
@@ -27,7 +27,7 @@ jobs:
           # Do not try to use DMD on macOS
           # Fails to link with errors such as:
           # "ld: r_symbolnum=20 out of range in '.../libae.a[11668](xmlwriter_2cc8_ad9.o)'"
-          - os: macos-14
+          - os: macos-15
             dc: dmd-2.111.0
 
     runs-on: ${{ matrix.os }}
