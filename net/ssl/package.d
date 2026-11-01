@@ -13,7 +13,7 @@
 
 module ae.net.ssl;
 
-import ae.net.asockets : IConnection, ConnectionAdapter;
+import ae.net.asockets : IConnection, ConnectionAdapter, ConnectionState;
 
 /// Abstract interface for an SSL context provider.
 class SSLProvider
@@ -23,6 +23,64 @@ class SSLProvider
 
 	/// Create a connection adapter using the given context.
 	abstract SSLAdapter createAdapter(SSLContext context, IConnection next);
+
+	/// Create a client connection adapter, indicating `hostName` for
+	/// SNI and peer verification.
+	///
+	/// Unlike calling `createAdapter` followed by `SSLAdapter.setHostName`,
+	/// this also works when `next` is already connected (e.g. when
+	/// upgrading a plain-text connection to TLS after a STARTTLS-style
+	/// negotiation): adapters start the handshake immediately when
+	/// wrapping a connected transport, which would otherwise happen
+	/// before the host name could be configured.
+	///
+	/// `setup`, if specified, is called with the adapter before the
+	/// handshake begins, and should be used to install the adapter's
+	/// event handlers, as the handshake may fail (and disconnect)
+	/// synchronously.
+	final SSLAdapter startTLS(SSLContext context, IConnection next, string hostName,
+		scope void delegate(SSLAdapter) setup = null)
+	{
+		if (next.state != ConnectionState.connected)
+		{
+			auto adapter = createAdapter(context, next);
+			adapter.setHostName(hostName);
+			if (setup)
+				setup(adapter);
+			return adapter;
+		}
+
+		// Hide the fact that `next` is connected until the adapter is configured.
+		auto gate = new HandshakeGate(next);
+		auto adapter = createAdapter(context, gate);
+		adapter.setHostName(hostName);
+		if (setup)
+			setup(adapter);
+		gate.release();
+		return adapter;
+	}
+}
+
+/// Pass-through adapter which reports a connected transport as still
+/// connecting until `release` is called. Used by `SSLProvider.startTLS`.
+private final class HandshakeGate : ConnectionAdapter
+{
+	private bool held = true;
+
+	this(IConnection next) { super(next); }
+
+	override @property ConnectionState state()
+	{
+		auto s = next.state;
+		return held && s == ConnectionState.connected ? ConnectionState.connecting : s;
+	}
+
+	void release()
+	{
+		held = false;
+		if (next.state == ConnectionState.connected)
+			onConnect();
+	}
 }
 
 /// The default (null) `SSLProvider` implementation.

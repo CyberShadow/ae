@@ -942,6 +942,57 @@ debug(ae_unittest) unittest
 	assert(ok);
 }
 
+// Test that SSLProvider.startTLS sends SNI when upgrading an
+// already-connected (plain-text) connection to TLS.
+debug(ae_unittest) unittest
+{
+	import ae.utils.array : asBytes;
+
+	auto p = new OpenSSLProvider;
+	auto sc = cast(OpenSSLContext) p.createContext(SSLContext.Kind.server);
+	sc.setPreSharedKey("test", "hunter2".representation);
+	auto cc = cast(OpenSSLContext) p.createContext(SSLContext.Kind.client);
+	cc.setPeerVerify(SSLContext.Verify.none);
+	cc.setPreSharedKey("test", "hunter2".representation);
+
+	string serverSNI;
+	bool ok;
+
+	auto s = new TcpServer;
+	s.handleAccept = (TcpConnection c)
+	{
+		s.close();
+		c.handleReadData = (Data d)
+		{
+			assert(cast(string)d.toGC() == "STARTTLS");
+			c.send(Data("OK".asBytes));
+			auto a = p.createAdapter(sc, c);
+			a.handleConnect = { serverSNI = a.getSNIHostname(); };
+			a.handleReadData = (Data d) { a.send(d); };
+		};
+	};
+	auto port = s.listen(0, "127.0.0.1");
+
+	auto c = new TcpConnection;
+	c.handleConnect = { c.send(Data("STARTTLS".asBytes)); };
+	c.handleReadData = (Data d)
+	{
+		assert(cast(string)d.toGC() == "OK");
+		p.startTLS(cc, c, "starttls.example.test", (SSLAdapter a) {
+			a.handleConnect = { a.send(Data("ping".asBytes)); };
+			a.handleReadData = (Data d) {
+				assert(cast(string)d.toGC() == "ping");
+				ok = true;
+				a.disconnect();
+			};
+		});
+	};
+	c.connect("127.0.0.1", port);
+	socketManager.loop();
+	assert(ok);
+	assert(serverSNI == "starttls.example.test", serverSNI);
+}
+
 debug (ae_unittest) import ae.net.ssl.test;
 debug(ae_unittest) unittest { testSSL(new OpenSSLProvider); }
 
