@@ -465,7 +465,7 @@ class OpenSSLContext : SSLContext
         if (sniName)
         {
             adapter.sniHostname = fromStringz(sniName).idup;
-            debug(OPENSSL) stderr.writeln("SNI hostname: ", context.sniHostname);
+            debug(OPENSSL) stderr.writeln("SNI hostname: ", adapter.sniHostname);
         }
         else
         {
