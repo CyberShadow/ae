@@ -83,19 +83,29 @@ private final class HandshakeGate : ConnectionAdapter
 	}
 }
 
-/// The default (null) `SSLProvider` implementation.
-/// Throws an assertion failure.
+/// The default (null) `SSLProvider` implementation, used when no SSL
+/// implementation (such as `ae.net.ssl.openssl`) is linked in.
+/// Throws an exception when used.
 class NoSSLProvider : SSLProvider
 {
 	override SSLContext createContext(SSLContext.Kind kind)
 	{
-		assert(false, "SSL implementation not set");
+		throw new Exception(notSetMessage);
 	} ///
 
 	override SSLAdapter createAdapter(SSLContext context, IConnection next)
 	{
-		assert(false, "SSL implementation not set");
+		throw new Exception(notSetMessage);
 	} ///
+
+	private enum notSetMessage = "SSL implementation not set (import e.g. ae.net.ssl.openssl)";
+}
+
+/// Returns `true` if an SSL implementation has been set as the global
+/// `ssl` provider (i.e. it is not `NoSSLProvider`).
+@property bool sslAvailable()
+{
+	return ssl !is null && cast(NoSSLProvider)ssl is null;
 }
 
 enum SSLVersion
