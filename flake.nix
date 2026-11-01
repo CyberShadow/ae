@@ -18,6 +18,15 @@
           hash = "sha256-Nc0w4XMENclUt8caK/fIcKAbUM6d4yqp8t4nwHKDDSk=";
         };
 
+        # Deimos OpenSSL bindings (version from dub.selections.json),
+        # for test binaries built without Dub which need ae.net.ssl.openssl
+        deimos-openssl = pkgs.fetchFromGitHub {
+          owner = "D-Programming-Deimos";
+          repo = "openssl";
+          rev = "v3.3.3";
+          hash = "sha256-Dtiv7VJQwph8y1y8C02KY/P9jJRDaTEhfxyPqy+RZJg=";
+        };
+
         # Common dub test function
         dubTest = { name, subpackage ? null, extraDeps ? [], extraFlags ? [] }:
           pkgs.stdenv.mkDerivation {
@@ -90,10 +99,12 @@
         };
 
         # PostgreSQL test binary - needs HAVE_PSQL_SERVER version flag
+        # Also links ae.net.ssl.openssl, for the TLS tests.
         psql-test-bin = pkgs.stdenv.mkDerivation {
           name = "ae-psql-test-bin";
 
           nativeBuildInputs = [ pkgs.ldc ];
+          buildInputs = [ pkgs.openssl ];
           dontStrip = true;
 
           unpackPhase = ''
@@ -111,10 +122,14 @@
               -d-debug=ae_unittest \
               -d-debug=ASOCKETS_DEBUG_IDLE \
               -d-version=HAVE_PSQL_SERVER \
+              -I${deimos-openssl}/source \
+              -d-version=DeimosOpenSSL_3_0 \
+              -L-lssl -L-lcrypto \
               -unittest \
               --main \
               -of=psql_test \
-              ae/net/db/psql/package.d
+              ae/net/db/psql/package.d \
+              ae/net/ssl/openssl.d
           '';
 
           installPhase = ''
@@ -501,7 +516,7 @@
             name = "ae-psql-test";
             src = self;
 
-            nativeBuildInputs = [ pkgs.postgresql psql-test-bin ];
+            nativeBuildInputs = [ pkgs.postgresql pkgs.openssl psql-test-bin ];
 
             buildPhase = ''
               export HOME="$TMPDIR"
@@ -514,11 +529,20 @@
               echo "Initializing PostgreSQL..."
               initdb -D "$PGDATA" --auth=trust --username=postgres
 
+              echo "Generating TLS certificate..."
+              openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+                -keyout "$TMPDIR/server.key" -out "$TMPDIR/server.crt" \
+                -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost"
+              chmod 600 "$TMPDIR/server.key"
+
               cat >> "$PGDATA/postgresql.conf" <<EOF
               unix_socket_directories = '$TMPDIR'
               listen_addresses = 'localhost'
               port = 5432
               password_encryption = scram-sha-256
+              ssl = on
+              ssl_cert_file = '$TMPDIR/server.crt'
+              ssl_key_file = '$TMPDIR/server.key'
               EOF
 
               cat > "$PGDATA/pg_hba.conf" <<EOF
@@ -538,8 +562,14 @@
 
               export PGHOST="localhost"
 
-              echo "Running PostgreSQL client tests..."
+              echo "Running PostgreSQL client tests (plain TCP)..."
+              PGSSLMODE=disable psql_test
+
+              echo "Running PostgreSQL client tests (default SSL mode: prefer)..."
               psql_test
+
+              echo "Running PostgreSQL client tests (TLS, verify-full)..."
+              PGSSLMODE=verify-full PGSSLROOTCERT="$TMPDIR/server.crt" psql_test
 
               echo "Stopping PostgreSQL..."
               pg_ctl -D "$PGDATA" stop -m fast

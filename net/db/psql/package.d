@@ -27,6 +27,7 @@ import std.bitmanip : nativeToBigEndian, bigEndianToNative;
 import std.digest.md : md5Of, toHexString, LetterCase;
 
 import ae.net.asockets;
+import ae.net.ssl : ssl, sslAvailable, SSLContext, SSLAdapter;
 import ae.utils.auth.scram : ScramSHA256Client;
 import ae.utils.exception;
 import ae.utils.promise;
@@ -37,7 +38,7 @@ import ae.utils.promise;
 // error. Force the dependency with a module-level import.
 static import ae.utils.promise.await;
 
-// TODO: SSL/TLS support - wrap connection with OpenSSLAdapter before passing to PgSqlConnection
+// TODO: Direct SSL negotiation (PostgreSQL 17+ `sslnegotiation=direct`; needs ALPN)
 // TODO: COPY protocol for bulk data import/export
 // TODO: LISTEN/NOTIFY for async notifications
 // TODO: Large Object support
@@ -55,53 +56,132 @@ public:
 	///   PGUSER - username (default: current OS user)
 	///   PGDATABASE - database name (default: same as user)
 	///   PGPASSWORD - password (default: none)
+	///   PGSSLMODE - `disable`, `prefer` (default), `require` or `verify-full`
+	///     (see `SSLMode`; `verify-full` uses `SSLMode.require` with a
+	///     context which verifies the server certificate and host name)
+	///   PGSSLROOTCERT - with `verify-full`, the root certificate file to
+	///     verify the server certificate against (default: system store)
 	this()
 	{
+		auto sslSettings = sslFromEnvironment();
 		this(
 			environment.get("PGHOST", "localhost"),
 			environment.get("PGPORT", "5432").to!ushort,
 			environment.get("PGUSER", environment.get("USER", "postgres")),
 			environment.get("PGDATABASE", environment.get("PGUSER", environment.get("USER", "postgres"))),
-			environment.get("PGPASSWORD")
+			environment.get("PGPASSWORD"),
+			sslSettings.mode,
+			sslSettings.context,
 		);
 	}
 
-	/// Connect with explicit connection parameters.
-	this(string host, ushort port, string user, string database, string password = null)
+	private struct SSLSettings { SSLMode mode; SSLContext context; }
+
+	private static SSLSettings sslFromEnvironment()
 	{
-		this.user = user;
-		this.database = database;
-		this.password = password;
-
-		auto tcpConn = new TcpConnection;
-		this.conn = tcpConn;
-
-		tcpConn.handleConnect = &onConnect;
-		tcpConn.handleReadData = &onReadData;
-		tcpConn.handleDisconnect = &onDisconnect;
-
-		tcpConn.connect(host, port);
+		SSLSettings result;
+		auto mode = environment.get("PGSSLMODE", "prefer");
+		switch (mode)
+		{
+			case "disable":
+				result.mode = SSLMode.disable;
+				break;
+			case "prefer":
+				result.mode = SSLMode.prefer;
+				break;
+			case "require":
+				result.mode = SSLMode.require;
+				break;
+			case "verify-full":
+				result.mode = SSLMode.require;
+				enforce!PgSqlException(sslAvailable, "PGSSLMODE=verify-full: " ~ noSSLProviderMessage);
+				result.context = ssl.createContext(SSLContext.Kind.client);
+				result.context.setPeerVerify(SSLContext.Verify.require);
+				if (auto rootCert = environment.get("PGSSLROOTCERT"))
+					result.context.setPeerRootCertificate(rootCert);
+				break;
+			default:
+				throw new PgSqlException("Unsupported PGSSLMODE: " ~ mode);
+		}
+		return result;
 	}
 
-	/// Construct with an existing connection (for custom transports like SSL).
-	/// The connection should not yet be connected; PgSqlConnection will
-	/// send the startup message when it connects.
+	/// TLS negotiation mode.
+	enum SSLMode
+	{
+		/// Never use TLS.
+		disable,
+		/// Use TLS if the server supports it, otherwise fall back to an
+		/// unencrypted connection. Offers no protection against an
+		/// active attacker.
+		/// If no SSL provider (such as `ae.net.ssl.openssl`) is linked
+		/// in, TLS is not attempted (like libpq built without SSL).
+		prefer,
+		/// Require TLS; fail if the server does not support it, or if
+		/// no SSL provider is linked in.
+		/// Whether the server certificate is verified is determined
+		/// by the `SSLContext` (see `SSLContext.setPeerVerify`).
+		require,
+	}
+
+	/// Connect with explicit connection parameters.
 	/// Params:
-	///   conn = underlying transport connection (e.g., TcpConnection wrapped in OpenSSLAdapter)
+	///   host = server host name; also used for SNI and certificate
+	///     host name verification when using TLS
+	///   port = server port
 	///   user = PostgreSQL user name
 	///   database = database name to connect to
 	///   password = optional password for authentication
-	this(IConnection conn, string user, string database, string password = null)
+	///   sslMode = whether to negotiate TLS (via SSLRequest);
+	///     defaults to `prefer`, like libpq
+	///   sslContext = client SSL context to use for TLS; if `null`,
+	///     a default context is created with the global `ssl` provider
+	///     (which does not verify the server certificate)
+	this(string host, ushort port, string user, string database, string password = null,
+		SSLMode sslMode = SSLMode.prefer, SSLContext sslContext = null)
+	{
+		auto tcpConn = new TcpConnection;
+		this(tcpConn, user, database, password, sslMode, sslContext, host);
+		tcpConn.connect(host, port);
+	}
+
+	/// Construct with an existing connection (for custom transports).
+	/// The connection should not yet be connected; PgSqlConnection will
+	/// send the startup message (or SSLRequest) when it connects.
+	/// Params:
+	///   conn = underlying transport connection
+	///   user = PostgreSQL user name
+	///   database = database name to connect to
+	///   password = optional password for authentication
+	///   sslMode = whether to negotiate TLS (via SSLRequest) over `conn`;
+	///     defaults to `disable`, as the transport may not need it
+	///     (e.g. a Unix domain socket)
+	///   sslContext = client SSL context (see above)
+	///   sslHostName = host name to indicate via SNI and to verify the
+	///     server certificate against
+	this(IConnection conn, string user, string database, string password = null,
+		SSLMode sslMode = SSLMode.disable, SSLContext sslContext = null, string sslHostName = null)
 	{
 		this.conn = conn;
 		this.user = user;
 		this.database = database;
 		this.password = password;
+		this.sslMode = sslMode;
+		this.sslContext = sslContext;
+		this.sslHostName = sslHostName;
 
 		conn.handleConnect = &onConnect;
 		conn.handleReadData = &onReadData;
 		conn.handleDisconnect = &onDisconnect;
 	}
+
+	/// Whether the connection is encrypted with TLS.
+	/// Becomes `true` once the TLS handshake has completed.
+	@property bool encrypted() { return sslAdapter !is null && sslAdapter.state == ConnectionState.connected; }
+
+	/// The TLS adapter, once TLS has been negotiated (e.g. to inspect
+	/// the server certificate). `null` otherwise.
+	@property SSLAdapter sslConnection() { return sslAdapter; }
 
 	/// PostgreSQL error/notice response fields.
 	struct ErrorResponse
@@ -570,6 +650,13 @@ public:
 private:
 	IConnection conn;
 
+	/// TLS state
+	SSLMode sslMode;
+	SSLContext sslContext;
+	string sslHostName;
+	SSLAdapter sslAdapter;
+	bool awaitingSSLResponse;
+
 	string user;
 	string database;
 	string password;
@@ -677,9 +764,88 @@ private:
 		return result;
 	}
 
+	enum noSSLProviderMessage = "TLS requires an SSL provider, but none is linked in (import e.g. ae.net.ssl.openssl)";
+
 	void onConnect()
 	{
-		sendStartupMessage();
+		final switch (sslMode)
+		{
+			case SSLMode.disable:
+				return sendStartupMessage();
+			case SSLMode.prefer:
+				if (!sslAvailable)
+					return sendStartupMessage();
+				return sendSSLRequest();
+			case SSLMode.require:
+				if (!sslAvailable)
+					return conn.disconnect(noSSLProviderMessage, DisconnectType.error);
+				return sendSSLRequest();
+		}
+	}
+
+	enum uint sslRequestCode = 80877103; // (1234 << 16) | 5679
+
+	void sendSSLRequest()
+	{
+		ubyte[8] packet;
+		packet[0 .. 4] = nativeToBigEndian(cast(uint)packet.length);
+		packet[4 .. 8] = nativeToBigEndian(sslRequestCode);
+		awaitingSSLResponse = true;
+		conn.send(Data(packet[]));
+	}
+
+	/// Handle the server's single-byte response to SSLRequest.
+	void onSSLResponse(Data data)
+	{
+		if (!data.length)
+			return;
+		awaitingSSLResponse = false;
+
+		auto response = readChar(data);
+		switch (response)
+		{
+			case 'S':
+				// Any data following the 'S' was sent before the TLS
+				// handshake, so it is not protected by it, and may have
+				// been injected by an attacker (CVE-2021-23222).
+				if (data.length)
+					return conn.disconnect("Received unencrypted data after SSL response", DisconnectType.error);
+
+				auto transport = conn;
+				try
+				{
+					if (!sslContext)
+						sslContext = ssl.createContext(SSLContext.Kind.client);
+					ssl.startTLS(sslContext, transport, sslHostName, (SSLAdapter adapter) {
+						sslAdapter = adapter;
+						conn = adapter;
+						adapter.handleConnect = &sendStartupMessage;
+						adapter.handleReadData = &onReadData;
+						adapter.handleDisconnect = &onDisconnect;
+					});
+				}
+				catch (Exception e)
+				{
+					if (conn is transport)
+						transport.handleDisconnect = &onDisconnect; // reclaim from any partially constructed adapter chain
+					if (conn.state.disconnectable)
+						conn.disconnect("TLS setup failed: " ~ e.msg, DisconnectType.error);
+				}
+				return;
+
+			case 'N':
+				if (sslMode == SSLMode.require)
+					return conn.disconnect("Server does not support SSL, but SSL was required", DisconnectType.error);
+				sendStartupMessage();
+				if (data.length)
+					onReadData(data);
+				return;
+
+			default:
+				// Servers which predate SSL support respond with an ErrorResponse.
+				return conn.disconnect("Unexpected response to SSL request: " ~ format("%(%s%)", [response]),
+					DisconnectType.error);
+		}
 	}
 
 	void onDisconnect(string reason, DisconnectType type)
@@ -719,6 +885,9 @@ private:
 
 	void onReadData(Data data)
 	{
+		if (awaitingSSLResponse)
+			return onSSLResponse(data);
+
 		packetBuf ~= data;
 		while (packetBuf.length >= 5)
 		{
@@ -1808,6 +1977,125 @@ debug(ae_unittest) unittest
 			gotError = true;
 	}).awaitSync();
 	assert(gotError, "Expected connection refused error from .ready");
+}
+
+// Test TLS against a real server. Active when the test environment selects
+// TLS via PGSSLMODE (requires an SSL provider, e.g. ae.net.ssl.openssl).
+version (HAVE_PSQL_SERVER)
+debug(ae_unittest) unittest
+{
+	import ae.utils.promise.await : async, await, awaitSync;
+
+	auto sslMode = environment.get("PGSSLMODE", "prefer");
+	if (sslMode == "disable" || (sslMode == "prefer" && !sslAvailable))
+		return;
+
+	async({
+		auto pg = new PgSqlConnection();
+		pg.ready.await;
+		scope(exit) pg.disconnect("Test cleanup");
+
+		assert(pg.encrypted, "Expected a TLS connection with PGSSLMODE=" ~ sslMode);
+		auto rows = pg.query("SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()").array.await;
+		assert(rows.length == 1 && rows[0].column!bool("ssl"), "Server does not see the connection as TLS");
+	}).awaitSync();
+
+	// With verification, connecting via a name not in the certificate must fail.
+	if (sslMode == "verify-full")
+	{
+		bool gotError;
+		async({
+			auto ctx = ssl.createContext(SSLContext.Kind.client);
+			ctx.setPeerVerify(SSLContext.Verify.require);
+			if (auto rootCert = environment.get("PGSSLROOTCERT"))
+				ctx.setPeerRootCertificate(rootCert);
+			auto tcp = new TcpConnection;
+			auto pg = new PgSqlConnection(tcp,
+				environment.get("PGUSER", "testuser"),
+				environment.get("PGDATABASE", "testdb"),
+				environment.get("PGPASSWORD"),
+				PgSqlConnection.SSLMode.require, ctx, "wrong-host.invalid");
+			tcp.connect(environment.get("PGHOST", "localhost"), environment.get("PGPORT", "5432").to!ushort);
+			try
+				pg.ready.await;
+			catch (PgSqlException e)
+				gotError = true;
+		}).awaitSync();
+		assert(gotError, "Expected certificate host name verification to fail");
+	}
+}
+
+// Test SSL mode handling when no SSL provider is linked in:
+// `prefer` (the default) silently skips TLS, `require` fails cleanly.
+debug(ae_unittest) unittest
+{
+	import ae.net.ssl : SSLProvider, NoSSLProvider;
+	import ae.utils.promise.await : async, await, awaitSync;
+
+	auto savedProvider = ssl;
+	ssl = new NoSSLProvider;
+	scope(exit) ssl = savedProvider;
+
+	// Mock server: expects a StartupMessage (not an SSLRequest), and
+	// replies with AuthenticationOk + ReadyForQuery.
+	ushort startServer(out bool sawSSLRequest)
+	{
+		auto server = new TcpServer;
+		server.handleAccept = (TcpConnection c) {
+			server.close();
+			Data buf;
+			c.handleReadData = (Data d) {
+				buf ~= d;
+				if (buf.length < 8)
+					return;
+				auto msg = buf.toGC();
+				if (msg[4 .. 8].bigEndianToNative!uint == 80877103)
+				{
+					sawSSLRequest = true;
+					return c.disconnect();
+				}
+				if (buf.length < msg[0 .. 4].bigEndianToNative!uint)
+					return;
+				static immutable ubyte[] reply = [
+					'R', 0, 0, 0, 8, 0, 0, 0, 0, // AuthenticationOk
+					'Z', 0, 0, 0, 5, 'I',        // ReadyForQuery
+				];
+				c.send(Data(reply));
+			};
+		};
+		return server.listen(0, "127.0.0.1");
+	}
+
+	// Default mode (prefer): connects without TLS.
+	{
+		bool sawSSLRequest, ready, encrypted;
+		auto port = startServer(sawSSLRequest);
+		async({
+			auto pg = new PgSqlConnection("127.0.0.1", port, "user", "db");
+			pg.ready.await;
+			ready = true;
+			encrypted = pg.encrypted;
+			pg.disconnect();
+		}).awaitSync();
+		assert(ready && !encrypted && !sawSSLRequest);
+	}
+
+	// require: fails with a clear error, without sending an SSLRequest.
+	{
+		bool sawSSLRequest;
+		string error;
+		auto port = startServer(sawSSLRequest);
+		async({
+			auto pg = new PgSqlConnection("127.0.0.1", port, "user", "db", null,
+				PgSqlConnection.SSLMode.require);
+			try
+				pg.ready.await;
+			catch (PgSqlException e)
+				error = e.msg;
+		}).awaitSync();
+		assert(error.indexOf("SSL provider") >= 0, error);
+		assert(!sawSSLRequest);
+	}
 }
 
 // Test: authentication error — .ready should reject cleanly (no double-reject crash)

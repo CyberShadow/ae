@@ -993,6 +993,114 @@ debug(ae_unittest) unittest
 	assert(serverSNI == "starttls.example.test", serverSNI);
 }
 
+// Test PostgreSQL SSLRequest negotiation (ae.net.db.psql) against a mock server.
+debug(ae_unittest) unittest
+{
+	import std.bitmanip : bigEndianToNative;
+	import ae.utils.array : asBytes;
+	import ae.net.db.psql : PgSqlConnection;
+	alias SSLMode = PgSqlConnection.SSLMode;
+
+	auto p = new OpenSSLProvider;
+	auto sc = cast(OpenSSLContext) p.createContext(SSLContext.Kind.server);
+	sc.setPreSharedKey("test", "hunter2".representation);
+
+	enum Behavior { acceptSSL, refuseSSL, injectAfterS }
+
+	struct Outcome { bool ready, encrypted, serverEncrypted; string sni, error; }
+
+	Outcome run(Behavior behavior, SSLMode mode)
+	{
+		Outcome o;
+
+		// Reply to the startup message with AuthenticationOk + ReadyForQuery.
+		void serveStartup(IConnection conn)
+		{
+			Data buf;
+			conn.handleReadData = (Data d)
+			{
+				buf ~= d;
+				if (buf.length < 4)
+					return;
+				auto len = buf.toGC()[0 .. 4].bigEndianToNative!uint;
+				if (buf.length < len)
+					return;
+				auto msg = buf.toGC();
+				assert(msg[4 .. 8].bigEndianToNative!uint == 0x0003_0000, "Expected StartupMessage");
+				static immutable ubyte[] reply = [
+					'R', 0, 0, 0, 8, 0, 0, 0, 0, // AuthenticationOk
+					'Z', 0, 0, 0, 5, 'I',        // ReadyForQuery
+				];
+				conn.send(Data(reply));
+			};
+		}
+
+		auto s = new TcpServer;
+		s.handleAccept = (TcpConnection c)
+		{
+			s.close();
+			c.handleReadData = (Data d)
+			{
+				auto msg = d.toGC();
+				assert(msg.length == 8, "Expected SSLRequest");
+				assert(msg[0 .. 4].bigEndianToNative!uint == 8);
+				assert(msg[4 .. 8].bigEndianToNative!uint == 80877103);
+				final switch (behavior)
+				{
+					case Behavior.acceptSSL:
+						c.send(Data("S".asBytes));
+						auto a = p.createAdapter(sc, c);
+						a.handleConnect = { o.serverEncrypted = true; o.sni = a.getSNIHostname(); };
+						serveStartup(a);
+						break;
+					case Behavior.refuseSSL:
+						c.send(Data("N".asBytes));
+						serveStartup(c);
+						break;
+					case Behavior.injectAfterS:
+						c.send(Data("SZ\0\0\0\x05I".asBytes));
+						c.handleReadData = (Data d) {};
+						break;
+				}
+			};
+		};
+		auto port = s.listen(0, "127.0.0.1");
+
+		auto cc = cast(OpenSSLContext) p.createContext(SSLContext.Kind.client);
+		cc.setPeerVerify(SSLContext.Verify.none);
+		cc.setPreSharedKey("test", "hunter2".representation);
+
+		auto tcp = new TcpConnection;
+		auto pg = new PgSqlConnection(tcp, "user", "db", null, mode, cc, "pg.example.test");
+		tcp.connect("127.0.0.1", port);
+		pg.ready.then((PgSqlConnection.TransactionStatus status) {
+			o.ready = true;
+			o.encrypted = pg.encrypted;
+			pg.disconnect();
+		}).except((Exception e) {
+			o.error = e.msg;
+		});
+		socketManager.loop();
+		return o;
+	}
+
+	auto o = run(Behavior.acceptSSL, SSLMode.require);
+	assert(o.ready && o.encrypted && o.serverEncrypted, o.error);
+	assert(o.sni == "pg.example.test", o.sni);
+
+	o = run(Behavior.acceptSSL, SSLMode.prefer);
+	assert(o.ready && o.encrypted && o.serverEncrypted, o.error);
+
+	o = run(Behavior.refuseSSL, SSLMode.prefer);
+	assert(o.ready && !o.encrypted, o.error);
+
+	o = run(Behavior.refuseSSL, SSLMode.require);
+	assert(!o.ready && o.error.length);
+
+	o = run(Behavior.injectAfterS, SSLMode.require);
+	assert(!o.ready && o.error.length);
+}
+
 debug (ae_unittest) import ae.net.ssl.test;
 debug(ae_unittest) unittest { testSSL(new OpenSSLProvider); }
 
