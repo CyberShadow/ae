@@ -529,9 +529,21 @@ public:
 	/// ---
 	Result extendedQuery(Args...)(const(char)[] sql, Args args)
 	{
+		return extendedQueryWithParams(sql, toQueryArgs(args));
+	}
+
+	/// ditto, with the parameters given as a run-time list of their values
+	/// in text format (`null`: NULL), e.g. to execute a query built at run
+	/// time.
+	/// Example:
+	/// ---
+	/// pg.extendedQueryWithParams("SELECT $1::int + $2::int", ["1", "2"]).array.then((rows) { ... });
+	/// ---
+	Result extendedQueryWithParams(const(char)[] sql, const(char)[][] params)
+	{
 		auto result = new Result(sql);
 		result.oneShot = true;
-		result.queryArgs = toQueryArgs(args);
+		result.queryArgs = params;
 		return result;
 	}
 
@@ -553,10 +565,17 @@ public:
 		/// Returns a lazy Result that can be consumed with .array(), .map(), or foreach.
 		Result query(Args...)(Args args)
 		{
+			return queryWithParams(toQueryArgs(args));
+		}
+
+		/// ditto, with the parameters given as a run-time list of their
+		/// values in text format (`null`: NULL).
+		Result queryWithParams(const(char)[][] params)
+		{
 			enforce!PgSqlException(!closed, "PreparedStatement has been closed");
 			auto result = new Result(null);
 			result.preparedStatement = this;
-			result.queryArgs = toQueryArgs(args);
+			result.queryArgs = params;
 			return result;
 		}
 
@@ -1800,6 +1819,12 @@ debug(ae_unittest) unittest
 		auto r6 = pg.extendedQuery("SELECT $1::int AS v", Nullable!int.init).array.await;
 		assert(r6[0].isNull("v"));
 		assert(r6[0].column!(Nullable!int)("v").isNull);
+
+		// Parameters given at run time, as text (null: NULL)
+		const(char)[][] params = ["10", null, "x"];
+		auto rp = pg.extendedQueryWithParams("SELECT $1::int + 1 AS v, $2::text IS NULL AS n, $3::text AS s",
+			params).array.await;
+		assert(rp[0].column!int("v") == 11 && rp[0].column!bool("n") && rp[0].column!string("s") == "x");
 
 		// Empty result set
 		auto r7 = pg.extendedQuery("SELECT 1 AS x WHERE $1::int > $2::int", 1, 2).array.await;
