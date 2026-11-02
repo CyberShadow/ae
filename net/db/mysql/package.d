@@ -490,10 +490,18 @@ public:
         /// Returns a lazy Result that can be consumed with .array(), .map(), or foreach.
         Result query(Args...)(Args args)
         {
+            return queryWithParams(toQueryArgs(args));
+        }
+
+        /// ditto, with the parameters given as a run-time list of their
+        /// values as text (`null`: NULL), e.g. for statements built at
+        /// run time.
+        Result queryWithParams(const(char)[][] params)
+        {
             enforce!MySqlException(!closed, "PreparedStatement has been closed");
             auto result = new Result(null);
             result.preparedStatement = this;
-            result.queryArgs = toQueryArgs(args);
+            result.queryArgs = params;
             return result;
         }
 
