@@ -338,6 +338,12 @@ final class SQLite
 			return sqlite3_column_count(stmt);
 		}
 
+		/// `sqlite3_bind_parameter_count` wrapper.
+		int parameterCount()
+		{
+			return sqlite3_bind_parameter_count(stmt);
+		}
+
 		/// `sqlite3_data_count` wrapper.
 		int dataCount()
 		{
