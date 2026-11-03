@@ -4,6 +4,13 @@
  * Implements the MySQL client/server protocol for asynchronous
  * database access integrated with the ae event loop.
  *
+ * ---
+ * auto mysql = connect("mysql://user:password@localhost/mydb").await;
+ * scope(exit) mysql.close();
+ * foreach (row; mysql.query("SELECT id, name FROM users WHERE id = ?", 42))
+ *     writeln(row.column!string("name"));
+ * ---
+ *
  * License:
  *   This Source Code Form is subject to the terms of
  *   the Mozilla Public License, v. 2.0. If a copy of
@@ -25,8 +32,10 @@ import std.typecons : Nullable;
 
 import ae.net.asockets;
 import ae.utils.array;
-import ae.utils.exception;
 import ae.utils.promise;
+
+public import ae.net.db.common : DbException, Param, toParams;
+static import ae.net.db.common;
 
 // https://issues.dlang.org/show_bug.cgi?id=7016
 // `await`/`async` are imported only inside method bodies below, which `rdmd`
@@ -34,506 +43,270 @@ import ae.utils.promise;
 // error. Force the dependency with a module-level import.
 static import ae.utils.promise.await;
 
-// TODO: SSL/TLS support - wrap connection with OpenSSLAdapter before passing to MySqlConnection
+// TODO: SSL/TLS support - wrap connection with OpenSSLAdapter and use connect(IConnection, ...)
 // TODO: Connection pooling
 // TODO: Unix socket support
 // TODO: Compression protocol
 // TODO: Multi-result sets (stored procedures)
 // TODO: LOCAL INFILE support
 
-/// MySQL connection handling the wire protocol.
+/// Connect to the MySQL server at `host`:`port`, as `user`, to `database`
+/// (none if null); the promise is fulfilled with the connection once it is
+/// ready for queries.
+Promise!MySqlConnection connect(string host, ushort port, string user, string database, string password = null)
+{
+    auto tcp = new TcpConnection;
+    auto mysql = new MySqlConnection(tcp, user, database, password);
+    tcp.connect(host, port);
+    return mysql.readyPromise;
+}
+
+/// ditto, of the URI `uri` (`mysql://user:password@host:port/database`,
+/// all but the host optional; the user defaults as for `connect()`).
+Promise!MySqlConnection connect(string uri)
+{
+    import ae.net.db.common : DbUri;
+    try
+    {
+        auto u = DbUri.parse(uri, ["mysql", "mysqli"]);
+        return connect(u.host.length ? u.host : "localhost", u.port.isNull ? 3306 : u.port.get,
+            u.user.length ? u.user : defaultUser, u.database, u.password);
+    }
+    catch (Exception e)
+        return rejected!MySqlConnection(e);
+}
+
+/// ditto, of the environment variables:
+///   MYSQL_HOST - server hostname (default: localhost)
+///   MYSQL_TCP_PORT - server port (default: 3306)
+///   MYSQL_USER or USER - username
+///   MYSQL_DATABASE - database name
+///   MYSQL_PWD - password (default: none)
+Promise!MySqlConnection connect()
+{
+    try
+        return connect(
+            environment.get("MYSQL_HOST", "localhost"),
+            environment.get("MYSQL_TCP_PORT", "3306").to!ushort,
+            defaultUser,
+            environment.get("MYSQL_DATABASE"),
+            environment.get("MYSQL_PWD"));
+    catch (Exception e)
+        return rejected!MySqlConnection(e);
+}
+
+/// ditto, over the transport `transport` (e.g. a TCP connection wrapped in
+/// an SSL adapter), connected or not: the connection waits for the
+/// server's initial handshake packet.
+Promise!MySqlConnection connect(IConnection transport, string user, string database, string password = null)
+{
+    return new MySqlConnection(transport, user, database, password).readyPromise;
+}
+
+private @property string defaultUser()
+{
+    return environment.get("MYSQL_USER", environment.get("USER", "root"));
+}
+
+private Promise!T rejected(T)(Exception e)
+{
+    auto p = new Promise!T;
+    p.reject(e);
+    return p;
+}
+
+/// The fields of a MySQL error packet.
+struct MySqlError
+{
+    ushort errorCode;
+    char[5] sqlState;
+    const(char)[] message;
+
+    string toString() const
+    {
+        return "MySQL error %d (%s): %s".format(errorCode, sqlState[], message);
+    }
+}
+
+/// Server status flags from OK/EOF packets.
+enum ServerStatus : ushort
+{
+    inTransaction = 0x0001,
+    autocommit = 0x0002,
+    moreResultsExist = 0x0008,
+    noGoodIndexUsed = 0x0010,
+    noIndexUsed = 0x0020,
+    cursorExists = 0x0040,
+    lastRowSent = 0x0080,
+    dbDropped = 0x0100,
+    noBackslashEscapes = 0x0200,
+    metadataChanged = 0x0400,
+    queryWasSlow = 0x0800,
+    psOutParams = 0x1000,
+    inTransactionReadonly = 0x2000,
+    sessionStateChanged = 0x4000,
+}
+
+/// Description of a result field/column.
+private struct FieldDescription
+{
+    const(char)[] catalog;
+    const(char)[] schema;
+    const(char)[] tableAlias;   /// Virtual table name
+    const(char)[] table;        /// Physical table name
+    const(char)[] nameAlias;    /// Virtual column name
+    const(char)[] name;         /// Physical column name
+    ushort charSet;
+    uint columnLength;
+    ColumnType columnType;
+    FieldFlags flags;
+    ubyte decimals;
+}
+
+/// MySQL column types.
+enum ColumnType : ubyte
+{
+    decimal = 0x00,
+    tiny = 0x01,
+    short_ = 0x02,
+    long_ = 0x03,
+    float_ = 0x04,
+    double_ = 0x05,
+    null_ = 0x06,
+    timestamp = 0x07,
+    longlong = 0x08,
+    int24 = 0x09,
+    date = 0x0a,
+    time = 0x0b,
+    datetime = 0x0c,
+    year = 0x0d,
+    newdate = 0x0e,
+    varchar = 0x0f,
+    bit = 0x10,
+    timestamp2 = 0x11,
+    datetime2 = 0x12,
+    time2 = 0x13,
+    json = 0xf5,
+    newdecimal = 0xf6,
+    enum_ = 0xf7,
+    set = 0xf8,
+    tinyBlob = 0xf9,
+    mediumBlob = 0xfa,
+    longBlob = 0xfb,
+    blob = 0xfc,
+    varString = 0xfd,
+    string_ = 0xfe,
+    geometry = 0xff,
+}
+
+/// Field flags.
+enum FieldFlags : ushort
+{
+    notNull = 0x0001,
+    primaryKey = 0x0002,
+    uniqueKey = 0x0004,
+    multipleKey = 0x0008,
+    blob = 0x0010,
+    unsigned = 0x0020,
+    zeroFill = 0x0040,
+    binary = 0x0080,
+    enum_ = 0x0100,
+    autoIncrement = 0x0200,
+    timestamp = 0x0400,
+    set = 0x0800,
+    noDefaultValue = 0x1000,
+    onUpdateNow = 0x2000,
+    num = 0x8000,
+}
+
+/// A row of a result (its values as text; of the binary protocol's
+/// results, converted to text).
+alias Row = ae.net.db.common.Row!();
+
+/// The lazy result of a query (see `ae.net.db.common.Result`), with the
+/// rows it affected and the ID it inserted.
+alias Result = ae.net.db.common.Result!Row;
+
+/// A statement prepared on the server (see `MySqlConnection.prepare`),
+/// executed with parameters (with the binary protocol, see
+/// `MySqlConnection.query`).
+final class PreparedStatement
+{
+    /// Execute the statement with the parameters `args` (see `Param.of`),
+    /// or `params`.
+    Result query(Args...)(Args args)
+    {
+        return query(toParams(args));
+    }
+
+    /// ditto
+    Result query(const(Param)[] params)
+    {
+        enforce!MySqlException(!closed, "PreparedStatement has been closed");
+        return new Result((Result result) => mysql.startQuery(result, null, this, params));
+    }
+
+    /// Close the statement, freeing its server resources.
+    Promise!void close()
+    {
+        enforce!MySqlException(!closed, "PreparedStatement already closed");
+        closed = true;
+        mysql.closeStatement(statementId);
+        return resolve();  // (The server does not respond)
+    }
+
+private:
+    MySqlConnection mysql;
+    uint statementId;
+    FieldDescription[] paramFields;
+    FieldDescription[] resultFields;
+    bool closed;
+
+    this(MySqlConnection mysql, uint id)
+    {
+        this.mysql = mysql;
+        this.statementId = id;
+    }
+}
+
+/// A connection to a MySQL server (see `connect`). Its queries are
+/// pipelined: each is sent when its result is consumed, and their results
+/// arrive in the order they were sent.
 final class MySqlConnection
 {
 public:
-    /// Connect using standard MySQL environment variables.
-    /// Environment variables used:
-    ///   MYSQL_HOST - server hostname (default: localhost)
-    ///   MYSQL_TCP_PORT - server port (default: 3306)
-    ///   MYSQL_USER or USER - username
-    ///   MYSQL_DATABASE - database name
-    ///   MYSQL_PWD - password (default: none)
-    this()
-    {
-        this(
-            environment.get("MYSQL_HOST", "localhost"),
-            environment.get("MYSQL_TCP_PORT", "3306").to!ushort,
-            environment.get("MYSQL_USER", environment.get("USER", "root")),
-            environment.get("MYSQL_DATABASE"),
-            environment.get("MYSQL_PWD")
-        );
-    }
-
-    /// Connect with explicit connection parameters.
-    this(string host, ushort port, string user, string database, string password = null)
-    {
-        this.user = user;
-        this.database = database;
-        this.password = password;
-
-        auto tcpConn = new TcpConnection;
-        this.conn = tcpConn;
-
-        tcpConn.handleConnect = &onConnect;
-        tcpConn.handleReadData = &onReadData;
-        tcpConn.handleDisconnect = &onDisconnect;
-
-        tcpConn.connect(host, port);
-    }
-
-    /// Construct with an existing connection (for custom transports like SSL).
-    /// The connection should already be connected; MySqlConnection will wait
-    /// for the server's initial handshake packet.
-    /// Params:
-    ///   conn = underlying transport connection (e.g., TcpConnection wrapped in OpenSSLAdapter)
-    ///   user = MySQL user name
-    ///   database = database name to connect to (can be null)
-    ///   password = optional password for authentication
-    this(IConnection conn, string user, string database, string password = null)
-    {
-        this.conn = conn;
-        this.user = user;
-        this.database = database;
-        this.password = password;
-
-        conn.handleConnect = &onConnect;
-        conn.handleReadData = &onReadData;
-        conn.handleDisconnect = &onDisconnect;
-    }
-
-    /// MySQL error packet fields.
-    struct ErrorResponse
-    {
-        ushort errorCode;
-        char[5] sqlState;
-        const(char)[] message;
-
-        string toString() const
-        {
-            return "MySQL error %d (%s): %s".format(errorCode, sqlState[], message);
-        }
-    }
-
-    /// Server status flags from OK/EOF packets.
-    enum ServerStatus : ushort
-    {
-        inTransaction = 0x0001,
-        autocommit = 0x0002,
-        moreResultsExist = 0x0008,
-        noGoodIndexUsed = 0x0010,
-        noIndexUsed = 0x0020,
-        cursorExists = 0x0040,
-        lastRowSent = 0x0080,
-        dbDropped = 0x0100,
-        noBackslashEscapes = 0x0200,
-        metadataChanged = 0x0400,
-        queryWasSlow = 0x0800,
-        psOutParams = 0x1000,
-        inTransactionReadonly = 0x2000,
-        sessionStateChanged = 0x4000,
-    }
-
-    /// Description of a result field/column.
-    struct FieldDescription
-    {
-        const(char)[] catalog;
-        const(char)[] schema;
-        const(char)[] tableAlias;   /// Virtual table name
-        const(char)[] table;        /// Physical table name
-        const(char)[] nameAlias;    /// Virtual column name
-        const(char)[] name;         /// Physical column name
-        ushort charSet;
-        uint columnLength;
-        ColumnType columnType;
-        FieldFlags flags;
-        ubyte decimals;
-    }
-
-    /// MySQL column types.
-    enum ColumnType : ubyte
-    {
-        decimal = 0x00,
-        tiny = 0x01,
-        short_ = 0x02,
-        long_ = 0x03,
-        float_ = 0x04,
-        double_ = 0x05,
-        null_ = 0x06,
-        timestamp = 0x07,
-        longlong = 0x08,
-        int24 = 0x09,
-        date = 0x0a,
-        time = 0x0b,
-        datetime = 0x0c,
-        year = 0x0d,
-        newdate = 0x0e,
-        varchar = 0x0f,
-        bit = 0x10,
-        timestamp2 = 0x11,
-        datetime2 = 0x12,
-        time2 = 0x13,
-        json = 0xf5,
-        newdecimal = 0xf6,
-        enum_ = 0xf7,
-        set = 0xf8,
-        tinyBlob = 0xf9,
-        mediumBlob = 0xfa,
-        longBlob = 0xfb,
-        blob = 0xfc,
-        varString = 0xfd,
-        string_ = 0xfe,
-        geometry = 0xff,
-    }
-
-    /// Field flags.
-    enum FieldFlags : ushort
-    {
-        notNull = 0x0001,
-        primaryKey = 0x0002,
-        uniqueKey = 0x0004,
-        multipleKey = 0x0008,
-        blob = 0x0010,
-        unsigned = 0x0020,
-        zeroFill = 0x0040,
-        binary = 0x0080,
-        enum_ = 0x0100,
-        autoIncrement = 0x0200,
-        timestamp = 0x0400,
-        set = 0x0800,
-        noDefaultValue = 0x1000,
-        onUpdateNow = 0x2000,
-        num = 0x8000,
-    }
-
-    /// A single row from a query result.
-    struct Row
-    {
-        private const(FieldDescription)[] fields;
-        private const(const(char)[])[] values;
-        private const(bool)[] nulls;
-
-        /// Get column value by index with type conversion.
-        T column(T)(size_t idx) const
-        {
-            enforce!MySqlException(idx < values.length, "Column index out of range");
-            static if (is(T == Nullable!U, U))
-            {
-                if (nulls[idx])
-                    return T.init;
-                return T(column!U(idx));
-            }
-            else
-            {
-                enforce!MySqlException(!nulls[idx], "NULL value for non-nullable column");
-                return convertValue!T(values[idx], fields[idx].columnType);
-            }
-        }
-
-        /// Get column value by name with type conversion.
-        T column(T)(const(char)[] name) const
-        {
-            return column!T(fieldIndex(name));
-        }
-
-        /// Check if a column is NULL.
-        bool isNull(size_t idx) const
-        {
-            enforce!MySqlException(idx < nulls.length, "Column index out of range");
-            return nulls[idx];
-        }
-
-        /// Check if a column is NULL by name.
-        bool isNull(const(char)[] name) const
-        {
-            return isNull(fieldIndex(name));
-        }
-
-        /// Get the number of columns.
-        size_t length() const
-        {
-            return values.length;
-        }
-
-        /// Find column index by name.
-        private size_t fieldIndex(const(char)[] name) const
-        {
-            foreach (i, field; fields)
-                if (field.nameAlias == name || field.name == name)
-                    return i;
-            throw new MySqlException("Unknown column: " ~ name.idup);
-        }
-    }
-
-    /// Lazy query result handle.
-    /// The query is not sent until a consumption method is called.
-    /// Each Result can only be consumed once (via array(), map(), or foreach).
-    final class Result
-    {
-        private const(char)[] sql;
-        private PreparedStatement preparedStatement;
-        private const(char)[][] queryArgs;
-        private bool started;
-        private bool completed;
-        private bool consumed;
-        private FieldDescription[] fields;
-        private OkPacket lastOk;
-        private MySqlException error;
-
-        // For array() mode
-        private Row[] bufferedRows;
-        private Promise!(Row[]) arrayPromise;
-
-        // For map() mode
-        private void delegate(Row) rowCallback;
-
-        // For lazy iteration (opApply)
-        private bool iterating;
-        private PromiseQueue!(Nullable!Row) iterQueue;
-
-        private this(const(char)[] sql)
-        {
-            this.sql = sql;
-        }
-
-        /// Collect all rows and return as array.
-        Promise!(Row[]) array()
-        {
-            enforce!MySqlException(!consumed, "Result has already been consumed");
-            consumed = true;
-
-            if (error)
-            {
-                auto p = new Promise!(Row[]);
-                p.reject(error);
-                return p;
-            }
-            if (completed)
-                return resolve(bufferedRows);
-
-            arrayPromise = new Promise!(Row[]);
-            startIfNeeded();
-            return arrayPromise;
-        }
-
-        /// Map a function over rows as they arrive, returning collected results.
-        Promise!(T[]) map(T)(T delegate(Row) fn)
-        {
-            enforce!MySqlException(!consumed, "Result has already been consumed");
-            consumed = true;
-
-            auto resultPromise = new Promise!(T[]);
-            T[] results;
-
-            if (error)
-            {
-                resultPromise.reject(error);
-                return resultPromise;
-            }
-
-            if (completed)
-            {
-                foreach (row; bufferedRows)
-                    results ~= fn(row);
-                resultPromise.fulfill(results);
-                return resultPromise;
-            }
-
-            rowCallback = (Row row) {
-                results ~= fn(row);
-            };
-            arrayPromise = new Promise!(Row[]);
-            arrayPromise.then((Row[] _) {
-                resultPromise.fulfill(results);
-            }).except((Exception e) {
-                resultPromise.reject(e);
-            });
-
-            startIfNeeded();
-            return resultPromise;
-        }
-
-        /// Fiber-based foreach iteration (requires fiber context).
-        /// Rows are processed lazily as they arrive from the server.
-        int opApply(scope int delegate(Row) dg)
-        {
-            import ae.utils.promise.await : await;
-
-            enforce!MySqlException(!consumed, "Result has already been consumed");
-            consumed = true;
-
-            if (error)
-                throw error;
-
-            // If already completed, iterate buffered rows
-            if (completed)
-            {
-                foreach (row; bufferedRows)
-                    if (auto r = dg(row))
-                        return r;
-                return 0;
-            }
-
-            // Lazy iteration: process rows as they arrive
-            iterating = true;
-            iterQueue = PromiseQueue!(Nullable!Row).init;
-            scope(exit)
-            {
-                iterating = false;
-                iterQueue = PromiseQueue!(Nullable!Row).init;
-            }
-
-            startIfNeeded();
-
-            while (true)
-            {
-                auto item = iterQueue.waitOne().await;
-
-                if (error)
-                    throw error;
-
-                if (item.isNull)
-                    break;  // End of results
-
-                if (auto r = dg(item.get))
-                    return r;
-            }
-
-            return 0;
-        }
-
-        /// Get the number of affected rows (for INSERT/UPDATE/DELETE).
-        @property ulong affectedRows() const
-        {
-            return lastOk.affectedRows;
-        }
-
-        /// Get the last insert ID.
-        @property ulong lastInsertId() const
-        {
-            return lastOk.lastInsertId;
-        }
-
-        private void startIfNeeded()
-        {
-            if (!started)
-            {
-                started = true;
-                this.outer.startQuery(this);
-            }
-        }
-
-        private void onFieldDescription(FieldDescription field)
-        {
-            fields ~= field;
-        }
-
-        private void onDataRow(const(const(char)[])[] values, const(bool)[] nulls)
-        {
-            auto row = Row(fields, values, nulls);
-            if (iterating)
-                iterQueue.fulfillOne(Nullable!Row(row));
-            else if (rowCallback)
-                rowCallback(row);
-            else
-                bufferedRows ~= row;
-        }
-
-        private void onOk(OkPacket ok)
-        {
-            lastOk = ok;
-        }
-
-        private void onComplete()
-        {
-            if (completed)
-                return;  // Guard against double completion
-            completed = true;
-            if (arrayPromise)
-                arrayPromise.fulfill(bufferedRows);
-            if (iterating)
-                iterQueue.fulfillOne(Nullable!Row.init);  // End marker
-        }
-
-        private void onError(MySqlException e)
-        {
-            error = e;
-            completed = true;
-            if (arrayPromise)
-                arrayPromise.reject(e);
-            if (iterating)
-                iterQueue.fulfillOne(Nullable!Row.init);  // Signal to unblock, error checked after
-        }
-    }
-
-    /// Create a lazy query result using text protocol.
-    /// The query is not sent until you call .array(), .map(), or iterate.
-    /// For parameterized queries, use prepare() instead.
+    /// A query of the SQL `sql` (with the text protocol).
     Result query(const(char)[] sql)
     {
-        return new Result(sql);
+        return new Result((Result result) => startQuery(result, sql, null, null));
     }
 
-    /// Prepared statement handle for binary protocol.
-    /// Allows executing the same query multiple times with different parameters.
-    final class PreparedStatement
+    /// A query of the statement `sql` with the parameters `args` (see
+    /// `Param.of`), or `params`: prepared, executed with the parameters
+    /// (with the binary protocol, typed natively: a boolean as TINYINT, an
+    /// integer as BIGINT, a floating-point number as DOUBLE, an exact
+    /// number as DECIMAL, a string as VARCHAR, a byte array as BLOB) and
+    /// closed (the server keeps no statement). Arrays are not supported.
+    Result query(Args...)(const(char)[] sql, Args args)
     {
-        private uint statementId;
-        private FieldDescription[] paramFields;
-        private FieldDescription[] resultFields;
-        private bool closed;
-
-        private this(uint id)
-        {
-            this.statementId = id;
-        }
-
-        /// Execute the prepared statement with the given parameters.
-        /// Returns a lazy Result that can be consumed with .array(), .map(), or foreach.
-        Result query(Args...)(Args args)
-        {
-            return queryWithParams(toQueryArgs(args));
-        }
-
-        /// ditto, with the parameters given as a run-time list of their
-        /// values as text (`null`: NULL), e.g. for statements built at
-        /// run time.
-        Result queryWithParams(const(char)[][] params)
-        {
-            enforce!MySqlException(!closed, "PreparedStatement has been closed");
-            auto result = new Result(null);
-            result.preparedStatement = this;
-            result.queryArgs = params;
-            return result;
-        }
-
-        /// Close the prepared statement, freeing server resources.
-        /// The statement cannot be used after closing.
-        void close()
-        {
-            enforce!MySqlException(!closed, "PreparedStatement already closed");
-            closed = true;
-            this.outer.closeStatement(this);
-        }
-
-        private void setParamFields(FieldDescription[] fields)
-        {
-            this.paramFields = fields;
-        }
-
-        private void setResultFields(FieldDescription[] fields)
-        {
-            this.resultFields = fields;
-        }
+        return query(sql, toParams(args));
     }
 
-    /// Prepare a statement for execution with parameters.
-    /// Uses binary protocol for safe parameter binding (prevents SQL injection).
-    /// Note: Use ? as parameter placeholder (not $1 like PostgreSQL).
-    /// Example:
-    /// ---
-    /// mysql.prepare("SELECT * FROM users WHERE id = ?").then((stmt) {
-    ///     stmt.query(42).array.then((rows) { ... });
-    /// });
-    /// ---
+    /// ditto
+    Result query(const(char)[] sql, const(Param)[] params)
+    {
+        return new Result((Result result) {
+            prepare(sql).then((PreparedStatement stmt) {
+                startQuery(result, null, stmt, params);
+                stmt.close();
+            }).except((Exception e) {
+                result.onError(e);
+            });
+        });
+    }
+
+    /// Prepare the statement `sql` (with `?` placeholders) on the server,
+    /// for executing it several times (see `PreparedStatement`).
     Promise!PreparedStatement prepare(const(char)[] sql)
     {
         auto promise = new Promise!PreparedStatement;
@@ -546,44 +319,24 @@ public:
         return promise;
     }
 
-    /// Disconnect from the server.
-    void disconnect(string reason = "Client disconnect")
+    /// Close the connection (the queries sent are answered first); the
+    /// promise is fulfilled once it is closed.
+    Promise!void close()
     {
-        if (state == ConnectionState.ready)
-            sendQuit();
-        conn.disconnect(reason);
-    }
-
-    /// Promise that fulfills when the connection is ready for queries.
-    /// Rejected if an error occurs during connection setup.
-    /// For fiber users: `await(mysql.ready);`
-    @property Promise!void ready()
-    {
-        if (readyPromise is null)
+        if (closePromise is null)
         {
-            readyPromise = new Promise!void;
-            // If already ready, fulfill immediately
-            if (state == ConnectionState.ready)
+            closePromise = new Promise!void;
+            if (state == ConnectionState.disconnected)
+                closePromise.fulfill();
+            else
             {
-                readyPromise.fulfill();
-                readyPromiseFulfilled = true;
-            }
-            // If already disconnected (e.g. DNS failure during constructor),
-            // reject immediately — onDisconnect already ran before .ready
-            // was accessed, so nothing else will resolve this promise.
-            else if (state == ConnectionState.disconnected)
-            {
-                readyPromise.reject(new MySqlException("Connection failed before ready"));
-                readyPromiseFulfilled = true;
+                if (state == ConnectionState.ready)
+                    sendQuit();
+                conn.disconnect("Client close");
             }
         }
-        return readyPromise;
+        return closePromise;
     }
-
-    /// Callback handlers for connection-level events.
-    void delegate(ErrorResponse response) handleError;
-    void delegate() handleAuthenticated;
-    void delegate(string reason, DisconnectType type) handleDisconnect;
 
 private:
     IConnection conn;
@@ -613,9 +366,24 @@ private:
     ushort serverStatus;
     uint connectionId;
 
-    /// Promise for ready() property
-    Promise!void readyPromise;
+    /// Fulfilled with the connection when it is first ready for queries
+    Promise!MySqlConnection readyPromise;
     bool readyPromiseFulfilled;
+
+    Promise!void closePromise;
+
+    this(IConnection conn, string user, string database, string password)
+    {
+        this.conn = conn;
+        this.user = user;
+        this.database = database;
+        this.password = password;
+        this.readyPromise = new Promise!MySqlConnection;
+
+        conn.handleConnect = &onConnect;
+        conn.handleReadData = &onReadData;
+        conn.handleDisconnect = &onDisconnect;
+    }
 
     /// Pending operation types
     enum PendingOpType { query, prepare, execute }
@@ -626,6 +394,7 @@ private:
         PendingOpType type;
         // For query
         Result result;
+        FieldDescription[] fields;  // (of the result)
         // For prepare
         const(char)[] prepareSql;
         Promise!PreparedStatement preparePromise;
@@ -721,7 +490,7 @@ private:
         auto err = new MySqlException("Connection lost: " ~ reason);
 
         // Reject ready promise if not yet fulfilled
-        if (readyPromise && !readyPromiseFulfilled)
+        if (!readyPromiseFulfilled)
         {
             readyPromise.reject(err);
             readyPromiseFulfilled = true;  // Prevent double rejection
@@ -742,8 +511,9 @@ private:
         }
         pendingOps = null;
 
-        if (handleDisconnect)
-            handleDisconnect(reason, type);
+        if (closePromise is null)
+            closePromise = new Promise!void;
+        closePromise.fulfill();
     }
 
     Data packetBuf;
@@ -770,7 +540,19 @@ private:
                     packetBuf = Data.init;
 
                 packetSeq = cast(ubyte)(seq + 1);
-                processPacket(packetData);
+                try
+                    processPacket(packetData);
+                catch (Exception e)
+                {
+                    // (A protocol or authentication failure: fatal)
+                    if (!readyPromiseFulfilled)
+                    {
+                        readyPromise.reject(e);
+                        readyPromiseFulfilled = true;
+                    }
+                    conn.disconnect(e.msg);
+                    return;
+                }
             }
             else
                 break;
@@ -898,29 +680,17 @@ private:
             serverStatus = ok.statusFlags;
 
             state = ConnectionState.ready;
-            if (handleAuthenticated)
-                handleAuthenticated();
-            if (readyPromise && !readyPromiseFulfilled)
+            if (!readyPromiseFulfilled)
             {
-                readyPromise.fulfill();
+                readyPromise.fulfill(this);
                 readyPromiseFulfilled = true;
             }
         }
         else if (firstByte == ResponseType.error)
         {
             data = data[1..$];  // Skip error header
-            auto err = parseErrorPacket(data);
-            auto ex = new MySqlException(err);
-
-            if (readyPromise)
-            {
-                readyPromise.reject(ex);
-                readyPromiseFulfilled = true;
-            }
-            else if (handleError)
-                handleError(err);
-            else
-                throw ex;
+            auto ex = new MySqlException(parseErrorPacket(data));
+            throw ex;  // (fatal: rejects the connection's promise)
         }
         else if (firstByte == ResponseType.eof)
         {
@@ -973,8 +743,7 @@ private:
         if (firstByte == ResponseType.error)
         {
             data = data[1..$];  // Skip error header
-            auto err = parseErrorPacket(data);
-            auto ex = new MySqlException(err);
+            auto ex = new MySqlException(parseErrorPacket(data));
 
             if (currentOp)
             {
@@ -992,10 +761,10 @@ private:
                 pendingOps = pendingOps[1..$];
                 resultState = ResultState.idle;
             }
-            else if (handleError)
-                handleError(err);
             else
-                throw ex;
+                // An error of no query (e.g. the server closing the
+                // connection): fatal
+                conn.disconnect(ex.msg);
             return;
         }
 
@@ -1012,7 +781,7 @@ private:
             {
                 if (currentOp.type == PendingOpType.query || currentOp.type == PendingOpType.execute)
                 {
-                    currentOp.result.onOk(ok);
+                    currentOp.result.onAffected(ok.affectedRows, ok.lastInsertId);
                     currentOp.result.onComplete();
                     pendingOps = pendingOps[1..$];
                 }
@@ -1072,6 +841,13 @@ private:
                     else
                     {
                         // For query: transition to rows
+                        if (currentOp)
+                        {
+                            string[] names;
+                            foreach (ref field; currentOp.fields)
+                                names ~= (field.nameAlias.length ? field.nameAlias : field.name).idup;
+                            currentOp.result.onColumns(names);
+                        }
                         resultState = ResultState.rows;
                     }
                 }
@@ -1096,7 +872,7 @@ private:
                         }
                         else
                         {
-                            currentOp.result.onFieldDescription(field);
+                            currentOp.fields ~= field;
                         }
                     }
                     receivedColumns++;
@@ -1129,9 +905,9 @@ private:
                     if (currentOp && (currentOp.type == PendingOpType.query || currentOp.type == PendingOpType.execute))
                     {
                         if (currentOp.type == PendingOpType.execute)
-                            parseExecuteRow(data, currentOp.result);
+                            parseExecuteRow(data, currentOp.result, currentOp.fields);
                         else
-                            parseTextRow(data, currentOp.result);
+                            parseTextRow(data, currentOp.result, currentOp.fields);
                     }
                 }
                 break;
@@ -1150,7 +926,7 @@ private:
         readInt!ubyte(data);  // reserved
         auto warningCount = readInt!ushort(data);
 
-        auto stmt = new PreparedStatement(stmtId);
+        auto stmt = new PreparedStatement(this, stmtId);
         currentOp.stmt = stmt;
         currentOp.numParams = numParams;
         currentOp.numColumns = numColumns;
@@ -1172,15 +948,9 @@ private:
         }
     }
 
-    void processPrepareOk(Data data, OkPacket ok)
+    void parseTextRow(Data data, Result result, const FieldDescription[] fields)
     {
-        // This is called when we get an OK for a prepare with 0 params and 0 columns
-        // But actually we handle this differently - the first packet is COM_STMT_PREPARE_OK
-    }
-
-    void parseTextRow(Data data, Result result)
-    {
-        auto numFields = result.fields.length;
+        auto numFields = fields.length;
         auto values = new const(char)[][numFields];
         auto nulls = new bool[numFields];
 
@@ -1210,15 +980,15 @@ private:
             }
         }
 
-        result.onDataRow(values, nulls);
+        result.onRow(values, nulls);
     }
 
-    void parseExecuteRow(Data data, Result result)
+    void parseExecuteRow(Data data, Result result, const FieldDescription[] fields)
     {
         // Binary protocol row
         auto packetHeader = readInt!ubyte(data);  // Should be 0x00
 
-        auto numFields = result.fields.length;
+        auto numFields = fields.length;
 
         // NULL bitmap
         auto nullBitmapLen = (numFields + 7 + 2) / 8;
@@ -1244,15 +1014,16 @@ private:
             else
             {
                 nulls[i] = false;
-                values[i] = readBinaryValue(data, result.fields[i]);
+                values[i] = readBinaryValue(data, fields[i]);
             }
         }
 
-        result.onDataRow(values, nulls);
+        result.onRow(values, nulls);
     }
 
     const(char)[] readBinaryValue(ref Data data, const ref FieldDescription field)
     {
+        bool unsigned = (field.flags & FieldFlags.unsigned) != 0;
         // Read value based on column type
         final switch (field.columnType) with (ColumnType)
         {
@@ -1260,18 +1031,18 @@ private:
                 return null;
 
             case tiny:
-                return readInt!ubyte(data).to!string;
+                return unsigned ? readInt!ubyte(data).to!string : readInt!byte(data).to!string;
 
             case short_:
             case year:
-                return readInt!ushort(data).to!string;
+                return unsigned ? readInt!ushort(data).to!string : readInt!short(data).to!string;
 
             case int24:
             case long_:
-                return readInt!uint(data).to!string;
+                return unsigned ? readInt!uint(data).to!string : readInt!int(data).to!string;
 
             case longlong:
-                return readInt!ulong(data).to!string;
+                return unsigned ? readInt!ulong(data).to!string : readInt!long(data).to!string;
 
             case float_:
                 uint bits = readInt!uint(data);
@@ -1411,9 +1182,9 @@ private:
         return ok;
     }
 
-    ErrorResponse parseErrorPacket(ref Data data)
+    MySqlError parseErrorPacket(ref Data data)
     {
-        ErrorResponse err;
+        MySqlError err;
         err.errorCode = readInt!ushort(data);
 
         if (clientCapabilities & Capabilities.protocol41)
@@ -1743,23 +1514,20 @@ private:
         }
     }
 
-    void startQuery(Result result)
+    void startQuery(Result result, const(char)[] sql, PreparedStatement stmt, const(Param)[] params)
     {
-        pendingOps ~= PendingOp(
-            result.preparedStatement ? PendingOpType.execute : PendingOpType.query,
-            result);
+        pendingOps ~= PendingOp(stmt ? PendingOpType.execute : PendingOpType.query, result);
 
-        if (result.preparedStatement !is null)
+        if (stmt !is null)
         {
             // Binary protocol: COM_STMT_EXECUTE
             // Note: Don't pre-populate fields - server will send column definitions
-            auto stmt = result.preparedStatement;
-            sendExecute(stmt.statementId, result.queryArgs);
+            sendExecute(stmt.statementId, params);
         }
         else
         {
             // Text protocol: COM_QUERY
-            sendQuery(result.sql);
+            sendQuery(sql);
         }
     }
 
@@ -1781,7 +1549,7 @@ private:
         sendPacket(buf.data);
     }
 
-    void sendExecute(uint stmtId, const(char)[][] params)
+    void sendExecute(uint stmtId, const(Param)[] params)
     {
         auto buf = appender!(ubyte[]);
         buf.put(cast(ubyte)0x17);  // COM_STMT_EXECUTE
@@ -1799,7 +1567,7 @@ private:
                 foreach (j; 0..8)
                 {
                     auto idx = i * 8 + j;
-                    if (idx < params.length && params[idx] is null)
+                    if (idx < params.length && params[idx].isNull)
                         bitmap |= (1 << j);
                 }
                 buf.put(bitmap);
@@ -1808,33 +1576,59 @@ private:
             // New params bound flag
             buf.put(cast(ubyte)0x01);
 
-            // Parameter types (2 bytes each)
-            foreach (param; params)
+            // Parameter types (2 bytes each: the type, and the unsigned flag)
+            foreach (ref param; params)
             {
-                // All params sent as MYSQL_TYPE_STRING for simplicity
-                writeLittleEndian(buf, cast(ushort)ColumnType.varString);
+                buf.put(cast(ubyte)parameterType(param));
+                buf.put(cast(ubyte)0);
             }
 
-            // Parameter values
-            foreach (param; params)
-            {
-                if (param !is null)
+            // Parameter values (but NULLs)
+            foreach (ref param; params)
+                final switch (param.type) with (Param.Type)
                 {
-                    writeLenEncInt(buf, param.length);
-                    buf.put(cast(const(ubyte)[])param);
+                    case null_: break;
+                    case boolean: buf.put(cast(ubyte)(param.boolean ? 1 : 0)); break;
+                    case integer: writeLittleEndian(buf, param.integer); break;
+                    case floating: writeLittleEndian(buf, *cast(const(ulong)*)&param.floating); break;
+                    case numeric:
+                    case text:
+                        writeLenEncInt(buf, param.text.length);
+                        buf.put(cast(const(ubyte)[])param.text);
+                        break;
+                    case bytes:
+                        writeLenEncInt(buf, param.bytes.length);
+                        buf.put(param.bytes);
+                        break;
+                    case array: assert(false);
                 }
-            }
         }
 
         packetSeq = 0;
         sendPacket(buf.data);
     }
 
-    void closeStatement(PreparedStatement stmt)
+    /// The binary protocol's type of the parameter `param`.
+    static ColumnType parameterType(ref const Param param)
+    {
+        final switch (param.type) with (Param.Type)
+        {
+            case null_: return ColumnType.null_;
+            case boolean: return ColumnType.tiny;
+            case integer: return ColumnType.longlong;
+            case floating: return ColumnType.double_;
+            case numeric: return ColumnType.newdecimal;
+            case text: return ColumnType.varString;
+            case bytes: return ColumnType.blob;
+            case array: throw new MySqlException("Array parameters are not supported");
+        }
+    }
+
+    void closeStatement(uint statementId)
     {
         auto buf = appender!(ubyte[]);
         buf.put(cast(ubyte)0x19);  // COM_STMT_CLOSE
-        writeLittleEndian(buf, stmt.statementId);
+        writeLittleEndian(buf, statementId);
         packetSeq = 0;
         sendPacket(buf.data);
         // COM_STMT_CLOSE doesn't return a response
@@ -1847,80 +1641,17 @@ private:
     }
 }
 
-/// Convert D values to MySQL text format parameters
-const(char)[][] toQueryArgs(Args...)(Args args)
-{
-    const(char)[][] result;
-    foreach (arg; args)
-    {
-        result ~= toQueryArg(arg);
-    }
-    return result;
-}
-
-/// Convert a single D value to MySQL text format
-const(char)[] toQueryArg(T)(T value)
-{
-    import std.format : format;
-
-    static if (is(T == typeof(null)))
-        return null;
-    else static if (is(T == Nullable!U, U))
-        return value.isNull ? null : toQueryArg(value.get);
-    else static if (is(T : const(char)[]))
-        return value;
-    else static if (is(T == bool))
-        return value ? "1" : "0";
-    else static if (is(T : long) || is(T : double))
-        return format!"%s"(value);
-    else static if (is(T == ubyte[]) || is(T == const(ubyte)[]))
-        return cast(const(char)[])value;
-    else
-        static assert(false, "Unsupported parameter type: " ~ T.stringof);
-}
-
-/// Convert MySQL text format value to D type.
-T convertValue(T)(const(char)[] textValue, MySqlConnection.ColumnType columnType)
-{
-    static if (is(T == string))
-        return textValue.idup;
-    else static if (is(T == const(char)[]))
-        return textValue;
-    else static if (is(T == int))
-        return textValue.to!int;
-    else static if (is(T == long))
-        return textValue.to!long;
-    else static if (is(T == short))
-        return textValue.to!short;
-    else static if (is(T == uint))
-        return textValue.to!uint;
-    else static if (is(T == ulong))
-        return textValue.to!ulong;
-    else static if (is(T == ushort))
-        return textValue.to!ushort;
-    else static if (is(T == double))
-        return textValue.to!double;
-    else static if (is(T == float))
-        return textValue.to!float;
-    else static if (is(T == bool))
-        return textValue == "1" || textValue == "true";
-    else static if (is(T == ubyte[]))
-        return cast(ubyte[])textValue.dup;
-    else
-        static assert(false, "Unsupported type for MySQL conversion: " ~ T.stringof);
-}
-
 /// MySQL exception with optional error response fields.
-class MySqlException : Exception
+class MySqlException : DbException
 {
-    MySqlConnection.ErrorResponse errorResponse;
+    MySqlError errorResponse;
 
     this(string msg, string file = __FILE__, size_t line = __LINE__)
     {
         super(msg, file, line);
     }
 
-    this(MySqlConnection.ErrorResponse response, string file = __FILE__, size_t line = __LINE__)
+    this(MySqlError response, string file = __FILE__, size_t line = __LINE__)
     {
         this.errorResponse = response;
         super(response.message.idup, file, line);
@@ -1928,26 +1659,6 @@ class MySqlException : Exception
 
     @property ushort errorCode() const { return errorResponse.errorCode; }
     @property const(char)[] sqlState() const { return errorResponse.sqlState[]; }
-}
-
-// Unit tests for type conversion
-debug(ae_unittest) unittest
-{
-    // Integer conversion
-    assert(convertValue!int("42", MySqlConnection.ColumnType.long_) == 42);
-    assert(convertValue!int("-123", MySqlConnection.ColumnType.long_) == -123);
-    assert(convertValue!long("9223372036854775807", MySqlConnection.ColumnType.longlong) == long.max);
-
-    // Float conversion
-    import std.math : isClose;
-    assert(isClose(convertValue!double("3.14159", MySqlConnection.ColumnType.double_), 3.14159));
-
-    // Boolean conversion
-    assert(convertValue!bool("1", MySqlConnection.ColumnType.tiny) == true);
-    assert(convertValue!bool("0", MySqlConnection.ColumnType.tiny) == false);
-
-    // String conversion
-    assert(convertValue!string("hello", MySqlConnection.ColumnType.varString) == "hello");
 }
 
 // Unit tests for mysql_native_password
@@ -2014,11 +1725,9 @@ debug(ae_unittest) unittest
     import ae.utils.promise.await : async, await, awaitSync;
     import std.math : isClose;
 
-    auto mysql = new MySqlConnection();
-
     async({
-        await(mysql.ready);
-        scope(exit) mysql.disconnect("Test cleanup");
+        auto mysql = connect().await;
+        scope(exit) mysql.close().await;
 
         // Test 1: Simple query
         auto rows = mysql.query("SELECT 1 + 1 AS result").array.await;
@@ -2068,14 +1777,14 @@ debug(ae_unittest) unittest
         rows = stmt.query(1).array.await;
         assert(rows.length == 1, "Prepared statement: expected 1 row");
         assert(rows[0].column!int("id") == 1);
-        stmt.close();
+        stmt.close().await;
 
         // Test 7: Prepared statement with multiple params
         stmt = mysql.prepare("SELECT ? + ? AS sum").await;
         rows = stmt.query(10, 20).array.await;
         assert(rows.length == 1);
         assert(rows[0].column!int("sum") == 30);
-        stmt.close();
+        stmt.close().await;
 
         // Test 8: Date/time types (text protocol)
         mysql.query("INSERT INTO ae_mysql_test (name, created_at, date_only, time_only) VALUES ('datetime_test', '2024-06-15 14:30:45', '2024-06-15', '14:30:45')").array.await;
@@ -2093,7 +1802,7 @@ debug(ae_unittest) unittest
         assert(rows[0].column!string("date_only") == "2024-06-15" ||
                rows[0].column!string("date_only") == "2024-06-15 00:00:00",  // Some servers add time
                "Unexpected date: " ~ rows[0].column!string("date_only"));
-        stmt.close();
+        stmt.close().await;
 
         // Test 10: UPDATE and verify affectedRows
         auto updateResult = mysql.query("UPDATE ae_mysql_test SET name = 'updated' WHERE id = 1");
@@ -2135,7 +1844,19 @@ debug(ae_unittest) unittest
         }
         assert(gotError, "Expected SQL syntax error");
 
-        // Test 14: Cleanup
+        // Test 14: Queries with typed parameters (prepared, executed and
+        // closed), of integers, strings, NULL, numbers; signed binary values
+        rows = mysql.query("SELECT ? + ? AS sum, ? AS s, ? IS NULL AS n, ? * 2 AS d, ? AS neg, ? AS b",
+            40, 2, "x", null, Param.numeric("1.25"), -5, true).array.await;
+        assert(rows[0].column!int("sum") == 42 && rows[0].column!string("s") == "x" && rows[0].column!bool("n"));
+        assert(rows[0].column!string("d") == "2.50" && rows[0].column!int("neg") == -5 && rows[0].column!bool("b"));
+        rows = mysql.query("SELECT id, name FROM ae_mysql_test WHERE id = ? LIMIT ?", [Param.of(1), Param.of(10)]).array.await;
+        assert(rows.length == 1 && rows[0].column!string("name") == "updated");
+        auto inserted = mysql.query("INSERT INTO ae_mysql_test (name, value) VALUES (?, ?)", "typed", 1.5);
+        inserted.array.await;
+        assert(inserted.affectedRows == 1 && inserted.lastInsertId > 0);
+
+        // Test 15: Cleanup
         mysql.query("DROP TABLE ae_mysql_test").array.await;
     }).awaitSync();
 }
@@ -2146,11 +1867,9 @@ debug(ae_unittest) unittest
 {
     import ae.utils.promise.await : async, await, awaitSync;
 
-    auto mysql = new MySqlConnection();
-
     async({
-        await(mysql.ready);
-        scope(exit) mysql.disconnect("Test cleanup");
+        auto mysql = connect().await;
+        scope(exit) mysql.close().await;
 
         // Setup
         mysql.query("DROP TABLE IF EXISTS ae_mysql_test2").array.await;
@@ -2227,7 +1946,7 @@ debug(ae_unittest) unittest
         auto stmt = mysql.prepare("SELECT val FROM ae_mysql_unicode WHERE id = ?").await;
         rows = stmt.query(2).array.await;
         assert(rows[0].column!string("val") == "Emoji: 🎉🚀💯");
-        stmt.close();
+        stmt.close().await;
 
         // Test: NULL parameters in prepared statements
         mysql.query("DROP TABLE IF EXISTS ae_mysql_nulltest").array.await;
@@ -2236,7 +1955,7 @@ debug(ae_unittest) unittest
         stmt = mysql.prepare("INSERT INTO ae_mysql_nulltest VALUES (?, ?)").await;
         stmt.query(1, "not null").array.await;
         stmt.query(2, null).array.await;
-        stmt.close();
+        stmt.close().await;
 
         rows = mysql.query("SELECT * FROM ae_mysql_nulltest ORDER BY id").array.await;
         assert(rows[0].column!string("val") == "not null");
@@ -2257,8 +1976,8 @@ debug(ae_unittest) unittest
         assert(rows1[0].column!int("id") == 2);
         assert(rows2[0].column!string("val") == "Emoji: 🎉🚀💯");
 
-        stmt1.close();
-        stmt2.close();
+        stmt1.close().await;
+        stmt2.close().await;
 
         // Cleanup
         mysql.query("DROP TABLE ae_mysql_test2").array.await;
@@ -2273,11 +1992,9 @@ debug(ae_unittest) unittest
 {
     import ae.utils.promise.await : async, await, awaitSync;
 
-    auto mysql = new MySqlConnection();
-
     async({
-        await(mysql.ready);
-        scope(exit) mysql.disconnect("Test cleanup");
+        auto mysql = connect().await;
+        scope(exit) mysql.close().await;
 
         // Create table and insert 500 rows
         mysql.query("DROP TABLE IF EXISTS ae_mysql_large").array.await;
@@ -2326,37 +2043,22 @@ debug(ae_unittest) unittest
     }).awaitSync();
 }
 
-// Test: DNS resolution failure — .ready should reject, not hang.
-// Uses trailing dot to prevent Windows DNS suffix search list expansion.
+// Connecting: by URI; DNS resolution failure and connection refused reject
+// the connection's promise
 debug(ae_unittest) unittest
 {
     import ae.utils.promise.await : async, await, awaitSync;
 
-    bool gotError = false;
+    int errors;
     async({
-        auto mysql = new MySqlConnection("nonexistent.invalid.", 3306, "user", "db", "pass");
-        try
-            await(mysql.ready);
-        catch (Exception e)
-            gotError = true;
+        foreach (p; [connect("nonexistent.invalid.", 3306, "user", "db", "pass"),
+                connect("127.0.0.1", 63999, "user", "db", "pass"), connect("http://localhost")])
+            try
+                p.await;
+            catch (Exception e)
+                errors++;
     }).awaitSync();
-    assert(gotError, "Expected DNS resolution error from .ready");
-}
-
-// Test: connection refused — .ready should reject with proper error
-debug(ae_unittest) unittest
-{
-    import ae.utils.promise.await : async, await, awaitSync;
-
-    bool gotError = false;
-    async({
-        auto mysql = new MySqlConnection("127.0.0.1", 63999, "user", "db", "pass");
-        try
-            await(mysql.ready);
-        catch (Exception e)
-            gotError = true;
-    }).awaitSync();
-    assert(gotError, "Expected connection refused error from .ready");
+    assert(errors == 3, "Expected the connections to fail");
 }
 
 // Test: authentication error — .ready should reject cleanly (no double-reject crash)
@@ -2368,15 +2070,14 @@ debug(ae_unittest) unittest
 
     bool gotError = false;
     async({
-        auto mysql = new MySqlConnection(
-            environment.get("MYSQL_HOST", "127.0.0.1"),
-            environment.get("MYSQL_TCP_PORT", "3306").to!ushort,
-            environment.get("MYSQL_USER", "testuser"),
-            environment.get("MYSQL_DATABASE", "testdb"),
-            "definitely_wrong_password_12345"
-        );
         try
-            await(mysql.ready);
+            connect(
+                environment.get("MYSQL_HOST", "127.0.0.1"),
+                environment.get("MYSQL_TCP_PORT", "3306").to!ushort,
+                environment.get("MYSQL_USER", "testuser"),
+                environment.get("MYSQL_DATABASE", "testdb"),
+                "definitely_wrong_password_12345"
+            ).await;
         catch (MySqlException e)
             gotError = true;
     }).awaitSync();

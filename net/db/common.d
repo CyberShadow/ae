@@ -159,10 +159,16 @@ const(Param)[] toParams(Args...)(Args args)
 	return result;
 }
 
+/// The bytes of a value in text format, as they are.
+ubyte[] rawBytes(const(char)[] text)
+{
+	return cast(ubyte[]) text.dup;
+}
+
 /// Convert a value in text format to the D type `T`: a string, an integer
 /// or floating-point number, a boolean ("t", "true" or "1"), or (with
 /// `decodeBytes`) a byte array.
-T convertText(T, alias decodeBytes = (const(char)[] s) => cast(ubyte[]) s.dup)(const(char)[] text)
+T convertText(T, alias decodeBytes = rawBytes)(const(char)[] text)
 {
 	import std.traits : isFloatingPoint, isIntegral;
 	static if (is(T == string))
@@ -182,7 +188,7 @@ T convertText(T, alias decodeBytes = (const(char)[] s) => cast(ubyte[]) s.dup)(c
 /// A row of a query's result: the values of its columns in text format
 /// (null: NULL), which `column` converts (see `convertText`; byte arrays
 /// with `decodeBytes`).
-struct Row(alias decodeBytes = (const(char)[] s) => cast(ubyte[]) s.dup)
+struct Row(alias decodeBytes = rawBytes)
 {
 	private const(string)[] names;
 	private const(const(char)[])[] values;
