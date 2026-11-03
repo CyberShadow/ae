@@ -4,6 +4,13 @@
  * Implements the PostgreSQL wire protocol (version 3.0) for asynchronous
  * database access integrated with the ae event loop.
  *
+ * ---
+ * auto pg = connect("postgresql://user:password@localhost/mydb").await;
+ * scope(exit) pg.close();
+ * foreach (row; pg.query("SELECT id, name FROM users WHERE id = $1", 42))
+ *     writeln(row.column!string("name"));
+ * ---
+ *
  * License:
  *   This Source Code Form is subject to the terms of
  *   the Mozilla Public License, v. 2.0. If a copy of
@@ -29,8 +36,10 @@ import std.digest.md : md5Of, toHexString, LetterCase;
 import ae.net.asockets;
 import ae.net.ssl : ssl, sslAvailable, SSLContext, SSLAdapter;
 import ae.utils.auth.scram : ScramSHA256Client;
-import ae.utils.exception;
 import ae.utils.promise;
+
+public import ae.net.db.common : DbException, Param, toParams;
+static import ae.net.db.common;
 
 // https://issues.dlang.org/show_bug.cgi?id=7016
 // `await`/`async` are imported only inside method bodies below, which `rdmd`
@@ -45,42 +54,127 @@ static import ae.utils.promise.await;
 // TODO: Connection pooling
 // TODO: Unix socket support (currently only TCP; PGHOST must be a hostname, not a socket path)
 
-/// PostgreSQL connection handling the wire protocol.
-final class PgSqlConnection
+/// TLS negotiation mode.
+enum SSLMode
 {
-public:
-	/// Connect using standard PostgreSQL environment variables.
-	/// Environment variables used:
-	///   PGHOST - server hostname (default: localhost)
-	///   PGPORT - server port (default: 5432)
-	///   PGUSER - username (default: current OS user)
-	///   PGDATABASE - database name (default: same as user)
-	///   PGPASSWORD - password (default: none)
-	///   PGSSLMODE - `disable`, `prefer` (default), `require` or `verify-full`
-	///     (see `SSLMode`; `verify-full` uses `SSLMode.require` with a
-	///     context which verifies the server certificate and host name)
-	///   PGSSLROOTCERT - with `verify-full`, the root certificate file to
-	///     verify the server certificate against (default: system store)
-	this()
+	/// Never use TLS.
+	disable,
+	/// Use TLS if the server supports it, otherwise fall back to an
+	/// unencrypted connection. Offers no protection against an
+	/// active attacker.
+	/// If no SSL provider (such as `ae.net.ssl.openssl`) is linked
+	/// in, TLS is not attempted (like libpq built without SSL).
+	prefer,
+	/// Require TLS; fail if the server does not support it, or if
+	/// no SSL provider is linked in.
+	/// Whether the server certificate is verified is determined
+	/// by the `SSLContext` (see `SSLContext.setPeerVerify`).
+	require,
+}
+
+/// Connect to the PostgreSQL server at `host`:`port`, as `user`, to
+/// `database`; the promise is fulfilled with the connection once it is
+/// ready for queries.
+/// Params:
+///   host = server host name; also used for SNI and certificate
+///     host name verification when using TLS
+///   port = server port
+///   user = PostgreSQL user name
+///   database = database name to connect to
+///   password = optional password for authentication
+///   sslMode = whether to negotiate TLS (via SSLRequest);
+///     defaults to `prefer`, like libpq
+///   sslContext = client SSL context to use for TLS; if `null`,
+///     a default context is created with the global `ssl` provider
+///     (which does not verify the server certificate)
+Promise!PgSqlConnection connect(string host, ushort port, string user, string database, string password = null,
+	SSLMode sslMode = SSLMode.prefer, SSLContext sslContext = null)
+{
+	auto tcp = new TcpConnection;
+	auto pg = new PgSqlConnection(tcp, user, database, password, sslMode, sslContext, host);
+	tcp.connect(host, port);
+	return pg.readyPromise;
+}
+
+/// ditto, of the URI `uri`
+/// (`postgresql://user:password@host:port/database?sslmode=...&sslrootcert=...`,
+/// all but the host optional; the user and database default as for
+/// `connect()`, and the `sslmode` and `sslrootcert` parameters as the
+/// PGSSLMODE and PGSSLROOTCERT environment variables do; other parameters
+/// are not supported).
+Promise!PgSqlConnection connect(string uri)
+{
+	import ae.net.db.common : DbUri;
+	try
 	{
-		auto sslSettings = sslFromEnvironment();
-		this(
+		auto u = DbUri.parse(uri, ["postgresql", "postgres"]);
+		foreach (name, value; u.parameters)
+			enforce!PgSqlException(name == "sslmode" || name == "sslrootcert",
+				"Unsupported connection URI parameter: " ~ name);
+		auto sslSettings = SSLSettings.parse(u.parameters.get("sslmode", "prefer"), u.parameters.get("sslrootcert", null));
+		auto user = u.user.length ? u.user : defaultUser;
+		return connect(u.host.length ? u.host : "localhost", u.port.isNull ? 5432 : u.port.get,
+			user, u.database.length ? u.database : user, u.password, sslSettings.mode, sslSettings.context);
+	}
+	catch (Exception e)
+		return rejected!PgSqlConnection(e);
+}
+
+/// ditto, of the standard PostgreSQL environment variables:
+///   PGHOST - server hostname (default: localhost)
+///   PGPORT - server port (default: 5432)
+///   PGUSER - username (default: the current OS user)
+///   PGDATABASE - database name (default: the user's)
+///   PGPASSWORD - password (default: none)
+///   PGSSLMODE - `disable`, `prefer` (default), `require` or `verify-full`
+///     (see `SSLMode`; `verify-full` uses `SSLMode.require` with a
+///     context which verifies the server certificate and host name)
+///   PGSSLROOTCERT - with `verify-full`, the root certificate file to
+///     verify the server certificate against (default: system store)
+Promise!PgSqlConnection connect()
+{
+	try
+	{
+		auto sslSettings = SSLSettings.parse(environment.get("PGSSLMODE", "prefer"), environment.get("PGSSLROOTCERT"));
+		return connect(
 			environment.get("PGHOST", "localhost"),
 			environment.get("PGPORT", "5432").to!ushort,
-			environment.get("PGUSER", environment.get("USER", "postgres")),
-			environment.get("PGDATABASE", environment.get("PGUSER", environment.get("USER", "postgres"))),
+			defaultUser,
+			environment.get("PGDATABASE", defaultUser),
 			environment.get("PGPASSWORD"),
 			sslSettings.mode,
-			sslSettings.context,
-		);
+			sslSettings.context);
 	}
+	catch (Exception e)
+		return rejected!PgSqlConnection(e);
+}
 
-	private struct SSLSettings { SSLMode mode; SSLContext context; }
+/// ditto, over the transport `transport`, which the caller then connects:
+/// the connection sends its startup message (or SSLRequest) when the
+/// transport connects.
+/// Params:
+///   sslMode = whether to negotiate TLS (via SSLRequest) over `transport`;
+///     defaults to `disable`, as the transport may not need it
+///     (e.g. a Unix domain socket)
+///   sslContext = client SSL context (see above)
+///   sslHostName = host name to indicate via SNI and to verify the
+///     server certificate against
+Promise!PgSqlConnection connect(IConnection transport, string user, string database, string password = null,
+	SSLMode sslMode = SSLMode.disable, SSLContext sslContext = null, string sslHostName = null)
+{
+	return new PgSqlConnection(transport, user, database, password, sslMode, sslContext, sslHostName).readyPromise;
+}
 
-	private static SSLSettings sslFromEnvironment()
+/// The TLS settings of a libpq `sslmode` (`disable`, `prefer`, `require`
+/// or `verify-full`, see `connect()`) and `sslrootcert`.
+private struct SSLSettings
+{
+	SSLMode mode;
+	SSLContext context;
+
+	static SSLSettings parse(string mode, string rootCert)
 	{
 		SSLSettings result;
-		auto mode = environment.get("PGSSLMODE", "prefer");
 		switch (mode)
 		{
 			case "disable":
@@ -94,86 +188,227 @@ public:
 				break;
 			case "verify-full":
 				result.mode = SSLMode.require;
-				enforce!PgSqlException(sslAvailable, "PGSSLMODE=verify-full: " ~ noSSLProviderMessage);
+				enforce!PgSqlException(sslAvailable, "sslmode=verify-full: " ~ noSSLProviderMessage);
 				result.context = ssl.createContext(SSLContext.Kind.client);
 				result.context.setPeerVerify(SSLContext.Verify.require);
-				if (auto rootCert = environment.get("PGSSLROOTCERT"))
+				if (rootCert)
 					result.context.setPeerRootCertificate(rootCert);
 				break;
 			default:
-				throw new PgSqlException("Unsupported PGSSLMODE: " ~ mode);
+				throw new PgSqlException("Unsupported sslmode: " ~ mode);
 		}
 		return result;
 	}
+}
 
-	/// TLS negotiation mode.
-	enum SSLMode
+private enum noSSLProviderMessage = "TLS requires an SSL provider, but none is linked in (import e.g. ae.net.ssl.openssl)";
+
+private @property string defaultUser()
+{
+	return environment.get("PGUSER", environment.get("USER", "postgres"));
+}
+
+private Promise!T rejected(T)(Exception e)
+{
+	auto p = new Promise!T;
+	p.reject(e);
+	return p;
+}
+
+/// The fields of an error or notice message of the server.
+struct PgSqlMessage
+{
+	struct Field
 	{
-		/// Never use TLS.
-		disable,
-		/// Use TLS if the server supports it, otherwise fall back to an
-		/// unencrypted connection. Offers no protection against an
-		/// active attacker.
-		/// If no SSL provider (such as `ae.net.ssl.openssl`) is linked
-		/// in, TLS is not attempted (like libpq built without SSL).
-		prefer,
-		/// Require TLS; fail if the server does not support it, or if
-		/// no SSL provider is linked in.
-		/// Whether the server certificate is verified is determined
-		/// by the `SSLContext` (see `SSLContext.setPeerVerify`).
-		require,
+		char type;
+		const(char)[] str;
+
+		string toString() const { return "%s=%s".format(type, str); }
+	}
+	Field[] fields;
+
+	string toString() const
+	{
+		return "%-(%s;%)".format(fields);
 	}
 
-	/// Connect with explicit connection parameters.
-	/// Params:
-	///   host = server host name; also used for SNI and certificate
-	///     host name verification when using TLS
-	///   port = server port
-	///   user = PostgreSQL user name
-	///   database = database name to connect to
-	///   password = optional password for authentication
-	///   sslMode = whether to negotiate TLS (via SSLRequest);
-	///     defaults to `prefer`, like libpq
-	///   sslContext = client SSL context to use for TLS; if `null`,
-	///     a default context is created with the global `ssl` provider
-	///     (which does not verify the server certificate)
-	this(string host, ushort port, string user, string database, string password = null,
-		SSLMode sslMode = SSLMode.prefer, SSLContext sslContext = null)
+	/// Get a specific field by type code.
+	/// Common codes: 'S'=severity, 'C'=SQLSTATE, 'M'=message, 'D'=detail, 'H'=hint
+	const(char)[] getField(char type) const
 	{
-		auto tcpConn = new TcpConnection;
-		this(tcpConn, user, database, password, sslMode, sslContext, host);
-		tcpConn.connect(host, port);
+		foreach (field; fields)
+			if (field.type == type)
+				return field.str;
+		return null;
 	}
 
-	/// Construct with an existing connection (for custom transports).
-	/// The connection should not yet be connected; PgSqlConnection will
-	/// send the startup message (or SSLRequest) when it connects.
-	/// Params:
-	///   conn = underlying transport connection
-	///   user = PostgreSQL user name
-	///   database = database name to connect to
-	///   password = optional password for authentication
-	///   sslMode = whether to negotiate TLS (via SSLRequest) over `conn`;
-	///     defaults to `disable`, as the transport may not need it
-	///     (e.g. a Unix domain socket)
-	///   sslContext = client SSL context (see above)
-	///   sslHostName = host name to indicate via SNI and to verify the
-	///     server certificate against
-	this(IConnection conn, string user, string database, string password = null,
-		SSLMode sslMode = SSLMode.disable, SSLContext sslContext = null, string sslHostName = null)
-	{
-		this.conn = conn;
-		this.user = user;
-		this.database = database;
-		this.password = password;
-		this.sslMode = sslMode;
-		this.sslContext = sslContext;
-		this.sslHostName = sslHostName;
+	@property const(char)[] severity() const { return getField('S'); }
+	@property const(char)[] sqlState() const { return getField('C'); }
+	@property const(char)[] message() const { return getField('M'); }
+	@property const(char)[] detail() const { return getField('D'); }
+	@property const(char)[] hint() const { return getField('H'); }
+}
 
-		conn.handleConnect = &onConnect;
-		conn.handleReadData = &onReadData;
-		conn.handleDisconnect = &onDisconnect;
+/// Transaction status indicator from ReadyForQuery.
+enum TransactionStatus : char
+{
+	idle = 'I',
+	inTransaction = 'T',
+	failed = 'E',
+}
+
+/// Common PostgreSQL type OIDs.
+enum PgOid : uint
+{
+	unknown = 0,  /// (a parameter's: inferred by the server from its context)
+	boolean = 16,
+	bytea = 17,
+	char_ = 18,
+	int8 = 20,
+	int2 = 21,
+	int4 = 23,
+	text = 25,
+	oid = 26,
+	float4 = 700,
+	float8 = 701,
+	varchar = 1043,
+	date = 1082,
+	time = 1083,
+	timestamp = 1114,
+	timestamptz = 1184,
+	numeric = 1700,
+	uuid = 2950,
+	json = 114,
+	jsonb = 3802,
+}
+
+/// A row of a result (its values as PostgreSQL's text format has them;
+/// `bytea` values as byte arrays, see `decodeBytea`).
+alias Row = ae.net.db.common.Row!decodeBytea;
+
+/// The lazy result of a query (see `ae.net.db.common.Result`). Its
+/// `affectedRows` is the count of the command tag of the (last)
+/// statement.
+alias Result = ae.net.db.common.Result!Row;
+
+/// A statement prepared on the server (see `PgSqlConnection.prepare`),
+/// executed with parameters (sent in text format, of the types the server
+/// inferred for them when it prepared the statement).
+final class PreparedStatement
+{
+	/// Execute the statement with the parameters `args` (see `Param.of`),
+	/// or `params`.
+	Result query(Args...)(Args args)
+	{
+		return query(toParams(args));
 	}
+
+	/// ditto
+	Result query(const(Param)[] params)
+	{
+		enforce!PgSqlException(!closed, "PreparedStatement has been closed");
+		return new Result((Result result) => pg.startQuery(result, null, params, false, this));
+	}
+
+	/// Close the statement, freeing its server resources.
+	Promise!void close()
+	{
+		enforce!PgSqlException(!closed, "PreparedStatement already closed");
+		closed = true;
+		return pg.closeStatement(this);
+	}
+
+private:
+	PgSqlConnection pg;
+	const(char)[] name;
+	const(string)[] columnNames;
+	bool closed;
+
+	this(PgSqlConnection pg, const(char)[] name)
+	{
+		this.pg = pg;
+		this.name = name;
+	}
+}
+
+/// A connection to a PostgreSQL server (see `connect`). Its queries are
+/// pipelined: each is sent when its result is consumed, and their results
+/// arrive in the order they were sent.
+final class PgSqlConnection
+{
+public:
+	/// A query of the SQL `sql` (several statements, separated by
+	/// semicolons, are allowed; their rows are concatenated), sent with
+	/// the Simple Query protocol.
+	Result query(const(char)[] sql)
+	{
+		return new Result((Result result) => startQuery(result, sql, null, true, null));
+	}
+
+	/// A query of the statement `sql` with the parameters `args` (see
+	/// `Param.of`), or `params`: sent with the Extended Query protocol
+	/// (Parse, Bind, Describe, Execute and Sync in one round trip, of the
+	/// unnamed statement), the parameters typed in the Parse message:
+	///   a boolean as `boolean`; an integer as `integer` (or `bigint`
+	///   beyond its range); a floating-point number as `double precision`;
+	///   an exact number as `numeric`; a byte array as `bytea`; a string,
+	///   NULL and an array as `unknown`, which the server infers from the
+	///   parameter's context (as it does for a string literal, e.g. a date
+	///   or an enum label).
+	Result query(Args...)(const(char)[] sql, Args args)
+	{
+		return query(sql, toParams(args));
+	}
+
+	/// ditto
+	Result query(const(char)[] sql, const(Param)[] params)
+	{
+		return new Result((Result result) => startQuery(result, sql, params, false, null));
+	}
+
+	/// Prepare the statement `sql` on the server (as a named statement),
+	/// for executing it several times (see `PreparedStatement`).
+	Promise!PreparedStatement prepare(const(char)[] sql)
+	{
+		auto promise = new Promise!PreparedStatement;
+		auto stmt = new PreparedStatement(this, "_ps" ~ (statementCounter++).to!string);
+		PendingOp op;
+		op.type = PendingOpType.prepare;
+		op.stmt = stmt;
+		op.preparePromise = promise;
+		pendingOps ~= op;
+		sendParse(stmt.name, sql, null);
+		sendDescribe('S', stmt.name);
+		sendSync();
+		return promise;
+	}
+
+	/// Close the connection (the queries sent are answered first); the
+	/// promise is fulfilled once it is closed.
+	Promise!void close()
+	{
+		if (closePromise is null)
+		{
+			closePromise = new Promise!void;
+			if (conn.state == ConnectionState.connected)
+			{
+				sendPacket('X', null);  // Terminate
+				conn.disconnect("Client close");
+			}
+			else if (conn.state == ConnectionState.disconnected)
+				closePromise.fulfill();
+			else
+				conn.disconnect("Client close");
+		}
+		return closePromise;
+	}
+
+	/// The transaction status of the connection (as of the last completed
+	/// query).
+	@property TransactionStatus transactionStatus() const { return currentTransactionStatus; }
+
+	/// Called with the notices (e.g. warnings) the server sends.
+	void delegate(PgSqlMessage notice) handleNotice;
 
 	/// Whether the connection is encrypted with TLS.
 	/// Becomes `true` once the TLS handshake has completed.
@@ -182,489 +417,6 @@ public:
 	/// The TLS adapter, once TLS has been negotiated (e.g. to inspect
 	/// the server certificate). `null` otherwise.
 	@property SSLAdapter sslConnection() { return sslAdapter; }
-
-	/// PostgreSQL error/notice response fields.
-	struct ErrorResponse
-	{
-		struct Field
-		{
-			char type;
-			const(char)[] str;
-
-			string toString() const { return "%s=%s".format(type, str); }
-		}
-		Field[] fields;
-
-		string toString() const
-		{
-			return "%-(%s;%)".format(fields);
-		}
-
-		/// Get a specific field by type code.
-		/// Common codes: 'S'=severity, 'C'=SQLSTATE, 'M'=message, 'D'=detail, 'H'=hint
-		const(char)[] getField(char type) const
-		{
-			foreach (field; fields)
-				if (field.type == type)
-					return field.str;
-			return null;
-		}
-
-		@property const(char)[] severity() const { return getField('S'); }
-		@property const(char)[] sqlState() const { return getField('C'); }
-		@property const(char)[] message() const { return getField('M'); }
-		@property const(char)[] detail() const { return getField('D'); }
-		@property const(char)[] hint() const { return getField('H'); }
-	}
-
-	/// Transaction status indicator from ReadyForQuery.
-	enum TransactionStatus : char
-	{
-		idle = 'I',
-		inTransaction = 'T',
-		failed = 'E',
-	}
-
-	/// Description of a result field/column.
-	struct FieldDescription
-	{
-		const(char)[] name;
-		uint tableOid;       /// OID of the table (0 if not a table column)
-		ushort columnAttr;   /// Column attribute number (0 if not a table column)
-		uint typeOid;        /// OID of the data type
-		short typeSize;      /// Data type size (-1 for variable-length)
-		int typeModifier;    /// Type-specific modifier
-		ushort formatCode;   /// Format code: 0=text, 1=binary
-	}
-
-	/// Common PostgreSQL type OIDs.
-	enum PgOid : uint
-	{
-		boolean = 16,
-		bytea = 17,
-		char_ = 18,
-		int8 = 20,
-		int2 = 21,
-		int4 = 23,
-		text = 25,
-		oid = 26,
-		float4 = 700,
-		float8 = 701,
-		varchar = 1043,
-		date = 1082,
-		time = 1083,
-		timestamp = 1114,
-		timestamptz = 1184,
-		numeric = 1700,
-		uuid = 2950,
-		json = 114,
-		jsonb = 3802,
-	}
-
-	/// A single row from a query result.
-	struct Row
-	{
-		private const(FieldDescription)[] fields;
-		private const(const(char)[])[] values;
-		private const(bool)[] nulls;
-
-		/// Get column value by index with type conversion.
-		T column(T)(size_t idx) const
-		{
-			enforce!PgSqlException(idx < values.length, "Column index out of range");
-			static if (is(T == Nullable!U, U))
-			{
-				if (nulls[idx])
-					return T.init;
-				return T(column!U(idx));
-			}
-			else
-			{
-				enforce!PgSqlException(!nulls[idx], "NULL value for non-nullable column");
-				return convertValue!T(values[idx], fields[idx].typeOid);
-			}
-		}
-
-		/// Get column value by name with type conversion.
-		T column(T)(const(char)[] name) const
-		{
-			return column!T(fieldIndex(name));
-		}
-
-		/// Check if a column is NULL.
-		bool isNull(size_t idx) const
-		{
-			enforce!PgSqlException(idx < nulls.length, "Column index out of range");
-			return nulls[idx];
-		}
-
-		/// Check if a column is NULL by name.
-		bool isNull(const(char)[] name) const
-		{
-			return isNull(fieldIndex(name));
-		}
-
-		/// Get the number of columns.
-		size_t length() const
-		{
-			return values.length;
-		}
-
-		/// Find column index by name.
-		private size_t fieldIndex(const(char)[] name) const
-		{
-			foreach (i, field; fields)
-				if (field.name == name)
-					return i;
-			throw new PgSqlException("Unknown column: " ~ name.idup);
-		}
-	}
-
-	/// Lazy query result handle.
-	/// The query is not sent until a consumption method is called.
-	/// Each Result can only be consumed once (via array(), map(), or foreach).
-	final class Result
-	{
-		private const(char)[] sql;
-		private PreparedStatement preparedStatement;
-		private const(char)[][] queryArgs;
-		private bool oneShot;
-		private bool started;
-		private bool completed;
-		private bool consumed;
-		private FieldDescription[] fields;
-		private const(char)[] commandTag;
-		private PgSqlException error;
-
-		// For array() mode
-		private Row[] bufferedRows;
-		private Promise!(Row[]) arrayPromise;
-
-		// For map() mode
-		private void delegate(Row) rowCallback;
-
-		// For lazy iteration (opApply)
-		private bool iterating;
-		private PromiseQueue!(Nullable!Row) iterQueue;
-
-		private this(const(char)[] sql)
-		{
-			this.sql = sql;
-		}
-
-		/// Collect all rows and return as array.
-		Promise!(Row[]) array()
-		{
-			enforce!PgSqlException(!consumed, "Result has already been consumed");
-			consumed = true;
-
-			if (error)
-			{
-				auto p = new Promise!(Row[]);
-				p.reject(error);
-				return p;
-			}
-			if (completed)
-				return resolve(bufferedRows);
-
-			arrayPromise = new Promise!(Row[]);
-			startIfNeeded();
-			return arrayPromise;
-		}
-
-		/// Map a function over rows as they arrive, returning collected results.
-		Promise!(T[]) map(T)(T delegate(Row) fn)
-		{
-			enforce!PgSqlException(!consumed, "Result has already been consumed");
-			consumed = true;
-
-			auto resultPromise = new Promise!(T[]);
-			T[] results;
-
-			if (error)
-			{
-				resultPromise.reject(error);
-				return resultPromise;
-			}
-
-			if (completed)
-			{
-				foreach (row; bufferedRows)
-					results ~= fn(row);
-				resultPromise.fulfill(results);
-				return resultPromise;
-			}
-
-			rowCallback = (Row row) {
-				results ~= fn(row);
-			};
-			arrayPromise = new Promise!(Row[]);
-			arrayPromise.then((Row[] _) {
-				resultPromise.fulfill(results);
-			}).except((Exception e) {
-				resultPromise.reject(e);
-			});
-
-			startIfNeeded();
-			return resultPromise;
-		}
-
-		/// Fiber-based foreach iteration (requires fiber context).
-		/// Rows are processed lazily as they arrive from the server.
-		int opApply(scope int delegate(Row) dg)
-		{
-			import ae.utils.promise.await : await;
-
-			enforce!PgSqlException(!consumed, "Result has already been consumed");
-			consumed = true;
-
-			if (error)
-				throw error;
-
-			// If already completed, iterate buffered rows
-			if (completed)
-			{
-				foreach (row; bufferedRows)
-					if (auto r = dg(row))
-						return r;
-				return 0;
-			}
-
-			// Lazy iteration: process rows as they arrive
-			iterating = true;
-			iterQueue = PromiseQueue!(Nullable!Row).init;
-			scope(exit)
-			{
-				iterating = false;
-				iterQueue = PromiseQueue!(Nullable!Row).init;
-			}
-
-			startIfNeeded();
-
-			while (true)
-			{
-				auto item = iterQueue.waitOne().await;
-
-				if (error)
-					throw error;
-
-				if (item.isNull)
-					break;  // End of results
-
-				if (auto r = dg(item.get))
-					return r;
-			}
-
-			return 0;
-		}
-
-		private void startIfNeeded()
-		{
-			if (!started)
-			{
-				started = true;
-				this.outer.startQuery(this);
-			}
-		}
-
-		private void onRowDescription(FieldDescription[] fields)
-		{
-			this.fields = fields;
-		}
-
-		private void onDataRow(const(const(char)[])[] values, const(bool)[] nulls)
-		{
-			auto row = Row(fields, values, nulls);
-			if (iterating)
-				iterQueue.fulfillOne(Nullable!Row(row));
-			else if (rowCallback)
-				rowCallback(row);
-			else
-				bufferedRows ~= row;
-		}
-
-		private void onCommandComplete(const(char)[] tag)
-		{
-			commandTag = tag;
-		}
-
-		private void onComplete()
-		{
-			completed = true;
-			if (arrayPromise)
-				arrayPromise.fulfill(bufferedRows);
-			if (iterating)
-				iterQueue.fulfillOne(Nullable!Row.init);  // End marker
-		}
-
-		private void onError(PgSqlException e)
-		{
-			error = e;
-			completed = true;
-			if (arrayPromise)
-				arrayPromise.reject(e);
-			if (iterating)
-				iterQueue.fulfillOne(Nullable!Row.init);  // Signal to unblock, error checked after
-		}
-	}
-
-	/// Create a lazy query result using Simple Query protocol.
-	/// The query is not sent until you call .array(), .map(), or iterate.
-	/// The SQL string may contain multiple statements.
-	/// For parameterized queries, use extendedQuery() or prepare() instead.
-	Result query(const(char)[] sql)
-	{
-		return new Result(sql);
-	}
-
-	/// Create a lazy one-shot query using the Extended Query protocol
-	/// with the unnamed statement; Parse + Bind + Describe + Execute +
-	/// Sync are sent together in a single server round-trip.
-	/// The query is not sent until you call .array(), .map(), or iterate.
-	/// The SQL string must be a single statement.
-	/// To execute the same statement many times, prepare() is more efficient.
-	/// Example:
-	/// ---
-	/// pg.extendedQuery("SELECT * FROM users WHERE id = $1", 42).array.then((rows) { ... });
-	/// ---
-	Result extendedQuery(Args...)(const(char)[] sql, Args args)
-	{
-		return extendedQueryWithParams(sql, toQueryArgs(args));
-	}
-
-	/// ditto, with the parameters given as a run-time list of their values
-	/// in text format (`null`: NULL), e.g. to execute a query built at run
-	/// time.
-	/// Example:
-	/// ---
-	/// pg.extendedQueryWithParams("SELECT $1::int + $2::int", ["1", "2"]).array.then((rows) { ... });
-	/// ---
-	Result extendedQueryWithParams(const(char)[] sql, const(char)[][] params)
-	{
-		auto result = new Result(sql);
-		result.oneShot = true;
-		result.queryArgs = params;
-		return result;
-	}
-
-	/// Prepared statement handle for Extended Query protocol.
-	/// Allows executing the same query multiple times with different parameters.
-	final class PreparedStatement
-	{
-		private const(char)[] name;
-		private FieldDescription[] fields;
-		private uint[] paramTypes;
-		private bool closed;
-
-		private this(const(char)[] name)
-		{
-			this.name = name;
-		}
-
-		/// Execute the prepared statement with the given parameters.
-		/// Returns a lazy Result that can be consumed with .array(), .map(), or foreach.
-		Result query(Args...)(Args args)
-		{
-			return queryWithParams(toQueryArgs(args));
-		}
-
-		/// ditto, with the parameters given as a run-time list of their
-		/// values in text format (`null`: NULL).
-		Result queryWithParams(const(char)[][] params)
-		{
-			enforce!PgSqlException(!closed, "PreparedStatement has been closed");
-			auto result = new Result(null);
-			result.preparedStatement = this;
-			result.queryArgs = params;
-			return result;
-		}
-
-		/// Close the prepared statement, freeing server resources.
-		/// The statement cannot be used after closing.
-		Promise!void close()
-		{
-			enforce!PgSqlException(!closed, "PreparedStatement already closed");
-			closed = true;
-			return this.outer.closeStatement(this);
-		}
-
-		private void setFields(FieldDescription[] fields)
-		{
-			this.fields = fields;
-		}
-
-		private void setParamTypes(uint[] types)
-		{
-			this.paramTypes = types;
-		}
-	}
-
-	/// Prepare a statement for execution with parameters.
-	/// Uses Extended Query protocol for safe parameter binding (prevents SQL injection).
-	/// Example:
-	/// ---
-	/// pg.prepare("SELECT * FROM users WHERE id = $1").then((stmt) {
-	///     stmt.query(42).array.then((rows) { ... });
-	/// });
-	/// ---
-	Promise!PreparedStatement prepare(const(char)[] sql)
-	{
-		auto promise = new Promise!PreparedStatement;
-		auto name = generateStatementName();
-		auto stmt = new PreparedStatement(name);
-		PendingOp op;
-		op.type = PendingOpType.prepare;
-		op.stmt = stmt;
-		op.preparePromise = promise;
-		pendingOps ~= op;
-		sendParse(name, sql);
-		sendDescribe('S', name);
-		sendSync();
-		return promise;
-	}
-
-	/// Disconnect from the server.
-	void disconnect(string reason = "Client disconnect")
-	{
-		conn.disconnect(reason);
-	}
-
-	/// Promise that fulfills when the connection is ready for queries.
-	/// Fulfilled with the initial transaction status on first ReadyForQuery.
-	/// Rejected if an error occurs during connection setup.
-	/// For fiber users: `await(pg.ready);`
-	@property Promise!TransactionStatus ready()
-	{
-		if (readyPromise is null)
-		{
-			readyPromise = new Promise!TransactionStatus;
-			// If already ready, fulfill immediately
-			if (isReady)
-			{
-				readyPromise.fulfill(currentTransactionStatus);
-				readyPromiseFulfilled = true;
-			}
-			// If already disconnected (e.g. DNS failure during constructor),
-			// reject immediately — onDisconnect already ran before .ready
-			// was accessed, so nothing else will resolve this promise.
-			else if (conn.state == ConnectionState.disconnected)
-			{
-				readyPromise.reject(new PgSqlException("Connection failed before ready"));
-				readyPromiseFulfilled = true;
-			}
-		}
-		return readyPromise;
-	}
-
-	/// Callback handlers for connection-level events.
-	void delegate(ErrorResponse response) handleError;
-	void delegate() handleAuthenticated;
-	void delegate(const(char)[] name, const(char)[] value) handleParameterStatus;
-	void delegate(TransactionStatus transactionStatus) handleReadyForQuery;
-	void delegate(ErrorResponse notice) handleNotice;
-	void delegate(string reason, DisconnectType type) handleDisconnect;
-
-	string applicationName = "ae.net.db.psql";
 
 private:
 	IConnection conn;
@@ -680,14 +432,17 @@ private:
 	string database;
 	string password;
 
+	enum applicationName = "ae.net.db.psql";
+
 	/// SCRAM authentication state (only used during auth handshake)
 	ScramSHA256Client scramClient;
 
-	/// Promise for ready() property
-	Promise!TransactionStatus readyPromise;
-	bool readyPromiseFulfilled;
+	/// Fulfilled with the connection when it is first ready for queries
+	Promise!PgSqlConnection readyPromise;
 	bool isReady;
 	TransactionStatus currentTransactionStatus;
+
+	Promise!void closePromise;
 
 	/// Pending operation types
 	enum PendingOpType { query, prepare, close }
@@ -713,16 +468,27 @@ private:
 	/// Counter for generating unique statement names
 	uint statementCounter;
 
+	this(IConnection conn, string user, string database, string password,
+		SSLMode sslMode, SSLContext sslContext, string sslHostName)
+	{
+		this.conn = conn;
+		this.user = user;
+		this.database = database;
+		this.password = password;
+		this.sslMode = sslMode;
+		this.sslContext = sslContext;
+		this.sslHostName = sslHostName;
+		this.readyPromise = new Promise!PgSqlConnection;
+
+		conn.handleConnect = &onConnect;
+		conn.handleReadData = &onReadData;
+		conn.handleDisconnect = &onDisconnect;
+	}
+
 	/// Get the current operation being processed (head of queue)
 	@property PendingOp* currentOp()
 	{
 		return pendingOps.length > 0 ? &pendingOps[0] : null;
-	}
-
-	/// Generate a unique statement name
-	const(char)[] generateStatementName()
-	{
-		return "_ps" ~ (statementCounter++).to!string;
 	}
 
 	enum ushort protocolVersionMajor = 3;
@@ -782,8 +548,6 @@ private:
 		data = data[length..$];
 		return result;
 	}
-
-	enum noSSLProviderMessage = "TLS requires an SSL provider, but none is linked in (import e.g. ae.net.ssl.openssl)";
 
 	void onConnect()
 	{
@@ -872,11 +636,10 @@ private:
 		// Fail all pending operations
 		auto err = new PgSqlException("Connection lost: " ~ reason);
 
-		// Reject ready promise if not yet fulfilled
-		if (readyPromise && !readyPromiseFulfilled)
+		if (!isReady)
 		{
+			isReady = true;  // (no longer pending)
 			readyPromise.reject(err);
-			readyPromiseFulfilled = true;
 		}
 
 		foreach (ref op; pendingOps)
@@ -896,8 +659,9 @@ private:
 		}
 		pendingOps = null;
 
-		if (handleDisconnect)
-			handleDisconnect(reason, type);
+		if (closePromise is null)
+			closePromise = new Promise!void;
+		closePromise.fulfill();
 	}
 
 	Data packetBuf;
@@ -920,7 +684,19 @@ private:
 
 				auto packetType = cast(PacketType)readChar(packetData);
 				packetData = packetData[4..$]; // Skip length
-				processPacket(packetType, packetData);
+				try
+					processPacket(packetType, packetData);
+				catch (Exception e)
+				{
+					// (A protocol or authentication failure: fatal)
+					if (!isReady)
+					{
+						isReady = true;
+						readyPromise.reject(e);
+					}
+					conn.disconnect(e.msg);
+					return;
+				}
 			}
 			else
 				break;
@@ -943,8 +719,7 @@ private:
 
 			case PacketType.errorResponse:
 			{
-				auto response = parseErrorResponse(data);
-				auto err = new PgSqlException(response);
+				auto err = new PgSqlException(parseMessage(data));
 
 				if (currentOp)
 				{
@@ -963,35 +738,32 @@ private:
 					}
 					// Don't pop here - wait for ReadyForQuery
 				}
-				else if (!isReady && readyPromise && !readyPromiseFulfilled)
+				else if (!isReady)
 				{
-					// Error during connection setup - reject ready promise
+					// Error during connection setup (e.g. authentication)
+					isReady = true;
 					readyPromise.reject(err);
-					readyPromiseFulfilled = true;
+					conn.disconnect(err.msg);
 				}
-				else if (handleError)
-					handleError(response);
 				else
-					throw err;
+					// An error of no query (e.g. the server shutting down
+					// the connection): fatal
+					conn.disconnect(err.msg);
 				break;
 			}
 
 			case PacketType.noticeResponse:
 			{
-				auto response = parseErrorResponse(data);
+				auto notice = parseMessage(data);
 				if (handleNotice)
-					handleNotice(response);
+					handleNotice(notice);
 				break;
 			}
 
 			case PacketType.parameterStatus:
-			{
-				auto name = readString(data);
-				auto value = readString(data);
-				if (handleParameterStatus)
-					handleParameterStatus(name, value);
+				// Run-time parameters of the server (e.g. server_version)
+				// Currently ignored
 				break;
-			}
 
 			case PacketType.readyForQuery:
 			{
@@ -1002,11 +774,7 @@ private:
 				if (!isReady)
 				{
 					isReady = true;
-					if (readyPromise && !readyPromiseFulfilled)
-					{
-						readyPromise.fulfill(status);
-						readyPromiseFulfilled = true;
-					}
+					readyPromise.fulfill(this);
 				}
 
 				if (currentOp)
@@ -1031,32 +799,29 @@ private:
 					// Pop completed operation from queue
 					pendingOps = pendingOps[1..$];
 				}
-
-				if (handleReadyForQuery)
-					handleReadyForQuery(status);
 				break;
 			}
 
 			case PacketType.rowDescription:
 			{
 				auto fieldCount = readInt!ushort(data);
-				auto fields = new FieldDescription[fieldCount];
+				auto names = new string[fieldCount];
 				foreach (i; 0..fieldCount)
 				{
-					fields[i].name = readString(data);
-					fields[i].tableOid = readInt!uint(data);
-					fields[i].columnAttr = readInt!ushort(data);
-					fields[i].typeOid = readInt!uint(data);
-					fields[i].typeSize = readInt!short(data);
-					fields[i].typeModifier = readInt!int(data);
-					fields[i].formatCode = readInt!ushort(data);
+					names[i] = readString(data).idup;
+					readInt!uint(data);   // table OID
+					readInt!ushort(data); // column attribute number
+					readInt!uint(data);   // type OID
+					readInt!short(data);  // type size
+					readInt!int(data);    // type modifier
+					readInt!ushort(data); // format code
 				}
 				if (currentOp)
 				{
 					if (currentOp.type == PendingOpType.prepare)
-						currentOp.stmt.setFields(fields);
+						currentOp.stmt.columnNames = names;
 					else if (currentOp.type == PendingOpType.query)
-						currentOp.result.onRowDescription(fields);
+						currentOp.result.onColumns(names);
 				}
 				break;
 			}
@@ -1081,70 +846,63 @@ private:
 					}
 				}
 				if (currentOp && currentOp.type == PendingOpType.query)
-					currentOp.result.onDataRow(values, nulls);
+					currentOp.result.onRow(values, nulls);
 				break;
 			}
 
 			case PacketType.commandComplete:
 			{
+				// The command tag, e.g. "INSERT 0 3", "UPDATE 2", "SELECT 5":
+				// its last word, if a number, is the count of rows
 				auto tag = readString(data);
 				if (currentOp && currentOp.type == PendingOpType.query)
-					currentOp.result.onCommandComplete(tag);
+				{
+					auto words = tag.split(' ');
+					ulong count;
+					if (words.length > 1 && words[$-1].length && words[$-1].isNumeric)
+						count = words[$-1].to!ulong;
+					currentOp.result.onAffected(count);
+				}
 				break;
 			}
 
 			case PacketType.emptyQueryResponse:
 				// Empty query string was sent
-				if (currentOp && currentOp.type == PendingOpType.query)
-					currentOp.result.onCommandComplete(null);
 				break;
 
 			// Extended Query protocol responses
 			case PacketType.parseComplete:
-				// Parse succeeded, statement is ready
-				break;
-
 			case PacketType.bindComplete:
-				// Bind succeeded, portal is ready
-				break;
-
 			case PacketType.closeComplete:
-				// Close succeeded
 				break;
 
 			case PacketType.noData:
 				// Statement returns no rows (e.g., INSERT/UPDATE/DELETE)
 				if (currentOp && currentOp.type == PendingOpType.prepare)
-					currentOp.stmt.setFields(null);
+					currentOp.stmt.columnNames = null;
 				break;
 
 			case PacketType.parameterDescription:
-			{
-				auto paramCount = readInt!ushort(data);
-				auto types = new uint[paramCount];
-				foreach (i; 0 .. paramCount)
-					types[i] = readInt!uint(data);
-				if (currentOp && currentOp.type == PendingOpType.prepare)
-					currentOp.stmt.setParamTypes(types);
+				// (The types of a prepared statement's parameters, which its
+				// parameters' text the server converts to)
 				break;
-			}
 
 			default:
-				throw new PgSqlException("Unknown packet type '%s' (0x%02X)".format(cast(char)type, cast(ubyte)type));
+				conn.disconnect("Unknown packet type '%s' (0x%02X)".format(cast(char)type, cast(ubyte)type));
 		}
 	}
 
-	ErrorResponse parseErrorResponse(ref Data data)
+	PgSqlMessage parseMessage(ref Data data)
 	{
-		ErrorResponse response;
+		PgSqlMessage message;
 		while (data.length)
 		{
 			auto fieldType = readChar(data);
 			if (!fieldType)
 				break;
-			response.fields ~= ErrorResponse.Field(fieldType, readString(data));
+			message.fields ~= PgSqlMessage.Field(fieldType, readString(data));
 		}
-		return response;
+		return message;
 	}
 
 	void processAuthRequest(ref Data data)
@@ -1153,8 +911,6 @@ private:
 		switch (authType)
 		{
 			case 0: // AuthenticationOk
-				if (handleAuthenticated)
-					handleAuthenticated();
 				break;
 
 			case 3: // AuthenticationCleartextPassword
@@ -1335,30 +1091,25 @@ private:
 		conn.send(packet);
 	}
 
-	void startQuery(Result result)
+	void startQuery(Result result, const(char)[] sql, const(Param)[] params, bool simple, PreparedStatement stmt)
 	{
 		pendingOps ~= PendingOp(PendingOpType.query, result);
 
-		if (result.preparedStatement !is null)
+		if (stmt !is null)
 		{
-			// Extended Query protocol: Bind + Execute + Sync
-			auto stmt = result.preparedStatement;
-
-			// Use the prepared statement's cached field descriptions
-			if (stmt.fields !is null)
-				result.onRowDescription(stmt.fields);
-
-			sendBind("", stmt.name, result.queryArgs);
+			// A prepared statement: Bind + Execute + Sync (its columns
+			// were described when it was prepared)
+			result.onColumns(stmt.columnNames);
+			sendBind("", stmt.name, params);
 			sendExecute("");
 			sendSync();
 		}
-		else
-		if (result.oneShot)
+		else if (!simple)
 		{
-			// One-shot parameterized query: Extended Query protocol with
-			// the unnamed statement, in a single round-trip.
-			sendParse("", result.sql);
-			sendBind("", "", result.queryArgs);
+			// Extended Query protocol with the unnamed statement, in a
+			// single round-trip
+			sendParse("", sql, params);
+			sendBind("", "", params);
 			sendDescribe('P', "");
 			sendExecute("");
 			sendSync();
@@ -1367,23 +1118,26 @@ private:
 		{
 			// Simple Query protocol
 			auto buf = appender!(ubyte[]);
-			write(buf, result.sql);
+			write(buf, sql);
 			sendPacket('Q', buf.data);
 		}
 	}
 
-	/// Send Parse message (Extended Query protocol)
-	void sendParse(const(char)[] stmtName, const(char)[] sql)
+	/// Send Parse message (Extended Query protocol), with the types of the
+	/// parameters `params` (if not null)
+	void sendParse(const(char)[] stmtName, const(char)[] sql, const(Param)[] params)
 	{
 		auto buf = appender!(ubyte[]);
 		write(buf, stmtName);           // Statement name
 		write(buf, sql);                // Query string
-		write(buf, cast(ushort)0);      // Number of parameter types (let server infer)
+		write(buf, cast(ushort)params.length);  // Number of parameter types
+		foreach (ref param; params)
+			write(buf, cast(uint)parameterType(param));
 		sendPacket('P', buf.data);
 	}
 
 	/// Send Bind message (Extended Query protocol)
-	void sendBind(const(char)[] portalName, const(char)[] stmtName, const(char)[][] params)
+	void sendBind(const(char)[] portalName, const(char)[] stmtName, const(Param)[] params)
 	{
 		auto buf = appender!(ubyte[]);
 		write(buf, portalName);         // Portal name
@@ -1391,16 +1145,17 @@ private:
 		write(buf, cast(ushort)0);      // Number of parameter format codes (use default text)
 		write(buf, cast(ushort)params.length);  // Number of parameters
 
-		foreach (param; params)
+		foreach (ref param; params)
 		{
-			if (param is null)
+			auto text = parameterText(param);
+			if (text is null)
 			{
 				write(buf, cast(int)-1);  // NULL value
 			}
 			else
 			{
-				write(buf, cast(int)param.length);  // Length
-				buf.put(cast(const(ubyte)[])param); // Value (no null terminator)
+				write(buf, cast(int)text.length);  // Length
+				buf.put(cast(const(ubyte)[])text); // Value (no null terminator)
 			}
 		}
 
@@ -1455,41 +1210,70 @@ private:
 	}
 }
 
-/// Convert D values to PostgreSQL text format parameters
-const(char)[][] toQueryArgs(Args...)(Args args)
+/// The type of the parameter `param` (see `PgSqlConnection.query`).
+private PgOid parameterType(const Param param)
 {
-	const(char)[][] result;
-	foreach (arg; args)
+	final switch (param.type) with (Param.Type)
 	{
-		result ~= toQueryArg(arg);
+		case null_: return PgOid.unknown;
+		case boolean: return PgOid.boolean;
+		case integer: return param.integer >= int.min && param.integer <= int.max ? PgOid.int4 : PgOid.int8;
+		case floating: return PgOid.float8;
+		case numeric: return PgOid.numeric;
+		case text: return PgOid.unknown;
+		case bytes: return PgOid.bytea;
+		case array: return PgOid.unknown;
 	}
-	return result;
 }
 
-/// Convert a single D value to PostgreSQL text format
-const(char)[] toQueryArg(T)(T value)
+/// The parameter `param` in PostgreSQL's text format (null: NULL): a
+/// byte array as `bytea`'s hex format, an array as an array value (its
+/// elements quoted, but numbers, booleans and NULL).
+private const(char)[] parameterText(const Param param)
 {
-	import std.format : format;
-
-	static if (is(T == typeof(null)))
-		return null;
-	else static if (is(T == Nullable!U, U))
-		return value.isNull ? null : toQueryArg(value.get);
-	else static if (is(T : const(char)[]))
-		return value;
-	else static if (is(T == bool))
-		return value ? "t" : "f";
-	else static if (is(T : long) || is(T : double))
-		return format!"%s"(value);
-	else static if (is(T == ubyte[]) || is(T == const(ubyte)[]))
-		return "\\x" ~ bytesToHex(value);
-	else
-		static assert(false, "Unsupported parameter type: " ~ T.stringof);
+	final switch (param.type) with (Param.Type)
+	{
+		case null_:
+		case boolean:
+		case integer:
+		case floating:
+		case numeric:
+		case text:
+			return param.toText();
+		case bytes:
+			return "\\x" ~ bytesToHex(param.bytes);
+		case array:
+			auto items = appender!string;
+			items.put('{');
+			foreach (i, ref element; param.elements)
+			{
+				if (i)
+					items.put(',');
+				final switch (element.type) with (Param.Type)
+				{
+					case null_: items.put("NULL"); break;
+					case boolean:
+					case integer:
+					case floating:
+					case numeric:
+					case array:
+						items.put(parameterText(element));
+						break;
+					case text:
+					case bytes:
+						items.put('"');
+						items.put(parameterText(element).replace(`\`, `\\`).replace(`"`, `\"`));
+						items.put('"');
+						break;
+				}
+			}
+			items.put('}');
+			return items.data;
+	}
 }
 
 private string bytesToHex(const(ubyte)[] data)
 {
-	import std.format : format;
 	auto result = new char[data.length * 2];
 	foreach (i, b; data)
 	{
@@ -1497,31 +1281,6 @@ private string bytesToHex(const(ubyte)[] data)
 		result[i*2+1] = "0123456789abcdef"[b & 0xf];
 	}
 	return cast(string)result;
-}
-
-/// Convert PostgreSQL text format value to D type.
-T convertValue(T)(const(char)[] textValue, uint typeOid)
-{
-	static if (is(T == string))
-		return textValue.idup;
-	else static if (is(T == const(char)[]))
-		return textValue;
-	else static if (is(T == int))
-		return textValue.to!int;
-	else static if (is(T == long))
-		return textValue.to!long;
-	else static if (is(T == short))
-		return textValue.to!short;
-	else static if (is(T == double))
-		return textValue.to!double;
-	else static if (is(T == float))
-		return textValue.to!float;
-	else static if (is(T == bool))
-		return textValue == "t" || textValue == "true" || textValue == "1";
-	else static if (is(T == ubyte[]))
-		return decodeBytea(textValue);
-	else
-		static assert(false, "Unsupported type for PostgreSQL conversion: " ~ T.stringof);
 }
 
 /// Decode PostgreSQL bytea hex format (\x...).
@@ -1579,17 +1338,18 @@ private ubyte hexDigit(char c)
 	throw new PgSqlException("Invalid hex digit: " ~ c);
 }
 
-/// PostgreSQL exception with optional error response fields.
-class PgSqlException : Exception
+/// PostgreSQL exception, with the fields of the server's error message
+/// (if it is one).
+class PgSqlException : DbException
 {
-	PgSqlConnection.ErrorResponse errorResponse;
+	PgSqlMessage errorResponse;
 
 	this(string msg, string file = __FILE__, size_t line = __LINE__)
 	{
 		super(msg, file, line);
 	}
 
-	this(PgSqlConnection.ErrorResponse response, string file = __FILE__, size_t line = __LINE__)
+	this(PgSqlMessage response, string file = __FILE__, size_t line = __LINE__)
 	{
 		this.errorResponse = response;
 		auto msg = response.message;
@@ -1604,29 +1364,25 @@ class PgSqlException : Exception
 	@property const(char)[] hint() const { return errorResponse.hint; }
 }
 
-// Unit tests for type conversion
+// Parameters: their types and text
 debug(ae_unittest) unittest
 {
-	// Integer conversion
-	assert(convertValue!int("42", PgSqlConnection.PgOid.int4) == 42);
-	assert(convertValue!int("-123", PgSqlConnection.PgOid.int4) == -123);
-	assert(convertValue!long("9223372036854775807", PgSqlConnection.PgOid.int8) == long.max);
+	assert(parameterType(Param.of(1)) == PgOid.int4 && parameterType(Param.of(1L << 40)) == PgOid.int8);
+	assert(parameterType(Param.of("x")) == PgOid.unknown && parameterType(Param.of(true)) == PgOid.boolean);
+	assert(parameterType(Param.numeric("1.5")) == PgOid.numeric && parameterType(Param.of(1.5)) == PgOid.float8);
+	assert(parameterText(Param.of(true)) == "true" && parameterText(Param.of(null)) is null);
+	assert(parameterText(Param.of(cast(const(ubyte)[]) "AB")) == `\x4142`);
+	auto array = Param.array([Param.of("a"), Param.of(`b"\`), Param.of(null), Param.of(3)]);
+	assert(parameterText(array) == `{"a","b\"\\",NULL,3}`, parameterText(array));
+	assert(parameterText(Param.array(null)) == "{}");
+}
 
-	// Float conversion
-	import std.math : isClose;
-	assert(isClose(convertValue!double("3.14159", PgSqlConnection.PgOid.float8), 3.14159));
-
-	// Boolean conversion
-	assert(convertValue!bool("t", PgSqlConnection.PgOid.boolean) == true);
-	assert(convertValue!bool("f", PgSqlConnection.PgOid.boolean) == false);
-	assert(convertValue!bool("true", PgSqlConnection.PgOid.boolean) == true);
-	assert(convertValue!bool("false", PgSqlConnection.PgOid.boolean) == false);
-
-	// String conversion
-	assert(convertValue!string("hello", PgSqlConnection.PgOid.text) == "hello");
-
-	// Bytea hex format
-	assert(decodeBytea("\\x48454c4c4f") == cast(ubyte[])"HELLO");
+// Values
+debug(ae_unittest) unittest
+{
+	auto row = Row(["i", "b", "s", "x"], ["42", "t", "hello", `\x48454c4c4f`], [false, false, false, false]);
+	assert(row.column!int("i") == 42 && row.column!long(0) == 42 && row.column!bool("b"));
+	assert(row.column!string("s") == "hello" && row.column!(ubyte[])("x") == cast(ubyte[]) "HELLO");
 	assert(decodeBytea("\\x") == []);
 }
 
@@ -1652,356 +1408,184 @@ debug(ae_unittest) unittest
 	assert(result[0..3] == "md5");
 }
 
-version (HAVE_PSQL_SERVER)
-debug(ae_unittest) unittest
-{
-	// Uses environment variables: PGHOST, PGPORT, PGUSER, PGDATABASE, PGPASSWORD
-	auto pg = new PgSqlConnection();
-
-	int completed;
-	enum totalTests = 5;
-
-	void checkDone()
-	{
-		if (completed == totalTests)
-			pg.disconnect("Test complete");
-	}
-
-	pg.handleReadyForQuery = (PgSqlConnection.TransactionStatus ts) {
-		pg.handleReadyForQuery = null;
-
-		// Test 1: Simple query with .array
-		pg.query("SELECT 1 + 1 AS result").array.dmd21804workaround.then((rows) {
-			assert(rows.length == 1, "Expected 1 row");
-			assert(rows[0].column!int(0) == 2, "Expected 1+1=2");
-			assert(rows[0].column!int("result") == 2, "Expected column by name");
-			completed++;
-			checkDone();
-		}).except((Exception e) {
-			assert(false, "Query 1 failed: " ~ e.msg);
-		});
-
-		// Test 2: Pipelined query (sent before first completes)
-		pg.query("SELECT 2 * 3 AS product").array.dmd21804workaround.then((rows) {
-			assert(rows.length == 1, "Expected 1 row");
-			assert(rows[0].column!int("product") == 6, "Expected 2*3=6");
-			completed++;
-			checkDone();
-		}).except((Exception e) {
-			assert(false, "Query 2 failed: " ~ e.msg);
-		});
-
-		// Test 3: Another pipelined query with multiple rows
-		pg.query("SELECT generate_series(1, 3) AS n").array.dmd21804workaround.then((rows) {
-			assert(rows.length == 3, "Expected 3 rows from generate_series");
-			assert(rows[0].column!int("n") == 1);
-			assert(rows[1].column!int("n") == 2);
-			assert(rows[2].column!int("n") == 3);
-			completed++;
-			checkDone();
-		}).except((Exception e) {
-			assert(false, "Query 3 failed: " ~ e.msg);
-		});
-
-		// Test 4: Prepared statement with parameters
-		pg.prepare("SELECT $1::int + $2::int AS sum").dmd21804workaround.then((PgSqlConnection.PreparedStatement stmt) {
-			stmt.query(10, 20).array.dmd21804workaround.then((rows) {
-				assert(rows.length == 1, "Expected 1 row from prepared stmt");
-				assert(rows[0].column!int("sum") == 30, "Expected 10+20=30");
-				completed++;
-				checkDone();
-
-				// Test 5: Reuse prepared statement with different params
-				stmt.query(100, 200).array.dmd21804workaround.then((rows2) {
-					assert(rows2.length == 1, "Expected 1 row from reused stmt");
-					assert(rows2[0].column!int("sum") == 300, "Expected 100+200=300");
-					completed++;
-					checkDone();
-				}).except((Exception e) {
-					assert(false, "Query 5 (reuse) failed: " ~ e.msg);
-				});
-			}).except((Exception e) {
-				assert(false, "Query 4 (prepared) failed: " ~ e.msg);
-			});
-		}).except((Exception e) {
-			assert(false, "Prepare failed: " ~ e.msg);
-		});
-	};
-
-	pg.handleError = (PgSqlConnection.ErrorResponse err) {
-		assert(false, "Connection error: " ~ err.toString());
-	};
-
-	socketManager.loop();
-	assert(completed == totalTests, "Not all tests completed: " ~ completed.to!string);
-}
-
-// Test fiber-based API using await
+// Queries, pipelined, with promises
 version (HAVE_PSQL_SERVER)
 debug(ae_unittest) unittest
 {
 	import ae.utils.promise.await : async, await, awaitSync;
 
-	auto pg = new PgSqlConnection();
-
 	async({
-		// Wait for connection to be ready (replaces handleReadyForQuery callback)
-		pg.ready.await;
-		scope(exit) pg.disconnect("Test cleanup");
+		// Uses environment variables: PGHOST, PGPORT, PGUSER, PGDATABASE, PGPASSWORD
+		auto pg = connect().await;
+		scope(exit) pg.close().await;
 
-		// Test 1: Simple query with await
-		auto rows1 = pg.query("SELECT 1 + 1 AS result").array.await;
-		assert(rows1.length == 1, "Expected 1 row");
-		assert(rows1[0].column!int("result") == 2, "Expected 1+1=2");
+		// Pipelined queries (all sent before the first completes)
+		auto q1 = pg.query("SELECT 1 + 1 AS result").array;
+		auto q2 = pg.query("SELECT 2 * 3 AS product").array;
+		auto q3 = pg.query("SELECT generate_series(1, 3) AS n").array;
+		auto rows = q1.await;
+		assert(rows.length == 1 && rows[0].column!int(0) == 2 && rows[0].column!int("result") == 2);
+		assert(q2.await[0].column!int("product") == 6);
+		rows = q3.await;
+		assert(rows.length == 3 && rows[2].column!int("n") == 3);
 
-		// Test 2: Prepared statement with await
-		auto stmt = pg.prepare("SELECT $1::int * $2::int AS product").await;
-		auto rows2 = stmt.query(6, 7).array.await;
-		assert(rows2.length == 1, "Expected 1 row from prepared stmt");
-		assert(rows2[0].column!int("product") == 42, "Expected 6*7=42");
+		// Prepared statements, reused
+		auto stmt = pg.prepare("SELECT $1::int + $2::int AS sum").await;
+		assert(stmt.query(10, 20).array.await[0].column!int("sum") == 30);
+		assert(stmt.query([Param.of(100), Param.of(200)]).array.await[0].column!int("sum") == 300);
 
-		// Test 3: Fiber-based foreach (opApply)
+		// Fiber-based foreach
+		int product = 1;
+		foreach (row; stmt.query(2, 3))
+			product *= row.column!int("sum");
+		assert(product == 5);
+		stmt.close().await;
+
 		int sum = 0;
 		foreach (row; pg.query("SELECT generate_series(1, 5) AS n"))
 			sum += row.column!int("n");
-		assert(sum == 15, "Expected sum 1+2+3+4+5=15, got " ~ sum.to!string);
-
-		// Test 4: Prepared statement reuse with foreach
-		int product = 1;
-		foreach (row; stmt.query(2, 3))
-			product *= row.column!int("product");
-		assert(product == 6, "Expected 2*3=6");
+		assert(sum == 15);
 	}).awaitSync();
 }
 
-// Test one-shot parameterized queries (unnamed Extended Query operation)
+// Queries with parameters (unnamed Extended Query operations)
 version (HAVE_PSQL_SERVER)
 debug(ae_unittest) unittest
 {
 	import ae.utils.promise.await : async, await, awaitSync;
 
-	auto pg = new PgSqlConnection();
-
 	async({
-		pg.ready.await;
-		scope(exit) pg.disconnect("Test cleanup");
+		auto pg = connect().await;
+		scope(exit) pg.close().await;
 
-		// Zero parameters (still Extended Query protocol)
-		auto r0 = pg.extendedQuery("SELECT 42 AS answer").array.await;
-		assert(r0.length == 1 && r0[0].column!int("answer") == 42);
+		// Zero parameters (Simple Query protocol), and parameters typed by
+		// their D types
+		assert(pg.query("SELECT 42 AS answer").array.await[0].column!int("answer") == 42);
+		auto r1 = pg.query("SELECT $1 + $2 AS sum, $3 AS s, $4 AS b, pg_typeof($1)::text AS t1, " ~
+			"pg_typeof($5)::text AS t5, pg_typeof($6)::text AS t6, pg_typeof($7)::text AS t7",
+			10, 20, "hello", true, 5_000_000_000L, 1.5, Param.numeric("2.50")).array.await;
+		assert(r1[0].column!int("sum") == 30 && r1[0].column!string("s") == "hello" && r1[0].column!bool("b"));
+		assert(r1[0].column!string("t1") == "integer" && r1[0].column!string("t5") == "bigint");
+		assert(r1[0].column!string("t6") == "double precision" && r1[0].column!string("t7") == "numeric");
 
-		// One parameter
-		auto r1 = pg.extendedQuery("SELECT $1::int AS v", 7).array.await;
-		assert(r1.length == 1 && r1[0].column!int("v") == 7);
+		// Strings, typed by their context (as string literals are)
+		auto r2 = pg.query("SELECT $1 = DATE '2020-01-31' AS d, $2 = ANY('{1,2}'::int[]) AS a",
+			[Param.of("2020-01-31"), Param.of("2")]).array.await;
+		assert(r2[0].column!bool("d") && r2[0].column!bool("a"));
 
-		// Multiple parameters of mixed types
-		auto r2 = pg.extendedQuery("SELECT $1::int + $2::int AS sum, $3::text AS s, $4::bool AS b",
-			10, 20, "hello", true).array.await;
-		assert(r2[0].column!int("sum") == 30);
-		assert(r2[0].column!string("s") == "hello");
-		assert(r2[0].column!bool("b") == true);
+		// Arrays, typed by their context
+		auto r3 = pg.query("SELECT 2 = ANY($1) AS a, 'b' = ANY($2) AS b",
+			[Param.array([Param.of(1), Param.of(2)]), Param.array([Param.of("a"), Param.of("b")])]).array.await;
+		assert(r3[0].column!bool("a") && r3[0].column!bool("b"));
 
-		// Multiple result rows
-		auto r3 = pg.extendedQuery("SELECT generate_series($1::int, $2::int) AS n", 1, 4).array.await;
-		assert(r3.length == 4);
-		foreach (i, row; r3)
-			assert(row.column!int("n") == i + 1);
-
-		// NULL parameters (both null literal and empty Nullable)
-		auto r4 = pg.extendedQuery("SELECT $1::int IS NULL AS a, coalesce($2::text, 'dflt') AS b",
+		// NULL parameters
+		auto r4 = pg.query("SELECT $1::int IS NULL AS a, coalesce($2::text, 'dflt') AS b",
 			null, Nullable!string.init).array.await;
-		assert(r4[0].column!bool("a") == true);
-		assert(r4[0].column!string("b") == "dflt");
+		assert(r4[0].column!bool("a") && r4[0].column!string("b") == "dflt");
+		auto r5 = pg.query("SELECT $1::int AS v", Nullable!int.init).array.await;
+		assert(r5[0].isNull("v") && r5[0].column!(Nullable!int)("v").isNull);
 
-		// Nullable round-trip
-		auto r5 = pg.extendedQuery("SELECT $1::int AS v", Nullable!int(5)).array.await;
-		assert(r5[0].column!(Nullable!int)("v").get == 5);
-		auto r6 = pg.extendedQuery("SELECT $1::int AS v", Nullable!int.init).array.await;
-		assert(r6[0].isNull("v"));
-		assert(r6[0].column!(Nullable!int)("v").isNull);
-
-		// Parameters given at run time, as text (null: NULL)
-		const(char)[][] params = ["10", null, "x"];
-		auto rp = pg.extendedQueryWithParams("SELECT $1::int + 1 AS v, $2::text IS NULL AS n, $3::text AS s",
-			params).array.await;
-		assert(rp[0].column!int("v") == 11 && rp[0].column!bool("n") && rp[0].column!string("s") == "x");
-
-		// Empty result set
-		auto r7 = pg.extendedQuery("SELECT 1 AS x WHERE $1::int > $2::int", 1, 2).array.await;
-		assert(r7.length == 0);
-
-		// Statement returning no rows at all (NoData path)
-		pg.query("CREATE TEMP TABLE oneshot_test (a int, b text)").array.await;
-		auto r8 = pg.extendedQuery("INSERT INTO oneshot_test VALUES ($1::int, $2::text)", 1, "one").array.await;
-		assert(r8.length == 0);
-		auto r9 = pg.extendedQuery("SELECT b FROM oneshot_test WHERE a = $1::int", 1).array.await;
-		assert(r9.length == 1 && r9[0].column!string("b") == "one");
+		// Empty result set; statements returning no rows, and the rows
+		// they affect
+		assert(pg.query("SELECT 1 AS x WHERE $1 > $2", 1, 2).array.await.length == 0);
+		pg.query("CREATE TEMP TABLE param_test (a int, b text, c bytea)").array.await;
+		auto insert = pg.query("INSERT INTO param_test VALUES ($1, $2, $3), ($1 + 1, $2, NULL)",
+			1, "one", cast(const(ubyte)[]) "\x00\xff");
+		assert(insert.array.await.length == 0 && insert.affectedRows == 2);
+		auto r6 = pg.query("SELECT b, c FROM param_test WHERE a = $1", 1).array.await;
+		assert(r6.length == 1 && r6[0].column!string("b") == "one" && r6[0].column!(ubyte[])("c") == [0, 255]);
 
 		// Lazy foreach iteration
 		int sum = 0;
-		foreach (row; pg.extendedQuery("SELECT generate_series(1, $1::int) AS n", 5))
+		foreach (row; pg.query("SELECT generate_series(1, $1) AS n", 5))
 			sum += row.column!int("n");
-		assert(sum == 15, "Expected sum 1+2+3+4+5=15");
+		assert(sum == 15);
 	}).awaitSync();
 }
 
-// Test one-shot query errors, recovery, and pipelining
+// Query errors, recovery, and pipelining
 version (HAVE_PSQL_SERVER)
 debug(ae_unittest) unittest
 {
 	import ae.utils.promise.await : async, await, awaitSync;
 
-	auto pg = new PgSqlConnection();
-
 	async({
-		pg.ready.await;
-		scope(exit) pg.disconnect("Test cleanup");
+		auto pg = connect().await;
+		scope(exit) pg.close().await;
 
-		// Parse error (syntax error)
-		bool gotError = false;
-		try
-			pg.extendedQuery("SELECT WHERE FROM $1::int", 1).array.await;
-		catch (PgSqlException e)
+		bool failsWith(string sqlState, Result result)
 		{
-			gotError = true;
-			assert(e.sqlState == "42601", "Expected syntax error, got " ~ e.sqlState.idup);
+			try
+				result.array.await;
+			catch (PgSqlException e)
+				return e.sqlState == sqlState;
+			return false;
 		}
-		assert(gotError, "Expected syntax error");
 
-		// Connection recovers after an error
-		auto r1 = pg.extendedQuery("SELECT $1::int AS v", 1).array.await;
-		assert(r1[0].column!int("v") == 1);
+		// Parse error (syntax error); runtime error (after Parse and Bind
+		// succeed); the connection recovers after each
+		assert(failsWith("42601", pg.query("SELECT WHERE FROM $1", 1)));
+		assert(pg.query("SELECT $1 AS v", 1).array.await[0].column!int("v") == 1);
+		assert(failsWith("22012", pg.query("SELECT $1 / $2 AS q", 1, 0)));
+		assert(pg.query("SELECT $1 AS v", 2).array.await[0].column!int("v") == 2);
 
-		// Runtime error (division by zero, after Parse/Bind succeed)
-		gotError = false;
-		try
-			pg.extendedQuery("SELECT $1::int / $2::int AS q", 1, 0).array.await;
-		catch (PgSqlException e)
-		{
-			gotError = true;
-			assert(e.sqlState == "22012", "Expected division by zero, got " ~ e.sqlState.idup);
-		}
-		assert(gotError, "Expected division by zero error");
-
-		// Recovers again
-		auto r2 = pg.extendedQuery("SELECT $1::int AS v", 2).array.await;
-		assert(r2[0].column!int("v") == 2);
-
-		// Multi-statement SQL is rejected by the Extended Query protocol...
-		gotError = false;
-		try
-			pg.extendedQuery("SELECT 1 AS a; SELECT 2 AS b").array.await;
-		catch (PgSqlException e)
-		{
-			gotError = true;
-			assert(e.sqlState == "42601", "Expected syntax error, got " ~ e.sqlState.idup);
-		}
-		assert(gotError, "Expected multi-statement SQL to be rejected");
-
-		// ...but accepted by the Simple Query protocol
+		// Several statements are rejected with parameters, accepted without
+		assert(failsWith("42601", pg.query("SELECT 1 AS a; SELECT 2 AS b", 1)));
 		auto rm = pg.query("SELECT 1 AS a; SELECT 2 AS b").array.await;
-		assert(rm.length == 2);
-		assert(rm[0].column!int("a") == 1);
-		assert(rm[1].column!int("b") == 2);
+		assert(rm.length == 2 && rm[0].column!int("a") == 1 && rm[1].column!int("b") == 2);
 
-		// Sequential one-shot queries
-		foreach (i; 0 .. 5)
-		{
-			auto rows = pg.extendedQuery("SELECT $1::int * 2 AS v", i).array.await;
-			assert(rows[0].column!int("v") == i * 2);
-		}
-
-		// Pipelined one-shot queries (all sent before any completes)
-		Promise!(PgSqlConnection.Row[])[] promises;
-		foreach (i; 0 .. 5)
-			promises ~= pg.extendedQuery("SELECT $1::int * 3 AS v", i).array;
-		foreach (i, p; promises)
-			assert(p.await[0].column!int("v") == i * 3);
-
-		// Pipelined mix of Simple Query and one-shot Extended Query
-		auto q1 = pg.query("SELECT 1 AS v").array;
-		auto q2 = pg.extendedQuery("SELECT $1::int AS v", 2).array;
-		auto q3 = pg.query("SELECT 3 AS v").array;
-		assert(q1.await[0].column!int("v") == 1);
-		assert(q2.await[0].column!int("v") == 2);
-		assert(q3.await[0].column!int("v") == 3);
-
-		// Pipelined queries with an error in the middle:
-		// the error must not affect preceding or following queries
-		auto pa = pg.extendedQuery("SELECT $1::int AS v", 1).array;
-		auto pb = pg.extendedQuery("SELECT $1::int / 0 AS v", 1).array;
-		auto pc = pg.extendedQuery("SELECT $1::int AS v", 3).array;
+		// Pipelined queries with an error in the middle: the error does not
+		// affect the others
+		auto pa = pg.query("SELECT $1 AS v", 1).array;
+		auto pb = pg.query("SELECT $1 / 0 AS v", 1);
+		auto pc = pg.query("SELECT 3 AS v").array;
 		assert(pa.await[0].column!int("v") == 1);
-		gotError = false;
-		try
-			pb.await;
-		catch (PgSqlException e)
-			gotError = true;
-		assert(gotError, "Expected error from pipelined bad query");
+		assert(failsWith("22012", pb));
 		assert(pc.await[0].column!int("v") == 3);
+
+		// Large SQL text and parameters
+		import std.array : replicate;
+		auto big = "y".replicate(1024 * 1024);
+		auto r = pg.query("SELECT length($1::text) AS len, $1::text AS echo /* " ~ "x".replicate(512 * 1024) ~ " */",
+			big).array.await;
+		assert(r[0].column!int("len") == big.length && r[0].column!string("echo") == big);
 	}).awaitSync();
 }
 
-// Test one-shot queries with large SQL and payloads
+// Connecting: by URI; DNS resolution failure and connection refused reject
+// the connection's promise
+debug(ae_unittest) unittest
+{
+	import ae.utils.promise.await : async, await, awaitSync;
+
+	int errors;
+	async({
+		foreach (p; [connect("nonexistent.invalid.", 5432, "user", "db", "pass"),
+				connect("127.0.0.1", 63999, "user", "db", "pass"), connect("http://localhost")])
+			try
+				p.await;
+			catch (Exception e)
+				errors++;
+	}).awaitSync();
+	assert(errors == 3, "Expected the connections to fail");
+}
+
+// Authentication error: rejected cleanly
 version (HAVE_PSQL_SERVER)
 debug(ae_unittest) unittest
 {
 	import ae.utils.promise.await : async, await, awaitSync;
 
-	auto pg = new PgSqlConnection();
-
-	async({
-		pg.ready.await;
-		scope(exit) pg.disconnect("Test cleanup");
-
-		// Large SQL text (packet larger than any single buffer/record)
-		auto bigComment = "x".replicate(512 * 1024);
-		auto r1 = pg.extendedQuery("SELECT $1::int AS v /* " ~ bigComment ~ " */", 11).array.await;
-		assert(r1[0].column!int("v") == 11);
-
-		// Large parameter payload, round-tripped
-		auto bigParam = "y".replicate(1024 * 1024);
-		auto r2 = pg.extendedQuery("SELECT length($1::text) AS len, $1::text AS echo", bigParam).array.await;
-		assert(r2[0].column!int("len") == bigParam.length);
-		assert(r2[0].column!string("echo") == bigParam);
-
-		// Large result payload
-		auto r3 = pg.extendedQuery("SELECT repeat('z', $1::int) AS big", 1024 * 1024).array.await;
-		assert(r3[0].column!string("big").length == 1024 * 1024);
-	}).awaitSync();
-}
-
-// Test: DNS resolution failure — .ready should reject, not hang.
-// Uses trailing dot to prevent Windows DNS suffix search list expansion.
-debug(ae_unittest) unittest
-{
-	import ae.utils.promise.await : async, await, awaitSync;
-
 	bool gotError = false;
 	async({
-		auto pg = new PgSqlConnection("nonexistent.invalid.", 5432, "user", "db", "pass");
 		try
-			await(pg.ready);
-		catch (Exception e)
+			connect(environment.get("PGHOST", "localhost"), environment.get("PGPORT", "5432").to!ushort,
+				environment.get("PGUSER", "testuser"), environment.get("PGDATABASE", "testdb"),
+				"definitely_wrong_password_12345").await;
+		catch (PgSqlException e)
 			gotError = true;
 	}).awaitSync();
-	assert(gotError, "Expected DNS resolution error from .ready");
-}
-
-// Test: connection refused — .ready should reject with proper error
-debug(ae_unittest) unittest
-{
-	import ae.utils.promise.await : async, await, awaitSync;
-
-	bool gotError = false;
-	async({
-		auto pg = new PgSqlConnection("127.0.0.1", 63999, "user", "db", "pass");
-		try
-			await(pg.ready);
-		catch (Exception e)
-			gotError = true;
-	}).awaitSync();
-	assert(gotError, "Expected connection refused error from .ready");
+	assert(gotError, "Expected authentication error");
 }
 
 // Test TLS against a real server. Active when the test environment selects
@@ -2016,9 +1600,8 @@ debug(ae_unittest) unittest
 		return;
 
 	async({
-		auto pg = new PgSqlConnection();
-		pg.ready.await;
-		scope(exit) pg.disconnect("Test cleanup");
+		auto pg = connect().await;
+		scope(exit) pg.close().await;
 
 		assert(pg.encrypted, "Expected a TLS connection with PGSSLMODE=" ~ sslMode);
 		auto rows = pg.query("SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()").array.await;
@@ -2035,14 +1618,14 @@ debug(ae_unittest) unittest
 			if (auto rootCert = environment.get("PGSSLROOTCERT"))
 				ctx.setPeerRootCertificate(rootCert);
 			auto tcp = new TcpConnection;
-			auto pg = new PgSqlConnection(tcp,
+			auto pg = connect(tcp,
 				environment.get("PGUSER", "testuser"),
 				environment.get("PGDATABASE", "testdb"),
 				environment.get("PGPASSWORD"),
-				PgSqlConnection.SSLMode.require, ctx, "wrong-host.invalid");
+				SSLMode.require, ctx, "wrong-host.invalid");
 			tcp.connect(environment.get("PGHOST", "localhost"), environment.get("PGPORT", "5432").to!ushort);
 			try
-				pg.ready.await;
+				pg.await;
 			catch (PgSqlException e)
 				gotError = true;
 		}).awaitSync();
@@ -2096,11 +1679,10 @@ debug(ae_unittest) unittest
 		bool sawSSLRequest, ready, encrypted;
 		auto port = startServer(sawSSLRequest);
 		async({
-			auto pg = new PgSqlConnection("127.0.0.1", port, "user", "db");
-			pg.ready.await;
+			auto pg = connect("127.0.0.1", port, "user", "db").await;
 			ready = true;
 			encrypted = pg.encrypted;
-			pg.disconnect();
+			pg.close().await;
 		}).awaitSync();
 		assert(ready && !encrypted && !sawSSLRequest);
 	}
@@ -2111,38 +1693,27 @@ debug(ae_unittest) unittest
 		string error;
 		auto port = startServer(sawSSLRequest);
 		async({
-			auto pg = new PgSqlConnection("127.0.0.1", port, "user", "db", null,
-				PgSqlConnection.SSLMode.require);
 			try
-				pg.ready.await;
+				connect("127.0.0.1", port, "user", "db", null, SSLMode.require).await;
 			catch (PgSqlException e)
 				error = e.msg;
 		}).awaitSync();
 		assert(error.indexOf("SSL provider") >= 0, error);
 		assert(!sawSSLRequest);
 	}
-}
 
-// Test: authentication error — .ready should reject cleanly (no double-reject crash)
-version (HAVE_PSQL_SERVER)
-debug(ae_unittest) unittest
-{
-	import ae.utils.promise.await : async, await, awaitSync;
-	import std.process : environment;
-
-	bool gotError = false;
-	async({
-		auto pg = new PgSqlConnection(
-			environment.get("PGHOST", "localhost"),
-			environment.get("PGPORT", "5432").to!ushort,
-			environment.get("PGUSER", "testuser"),
-			environment.get("PGDATABASE", "testdb"),
-			"definitely_wrong_password_12345"
-		);
-		try
-			await(pg.ready);
-		catch (PgSqlException e)
-			gotError = true;
-	}).awaitSync();
-	assert(gotError, "Expected authentication error from .ready");
+	// verify-full (of a URI): fails without an SSL provider; unsupported
+	// modes and parameters are rejected.
+	foreach (uri; ["postgresql://localhost/db?sslmode=verify-full", "postgresql://localhost/db?sslmode=allow",
+			"postgresql://localhost/db?connect_timeout=1"])
+	{
+		string error;
+		async({
+			try
+				connect(uri).await;
+			catch (PgSqlException e)
+				error = e.msg;
+		}).awaitSync();
+		assert(error.length, uri);
+	}
 }

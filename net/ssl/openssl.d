@@ -998,8 +998,7 @@ debug(ae_unittest) unittest
 {
 	import std.bitmanip : bigEndianToNative;
 	import ae.utils.array : asBytes;
-	import ae.net.db.psql : PgSqlConnection;
-	alias SSLMode = PgSqlConnection.SSLMode;
+	import ae.net.db.psql : PgSqlConnection, SSLMode, connect;
 
 	auto p = new OpenSSLProvider;
 	auto sc = cast(OpenSSLContext) p.createContext(SSLContext.Kind.server);
@@ -1071,15 +1070,14 @@ debug(ae_unittest) unittest
 		cc.setPreSharedKey("test", "hunter2".representation);
 
 		auto tcp = new TcpConnection;
-		auto pg = new PgSqlConnection(tcp, "user", "db", null, mode, cc, "pg.example.test");
-		tcp.connect("127.0.0.1", port);
-		pg.ready.then((PgSqlConnection.TransactionStatus status) {
+		connect(tcp, "user", "db", null, mode, cc, "pg.example.test").then((PgSqlConnection pg) {
 			o.ready = true;
 			o.encrypted = pg.encrypted;
-			pg.disconnect();
+			pg.close();
 		}).except((Exception e) {
 			o.error = e.msg;
 		});
+		tcp.connect("127.0.0.1", port);
 		socketManager.loop();
 		return o;
 	}
