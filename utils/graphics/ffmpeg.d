@@ -200,7 +200,10 @@ struct VideoOutputStream
 			import core.sys.linux.fcntl : fcntl;
 			enum F_SETPIPE_SZ = 1024 + 7;
 			auto res = fcntl(pipes.readEnd.fileno, F_SETPIPE_SZ, maxSize);
-			errnoEnforce(res >= 0, "Failed to set the pipe size");
+			// EPERM: an unprivileged user may not exceed their pipe buffer limits
+			// (e.g. once fs.pipe-user-pages-soft is reached); keep the default size.
+			import core.stdc.errno : errno, EPERM;
+			errnoEnforce(res >= 0 || errno == EPERM, "Failed to set the pipe size");
 		}
 
 		auto args = [
