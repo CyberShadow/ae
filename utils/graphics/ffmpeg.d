@@ -59,6 +59,8 @@ private struct VideoInputStreamImpl
 
 	~this()
 	{
+		if (pid is null)
+			return; // Not initialized (or initialization failed before starting ffmpeg)
 		if (done)
 			wait(pid);
 		else
@@ -145,6 +147,14 @@ deprecated alias VideoStream = VideoInputStream;
 VideoInputStream streamVideo(File f, string[] ffmpegArgs = null) { return VideoInputStream(f, ffmpegArgs); }
 VideoInputStream streamVideo(string fn, string[] ffmpegArgs = null) { return VideoInputStream(fn, ffmpegArgs); } /// ditto
 
+debug(ae_unittest) unittest
+{
+	// Destroying streams which were never started must be safe
+	// (e.g. fields of an aggregate whose constructor threw).
+	{ VideoInputStreamImpl s; }
+	{ VideoOutputStream s; }
+}
+
 // ----------------------------------------------------------------------------
 
 /// Represents a video encoding process as a D output range of frames.
@@ -163,6 +173,8 @@ struct VideoOutputStream
 
 	~this()
 	{
+		if (pid is null)
+			return; // Not initialized (or initialization failed before starting ffmpeg)
 		output.close();
 		wait(pid);
 	}
