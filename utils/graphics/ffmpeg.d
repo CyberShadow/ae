@@ -89,7 +89,7 @@ private struct VideoInputStreamImpl
 		}
 	}
 
-	private void initialize(File f, string fn, string[] ffmpegArgs)
+	private void initialize(File f, string fn, string[] ffmpegArgs, string[] inputArgs)
 	{
 		auto pipes = pipe();
 		output = pipes.readEnd();
@@ -97,6 +97,8 @@ private struct VideoInputStreamImpl
 			"ffmpeg",
 			// Be quiet
 			"-loglevel", "panic",
+			// Additional input arguments (such as -ss)
+			] ~ inputArgs ~ [
 			// Specify input
 			"-i", fn,
 			// No audio
@@ -134,8 +136,8 @@ private:
 struct VideoInputStream
 {
 	private RefCounted!VideoInputStreamImpl impl;
-	this(File f, string[] ffmpegArgs) { impl.initialize(f, "-", ffmpegArgs); } ///
-	this(string fn, string[] ffmpegArgs) { impl.initialize(stdin, fn, ffmpegArgs); } ///
+	this(File f, string[] ffmpegArgs, string[] inputArgs = null) { impl.initialize(f, "-", ffmpegArgs, inputArgs); } ///
+	this(string fn, string[] ffmpegArgs, string[] inputArgs = null) { impl.initialize(stdin, fn, ffmpegArgs, inputArgs); } ///
 	@property ref Image!BGR front() return { return impl.front; } ///
 	@property bool empty() { return impl.empty; } ///
 	void popFront() { impl.popFront(); } ///
@@ -144,8 +146,8 @@ struct VideoInputStream
 deprecated alias VideoStream = VideoInputStream;
 
 /// Creates a `VideoInputStream` from the given file.
-VideoInputStream streamVideo(File f, string[] ffmpegArgs = null) { return VideoInputStream(f, ffmpegArgs); }
-VideoInputStream streamVideo(string fn, string[] ffmpegArgs = null) { return VideoInputStream(fn, ffmpegArgs); } /// ditto
+VideoInputStream streamVideo(File f, string[] ffmpegArgs = null, string[] inputArgs = null) { return VideoInputStream(f, ffmpegArgs, inputArgs); }
+VideoInputStream streamVideo(string fn, string[] ffmpegArgs = null, string[] inputArgs = null) { return VideoInputStream(fn, ffmpegArgs, inputArgs); } /// ditto
 
 debug(ae_unittest) unittest
 {
