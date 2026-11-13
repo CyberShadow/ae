@@ -51,11 +51,10 @@ Promise!SqliteConnection connect(string path, bool readOnly = false)
         return WorkerResult.init;
     }).then((WorkerResult _) {
         return conn;
-    }, (Exception e) {
+    }, delegate SqliteConnection(Exception e) {
         conn.queue.close();  // (Let the event loop exit)
         conn.queue = null;
         throw wrapException(e);
-        return SqliteConnection.init;
     });
 }
 
@@ -228,9 +227,8 @@ private:
             return p;
         }
         auto worker = this.worker;
-        return queue.put(() => task(worker)).except((Exception e) {
+        return queue.put(() => task(worker)).except(delegate WorkerResult(Exception e) {
             throw wrapException(e);
-            return WorkerResult.init;
         });
     }
 
