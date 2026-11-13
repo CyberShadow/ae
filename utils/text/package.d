@@ -189,7 +189,8 @@ T[] fastReplace(T)(T[] what, T[] from, T[] to)
 					{
 						what = what[p-what.ptr..$];
 					}
-					p = cast(T*)memchr(what.ptr, head, what.length);
+					// Only search where a whole `from` still fits.
+					p = what.ptr < end ? cast(T*)memchr(what.ptr, head, end - what.ptr) : null;
 				}
 				while (p);
 
@@ -238,6 +239,11 @@ debug(ae_unittest) unittest
 	test("Mary had a little lamb", "aX", "YY");
 
 	test("foo", "foobar", "bar");
+
+	// Must not look past the end of the haystack
+	// (here, the following byte completes a match).
+	auto crlf = "a\r\nb\r\n";
+	test(crlf[0 .. $-1], "\r\n", "\n");
 }
 
 /// An implementation of `split` optimized for common cases. Allocates only once.
