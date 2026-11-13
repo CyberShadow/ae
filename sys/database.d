@@ -35,10 +35,15 @@ struct Database
 	/// Successive versions of applications should only extend this array by adding new items at the end.
 	string[] schema;
 
-	this(string dbFileName, string[] schema = null)
+	/// Called with every newly opened connection, after any migrations.
+	/// Use this for per-connection settings, such as most `PRAGMA`s.
+	void delegate(SQLite db) onOpen;
+
+	this(string dbFileName, string[] schema = null, void delegate(SQLite db) onOpen = null)
 	{
 		this.dbFileName = dbFileName;
 		this.schema = schema;
+		this.onOpen = onOpen;
 	} ///
 
 	/// Return an `SQLite.PreparedStatement`, caching it.
@@ -101,8 +106,27 @@ struct Database
 			}
 		}
 
+		if (onOpen)
+			onOpen(*db);
+
 		return *db;
 	}
+}
+
+debug(ae_unittest) unittest
+{
+	int opened;
+	auto database = Database(":memory:", [
+		"CREATE TABLE [Test] ([Value] INTEGER);",
+	], (SQLite db) {
+		opened++;
+		// Runs after migrations
+		db.exec("INSERT INTO [Test] VALUES (1);");
+	});
+	assert(opened == 0, "Connection should be opened lazily");
+	assert(database.stmt!"SELECT COUNT(*) FROM [Test]".iterate().selectValue!int == 1);
+	assert(database.stmt!"SELECT SUM([Value]) FROM [Test]".iterate().selectValue!int == 1);
+	assert(opened == 1);
 }
 
 /// Return the first value of the given iterator.
