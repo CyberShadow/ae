@@ -84,6 +84,10 @@ version (Posix)
 		}
 
 		addSignalHandler(SIGCHLD, &handler);
+
+		// The process may have exited before the handler was registered,
+		// in which case we would never get a SIGCHLD for it.
+		handler();
 	}
 
 	debug(ae_unittest) import ae.sys.timing, ae.net.asockets;
@@ -99,6 +103,26 @@ version (Posix)
 		socketManager.loop();
 
 		assert(order == "abc");
+	}
+
+	// The process exits before asyncWait is called.
+	debug(ae_unittest) unittest
+	{
+		import core.sys.posix.signal : siginfo_t;
+		import core.sys.posix.sys.wait : waitid, idtype_t, WEXITED, WNOWAIT;
+
+		auto pid = spawnProcess(["true"]);
+
+		// Wait for the process to exit, without reaping it.
+		siginfo_t info;
+		auto ret = waitid(idtype_t.P_PID, pid.processID, &info, WEXITED | WNOWAIT);
+		assert(ret == 0);
+
+		bool called;
+		asyncWait(pid, (int status) { assert(status == 0); called = true; });
+		socketManager.loop();
+
+		assert(called);
 	}
 }
 
