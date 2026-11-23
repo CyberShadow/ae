@@ -90,28 +90,52 @@ struct CborParser
 			if (info == 31)
 			{
 				// Indefinite-length array
-				IndefiniteArrayReader reader = {parser: &this};
+				bool consumed;
+				IndefiniteArrayReader reader = {parser: &this, consumed: &consumed};
 				sink.handle(Array!(typeof(reader))(reader));
+				if (!consumed)
+				{
+					DrainSink ds;
+					reader(&ds);
+				}
 			}
 			else
 			{
 				auto count = readArgument(info);
-				DefiniteArrayReader reader = {parser: &this, remaining: cast(size_t) count};
+				bool consumed;
+				DefiniteArrayReader reader = {parser: &this, remaining: cast(size_t) count, consumed: &consumed};
 				sink.handle(Array!(typeof(reader))(reader));
+				if (!consumed)
+				{
+					DrainSink ds;
+					reader(&ds);
+				}
 			}
 			break;
 
 		case CborMajor.map:
 			if (info == 31)
 			{
-				IndefiniteMapReader reader = {parser: &this};
+				bool consumed;
+				IndefiniteMapReader reader = {parser: &this, consumed: &consumed};
 				sink.handle(Map!(typeof(reader))(reader));
+				if (!consumed)
+				{
+					DrainSink ds;
+					reader(&ds);
+				}
 			}
 			else
 			{
 				auto count = readArgument(info);
-				DefiniteMapReader reader = {parser: &this, remaining: cast(size_t) count};
+				bool consumed;
+				DefiniteMapReader reader = {parser: &this, remaining: cast(size_t) count, consumed: &consumed};
 				sink.handle(Map!(typeof(reader))(reader));
+				if (!consumed)
+				{
+					DrainSink ds;
+					reader(&ds);
+				}
 			}
 			break;
 
@@ -212,9 +236,12 @@ private struct DefiniteArrayReader
 {
 	CborParser* parser;
 	size_t remaining;
+	bool* consumed;
 
 	void opCall(Sink)(Sink sink)
 	{
+		assert(!*consumed);
+		*consumed = true;
 		foreach (_; 0 .. remaining)
 			parser.read(sink);
 	}
@@ -223,9 +250,12 @@ private struct DefiniteArrayReader
 private struct IndefiniteArrayReader
 {
 	CborParser* parser;
+	bool* consumed;
 
 	void opCall(Sink)(Sink sink)
 	{
+		assert(!*consumed);
+		*consumed = true;
 		while (!parser.atBreak())
 			parser.read(sink);
 		parser.p++; // skip break byte
@@ -236,14 +266,21 @@ private struct DefiniteMapReader
 {
 	CborParser* parser;
 	size_t remaining;
+	bool* consumed;
 
 	void opCall(Sink)(Sink sink)
 	{
+		assert(!*consumed);
+		*consumed = true;
 		foreach (_; 0 .. remaining)
 		{
-			CborKeyReader kr = {parser: parser};
-			CborValueReader vr = {parser: parser};
+			bool nameRead, valueRead;
+			CborKeyReader kr = {parser: parser, consumed: &nameRead};
+			CborValueReader vr = {keyReader: kr, consumed: &valueRead};
 			sink.handle(Field!(typeof(kr), typeof(vr))(kr, vr));
+			DrainSink ds;
+			if (!nameRead) kr(&ds);
+			if (!valueRead) vr(&ds);
 		}
 	}
 }
@@ -251,14 +288,21 @@ private struct DefiniteMapReader
 private struct IndefiniteMapReader
 {
 	CborParser* parser;
+	bool* consumed;
 
 	void opCall(Sink)(Sink sink)
 	{
+		assert(!*consumed);
+		*consumed = true;
 		while (!parser.atBreak())
 		{
-			CborKeyReader kr = {parser: parser};
-			CborValueReader vr = {parser: parser};
+			bool nameRead, valueRead;
+			CborKeyReader kr = {parser: parser, consumed: &nameRead};
+			CborValueReader vr = {keyReader: kr, consumed: &valueRead};
 			sink.handle(Field!(typeof(kr), typeof(vr))(kr, vr));
+			DrainSink ds;
+			if (!nameRead) kr(&ds);
+			if (!valueRead) vr(&ds);
 		}
 		parser.p++; // skip break byte
 	}
@@ -267,18 +311,31 @@ private struct IndefiniteMapReader
 private struct CborKeyReader
 {
 	CborParser* parser;
+	bool* consumed;
+
 	void opCall(Sink)(Sink sink)
 	{
+		assert(!*consumed);
+		*consumed = true;
 		parser.read(sink);
 	}
 }
 
 private struct CborValueReader
 {
-	CborParser* parser;
+	CborKeyReader keyReader;
+	bool* consumed;
+
 	void opCall(Sink)(Sink sink)
 	{
-		parser.read(sink);
+		assert(!*consumed);
+		*consumed = true;
+		if (!*keyReader.consumed)
+		{
+			DrainSink ds;
+			keyReader(&ds);
+		}
+		keyReader.parser.read(sink);
 	}
 }
 
@@ -645,4 +702,75 @@ debug(ae_unittest) unittest
 	];
 	auto result = parseCbor!(int[])(cbor);
 	assert(result == [1, 2, 3]);
+}
+
+debug(ae_unittest) unittest
+{
+	static struct Fields
+	{
+		int[] skipped;
+		int[string] nameOnly;
+		string valueOnly;
+		string kept;
+		string after;
+	}
+
+	static void readInto(Sink)(Sink sink)
+	{
+		auto data = toCbor(Fields([1], ["nested": 2], "v", "k", "a"));
+		// Use an indefinite map and wrap the skipped array in the self-described CBOR tag.
+		enum valueOffset = 1 + 1 + "skipped".length;
+		enum ubyte[] tag = [0xD9, 0xD9, 0xF7];
+		data[0] = 0xBF;
+		data = data[0 .. valueOffset] ~ tag ~ data[valueOffset .. $] ~ cast(ubyte) 0xFF;
+		auto parser = CborParser(data);
+		parser.read(sink);
+		assert(parser.p == data.length);
+	}
+
+	testFieldSkipping!readInto();
+}
+
+debug(ae_unittest) unittest
+{
+	import std.typecons : tuple;
+
+	static void readInto(Sink)(Sink sink)
+	{
+		auto data = toCbor(tuple([1], ["nested": 2], "s"));
+		data[0] = 0x9F; // indefinite array
+		data ~= 0xFF; // break
+		auto parser = CborParser(data);
+		parser.read(sink);
+		assert(parser.p == data.length);
+	}
+
+	testElementSkipping!readInto();
+}
+
+debug(ae_unittest) unittest
+{
+	static struct IgnoreContainer
+	{
+		void handle(V)(V v)
+		{
+			assert(isProtocolArray!V || isProtocolMap!V);
+		}
+	}
+
+	const(ubyte)[][] inputs = [
+		[0x9F, 0x01, 0xFF, 0x61, 's'], // [_ 1], "s"
+		[0xBF, 0x61, 'k', 0x01, 0xFF, 0x61, 's'], // {_ "k": 1}, "s"
+	];
+	foreach (data; inputs)
+	{
+		auto parser = CborParser(data);
+		IgnoreContainer sink;
+		parser.read(&sink);
+
+		string next;
+		parser.read(deserializer(&next));
+		assert(next == "s");
+		assert(parser.p == data.length);
+	}
 }
