@@ -191,7 +191,8 @@ struct XmlParser(C = immutable(char))
 				sink.handle(Null());
 			else
 			{
-				XmlElementReader!(typeof(this)) er = {parser: &this, attrs: attrs, selfClosing: true};
+				bool consumed;
+				XmlElementReader!(typeof(this)) er = {parser: &this, attrs: attrs, selfClosing: true, consumed: &consumed};
 				sink.handle(Map!(typeof(er))(er));
 			}
 			return;
@@ -223,8 +224,14 @@ struct XmlParser(C = immutable(char))
 		}
 
 		// Has child elements
-		XmlElementReader!(typeof(this)) er = {parser: &this, attrs: attrs, selfClosing: false};
+		bool consumed;
+		XmlElementReader!(typeof(this)) er = {parser: &this, attrs: attrs, selfClosing: false, consumed: &consumed};
 		sink.handle(Map!(typeof(er))(er));
+		if (!consumed)
+		{
+			DrainSink ds;
+			er(&ds);
+		}
 	}
 }
 
@@ -233,10 +240,13 @@ private struct XmlElementReader(Parser)
 	Parser* parser;
 	immutable(char)[][2][] attrs;
 	bool selfClosing;
+	bool* consumed;
 
 	void opCall(Sink)(Sink sink)
 	{
-		import ae.utils.serialization.serialization : Field;
+		assert(!*consumed);
+		*consumed = true;
+		import ae.utils.serialization.serialization : Field, DrainSink;
 
 		foreach (attr; attrs)
 		{
@@ -260,8 +270,14 @@ private struct XmlElementReader(Parser)
 			parser.p--;
 
 			XmlStringReader nr = {s: childName};
-			XmlChildValueReader!Parser vr = {parser: parser};
+			bool valueRead;
+			XmlChildValueReader!Parser vr = {parser: parser, consumed: &valueRead};
 			sink.handle(Field!(typeof(nr), typeof(vr))(nr, vr));
+			if (!valueRead)
+			{
+				DrainSink ds;
+				vr(&ds);
+			}
 
 			parser.skipWhitespace();
 		}
@@ -301,7 +317,14 @@ private struct XmlTextWithAttrsReader(Parser)
 private struct XmlChildValueReader(Parser)
 {
 	Parser* parser;
-	void opCall(Sink)(Sink sink) { parser.readElement(sink); }
+	bool* consumed;
+
+	void opCall(Sink)(Sink sink)
+	{
+		assert(!*consumed);
+		*consumed = true;
+		parser.readElement(sink);
+	}
 }
 
 private struct XmlStringReader
@@ -628,4 +651,50 @@ debug(ae_unittest) unittest
 	static struct S { string v; }
 	auto xml = toXml(S("a < b & c"), "s");
 	assert(xml == `<s v="a &lt; b &amp; c"/>`, xml);
+}
+
+debug(ae_unittest) unittest
+{
+	static struct Leaf { string text; }
+	static struct Branch { Leaf child; }
+
+	static void readInto(Sink)(Sink sink)
+	{
+		// Assemble the root explicitly to keep nested and text children in probe order.
+		auto xml = "<root>"
+			~ toXml(Branch(Leaf("a")), "skipped")
+			~ toXml(Branch(Leaf("b")), "nameOnly")
+			~ "<valueOnly>v</valueOnly><kept>k</kept><after>a</after></root>";
+		auto parser = XmlParser!()(xml);
+		parser.read(sink);
+		assert(parser.p == xml.length);
+	}
+
+	testFieldSkipping!readInto();
+}
+
+debug(ae_unittest) unittest
+{
+	static struct Leaf { string text; }
+	static struct Root { Leaf child; }
+
+	static struct IgnoreRoot
+	{
+		size_t events;
+
+		void handle(V)(V v)
+		{
+			static if (isProtocolMap!V)
+				++events;
+			else
+				assert(false, "Expected the root map");
+		}
+	}
+
+	auto xml = toXml(Root(Leaf("a")));
+	auto parser = XmlParser!()(xml);
+	IgnoreRoot sink;
+	parser.read(&sink);
+	assert(sink.events == 1);
+	assert(parser.p == xml.length);
 }

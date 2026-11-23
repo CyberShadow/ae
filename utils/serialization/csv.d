@@ -127,18 +127,23 @@ struct CsvParser(C = immutable(char), CsvOptions csvOptions = CsvOptions.init)
 	/// Parse and emit events into sink.
 	void read(Sink)(Sink sink)
 	{
-		import ae.utils.serialization.serialization : Array;
+		import ae.utils.serialization.serialization : Array, DrainSink;
 
+		bool consumed;
 		static if (csvOptions.hasHeader)
 		{
 			auto headers = readRow();
-			OuterReaderWithHeaders!(typeof(this)) outerReader = {headers: headers, parser: &this};
-			sink.handle(Array!(typeof(outerReader))(outerReader));
+			OuterReaderWithHeaders!(typeof(this)) outerReader = {headers: headers, parser: &this, consumed: &consumed};
 		}
 		else
 		{
-			OuterReaderNoHeaders!(typeof(this)) outerReader = {parser: &this};
-			sink.handle(Array!(typeof(outerReader))(outerReader));
+			OuterReaderNoHeaders!(typeof(this)) outerReader = {parser: &this, consumed: &consumed};
+		}
+		sink.handle(Array!(typeof(outerReader))(outerReader));
+		if (!consumed)
+		{
+			DrainSink ds;
+			outerReader(&ds);
 		}
 	}
 }
@@ -147,9 +152,12 @@ private struct OuterReaderWithHeaders(Parser)
 {
 	immutable(char)[][] headers;
 	Parser* parser;
+	bool* consumed;
 
 	void opCall(Sink)(Sink sink)
 	{
+		assert(!*consumed);
+		*consumed = true;
 		import ae.utils.serialization.serialization : Map;
 
 		while (parser.p < parser.s.length)
@@ -165,9 +173,12 @@ private struct OuterReaderWithHeaders(Parser)
 private struct OuterReaderNoHeaders(Parser)
 {
 	Parser* parser;
+	bool* consumed;
 
 	void opCall(Sink)(Sink sink)
 	{
+		assert(!*consumed);
+		*consumed = true;
 		import ae.utils.serialization.serialization : Array;
 
 		while (parser.p < parser.s.length)
@@ -568,4 +579,75 @@ debug(ae_unittest) unittest
 	auto csv = "name,age\n";
 	auto result = parseCsv!(string[string][])(csv);
 	assert(result.length == 0);
+}
+
+debug(ae_unittest) unittest
+{
+	static struct Row
+	{
+		string skipped;
+		string nameOnly;
+		string valueOnly;
+		string kept;
+		string after;
+	}
+
+	static struct ReadRows(Sink)
+	{
+		Sink sink;
+
+		void handle(V)(V v)
+		{
+			static if (isProtocolArray!V)
+				v.reader(sink);
+			else
+				assert(0, "Expected outer array");
+		}
+	}
+
+	static void readInto(Sink)(Sink sink)
+	{
+		auto csv = toCsv([Row("skip, this", `"name only"`, "v", "k", "a")]);
+		auto parser = CsvParser!()(csv);
+		auto rows = ReadRows!Sink(sink);
+		parser.read(&rows);
+		assert(parser.p == csv.length);
+	}
+
+	testFieldSkipping!readInto();
+}
+
+debug(ae_unittest) unittest
+{
+	import std.meta : AliasSeq;
+
+	static struct Row { string text; }
+
+	static struct IgnoreRows
+	{
+		size_t arrays;
+
+		void handle(V)(V v)
+		{
+			static if (isProtocolArray!V)
+				++arrays;
+			else
+				assert(false, "Expected the root array");
+		}
+	}
+
+	foreach (hasHeader; AliasSeq!(true, false))
+	{
+		enum options = CsvOptions(',', hasHeader);
+		static if (hasHeader)
+			auto csv = toCsv!options([Row("first"), Row("second")]);
+		else
+			auto csv = "first\nsecond\n";
+
+		auto parser = CsvParser!(immutable(char), options)(csv);
+		IgnoreRows sink;
+		parser.read(&sink);
+		assert(sink.arrays == 1);
+		assert(parser.p == csv.length);
+	}
 }
