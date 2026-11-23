@@ -61,14 +61,14 @@ struct CborParser
 		{
 		case CborMajor.unsignedInt:
 			auto val = readArgument(info);
-			sink.handle(Numeric!string(to!string(val)));
+			sink.handle(NativeNumeric!ulong(val));
 			break;
 
 		case CborMajor.negativeInt:
 			auto val = readArgument(info);
 			// CBOR negative: -1 - val
 			long negVal = -1 - cast(long) val;
-			sink.handle(Numeric!string(to!string(negVal)));
+			sink.handle(NativeNumeric!long(negVal));
 			break;
 
 		case CborMajor.byteString:
@@ -157,21 +157,33 @@ struct CborParser
 				// float16
 				auto bytes = readBytes(2);
 				double val = decodeFloat16(bytes[0], bytes[1]);
-				sink.handle(Numeric!string(to!string(val)));
+				import std.math : isFinite;
+				if (val.isFinite)
+					sink.handle(NativeNumeric!double(val));
+				else
+					sink.handle(String!string(to!string(val)));
 			}
 			else if (info == 26)
 			{
 				// float32
 				auto bytes = readBytes(4);
 				float val = bigEndianToNative!float(bytes[0 .. 4]);
-				sink.handle(Numeric!string(to!string(val)));
+				import std.math : isFinite;
+				if (val.isFinite)
+					sink.handle(NativeNumeric!float(val));
+				else
+					sink.handle(String!string(to!string(val)));
 			}
 			else if (info == 27)
 			{
 				// float64
 				auto bytes = readBytes(8);
 				double val = bigEndianToNative!double(bytes[0 .. 8]);
-				sink.handle(Numeric!string(to!string(val)));
+				import std.math : isFinite;
+				if (val.isFinite)
+					sink.handle(NativeNumeric!double(val));
+				else
+					sink.handle(String!string(to!string(val)));
 			}
 			else if (info == 31)
 			{
@@ -181,7 +193,7 @@ struct CborParser
 			else
 			{
 				// Simple value — emit as numeric
-				sink.handle(Numeric!string(to!string(info)));
+				sink.handle(NativeNumeric!(typeof(info))(info));
 			}
 			break;
 		}
@@ -773,4 +785,54 @@ debug(ae_unittest) unittest
 		assert(next == "s");
 		assert(parser.p == data.length);
 	}
+}
+
+debug(ae_unittest) unittest
+{
+	const(ubyte)[] maxUnsigned = [0x1B, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
+	assert(parseCbor!ulong(maxUnsigned) == ulong.max);
+	assert(parseCbor!string(maxUnsigned) == "18446744073709551615");
+	assertThrown!ConvException(parseCbor!long(maxUnsigned));
+
+	const(ubyte)[] minSigned = [0x3B, 0x7F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
+	assert(parseCbor!long(minSigned) == long.min);
+	assert(parseCbor!string(minSigned) == "-9223372036854775808");
+	assertThrown!ConvException(parseCbor!int(minSigned));
+}
+
+debug(ae_unittest) unittest
+{
+	const(ubyte)[] data = [0xFA, 0x3D, 0xCC, 0xCC, 0xCD]; // float32 0.1f
+	float single = parseCbor!float(data);
+	assert(nativeToBigEndian(single)[] == data[1 .. $]);
+	double widened = parseCbor!double(data);
+	assert(widened == cast(double) single);
+	assert(widened != 0.1);
+}
+
+debug(ae_unittest) unittest
+{
+	const(ubyte)[] data = [0xF9, 0x65, 0x55]; // float16 1365.0
+	assert(parseCbor!double(data) == 1365.0);
+	assert(parseCbor!string(data) == "1365.0");
+}
+
+debug(ae_unittest) unittest
+{
+	foreach (value; [2.0, 2.5])
+		assertThrown!ConvException(parseCbor!int([cast(ubyte) 0xFB] ~ nativeToBigEndian(value)[]));
+
+	testNarrowingFollowsText!(v => parseCbor!float([cast(ubyte) 0xFB] ~ nativeToBigEndian(v)[]))(1e300);
+}
+
+debug(ae_unittest) unittest
+{
+	import ae.utils.serialization.json : JsonOptions, JsonWriter;
+	import ae.utils.textout : StringBuilder;
+
+	const(ubyte)[] data = [0xF9, 0x7E, 0x00]; // float16 quiet NaN
+	auto parser = CborParser(data);
+	JsonWriter!(StringBuilder, JsonOptions(JsonOptions.NonStringKeys.stringify)) writer;
+	parser.read(&writer);
+	assert(writer.get() == `"nan"`);
 }
