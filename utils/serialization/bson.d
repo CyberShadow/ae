@@ -105,7 +105,11 @@ struct BsonParser
 		case BsonType.double_:
 			auto bits = readBytes(8);
 			double val = *cast(const(double)*) bits.ptr;
-			sink.handle(Numeric!string(to!string(val)));
+			import std.math : isFinite;
+			if (val.isFinite)
+				sink.handle(NativeNumeric!double(val));
+			else
+				sink.handle(String!string(to!string(val)));
 			break;
 
 		case BsonType.string_:
@@ -144,7 +148,7 @@ struct BsonParser
 
 		case BsonType.datetime:
 			auto millis = readInt64();
-			sink.handle(Numeric!string(to!string(millis)));
+			sink.handle(NativeNumeric!long(millis));
 			break;
 
 		case BsonType.null_:
@@ -164,17 +168,17 @@ struct BsonParser
 
 		case BsonType.int32:
 			auto val = readInt32();
-			sink.handle(Numeric!string(to!string(val)));
+			sink.handle(NativeNumeric!int(val));
 			break;
 
 		case BsonType.timestamp:
 			auto val = readInt64();
-			sink.handle(Numeric!string(to!string(val)));
+			sink.handle(NativeNumeric!long(val));
 			break;
 
 		case BsonType.int64:
 			auto val = readInt64();
-			sink.handle(Numeric!string(to!string(val)));
+			sink.handle(NativeNumeric!long(val));
 			break;
 
 		case BsonType.decimal128:
@@ -300,7 +304,7 @@ private struct BinaryArrayReader
 	void opCall(Sink)(Sink sink)
 	{
 		foreach (b; bytes)
-			sink.handle(Numeric!string(to!string(b)));
+			sink.handle(NativeNumeric!ubyte(b));
 	}
 }
 
@@ -1108,4 +1112,55 @@ debug(ae_unittest) unittest
 		IgnoreValue sink;
 		assertThrown(parser.read(&sink));
 	}
+}
+
+debug(ae_unittest) unittest
+{
+	static struct Limits
+	{
+		int minInt, maxInt;
+		long minLong, maxLong;
+	}
+
+	static struct Wider { long minInt, maxInt, minLong, maxLong; }
+	static struct Text { string minInt, maxInt, minLong, maxLong; }
+	@IgnoreUnknown static struct NarrowInt32 { short maxInt; }
+	@IgnoreUnknown static struct NarrowInt64 { int minLong; }
+
+	auto limits = Limits(int.min, int.max, long.min, long.max);
+	auto data = toBson(limits);
+	assert(parseBson!Limits(data) == limits);
+	assert(parseBson!Wider(data) == Wider(int.min, int.max, long.min, long.max));
+	assert(parseBson!Text(data) == Text(
+		"-2147483648", "2147483647", "-9223372036854775808", "9223372036854775807"));
+	assertThrown!ConvException(parseBson!NarrowInt32(data));
+	assertThrown!ConvException(parseBson!NarrowInt64(data));
+}
+
+debug(ae_unittest) unittest
+{
+	static struct IntField { int value; }
+	static struct FloatField { float value; }
+	static struct DoubleField { double value; }
+
+	foreach (value; [2.0, 2.5])
+		assertThrown!ConvException(parseBson!IntField(toBson(DoubleField(value))));
+
+	testNarrowingFollowsText!(v => parseBson!FloatField(toBson(DoubleField(v))).value)(1e300);
+}
+
+debug(ae_unittest) unittest
+{
+	import ae.utils.serialization.json : JsonWriter;
+
+	const(ubyte)[] data = [
+		0x10, 0, 0, 0, // document length
+		0x01, 'x', 0, // double field named "x"
+		0, 0, 0, 0, 0, 0, 0xF8, 0x7F, // quiet NaN
+		0, // end of document
+	];
+	auto parser = BsonParser(data);
+	JsonWriter!() writer;
+	parser.read(&writer);
+	assert(writer.get() == `{"x":"nan"}`);
 }
