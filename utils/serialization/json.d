@@ -230,60 +230,15 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 	/// Used by callers that capture the source slice directly (e.g. raw-text sinks).
 	void skipValue()
 	{
-		skipWhitespace();
-		switch (peek())
-		{
-		case '[':
-			skip();
-			skipWhitespace();
-			if (peek() == ']') { skip(); break; }
-			while (true)
-			{
-				skipValue();
-				skipWhitespace();
-				if (peek() == ']') { skip(); break; }
-				expect(',');
-			}
-			break;
-		case '{':
-			skip();
-			skipWhitespace();
-			if (peek() == '}') { skip(); break; }
-			while (true)
-			{
-				skipWhitespace();
-				expect('"');
-				scanString!false();
-				skipWhitespace();
-				expect(':');
-				skipValue();
-				skipWhitespace();
-				if (peek() == '}') { skip(); break; }
-				expect(',');
-			}
-			break;
-		case '"':
-			skip();
-			scanString!false();
-			break;
-		case 't': skip(); expect('r'); expect('u'); expect('e'); break;
-		case 'f': skip(); expect('a'); expect('l'); expect('s'); expect('e'); break;
-		case 'n': skip(); expect('u'); expect('l'); expect('l'); break;
-		case '-':
-		case '0': .. case '9':
-			readNumeric();                  // discards
-			break;
-		default:
-			throw new Exception("Unknown JSON symbol: %s".format(peek()));
-		}
+		DrainSink ds;
+		read(&ds);
 	}
 
 	/// Reads a JSON value and pushes events to a sink.
+	/// Readers are single-use and borrow the parser for the duration of handle.
+	/// The parser validates and skips values for readers the sink leaves unread.
 	void read(Sink)(Sink sink)
 	{
-		import ae.utils.serialization.serialization : Null, Boolean, Numeric,
-			Array, Map;
-
 		skipWhitespace();
 
 		static if (is(typeof(sink.putRawJson(s[0..0]))))
@@ -298,8 +253,14 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 		{
 		case '[':
 			skip();
-			ArrayReader ar = {parser: &this};
+			bool arrayRead;
+			ArrayReader ar = {parser: &this, consumed: &arrayRead};
 			sink.handle(Array!(typeof(ar))(ar));
+			if (!arrayRead)
+			{
+				DrainSink ds;
+				ar(&ds);
+			}
 			break;
 		case '"':
 			skip();
@@ -334,8 +295,14 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 			break;
 		case '{':
 			skip();
-			ObjectReader or_ = {parser: &this};
+			bool objectRead;
+			ObjectReader or_ = {parser: &this, consumed: &objectRead};
 			sink.handle(Map!(typeof(or_))(or_));
+			if (!objectRead)
+			{
+				DrainSink ds;
+				or_(&ds);
+			}
 			break;
 		default:
 			throw new Exception("Unknown JSON symbol: %s".format(peek()));
@@ -345,9 +312,13 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 	static struct ArrayReader
 	{
 		JsonParser* parser;
+		bool* consumed;
 
 		void opCall(Sink)(Sink sink)
 		{
+			assert(!*consumed);
+			*consumed = true;
+			parser.skipWhitespace();
 			if (parser.peek() == ']')
 			{
 				parser.skip();
@@ -371,11 +342,14 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 	static struct ObjectReader
 	{
 		JsonParser* parser;
+		bool* consumed;
 
 		void opCall(Sink)(Sink sink)
 		{
 			import ae.utils.serialization.serialization : Field;
 
+			assert(!*consumed);
+			*consumed = true;
 			parser.skipWhitespace();
 			if (parser.peek() == '}')
 			{
@@ -389,12 +363,16 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 				// StringReader to avoid instantiating non-string sink methods.
 				// NonStringKeys.asIs produces non-standard JSON with unquoted
 				// keys, so fall back to ValueReader for that case.
+				bool nameRead, valueRead;
 				static if (options.nonStringKeys == JsonOptions.NonStringKeys.asIs)
-					ValueReader nr = {parser: parser};
+					ValueReader nr = {parser: parser, consumed: &nameRead};
 				else
-					StringReader nr = {parser: parser};
-				ObjectValueReader vr = {parser: parser};
+					StringReader nr = {parser: parser, consumed: &nameRead};
+				ObjectValueReader!(typeof(nr)) vr = {nameReader: nr, consumed: &valueRead};
 				sink.handle(Field!(typeof(nr), typeof(vr))(nr, vr));
+				DrainSink ds;
+				if (!nameRead) nr(&ds);
+				if (!valueRead) vr(&ds);
 
 				parser.skipWhitespace();
 				if (parser.peek() == '}')
@@ -412,9 +390,12 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 	static struct ValueReader
 	{
 		JsonParser* parser;
+		bool* consumed;
 
 		void opCall(Sink)(Sink sink)
 		{
+			assert(!*consumed);
+			*consumed = true;
 			parser.read(sink);
 		}
 	}
@@ -425,10 +406,12 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 	static struct StringReader
 	{
 		JsonParser* parser;
+		bool* consumed;
 
 		void opCall(Sink)(Sink sink)
 		{
-			import ae.utils.serialization.serialization : String;
+			assert(!*consumed);
+			*consumed = true;
 			parser.skipWhitespace();
 			parser.expect('"');
 			parser.readStringEvent(sink);
@@ -436,12 +419,21 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 	}
 
 	/// Reads ':' then a JSON value (used as value reader for object fields).
-	static struct ObjectValueReader
+	static struct ObjectValueReader(NameReader)
 	{
-		JsonParser* parser;
+		NameReader nameReader;
+		bool* consumed;
 
 		void opCall(Sink)(Sink sink)
 		{
+			assert(!*consumed);
+			*consumed = true;
+			if (!*nameReader.consumed)
+			{
+				DrainSink ds;
+				nameReader(&ds);
+			}
+			auto parser = nameReader.parser;
 			parser.skipWhitespace();
 			parser.expect(':');
 			parser.read(sink);
@@ -2029,4 +2021,134 @@ debug(ae_unittest) unittest
 		auto json = toJson!(JsonOptions.init, serOpts)(s);
 		assert(json == `{"name":"","arr":[],"map":{}}`, json);
 	}
+}
+
+debug(ae_unittest) unittest
+{
+	static void readInto(Sink)(Sink sink)
+	{
+		auto parser = JsonParser!()(
+			`{"skip\u0070ed": {"nested": ["\n", "\uD83E\uDD40"]}, "nameOnly": [{"nested": "\t\uD83E\uDD40"}], "valueOnly": "v", "kept": "k", "after": "a"}`, 0);
+		parser.read(sink);
+		assert(parser.eof);
+	}
+
+	testFieldSkipping!readInto();
+}
+
+debug(ae_unittest) unittest
+{
+	static void readInto(Sink)(Sink sink)
+	{
+		enum opts = JsonOptions(JsonOptions.NonStringKeys.asIs);
+		auto parser = JsonParser!(immutable(char), opts)(
+			`{0: {12: ["\n", "\uD83E\uDD40"]}, "nameOnly": [{34: "\t\uD83E\uDD40"}], 2: "v", "kept": "k", "after": "a"}`, 0);
+		parser.read(sink);
+		assert(parser.eof);
+	}
+
+	testFieldSkipping!readInto();
+}
+
+debug(ae_unittest) unittest
+{
+	static void readInto(Sink)(Sink sink)
+	{
+		auto parser = JsonParser!()(
+			`[["\n", {"nested": "\uD83E\uDD40"}], {"nested": ["\t", "\uD83E\uDD40"]}, "s"]`, 0);
+		parser.read(sink);
+		assert(parser.eof);
+	}
+
+	testElementSkipping!readInto();
+}
+
+debug(ae_unittest) unittest
+{
+	static struct Sink
+	{
+		int count;
+
+		void handle(V)(V v)
+		{
+			static if (isProtocolMap!V)
+				v.reader(&this);
+			else static if (isProtocolField!V)
+			{
+				switch (count++)
+				{
+				case 0: break;
+				case 1: v.nameReader(&this); break;
+				case 2: v.valueReader(&this); break;
+				default: assert(0, "Unexpected field");
+				}
+			}
+			else static if (isProtocolString!V)
+				assert(v.text == "kept name");
+			else static if (isProtocolNumeric!V)
+				assert(v.text == "42");
+			else
+				assert(0, "Unexpected event");
+		}
+	}
+
+	auto parser = JsonParser!()(
+		`{"skip both": {"nested": ["\n", "\uD83E\uDD40"]}, "kept\u0020name": [{"nested": "\t\uD83E\uDD40"}], "skip name": 42}`, 0);
+	Sink sink;
+	parser.read(&sink);
+	assert(parser.eof && sink.count == 3);
+}
+
+debug(ae_unittest) unittest
+{
+	enum opts = JsonOptions(JsonOptions.NonStringKeys.asIs);
+	auto parser = JsonParser!(immutable(char), opts)(
+		`{12: {"\u0061": [ "\uD83E\uDD40", {34: "\n"} ]}, 56: [ ]} 789`, 0);
+	DrainSink sink;
+	parser.read(&sink);
+
+	int second;
+	parser.read(deserializer(&second));
+	assert(second == 789);
+	assert(parser.eof);
+}
+
+debug(ae_unittest) unittest
+{
+	auto parser = JsonParser!()(`[ ]`, 0);
+	int[] result = [1];
+	parser.read(deserializer(&result));
+	assert(result.length == 0);
+	assert(parser.eof);
+}
+
+debug(ae_unittest) unittest
+{
+	static struct Sink
+	{
+		string raw;
+
+		void handle(V)(V v)
+		{
+			assert(0, "Expected raw JSON");
+		}
+
+		void putRawJson(string value)
+		{
+			raw = value;
+		}
+	}
+
+	enum value = `{ "nested": [ "\n", "\uD83E\uDD40", [ ] ] }`;
+	immutable string input = " " ~ value ~ " 789";
+	auto parser = JsonParser!()(input, 0);
+	Sink sink;
+	parser.read(&sink);
+	assert(sink.raw == value);
+	assert(sink.raw.ptr == input.ptr + 1);
+
+	int second;
+	parser.read(deserializer(&second));
+	assert(second == 789);
+	assert(parser.eof);
 }
