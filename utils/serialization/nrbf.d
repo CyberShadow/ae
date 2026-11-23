@@ -169,13 +169,20 @@ struct NrbfParser
 				fieldArrayIds.length = fieldCount;
 				fieldArrayIds[] = -1;
 
+				bool consumed;
 				FieldsReader fr = {
 					parser: &this,
 					fieldNames: fieldNames,
 					fieldBinaryTypes: fieldBinaryTypes,
 					fieldPrimTypes: fieldPrimTypes,
+					consumed: &consumed,
 				};
 				sink.handle(Map!(typeof(fr))(fr));
+				if (!consumed)
+				{
+					DrainSink ds;
+					fr(&ds);
+				}
 
 				// After emitting the map, consume trailing records
 				// (deferred arrays, strings, MessageEnd)
@@ -376,8 +383,14 @@ struct NrbfParser
 			int arrayId = readInt32();
 			int length = readInt32();
 
-			StringArrayReader sar = {parser: &this, remaining: length};
+			bool consumed;
+			StringArrayReader sar = {parser: &this, remaining: length, consumed: &consumed};
 			sink.handle(Array!(typeof(sar))(sar));
+			if (!consumed)
+			{
+				DrainSink ds;
+				sar(&ds);
+			}
 		}
 		else if (recType == RecordType.MemberReference)
 		{
@@ -456,18 +469,29 @@ private struct FieldsReader
 	string[] fieldNames;
 	BinaryType[] fieldBinaryTypes;
 	PrimitiveType[] fieldPrimTypes;
+	bool* consumed;
 
 	void opCall(Sink)(Sink sink)
 	{
+		assert(!*consumed);
+		*consumed = true;
 		foreach (i; 0 .. fieldNames.length)
 		{
-			FieldNameReader nr = {name: fieldNames[i]};
+			bool nameRead, valueRead;
+			FieldNameReader nr = {name: fieldNames[i], consumed: &nameRead};
 			FieldValueReader vr = {
 				parser: parser,
 				bType: fieldBinaryTypes[i],
 				pType: fieldPrimTypes[i],
+				nameConsumed: &nameRead,
+				consumed: &valueRead,
 			};
 			sink.handle(Field!(typeof(nr), typeof(vr))(nr, vr));
+			if (!valueRead)
+			{
+				DrainSink ds;
+				vr(&ds);
+			}
 		}
 	}
 }
@@ -475,8 +499,12 @@ private struct FieldsReader
 private struct FieldNameReader
 {
 	string name;
+	bool* consumed;
+
 	void opCall(Sink)(Sink sink)
 	{
+		assert(!*consumed);
+		*consumed = true;
 		sink.handle(String!string(name));
 	}
 }
@@ -486,9 +514,14 @@ private struct FieldValueReader
 	NrbfParser* parser;
 	BinaryType bType;
 	PrimitiveType pType;
+	bool* nameConsumed;
+	bool* consumed;
 
 	void opCall(Sink)(Sink sink)
 	{
+		assert(!*consumed);
+		*consumed = true;
+		*nameConsumed = true;
 		if (bType == BinaryType.Primitive)
 			parser.readPrimitiveValue(pType, sink);
 		else if (bType == BinaryType.String)
@@ -506,9 +539,12 @@ private struct StringArrayReader
 {
 	NrbfParser* parser;
 	int remaining;
+	bool* consumed;
 
 	void opCall(Sink)(Sink sink)
 	{
+		assert(!*consumed);
+		*consumed = true;
 		foreach (_; 0 .. remaining)
 			parser.readStringValue(sink);
 	}
@@ -860,4 +896,85 @@ debug(ae_unittest) unittest
 	alias SO = SerializedObject!(immutable(char));
 	auto result = parseNrbf!SO(stream);
 	assert(result.type == SO.Type.object);
+}
+
+debug(ae_unittest) unittest
+{
+	import std.bitmanip : nativeToLittleEndian;
+
+	static void readInto(Sink)(Sink sink)
+	{
+		ubyte[] values;
+		values ~= cast(ubyte) RecordType.ArraySingleString;
+		values ~= nativeToLittleEndian(4)[]; // array ID
+		values ~= nativeToLittleEndian(1)[]; // element count
+		values ~= cast(ubyte) RecordType.BinaryObjectString;
+		values ~= nativeToLittleEndian(5)[]; // string ID
+		values ~= prefixStr("v");
+
+		values ~= cast(ubyte) RecordType.ObjectNull;
+		values ~= cast(ubyte) RecordType.MemberReference;
+		values ~= nativeToLittleEndian(5)[];
+
+		foreach (id, value; ["k", "a"])
+		{
+			values ~= cast(ubyte) RecordType.BinaryObjectString;
+			values ~= nativeToLittleEndian(cast(int) id + 6)[];
+			values ~= prefixStr(value);
+		}
+
+		auto data = buildNrbfStream(
+			"TestClass", "TestAssembly",
+			["skipped", "nameOnly", "valueOnly", "kept", "after"],
+			[BinaryType.StringArray, BinaryType.String, BinaryType.String,
+			 BinaryType.String, BinaryType.String],
+			[PrimitiveType.Null, PrimitiveType.Null, PrimitiveType.Null,
+			 PrimitiveType.Null, PrimitiveType.Null],
+			values
+		);
+		auto parser = NrbfParser(data);
+		parser.read(sink);
+		assert(parser.p == data.length);
+	}
+
+	testFieldSkipping!readInto();
+
+	static struct IgnoreArray
+	{
+		void handle(V)(V v)
+		{
+			assert(isProtocolArray!V);
+		}
+	}
+
+	static struct Probe
+	{
+		size_t fields;
+		string reference;
+
+		void handle(V)(V v)
+		{
+			static if (isProtocolMap!V)
+				v.reader(&this);
+			else static if (isProtocolField!V)
+			{
+				switch (fields++)
+				{
+				case 0:
+					IgnoreArray sink;
+					v.valueReader(&sink);
+					break;
+				case 2:
+					v.valueReader(deserializer(&reference));
+					break;
+				default:
+					break;
+				}
+			}
+		}
+	}
+
+	Probe probe;
+	readInto(&probe);
+	assert(probe.fields == 5 && probe.reference == "v");
 }
