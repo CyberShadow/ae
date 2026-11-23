@@ -1136,6 +1136,8 @@ private auto fpToBuf(Q)(Q val) @safe nothrow @nogc
 			}
 		while (s.length>2 && s[$-1]!='.' && tryPrefix(s[0..$-1])==v)
 			s = s[0..$-1];
+		if (s[$-1] == '.') // Never leave a bare decimal point (e.g. "3.e-06" is invalid JSON)
+			s = s[0..$-1];
 
 		render(s);
 		return testBuf;
@@ -1198,6 +1200,9 @@ debug(ae_unittest) unittest
 {
 	assert(2.3841857910156251e-07.doubleToString == "2.384185791015625e-07");
 	assert(1.3e-07.doubleToString == "1.3e-07");
+	assert(3e-06.doubleToString == "3e-06");
+	assert((-3e-06).doubleToString == "-3e-06");
+	assert(3e-06f.fpToString!float == "3e-06");
 }
 
 /// Like `fpToString`, but writes the result to a sink.

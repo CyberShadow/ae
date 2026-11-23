@@ -636,6 +636,7 @@ debug(ae_unittest) unittest
 	int[] arr = [1,5,7];
 	assert(toJson(arr) == `[1,5,7]`);
 	assert(toJson(true) == `true`);
+	assert(toJson(3e-06) == `3e-06`); // not "3.e-06", which is invalid JSON
 
 	assert(toJson(tuple()) == ``);
 	assert(toJson(tuple(42)) == `42`);
