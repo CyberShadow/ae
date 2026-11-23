@@ -179,6 +179,15 @@ private template isCustomProtocolBoolean(V)
 		enum bool isCustomProtocolBoolean = false;
 }
 
+// Copy borrowed text when conversion would otherwise retain its slice.
+package T retainText(T, S)(S text)
+{
+	static if (is(S : T) && !is(typeof(text[0]) == immutable))
+		return to!T(text.dup);
+	else
+		return to!T(text);
+}
+
 /// True if V is a numeric protocol value.
 /// Required: `.text` convertible to `const(char)[]`.
 enum bool isProtocolNumeric(V) = is(V : Numeric!S, S) || isCustomProtocolNumeric!V;
@@ -840,7 +849,7 @@ template CustomDeserializer(alias Transform, alias anchor)
 			{
 				static if (is(typeof(to!T(v.text))))
 				{
-					T t = to!T(v.text);
+					T t = retainText!T(v.text);
 					handleValue(t);
 				}
 				else
@@ -852,7 +861,7 @@ template CustomDeserializer(alias Transform, alias anchor)
 				alias S = ProtocolTextType!V;
 				static if (is(typeof(v.text.to!T)))
 				{
-					T t = to!T(v.text);
+					T t = retainText!T(v.text);
 					handleValue(t);
 				}
 				else

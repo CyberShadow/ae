@@ -1183,6 +1183,19 @@ debug(ae_unittest) unittest
 	assert(result.s == "world");
 }
 
+debug(ae_unittest) unittest
+{
+	import core.memory : GC;
+
+	static struct S { string text; }
+
+	auto input = `{"text":"hello"}`.idup;
+	auto result = jsonParse!S(input);
+	assert(result.text == "hello");
+	assert(GC.addrOf(result.text.ptr) !is null);
+	assert(result.text.ptr >= input.ptr && result.text.ptr < input.ptr + input.length);
+}
+
 // D struct -> JSON string
 debug(ae_unittest) unittest
 {

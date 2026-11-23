@@ -297,7 +297,7 @@ struct SerializedObject(C = immutable(char))
 	{
 		import ae.utils.serialization.serialization : isProtocolNull, isProtocolBoolean,
 			isProtocolNumeric, isProtocolString, isProtocolArray, isProtocolMap,
-			isProtocolField, ProtocolTextType;
+			isProtocolField, ProtocolTextType, retainText;
 
 		static if (isProtocolNull!V)
 		{
@@ -314,13 +314,13 @@ struct SerializedObject(C = immutable(char))
 		{
 			assert(type == Type.none);
 			type = Type.numeric;
-			_numeric = v.text.to!S;
+			_numeric = retainText!S(v.text);
 		}
 		else static if (isProtocolString!V)
 		{
 			assert(type == Type.none);
 			type = Type.string_;
-			_string = v.text.to!S;
+			_string = retainText!S(v.text);
 		}
 		else static if (isProtocolArray!V)
 		{
@@ -361,7 +361,7 @@ struct SerializedObject(C = immutable(char))
 								import ae.utils.serialization.serialization : isProtocolString;
 
 								static if (isProtocolString!W)
-									this.s = w.text.to!S;
+									this.s = retainText!S(w.text);
 								else
 									throw new Exception("String expected");
 							}
@@ -509,6 +509,34 @@ debug(ae_unittest) unittest
 	assert(result.name == "hello");
 	assert(result.inner.x == 7);
 	assert(result.inner.s == "world");
+}
+
+debug(ae_unittest) unittest
+{
+	import core.memory : GC;
+	import ae.utils.serialization.serialization;
+
+	static struct Source { int n; char c; }
+	static struct Destination { const(char)[] n, c; }
+
+	SerializedObject!(const(char)) s;
+	Serializer.Impl!Object.read(&s, Source(42, 'x'));
+
+	auto storedNumber = s._object["n"]._numeric;
+	auto storedCharacter = s._object["c"]._string;
+	assert(GC.addrOf(storedNumber.ptr) !is null);
+	assert(GC.addrOf(storedCharacter.ptr) !is null);
+	assert(storedNumber == "42");
+	assert(storedCharacter == "x");
+
+	Destination d;
+	Serializer.Impl!Object.read(deserializer(&d), s);
+	assert(GC.addrOf(d.n.ptr) !is null);
+	assert(GC.addrOf(d.c.ptr) !is null);
+	assert(d.n == "42");
+	assert(d.c == "x");
+	assert(d.n.ptr != storedNumber.ptr);
+	assert(d.c.ptr != storedCharacter.ptr);
 }
 
 debug(ae_unittest) unittest
