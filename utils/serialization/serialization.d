@@ -201,12 +201,15 @@ private template isCustomProtocolNumeric(V)
 }
 
 /// True if V is a string protocol value.
-/// Required: `.text` that is some char array.
+/// Required: `.text` that is some char array. It may be computed, so read
+/// it once per event and reuse the result. The text is valid only during
+/// `handle` unless its element type is immutable. Copy borrowed text to
+/// retain it beyond the call.
 enum bool isProtocolString(V) = is(V : String!S, S) || isCustomProtocolString!V;
 
 private template isCustomProtocolString(V)
 {
-	static if (is(typeof(V.init.text) : const(char)[]) && __traits(hasMember, V, "isProtocolString"))
+	static if (__traits(hasMember, V, "isProtocolString") && isSomeString!(typeof(V.init.text)))
 		enum bool isCustomProtocolString = V.isProtocolString;
 	else
 		enum bool isCustomProtocolString = false;

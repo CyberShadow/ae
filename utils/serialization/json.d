@@ -282,7 +282,7 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 	void read(Sink)(Sink sink)
 	{
 		import ae.utils.serialization.serialization : Null, Boolean, Numeric,
-			String, Array, Map;
+			Array, Map;
 
 		skipWhitespace();
 
@@ -303,8 +303,7 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 			break;
 		case '"':
 			skip();
-			auto str = readWholeString();
-			sink.handle(String!(typeof(str))(str));
+			readStringEvent(sink);
 			break;
 		case 't':
 			skip();
@@ -432,8 +431,7 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 			import ae.utils.serialization.serialization : String;
 			parser.skipWhitespace();
 			parser.expect('"');
-			auto str = parser.readWholeString();
-			sink.handle(String!(typeof(str))(str));
+			parser.readStringEvent(sink);
 		}
 	}
 
@@ -448,6 +446,30 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 			parser.expect(':');
 			parser.read(sink);
 		}
+	}
+
+	/// Holds the validated source slice including its closing quote.
+	/// Accessing text decodes escapes each time.
+	static struct StringEvent
+	{
+		enum isProtocolString = true;
+		private C[] quotedTail;
+		private bool escaped;
+
+		@property C[] text()
+		{
+			if (!escaped)
+				return quotedTail[0 .. $ - 1];
+			auto parser = JsonParser(quotedTail, 0);
+			return parser.readWholeString();
+		}
+	}
+
+	private void readStringEvent(Sink)(Sink sink)
+	{
+		auto start = mark();
+		auto escaped = scanString!false();
+		sink.handle(StringEvent(slice(start, mark()), escaped));
 	}
 
 	/// Read a complete JSON string (after opening '"' is consumed).
@@ -1280,6 +1302,53 @@ debug(ae_unittest) unittest
 	assertThrown!Exception(jsonParse!string(`"\uDD40"`));
 	assertThrown!Exception(jsonParse!string(`"\uD83E\n"`));
 	assertThrown!Exception(jsonParse!string(`"\uD83E\u0041"`));
+}
+
+debug(ae_unittest) unittest
+{
+	import std.meta : AliasSeq;
+
+	static struct StringSink(Event)
+	{
+		Event value;
+
+		void handle(T)(T event)
+		{
+			static if (is(T == Event))
+				value = event;
+			else
+				assert(0, "Expected a JSON string event");
+		}
+	}
+
+	static foreach (C; AliasSeq!(immutable(char), immutable(wchar), immutable(dchar)))
+	{{
+		alias Parser = JsonParser!C;
+		alias Event = Parser.StringEvent;
+		StringSink!Event sink;
+
+		auto escaped = `"line\n\"quote\" \uD83E\uDD40"`.to!(C[]);
+		auto escapedParser = Parser(escaped, 0);
+		escapedParser.read(&sink);
+		assert(sink.value.text == "line\n\"quote\" 🥀".to!(C[]));
+
+		auto plain = `"plain"`.to!(C[]);
+		auto plainParser = Parser(plain, 0);
+		plainParser.read(&sink);
+		auto plainText = sink.value.text;
+		assert(plainText == "plain".to!(C[]));
+		assert(plainText.ptr == plain[1 .. $].ptr);
+
+		Event copied;
+		{
+			auto input = `"first\tsecond"`.to!(C[]);
+			auto parser = Parser(input, 0);
+			StringSink!Event localSink;
+			parser.read(&localSink);
+			copied = localSink.value;
+		}
+		assert(copied.text == "first\tsecond".to!(C[]));
+	}}
 }
 
 debug(ae_unittest) unittest
