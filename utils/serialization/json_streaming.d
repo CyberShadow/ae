@@ -171,24 +171,43 @@ private:
 
 	void parseValue(Sink)(Sink sink)
 	{
-		import ae.utils.serialization.serialization : Null, Boolean, Numeric,
-			String, Array, Map;
-
 		skipWhitespace();
 		C c = peekChar();
+		ContainerState state = {parser: this};
 
 		switch (c)
 		{
 		case '{':
 			currentPos++;
-			ObjectReader or_ = {parser: this};
+			auto or_ = ObjectReader(&state);
 			sink.handle(Map!(typeof(or_))(or_));
+			if (!state.consumed)
+			{
+				DrainSink ds;
+				or_(&ds);
+			}
 			break;
 		case '[':
 			currentPos++;
-			ArrayReader ar = {parser: this};
+			auto ar = ArrayReader(&state);
 			sink.handle(Array!(typeof(ar))(ar));
+			if (!state.consumed)
+			{
+				DrainSink ds;
+				ar(&ds);
+			}
 			break;
+		default:
+			parseScalar(sink, c);
+			break;
+		}
+	}
+
+	// Keep scalar parsing locals off the recursive container path.
+	void parseScalar(Sink)(Sink sink, C c)
+	{
+		switch (c)
+		{
 		case '"':
 			currentPos++;
 			auto str = readWholeString();
@@ -219,12 +238,31 @@ private:
 		}
 	}
 
-	static struct ArrayReader
+	// Reader copies share the state for the current event.
+	static struct ContainerState
 	{
 		StreamingJsonParser parser;
+		bool consumed;
+	}
+
+	static struct FieldState
+	{
+		StreamingJsonParser parser;
+		bool nameRead;
+		bool valueRead;
+	}
+
+	static struct ArrayReader
+	{
+		ContainerState* state;
+
+		this(ContainerState* state) { this.state = state; }
 
 		void opCall(Sink)(Sink sink)
 		{
+			assert(!state.consumed);
+			state.consumed = true;
+			auto parser = state.parser;
 			parser.skipWhitespace();
 			if (parser.peekChar() == ']')
 			{
@@ -248,10 +286,15 @@ private:
 
 	static struct ObjectReader
 	{
-		StreamingJsonParser parser;
+		ContainerState* state;
+
+		this(ContainerState* state) { this.state = state; }
 
 		void opCall(Sink)(Sink sink)
 		{
+			assert(!state.consumed);
+			state.consumed = true;
+			auto parser = state.parser;
 			parser.skipWhitespace();
 			if (parser.peekChar() == '}')
 			{
@@ -263,9 +306,14 @@ private:
 			{
 				import ae.utils.serialization.serialization : Field;
 
-				NameReader nr = {parser: parser};
-				ObjectValueReader vr = {parser: parser};
-				sink.handle(Field!(typeof(nr), typeof(vr))(nr, vr));
+				FieldState field = {parser: parser};
+				sink.handle(Field!(NameReader, ObjectValueReader)(
+					NameReader(&field), ObjectValueReader(&field)));
+				if (!field.valueRead)
+				{
+					DrainSink ds;
+					ObjectValueReader(&field)(&ds);
+				}
 
 				parser.skipWhitespace();
 				if (parser.peekChar() == '}')
@@ -281,10 +329,15 @@ private:
 
 	static struct NameReader
 	{
-		StreamingJsonParser parser;
+		FieldState* state;
+
+		this(FieldState* state) { this.state = state; }
 
 		void opCall(Sink)(Sink sink)
 		{
+			assert(!state.nameRead);
+			state.nameRead = true;
+			auto parser = state.parser;
 			import ae.utils.serialization.serialization : String;
 			// JSON object keys are always strings — read directly
 			// to avoid instantiating non-string handlers on key sinks.
@@ -297,13 +350,22 @@ private:
 
 	static struct ObjectValueReader
 	{
-		StreamingJsonParser parser;
+		FieldState* state;
+
+		this(FieldState* state) { this.state = state; }
 
 		void opCall(Sink)(Sink sink)
 		{
-			parser.skipWhitespace();
-			parser.expect(':');
-			parser.parseValue(sink);
+			assert(!state.valueRead);
+			state.valueRead = true;
+			if (!state.nameRead)
+			{
+				DrainSink ds;
+				NameReader(state)(&ds);
+			}
+			state.parser.skipWhitespace();
+			state.parser.expect(':');
+			state.parser.parseValue(sink);
 		}
 	}
 
@@ -511,6 +573,37 @@ debug(ae_unittest) unittest
 	assert(result.s == "hello\nworld");
 }
 
+// An ignored root still drains deeply nested containers through the closing delimiter.
+debug(ae_unittest) unittest
+{
+	import std.array : replicate;
+
+	static struct Sink
+	{
+		size_t events;
+
+		void handle(V)(V value)
+		{
+			static if (isProtocolArray!V)
+				events++;
+			else
+				assert(false, "Expected the root array");
+			// Leave the root reader unread.
+		}
+	}
+
+	Sink sink;
+	auto parser = new StreamingJsonParser!(immutable(char));
+	parser.start(&sink);
+	auto input = replicate(`[{"child":`, 17) ~ "[]" ~ replicate("}]", 17);
+	parser.feed(input[0 .. $ - 1]);
+	assert(!parser.done);
+	parser.feed(input[$ - 1 .. $]);
+	assert(parser.done);
+	parser.endInput();
+	assert(sink.events == 1);
+}
+
 // Empty object and array
 debug(ae_unittest) unittest
 {
@@ -563,4 +656,65 @@ debug(ae_unittest) unittest
 
 	assert(result.name == "hello");
 	assert(result.value == 42);
+}
+
+debug(ae_unittest) private void readTestJson(bool oneCharAtATime, Sink)(string json, Sink sink)
+{
+	auto parser = new StreamingJsonParser!(immutable(char));
+	parser.start(sink);
+	static if (oneCharAtATime)
+		foreach (c; json)
+			parser.feed([c]);
+	else
+		parser.feed(json);
+	parser.endInput();
+	assert(parser.done);
+}
+
+debug(ae_unittest) unittest
+{
+	import ae.utils.serialization.json : toJson;
+
+	static struct Fields
+	{
+		string[][string] skipped;
+		string[string][] nameOnly;
+		string valueOnly;
+		string kept;
+		string after;
+	}
+
+	static foreach (oneCharAtATime; [false, true])
+	{
+		{
+			static void readInto(Sink)(Sink sink)
+			{
+				auto json = toJson(Fields(
+					["nested": ["\n", "🥀"]], [["nested": "\t"]], "v", "k", "a"));
+				readTestJson!oneCharAtATime(json, sink);
+			}
+
+			testFieldSkipping!readInto();
+		}
+	}
+}
+
+debug(ae_unittest) unittest
+{
+	import std.typecons : tuple;
+
+	import ae.utils.serialization.json : toJson;
+
+	static foreach (oneCharAtATime; [false, true])
+	{
+		{
+			static void readInto(Sink)(Sink sink)
+			{
+				auto json = toJson(tuple(["\n", "🥀"], ["nested": ["\t"]], "s"));
+				readTestJson!oneCharAtATime(json, sink);
+			}
+
+			testElementSkipping!readInto();
+		}
+	}
 }
