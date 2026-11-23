@@ -152,6 +152,20 @@ template getSerializedName(T, string dFieldName)
 /// Every sink implements a single `void handle(V)(V v)` and dispatches
 /// on V using `static if`. Sources emit these types via `sink.handle(...)`.
 
+/// Reader rules:
+/// R1. Invoke readers synchronously inside the handle call that delivers
+/// them. Do not retain readers or invoke them after that call.
+/// R2. Invoke each reader at most once. Cursor-based sources assert this.
+/// R3. Read the name before the value when reading both parts of a field.
+/// Reading the value first gives up the name. Cursor-based sources assert
+/// on a subsequent name read.
+/// R4. After handle returns normally, the source consumes exactly one
+/// value, skipping any unread parts. If handle throws, the source state
+/// is unspecified.
+/// R5. A filter forwarding a wrapper reader calls the wrapped reader
+/// only inside the wrapper's invocation. A filter can also read eagerly
+/// inside its own handle call.
+
 struct Null {}
 struct Boolean { bool value; }
 struct Numeric(S) { S text; }
@@ -767,6 +781,107 @@ struct DrainSink
 		else static if (isProtocolMap!V) v.reader(&this);
 		else static if (isProtocolField!V) { v.nameReader(&this); v.valueReader(&this); }
 	}
+}
+
+debug(ae_unittest) package void testFieldSkipping(alias readInto)()
+{
+	static struct TextSink
+	{
+		string text;
+
+		void handle(V)(V v)
+		{
+			static if (isProtocolString!V || isProtocolNumeric!V)
+				text = to!string(v.text);
+			else
+				assert(0, "Expected scalar text");
+		}
+	}
+
+	static struct Probe
+	{
+		size_t fields;
+
+		void handle(V)(V v)
+		{
+			static if (isProtocolMap!V)
+				v.reader(&this);
+			else static if (isProtocolField!V)
+			{
+				TextSink name, value;
+				switch (fields++)
+				{
+				case 0:
+					break;
+				case 1:
+					v.nameReader(&name);
+					assert(name.text == "nameOnly");
+					break;
+				case 2:
+					v.valueReader(&value);
+					assert(value.text == "v");
+					break;
+				case 3:
+					v.nameReader(&name);
+					v.valueReader(&value);
+					assert(name.text == "kept" && value.text == "k");
+					break;
+				case 4:
+					v.nameReader(&name);
+					v.valueReader(&value);
+					assert(name.text == "after" && value.text == "a");
+					break;
+				default:
+					assert(0, "Unexpected field");
+				}
+			}
+			else
+				assert(0, "Expected map or field");
+		}
+	}
+
+	DrainSink drain;
+	readInto(&drain);
+	Probe probe;
+	readInto(&probe);
+	assert(probe.fields == 5);
+}
+
+debug(ae_unittest) package void testElementSkipping(alias readInto)()
+{
+	static struct Elements
+	{
+		size_t count;
+
+		void handle(V)(V v)
+		{
+			++count;
+			static if (isProtocolArray!V || isProtocolMap!V)
+				assert(count <= 2);
+			else static if (isProtocolString!V)
+				assert(count == 3 && to!string(v.text) == "s");
+			else
+				assert(0, "Expected container or string");
+		}
+	}
+
+	static struct Probe
+	{
+		void handle(V)(V v)
+		{
+			static if (isProtocolArray!V)
+			{
+				Elements elements;
+				v.reader(&elements);
+				assert(elements.count == 3);
+			}
+			else
+				assert(0, "Expected array");
+		}
+	}
+
+	Probe probe;
+	readInto(&probe);
 }
 
 // ---------------------------------------------------------------------------
@@ -1419,6 +1534,37 @@ debug(ae_unittest) unittest
 	auto sink = deserializer(&result);
 	Serializer.Impl!Object.read(sink, original);
 	assert(result == [10, 20, 30]);
+}
+
+debug(ae_unittest) unittest
+{
+	static struct Fields
+	{
+		int[] skipped;
+		int[string] nameOnly;
+		string valueOnly;
+		string kept;
+		string after;
+	}
+
+	static void readInto(Sink)(Sink sink)
+	{
+		Serializer.Impl!Object.read(sink, Fields([1], ["nested": 2], "v", "k", "a"));
+	}
+
+	testFieldSkipping!readInto();
+}
+
+debug(ae_unittest) unittest
+{
+	import std.typecons : tuple;
+
+	static void readInto(Sink)(Sink sink)
+	{
+		Serializer.Impl!Object.read(sink, tuple([1], ["nested": 2], "s"));
+	}
+
+	testElementSkipping!readInto();
 }
 
 // Test Tuples

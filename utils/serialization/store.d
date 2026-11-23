@@ -472,6 +472,41 @@ debug(ae_unittest) unittest
 	}
 }
 
+debug(ae_unittest) unittest
+{
+	import ae.utils.serialization.serialization : testFieldSkipping;
+	alias SO = SerializedObject!();
+
+	static void readInto(Sink)(Sink sink)
+	{
+		SO source;
+		source.type = SO.Type.object;
+		source._object["skipped"] = SO([SO(1)]);
+		source._object["nameOnly"] = SO(["nested": SO(2)]);
+		source._object["valueOnly"] = SO("v");
+		source._object["kept"] = SO("k");
+		source._object["after"] = SO("a");
+		source.read(sink);
+	}
+
+	testFieldSkipping!readInto();
+}
+
+debug(ae_unittest) unittest
+{
+	import ae.utils.serialization.serialization : testElementSkipping;
+	alias SO = SerializedObject!();
+
+	static void readInto(Sink)(Sink sink)
+	{
+		SO source;
+		source = [SO([SO(1)]), SO(["nested": SO(2)]), SO("s")];
+		source.read(sink);
+	}
+
+	testElementSkipping!readInto();
+}
+
 // Full round-trip: D struct -> Serializer -> SerializedObject -> Deserializer -> D struct
 debug(ae_unittest) unittest
 {
