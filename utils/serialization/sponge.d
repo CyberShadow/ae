@@ -151,14 +151,26 @@ struct SerializationSponge
 		}
 		case Op.arrayBegin:
 		{
-			SpongeArrayReader reader = {sponge: &this, pos: &pos};
+			bool consumed;
+			SpongeArrayReader reader = {sponge: &this, pos: &pos, consumed: &consumed};
 			sink.handle(Array!(typeof(reader))(reader));
+			if (!consumed)
+			{
+				DrainSink ds;
+				reader(&ds);
+			}
 			break;
 		}
 		case Op.mapBegin:
 		{
-			SpongeMapReader reader = {sponge: &this, pos: &pos};
+			bool consumed;
+			SpongeMapReader reader = {sponge: &this, pos: &pos, consumed: &consumed};
 			sink.handle(Map!(typeof(reader))(reader));
+			if (!consumed)
+			{
+				DrainSink ds;
+				reader(&ds);
+			}
 			break;
 		}
 		case Op.arrayEnd:
@@ -216,9 +228,12 @@ private struct SpongeArrayReader
 {
 	SerializationSponge* sponge;
 	size_t* pos;
+	bool* consumed;
 
 	void opCall(Sink)(Sink sink)
 	{
+		assert(!*consumed);
+		*consumed = true;
 		while (cast(Op) sponge.buffer[*pos] != Op.arrayEnd)
 			sponge.readAt(sink, *pos);
 		(*pos)++; // skip arrayEnd
@@ -229,14 +244,23 @@ private struct SpongeMapReader
 {
 	SerializationSponge* sponge;
 	size_t* pos;
+	bool* consumed;
 
 	void opCall(Sink)(Sink sink)
 	{
+		assert(!*consumed);
+		*consumed = true;
 		while (cast(Op) sponge.buffer[*pos] != Op.mapEnd)
 		{
-			SpongeNameReader nr = {sponge: sponge, pos: pos};
-			SpongeValueReader vr = {sponge: sponge, pos: pos};
+			bool nameRead, valueRead;
+			SpongeNameReader nr = {sponge: sponge, pos: pos, consumed: &nameRead};
+			SpongeValueReader vr = {sponge: sponge, pos: pos, consumed: &valueRead, nameReader: nr};
 			sink.handle(Field!(typeof(nr), typeof(vr))(nr, vr));
+			if (!valueRead)
+			{
+				DrainSink ds;
+				vr(&ds);
+			}
 		}
 		(*pos)++; // skip mapEnd
 	}
@@ -246,9 +270,12 @@ private struct SpongeNameReader
 {
 	SerializationSponge* sponge;
 	size_t* pos;
+	bool* consumed;
 
 	void opCall(Sink)(Sink sink)
 	{
+		assert(!*consumed);
+		*consumed = true;
 		sponge.readAt(sink, *pos);
 	}
 }
@@ -257,9 +284,18 @@ private struct SpongeValueReader
 {
 	SerializationSponge* sponge;
 	size_t* pos;
+	bool* consumed;
+	SpongeNameReader nameReader;
 
 	void opCall(Sink)(Sink sink)
 	{
+		assert(!*consumed);
+		*consumed = true;
+		if (!*nameReader.consumed)
+		{
+			DrainSink ds;
+			nameReader(&ds);
+		}
 		sponge.readAt(sink, *pos);
 	}
 }
@@ -433,4 +469,38 @@ debug(ae_unittest) unittest
 	auto sponge = toSponge(s);
 	auto result = fromSponge!string(sponge);
 	assert(result == s);
+}
+
+debug(ae_unittest) unittest
+{
+	static struct Fields
+	{
+		string[][string] skipped;
+		string[string][] nameOnly;
+		string valueOnly;
+		string kept;
+		string after;
+	}
+
+	static void readInto(Sink)(Sink sink)
+	{
+		auto sponge = toSponge(Fields(
+			["nested": ["a"]], [["nested": "b"]], "v", "k", "a"));
+		sponge.read(sink);
+	}
+
+	testFieldSkipping!readInto();
+}
+
+debug(ae_unittest) unittest
+{
+	import std.typecons : tuple;
+
+	static void readInto(Sink)(Sink sink)
+	{
+		auto sponge = toSponge(tuple([["nested": "a"]], ["nested": ["b"]], "s"));
+		sponge.read(sink);
+	}
+
+	testElementSkipping!readInto();
 }
