@@ -73,14 +73,26 @@ struct BencodeParser(C = immutable(char))
 		else if (c == 'l')
 		{
 			skip(); // skip 'l'
-			ListReader!(typeof(this)) lr = {parser: &this};
+			bool consumed;
+			ListReader!(typeof(this)) lr = {parser: &this, consumed: &consumed};
 			sink.handle(Array!(typeof(lr))(lr));
+			if (!consumed)
+			{
+				DrainSink ds;
+				lr(&ds);
+			}
 		}
 		else if (c == 'd')
 		{
 			skip(); // skip 'd'
-			DictReader!(typeof(this)) dr = {parser: &this};
+			bool consumed;
+			DictReader!(typeof(this)) dr = {parser: &this, consumed: &consumed};
 			sink.handle(Map!(typeof(dr))(dr));
+			if (!consumed)
+			{
+				DrainSink ds;
+				dr(&ds);
+			}
 		}
 		else
 			throw new Exception("Invalid bencode character: %s".format(c));
@@ -104,9 +116,12 @@ struct BencodeParser(C = immutable(char))
 private struct ListReader(Parser)
 {
 	Parser* parser;
+	bool* consumed;
 
 	void opCall(Sink)(Sink sink)
 	{
+		assert(!*consumed);
+		*consumed = true;
 		while (parser.peek() != 'e')
 			parser.read(sink);
 		parser.skip(); // skip 'e'
@@ -116,16 +131,23 @@ private struct ListReader(Parser)
 private struct DictReader(Parser)
 {
 	Parser* parser;
+	bool* consumed;
 
 	void opCall(Sink)(Sink sink)
 	{
+		assert(!*consumed);
+		*consumed = true;
 		import ae.utils.serialization.serialization : Field;
 
 		while (parser.peek() != 'e')
 		{
-			DictKeyReader!Parser kr = {parser: parser};
-			DictValueReader!Parser vr = {parser: parser};
+			bool nameRead, valueRead;
+			DictKeyReader!Parser kr = {parser: parser, consumed: &nameRead};
+			DictValueReader!Parser vr = {keyReader: kr, consumed: &valueRead};
 			sink.handle(Field!(typeof(kr), typeof(vr))(kr, vr));
+			DrainSink ds;
+			if (!nameRead) kr(&ds);
+			if (!valueRead) vr(&ds);
 		}
 		parser.skip(); // skip 'e'
 	}
@@ -134,8 +156,12 @@ private struct DictReader(Parser)
 private struct DictKeyReader(Parser)
 {
 	Parser* parser;
+	bool* consumed;
+
 	void opCall(Sink)(Sink sink)
 	{
+		assert(!*consumed);
+		*consumed = true;
 		import ae.utils.serialization.serialization : String;
 		auto str = parser.readString();
 		sink.handle(String!(typeof(str))(str));
@@ -144,10 +170,19 @@ private struct DictKeyReader(Parser)
 
 private struct DictValueReader(Parser)
 {
-	Parser* parser;
+	DictKeyReader!Parser keyReader;
+	bool* consumed;
+
 	void opCall(Sink)(Sink sink)
 	{
-		parser.read(sink);
+		assert(!*consumed);
+		*consumed = true;
+		if (!*keyReader.consumed)
+		{
+			DrainSink ds;
+			keyReader(&ds);
+		}
+		keyReader.parser.read(sink);
 	}
 }
 
@@ -339,4 +374,70 @@ debug(ae_unittest) unittest
 
 	assert(result.name == "John");
 	assert(result.age == 30);
+}
+
+debug(ae_unittest) unittest
+{
+	import ae.utils.textout : StringBuilder;
+
+	static struct Fields
+	{
+		int[] skipped;
+		int[string] nameOnly;
+		string valueOnly;
+		string kept;
+		string after;
+	}
+
+	static void readInto(Sink)(Sink sink)
+	{
+		BencodeWriter!StringBuilder writer;
+		Serializer.Impl!Object.read(&writer, Fields([1], ["nested": 2], "v", "k", "a"));
+		auto data = writer.output.get();
+		auto parser = BencodeParser!()(data);
+		parser.read(sink);
+		assert(parser.p == data.length);
+	}
+
+	testFieldSkipping!readInto();
+}
+
+debug(ae_unittest) unittest
+{
+	import std.typecons : tuple;
+	import ae.utils.textout : StringBuilder;
+
+	static void readInto(Sink)(Sink sink)
+	{
+		BencodeWriter!StringBuilder writer;
+		Serializer.Impl!Object.read(&writer, tuple([1], ["nested": 2], "s"));
+		auto data = writer.output.get();
+		auto parser = BencodeParser!()(data);
+		parser.read(sink);
+		assert(parser.p == data.length);
+	}
+
+	testElementSkipping!readInto();
+}
+
+debug(ae_unittest) unittest
+{
+	static struct IgnoreValue
+	{
+		void handle(V)(V v) {}
+	}
+
+	import std.typecons : tuple;
+
+	auto input = "d1:ali1eee4:next";
+	foreach (sink; tuple(DrainSink(), IgnoreValue()))
+	{
+		auto parser = BencodeParser!()(input);
+		parser.read(&sink);
+
+		string result;
+		parser.read(deserializer(&result));
+		assert(result == "next");
+		assert(parser.p == input.length);
+	}
 }
