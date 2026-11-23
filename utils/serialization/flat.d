@@ -417,7 +417,7 @@ private struct FlatObjectReplayReader
 
 	void opCall(Sink)(Sink sink)
 	{
-		import ae.utils.serialization.serialization : Field;
+		import ae.utils.serialization.serialization : Field, DrainSink;
 
 		size_t i;
 		while (i < events.length)
@@ -427,8 +427,14 @@ private struct FlatObjectReplayReader
 			i++;
 
 			FlatStringEmitter nameReader = {str: keyStr};
-			FlatValueReplayReader valueReader = {events: events, pos: &i};
+			bool valueRead;
+			FlatValueReplayReader valueReader = {events: events, pos: &i, consumed: &valueRead};
 			sink.handle(Field!(typeof(nameReader), typeof(valueReader))(nameReader, valueReader));
+			if (!valueRead)
+			{
+				DrainSink ds;
+				valueReader(&ds);
+			}
 		}
 	}
 }
@@ -448,9 +454,12 @@ private struct FlatValueReplayReader
 {
 	FlatEvent[] events;
 	size_t* pos;
+	bool* consumed;
 
 	void opCall(Sink)(Sink sink)
 	{
+		assert(!*consumed);
+		*consumed = true;
 		replayValue(events, *pos, sink);
 	}
 }
@@ -565,4 +574,40 @@ debug(ae_unittest) unittest
 	assert(result.inner.x == 7);
 	assert(result.inner.s == "world");
 	assert(result.arr == [1, 2, 3]);
+}
+
+debug(ae_unittest) unittest
+{
+	static struct Fields
+	{
+		string[][string] skipped;
+		string[string][] nameOnly;
+		string valueOnly;
+		string kept;
+		string after;
+	}
+
+	static void readInto(Sink)(Sink sink)
+	{
+		auto replay = flatToCallback(sink);
+		auto writer = callbackToFlat(&replay);
+		Serializer.Impl!Object.read(&writer, Fields(
+			["nested": ["a"]], [["nested": "b"]], "v", "k", "a"));
+	}
+
+	testFieldSkipping!readInto();
+}
+
+debug(ae_unittest) unittest
+{
+	import std.typecons : tuple;
+
+	static void readInto(Sink)(Sink sink)
+	{
+		auto replay = flatToCallback(sink);
+		auto writer = callbackToFlat(&replay);
+		Serializer.Impl!Object.read(&writer, tuple([["nested": "a"]], ["nested": ["b"]], "s"));
+	}
+
+	testElementSkipping!readInto();
 }
