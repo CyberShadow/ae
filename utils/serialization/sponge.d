@@ -504,3 +504,32 @@ debug(ae_unittest) unittest
 
 	testElementSkipping!readInto();
 }
+
+debug(ae_unittest) unittest
+{
+	import ae.utils.serialization.json : JsonOptions, JsonWriter;
+	import ae.utils.textout : StringBuilder;
+
+	static struct Sink
+	{
+		void handle(V)(V value)
+		{
+			assert(isProtocolMap!V);
+			// Leave the root reader unread.
+		}
+	}
+
+	auto sponge = toSponge(["child": ["leaf"]]);
+	auto rootLength = sponge.buffer.length;
+	sponge.handle(Boolean(true));
+
+	size_t pos;
+	sponge.readAt(Sink(), pos);
+	assert(pos == rootLength);
+
+	enum options = JsonOptions(JsonOptions.NonStringKeys.stringify);
+	JsonWriter!(StringBuilder, options) writer;
+	sponge.readAt(&writer, pos);
+	assert(writer.get() == "true");
+	assert(pos == sponge.buffer.length);
+}

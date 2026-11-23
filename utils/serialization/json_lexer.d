@@ -1131,3 +1131,30 @@ debug(ae_unittest) unittest
 
 	testElementSkipping!readInto();
 }
+
+debug(ae_unittest) unittest
+{
+	import ae.utils.serialization.json : JsonWriter;
+	import ae.utils.serialization.serialization : isProtocolArray;
+	import ae.utils.textout : StringBuilder;
+
+	static struct Sink
+	{
+		void handle(V)(V value)
+		{
+			assert(isProtocolArray!V);
+			// Leave the root reader unread.
+		}
+	}
+
+	auto root = tokenize(`[{"child":["leaf"]}]`);
+	auto converter = TokenToEventConverter(root ~ tokenize("42"));
+	size_t pos;
+	converter.readValue(Sink(), pos);
+	assert(pos == root.length);
+
+	JsonWriter!StringBuilder writer;
+	converter.readValue(&writer, pos);
+	assert(writer.get() == "42");
+	assert(pos == converter.tokens.length);
+}
