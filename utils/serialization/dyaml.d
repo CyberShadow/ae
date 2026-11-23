@@ -414,3 +414,23 @@ debug(ae_unittest) unittest
 	assert(json.canFind(`"hello"`), json);
 	assert(json.canFind(`42`), json);
 }
+
+debug(ae_unittest) unittest
+{
+	static struct Fields
+	{
+		string[] skipped;
+		string[string] nameOnly;
+		string valueOnly;
+		string kept;
+		string after;
+	}
+
+	static void readInto(Sink)(Sink sink)
+	{
+		auto node = toYamlNode(Fields(["a"], ["nested": "b"], "v", "k", "a"));
+		YamlParser.read(node, sink);
+	}
+
+	testFieldSkipping!readInto();
+}

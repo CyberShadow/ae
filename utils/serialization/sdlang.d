@@ -525,3 +525,24 @@ debug(ae_unittest) unittest
 	assert(result.subPackage[1].name == "sqlite");
 	assert(result.subPackage[1].sourceFiles == ["sys/database.d", "sys/sqlite3.d"]);
 }
+
+debug(ae_unittest) unittest
+{
+	static void readInto(Sink)(Sink sink)
+	{
+		auto root = parseSource(q"SDL
+skipped {
+	child "a"
+}
+nameOnly {
+	child "b"
+}
+valueOnly "v"
+kept "k"
+after "a"
+SDL");
+		SdlParser.read(root, sink);
+	}
+
+	testFieldSkipping!readInto();
+}

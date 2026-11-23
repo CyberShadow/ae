@@ -496,3 +496,29 @@ debug(ae_unittest) unittest
 	assert(result.server.tls.enabled == "true");
 	assert(result.server.tls.cert == "/etc/cert.pem");
 }
+
+debug(ae_unittest) unittest
+{
+	import ae.utils.textout : StringBuilder;
+
+	static struct Nested { string child; }
+	static struct Fields
+	{
+		Nested skipped;
+		Nested nameOnly;
+		string valueOnly;
+		string kept;
+		string after;
+	}
+
+	static void readInto(Sink)(Sink sink)
+	{
+		SiniWriter!StringBuilder writer;
+		Serializer.Impl!Object.read(&writer, Fields(Nested("a"), Nested("b"), "v", "k", "a"));
+		auto lines = writer.output.get().splitLines();
+		SiniParser.read(lines, sink);
+	}
+
+	// SINI writes root keys before sections.
+	testFieldSkipping!readInto(["valueOnly", "kept", "after", "skipped", "nameOnly"]);
+}

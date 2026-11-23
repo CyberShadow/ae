@@ -455,3 +455,26 @@ debug(ae_unittest) unittest
 	auto result = parseToml!S("apple.color = \"red\"\n");
 	assert(result.apple.color == "red");
 }
+
+debug(ae_unittest) unittest
+{
+	static struct Nested { string child; }
+	static struct Fields
+	{
+		string[] skipped;
+		Nested nameOnly;
+		string valueOnly;
+		string kept;
+		string after;
+	}
+
+	static TOMLDocument doc;
+	doc = toTomlDoc(Fields(["a"], Nested("b"), "v", "k", "a"));
+	static void readInto(Sink)(Sink sink)
+	{
+		TomlParser.read(doc, sink);
+	}
+
+	// TOMLDocument exposes an unordered table.
+	testFieldSkipping!readInto(doc.table.keys);
+}

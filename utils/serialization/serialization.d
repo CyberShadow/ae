@@ -783,7 +783,8 @@ struct DrainSink
 	}
 }
 
-debug(ae_unittest) package void testFieldSkipping(alias readInto)()
+debug(ae_unittest) package void testFieldSkipping(alias readInto)(
+	string[] fieldOrder = ["skipped", "nameOnly", "valueOnly", "kept", "after"])
 {
 	static struct TextSink
 	{
@@ -800,6 +801,7 @@ debug(ae_unittest) package void testFieldSkipping(alias readInto)()
 
 	static struct Probe
 	{
+		string[] fieldOrder;
 		size_t fields;
 
 		void handle(V)(V v)
@@ -809,30 +811,31 @@ debug(ae_unittest) package void testFieldSkipping(alias readInto)()
 			else static if (isProtocolField!V)
 			{
 				TextSink name, value;
-				switch (fields++)
+				assert(fields < fieldOrder.length, "Unexpected field");
+				switch (fieldOrder[fields++])
 				{
-				case 0:
+				case "skipped":
 					break;
-				case 1:
+				case "nameOnly":
 					v.nameReader(&name);
 					assert(name.text == "nameOnly");
 					break;
-				case 2:
+				case "valueOnly":
 					v.valueReader(&value);
 					assert(value.text == "v");
 					break;
-				case 3:
+				case "kept":
 					v.nameReader(&name);
 					v.valueReader(&value);
 					assert(name.text == "kept" && value.text == "k");
 					break;
-				case 4:
+				case "after":
 					v.nameReader(&name);
 					v.valueReader(&value);
 					assert(name.text == "after" && value.text == "a");
 					break;
 				default:
-					assert(0, "Unexpected field");
+					assert(0, "Unexpected fixture key");
 				}
 			}
 			else
@@ -842,7 +845,7 @@ debug(ae_unittest) package void testFieldSkipping(alias readInto)()
 
 	DrainSink drain;
 	readInto(&drain);
-	Probe probe;
+	Probe probe = {fieldOrder: fieldOrder};
 	readInto(&probe);
 	assert(probe.fields == 5);
 }
