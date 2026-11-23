@@ -177,11 +177,12 @@ struct BencodeWriter(Output)
 		else static if (isProtocolString!V)
 		{
 			import ae.utils.text : toDec, decimalSize;
-			auto len = v.text.length;
+			auto text = v.text;
+			auto len = text.length;
 			char[decimalSize!size_t] buf = void;
 			output.put(toDec(len, buf));
 			output.put(':');
-			output.put(v.text);
+			output.put(text);
 		}
 		else static if (isProtocolArray!V)
 		{

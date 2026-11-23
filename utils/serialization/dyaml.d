@@ -157,22 +157,23 @@ struct YamlWriter
 			result = Node(v.value);
 		else static if (isProtocolNumeric!V)
 		{
+			auto text = v.text;
 			// Try integer first, then floating point, fall back to string
 			try
 			{
-				result = Node(to!long(v.text));
+				result = Node(to!long(text));
 				return;
 			}
 			catch (ConvException) {}
 
 			try
 			{
-				result = Node(to!double(v.text));
+				result = Node(to!double(text));
 				return;
 			}
 			catch (ConvException) {}
 
-			result = Node(v.text.to!string);
+			result = Node(text.to!string);
 		}
 		else static if (isProtocolString!V)
 			result = Node(v.text.to!string);

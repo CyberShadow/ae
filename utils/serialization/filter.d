@@ -400,14 +400,21 @@ struct TypeCoercer(Sink)
 		else static if (isProtocolString!V)
 		{
 			alias S = ProtocolTextType!V;
+			if (!stringsToBoolean && !stringsToNumbers)
+			{
+				downstream.handle(v);
+				return;
+			}
+
+			auto text = v.text;
 			if (stringsToBoolean)
 			{
-				if (v.text == "true")  { downstream.handle(Boolean(true));  return; }
-				if (v.text == "false") { downstream.handle(Boolean(false)); return; }
+				if (text == "true")  { downstream.handle(Boolean(true));  return; }
+				if (text == "false") { downstream.handle(Boolean(false)); return; }
 			}
-			if (stringsToNumbers && isNumericString(v.text))
+			if (stringsToNumbers && isNumericString(text))
 			{
-				downstream.handle(Numeric!(S)(v.text));
+				downstream.handle(Numeric!(S)(text));
 				return;
 			}
 			downstream.handle(v);
@@ -957,6 +964,41 @@ debug(ae_unittest) unittest
 }
 
 // --- TypeCoercer tests ---
+
+debug(ae_unittest) unittest
+{
+	static struct Event
+	{
+		enum isProtocolString = true;
+		int* reads;
+
+		@property string text()
+		{
+			++*reads;
+			return "42";
+		}
+	}
+
+	static struct Sink
+	{
+		int* forwarded;
+
+		void handle(V)(V v)
+		{
+			static if (is(V == Event))
+				forwarded = v.reads;
+			else
+				assert(0, "Expected the original string event");
+		}
+	}
+
+	int reads;
+	Sink sink;
+	auto filter = typeCoercer(&sink);
+	filter.handle(Event(&reads));
+	assert(sink.forwarded == &reads);
+	assert(reads == 0);
+}
 
 debug(ae_unittest) unittest
 {
