@@ -359,7 +359,7 @@ private:
 	void readValue(Sink)(Sink sink, ref size_t pos)
 	{
 		import ae.utils.serialization.serialization : Null, Boolean, Numeric,
-			String, Array, Map;
+			String, Array, Map, DrainSink;
 
 		skipWS(pos);
 		enforce(pos < tokens.length, "Unexpected end of token stream");
@@ -369,12 +369,24 @@ private:
 		final switch (tok.type)
 		{
 		case JsonTokenType.objectStart:
-			auto or_ = objectReader(&pos);
+			bool objectRead;
+			auto or_ = objectReader(&pos, &objectRead);
 			sink.handle(Map!(typeof(or_))(or_));
+			if (!objectRead)
+			{
+				DrainSink ds;
+				or_(&ds);
+			}
 			break;
 		case JsonTokenType.arrayStart:
-			auto ar = arrayReader(&pos);
+			bool arrayRead;
+			auto ar = arrayReader(&pos, &arrayRead);
 			sink.handle(Array!(typeof(ar))(ar));
+			if (!arrayRead)
+			{
+				DrainSink ds;
+				ar(&ds);
+			}
 			break;
 		case JsonTokenType.string_:
 			sink.handle(String!(typeof(tok.value))(tok.value));
@@ -401,15 +413,18 @@ private:
 		}
 	}
 
-	auto arrayReader(size_t* pos)
+	auto arrayReader(size_t* pos, bool* consumed)
 	{
 		static struct ArrayReader
 		{
 			TokenToEventConverter* converter;
 			size_t* pos;
+			bool* consumed;
 
 			void opCall(ElemSink)(ElemSink sink)
 			{
+				assert(!*consumed);
+				*consumed = true;
 				converter.skipWS(*pos);
 				if (*pos < converter.tokens.length && converter.tokens[*pos].type == JsonTokenType.arrayEnd)
 				{
@@ -432,18 +447,21 @@ private:
 				}
 			}
 		}
-		ArrayReader r = {converter: &this, pos: pos}; return r;
+		ArrayReader r = {converter: &this, pos: pos, consumed: consumed}; return r;
 	}
 
-	auto objectReader(size_t* pos)
+	auto objectReader(size_t* pos, bool* consumed)
 	{
 		static struct ObjectReader
 		{
 			TokenToEventConverter* converter;
 			size_t* pos;
+			bool* consumed;
 
 			void opCall(FieldSink)(FieldSink sink)
 			{
+				assert(!*consumed);
+				*consumed = true;
 				converter.skipWS(*pos);
 				if (*pos < converter.tokens.length && converter.tokens[*pos].type == JsonTokenType.objectEnd)
 				{
@@ -452,10 +470,16 @@ private:
 				}
 				while (true)
 				{
-					import ae.utils.serialization.serialization : Field;
-					auto nr = converter.nameReader(pos);
-					auto vr = converter.valueReader(pos);
+					import ae.utils.serialization.serialization : Field, DrainSink;
+					bool nameRead, valueRead;
+					auto nr = converter.nameReader(pos, &nameRead);
+					auto vr = converter.valueReader(pos, &valueRead, nr);
 					sink.handle(Field!(typeof(nr), typeof(vr))(nr, vr));
+					if (!valueRead)
+					{
+						DrainSink ds;
+						vr(&ds);
+					}
 
 					converter.skipWS(*pos);
 					if (*pos < converter.tokens.length && converter.tokens[*pos].type == JsonTokenType.objectEnd)
@@ -470,18 +494,21 @@ private:
 				}
 			}
 		}
-		ObjectReader r = {converter: &this, pos: pos}; return r;
+		ObjectReader r = {converter: &this, pos: pos, consumed: consumed}; return r;
 	}
 
-	auto nameReader(size_t* pos)
+	auto nameReader(size_t* pos, bool* consumed)
 	{
 		static struct NameReader
 		{
 			TokenToEventConverter* converter;
 			size_t* pos;
+			bool* consumed;
 
 			void opCall(Sink)(Sink sink)
 			{
+				assert(!*consumed);
+				*consumed = true;
 				import ae.utils.serialization.serialization : String;
 				// JSON object keys are always strings — call handle(String)
 				// directly to avoid instantiating non-string handlers on
@@ -495,18 +522,28 @@ private:
 				(*pos)++;
 			}
 		}
-		NameReader r = {converter: &this, pos: pos}; return r;
+		NameReader r = {converter: &this, pos: pos, consumed: consumed}; return r;
 	}
 
-	auto valueReader(size_t* pos)
+	auto valueReader(NameReaderType)(size_t* pos, bool* consumed, NameReaderType nameReader)
 	{
 		static struct ValueReader
 		{
 			TokenToEventConverter* converter;
 			size_t* pos;
+			bool* consumed;
+			NameReaderType nameReader;
 
 			void opCall(Sink)(Sink sink)
 			{
+				assert(!*consumed);
+				*consumed = true;
+				import ae.utils.serialization.serialization : DrainSink;
+				if (!*nameReader.consumed)
+				{
+					DrainSink ds;
+					nameReader(&ds);
+				}
 				converter.skipWS(*pos);
 				enforce(*pos < converter.tokens.length && converter.tokens[*pos].type == JsonTokenType.colon,
 					"Expected ':' after object key");
@@ -514,7 +551,7 @@ private:
 				converter.readValue(sink, *pos);
 			}
 		}
-		ValueReader r = {converter: &this, pos: pos}; return r;
+		ValueReader r = {converter: &this, pos: pos, consumed: consumed, nameReader: nameReader}; return r;
 	}
 }
 
@@ -1052,4 +1089,45 @@ debug(ae_unittest) unittest
 	assert(result.canFind(`"value": 42`), result);
 	// Name should be changed
 	assert(result.canFind(`"world"`), result);
+}
+
+debug(ae_unittest) unittest
+{
+	import ae.utils.serialization.json : toJson;
+	import ae.utils.serialization.serialization : testFieldSkipping;
+
+	static struct Fields
+	{
+		string[][string] skipped;
+		string[string][] nameOnly;
+		string valueOnly;
+		string kept;
+		string after;
+	}
+
+	static void readInto(Sink)(Sink sink)
+	{
+		auto tokens = tokenize(toJson(Fields(
+			["nested": ["a"]], [["nested": "b"]], "v", "k", "a")));
+		auto converter = TokenToEventConverter(tokens);
+		converter.read(sink);
+	}
+
+	testFieldSkipping!readInto();
+}
+
+debug(ae_unittest) unittest
+{
+	import std.typecons : tuple;
+	import ae.utils.serialization.json : toJson;
+	import ae.utils.serialization.serialization : testElementSkipping;
+
+	static void readInto(Sink)(Sink sink)
+	{
+		auto tokens = tokenize(toJson(tuple([["nested": "a"]], ["nested": ["b"]], "s")));
+		auto converter = TokenToEventConverter(tokens);
+		converter.read(sink);
+	}
+
+	testElementSkipping!readInto();
 }
