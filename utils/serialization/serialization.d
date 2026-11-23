@@ -169,6 +169,42 @@ template getSerializedName(T, string dFieldName)
 struct Null {}
 struct Boolean { bool value; }
 struct Numeric(S) { S text; }
+/// A native number with a text view borrowed from the event.
+/// Floating-point values must be finite. Each text access rewrites the buffer.
+struct NativeNumeric(N) if (isIntegral!N || isFloatingPoint!N)
+{
+	N value;
+	enum isProtocolNumeric = true;
+
+	static if (isIntegral!N)
+		private char[decimalSize!N] buf;
+	else
+	{
+		import ae.utils.textout : StaticBuf;
+		private StaticBuf!(char, 66) buf;
+	}
+
+	@property const(char)[] text() return
+	{
+		static if (isIntegral!N)
+		{
+			auto digits = toDec(value, buf).length;
+			return buf[$ - digits .. $];
+		}
+		else
+		{
+			buf.pos = 0;
+			putFP(buf, value);
+			foreach (c; buf.buf[0 .. buf.pos])
+				if (c == '.' || c == 'e' || c == 'E')
+					return buf.buf[0 .. buf.pos];
+			buf.put('.');
+			buf.put('0');
+			return buf.buf[0 .. buf.pos];
+		}
+	}
+}
+
 struct String(S) { S text; }
 struct Array(Reader) { Reader reader; }
 struct Map(Reader) { Reader reader; }
@@ -203,7 +239,11 @@ package T retainText(T, S)(S text)
 }
 
 /// True if V is a numeric protocol value.
-/// Required: `.text` convertible to `const(char)[]`.
+/// Required: `.text` convertible to `const(char)[]`. It may be computed,
+/// so read it once on the mutable event and reuse the result. The text is
+/// valid only during `handle` unless its element type is immutable. Copy
+/// borrowed text to retain it.
+/// Optional: integral or floating-point `.value` holding the native number.
 enum bool isProtocolNumeric(V) = is(V : Numeric!S, S) || isCustomProtocolNumeric!V;
 
 private template isCustomProtocolNumeric(V)
@@ -474,40 +514,13 @@ struct CustomSerializer(alias Transform = NoSerializeTransform, SerializerOption
 			}
 			else
 			static if (is(T : ulong))
-			{
-				char[decimalSize!T] buf = void;
-				auto s = toDec(v, buf);
-				sink.handle(Numeric!(typeof(s))(s));
-			}
+				sink.handle(NativeNumeric!T(v));
 			else
 			static if (isNumeric!T) // floating point
 			{
 				import std.math : isFinite;
 				if (v.isFinite)
-				{
-					import ae.utils.text : putFP;
-					import ae.utils.textout : StaticBuf;
-					StaticBuf!(char, 66) buf;
-					putFP(buf, v);
-					auto s = buf.data();
-					// Ensure float values are distinguishable from integers
-					// by always including a '.' or 'e' in the representation.
-					bool hasMarker = false;
-					foreach (c; s)
-						if (c == '.' || c == 'e' || c == 'E')
-						{
-							hasMarker = true;
-							break;
-						}
-					if (hasMarker)
-						sink.handle(Numeric!(typeof(s))(s));
-					else
-					{
-						buf.put('.');
-						buf.put('0');
-						sink.handle(Numeric!(typeof(buf.data()))(buf.data()));
-					}
-				}
+					sink.handle(NativeNumeric!T(v));
 				else
 					sink.handle(String!string(to!string(v)));
 			}
@@ -979,7 +992,13 @@ template CustomDeserializer(alias Transform, alias anchor)
 			else
 			static if (isProtocolNumeric!V)
 			{
-				static if (is(typeof(to!T(v.text))))
+				static if (isNumeric!T && !is(T == enum) && is(typeof(v.value) N)
+					&& (isIntegral!N || (isFloatingPoint!N && isFloatingPoint!T && N.sizeof <= T.sizeof)))
+				{
+					T t = to!T(v.value);
+					handleValue(t);
+				}
+				else static if (is(typeof(to!T(v.text))))
 				{
 					T t = retainText!T(v.text);
 					handleValue(t);
@@ -1998,4 +2017,113 @@ debug(ae_unittest) unittest
 	assert(result.a == 1);
 	assert(result.b == 2);
 	assert(result.c == "hello");
+}
+
+// Preserve integer limits through the serializer and the deserializer.
+debug(ae_unittest) unittest
+{
+	static struct Exact
+	{
+		byte small;
+		int medium;
+		long signedLimit;
+		ulong unsignedLimit;
+	}
+
+	static struct Wider
+	{
+		short small;
+		long medium;
+		long signedLimit;
+		ulong unsignedLimit;
+	}
+
+	auto original = Exact(byte.min, int.max, long.min, ulong.max);
+	Exact exact;
+	Serializer.Impl!Object.read(deserializer(&exact), original);
+	assert(exact == original);
+
+	Wider wider;
+	Serializer.Impl!Object.read(deserializer(&wider), original);
+	assert(wider == Wider(byte.min, int.max, long.min, ulong.max));
+}
+
+debug(ae_unittest) unittest
+{
+	import std.conv : ConvOverflowException;
+	import std.exception : assertThrown;
+
+	long result;
+	assertThrown!ConvOverflowException(
+		Serializer.Impl!Object.read(deserializer(&result), ulong.max));
+}
+
+debug(ae_unittest) unittest
+{
+	auto number = NativeNumeric!double(2.0);
+	assert(number.text == "2.0");
+}
+
+debug(ae_unittest) unittest
+{
+	import ae.utils.serialization.json : toJson;
+
+	static struct Numbers
+	{
+		double tenth, one, huge, negativeZero, third;
+		float maxFloat;
+		long minSigned;
+		ulong maxUnsigned;
+	}
+
+	auto numbers = Numbers(0.1, 1.0, 1e300, -0.0, 1 / 3.0, float.max, long.min, ulong.max);
+	assert(toJson(numbers) ==
+		`{"tenth":0.1,"one":1.0,"huge":1e+300,"negativeZero":-0.0,"third":0.3333333333333333,` ~
+		`"maxFloat":3.4028235e+38,"minSigned":-9223372036854775808,"maxUnsigned":18446744073709551615}`);
+}
+
+// Numeric events expose their native value to protocol consumers.
+debug(ae_unittest) unittest
+{
+	static struct Probe(N)
+	{
+		N actual;
+
+		void handle(V)(V event)
+		{
+			static if (isProtocolNumeric!V)
+			{
+				static assert(is(typeof(event.value) == N));
+				actual = event.value;
+			}
+			else
+				assert(0);
+		}
+	}
+
+	Probe!long integral;
+	Serializer.Impl!Object.read(&integral, long.min);
+	assert(integral.actual == long.min);
+
+	Probe!double floating;
+	Serializer.Impl!Object.read(&floating, 0.1);
+	assert(floating.actual == 0.1);
+}
+
+debug(ae_unittest) unittest
+{
+	static struct CustomNumeric(V)
+	{
+		enum isProtocolNumeric = true;
+		V value;
+		string text = "42.5";
+	}
+
+	foreach (event; tuple(CustomNumeric!bool(true), CustomNumeric!(void*)()))
+	{
+		double result;
+		auto sink = deserializer(&result);
+		sink.handle(event);
+		assert(result == 42.5);
+	}
 }
