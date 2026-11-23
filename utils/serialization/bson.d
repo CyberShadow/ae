@@ -72,22 +72,30 @@ struct BsonParser
 
 	private void readDocument(Sink)(Sink sink)
 	{
+		auto start = p;
 		auto docSize = readInt32();
-		auto docEnd = p - 4 + docSize;
-		enforce(docEnd <= data.length, "BSON document extends past end of input");
+		enforce(docSize >= 5, "Invalid BSON document length");
+		enforce(docSize <= data.length - start, "BSON document extends past end of input");
+		auto docEnd = start + docSize;
 
-		DocReader reader = {parser: &this, docEnd: docEnd};
+		bool consumed;
+		DocReader reader = {parser: &this, docEnd: docEnd, consumed: &consumed};
 		sink.handle(Map!(typeof(reader))(reader));
+		p = docEnd;
 	}
 
 	private void readArray(Sink)(Sink sink)
 	{
+		auto start = p;
 		auto docSize = readInt32();
-		auto docEnd = p - 4 + docSize;
-		enforce(docEnd <= data.length, "BSON array extends past end of input");
+		enforce(docSize >= 5, "Invalid BSON array length");
+		enforce(docSize <= data.length - start, "BSON array extends past end of input");
+		auto docEnd = start + docSize;
 
-		ArrayReader reader = {parser: &this, docEnd: docEnd};
+		bool consumed;
+		ArrayReader reader = {parser: &this, docEnd: docEnd, consumed: &consumed};
 		sink.handle(Array!(typeof(reader))(reader));
+		p = docEnd;
 	}
 
 	private void readValue(Sink)(BsonType type, Sink sink)
@@ -115,7 +123,8 @@ struct BsonParser
 
 		case BsonType.binary:
 			auto len = readInt32();
-			p++; // skip subtype byte
+			enforce(len >= 0, "Invalid BSON binary length");
+			readByte(); // skip subtype byte
 			auto bytes = readBytes(len);
 			BinaryArrayReader bar = {bytes: bytes};
 			sink.handle(Array!(typeof(bar))(bar));
@@ -189,7 +198,7 @@ struct BsonParser
 
 	private const(ubyte)[] readBytes(size_t n)
 	{
-		enforce(p + n <= data.length, "Unexpected end of BSON input");
+		enforce(n <= data.length - p, "Unexpected end of BSON input");
 		auto result = data[p .. p + n];
 		p += n;
 		return result;
@@ -222,7 +231,7 @@ struct BsonParser
 	{
 		auto len = readInt32();
 		enforce(len >= 1, "Invalid BSON string length");
-		enforce(p + len <= data.length, "BSON string extends past end of input");
+		enforce(len <= data.length - p, "BSON string extends past end of input");
 		auto result = cast(const(char)[]) data[p .. p + len - 1];
 		p += len; // includes null terminator
 		return result;
@@ -233,20 +242,33 @@ private struct DocReader
 {
 	BsonParser* parser;
 	size_t docEnd;
+	bool* consumed;
 
 	void opCall(Sink)(Sink sink)
 	{
+		assert(!*consumed);
+		*consumed = true;
 		while (parser.p < docEnd - 1)
 		{
 			auto type = cast(BsonType) parser.readByte();
 			if (type == 0) break; // end marker
 
 			auto name = parser.readCString();
-			ConstStringReader nr = {s: name};
-			ValueReader vr = {parser: parser, type: type};
+			bool nameRead, valueRead;
+			ConstStringReader nr = {s: name, consumed: &nameRead};
+			ValueReader vr = {parser: parser, type: type, nameConsumed: &nameRead, consumed: &valueRead};
 			sink.handle(Field!(typeof(nr), typeof(vr))(nr, vr));
+			if (!valueRead)
+			{
+				// BSON emitters consume the payload even when the sink ignores it.
+				static struct IgnoreValue
+				{
+					void handle(V)(V v) {}
+				}
+				IgnoreValue ignore;
+				vr(&ignore);
+			}
 		}
-		parser.p = docEnd; // skip to document end
 	}
 }
 
@@ -254,9 +276,12 @@ private struct ArrayReader
 {
 	BsonParser* parser;
 	size_t docEnd;
+	bool* consumed;
 
 	void opCall(Sink)(Sink sink)
 	{
+		assert(!*consumed);
+		*consumed = true;
 		while (parser.p < docEnd - 1)
 		{
 			auto type = cast(BsonType) parser.readByte();
@@ -265,7 +290,6 @@ private struct ArrayReader
 			parser.readCString(); // skip array index name ("0", "1", ...)
 			parser.readValue(type, sink);
 		}
-		parser.p = docEnd;
 	}
 }
 
@@ -283,8 +307,12 @@ private struct BinaryArrayReader
 private struct ConstStringReader
 {
 	string s;
+	bool* consumed;
+
 	void opCall(Sink)(Sink sink)
 	{
+		assert(!*consumed);
+		*consumed = true;
 		sink.handle(String!string(s));
 	}
 }
@@ -293,9 +321,14 @@ private struct ValueReader
 {
 	BsonParser* parser;
 	BsonType type;
+	bool* nameConsumed;
+	bool* consumed;
 
 	void opCall(Sink)(Sink sink)
 	{
+		assert(!*consumed);
+		*consumed = true;
+		*nameConsumed = true;
 		parser.readValue(type, sink);
 	}
 }
@@ -924,4 +957,155 @@ private ubyte[] hexToBytes(string hex)
 	foreach (i; 0 .. result.length)
 		result[i] = to!ubyte(hex[i * 2 .. i * 2 + 2], 16);
 	return result;
+}
+
+debug(ae_unittest) unittest
+{
+	static struct Nested { int value; }
+	static struct Fields
+	{
+		Nested skipped;
+		int[] nameOnly;
+		string valueOnly;
+		string kept;
+		string after;
+	}
+
+	static void readInto(Sink)(Sink sink)
+	{
+		auto data = toBson(Fields(Nested(1), [2], "v", "k", "a"));
+		auto parser = BsonParser(data);
+		parser.read(sink);
+		assert(parser.p == data.length);
+	}
+
+	testFieldSkipping!readInto();
+}
+
+debug(ae_unittest) unittest
+{
+	import std.typecons : tuple;
+
+	static void readInto(Sink)(Sink sink)
+	{
+		static struct ArrayField(S)
+		{
+			S target;
+
+			void handle(V)(V v)
+			{
+				static if (isProtocolMap!V)
+					v.reader(&this);
+				else static if (isProtocolField!V)
+					v.valueReader(target);
+				else
+					assert(0, "Expected document or field");
+			}
+		}
+
+		static struct Nested { int value; }
+		auto elements = tuple([1], Nested(2), "s");
+		// BSON documents expose a map at the root. Wrap the array as a field.
+		static struct Document { typeof(elements) items; }
+		auto data = toBson(Document(elements));
+		auto parser = BsonParser(data);
+		auto field = ArrayField!Sink(sink);
+		parser.read(&field);
+		assert(parser.p == data.length);
+	}
+
+	testElementSkipping!readInto();
+}
+
+debug(ae_unittest) unittest
+{
+	static struct Fields
+	{
+		string skipped;
+		int[] nameOnly;
+		string valueOnly;
+		string kept;
+		string after;
+	}
+
+	static void readInto(Sink)(Sink sink)
+	{
+		auto data = toBson(Fields("bin", [1], "v", "k", "a"));
+		// Change the first field from a four-byte BSON string to binary
+		// with a generic subtype followed by three payload bytes.
+		data[4] = cast(ubyte) BsonType.binary;
+		enum lengthOffset = 4 + 1 + "skipped".length + 1;
+		data[lengthOffset .. lengthOffset + 4] = nativeToLittleEndian(3)[];
+		data[lengthOffset + 4 .. lengthOffset + 8] = [0, 0xDE, 0xAD, 0xFF];
+
+		auto parser = BsonParser(data);
+		parser.read(sink);
+		assert(parser.p == data.length);
+	}
+
+	testFieldSkipping!readInto();
+}
+
+debug(ae_unittest) unittest
+{
+	static struct Nested { string value; }
+	static struct Document
+	{
+		Nested doc;
+		string[] arr;
+		string kept;
+	}
+
+	static struct Sink
+	{
+		size_t fields;
+		string kept;
+
+		void handle(V)(V v)
+		{
+			static if (isProtocolMap!V)
+				v.reader(&this);
+			else static if (isProtocolField!V)
+			{
+				if (fields++ == 2)
+					v.valueReader(deserializer(&kept));
+			}
+		}
+	}
+
+	auto data = toBson(Document(Nested("d"), ["a"], "k"));
+	enum docStart = 4 + 1 + "doc".length + 1;
+	enum docStringLength = docStart + 4 + 1 + "value".length + 1;
+	auto docLength = littleEndianToNative!int(data[docStart .. docStart + 4]);
+	auto arrStart = docStart + docLength + 1 + "arr".length + 1;
+	auto arrStringLength = arrStart + 4 + 1 + "0".length + 1;
+
+	foreach (offset; [docStringLength, arrStringLength])
+	{
+		auto malformed = data.dup;
+		malformed[offset .. offset + 4] = 0;
+		auto parser = BsonParser(malformed);
+		Sink sink;
+		parser.read(&sink);
+		assert(sink.fields == 3 && sink.kept == "k");
+		assert(parser.p == malformed.length);
+	}
+}
+
+debug(ae_unittest) unittest
+{
+	static struct IgnoreValue
+	{
+		void handle(V)(V v) {}
+	}
+
+	static struct Document { string value; }
+	auto valid = toBson(Document("next"));
+	foreach (size; [0, 4])
+	{
+		auto data = nativeToLittleEndian(size)[] ~ valid;
+		auto parser = BsonParser(data);
+		IgnoreValue sink;
+		assertThrown(parser.read(&sink));
+	}
 }
