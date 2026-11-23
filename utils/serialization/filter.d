@@ -237,8 +237,6 @@ struct RecursionLimiter(Sink)
 		{
 			if (currentDepth >= maxDepth)
 			{
-				DrainSink ds;
-				v.reader(&ds);
 				downstream.handle(Null());
 				return;
 			}
@@ -251,8 +249,6 @@ struct RecursionLimiter(Sink)
 		{
 			if (currentDepth >= maxDepth)
 			{
-				DrainSink ds;
-				v.reader(&ds);
 				downstream.handle(Null());
 				return;
 			}
@@ -547,11 +543,6 @@ struct FieldFilter(Sink)
 					alias VR = typeof(v.valueReader);
 					FilteredValueReader!(VR, Config) wvr = {originalReader: v.valueReader, config: config};
 					objSink.handle(Field!(typeof(emitter), typeof(wvr))(emitter, wvr));
-				}
-				else
-				{
-					DrainSink ds;
-					v.valueReader(&ds);
 				}
 			}
 			else
@@ -1116,6 +1107,25 @@ debug(ae_unittest) unittest
 	Serializer.Impl!Object.read(&filter, original);
 
 	assert(result.length == 0);
+}
+
+debug(ae_unittest) unittest
+{
+	import ae.utils.serialization.json : JsonParser;
+
+	static struct Inner { int count; }
+	static struct Output { Inner inner; string name; }
+
+	auto parser = JsonParser!()(
+		`{"discard":{"items":[1,{"value":2}]},"inner":{"discard":[{"value":"\n"}],"count":7},"name":"kept"}`,
+		0);
+	Output result;
+	auto filter = fieldFilter(deserializer(&result), ["inner", "count", "name"]);
+	parser.read(&filter);
+
+	assert(result.inner.count == 7);
+	assert(result.name == "kept");
+	assert(parser.eof);
 }
 
 // --- Composition tests ---

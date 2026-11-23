@@ -769,18 +769,29 @@ struct CustomSerializer(alias Transform = NoSerializeTransform, SerializerOption
 alias Serializer = CustomSerializer!NoSerializeTransform;
 
 // ---------------------------------------------------------------------------
-// Drain sink: discards any value, used for @IgnoreUnknown
+// Drain sink: discards any value
 // ---------------------------------------------------------------------------
 
-/// Recursively consumes and discards a value tree.
+/// Discards events. The source skips unread values.
 struct DrainSink
 {
-	void handle(V)(V v)
+	void handle(V)(V v) {}
+}
+
+debug(ae_unittest) unittest
+{
+	static assert(DrainSink.tupleof.length == 0);
+
+	static struct UnreadArray
 	{
-		static if (isProtocolArray!V) v.reader(&this);
-		else static if (isProtocolMap!V) v.reader(&this);
-		else static if (isProtocolField!V) { v.nameReader(&this); v.valueReader(&this); }
+		void opCall(Sink)(Sink sink)
+		{
+			assert(0, "DrainSink called the array reader");
+		}
 	}
+
+	DrainSink sink;
+	sink.handle(Array!UnreadArray(UnreadArray.init));
 }
 
 debug(ae_unittest) package void testFieldSkipping(alias readInto)(
@@ -1133,13 +1144,7 @@ template CustomDeserializer(alias Transform, alias anchor)
 									s.tupleof[extrasFieldIndex][name] = val;
 								}
 								else
-								// @IgnoreUnknown: silently drain unknown fields (any value type)
-								static if (hasUDA!(IgnoreUnknown, T))
-								{
-									DrainSink ds;
-									fv.valueReader(&ds);
-								}
-								else
+								static if (!hasUDA!(IgnoreUnknown, T))
 									throw new Exception("Unknown field %s".format(name));
 							}
 						}
@@ -1862,6 +1867,27 @@ debug(ae_unittest) unittest
 	Serializer.Impl!Object.read(sink, original);
 	assert(result.a == 1);
 	assert(result.c == 3);
+}
+
+// Test skipping unknown JSON fields without GC allocations.
+debug(ae_unittest) unittest
+{
+	import core.memory : GC;
+	import std.array : replicate;
+	import ae.utils.serialization.json : jsonParse;
+
+	@IgnoreUnknown static struct Partial { int keep; }
+
+	enum escaped = `"` ~ `\u0061\n\"\\`.replicate(256) ~ `"`;
+	immutable string input = `{"discard":` ~ escaped ~
+		`,"nested":[{"discard":` ~ escaped ~ `},[null,{}]],"keep":42}`;
+
+	auto before = GC.stats().allocatedInCurrentThread;
+	auto result = jsonParse!Partial(input);
+	auto after = GC.stats().allocatedInCurrentThread;
+
+	assert(result.keep == 42);
+	assert(after == before);
 }
 
 // Test @Exclude
