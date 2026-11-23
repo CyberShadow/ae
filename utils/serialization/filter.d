@@ -27,37 +27,7 @@ import std.conv;
 import ae.utils.serialization.serialization;
 import ae.utils.serialization.store;
 
-// =========================================================================
-// DrainSink — consumes and discards any value tree
-// =========================================================================
-
-/// Drain sink: consumes and discards any value tree. Useful when a filter
-/// wants to skip a subtree but the source requires the reader to be called.
-struct DrainSink
-{
-	void handle(V)(V v)
-	{
-		import ae.utils.serialization.serialization : isProtocolArray, isProtocolMap, isProtocolField;
-
-		static if (isProtocolArray!V)
-		{
-			DrainSink ds;
-			v.reader(&ds);
-		}
-		else static if (isProtocolMap!V)
-		{
-			DrainSink ds;
-			v.reader(&ds);
-		}
-		else static if (isProtocolField!V)
-		{
-			DrainSink ds;
-			v.nameReader(&ds);
-			v.valueReader(&ds);
-		}
-		// Scalars (Null, Boolean, Numeric, String): discard
-	}
-}
+public import ae.utils.serialization.serialization : DrainSink;
 
 // =========================================================================
 // Generic wrapper structs

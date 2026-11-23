@@ -746,7 +746,8 @@ alias Serializer = CustomSerializer!NoSerializeTransform;
 // Drain sink: discards any value, used for @IgnoreUnknown
 // ---------------------------------------------------------------------------
 
-private struct DrainSink
+/// Recursively consumes and discards a value tree.
+struct DrainSink
 {
 	void handle(V)(V v)
 	{
