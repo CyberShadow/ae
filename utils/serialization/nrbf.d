@@ -257,48 +257,44 @@ struct NrbfParser
 			sink.handle(Boolean(readByte() != 0));
 			break;
 		case PrimitiveType.Byte:
-			sink.handle(Numeric!string(to!string(readByte())));
+			sink.handle(NativeNumeric!ubyte(readByte()));
 			break;
 		case PrimitiveType.SByte:
-			sink.handle(Numeric!string(to!string(cast(byte) readByte())));
+			sink.handle(NativeNumeric!byte(cast(byte) readByte()));
 			break;
 		case PrimitiveType.Int16:
-			sink.handle(Numeric!string(to!string(readVal!short())));
+			sink.handle(NativeNumeric!short(readVal!short()));
 			break;
 		case PrimitiveType.UInt16:
-			sink.handle(Numeric!string(to!string(readVal!ushort())));
+			sink.handle(NativeNumeric!ushort(readVal!ushort()));
 			break;
 		case PrimitiveType.Int32:
-			sink.handle(Numeric!string(to!string(readInt32())));
+			sink.handle(NativeNumeric!int(readInt32()));
 			break;
 		case PrimitiveType.UInt32:
-			sink.handle(Numeric!string(to!string(readVal!uint())));
+			sink.handle(NativeNumeric!uint(readVal!uint()));
 			break;
 		case PrimitiveType.Int64:
-			sink.handle(Numeric!string(to!string(readVal!long())));
+			sink.handle(NativeNumeric!long(readVal!long()));
 			break;
 		case PrimitiveType.UInt64:
-			sink.handle(Numeric!string(to!string(readVal!ulong())));
+			sink.handle(NativeNumeric!ulong(readVal!ulong()));
 			break;
 		case PrimitiveType.Single:
 			float f = readVal!float();
-			import std.math : isNaN, isInfinity;
-			if (f.isNaN)
-				sink.handle(String!string("NaN"));
-			else if (f.isInfinity)
-				sink.handle(String!string(f > 0 ? "Infinity" : "-Infinity"));
+			import std.math : isFinite;
+			if (f.isFinite)
+				sink.handle(NativeNumeric!float(f));
 			else
-				sink.handle(Numeric!string(to!string(f)));
+				sink.handle(String!string(to!string(f)));
 			break;
 		case PrimitiveType.Double:
 			double d = readVal!double();
-			import std.math : isNaN, isInfinity;
-			if (d.isNaN)
-				sink.handle(String!string("NaN"));
-			else if (d.isInfinity)
-				sink.handle(String!string(d > 0 ? "Infinity" : "-Infinity"));
+			import std.math : isFinite;
+			if (d.isFinite)
+				sink.handle(NativeNumeric!double(d));
 			else
-				sink.handle(Numeric!string(to!string(d)));
+				sink.handle(String!string(to!string(d)));
 			break;
 		case PrimitiveType.Char:
 			// UTF-8 encoded character (1-3 bytes)
@@ -311,7 +307,7 @@ struct NrbfParser
 			else
 			{
 				// Multi-byte: just emit as numeric
-				sink.handle(Numeric!string(to!string(ch)));
+				sink.handle(NativeNumeric!ubyte(ch));
 			}
 			break;
 		case PrimitiveType.Decimal:
@@ -323,11 +319,11 @@ struct NrbfParser
 		case PrimitiveType.DateTime:
 			// 8 bytes (ticks + kind)
 			long ticks = readVal!long();
-			sink.handle(Numeric!string(to!string(ticks)));
+			sink.handle(NativeNumeric!long(ticks));
 			break;
 		case PrimitiveType.TimeSpan:
 			long ticks = readVal!long();
-			sink.handle(Numeric!string(to!string(ticks)));
+			sink.handle(NativeNumeric!long(ticks));
 			break;
 		case PrimitiveType.Null:
 			sink.handle(Null());
@@ -977,4 +973,85 @@ debug(ae_unittest) unittest
 	Probe probe;
 	readInto(&probe);
 	assert(probe.fields == 5 && probe.reference == "v");
+}
+
+debug(ae_unittest) unittest
+{
+	import std.bitmanip : nativeToLittleEndian;
+
+	static struct Integers
+	{
+		byte i8;
+		ubyte u8;
+		short i16;
+		ushort u16;
+		int i32;
+		uint u32;
+		long i64;
+		ulong u64;
+	}
+
+	auto expected = Integers(byte.min, ubyte.max, short.min, ushort.max,
+		int.min, uint.max, long.min, ulong.max);
+	ubyte[] values = [cast(ubyte) expected.i8, expected.u8];
+	foreach (value; expected.tupleof[2 .. $])
+		values ~= nativeToLittleEndian(value)[];
+
+	auto data = buildNrbfStream("TestClass", "TestAssembly",
+		["i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64"],
+		[BinaryType.Primitive, BinaryType.Primitive, BinaryType.Primitive, BinaryType.Primitive,
+		 BinaryType.Primitive, BinaryType.Primitive, BinaryType.Primitive, BinaryType.Primitive],
+		[PrimitiveType.SByte, PrimitiveType.Byte, PrimitiveType.Int16, PrimitiveType.UInt16,
+		 PrimitiveType.Int32, PrimitiveType.UInt32, PrimitiveType.Int64, PrimitiveType.UInt64],
+		values);
+	assert(parseNrbf!Integers(data) == expected);
+}
+
+debug(ae_unittest) unittest
+{
+	import std.bitmanip : nativeToLittleEndian;
+
+	static struct Single { float value; }
+	static struct Double { double value; }
+
+	auto bytes = nativeToLittleEndian(0.1f);
+	auto data = buildNrbfStream("TestClass", "TestAssembly", ["value"],
+		[BinaryType.Primitive], [PrimitiveType.Single], bytes[].dup);
+	float single = parseNrbf!Single(data).value;
+	assert(nativeToLittleEndian(single) == bytes);
+	double widened = parseNrbf!Double(data).value;
+	assert(widened == cast(double) single);
+	assert(widened != 0.1);
+}
+
+debug(ae_unittest) unittest
+{
+	import std.bitmanip : nativeToLittleEndian;
+
+	static struct Integer { int value; }
+	static struct Single { float value; }
+
+	static ubyte[] buildDouble(double value)
+	{
+		return buildNrbfStream("TestClass", "TestAssembly", ["value"],
+			[BinaryType.Primitive], [PrimitiveType.Double], nativeToLittleEndian(value)[].dup);
+	}
+
+	foreach (value; [2.0, 2.5])
+		assertThrown!ConvException(parseNrbf!Integer(buildDouble(value)));
+
+	testNarrowingFollowsText!(v => parseNrbf!Single(buildDouble(v)).value)(1e300);
+}
+
+debug(ae_unittest) unittest
+{
+	import std.bitmanip : nativeToLittleEndian;
+	import ae.utils.serialization.json : JsonWriter;
+
+	auto data = buildNrbfStream("TestClass", "TestAssembly", ["value"],
+		[BinaryType.Primitive], [PrimitiveType.Double], nativeToLittleEndian(0x7FF8000000000000UL)[].dup);
+	auto parser = NrbfParser(data);
+	JsonWriter!() writer;
+	parser.read(&writer);
+	assert(writer.get() == `{"value":"nan"}`);
 }
