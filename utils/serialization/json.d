@@ -253,7 +253,7 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 			{
 				skipWhitespace();
 				expect('"');
-				readWholeString();          // discards
+				scanString!false();
 				skipWhitespace();
 				expect(':');
 				skipValue();
@@ -264,7 +264,7 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 			break;
 		case '"':
 			skip();
-			readWholeString();
+			scanString!false();
 			break;
 		case 't': skip(); expect('r'); expect('u'); expect('e'); break;
 		case 'f': skip(); expect('a'); expect('l'); expect('s'); expect('e'); break;
@@ -454,6 +454,11 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 	/// Returns the unescaped string content.
 	C[] readWholeString()
 	{
+		return scanString!true();
+	}
+
+	private auto scanString(bool decode)()
+	{
 		// Fast path: try to find closing quote with no escapes
 		auto start = mark();
 		while (true)
@@ -462,9 +467,11 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 			if (c == '"')
 			{
 				// No escapes -- return slice directly (zero allocation)
-				auto result = slice(start, mark());
 				skip(); // consume closing quote
-				return result;
+				static if (decode)
+					return slice(start, mark() - 1);
+				else
+					return false;
 			}
 			else if (c == '\\')
 			{
@@ -476,8 +483,11 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 		}
 
 		// Slow path: build with escape processing
-		C[] buf;
-		buf ~= slice(start, mark());
+		static if (decode)
+		{
+			C[] buf;
+			buf ~= slice(start, mark());
+		}
 
 		while (true)
 		{
@@ -485,21 +495,22 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 			if (c == '"')
 			{
 				skip();
-				return buf;
+				static if (decode) return buf;
+				else return true;
 			}
 			else if (c == '\\')
 			{
 				skip();
 				switch (next())
 				{
-				case '"':  buf ~= '"'; break;
-				case '/':  buf ~= '/'; break;
-				case '\\': buf ~= '\\'; break;
-				case 'b':  buf ~= '\b'; break;
-				case 'f':  buf ~= '\f'; break;
-				case 'n':  buf ~= '\n'; break;
-				case 'r':  buf ~= '\r'; break;
-				case 't':  buf ~= '\t'; break;
+				case '"':  static if (decode) buf ~= '"'; break;
+				case '/':  static if (decode) buf ~= '/'; break;
+				case '\\': static if (decode) buf ~= '\\'; break;
+				case 'b':  static if (decode) buf ~= '\b'; break;
+				case 'f':  static if (decode) buf ~= '\f'; break;
+				case 'n':  static if (decode) buf ~= '\n'; break;
+				case 'r':  static if (decode) buf ~= '\r'; break;
+				case 't':  static if (decode) buf ~= '\t'; break;
 				case 'u':
 				{
 					auto d = cast(dchar) fromHex!ushort(readN(4));
@@ -514,21 +525,24 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 					else
 						enforce(d < 0xDC00 || d > 0xDFFF, "Unexpected low surrogate");
 
-					static if (C.sizeof == 1)
+					static if (decode)
 					{
-						char[4] tmpbuf;
-						auto len = encode(tmpbuf, d);
-						buf ~= cast(C[]) tmpbuf[0 .. len];
-					}
-					else static if (C.sizeof == 2)
-					{
-						wchar[2] tmpbuf;
-						auto len = encode(tmpbuf, d);
-						buf ~= cast(C[]) tmpbuf[0 .. len];
-					}
-					else
-					{
-						buf ~= cast(C) d;
+						static if (C.sizeof == 1)
+						{
+							char[4] tmpbuf;
+							auto len = encode(tmpbuf, d);
+							buf ~= cast(C[]) tmpbuf[0 .. len];
+						}
+						else static if (C.sizeof == 2)
+						{
+							wchar[2] tmpbuf;
+							auto len = encode(tmpbuf, d);
+							buf ~= cast(C[]) tmpbuf[0 .. len];
+						}
+						else
+						{
+							buf ~= cast(C) d;
+						}
 					}
 					break;
 				}
@@ -538,7 +552,7 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 			}
 			else
 			{
-				buf ~= c;
+				static if (decode) buf ~= c;
 				skip();
 			}
 		}
@@ -1266,6 +1280,27 @@ debug(ae_unittest) unittest
 	assertThrown!Exception(jsonParse!string(`"\uDD40"`));
 	assertThrown!Exception(jsonParse!string(`"\uD83E\n"`));
 	assertThrown!Exception(jsonParse!string(`"\uD83E\u0041"`));
+}
+
+debug(ae_unittest) unittest
+{
+	foreach (input; [`"\q"`, `"\u012z"`, `"\uDC00"`, `"\uD800a"`, `"\uD800"`])
+	{
+		JsonParser!() parser = {s: input};
+		assertThrown!Exception(parser.skipValue(), input);
+	}
+}
+
+debug(ae_unittest) unittest
+{
+	import core.memory : GC;
+
+	JsonParser!() parser = {s: `{"line\nbreak":["escaped \"quote\"","é 😀","\u00e9 \uD83D\uDE00"]}`};
+	auto before = GC.stats().allocatedInCurrentThread;
+	parser.skipValue();
+	auto after = GC.stats().allocatedInCurrentThread;
+	assert(parser.eof);
+	assert(after == before);
 }
 
 // AA serialization/parse
