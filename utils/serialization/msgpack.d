@@ -45,7 +45,7 @@ struct MsgpackParser
 		// positive fixint: 0x00..0x7f
 		if (b <= 0x7F)
 		{
-			sink.handle(Numeric!string(to!string(b)));
+			sink.handle(NativeNumeric!ubyte(b));
 			return;
 		}
 
@@ -76,7 +76,7 @@ struct MsgpackParser
 		if (b >= 0xE0)
 		{
 			auto val = cast(byte) b;
-			sink.handle(Numeric!string(to!string(val)));
+			sink.handle(NativeNumeric!byte(val));
 			return;
 		}
 
@@ -138,7 +138,11 @@ struct MsgpackParser
 		{
 			auto bytes = readBytes(4);
 			float val = bigEndianToNative!float(bytes[0 .. 4]);
-			sink.handle(Numeric!string(to!string(val)));
+			import std.math : isFinite;
+			if (val.isFinite)
+				sink.handle(NativeNumeric!float(val));
+			else
+				sink.handle(String!string(to!string(val)));
 			break;
 		}
 
@@ -147,36 +151,40 @@ struct MsgpackParser
 		{
 			auto bytes = readBytes(8);
 			double val = bigEndianToNative!double(bytes[0 .. 8]);
-			sink.handle(Numeric!string(to!string(val)));
+			import std.math : isFinite;
+			if (val.isFinite)
+				sink.handle(NativeNumeric!double(val));
+			else
+				sink.handle(String!string(to!string(val)));
 			break;
 		}
 
 		// uint 8/16/32/64
 		case 0xCC:
-			sink.handle(Numeric!string(to!string(readByte())));
+			sink.handle(NativeNumeric!ubyte(readByte()));
 			break;
 		case 0xCD:
-			sink.handle(Numeric!string(to!string(read16())));
+			sink.handle(NativeNumeric!ushort(read16()));
 			break;
 		case 0xCE:
-			sink.handle(Numeric!string(to!string(read32())));
+			sink.handle(NativeNumeric!uint(read32()));
 			break;
 		case 0xCF:
-			sink.handle(Numeric!string(to!string(read64())));
+			sink.handle(NativeNumeric!ulong(read64()));
 			break;
 
 		// int 8/16/32/64
 		case 0xD0:
-			sink.handle(Numeric!string(to!string(cast(byte) readByte())));
+			sink.handle(NativeNumeric!byte(cast(byte) readByte()));
 			break;
 		case 0xD1:
-			sink.handle(Numeric!string(to!string(cast(short) read16())));
+			sink.handle(NativeNumeric!short(cast(short) read16()));
 			break;
 		case 0xD2:
-			sink.handle(Numeric!string(to!string(cast(int) read32())));
+			sink.handle(NativeNumeric!int(cast(int) read32()));
 			break;
 		case 0xD3:
-			sink.handle(Numeric!string(to!string(cast(long) read64())));
+			sink.handle(NativeNumeric!long(cast(long) read64()));
 			break;
 
 		// fixext 1/2/4/8/16 — skip type byte, emit data as bin
@@ -388,7 +396,7 @@ private struct MsgpackBinReader
 	void opCall(Sink)(Sink sink)
 	{
 		foreach (b; bytes)
-			sink.handle(Numeric!string(to!string(b)));
+			sink.handle(NativeNumeric!ubyte(b));
 	}
 }
 
@@ -871,4 +879,84 @@ debug(ae_unittest) unittest
 	}
 
 	testElementSkipping!readInto();
+}
+
+debug(ae_unittest) unittest
+{
+	const(ubyte)[] maxUnsigned = [0xCF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
+	assert(parseMsgpack!ulong(maxUnsigned) == ulong.max);
+	assert(parseMsgpack!string(maxUnsigned) == "18446744073709551615");
+	assertThrown!ConvException(parseMsgpack!long(maxUnsigned));
+
+	const(ubyte)[] minSigned = [0xD3, 0x80, 0, 0, 0, 0, 0, 0, 0];
+	assert(parseMsgpack!long(minSigned) == long.min);
+	assertThrown!ConvException(parseMsgpack!int(minSigned));
+}
+
+debug(ae_unittest) unittest
+{
+	const(ubyte)[] data = [0xCA, 0x3D, 0xCC, 0xCC, 0xCD]; // float32 0.1f
+	float single = parseMsgpack!float(data);
+	assert(nativeToBigEndian(single)[] == data[1 .. $]);
+	double widened = parseMsgpack!double(data);
+	assert(widened == cast(double) single);
+	assert(widened != 0.1);
+}
+
+debug(ae_unittest) unittest
+{
+	foreach (value; [2.0, 2.5])
+		assertThrown!ConvException(parseMsgpack!int([cast(ubyte) 0xCB] ~ nativeToBigEndian(value)[]));
+
+	testNarrowingFollowsText!(v => parseMsgpack!float([cast(ubyte) 0xCB] ~ nativeToBigEndian(v)[]))(1e300);
+}
+
+debug(ae_unittest) unittest
+{
+	import ae.utils.serialization.json : JsonOptions, JsonWriter;
+	import ae.utils.textout : StringBuilder;
+
+	const(ubyte)[] data = [0xCB, 0x7F, 0xF8, 0, 0, 0, 0, 0, 0]; // float64 quiet NaN
+	auto parser = MsgpackParser(data);
+	JsonWriter!(StringBuilder, JsonOptions(JsonOptions.NonStringKeys.stringify)) writer;
+	parser.read(&writer);
+	assert(writer.get() == `"nan"`);
+}
+
+debug(ae_unittest) unittest
+{
+	import core.memory : GC;
+
+	@IgnoreUnknown static struct Partial { int keep; }
+	static struct Document { long[] discard; int keep; }
+
+	long[128] integers;
+	foreach (i; 0 .. 32)
+		integers[i * 4 .. i * 4 + 4] =
+			[cast(long) i, byte.min - i, short.min - i, long.min + i];
+
+	auto arrayData = toMsgpack(integers).idup;
+	auto parser = MsgpackParser(arrayData);
+	DrainSink sink;
+	parser.read(&sink);
+	parser = MsgpackParser(arrayData);
+	auto before = GC.stats().allocatedInCurrentThread;
+	parser.read(&sink);
+	auto after = GC.stats().allocatedInCurrentThread;
+	assert(after == before);
+
+	// readString exposes const(char)[] even for immutable input, so
+	// retainText copies the field names during typed deserialization.
+	ulong[2] allocated;
+	foreach (i, size; [1, integers.length])
+	{
+		auto data = toMsgpack(Document(integers[0 .. size], 42)).idup;
+		assert(parseMsgpack!Partial(data).keep == 42);
+		before = GC.stats().allocatedInCurrentThread;
+		auto result = parseMsgpack!Partial(data);
+		after = GC.stats().allocatedInCurrentThread;
+		assert(result.keep == 42);
+		allocated[i] = after - before;
+	}
+	assert(allocated[0] == allocated[1]);
 }

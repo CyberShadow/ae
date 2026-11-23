@@ -874,6 +874,21 @@ debug(ae_unittest) package void testFieldSkipping(alias readInto)(
 	assert(probe.fields == 5);
 }
 
+/// Asserts that `parseFloat(value)`, which deserializes a native `double`
+/// event into a `float`, converts through the event's text. Narrowing
+/// conversions take the text path, so they throw or overflow exactly as
+/// `to!float` does for that text (which depends on the Phobos version).
+debug(ae_unittest) package void testNarrowingFollowsText(alias parseFloat)(double value)
+{
+	import std.exception : assertThrown, collectException;
+
+	float expected;
+	if (collectException!ConvException(expected = to!float(NativeNumeric!double(value).text)))
+		assertThrown!ConvException(parseFloat(value));
+	else
+		assert(parseFloat(value) == expected);
+}
+
 debug(ae_unittest) package void testElementSkipping(alias readInto)()
 {
 	static struct Elements
