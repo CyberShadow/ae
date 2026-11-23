@@ -244,14 +244,26 @@ struct MsgpackParser
 
 	private void readArray(Sink)(size_t count, Sink sink)
 	{
-		MsgpackArrayReader reader = {parser: &this, remaining: count};
+		bool consumed;
+		MsgpackArrayReader reader = {parser: &this, remaining: count, consumed: &consumed};
 		sink.handle(Array!(typeof(reader))(reader));
+		if (!consumed)
+		{
+			DrainSink ds;
+			reader(&ds);
+		}
 	}
 
 	private void readMap(Sink)(size_t count, Sink sink)
 	{
-		MsgpackMapReader reader = {parser: &this, remaining: count};
+		bool consumed;
+		MsgpackMapReader reader = {parser: &this, remaining: count, consumed: &consumed};
 		sink.handle(Map!(typeof(reader))(reader));
+		if (!consumed)
+		{
+			DrainSink ds;
+			reader(&ds);
+		}
 	}
 
 	private void emitBin(Sink)(size_t len, Sink sink)
@@ -304,9 +316,12 @@ private struct MsgpackArrayReader
 {
 	MsgpackParser* parser;
 	size_t remaining;
+	bool* consumed;
 
 	void opCall(Sink)(Sink sink)
 	{
+		assert(!*consumed);
+		*consumed = true;
 		foreach (_; 0 .. remaining)
 			parser.read(sink);
 	}
@@ -316,14 +331,21 @@ private struct MsgpackMapReader
 {
 	MsgpackParser* parser;
 	size_t remaining;
+	bool* consumed;
 
 	void opCall(Sink)(Sink sink)
 	{
+		assert(!*consumed);
+		*consumed = true;
 		foreach (_; 0 .. remaining)
 		{
-			MsgpackKeyReader kr = {parser: parser};
-			MsgpackValueReader vr = {parser: parser};
+			bool nameRead, valueRead;
+			MsgpackKeyReader kr = {parser: parser, consumed: &nameRead};
+			MsgpackValueReader vr = {keyReader: kr, consumed: &valueRead};
 			sink.handle(Field!(typeof(kr), typeof(vr))(kr, vr));
+			DrainSink ds;
+			if (!nameRead) kr(&ds);
+			if (!valueRead) vr(&ds);
 		}
 	}
 }
@@ -331,13 +353,32 @@ private struct MsgpackMapReader
 private struct MsgpackKeyReader
 {
 	MsgpackParser* parser;
-	void opCall(Sink)(Sink sink) { parser.read(sink); }
+	bool* consumed;
+
+	void opCall(Sink)(Sink sink)
+	{
+		assert(!*consumed);
+		*consumed = true;
+		parser.read(sink);
+	}
 }
 
 private struct MsgpackValueReader
 {
-	MsgpackParser* parser;
-	void opCall(Sink)(Sink sink) { parser.read(sink); }
+	MsgpackKeyReader keyReader;
+	bool* consumed;
+
+	void opCall(Sink)(Sink sink)
+	{
+		assert(!*consumed);
+		*consumed = true;
+		if (!*keyReader.consumed)
+		{
+			DrainSink ds;
+			keyReader(&ds);
+		}
+		keyReader.parser.read(sink);
+	}
 }
 
 private struct MsgpackBinReader
@@ -789,4 +830,45 @@ debug(ae_unittest) unittest
 	// bin8, length 3, bytes [0xDE, 0xAD, 0xFF]
 	auto result = parseMsgpack!(ubyte[])([0xC4, 0x03, 0xDE, 0xAD, 0xFF]);
 	assert(result == [0xDE, 0xAD, 0xFF]);
+}
+
+debug(ae_unittest) unittest
+{
+	static struct Fields
+	{
+		int[] skipped;
+		int[string] nameOnly;
+		string valueOnly;
+		string kept;
+		string after;
+	}
+
+	static void readInto(Sink)(Sink sink)
+	{
+		auto data = toMsgpack(Fields([1], ["nested": 2], "v", "k", "a"));
+		// Replace the first field's value with an array containing bin8 and fixext1.
+		enum valueOffset = 1 + 1 + "skipped".length;
+		enum ubyte[] payload = [0x92, 0xC4, 0x02, 0xDE, 0xAD, 0xD4, 0x01, 0xFF];
+		data = data[0 .. valueOffset] ~ payload ~ data[valueOffset + 2 .. $];
+		auto parser = MsgpackParser(data);
+		parser.read(sink);
+		assert(parser.p == data.length);
+	}
+
+	testFieldSkipping!readInto();
+}
+
+debug(ae_unittest) unittest
+{
+	import std.typecons : tuple;
+
+	static void readInto(Sink)(Sink sink)
+	{
+		auto data = toMsgpack(tuple([1], ["nested": 2], "s"));
+		auto parser = MsgpackParser(data);
+		parser.read(sink);
+		assert(parser.p == data.length);
+	}
+
+	testElementSkipping!readInto();
 }
