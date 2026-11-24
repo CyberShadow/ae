@@ -216,7 +216,25 @@ auto stringEmitter(S)(S value)
 // Filter: RecursionLimiter
 // =========================================================================
 
-/// Filter that replaces nested structures beyond maxDepth with null.
+/**
+ * Filter that throws when nesting exceeds `maxDepth`.
+ *
+ * A container at nesting depth `maxDepth` or deeper (the top-level
+ * value has depth 0) causes an `Exception` to be thrown instead of
+ * being forwarded.
+ *
+ * The limiter also bounds the recursion of the source it is attached
+ * to. Under the reader rules, a value which the sink does not read is
+ * skipped by the source, which recurses through all of its nesting.
+ * To prevent this, if the downstream sink returns without reading a
+ * container (or a map field's name or value), the limiter itself reads it,
+ * through a limiter wrapping `DrainSink`, so that every level of
+ * nesting is depth-checked. Scalars stay undecoded on this path.
+ *
+ * Invariant: with the limiter directly downstream of a source, the
+ * source never recurses deeper than about `maxDepth` + 1 levels,
+ * whatever the sink reads.
+ */
 struct RecursionLimiter(Sink)
 {
 	Sink downstream;
@@ -228,37 +246,136 @@ struct RecursionLimiter(Sink)
 		return RecursionLimiter!S(sink, maxDepth, currentDepth + 1);
 	}
 
+	/// Reads a value (nested one level below this limiter's container)
+	/// which the downstream sink did not read, so that its nesting is
+	/// depth-checked.
+	void skip(Reader)(Reader reader)
+	{
+		auto drain = RecursionLimiter!DrainSink(DrainSink(), maxDepth, currentDepth + 1);
+		reader(&drain);
+	}
+
 	void handle(V)(V v)
 	{
-		import ae.utils.serialization.serialization : Null, isProtocolArray, isProtocolMap,
+		import ae.utils.serialization.serialization : isProtocolArray, isProtocolMap,
 			rewrapArray, rewrapMap;
 
-		static if (isProtocolArray!V)
+		static if (isProtocolArray!V || isProtocolMap!V)
 		{
 			if (currentDepth >= maxDepth)
-			{
-				downstream.handle(Null());
-				return;
-			}
+				throw new Exception("Recursion limit exceeded (maximum depth: " ~ maxDepth.to!string ~ ")");
 			auto self = &this;
 			alias R = typeof(v.reader);
-			FilteredArrayReader!(R, typeof(self)) wr = {originalReader: v.reader, config: self};
-			downstream.handle(rewrapArray(v, wr));
-		}
-		else static if (isProtocolMap!V)
-		{
-			if (currentDepth >= maxDepth)
+			bool called;
+			static if (isProtocolArray!V)
 			{
-				downstream.handle(Null());
-				return;
+				LimitedReader!(R, typeof(self)) wr = {originalReader: v.reader, config: self, called: &called};
+				downstream.handle(rewrapArray(v, wr));
+				if (!called)
+					skip(v.reader);
 			}
-			auto self = &this;
-			alias R = typeof(v.reader);
-			FullFilteredObjectReader!(R, typeof(self)) wr = {originalReader: v.reader, config: self};
-			downstream.handle(rewrapMap(v, wr));
+			else
+			{
+				LimitedObjectReader!(R, typeof(self)) wr = {originalReader: v.reader, config: self, called: &called};
+				downstream.handle(rewrapMap(v, wr));
+				if (!called)
+				{
+					// Map readers emit fields; the field sink walks the values.
+					LimitedFieldSink!(DrainSink, typeof(self)) fs = {downstream: DrainSink(), config: self};
+					v.reader(&fs);
+				}
+			}
 		}
 		else
 			downstream.handle(v);
+	}
+}
+
+/// Like `FilteredValueReader`, but records that it was called.
+struct LimitedReader(OrigReader, Config)
+{
+	OrigReader originalReader;
+	Config config;
+	bool* called;
+
+	void opCall(Sink)(Sink sink)
+	{
+		*called = true;
+		auto filter = config.makeFilter(sink);
+		originalReader(&filter);
+	}
+}
+
+/// Like `FullFilteredObjectReader`, but records that it was called,
+/// and depth-checks every field.
+struct LimitedObjectReader(OrigReader, Config)
+{
+	OrigReader originalReader;
+	Config config;
+	bool* called;
+
+	void opCall(Sink)(Sink sink)
+	{
+		*called = true;
+		LimitedFieldSink!(Sink, Config) fs = {downstream: sink, config: config};
+		originalReader(&fs);
+	}
+}
+
+/// Field sink which depth-checks names and values, including the ones
+/// the downstream sink leaves unread. Names need this too: in formats
+/// such as MessagePack and CBOR, a map key can be a nested container.
+struct LimitedFieldSink(Sink, Config)
+{
+	Sink downstream;
+	Config config;
+
+	void handle(V)(V v)
+	{
+		import ae.utils.serialization.serialization : isProtocolField, Field;
+
+		static if (isProtocolField!V)
+		{
+			alias NR = typeof(v.nameReader);
+			alias VR = typeof(v.valueReader);
+			bool nameCalled, valueCalled;
+			LimitedReader!(NR, Config) wnr = {originalReader: v.nameReader, config: config, called: &nameCalled};
+			LimitedFieldValueReader!(NR, VR, Config) wvr = {
+				nameReader: v.nameReader, nameCalled: &nameCalled,
+				originalReader: v.valueReader, config: config, called: &valueCalled,
+			};
+			downstream.handle(Field!(typeof(wnr), typeof(wvr))(wnr, wvr));
+			// If the value was read, its reader already walked an unread name.
+			if (!nameCalled)
+				config.skip(v.nameReader);
+			if (!valueCalled)
+				config.skip(v.valueReader);
+		}
+		else
+			static assert(false, "LimitedFieldSink: expected Field, got " ~ V.stringof);
+	}
+}
+
+/// Value reader which, per the reader rules, first walks the field name
+/// if the sink left it unread, so the source does not skip it unchecked.
+struct LimitedFieldValueReader(NameReader, OrigReader, Config)
+{
+	NameReader nameReader;
+	bool* nameCalled;
+	OrigReader originalReader;
+	Config config;
+	bool* called;
+
+	void opCall(Sink)(Sink sink)
+	{
+		*called = true;
+		if (!*nameCalled)
+		{
+			*nameCalled = true;
+			config.skip(nameReader);
+		}
+		auto filter = config.makeFilter(sink);
+		originalReader(&filter);
 	}
 }
 
@@ -881,37 +998,148 @@ debug(ae_unittest) unittest
 
 debug(ae_unittest) unittest
 {
+	import std.exception : assertThrown;
+
 	static struct Inner { int x; }
 	static struct Outer { int a; Inner inner; }
 
 	Outer original = Outer(42, Inner(7));
-
-	import std.typecons : Nullable;
-	static struct FlatOuter { int a; Nullable!int inner; }
-
-	FlatOuter result;
+	Outer result;
 	auto sink = deserializer(&result);
 	auto filter = recursionLimiter(sink, 1);
-	Serializer.Impl!Object.read(&filter, original);
-
-	assert(result.a == 42);
-	assert(result.inner.isNull);
+	assertThrown(Serializer.Impl!Object.read(&filter, original));
 }
 
 debug(ae_unittest) unittest
 {
-	import std.typecons : Nullable;
+	import std.exception : assertThrown;
 
 	int[][] original = [[1, 2], [3, 4]];
-
-	Nullable!(int)[] result;
+	int[][] result;
 	auto sink = deserializer(&result);
 	auto filter = recursionLimiter(sink, 1);
-	Serializer.Impl!Object.read(&filter, original);
+	assertThrown(Serializer.Impl!Object.read(&filter, original));
+}
 
-	assert(result.length == 2);
-	assert(result[0].isNull);
-	assert(result[1].isNull);
+// Hostile depth: the limiter must bound the source's recursion,
+// whatever the sink reads.
+debug(ae_unittest) unittest
+{
+	import std.array : replicate;
+	import std.algorithm.searching : canFind;
+	import ae.utils.serialization.json : JsonParser;
+
+	@IgnoreUnknown static struct Ignoring { int x; }
+
+	// Reads every container, ignoring scalars
+	static struct Reader
+	{
+		void handle(V)(V v)
+		{
+			static if (isProtocolArray!V || isProtocolMap!V)
+				v.reader(&this);
+			else static if (isProtocolField!V)
+			{
+				v.nameReader(&this);
+				v.valueReader(&this);
+			}
+		}
+	}
+
+	static void check(Sink)(Sink sink, string input)
+	{
+		auto limiter = recursionLimiter(sink, 64);
+		try
+			JsonParser!()(input).read(&limiter);
+		catch (Exception e)
+		{
+			assert(e.msg.canFind("Recursion limit"), e.msg);
+			return;
+		}
+		assert(false, "No exception");
+	}
+
+	enum depth = 1_000_000;
+	foreach (chain; ["[", `{"a":`])
+	{
+		auto deep = chain.replicate(depth);
+
+		// (a) @IgnoreUnknown struct; the deep value is in an unknown field
+		Ignoring ignoring;
+		check(deserializer(&ignoring), `{"deep":` ~ deep);
+		// (b) DrainSink directly
+		check(DrainSink(), deep);
+		// (c) a sink reading everything
+		check(Reader(), deep);
+	}
+}
+
+// Deep but within the limit.
+debug(ae_unittest) unittest
+{
+	import std.array : replicate;
+	import ae.utils.serialization.json : JsonParser;
+
+	enum n = 60;
+	auto text = "[".replicate(n) ~ "5" ~ "]".replicate(n);
+	// Read through to a flat sink; every level passes the depth check
+	struct Counter
+	{
+		size_t* count;
+		void handle(V)(V v)
+		{
+			import ae.utils.serialization.serialization : isProtocolArray;
+			static if (isProtocolArray!V)
+			{
+				(*count)++;
+				v.reader(&this);
+			}
+		}
+	}
+	size_t count;
+	auto limiter = recursionLimiter(Counter(&count), 64);
+	JsonParser!()(text).read(&limiter);
+	assert(count == n);
+}
+
+// Hostile depth in a map key (MessagePack keys can be containers).
+debug(ae_unittest) unittest
+{
+	import std.algorithm.searching : canFind;
+	import std.array : replicate;
+	import ae.utils.serialization.msgpack : MsgpackParser;
+
+	// Reads only field values
+	static struct ValueOnly
+	{
+		void handle(V)(V v)
+		{
+			static if (isProtocolMap!V)
+				v.reader(&this);
+			else static if (isProtocolField!V)
+				v.valueReader(&this);
+		}
+	}
+
+	static void check(Sink)(Sink sink, const(ubyte)[] input)
+	{
+		auto limiter = recursionLimiter(sink, 64);
+		try
+			MsgpackParser(input).read(&limiter);
+		catch (Exception e)
+		{
+			assert(e.msg.canFind("Recursion limit"), e.msg);
+			return;
+		}
+		assert(false, "No exception");
+	}
+
+	// {[[[...0...]]]: 0}: a one-entry map whose key is nested 1,000,000 deep
+	ubyte[] input = [0x81];
+	input ~= (cast(ubyte[]) [0x91]).replicate(1_000_000);
+	input ~= [0x00, 0x00];
+	check(DrainSink(), input);
+	check(ValueOnly(), input);
 }
 
 // --- FieldRenamer tests ---

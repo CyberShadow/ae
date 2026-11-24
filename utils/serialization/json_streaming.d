@@ -718,3 +718,75 @@ debug(ae_unittest) unittest
 		}
 	}
 }
+
+// Hostile depth: the limiter must stop the fiber from overflowing its stack.
+// The default fiber stack is small (4 pages on Linux), and unwinding
+// the exception needs stack too, so the limit must be low.
+debug(ae_unittest) unittest
+{
+	import std.algorithm.comparison : min;
+	import std.algorithm.searching : canFind;
+	import std.array : replicate;
+
+	import ae.utils.serialization.filter : recursionLimiter;
+
+	@IgnoreUnknown static struct Ignoring { int x; }
+
+	static struct Reader
+	{
+		void handle(V)(V v)
+		{
+			static if (isProtocolArray!V || isProtocolMap!V)
+				v.reader(&this);
+			else static if (isProtocolField!V)
+			{
+				v.nameReader(&this);
+				v.valueReader(&this);
+			}
+		}
+	}
+
+	static void check(Sink)(Sink sink, string input)
+	{
+		auto parser = new StreamingJsonParser!(immutable(char));
+		parser.start(recursionLimiter(sink, 8));
+		try
+		{
+			for (size_t i = 0; i < input.length; i += 4096)
+				parser.feed(input[i .. min($, i + 4096)]);
+			parser.endInput();
+		}
+		catch (Exception e)
+		{
+			assert(e.msg.canFind("Recursion limit"), e.msg);
+			return;
+		}
+		assert(false, "No exception");
+	}
+
+	enum depth = 1_000_000;
+	foreach (chain; ["[", `{"a":`])
+	{
+		auto deep = chain.replicate(depth);
+		Ignoring ignoring;
+		check(deserializer(&ignoring), `{"deep":` ~ deep);
+		check(DrainSink(), deep);
+		check(Reader(), deep);
+	}
+}
+
+// Deep but within the limit
+debug(ae_unittest) unittest
+{
+	import std.array : replicate;
+
+	import ae.utils.serialization.filter : recursionLimiter;
+
+	int[][][][] result;
+	auto parser = new StreamingJsonParser!(immutable(char));
+	parser.start(recursionLimiter(deserializer(&result), 64));
+	parser.feed("[[[[1,2],[3]]]]");
+	parser.endInput();
+	assert(parser.done);
+	assert(result == [[[[1, 2], [3]]]]);
+}
