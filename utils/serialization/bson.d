@@ -1164,3 +1164,63 @@ debug(ae_unittest) unittest
 	parser.read(&writer);
 	assert(writer.get() == `{"x":"nan"}`);
 }
+
+// Declared lengths that exceed the input must be rejected cleanly
+// (including int.max, which must not overflow on 32-bit size_t)
+debug(ae_unittest) unittest
+{
+	import std.exception : assertThrown;
+
+	static ubyte[] doc(int size, const(ubyte)[] body_)
+	{
+		return nativeToLittleEndian(size)[] ~ body_ ~ cast(ubyte) 0;
+	}
+
+	static ubyte[] wrap(const(ubyte)[] body_)
+	{
+		return doc(cast(int)(4 + body_.length + 1), body_);
+	}
+
+	static void check(const(ubyte)[] bson)
+	{
+		// Enter containers so their contents are parsed; DrainSink alone
+		// would skip a nested document by its declared length.
+		static struct EnterContainers
+		{
+			void handle(V)(V v)
+			{
+				static if (isProtocolMap!V || isProtocolArray!V)
+					v.reader(&this);
+				else static if (isProtocolField!V)
+					v.valueReader(&this);
+			}
+		}
+		EnterContainers sink;
+		auto parser = BsonParser(bson, 0);
+		parser.read(&sink);
+	}
+
+	foreach (len; [int.max, 100, 1000])
+	{
+		// Top-level document
+		assertThrown!Exception(check(doc(len, [])));
+
+		// Nested document
+		assertThrown!Exception(check(wrap(
+			cast(ubyte[]) [0x03, 'v', 0x00] ~ doc(len, []))));
+
+		// Nested array
+		assertThrown!Exception(check(wrap(
+			cast(ubyte[]) [0x04, 'v', 0x00] ~ doc(len, []))));
+
+		// String
+		assertThrown!Exception(check(wrap(
+			cast(ubyte[]) [0x02, 'v', 0x00] ~ nativeToLittleEndian(len)[] ~ cast(ubyte[]) "ab\0")));
+	}
+
+	// Length just past the end
+	auto ok = doc(5, []);
+	assert(ok.length == 5);
+	check(ok);
+	assertThrown!Exception(check(doc(6, [])));
+}
