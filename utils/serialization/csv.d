@@ -281,7 +281,7 @@ struct CsvWriter(Output, CsvOptions csvOptions = CsvOptions.init)
 			}
 			else
 			{
-				CsvArrayCollector ac = {csvOptions: csvOptions};
+				CsvArrayCollector ac;
 				v.reader(&ac);
 				foreach (ref row; ac.rows)
 				{
@@ -364,6 +364,38 @@ private struct CsvRowCollector
 			rows ~= row;
 		}
 		// Ignore non-object elements
+	}
+}
+
+/// Collects rows from an array-of-arrays stream for headerless CSV.
+private struct CsvArrayCollector
+{
+	string[][] rows;
+
+	void handle(V)(V v)
+	{
+		import ae.utils.serialization.serialization : isProtocolArray;
+
+		static if (isProtocolArray!V)
+		{
+			CsvElementCollector ec;
+			v.reader(&ec);
+			rows ~= ec.values;
+		}
+		else
+			static assert(false, "CsvArrayCollector: expected Array, got " ~ V.stringof);
+	}
+}
+
+private struct CsvElementCollector
+{
+	string[] values;
+
+	void handle(V)(V v)
+	{
+		CsvValueCapture vc;
+		vc.handle(v);
+		values ~= vc.value;
 	}
 }
 
@@ -650,4 +682,14 @@ debug(ae_unittest) unittest
 		assert(sink.arrays == 1);
 		assert(parser.p == csv.length);
 	}
+}
+
+// Round-trip without header: array of arrays -> CSV -> array of arrays
+debug(ae_unittest) unittest
+{
+	enum opts = CsvOptions(',', false);
+	string[][] rows = [["John", "30", "NYC"], ["a,b", "", "say \"hi\""]];
+	auto csv = toCsv!opts(rows);
+	assert(csv == "John,30,NYC\n\"a,b\",,\"say \"\"hi\"\"\"\n");
+	assert(parseCsv!(string[][], opts)(csv) == rows);
 }
