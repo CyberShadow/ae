@@ -20,7 +20,7 @@ module ae.net.jsonrpc.codec;
 import std.exception : assumeUnique;
 
 import ae.net.asockets : IConnection, DisconnectType;
-version(unittest) import ae.net.asockets : ConnectionState;
+debug(ae_unittest) import ae.net.asockets : ConnectionState;
 import ae.sys.data : Data;
 import ae.utils.array : asBytes;
 import ae.utils.serialization.json;
@@ -69,6 +69,14 @@ private string normalizeJsonId(ref SO id)
 /// codec.handleRequest = &dispatcher.dispatch;  // Handle incoming requests
 /// codec.sendRequest(request);  // Send outgoing requests
 /// ---
+///
+/// When the connection is closed (by the peer, or by the codec itself
+/// due to a protocol error), all requests still awaiting a response are
+/// rejected.
+///
+/// The codec takes over the connection's `handleReadData` and
+/// `handleDisconnect`. Owners that wish to be notified of disconnections
+/// must set `handleDisconnect` on the codec, not on the underlying connection.
 class JsonRpcCodec
 {
 	private IConnection conn;
@@ -85,7 +93,13 @@ class JsonRpcCodec
 	{
 		this.conn = conn;
 		conn.handleReadData = &onReadData;
+		conn.handleDisconnect = &onDisconnect;
 	}
+
+	/// Callback setter for when the connection was closed.
+	/// Called after all pending requests have been rejected.
+	@property void handleDisconnect(IConnection.DisconnectHandler value) { disconnectHandler = value; }
+	private IConnection.DisconnectHandler disconnectHandler;
 
 	/// Send a request and return a promise for the response.
 	/// Automatically assigns a request ID for correlation.
@@ -110,6 +124,17 @@ class JsonRpcCodec
 	}
 
 private:
+	void onDisconnect(string reason, DisconnectType type)
+	{
+		auto pending = pendingRequests;
+		pendingRequests = null;
+		foreach (promise; pending)
+			promise.reject(new Exception("JSON-RPC connection closed: " ~ reason));
+
+		if (disconnectHandler)
+			disconnectHandler(reason, type);
+	}
+
 	void onReadData(Data data) nothrow
 	{
 		string message;
@@ -225,6 +250,30 @@ private:
 	}
 }
 
+debug(ae_unittest) private class MockConnection : IConnection
+{
+	ReadDataHandler readHandler;
+	DisconnectHandler disconnectHandler;
+	string disconnectReason;
+	bool disconnected;
+
+	@property ConnectionState state() { return ConnectionState.connected; }
+
+	void send(scope Data[] data, int priority = DEFAULT_PRIORITY) {}
+	alias send = IConnection.send;
+
+	void disconnect(string reason = defaultDisconnectReason, DisconnectType type = DisconnectType.requested)
+	{
+		disconnected = true;
+		disconnectReason = reason;
+		disconnectHandler(reason, type);
+	}
+	@property void handleConnect(ConnectHandler value) {}
+	@property void handleReadData(ReadDataHandler value) { readHandler = value; }
+	@property void handleDisconnect(DisconnectHandler value) { disconnectHandler = value; }
+	@property void handleBufferFlushed(BufferFlushedHandler value) {}
+}
+
 debug(ae_unittest) unittest
 {
 	import ae.utils.promise : resolve;
@@ -233,28 +282,6 @@ debug(ae_unittest) unittest
 	// evolves. JSON-RPC 2.0 specifies the member set but does not oblige
 	// implementations to reject extra members, and a codec that fails on
 	// them cannot interoperate across peer versions.
-	static class MockConnection : IConnection
-	{
-		ReadDataHandler readHandler;
-		string disconnectReason;
-		bool disconnected;
-
-		@property ConnectionState state() { return ConnectionState.connected; }
-
-		void send(scope Data[] data, int priority = DEFAULT_PRIORITY) {}
-		alias send = IConnection.send;
-
-		void disconnect(string reason = defaultDisconnectReason, DisconnectType type = DisconnectType.requested)
-		{
-			disconnected = true;
-			disconnectReason = reason;
-		}
-		@property void handleConnect(ConnectHandler value) {}
-		@property void handleReadData(ReadDataHandler value) { readHandler = value; }
-		@property void handleDisconnect(DisconnectHandler value) {}
-		@property void handleBufferFlushed(BufferFlushedHandler value) {}
-	}
-
 	string[] dispatched;
 	auto conn = new MockConnection;
 	auto codec = new JsonRpcCodec(conn);
@@ -275,6 +302,56 @@ debug(ae_unittest) unittest
 		`[{"method":"a","extra":1},{"method":"b","extra":2}]`.asBytes));
 	assert(dispatched == ["a", "b"]);
 	assert(!conn.disconnected, conn.disconnectReason);
+}
+
+debug(ae_unittest) unittest
+{
+	import ae.net.asockets : socketManager;
+
+	static JsonRpcRequest makeRequest() { JsonRpcRequest r; r.method = "m"; return r; }
+
+	// Peer disconnect: answered requests keep their response, the rest are rejected.
+	{
+		auto conn = new MockConnection;
+		auto codec = new JsonRpcCodec(conn);
+		string ownerReason;
+		DisconnectType ownerType;
+		codec.handleDisconnect = (string reason, DisconnectType type) { ownerReason = reason; ownerType = type; };
+
+		bool answered, rejected;
+		string rejectMessage;
+		codec.sendRequest(makeRequest()).then((JsonRpcResponse r) { answered = true; });
+		codec.sendRequest(makeRequest()).then((JsonRpcResponse r) { assert(false); },
+			(Exception e) { rejected = true; rejectMessage = e.msg; });
+
+		conn.readHandler(Data(`{"jsonrpc":"2.0","id":1,"result":0}`.asBytes));
+		conn.disconnectHandler("peer went away", DisconnectType.error);
+
+		socketManager.loop();
+		assert(answered);
+		assert(rejected);
+		import std.algorithm.searching : canFind;
+		assert(rejectMessage.canFind("peer went away"), rejectMessage);
+		assert(ownerReason == "peer went away");
+		assert(ownerType == DisconnectType.error);
+	}
+
+	// Codec-initiated disconnect (unexpected response ID) rejects pending requests.
+	{
+		auto conn = new MockConnection;
+		auto codec = new JsonRpcCodec(conn);
+		bool rejected;
+		string rejectMessage;
+		codec.sendRequest(makeRequest()).then((JsonRpcResponse r) { assert(false); },
+			(Exception e) { rejected = true; rejectMessage = e.msg; });
+
+		conn.readHandler(Data(`{"jsonrpc":"2.0","id":99,"result":0}`.asBytes));
+
+		socketManager.loop();
+		assert(rejected);
+		import std.algorithm.searching : canFind;
+		assert(rejectMessage.canFind("Unexpected response ID"), rejectMessage);
+	}
 }
 
 /// Convenience alias for server-only usage.
