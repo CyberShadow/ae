@@ -46,6 +46,19 @@ import ae.utils.serialization.serialization;
 /// ---
 class StreamingJsonParser(C = immutable(char))
 {
+	/// The parser recurses on its fiber's stack once per nesting level,
+	/// using up to about 2 KiB per level. Overflowing the fiber stack
+	/// crashes the process, so bound the depth of untrusted input with
+	/// `recursionLimiter` and size the stack for that limit. The default
+	/// fits a limit of 256 with room to spare.
+	enum size_t defaultStackSize = 1024 * 1024;
+
+	/// Create a parser whose fiber has `stackSize` bytes of stack.
+	this(size_t stackSize = defaultStackSize)
+	{
+		this.stackSize = stackSize;
+	}
+
 	/// Start parsing, emitting events into `sink`.
 	void start(Sink)(Sink sink)
 	{
@@ -62,7 +75,7 @@ class StreamingJsonParser(C = immutable(char))
 			{
 				this.parseError = t;
 			}
-		});
+		}, stackSize);
 
 		// Start the fiber — it will run until it needs input
 		fiber.call();
@@ -107,6 +120,7 @@ private:
 	size_t currentPos;
 	bool inputDone;
 	bool parsingStarted;
+	size_t stackSize;
 	bool parsingComplete;
 
 	Fiber fiber;
@@ -735,8 +749,6 @@ debug(ae_unittest) unittest
 }
 
 // Hostile depth: the limiter must stop the fiber from overflowing its stack.
-// The default fiber stack is small (4 pages on Linux), and unwinding
-// the exception needs stack too, so the limit must be low.
 debug(ae_unittest) unittest
 {
 	import std.algorithm.comparison : min;
@@ -764,7 +776,7 @@ debug(ae_unittest) unittest
 	static void check(Sink)(Sink sink, string input)
 	{
 		auto parser = new StreamingJsonParser!(immutable(char));
-		parser.start(recursionLimiter(sink, 8));
+		parser.start(recursionLimiter(sink, 256));
 		try
 		{
 			for (size_t i = 0; i < input.length; i += 4096)
