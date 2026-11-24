@@ -208,8 +208,12 @@ struct NrbfParser
 				int arrayId = readInt32();
 				int length = readInt32();
 				// Skip array elements
-				foreach (_; 0 .. length)
-					skipArrayElement();
+				for (int remaining = length; remaining > 0; )
+				{
+					auto count = skipArrayElement();
+					enforce(count > 0 && count <= remaining, "Invalid null run length in NRBF array");
+					remaining -= count;
+				}
 			}
 			else if (recType == RecordType.BinaryObjectString)
 			{
@@ -229,7 +233,8 @@ struct NrbfParser
 		}
 	}
 
-	private void skipArrayElement()
+	/// Skips one array element record. Returns the number of elements it covered.
+	private int skipArrayElement()
 	{
 		auto recType = readByte();
 		if (recType == RecordType.BinaryObjectString)
@@ -242,9 +247,10 @@ struct NrbfParser
 		else if (recType == RecordType.ObjectNull)
 		{} // nothing
 		else if (recType == RecordType.ObjectNullMultiple256)
-			skip(1);
+			return readByte();
 		else if (recType == RecordType.ObjectNullMultiple)
-			skip(4);
+			return readInt32();
+		return 1;
 	}
 
 	// -- Primitive reading ---
@@ -352,16 +358,6 @@ struct NrbfParser
 		}
 		else if (recType == RecordType.ObjectNull)
 			sink.handle(Null());
-		else if (recType == RecordType.ObjectNullMultiple256)
-		{
-			skip(1);
-			sink.handle(Null());
-		}
-		else if (recType == RecordType.ObjectNullMultiple)
-		{
-			skip(4);
-			sink.handle(Null());
-		}
 		else
 			throw new Exception("Expected string record, got " ~ to!string(recType));
 	}
@@ -537,8 +533,26 @@ private struct StringArrayReader
 	{
 		assert(!*consumed);
 		*consumed = true;
-		foreach (_; 0 .. remaining)
-			parser.readStringValue(sink);
+		while (remaining > 0)
+		{
+			enforce(parser.p < parser.data.length, "Unexpected end of NRBF input");
+			auto recType = parser.data[parser.p];
+			if (recType == RecordType.ObjectNullMultiple256 || recType == RecordType.ObjectNullMultiple)
+			{
+				parser.p++;
+				int count = recType == RecordType.ObjectNullMultiple256
+					? parser.readByte() : parser.readInt32();
+				enforce(count > 0 && count <= remaining, "Invalid null run length in NRBF string array");
+				foreach (_; 0 .. count)
+					sink.handle(Null());
+				remaining -= count;
+			}
+			else
+			{
+				parser.readStringValue(sink);
+				remaining--;
+			}
+		}
 	}
 }
 
@@ -1068,4 +1082,44 @@ debug(ae_unittest) unittest
 	auto r = parseNrbf!S(stream);
 	assert(r.a == "x" && r.b == "\u00e9" && r.c == "\u20ac" && r.d == "\U0001F600");
 	assert(r.after == 1234);
+}
+
+// String arrays with null runs
+debug(ae_unittest) unittest
+{
+	import std.bitmanip : nativeToLittleEndian;
+
+	ubyte[] values;
+	values ~= cast(ubyte) RecordType.ArraySingleString;
+	values ~= nativeToLittleEndian(4)[]; // array ID
+	values ~= nativeToLittleEndian(7)[]; // element count: "a", 3 nulls, "b", 2 nulls
+	values ~= cast(ubyte) RecordType.BinaryObjectString;
+	values ~= nativeToLittleEndian(5)[];
+	values ~= prefixStr("a");
+	values ~= cast(ubyte) RecordType.ObjectNullMultiple256;
+	values ~= cast(ubyte) 3;
+	values ~= cast(ubyte) RecordType.BinaryObjectString;
+	values ~= nativeToLittleEndian(6)[];
+	values ~= prefixStr("b");
+	values ~= cast(ubyte) RecordType.ObjectNullMultiple;
+	values ~= nativeToLittleEndian(2)[];
+	values ~= nativeToLittleEndian(99)[]; // field after the array
+	auto stream = buildNrbfStream(
+		"TestClass", "TestAssembly",
+		["arr", "after"],
+		[BinaryType.StringArray, BinaryType.Primitive],
+		[PrimitiveType.Null, PrimitiveType.Int32],
+		values
+	);
+
+	import ae.utils.serialization.store : SerializedObject;
+	alias SO = SerializedObject!(immutable(char));
+	auto result = parseNrbf!SO(stream);
+	assert(result.type == SO.Type.object);
+
+	static struct S { string[] arr; int after; }
+	auto s = parseNrbf!S(stream);
+	assert(s.arr.length == 7);
+	assert(s.arr[0] == "a" && s.arr[4] == "b");
+	assert(s.after == 99);
 }
