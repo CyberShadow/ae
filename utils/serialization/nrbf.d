@@ -297,18 +297,14 @@ struct NrbfParser
 				sink.handle(String!string(to!string(d)));
 			break;
 		case PrimitiveType.Char:
-			// UTF-8 encoded character (1-3 bytes)
-			auto ch = readByte();
-			if (ch < 0x80)
-			{
-				char[1] buf = [cast(char) ch];
-				sink.handle(String!string(buf[].idup));
-			}
-			else
-			{
-				// Multi-byte: just emit as numeric
-				sink.handle(NativeNumeric!ubyte(ch));
-			}
+			// UTF-8 encoded character (1-4 bytes)
+			auto lead = readByte();
+			size_t len = lead < 0x80 ? 1 : lead >= 0xF0 ? 4 : lead >= 0xE0 ? 3 : 2;
+			auto rest = readBytes(len - 1);
+			auto str = cast(string) (cast(ubyte[]) [lead] ~ rest);
+			import std.utf : validate;
+			validate(str);
+			sink.handle(String!string(str));
 			break;
 		case PrimitiveType.Decimal:
 			// .NET Decimal is a 16-byte type, emit as string
@@ -1054,4 +1050,22 @@ debug(ae_unittest) unittest
 	JsonWriter!() writer;
 	parser.read(&writer);
 	assert(writer.get() == `{"value":"nan"}`);
+}
+
+// Char fields: multibyte UTF-8, followed by another field to check the cursor
+debug(ae_unittest) unittest
+{
+	import std.bitmanip : nativeToLittleEndian;
+
+	static struct S { string a, b, c, d; int after; }
+	auto stream = buildNrbfStream(
+		"TestClass", "TestAssembly",
+		["a", "b", "c", "d", "after"],
+		[BinaryType.Primitive, BinaryType.Primitive, BinaryType.Primitive, BinaryType.Primitive, BinaryType.Primitive],
+		[PrimitiveType.Char, PrimitiveType.Char, PrimitiveType.Char, PrimitiveType.Char, PrimitiveType.Int32],
+		cast(ubyte[]) "x\u00e9\u20ac\U0001F600" ~ nativeToLittleEndian(1234)[]
+	);
+	auto r = parseNrbf!S(stream);
+	assert(r.a == "x" && r.b == "\u00e9" && r.c == "\u20ac" && r.d == "\U0001F600");
+	assert(r.after == 1234);
 }
