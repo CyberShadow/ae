@@ -392,12 +392,19 @@ private:
 				case 't':  buf ~= '\t'; break;
 				case 'u':
 				{
-					char[4] hexBuf;
-					foreach (i; 0 .. 4)
-						hexBuf[i] = cast(char) nextChar();
-					auto w = cast(wchar) fromHex!ushort(hexBuf);
+					auto d = cast(dchar) readHex4();
+					if (d >= 0xD800 && d <= 0xDBFF)
+					{
+						expect('\\');
+						expect('u');
+						auto low = cast(dchar) readHex4();
+						enforce(low >= 0xDC00 && low <= 0xDFFF, "Expected low surrogate");
+						d = 0x10000 + ((d - 0xD800) << 10) + (low - 0xDC00);
+					}
+					else
+						enforce(d < 0xDC00 || d > 0xDFFF, "Unexpected low surrogate");
 					char[4] tmpbuf;
-					auto len = encode(tmpbuf, w);
+					auto len = encode(tmpbuf, d);
 					buf ~= cast(C[]) tmpbuf[0 .. len];
 					break;
 				}
@@ -408,6 +415,14 @@ private:
 			else
 				buf ~= c;
 		}
+	}
+
+	ushort readHex4()
+	{
+		char[4] hexBuf;
+		foreach (i; 0 .. 4)
+			hexBuf[i] = cast(char) nextChar();
+		return fromHex!ushort(hexBuf);
 	}
 
 	C[] readNumeric()
@@ -789,4 +804,34 @@ debug(ae_unittest) unittest
 	parser.endInput();
 	assert(parser.done);
 	assert(result == [[[[1, 2], [3]]]]);
+}
+
+// Surrogate pairs in \u escapes
+debug(ae_unittest) unittest
+{
+	import std.algorithm.comparison : min;
+	import std.exception : assertThrown;
+
+	static string parse(string input, size_t chunk)
+	{
+		string result;
+		auto parser = new StreamingJsonParser!(immutable(char));
+		parser.start(deserializer(&result));
+		foreach (i; 0 .. (input.length + chunk - 1) / chunk)
+			parser.feed(input[i * chunk .. min($, (i + 1) * chunk)]);
+		parser.endInput();
+		assert(parser.done);
+		return result;
+	}
+
+	foreach (chunk; [size_t.max / 2, 1])
+	{
+		assert(parse(`"\uD83E\uDD40"`, chunk) == "🥀");
+		assert(parse(`"\u00e9"`, chunk) == "é");
+		assertThrown(parse(`"\uDC00"`, chunk));
+		assertThrown(parse(`"\uD800"`, chunk));
+		assertThrown(parse(`"\uD800a"`, chunk));
+		assertThrown(parse(`"\uD83EA"`, chunk));
+		assertThrown(parse(`"\uD83E\u0041"`, chunk));
+	}
 }
