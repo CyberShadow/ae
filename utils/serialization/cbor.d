@@ -511,18 +511,31 @@ private double decodeFloat16(ubyte b0, ubyte b1)
 	int exp = (half >> 10) & 0x1F;
 	int mant = half & 0x3FF;
 
+	import std.math : ldexp;
 	double val;
 	if (exp == 0)
-		val = (1.0 / (1 << 24)) * mant; // subnormal
+		val = ldexp(cast(double) mant, -24); // subnormal
 	else if (exp == 31)
-	{
-		import std.math : isNaN;
 		val = mant == 0 ? double.infinity : double.nan;
-	}
 	else
-		val = (1.0 * (1 << (exp - 25))) * (1024 + mant);
+		val = ldexp(cast(double) (1024 + mant), exp - 25);
 
 	return sign ? -val : val;
+}
+
+debug(ae_unittest) unittest
+{
+	import std.math : isNaN, isInfinity, signbit;
+	assert(decodeFloat16(0x3C, 0x00) == 1.0);
+	assert(decodeFloat16(0xC0, 0x00) == -2.0);
+	assert(decodeFloat16(0x7B, 0xFF) == 65504.0);
+	assert(decodeFloat16(0x00, 0x01) == 0x1p-24);
+	assert(decodeFloat16(0x04, 0x00) == 0x1p-14);
+	assert(decodeFloat16(0x00, 0x00) == 0.0 && !signbit(decodeFloat16(0x00, 0x00)));
+	assert(decodeFloat16(0x80, 0x00) == 0.0 && signbit(decodeFloat16(0x80, 0x00)));
+	assert(decodeFloat16(0x7C, 0x00) == double.infinity);
+	assert(decodeFloat16(0xFC, 0x00) == -double.infinity);
+	assert(decodeFloat16(0x7E, 0x00).isNaN);
 }
 
 // ---------------------------------------------------------------------------
