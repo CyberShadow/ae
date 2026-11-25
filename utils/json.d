@@ -735,6 +735,7 @@ debug(ae_unittest) unittest
 	jsonParse!S(toJson(s).dup);
 
 	assert(jsonParse!(Tuple!())(``) == tuple());
+	assert(jsonParse!(Tuple!())(toJson(tuple())) == tuple());
 	assert(jsonParse!(Tuple!int)(`42`) == tuple(42));
 	assert(jsonParse!(Tuple!(int, string))(`[42, "banana"]`) == tuple(42, "banana"));
 
@@ -784,15 +785,11 @@ debug(ae_unittest) unittest
 	check(-double.infinity, `"-inf"`);
 }
 
-/// Parse the JSON in string `s` and deserialize it into `T`.
+/// Parse the complete JSON document in `s` and deserialize it into `T`.
 void jsonParse(T, C)(C[] s, ref T result)
 {
-	import ae.utils.serialization.json : JsonParser, jsonCustomDeserializer;
-	auto parser = JsonParser!C(s, 0);
-	auto sink = jsonCustomDeserializer(&result);
-	parser.skipWhitespace();
-	if (!parser.eof)
-		parser.read(sink);
+	import ae.utils.serialization.json : parseJsonDocument;
+	parseJsonDocument(s, result);
 }
 
 debug(ae_unittest) unittest
@@ -802,6 +799,27 @@ debug(ae_unittest) unittest
 	s.a = 1;
 	jsonParse(`{"b":2}`, s);
 	assert(s == S(1, 2));
+}
+
+debug(ae_unittest) unittest
+{
+	import std.exception : assertThrown;
+	assert(jsonParse!int("42 \t\r\n") == 42);
+	assertThrown(jsonParse!int(""));
+	assertThrown(jsonParse!int(" \t\r\n"));
+	assertThrown(jsonParse!int("42 junk"));
+}
+
+debug(ae_unittest) unittest
+{
+	import std.exception : assertThrown;
+	int result;
+	jsonParse("42 \t\r\n", result);
+	assert(result == 42);
+
+	assertThrown(jsonParse("", result));
+	assertThrown(jsonParse(" \t\r\n", result));
+	assertThrown(jsonParse("42 junk", result));
 }
 
 // ************************************************************************

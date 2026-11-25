@@ -875,7 +875,7 @@ private void mergeSOArrayIntoTokens(SO)(ref SO so, const(JsonToken)[] tokens, re
 
 /// High-level: apply programmatic modifications to JSON while preserving formatting.
 ///
-/// Parses the JSON into a `SerializedObject`, applies the modification,
+/// Parses one JSON document into a `SerializedObject`, applies the modification,
 /// then walks the original token stream and modified SO in parallel to
 /// produce output that preserves original whitespace and field order.
 string jsonModifyPreservingFormat(alias modify)(const(char)[] json)
@@ -889,7 +889,10 @@ string jsonModifyPreservingFormat(alias modify)(const(char)[] json)
 	auto converter = TokenToEventConverter(originalTokens);
 	alias SO = SerializedObject!(immutable(char));
 	SO so;
-	converter.read(&so);
+	size_t rootEnd = 0;
+	converter.readValue(&so, rootEnd);
+	converter.skipWS(rootEnd);
+	enforce(rootEnd == originalTokens.length, "Unexpected trailing data after JSON value");
 
 	// 3. Apply modifications
 	modify(so);
@@ -1041,6 +1044,39 @@ debug(ae_unittest) unittest
 		(ref SO so) { /* no modifications */ }
 	)(json);
 	assert(result == json, result);
+}
+
+// Format-preserving modifications require exactly one complete root.
+debug(ae_unittest) unittest
+{
+	import ae.utils.serialization.store : SerializedObject;
+	import std.exception : assertThrown;
+	alias SO = SerializedObject!(immutable(char));
+
+	bool called;
+	void modify(ref SO so) { called = true; }
+
+	foreach (json; ["{} []", "{} !", ""])
+	{
+		assertThrown(jsonModifyPreservingFormat!modify(json), json);
+		assert(!called, json);
+	}
+}
+
+// Modifying a value preserves whitespace after the root.
+debug(ae_unittest) unittest
+{
+	import ae.utils.serialization.serialization : Numeric;
+	import ae.utils.serialization.store : SerializedObject;
+	alias SO = SerializedObject!(immutable(char));
+
+	auto result = jsonModifyPreservingFormat!(
+		(ref SO so) {
+			so["value"] = SO.init;
+			so["value"].handle(Numeric!(string)("2"));
+		}
+	)("{\"value\": 1} \t\r\n");
+	assert(result == "{\"value\": 2} \t\r\n", result);
 }
 
 // 3-way merge: modify a value

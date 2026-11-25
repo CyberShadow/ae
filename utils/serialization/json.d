@@ -23,6 +23,7 @@ import std.conv;
 import std.exception;
 import std.format;
 import std.traits;
+import std.typecons : isTuple;
 import std.utf;
 
 import ae.utils.text;
@@ -1147,17 +1148,30 @@ alias jsonCustomDeserializer = JsonCustomDeserializer!Object.makeSink;
 // Convenience wrappers
 // ---------------------------------------------------------------------------
 
-/// Parse a JSON string into a D type.
+package(ae) void parseJsonDocument(JsonOptions options = JsonOptions.init, T, C)(C[] s, ref T result)
+{
+	auto parser = JsonParser!(C, options)(s, 0);
+	static if (isTuple!T)
+		static if (T.expand.length == 0)
+		{
+			// The writer emits no value for a zero-field tuple.
+			parser.skipWhitespace();
+			if (parser.eof)
+				return;
+		}
+	auto sink = jsonCustomDeserializer(&result);
+	parser.read(sink);
+	parser.skipWhitespace();
+	enforce(parser.eof, "Unexpected trailing data after JSON value");
+}
+
+/// Parse a complete JSON document into a D type.
 template jsonParse(T, JsonOptions options = JsonOptions.init)
 {
 	T jsonParse(C)(C[] s)
 	{
-		auto parser = JsonParser!(C, options)(s, 0);
 		T result;
-		auto sink = jsonCustomDeserializer(&result);
-		parser.skipWhitespace();
-		if (!parser.eof)
-			parser.read(sink);
+		parseJsonDocument!options(s, result);
 		return result;
 	}
 }

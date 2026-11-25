@@ -33,7 +33,7 @@ import ae.utils.text : fromHex;
 
 import ae.utils.serialization.serialization;
 
-/// Heap-allocated fiber-based streaming JSON parser.
+/// Heap-allocated fiber-based streaming parser for one JSON document.
 ///
 /// Usage:
 /// ---
@@ -69,6 +69,8 @@ class StreamingJsonParser(C = immutable(char))
 			try
 			{
 				this.parseValue(sink);
+				this.skipWhitespace();
+				enforce(this.inputDone, "Unexpected trailing data after JSON value");
 				this.parsingComplete = true;
 			}
 			catch (Throwable t)
@@ -87,6 +89,8 @@ class StreamingJsonParser(C = immutable(char))
 	void feed(const(C)[] data)
 	{
 		assert(parsingStarted, "Must call start() before feed()");
+		if (parseError)
+			throw parseError;
 		if (parsingComplete)
 			return;
 
@@ -101,6 +105,8 @@ class StreamingJsonParser(C = immutable(char))
 	/// Signal end of input.
 	void endInput()
 	{
+		if (parseError)
+			throw parseError;
 		inputDone = true;
 		if (!parsingComplete && parsingStarted)
 		{
@@ -112,7 +118,7 @@ class StreamingJsonParser(C = immutable(char))
 		}
 	}
 
-	/// True when parsing has completed successfully.
+	/// True after endInput() has validated the complete document.
 	@property bool done() { return parsingComplete; }
 
 private:
@@ -628,9 +634,82 @@ debug(ae_unittest) unittest
 	parser.feed(input[0 .. $ - 1]);
 	assert(!parser.done);
 	parser.feed(input[$ - 1 .. $]);
-	assert(parser.done);
+	assert(!parser.done);
 	parser.endInput();
+	assert(parser.done);
 	assert(sink.events == 1);
+}
+
+// Trailing garbage in the root value's chunk
+debug(ae_unittest) unittest
+{
+	import std.exception : assertThrown;
+
+	auto parser = new StreamingJsonParser!(immutable(char));
+	parser.start(DrainSink());
+	assertThrown(parser.feed("[] \t!"));
+	assert(!parser.done);
+}
+
+// Trailing garbage in a later chunk
+debug(ae_unittest) unittest
+{
+	import std.exception : assertThrown;
+
+	auto parser = new StreamingJsonParser!(immutable(char));
+	parser.start(DrainSink());
+	parser.feed("[]");
+	assertThrown(parser.feed(" \t!"));
+	assert(!parser.done);
+}
+
+// A failed feed reports the parse failure on subsequent calls.
+debug(ae_unittest) unittest
+{
+	import std.exception : assertThrown;
+
+	foreach (json; ["[]!", "!"])
+	{
+		auto parser = new StreamingJsonParser!(immutable(char));
+		parser.start(DrainSink());
+		assertThrown(parser.feed(json), json);
+		assertThrown(parser.endInput(), json);
+		assertThrown(parser.feed("null"), json);
+		assert(!parser.done, json);
+	}
+}
+
+// Whitespace after the root value, in the same chunk or a later one
+debug(ae_unittest) unittest
+{
+	foreach (chunks; [["[] \t\r\n"], ["[]", " \t\r\n"]])
+	{
+		auto parser = new StreamingJsonParser!(immutable(char));
+		parser.start(DrainSink());
+		foreach (chunk; chunks)
+		{
+			parser.feed(chunk);
+			assert(!parser.done);
+		}
+		parser.endInput();
+		assert(parser.done);
+	}
+}
+
+// Empty and whitespace-only input lack a root value
+debug(ae_unittest) unittest
+{
+	import std.exception : assertThrown;
+
+	foreach (chunks; [cast(string[]) null, [" \t\r\n"]])
+	{
+		auto parser = new StreamingJsonParser!(immutable(char));
+		parser.start(DrainSink());
+		foreach (chunk; chunks)
+			parser.feed(chunk);
+		assertThrown(parser.endInput());
+		assert(!parser.done);
+	}
 }
 
 // Empty object and array
