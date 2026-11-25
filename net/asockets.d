@@ -92,6 +92,55 @@ else
 
 int eventCounter;
 
+private struct NextTickQueue
+{
+	alias Handler = void delegate();
+	Handler[] pending, spare;
+
+	@property size_t length() const
+	{
+		return pending.length;
+	}
+
+	void put(Handler handler) pure @safe nothrow
+	{
+		pending ~= handler;
+	}
+
+	void drain()
+	{
+		auto batch = pending;
+		pending = spare;
+		spare = null; // The batch stays private to this call, even in a nested drain.
+
+		scope (exit)
+		{
+			batch[] = null;
+			batch = batch[0 .. 0];
+			batch.assumeSafeAppend();
+			spare = batch;
+		}
+
+		size_t next;
+		scope (failure)
+		{
+			// Restore the undispatched suffix ahead of ticks queued during
+			// the drain. Copy it before the batch is cleared for reuse.
+			if (next < batch.length)
+				pending = batch[next .. $].dup ~ pending;
+		}
+
+		while (next < batch.length)
+		{
+			auto handler = batch[next++];
+			static if (eventLoopMechanism == EventLoopMechanism.libev)
+				runUserEventHandler(handler);
+			else
+				handler();
+		}
+	}
+}
+
 static if (eventLoopMechanism == EventLoopMechanism.epoll)
 {
 	// Use the epoll_event.data.ptr field to store the parent GenericSocket address.
@@ -110,7 +159,7 @@ static if (eventLoopMechanism == EventLoopMechanism.epoll)
 		/// Debug AA to check for dangling socket references.
 		debug GenericSocket[socket_t] socketHandles;
 
-		void delegate()[] nextTickHandlers;
+		NextTickQueue nextTickHandlers;
 		IdleHandler[] idleHandlers;
 
 	public:
@@ -201,11 +250,7 @@ static if (eventLoopMechanism == EventLoopMechanism.epoll)
 			{
 				if (nextTickHandlers.length)
 				{
-					auto thisTickHandlers = nextTickHandlers;
-					nextTickHandlers = null;
-
-					foreach (handler; thisTickHandlers)
-						handler();
+					nextTickHandlers.drain();
 
 					continue;
 				}
@@ -476,7 +521,7 @@ static if (eventLoopMechanism == EventLoopMechanism.libev)
 	private:
 		size_t count;
 
-		void delegate()[] nextTickHandlers;
+		NextTickQueue nextTickHandlers;
 
 		extern(C)
 		static void ioCallback(ev_loop_t* l, ev_io* w, int revents)
@@ -530,15 +575,7 @@ static if (eventLoopMechanism == EventLoopMechanism.libev)
 			do
 			{
 				while (nextTickHandlers.length)
-				{
-					auto thisTickHandlers = nextTickHandlers;
-					nextTickHandlers = null;
-
-					foreach (handler; thisTickHandlers)
-						runUserEventHandler({
-							handler();
-						});
-				}
+					nextTickHandlers.drain();
 
 				socketManager.updateTimer(wokeDueToTimeout);
 				wokeDueToTimeout = false;
@@ -832,7 +869,7 @@ static if (eventLoopMechanism == EventLoopMechanism.select)
 		/// Debug AA to check for dangling socket references.
 		debug GenericSocket[socket_t] socketHandles;
 
-		void delegate()[] nextTickHandlers;
+		NextTickQueue nextTickHandlers;
 		IdleHandler[] idleHandlers;
 
 	public:
@@ -906,11 +943,7 @@ static if (eventLoopMechanism == EventLoopMechanism.select)
 			{
 				if (nextTickHandlers.length)
 				{
-					auto thisTickHandlers = nextTickHandlers;
-					nextTickHandlers = null;
-
-					foreach (handler; thisTickHandlers)
-						handler();
+					nextTickHandlers.drain();
 
 					continue;
 				}
@@ -1246,7 +1279,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 		GenericSocket[] sockets;
 		debug GenericSocket[socket_t] socketHandles;
 
-		void delegate()[] nextTickHandlers;
+		NextTickQueue nextTickHandlers;
 		IdleHandler[] idleHandlers;
 
 		// Sockets whose notifyWrite became true and need a synthetic
@@ -1435,10 +1468,7 @@ static if (eventLoopMechanism == EventLoopMechanism.iocp)
 				// Process nextTick handlers exhaustively first.
 				if (nextTickHandlers.length)
 				{
-					auto thisTickHandlers = nextTickHandlers;
-					nextTickHandlers = null;
-					foreach (handler; thisTickHandlers)
-						handler();
+					nextTickHandlers.drain();
 					continue;
 				}
 
@@ -3609,12 +3639,65 @@ else
 /// The default socket manager.
 SocketManager socketManager;
 
-/// Schedule a function to run on the next event loop iteration.
-/// Can be used to queue logic to run once all current execution frames exit.
-/// Similar to e.g. process.nextTick in Node.
+/// Queue a function to run once the current execution frames exit.
+/// The event loop drains queued handlers before polling for I/O again,
+/// including handlers queued by other next-tick handlers.
+/// To yield to I/O, use a timer or, where available, `addIdleHandler`.
 void onNextTick(ref SocketManager socketManager, void delegate() dg) pure @safe nothrow
 {
-	socketManager.nextTickHandlers ~= dg;
+	socketManager.nextTickHandlers.put(dg);
+}
+
+debug(ae_unittest) unittest
+{
+	import core.memory : GC;
+
+	int[4] order;
+	size_t count;
+	onNextTick(socketManager, {
+		order[count++] = 1;
+		onNextTick(socketManager, { order[count++] = 3; });
+		onNextTick(socketManager, { order[count++] = 4; });
+	});
+	onNextTick(socketManager, { order[count++] = 2; });
+
+	enum warmup = 8, ticks = 100_000;
+	size_t remaining = warmup + ticks;
+	ulong before, allocated;
+	void reschedule()
+	{
+		remaining--;
+		if (remaining == ticks)
+			before = GC.stats().allocatedInCurrentThread;
+		if (remaining)
+			onNextTick(socketManager, &reschedule);
+		else
+			allocated = GC.stats().allocatedInCurrentThread - before;
+	}
+	onNextTick(socketManager, &reschedule);
+	socketManager.loop();
+	assert(count == order.length && order == [1, 2, 3, 4]);
+	assert(remaining == 0);
+	assert(allocated <= 1024, format("Next-tick chain allocated %s GC bytes after warm-up", allocated));
+}
+
+debug(ae_unittest) unittest
+{
+	auto failure = new Exception("next-tick handler failed");
+	int[4] order;
+	size_t count;
+	onNextTick(socketManager, {
+		order[count++] = 1;
+		onNextTick(socketManager, { order[count++] = 4; });
+		throw failure;
+	});
+	onNextTick(socketManager, { order[count++] = 2; });
+	onNextTick(socketManager, { order[count++] = 3; });
+
+	assert(collectException(socketManager.loop()) is failure);
+	assert(count == 1 && order[0] == 1);
+	socketManager.loop();
+	assert(count == order.length && order == [1, 2, 3, 4]);
 }
 
 debug(ae_unittest) unittest
@@ -4003,7 +4086,7 @@ static if (haveEventLoopDebug)
 	{
 		import std.stdio : stderr;
 
-		auto handlers = socketManager.nextTickHandlers;
+		scope const handlers = socketManager.nextTickHandlers.pending;
 		if (handlers.length == 0)
 		{
 			stderr.writeln("NEXT TICK HANDLERS: None queued\n");
