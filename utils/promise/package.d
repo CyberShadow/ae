@@ -22,7 +22,9 @@ import ae.net.asockets : socketManager, onNextTick;
 debug (no_ae_promise) {} else debug debug = ae_promise;
 
 /**
-   A promise for a value `T` or error `E`.
+   A promise for a value `T` or error `E`. A fulfilled promise retains its
+   value until destruction. Its value must be safe to destroy during GC
+   finalization.
 
    Attempts to implement the Promises/A+ spec
    (https://promisesaplus.com/),
@@ -243,6 +245,13 @@ public:
 		catch (LeakedPromiseError e)
 			leakedPromiseError = e;
 		catch (Throwable) {} // allow nothrow
+	}
+
+	~this()
+	{
+		// `value` shares a union with `error`, so it is not destroyed implicitly.
+		if (this.state == PromiseState.fulfilled)
+			destroy(this.value);
 	}
 
 	/// A tuple of this `Promise`'s value.
@@ -549,6 +558,39 @@ debug(ae_unittest) nothrow unittest
 		Promise!void test2;
 		test2.then({});
 	}
+}
+
+debug(ae_unittest) unittest
+{
+	import core.memory : GC;
+	import ae.sys.data : Data;
+
+	pragma(inline, false)
+	static void fulfillAndDrop(ref Data[256] payloads)
+	{
+		foreach (ref payload; payloads)
+		{
+			payload = Data(1024);
+			auto promise = new Promise!Data;
+			promise.ignoreResult();
+			promise.fulfill(payload);
+		}
+	}
+
+	Data[256] payloads;
+	fulfillAndDrop(payloads);
+	foreach (i; 0 .. 3)
+		GC.collect();
+	// A surviving promise still shares its payload, so ensureUnique copies it.
+	// Conservative scanning may keep a few of the promises alive.
+	size_t retained;
+	foreach (ref payload; payloads)
+	{
+		auto contents = payload.unsafeContents.ptr;
+		auto unique = payload.ensureUnique();
+		retained += unique.unsafeContents.ptr != contents;
+	}
+	assert(retained <= 4, "Dropped promises retained their Data");
 }
 
 // Non-Exception based errors
