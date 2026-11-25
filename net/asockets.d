@@ -527,18 +527,23 @@ static if (eventLoopMechanism == EventLoopMechanism.libev)
 		/// Called before going back to sleep, after calling any users' event handlers.
 		void postEvent(bool wokeDueToTimeout)
 		{
-			while (nextTickHandlers.length)
+			do
 			{
-				auto thisTickHandlers = nextTickHandlers;
-				nextTickHandlers = null;
+				while (nextTickHandlers.length)
+				{
+					auto thisTickHandlers = nextTickHandlers;
+					nextTickHandlers = null;
 
-				foreach (handler; thisTickHandlers)
-					runUserEventHandler({
-						handler();
-					});
+					foreach (handler; thisTickHandlers)
+						runUserEventHandler({
+							handler();
+						});
+				}
+
+				socketManager.updateTimer(wokeDueToTimeout);
+				wokeDueToTimeout = false;
 			}
-
-			socketManager.updateTimer(wokeDueToTimeout);
+			while (nextTickHandlers.length);
 		}
 
 		private void setTimerReferenced(ev_loop_t* evLoop, bool referenced)
@@ -567,6 +572,14 @@ static if (eventLoopMechanism == EventLoopMechanism.libev)
 			assert((lastNextEvent == MonoTime.max) == !timerActive);
 
 			auto nextEvent = mainTimer.getNextEvent();
+			if (nextEvent <= socketManager.now)
+			{
+				debug (ASOCKETS) stderr.writeln("Prodding overdue timer.");
+				runUserEventHandler({
+					mainTimer.prod(socketManager.now);
+				});
+				nextEvent = mainTimer.getNextEvent();
+			}
 			if (force || lastNextEvent != nextEvent)
 			{
 				debug (ASOCKETS) stderr.writefln("Rescheduling timer. Was at %s, now at %s", lastNextEvent, nextEvent);
@@ -583,14 +596,6 @@ static if (eventLoopMechanism == EventLoopMechanism.libev)
 				else
 				{
 					auto remaining = mainTimer.getRemainingTime(socketManager.now);
-					while (remaining <= Duration.zero)
-					{
-						debug (ASOCKETS) stderr.writefln("remaining=%s, prodding timer.", remaining);
-						runUserEventHandler({
-							mainTimer.prod(socketManager.now);
-						});
-						remaining = mainTimer.getRemainingTime(socketManager.now);
-					}
 					ev_tstamp tstamp = remaining.total!"hnsecs" * 1.0 / convert!("seconds", "hnsecs")(1);
 					debug (ASOCKETS) stderr.writefln("remaining=%s, ev_tstamp=%s", remaining, tstamp);
 					if (lastNextEvent == MonoTime.max) // Starting
@@ -671,9 +676,10 @@ static if (eventLoopMechanism == EventLoopMechanism.libev)
 			auto evLoop = ev_default_loop(0);
 			enforce(evLoop, "libev initialization failure");
 
-			updateTimer(true);
+			preEvent();
+			postEvent(true);
 			debug (ASOCKETS) stderr.writeln("ev_run");
-			ev_run(ev_default_loop(0), 0);
+			ev_run(evLoop, 0);
 		}
 	}
 
@@ -3609,6 +3615,35 @@ SocketManager socketManager;
 void onNextTick(ref SocketManager socketManager, void delegate() dg) pure @safe nothrow
 {
 	socketManager.nextTickHandlers ~= dg;
+}
+
+debug(ae_unittest) unittest
+{
+	static if (eventLoopMechanism == EventLoopMechanism.libev)
+	{
+		debug (ASOCKETS_DEBUG_IDLE)
+		{
+			IdleDebugger.register();
+			auto watchdog = IdleDebugger.periodicTask;
+			auto deadline = watchdog.when;
+			watchdog.cancel();
+			scope (exit) mainTimer.add(watchdog, deadline);
+		}
+
+		bool ran;
+		onNextTick(socketManager, {
+			onNextTick(socketManager, { ran = true; });
+		});
+		socketManager.loop();
+		assert(ran, "The event loop exited with a next-tick handler pending");
+
+		ran = false;
+		setTimeout({
+			onNextTick(socketManager, { ran = true; });
+		}, Duration.zero);
+		socketManager.loop();
+		assert(ran, "The event loop exited with a timer's next-tick handler pending");
+	}
 }
 
 /// The current monotonic time.
