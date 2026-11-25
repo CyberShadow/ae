@@ -80,7 +80,7 @@ struct StreamingJsonLexer
 			feedChar(data[i]);
 	}
 
-	/// Signal end of input. Flushes any pending number token.
+	/// Signal end of input. Flushes pending numbers and rejects unfinished tokens.
 	void endInput()
 	{
 		if (state == State.inNumber)
@@ -89,6 +89,7 @@ struct StreamingJsonLexer
 			numBuf = null;
 			state = State.value;
 		}
+		enforce(state == State.value, "Unexpected end of JSON input in unfinished token");
 		flushWhitespace();
 	}
 
@@ -936,6 +937,15 @@ debug(ae_unittest) unittest
 	assert(content[8].type == JsonTokenType.objectEnd);
 }
 
+// EOF must not silently discard an unfinished token.
+debug(ae_unittest) unittest
+{
+	import std.exception : assertThrown;
+
+	foreach (json; ["t", "fa", "nul", `"`, `"a\`, `"\u12`])
+		assertThrown(tokenize(json), json);
+}
+
 // One char at a time
 debug(ae_unittest) unittest
 {
@@ -1056,7 +1066,7 @@ debug(ae_unittest) unittest
 	bool called;
 	void modify(ref SO so) { called = true; }
 
-	foreach (json; ["{} []", "{} !", ""])
+	foreach (json; ["{} []", "{} !", "", "{} t", "{} fa", "{} nul", `{} "`, `{} "a\`, `{} "\u12`])
 	{
 		assertThrown(jsonModifyPreservingFormat!modify(json), json);
 		assert(!called, json);
