@@ -1015,6 +1015,42 @@ public import ae.utils.serialization.serialization : JSONPartial = IgnoreUnknown
 
 debug(ae_unittest) unittest
 {
+	import std.exception : assertThrown;
+	import std.meta : AliasSeq;
+
+	static struct S { string type; }
+	@JSONPartial static struct Partial { string type; }
+	static foreach (T; AliasSeq!(S, Partial))
+	{
+		assertThrown(`"x"`.jsonParse!T);
+		assertThrown(`123`.jsonParse!T);
+		assertThrown(`{"type":["a","b"]}`.jsonParse!T);
+		assert(`{"type":"x"}`.jsonParse!T == T("x"));
+	}
+
+	static struct Constructed
+	{
+		string value;
+		this(string text) { value = "constructed " ~ text; }
+	}
+	static class ConstructedClass
+	{
+		string value;
+		this(string text) { value = "constructed " ~ text; }
+	}
+	assert(`"x"`.jsonParse!Constructed.value == "constructed x");
+	assert(`123`.jsonParse!Constructed.value == "constructed 123");
+	assert(`"x"`.jsonParse!ConstructedClass.value == "constructed x");
+	assert(`["a","b"]`.jsonParse!(string[]) == ["a", "b"]);
+	assert(`[1,2]`.jsonParse!(ubyte[]) == [1, 2]);
+	assert(`"123"`.jsonParse!int == 123);
+	assert(`true`.jsonParse!bool);
+	enum Choice { first, second }
+	assert(`"second"`.jsonParse!Choice == Choice.second);
+}
+
+debug(ae_unittest) unittest
+{
 	@JSONPartial static struct S { int b; }
 	assert(`{"a":1,"b":2,"c":3.4,"d":[5,"x"],"de":[],"e":{"k":"v"},"ee":{},"f":true,"g":false,"h":null}`.jsonParse!S == S(2));
 }

@@ -229,6 +229,17 @@ private template isCustomProtocolBoolean(V)
 		enum bool isCustomProtocolBoolean = false;
 }
 
+// std.conv can initialize the fields of a struct directly from one argument.
+// Require an explicit constructor for aggregate targets in the default sink.
+private template acceptsProtocolText(T, S)
+{
+	static if (is(T == struct) || is(T == class) || is(T == union))
+		enum acceptsProtocolText = is(typeof(to!T(S.init)))
+			&& is(typeof((S text) { T value = void; value.__ctor(text); }));
+	else
+		enum acceptsProtocolText = is(typeof(to!T(S.init)));
+}
+
 // Copy borrowed text when conversion would otherwise retain its slice.
 package T retainText(T, S)(S text)
 {
@@ -1013,7 +1024,7 @@ template CustomDeserializer(alias Transform, alias anchor)
 					T t = to!T(v.value);
 					handleValue(t);
 				}
-				else static if (is(typeof(to!T(v.text))))
+				else static if (acceptsProtocolText!(T, typeof(v.text)))
 				{
 					T t = retainText!T(v.text);
 					handleValue(t);
@@ -1025,7 +1036,7 @@ template CustomDeserializer(alias Transform, alias anchor)
 			static if (isProtocolString!V)
 			{
 				alias S = ProtocolTextType!V;
-				static if (is(typeof(v.text.to!T)))
+				static if (acceptsProtocolText!(T, typeof(v.text)))
 				{
 					T t = retainText!T(v.text);
 					handleValue(t);
@@ -1036,7 +1047,7 @@ template CustomDeserializer(alias Transform, alias anchor)
 			else
 			static if (isProtocolArray!V)
 			{
-				static if (is(T U : U[]) && !isStaticArray!T)
+				static if (is(T U : U[]) && !isStaticArray!T && !isSomeString!T)
 				{
 					ArraySink!U sink;
 					v.reader(&sink);
