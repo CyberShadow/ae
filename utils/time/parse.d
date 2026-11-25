@@ -14,7 +14,7 @@
 module ae.utils.time.parse;
 
 import core.stdc.time : time_t;
-import core.time : minutes, seconds, dur;
+import core.time : hours, minutes, seconds, dur;
 
 import std.exception : enforce;
 import std.conv : to;
@@ -353,7 +353,9 @@ private T parseTimeImpl(alias fmt, T, bool checked, C)(C[] t, immutable TimeZone
 			auto frac = dur!"nsecs"(nsecs);
 
 			auto dt = DateTime(year, month, day, hour, minute, second);
-			AbsTime result = AbsTime(dt, frac);
+			// AbsTime has no time zone, but it is an absolute instant, so the offset must be applied.
+			// No time zone means UTC (not LocalTime, which is what SysTime would default to).
+			AbsTime result = AbsTime(SysTime(dt, frac, tz is null ? UTC() : tz));
 
 			if (dow >= 0 && !__ctfe)
 				enforce(dt.dayOfWeek == dow, "Mismatching weekday");
@@ -540,14 +542,14 @@ debug(ae_unittest) @safe unittest
 
 /// Parse the given string into an AbsTime, using the format spec fmt.
 /// This version generates specialized code for the given fmt.
-/// Fields which are not representable in an AbsTime, such as timezone,
-/// are parsed but silently discarded.
+/// The timezone (parsed, or given as defaultTZ) is applied to compute the
+/// instant denoted by the string; if there is none, UTC is assumed.
 alias parseAbsTime = parseTimeLike!AbsTime;
 
 /// Parse the given string into an AbsTime, using the format spec fmt.
 /// This version parses fmt at runtime.
-/// Fields which are not representable in an AbsTime, such as timezone,
-/// are parsed but silently discarded.
+/// The timezone (parsed, or given as defaultTZ) is applied to compute the
+/// instant denoted by the string; if there is none, UTC is assumed.
 alias parseAbsTimeUsing = parseTimeLikeUsing!AbsTime;
 
 debug(ae_unittest) @safe unittest
@@ -555,4 +557,33 @@ debug(ae_unittest) @safe unittest
 	const char[] s = "Tue, 21 Nov 2006 21:19:46 +0000";
 	auto d = s.parseAbsTime!(TimeFormats.RFC2822);
 	assert(d.sysTime.year == 2006 && d.sysTime.second == 46);
+}
+
+debug(ae_unittest) @safe unittest
+{
+	static void check(string s, string fmt)()
+	{
+		auto expected = s.parseTime!fmt.stdTime;
+		assert(s.parseAbsTime!fmt.stdTime == expected);
+		assert(s.parseAbsTimeUsing(fmt).stdTime == expected);
+	}
+
+	check!("Tue, 21 Nov 2006 21:19:46 +0200", TimeFormats.RFC2822);
+	check!("Tue, 21 Nov 2006 21:19:46 -0530", TimeFormats.RFC2822);
+	check!("2006-11-21T21:19:46+02:00", TimeFormats.ATOM);
+	check!("2006-11-21T21:19:46-05:30", TimeFormats.ATOM);
+
+	assert("Tue, 21 Nov 2006 21:19:46 +0200".parseAbsTime!(TimeFormats.RFC2822).sysTime
+		== SysTime(DateTime(2006, 11, 21, 19, 19, 46), UTC()));
+
+	// No timezone: UTC
+	assert("2006-11-21".parseAbsTime!(TimeFormats.HTML5DATE).sysTime
+		== SysTime(DateTime(2006, 11, 21, 0, 0, 0), UTC()));
+
+	// defaultTZ
+	auto tz = new immutable SimpleTimeZone(hours(2));
+	assert("2006-11-21".parseAbsTime!(TimeFormats.HTML5DATE)(tz).sysTime
+		== SysTime(DateTime(2006, 11, 20, 22, 0, 0), UTC()));
+	assert("2006-11-21".parseAbsTimeUsing(TimeFormats.HTML5DATE, tz).sysTime
+		== SysTime(DateTime(2006, 11, 20, 22, 0, 0), UTC()));
 }
