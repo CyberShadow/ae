@@ -1594,24 +1594,93 @@ void copyRecurse(DirEntry src, string dst)
 }
 void copyRecurse(string src, string dst) { copyRecurse(DirEntry(src), dst); } /// ditto
 
-version (linux) static if (is(typeof(mixin(q{{import core.sys.linux.fs : RENAME_EXCHANGE, RENAME_NOREPLACE, RENAME_WHITEOUT;}}))))
+version (linux)
 {
-	private extern(C) int renameat2(int olddirfd, const char *oldpath, int newdirfd, const char *newpath, uint flags);
+	// musl does not export renameat2, and druntime does not provide its syscall number.
+	version (HPPA)    version = HPPA_Any;
+	version (HPPA64)  version = HPPA_Any;
+	version (PPC)     version = PPC_Any;
+	version (PPC64)   version = PPC_Any;
+	version (RISCV32) version = RISCV_Any;
+	version (RISCV64) version = RISCV_Any;
+	version (S390)    version = IBMZ_Any;
+	version (SPARC)   version = SPARC_Any;
+	version (SPARC64) version = SPARC_Any;
+	version (SystemZ) version = IBMZ_Any;
+
+	version (X86_64)
+	{
+		version (D_X32)
+			private enum __NR_renameat2 = 0x40000000 + 316;
+		else
+			private enum __NR_renameat2 = 316;
+	}
+	else version (X86)
+		private enum __NR_renameat2 = 353;
+	else version (ARM)
+		private enum __NR_renameat2 = 382;
+	else version (AArch64)
+		private enum __NR_renameat2 = 276;
+	else version (HPPA_Any)
+		private enum __NR_renameat2 = 337;
+	else version (IBMZ_Any)
+		private enum __NR_renameat2 = 347;
+	else version (MIPS32)
+		private enum __NR_renameat2 = 4000 + 351;
+	else version (MIPS64)
+	{
+		version (MIPS_N32)
+			private enum __NR_renameat2 = 6000 + 315;
+		else version (MIPS_N64)
+			private enum __NR_renameat2 = 5000 + 311;
+	}
+	else version (PPC_Any)
+		private enum __NR_renameat2 = 357;
+	else version (RISCV_Any)
+		private enum __NR_renameat2 = 276;
+	else version (SPARC_Any)
+		private enum __NR_renameat2 = 345;
+	else version (LoongArch64)
+		private enum __NR_renameat2 = 276;
+	else version (Xtensa)
+		private enum __NR_renameat2 = 336;
+}
+
+version (linux) static if (is(typeof(__NR_renameat2)) &&
+	is(typeof(mixin(q{{import core.sys.linux.fs : RENAME_EXCHANGE, RENAME_NOREPLACE, RENAME_WHITEOUT;}}))))
+{
+	private import core.stdc.config : c_long;
+	private extern(C) c_long syscall(c_long sysno, ...);
 
 	/// Atomically exchange the given files.
 	void atomicExchange(string a, string b)
 	{
 		import core.sys.posix.fcntl : AT_FDCWD;
-		import core.sys.linux.fs : RENAME_EXCHANGE, RENAME_NOREPLACE, RENAME_WHITEOUT;
+		import core.sys.linux.fs : RENAME_EXCHANGE;
 		import std.exception : errnoEnforce;
 		import std.string : toStringz;
 		import ae.utils.math : eq;
 
-		renameat2(
+		syscall(__NR_renameat2,
 			AT_FDCWD, a.toStringz,
 			AT_FDCWD, b.toStringz,
 			RENAME_EXCHANGE
 		).eq(0).errnoEnforce("renameat2");
+	}
+
+	debug(ae_unittest) unittest
+	{
+		auto base = deleteme;
+		auto a = base ~ "a";
+		auto b = base ~ "b";
+		std.file.write(a, "first");
+		scope(exit) remove(a);
+		std.file.write(b, "second");
+		scope(exit) remove(b);
+
+		atomicExchange(a, b);
+		assert(a.readText() == "second");
+		assert(b.readText() == "first");
 	}
 }
 
