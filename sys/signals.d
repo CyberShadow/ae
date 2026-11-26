@@ -107,17 +107,21 @@ synchronized class HandlerSet
 	/// The disposition which was in effect before `sighandle` was installed.
 	/// Valid while `handlers` is non-empty.
 	private sigaction_t original;
+	/// Set during runtime shutdown, after which the set may no longer change.
+	private bool closed;
 
 	this(int signum) { this.signum = signum; }
 
 	void add(T fn)
 	{
+		assert(!closed, "Signal handler registered after runtime shutdown");
 		if (handlers.length == 0)
 			install();
 		handlers ~= cast(shared)fn;
 	}
 	void remove(T fn)
 	{
+		assert(!closed, "Signal handler unregistered after runtime shutdown");
 		foreach (i, lfn; handlers)
 			if (lfn is fn)
 			{
@@ -127,6 +131,15 @@ synchronized class HandlerSet
 				return;
 			}
 		assert(false, "Handler not found");
+	}
+	/// Restore the original disposition if `sighandle` is installed.
+	/// Called during runtime shutdown, before the GC releases the
+	/// storage referenced by `handlers` and the delegate contexts.
+	void close()
+	{
+		if (handlers.length)
+			uninstall();
+		closed = true;
 	}
 	const(T)[] get() pure nothrow @nogc { return cast(const(T[]))handlers; }
 
@@ -151,6 +164,10 @@ shared HandlerSet[SIGMAX] handlers;
 
 shared static this() { foreach (signum, ref h; handlers) h = new shared HandlerSet(cast(int)signum); }
 
+// druntime runs module destructors before `gc_term`, so this uninstalls
+// `sighandle` while the delegates it dereferences are still alive.
+shared static ~this() { foreach (h; handlers) h.close(); }
+
 extern(C) void sighandle(int signum) nothrow @system
 {
 	if (signum >= 0 && signum < handlers.length)
@@ -162,6 +179,8 @@ extern(C) void sighandle(int signum) nothrow @system
 
 debug(ae_unittest)
 {
+	import core.stdc.stdlib : atexit;
+
 	// The default action of SIGURG is to ignore it, and nothing else in ae uses it.
 	enum testSignal = SIGURG;
 	__gshared sigaction_t testOriginal;
@@ -174,6 +193,20 @@ debug(ae_unittest)
 			&& current.sa_flags == testOriginal.sa_flags
 			&& sigismember(&current.sa_mask, SIGUSR2) == 1
 			&& sigismember(&current.sa_mask, SIGUSR1) == 0;
+	}
+
+	// Runs after `rt_term`, i.e. after the GC has been torn down.
+	extern(C) void checkDispositionAfterRuntime() nothrow @nogc
+	{
+		import core.stdc.stdio : fflush, fprintf, stderr;
+		import core.sys.posix.unistd : _exit;
+
+		if (!isOriginalDisposition())
+		{
+			fprintf(stderr, "ae.sys.signals: signal disposition was not restored at runtime shutdown\n");
+			fflush(null);
+			_exit(1);
+		}
 	}
 }
 
@@ -196,4 +229,9 @@ debug(ae_unittest) unittest
 	assert(!isOriginalDisposition());
 	removeSignalHandler(testSignal, fn);
 	assert(isOriginalDisposition());
+
+	// Runtime shutdown restores the original disposition
+	// of signals which still have handlers registered.
+	addSignalHandler(testSignal, fn); // Intentionally never removed
+	atexit(&checkDispositionAfterRuntime);
 }
