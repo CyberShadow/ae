@@ -31,6 +31,7 @@ import std.utf;
 
 import ae.utils.text : fromHex;
 
+import ae.utils.serialization.json : enforceJsonNumber;
 import ae.utils.serialization.serialization;
 
 /// Heap-allocated fiber-based streaming parser for one JSON document.
@@ -455,19 +456,21 @@ private:
 			'.': true, '-': true, '+': true, 'e': true, 'E': true,
 		];
 
-		while (true)
+		numberLoop: while (true)
 		{
 			while (currentPos >= currentBuf.length)
 			{
 				if (inputDone)
-					return buf;
+					break numberLoop;
 				Fiber.yield();
 			}
 			auto c = currentBuf[currentPos];
 			if (c >= numeric.length || !numeric[c])
-				return buf;
+				break;
 			buf ~= currentBuf[currentPos++];
 		}
+		enforceJsonNumber(buf);
+		return buf;
 	}
 }
 
@@ -969,4 +972,39 @@ debug(ae_unittest) unittest
 		assertThrown(parse(`"\uD83EA"`, chunk));
 		assertThrown(parse(`"\uD83E\u0041"`, chunk));
 	}
+}
+
+debug(ae_unittest) unittest
+{
+	foreach (number; ["-", "01", "-01", "00", "1.", ".5", "1e", "1e+", "1E-",
+		"1-2", "1+2", "1.2.3", "1e5e5", "+1", "--1", "1.e5", "-.5"])
+	{
+		string result;
+		assertThrown(readTestJson!true(number, deserializer(&result)), number);
+
+		string[] elements;
+		assertThrown(readTestJson!true("[" ~ number ~ "]", deserializer(&elements)), number);
+	}
+}
+
+debug(ae_unittest) unittest
+{
+	foreach (number; ["0", "-0", "1", "-12", "0.5", "-0.5", "1e5", "1E+5",
+		"1e-05", "12.34e+56"])
+	{
+		string result;
+		readTestJson!true(number, deserializer(&result));
+		assert(result == number, number);
+	}
+}
+
+debug(ae_unittest) unittest
+{
+	string[][string] arrays;
+	readTestJson!true(`{"a":[-0,1E+5],"b":[1e-05 ,-0.5]}`, deserializer(&arrays));
+	assert(arrays == ["a": ["-0", "1E+5"], "b": ["1e-05", "-0.5"]]);
+
+	string[string] object;
+	readTestJson!true(`{"a":0,"b":1e-05}`, deserializer(&object));
+	assert(object == ["a": "0", "b": "1e-05"]);
 }

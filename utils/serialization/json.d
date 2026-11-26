@@ -153,6 +153,45 @@ private immutable Escapes escapes = {
 	return e;
 }();
 
+package(ae) void enforceJsonNumber(C)(const(C)[] number)
+{
+	import std.ascii : isDigit;
+
+	size_t pos;
+
+	void consumeDigits()
+	{
+		auto start = pos;
+		while (pos < number.length && isDigit(number[pos]))
+			pos++;
+		enforce(pos > start, "Expected a digit in JSON number");
+	}
+
+	if (pos < number.length && number[pos] == '-')
+		pos++;
+
+	if (pos < number.length && number[pos] == '0')
+		pos++;
+	else
+		consumeDigits();
+
+	if (pos < number.length && number[pos] == '.')
+	{
+		pos++;
+		consumeDigits();
+	}
+
+	if (pos < number.length && (number[pos] == 'e' || number[pos] == 'E'))
+	{
+		pos++;
+		if (pos < number.length && (number[pos] == '+' || number[pos] == '-'))
+			pos++;
+		consumeDigits();
+	}
+
+	enforce(pos == number.length, "Invalid JSON number");
+}
+
 // ---------------------------------------------------------------------------
 // JsonParser -- source that parses JSON text
 // ---------------------------------------------------------------------------
@@ -585,7 +624,9 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 
 		while (!eof() && peek() < numeric.length && numeric[peek()])
 			skip();
-		return slice(m, mark());
+		auto number = slice(m, mark());
+		enforceJsonNumber(number);
+		return number;
 	}
 }
 
@@ -2172,4 +2213,49 @@ debug(ae_unittest) unittest
 	parser.read(deserializer(&second));
 	assert(second == 789);
 	assert(parser.eof);
+}
+
+debug(ae_unittest) unittest
+{
+	import std.exception : assertThrown;
+
+	// A string target retains number text, so it also exercises grammar
+	// validation for spellings that numeric conversion would reject.
+	foreach (number; ["-", "01", "-01", "00", "1.", ".5", "1e", "1e+", "1E-",
+		"1-2", "1+2", "1.2.3", "1e5e5", "+1", "--1", "1.e5", "-.5"])
+	{
+		assertThrown(jsonParse!string(number), number);
+		assertThrown(jsonParse!double(number), number);
+	}
+}
+
+debug(ae_unittest) unittest
+{
+	import std.math : isClose;
+
+	auto spellings = ["0", "-0", "1", "-12", "0.5", "-0.5", "1e5", "1E+5",
+		"1e-05", "12.34e+56"];
+	auto values = [0.0, -0.0, 1.0, -12.0, 0.5, -0.5, 1e5, 1e5, 1e-5, 12.34e56];
+	foreach (i, number; spellings)
+	{
+		assert(jsonParse!string(number) == number, number);
+		assert(isClose(jsonParse!double(number), values[i]), number);
+	}
+}
+
+debug(ae_unittest) unittest
+{
+	auto result = jsonParse!(string[][string])(`{"a":[-0,1E+5],"b":[1e-05 ,-0.5]}`);
+	assert(result == ["a": ["-0", "1E+5"], "b": ["1e-05", "-0.5"]]);
+	assert(jsonParse!(string[string])(`{"a":0,"b":1e-05}`) == ["a": "0", "b": "1e-05"]);
+}
+
+debug(ae_unittest) unittest
+{
+	auto parser = JsonParser!()("01");
+	assertThrown!Exception(parser.readNumeric());
+
+	parser = JsonParser!()("1E+5,");
+	assert(parser.readNumeric() == "1E+5");
+	assert(parser.peek() == ',');
 }

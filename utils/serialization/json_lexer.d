@@ -29,6 +29,8 @@ import std.utf;
 
 import ae.utils.text : fromHex;
 
+import ae.utils.serialization.json : enforceJsonNumber;
+
 // ===========================================================================
 // Token types
 // ===========================================================================
@@ -85,7 +87,9 @@ struct StreamingJsonLexer
 	{
 		if (state == State.inNumber)
 		{
-			emitToken(JsonToken(JsonTokenType.number, numBuf.idup, numBuf.idup));
+			enforceJsonNumber(numBuf);
+			auto number = numBuf.idup;
+			emitToken(JsonToken(JsonTokenType.number, number, number));
 			numBuf = null;
 			state = State.value;
 		}
@@ -278,7 +282,9 @@ private:
 			}
 			else
 			{
-				emitToken(JsonToken(JsonTokenType.number, numBuf.idup, numBuf.idup));
+				enforceJsonNumber(numBuf);
+				auto number = numBuf.idup;
+				emitToken(JsonToken(JsonTokenType.number, number, number));
 				numBuf = null;
 				state = State.value;
 				feedChar(c); // reprocess
@@ -1203,4 +1209,49 @@ debug(ae_unittest) unittest
 	converter.readValue(&writer, pos);
 	assert(writer.get() == "42");
 	assert(pos == converter.tokens.length);
+}
+
+debug(ae_unittest) private JsonToken[] tokenizeByteByByte(string json)
+{
+	JsonToken[] tokens;
+	StreamingJsonLexer lexer;
+	lexer.onToken = (JsonToken token) { tokens ~= token; };
+	foreach (c; json)
+		lexer.feed([c]);
+	lexer.endInput();
+	return tokens;
+}
+
+debug(ae_unittest) unittest
+{
+	import ae.utils.serialization.store : SerializedObject;
+	static void modify(ref SerializedObject!(immutable(char)) value) {}
+
+	foreach (number; ["-", "01", "-01", "00", "1.", ".5", "1e", "1e+", "1E-",
+		"1-2", "1+2", "1.2.3", "1e5e5", "+1", "--1", "1.e5", "-.5"])
+	{
+		assertThrown(tokenizeByteByByte(number), number);
+		assertThrown(tokenizeByteByByte("[" ~ number ~ "]"), number);
+		assertThrown(jsonModifyPreservingFormat!modify(number), number);
+		assertThrown(jsonModifyPreservingFormat!modify("[" ~ number ~ "]"), number);
+	}
+}
+
+debug(ae_unittest) unittest
+{
+	import ae.utils.serialization.store : SerializedObject;
+	static void modify(ref SerializedObject!(immutable(char)) value) {}
+
+	foreach (number; ["0", "-0", "1", "-12", "0.5", "-0.5", "1e5", "1E+5",
+		"1e-05", "12.34e+56"])
+	{
+		auto tokens = tokenizeByteByByte(number);
+		assert(tokens.length == 1 && tokens[0].type == JsonTokenType.number, number);
+		assert(tokens[0].value == number && tokens[0].rawValue == number, number);
+		assert(jsonModifyPreservingFormat!modify(number) == number, number);
+	}
+
+	auto json = `{"a":[-0,1E+5],"b":1e-05 ,"c":-0.5}`;
+	assert(tokensToString(tokenizeByteByByte(json)) == json);
+	assert(jsonModifyPreservingFormat!modify(json) == json);
 }
