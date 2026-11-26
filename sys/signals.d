@@ -40,19 +40,15 @@ version(FreeBSD) private
 /// Register a handler for a POSIX signal.
 void addSignalHandler(int signum, SignalHandler fn)
 {
-	handlers[signum].add(fn, {
-		alias sigfn_t = typeof(signal(0, null));
-		auto old = signal(signum, cast(sigfn_t)&sighandle);
-		assert(old == SIG_DFL || old == SIG_IGN, "A signal handler was already set");
-	});
+	handlers[signum].add(fn);
 }
 
 /// Unregister a previously registered signal handler.
+/// When the last handler for `signum` is removed, the disposition
+/// that was in effect before the first `addSignalHandler` is restored.
 void removeSignalHandler(int signum, SignalHandler fn)
 {
-	handlers[signum].remove(fn, {
-		signal(signum, SIG_DFL);
-	});
+	handlers[signum].remove(fn);
 }
 
 // ***************************************************************************
@@ -106,36 +102,98 @@ enum SIGMAX = 100;
 synchronized class HandlerSet
 {
 	alias T = SignalHandler;
+	private immutable int signum;
 	private T[] handlers;
+	/// The disposition which was in effect before `sighandle` was installed.
+	/// Valid while `handlers` is non-empty.
+	private sigaction_t original;
 
-	void add(T fn, scope void delegate() register)
+	this(int signum) { this.signum = signum; }
+
+	void add(T fn)
 	{
 		if (handlers.length == 0)
-			register();
+			install();
 		handlers ~= cast(shared)fn;
 	}
-	void remove(T fn, scope void delegate() deregister)
+	void remove(T fn)
 	{
 		foreach (i, lfn; handlers)
 			if (lfn is fn)
 			{
 				handlers = handlers[0..i] ~ handlers[i+1..$];
 				if (handlers.length == 0)
-					deregister();
+					uninstall();
 				return;
 			}
 		assert(false, "Handler not found");
 	}
 	const(T)[] get() pure nothrow @nogc { return cast(const(T[]))handlers; }
+
+	private void install()
+	{
+		sigaction_t sa;
+		sa.sa_handler = &sighandle;
+		sigemptyset(&sa.sa_mask);
+		sa.sa_flags = SA_RESTART; // Same semantics as BSD / glibc signal()
+		sigaction_t old;
+		errnoEnforce(sigaction(signum, &sa, &old) == 0, "sigaction");
+		assert(old.sa_handler == SIG_DFL || old.sa_handler == SIG_IGN, "A signal handler was already set");
+		original = cast(shared)old;
+	}
+	private void uninstall()
+	{
+		errnoEnforce(sigaction(signum, cast(sigaction_t*)&original, null) == 0, "sigaction");
+	}
 }
 
 shared HandlerSet[SIGMAX] handlers;
 
-shared static this() { foreach (ref h; handlers) h = new HandlerSet; }
+shared static this() { foreach (signum, ref h; handlers) h = new shared HandlerSet(cast(int)signum); }
 
 extern(C) void sighandle(int signum) nothrow @system
 {
 	if (signum >= 0 && signum < handlers.length)
 		foreach (fn; handlers[signum].get())
 			fn();
+}
+
+// ***************************************************************************
+
+debug(ae_unittest)
+{
+	// The default action of SIGURG is to ignore it, and nothing else in ae uses it.
+	enum testSignal = SIGURG;
+	__gshared sigaction_t testOriginal;
+
+	bool isOriginalDisposition() nothrow @nogc
+	{
+		sigaction_t current;
+		sigaction(testSignal, null, &current);
+		return current.sa_handler == testOriginal.sa_handler
+			&& current.sa_flags == testOriginal.sa_flags
+			&& sigismember(&current.sa_mask, SIGUSR2) == 1
+			&& sigismember(&current.sa_mask, SIGUSR1) == 0;
+	}
+}
+
+debug(ae_unittest) unittest
+{
+	// Start from a known non-default disposition, so that restoring
+	// the original is distinguishable from restoring SIG_DFL.
+	sigaction_t sa;
+	sa.sa_handler = SIG_IGN;
+	sigemptyset(&sa.sa_mask);
+	sigaddset(&sa.sa_mask, SIGUSR2);
+	sa.sa_flags = 0;
+	errnoEnforce(sigaction(testSignal, &sa, null) == 0);
+	errnoEnforce(sigaction(testSignal, null, &testOriginal) == 0);
+
+	SignalHandler fn = {};
+
+	// Removing the last handler restores the original disposition.
+	addSignalHandler(testSignal, fn);
+	assert(!isOriginalDisposition());
+	removeSignalHandler(testSignal, fn);
+	assert(isOriginalDisposition());
 }
