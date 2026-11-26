@@ -463,7 +463,8 @@ private:
 					return buf;
 				Fiber.yield();
 			}
-			if (!numeric[currentBuf[currentPos]])
+			auto c = currentBuf[currentPos];
+			if (c >= numeric.length || !numeric[c])
 				return buf;
 			buf ~= currentBuf[currentPos++];
 		}
@@ -661,6 +662,22 @@ debug(ae_unittest) unittest
 	parser.feed("[]");
 	assertThrown(parser.feed(" \t!"));
 	assert(!parser.done);
+}
+
+// Non-ASCII code unit after a number
+debug(ae_unittest) unittest
+{
+	import std.exception : assertThrown;
+	import std.meta : AliasSeq;
+
+	static foreach (C; AliasSeq!(immutable(wchar), immutable(dchar)))
+	{{
+		int result;
+		auto parser = new StreamingJsonParser!C;
+		parser.start(deserializer(&result));
+		assertThrown!Exception(parser.feed("42🥀".to!(C[])));
+		assert(!parser.done);
+	}}
 }
 
 // A failed feed reports the parse failure on subsequent calls.

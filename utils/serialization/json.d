@@ -583,7 +583,7 @@ struct JsonParser(C = immutable(char), JsonOptions options = JsonOptions.init)
 			'.': true, '-': true, '+': true, 'e': true, 'E': true,
 		];
 
-		while (!eof() && numeric[peek()])
+		while (!eof() && peek() < numeric.length && numeric[peek()])
 			skip();
 		return slice(m, mark());
 	}
@@ -1308,6 +1308,13 @@ debug(ae_unittest) unittest
 	assertThrown!Exception(jsonParse!string(`"\uDD40"`));
 	assertThrown!Exception(jsonParse!string(`"\uD83E\n"`));
 	assertThrown!Exception(jsonParse!string(`"\uD83E\u0041"`));
+}
+
+// Non-ASCII code unit after a number
+debug(ae_unittest) unittest
+{
+	assertThrown!Exception(jsonParse!int("42🥀"w));
+	assertThrown!Exception(jsonParse!int("42🥀"d));
 }
 
 debug(ae_unittest) unittest
