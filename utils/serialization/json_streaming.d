@@ -91,8 +91,7 @@ class StreamingJsonParser(C = immutable(char))
 		assert(parsingStarted, "Must call start() before feed()");
 		if (parseError)
 			throw parseError;
-		if (parsingComplete)
-			return;
+		assert(!inputDone, "Cannot feed() after endInput()");
 
 		currentBuf = data;
 		currentPos = 0;
@@ -107,6 +106,7 @@ class StreamingJsonParser(C = immutable(char))
 	{
 		if (parseError)
 			throw parseError;
+		assert(!inputDone, "endInput() called twice");
 		inputDone = true;
 		if (!parsingComplete && parsingStarted)
 		{
@@ -727,6 +727,33 @@ debug(ae_unittest) unittest
 		assertThrown(parser.endInput());
 		assert(!parser.done);
 	}
+}
+
+// Feeding after a successful end of input is a caller bug
+debug(ae_unittest) unittest
+{
+	import core.exception : AssertError;
+	import std.exception : assertThrown;
+
+	auto parser = new StreamingJsonParser!(immutable(char));
+	parser.start(DrainSink());
+	parser.feed("[]");
+	parser.endInput();
+	assertThrown!AssertError(parser.feed("null"));
+	assert(parser.done);
+}
+
+// Ending input twice is a caller bug
+debug(ae_unittest) unittest
+{
+	import core.exception : AssertError;
+	import std.exception : assertThrown;
+
+	auto parser = new StreamingJsonParser!(immutable(char));
+	parser.start(DrainSink());
+	parser.feed("[]");
+	parser.endInput();
+	assertThrown!AssertError(parser.endInput());
 }
 
 // Empty object and array
